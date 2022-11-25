@@ -1,0 +1,9 @@
+[package]
+name = "protosim"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+ethers = "1.0.1"
+petgraph = "0.6.2"

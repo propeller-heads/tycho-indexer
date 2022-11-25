@@ -1,0 +1,10 @@
+[package]
+name = "prop-builder"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["protosim"]
+
+[dependencies]
+protosim = { version = "^0.1.0", path = "./protosim" }
