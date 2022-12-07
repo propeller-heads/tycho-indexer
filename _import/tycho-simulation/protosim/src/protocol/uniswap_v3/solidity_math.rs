@@ -6,7 +6,7 @@ pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> U256 {
     let product = a_big * b_big;
     let (mut result, rest) = product.div_mod(U512::from(denom));
     if rest >= U512::zero() {
-        let result = result + U512::one();
+        result = result + U512::one();
     }
     let res_small = result.try_into().expect("Mul div overflow!!");
     return res_small;
@@ -19,9 +19,9 @@ mod tests {
     #[test]
     fn test_mul_div_rounding_up() {
         // TODO: check U256 overflows and maybe U512?
-        let a = U256::from(5);
-        let b = U256::from(5);
-        let denom = U256::from(5);
+        let a = U256::from(23);
+        let b = U256::from(10);
+        let denom = U256::from(50);
         let res = mul_div_rounding_up(a, b, denom);
 
         assert_eq!(res, U256::from(5));
