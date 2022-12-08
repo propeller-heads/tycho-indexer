@@ -12,6 +12,15 @@ pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> U256 {
     return res_small;
 }
 
+pub fn mul_div(a: U256, b: U256, denom: U256) -> U256 {
+    let a_big = U512::from(a);
+    let b_big = U512::from(b);
+    let product = a_big * b_big;
+    let result = product / denom;
+    let res_small: U256 = result.try_into().expect("Mul div overflow!!");
+    return res_small;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
