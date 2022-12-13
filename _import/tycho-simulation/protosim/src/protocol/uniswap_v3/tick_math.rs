@@ -2,8 +2,8 @@ use std::ops::BitOr;
 
 use ethers::types::{Sign, I256, U256};
 
-const MIN_TICK: i32 = -887272;
-const MAX_TICK: i32 = 887272;
+pub const MIN_TICK: i32 = -887272;
+pub const MAX_TICK: i32 = 887272;
 
 // 4295128739
 pub const MIN_SQRT_RATIO: U256 = U256([4295128739, 0, 0, 0]);

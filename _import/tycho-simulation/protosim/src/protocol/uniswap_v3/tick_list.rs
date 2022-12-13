@@ -1,13 +1,13 @@
-use std::cmp::Ordering;
+use std::cmp::{self, Ordering};
 
-use ethers::types::U256;
+use ethers::types::{I256, U256};
 
 // enum TickSpacing{one: 1, 100, 300, 5000}
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct TickInfo {
     index: i32,
-    net_liquidity: U256,
+    net_liquidity: I256,
     sqrt_price: U256,
 }
 
@@ -15,6 +15,22 @@ impl PartialOrd for TickInfo {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         return self.index.partial_cmp(&other.index);
     }
+}
+
+#[derive(Debug)]
+pub struct TickListError {
+    kind: TickListErrorKind,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TickListErrorKind {
+    NotFound,
+    InvalidSpacing,
+    TickAlignment,
+    UnsortedTicks,
+    BelowSmallest,
+    AtOrAboveLargest,
+    TicksExeeded,
 }
 
 pub struct TickList {
@@ -57,8 +73,8 @@ impl TickList {
             let t = self.ticks.get(i).unwrap();
             if t.index % self.tick_spacing as i32 != 0 {
                 return Err(format!(
-                    "Tick index {} not aligned with tick spacing",
-                    t.index
+                    "Tick index {} not aligned with tick spacing {}",
+                    t.index, self.tick_spacing,
                 ));
             }
         }
@@ -87,35 +103,148 @@ impl TickList {
         }
     }
 
-    // def is_at_or_above_largest(self, tick: int) -> bool:
-    // assert len(self.ticks), "LENGTH"
-    // return tick >= self.ticks[-1].tick_idx
+    pub fn is_below_smallest(&self, tick: i32) -> bool {
+        tick < self.ticks[0].index
+    }
 
-    // def is_at_or_above_safe_tick(self, tick: int) -> bool:
-    //     largest = self.ticks[-1].tick_idx
-    //     maximum = largest + self.tick_spacing
-    //     return tick >= maximum
+    pub fn is_below_safe_tick(&self, tick: i32) -> bool {
+        let smallest = self.ticks[0].index;
+        let minimum = smallest - self.tick_spacing as i32;
+        tick < minimum
+    }
+
+    pub fn is_at_or_above_largest(&self, tick: i32) -> bool {
+        tick >= self.ticks[self.ticks.len() - 1].index
+    }
+
+    pub fn is_at_or_above_safe_tick(&self, tick: i32) -> bool {
+        let largest = self.ticks[self.ticks.len() - 1].index;
+        let maximum = largest + self.tick_spacing as i32;
+        tick >= maximum
+    }
+
+    pub fn get_tick(&self, index: i32) -> Result<&TickInfo, TickListError> {
+        match self.ticks.binary_search_by(|el| el.index.cmp(&index)) {
+            Ok(idx) => Ok(&self.ticks[idx]),
+            Err(_) => Err(TickListError {
+                kind: TickListErrorKind::NotFound,
+            }),
+        }
+    }
+
+    pub fn next_initialized_tick(&self, index: i32, lte: bool) -> Result<&TickInfo, TickListError> {
+        if lte {
+            if self.is_below_smallest(index) {
+                return Err(TickListError {
+                    kind: TickListErrorKind::BelowSmallest,
+                });
+            }
+            if self.is_at_or_above_largest(index) {
+                return Ok(&self.ticks[self.ticks.len() - 1]);
+            }
+            let tick = match self.ticks.binary_search_by(|el| el.index.cmp(&index)) {
+                Ok(idx) => &self.ticks[idx],
+                Err(idx) => &self.ticks[idx - 1],
+            };
+            return Ok(tick);
+        } else {
+            if self.is_at_or_above_largest(index) {
+                return Err(TickListError {
+                    kind: TickListErrorKind::AtOrAboveLargest,
+                });
+            }
+            if self.is_below_smallest(index) {
+                return Ok(&self.ticks[0]);
+            }
+            let idx = match self.ticks.binary_search_by(|el| el.index.cmp(&index)) {
+                Ok(idx) => idx + 1,
+                Err(idx) => idx,
+            };
+            return Ok(&self.ticks[idx]);
+        }
+    }
+
+    pub fn next_initialized_tick_within_one_word(
+        &self,
+        tick: i32,
+        lte: bool,
+    ) -> Result<(i32, bool), TickListError> {
+        let spacing = self.tick_spacing as i32;
+        let compressed = div_floor(tick, spacing);
+
+        if lte {
+            let word_pos = compressed >> 8;
+            let min_in_word = (word_pos << 8) * spacing;
+
+            if self.is_below_safe_tick(tick) {
+                return Err(TickListError {
+                    kind: TickListErrorKind::TicksExeeded,
+                });
+            }
+
+            if self.is_below_smallest(tick) {
+                let minimum = cmp::max(self.ticks[0].index - spacing, min_in_word);
+                return Ok((minimum, false));
+            }
+
+            let idx = self.next_initialized_tick(tick, lte)?.index;
+            let next_tick_idx = cmp::max(idx, min_in_word);
+            return Ok((next_tick_idx, next_tick_idx == idx));
+        } else {
+            let word_pos = (compressed + 1) >> 8;
+            let max_in_word = (((word_pos + 1) << 8) - 1) * spacing;
+
+            if self.is_at_or_above_safe_tick(tick) {
+                return Err(TickListError {
+                    kind: TickListErrorKind::TicksExeeded,
+                });
+            }
+
+            if self.is_at_or_above_largest(tick) {
+                let maximum = cmp::min(
+                    self.ticks[self.ticks.len() - 1].index + spacing,
+                    max_in_word,
+                );
+                return Ok((maximum, false));
+            }
+            let idx = self.next_initialized_tick(tick, lte)?.index;
+            let next_tick_idx = cmp::min(max_in_word, idx);
+            return Ok((next_tick_idx, next_tick_idx == idx));
+        }
+    }
+}
+
+fn div_floor(lhs: i32, rhs: i32) -> i32 {
+    let d = lhs / rhs;
+    let r = lhs % rhs;
+    if (r > 0 && rhs < 0) || (r < 0 && rhs > 0) {
+        d - 1
+    } else {
+        d
+    }
 }
 
 #[cfg(test)]
 mod tests {
+
+    use crate::protocol::uniswap_v3::tick_math;
 
     use super::*;
 
     fn create_tick_list() -> TickList {
         let tick_infos = vec![
             create_tick_info(10, 10),
-            create_tick_info(20, 5),
-            create_tick_info(40, 0),
+            create_tick_info(20, -5),
+            create_tick_info(40, -5),
         ];
 
         TickList::from(10, tick_infos)
     }
 
-    fn create_tick_info(idx: i32, liq: u8) -> TickInfo {
+    fn create_tick_info(idx: i32, liq: i32) -> TickInfo {
         return TickInfo {
             index: idx,
-            net_liquidity: U256::from(liq),
+            net_liquidity: I256::from(liq),
             sqrt_price: U256::zero(),
         };
     }
@@ -166,5 +295,351 @@ mod tests {
     }
 
     #[test]
-    fn test_is_below_smallest() {}
+    fn test_is_below_smallest() {
+        let tick_list = create_tick_list();
+        assert!(tick_list.is_below_smallest(-100));
+        assert!(!tick_list.is_below_smallest(10));
+    }
+
+    #[test]
+    fn test_is_at_or_above_largest() {
+        let tick_list = create_tick_list();
+        assert!(!tick_list.is_at_or_above_largest(10));
+        assert!(tick_list.is_at_or_above_largest(200));
+    }
+
+    #[test]
+    fn test_get_tick_success() {
+        let tick_list = create_tick_list();
+        let tick = tick_list.get_tick(10).unwrap();
+        assert_eq!(tick, &tick_list.ticks[0])
+    }
+
+    #[test]
+    fn test_get_tick_error() {
+        let tick_list = create_tick_list();
+        let err = tick_list.get_tick(-10).unwrap_err();
+        assert_eq!(err.kind, TickListErrorKind::NotFound);
+    }
+
+    struct TestCaseNextInitializedTick {
+        args: (i32, bool),
+        exp: usize,
+        id: &'static str,
+    }
+
+    #[test]
+    fn test_next_initialized_tick() {
+        let tick_infos = vec![
+            create_tick_info(tick_math::MIN_TICK + 1, 10),
+            create_tick_info(0, -5),
+            create_tick_info(tick_math::MAX_TICK - 1, -5),
+        ];
+        let tick_list = TickList::from(1, tick_infos.clone());
+        let cases = vec![
+            TestCaseNextInitializedTick {
+                args: (tick_math::MIN_TICK + 1, true),
+                exp: 0,
+                id: "low: idx = MIN + 1, lte = true",
+            },
+            TestCaseNextInitializedTick {
+                args: (tick_math::MIN_TICK + 2, true),
+                exp: 0,
+                id: "low: idx = MIN + 2, lte = true",
+            },
+            TestCaseNextInitializedTick {
+                args: (tick_math::MIN_TICK, false),
+                exp: 0,
+                id: "low: idx = MIN, lte = false",
+            },
+            TestCaseNextInitializedTick {
+                args: (tick_math::MIN_TICK + 1, false),
+                exp: 1,
+                id: "low: = MIN + 1, lte = false",
+            },
+            TestCaseNextInitializedTick {
+                args: (0, true),
+                exp: 1,
+                id: "mid: idx = 0, lte = true",
+            },
+            TestCaseNextInitializedTick {
+                args: (1, true),
+                exp: 1,
+                id: "mid: idx = 1, lte = true",
+            },
+            TestCaseNextInitializedTick {
+                args: (-1, false),
+                exp: 1,
+                id: "mid: idx = -1, lte = false",
+            },
+            TestCaseNextInitializedTick {
+                args: (1, false),
+                exp: 2,
+                id: "mid: idx = 1, lte = false",
+            },
+            TestCaseNextInitializedTick {
+                args: (tick_math::MAX_TICK - 1, true),
+                exp: 2,
+                id: "high: idx = MAX - 1, lte = true",
+            },
+            TestCaseNextInitializedTick {
+                args: (tick_math::MAX_TICK, true),
+                exp: 2,
+                id: "high: idx = MAX, lte = true",
+            },
+            TestCaseNextInitializedTick {
+                args: (tick_math::MAX_TICK - 2, false),
+                exp: 2,
+                id: "high: idx = MAX - 2, lte = false",
+            },
+            TestCaseNextInitializedTick {
+                args: (tick_math::MAX_TICK - 3, false),
+                exp: 2,
+                id: "high: idx = MAX - 3, lte = false",
+            },
+        ];
+
+        for case in cases {
+            assert_eq!(
+                tick_list
+                    .next_initialized_tick(case.args.0, case.args.1)
+                    .unwrap(),
+                &tick_infos[case.exp],
+                "{}",
+                case.id,
+            );
+        }
+    }
+
+    struct TestCaseNextInitializedTickWithinWord {
+        args: (i32, bool),
+        exp: (i32, bool),
+        id: &'static str,
+    }
+
+    #[test]
+    fn test_next_initialized_tick_within_one_word() {
+        let tick_infos = vec![
+            create_tick_info(tick_math::MIN_TICK + 1, 10),
+            create_tick_info(0, -5),
+            create_tick_info(tick_math::MAX_TICK - 1, -5),
+        ];
+        let tick_list = TickList::from(1, tick_infos.clone());
+        let cases = vec![
+            TestCaseNextInitializedTickWithinWord {
+                args: (-257, true),
+                exp: (-512, false),
+                id: "idx=-257 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (-256, true),
+                exp: (-256, false),
+                id: "idx=-256 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (-1, true),
+                exp: (-256, false),
+                id: "idx=-1 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (0, true),
+                exp: (0, true),
+                id: "idx=0 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (1, true),
+                exp: (0, true),
+                id: "idx=1 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (255, true),
+                exp: (0, true),
+                id: "idx=255 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (256, true),
+                exp: (256, false),
+                id: "idx=256 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (257, true),
+                exp: (256, false),
+                id: "idx=257 lte=true",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (-258, false),
+                exp: (-257, false),
+                id: "idx=-258 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (-257, false),
+                exp: (-1, false),
+                id: "idx=-257 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (-256, false),
+                exp: (-1, false),
+                id: "idx=-256 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (-2, false),
+                exp: (-1, false),
+                id: "idx=-2 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (-1, false),
+                exp: (0, true),
+                id: "idx=-1 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (0, false),
+                exp: (255, false),
+                id: "idx=0 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (1, false),
+                exp: (255, false),
+                id: "idx=1 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (254, false),
+                exp: (255, false),
+                id: "idx=254 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (255, false),
+                exp: (511, false),
+                id: "idx=255 lte=false",
+            },
+            TestCaseNextInitializedTickWithinWord {
+                args: (256, false),
+                exp: (511, false),
+                id: "idx=256 lte=false",
+            },
+        ];
+
+        for case in cases {
+            assert_eq!(
+                tick_list
+                    .next_initialized_tick_within_one_word(case.args.0, case.args.1)
+                    .unwrap(),
+                case.exp,
+                "{}",
+                case.id,
+            );
+        }
+    }
+
+    #[test]
+    fn test_next_initialized_tick_within_one_word_spacing() {
+        let tick_infos = vec![create_tick_info(0, 5), create_tick_info(512, -5)];
+        let tick_list1 = TickList::from(1, tick_infos.clone());
+        let tick_list2 = TickList::from(2, tick_infos.clone());
+
+        assert_eq!(
+            tick_list1
+                .next_initialized_tick_within_one_word(0, false)
+                .unwrap(),
+            (255, false)
+        );
+        assert_eq!(
+            tick_list2
+                .next_initialized_tick_within_one_word(0, false)
+                .unwrap(),
+            (510, false)
+        );
+    }
+
+    struct TestCaseNextTickError {
+        args: (i32, bool),
+        exp: Option<(i32, bool)>,
+        err: Option<TickListErrorKind>,
+        id: &'static str,
+    }
+
+    #[test]
+    fn test_next_initialized_tick_within_one_word_errors() {
+        let tick_infos = vec![
+            create_tick_info(-5100, 10),
+            create_tick_info(0, -5),
+            create_tick_info(5100, -5),
+        ];
+        let tick_list = TickList::from(10, tick_infos.clone());
+        let cases = vec![
+            TestCaseNextTickError {
+                args: (-1, true),
+                exp: Some((-2560, false)),
+                err: None,
+                id: "lte: minimum within word",
+            },
+            TestCaseNextTickError {
+                args: (-2561, true),
+                exp: Some((-5100, true)),
+                err: None,
+                id: "lte: smallest initialized",
+            },
+            TestCaseNextTickError {
+                args: (-5101, true),
+                exp: Some((-5110, false)),
+                err: None,
+                id: "lte: last safe tick",
+            },
+            TestCaseNextTickError {
+                args: (-5110, true),
+                exp: Some((-5110, false)),
+                err: None,
+                id: "lte: border does not raise",
+            },
+            TestCaseNextTickError {
+                args: (-5111, true),
+                exp: None,
+                err: Some(TickListErrorKind::TicksExeeded),
+                id: "lte: outside safe raises",
+            },
+            TestCaseNextTickError {
+                args: (1, false),
+                exp: Some((2550, false)),
+                err: None,
+                id: "gt: minimum within word",
+            },
+            TestCaseNextTickError {
+                args: (2550, false),
+                exp: Some((5100, true)),
+                err: None,
+                id: "gt: largest initialized",
+            },
+            TestCaseNextTickError {
+                args: (5101, false),
+                exp: Some((5110, false)),
+                err: None,
+                id: "gt: last safe tick",
+            },
+            TestCaseNextTickError {
+                args: (5110, false),
+                exp: None,
+                err: Some(TickListErrorKind::TicksExeeded),
+                id: "gt: border raises",
+            },
+            TestCaseNextTickError {
+                args: (5111, false),
+                exp: None,
+                err: Some(TickListErrorKind::TicksExeeded),
+                id: "gt: outside safe raises",
+            },
+        ];
+
+        for case in cases {
+            let res = tick_list.next_initialized_tick_within_one_word(case.args.0, case.args.1);
+            match case.err {
+                Some(kind) => {
+                    let err = res.unwrap_err();
+                    assert_eq!(err.kind, kind, "{}", case.id);
+                }
+                None => {
+                    let tup = res.unwrap();
+                    assert_eq!(tup, case.exp.unwrap(), "{}", case.id);
+                }
+            }
+        }
+    }
 }
