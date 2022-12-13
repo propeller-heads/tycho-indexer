@@ -2,13 +2,26 @@ use std::cmp::{self, Ordering};
 
 use ethers::types::{I256, U256};
 
+use super::tick_math;
+
 // enum TickSpacing{one: 1, 100, 300, 5000}
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct TickInfo {
-    index: i32,
-    net_liquidity: I256,
-    sqrt_price: U256,
+    pub index: i32,
+    pub net_liquidity: I256,
+    pub sqrt_price: U256,
+}
+
+impl TickInfo {
+    pub fn new(index: i32, net_liquidity: I256) -> Self {
+        let sqrt_price = tick_math::get_sqrt_ratio_at_tick(index);
+        TickInfo {
+            index,
+            net_liquidity,
+            sqrt_price,
+        }
+    }
 }
 
 impl PartialOrd for TickInfo {
@@ -39,6 +52,7 @@ pub struct TickList {
 }
 
 impl TickList {
+    // TODO spacing shouldn't depend on arch (shouldn't be usize)
     pub fn new(spacing: usize) -> Self {
         return TickList {
             tick_spacing: spacing,
@@ -46,6 +60,7 @@ impl TickList {
         };
     }
 
+    // TODO spacing shouldn't depend on arch (shouldn't be usize)
     pub fn from(spacing: usize, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList {
             tick_spacing: spacing,
