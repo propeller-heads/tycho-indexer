@@ -4,8 +4,6 @@ const Q96: U256 = U256([0, 4294967296, 0, 0]);
 const RESOLUTION: U256 = U256([96, 0, 0, 0]);
 const U160_MAX: U256 = U256([u64::MAX, u64::MAX, 4294967295, 0]);
 
-// TODO: work on types, especiall U128 and U160, currently we use U256 for those
-
 fn maybe_flip_ratios(a: U256, b: U256) -> (U256, U256) {
     if a > b {
         (b, a)

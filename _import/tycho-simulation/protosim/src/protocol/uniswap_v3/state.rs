@@ -68,7 +68,7 @@ impl UniswapV3State {
         return pool;
     }
 
-    fn get_spacing(fee: u32) -> usize {
+    fn get_spacing(fee: u32) -> u16 {
         match fee {
             100 => 1,
             500 => 10,

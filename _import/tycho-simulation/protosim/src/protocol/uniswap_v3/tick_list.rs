@@ -44,13 +44,12 @@ pub enum TickListErrorKind {
 }
 
 pub struct TickList {
-    tick_spacing: usize,
+    tick_spacing: u16,
     ticks: Vec<TickInfo>,
 }
 
 impl TickList {
-    // TODO spacing shouldn't depend on arch (shouldn't be usize)
-    pub fn from(spacing: usize, ticks: Vec<TickInfo>) -> Self {
+    pub fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList {
             tick_spacing: spacing,
             ticks: ticks,
@@ -67,7 +66,6 @@ impl TickList {
     // 1. Tick spacing > 0
     // 2. Tick indexes have no rest when divided by tick spacing
     // 3. Ticks are ordered by index
-    // TODO: test
     fn valid_ticks(&self) -> Result<bool, String> {
         if self.tick_spacing == 0 {
             return Err(String::from("Tick spacing is 0"));
@@ -93,8 +91,8 @@ impl TickList {
         return Ok(true);
     }
 
+    #[allow(dead_code)]
     pub fn push(&mut self, tick: TickInfo) {
-        // let tickcmp_f = |el: &TickInfo| -> Ordering { el.index.cmp(&tick.index) };
         let index_to_push = self.ticks.binary_search_by(|el| el.index.cmp(&tick.index));
         if index_to_push.is_ok() {
             panic!("Tick at index {} already exists!", tick.index)
