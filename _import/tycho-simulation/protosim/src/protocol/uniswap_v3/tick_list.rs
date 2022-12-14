@@ -1,6 +1,6 @@
-use std::cmp::{self, Ordering};
+use std::cmp::{self};
 
-use ethers::types::{I256, U256};
+use ethers::types::U256;
 
 use super::tick_math;
 
@@ -9,12 +9,12 @@ use super::tick_math;
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct TickInfo {
     pub index: i32,
-    pub net_liquidity: I256,
+    pub net_liquidity: i128,
     pub sqrt_price: U256,
 }
 
 impl TickInfo {
-    pub fn new(index: i32, net_liquidity: I256) -> Self {
+    pub fn new(index: i32, net_liquidity: i128) -> Self {
         let sqrt_price = tick_math::get_sqrt_ratio_at_tick(index);
         TickInfo {
             index,
@@ -38,9 +38,6 @@ pub struct TickListError {
 #[derive(Debug, PartialEq)]
 pub enum TickListErrorKind {
     NotFound,
-    InvalidSpacing,
-    TickAlignment,
-    UnsortedTicks,
     BelowSmallest,
     AtOrAboveLargest,
     TicksExeeded,
@@ -52,14 +49,6 @@ pub struct TickList {
 }
 
 impl TickList {
-    // TODO spacing shouldn't depend on arch (shouldn't be usize)
-    pub fn new(spacing: usize) -> Self {
-        return TickList {
-            tick_spacing: spacing,
-            ticks: Vec::with_capacity(20),
-        };
-    }
-
     // TODO spacing shouldn't depend on arch (shouldn't be usize)
     pub fn from(spacing: usize, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList {
@@ -256,10 +245,10 @@ mod tests {
         TickList::from(10, tick_infos)
     }
 
-    fn create_tick_info(idx: i32, liq: i32) -> TickInfo {
+    fn create_tick_info(idx: i32, liq: i128) -> TickInfo {
         return TickInfo {
             index: idx,
-            net_liquidity: I256::from(liq),
+            net_liquidity: liq,
             sqrt_price: U256::zero(),
         };
     }

@@ -12,7 +12,7 @@ use super::{
 pub struct TradeSimulationError {}
 
 pub struct UniswapV3State {
-    liquidity: U256,
+    liquidity: u128,
     sqrt_price: U256,
     fee: u32,
     tick: i32,
@@ -25,7 +25,7 @@ struct SwapState {
     amount_calculated: I256,
     sqrt_price: U256,
     tick: i32,
-    liquidity: U256,
+    liquidity: u128,
 }
 
 #[derive(Debug)]
@@ -49,7 +49,7 @@ struct SwapResults {
 
 impl UniswapV3State {
     pub fn new(
-        liquidity: U256,
+        liquidity: u128,
         sqrt_price: U256,
         fee: u32,
         tick: i32,
@@ -156,7 +156,7 @@ impl UniswapV3State {
             );
             state.sqrt_price = sqrt_price;
 
-            let mut step = StepComputation {
+            let step = StepComputation {
                 sqrt_price_start: state.sqrt_price,
                 tick_next: next_tick,
                 initialized,
@@ -165,7 +165,6 @@ impl UniswapV3State {
                 amount_out,
                 fee_amount,
             };
-            println!("{:#?}", step);
             if exact_input {
                 state.amount_remaining = state.amount_remaining
                     - I256::checked_from_sign_and_abs(
@@ -189,14 +188,12 @@ impl UniswapV3State {
                 if step.initialized {
                     let liquidity_raw = self.ticks.get_tick(step.tick_next).unwrap().net_liquidity;
                     let liquidity_net = if zero_for_one {
-                        liquidity_raw.checked_neg().unwrap()
+                        -liquidity_raw
                     } else {
                         liquidity_raw
                     };
-                    state.liquidity = U256::from(liquidity_math::add_liquidity_delta(
-                        state.liquidity.as_u128(),
-                        liquidity_net.as_i128(),
-                    ))
+                    state.liquidity =
+                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)
                 }
                 state.tick = if zero_for_one {
                     step.tick_next - 1
@@ -206,13 +203,12 @@ impl UniswapV3State {
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price);
             }
-            println!("{:#?}", state);
             n_ticks_crossed += 1;
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
             sqrt_price: state.sqrt_price,
-            liquidity: state.liquidity.as_u128(),
+            liquidity: state.liquidity,
             tick: state.tick,
             n_ticks_crossed: n_ticks_crossed,
         })
@@ -247,14 +243,11 @@ mod tests {
         let token_y = ERC20Token::new("0xf1ca9cb74685755965c7458528a36934df52a3ef", 18, "Y");
 
         let pool = UniswapV3State::new(
-            U256::from_dec_str("8330443394424070888454257").unwrap(),
+            8330443394424070888454257,
             U256::from_dec_str("188562464004052255423565206602").unwrap(),
             3000,
             17342,
-            vec![
-                TickInfo::new(0, I256::zero()),
-                TickInfo::new(46080, I256::zero()),
-            ],
+            vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
         );
         let sell_amount = U256::from(11000) * U256::exp10(18);
         let expected = U256::from_dec_str("61927070842678722935941").unwrap();
@@ -277,22 +270,22 @@ mod tests {
         let wbtc = ERC20Token::new("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", 8, "WBTC");
         let weth = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH");
         let pool = UniswapV3State::new(
-            U256::from_dec_str("377952820878029838").unwrap(),
+            377952820878029838,
             U256::from_dec_str("28437325270877025820973479874632004").unwrap(),
             500,
             255830,
             vec![
-                TickInfo::new(255760, I256::from_dec_str("1759015528199933").unwrap()),
-                TickInfo::new(255770, I256::from_dec_str("6393138051835308").unwrap()),
-                TickInfo::new(255780, I256::from_dec_str("228206673808681").unwrap()),
-                TickInfo::new(255820, I256::from_dec_str("1319490609195820").unwrap()),
-                TickInfo::new(255830, I256::from_dec_str("678916926147901").unwrap()),
-                TickInfo::new(255840, I256::from_dec_str("12208947683433103").unwrap()),
-                TickInfo::new(255850, I256::from_dec_str("1177970713095301").unwrap()),
-                TickInfo::new(255860, I256::from_dec_str("8752304680520407").unwrap()),
-                TickInfo::new(255880, I256::from_dec_str("1486478248067104").unwrap()),
-                TickInfo::new(255890, I256::from_dec_str("1878744276123248").unwrap()),
-                TickInfo::new(255900, I256::from_dec_str("77340284046725227").unwrap()),
+                TickInfo::new(255760, 1759015528199933i128),
+                TickInfo::new(255770, 6393138051835308i128),
+                TickInfo::new(255780, 228206673808681i128),
+                TickInfo::new(255820, 1319490609195820i128),
+                TickInfo::new(255830, 678916926147901i128),
+                TickInfo::new(255840, 12208947683433103i128),
+                TickInfo::new(255850, 1177970713095301i128),
+                TickInfo::new(255860, 8752304680520407i128),
+                TickInfo::new(255880, 1486478248067104i128),
+                TickInfo::new(255890, 1878744276123248i128),
+                TickInfo::new(255900, 77340284046725227i128),
             ],
         );
         let cases = vec![

@@ -15,7 +15,7 @@ enum FeeAmount {
 pub fn compute_swap_step(
     sqrt_ratio_current: U256,
     sqrt_ratio_target: U256,
-    liquidity: U256,
+    liquidity: u128,
     amount_remaining: I256,
     fee_pips: u32,
 ) -> (U256, U256, U256, U256) {
@@ -146,7 +146,7 @@ mod tests {
     struct TestCase {
         price: U256,
         target: U256,
-        liquidity: U256,
+        liquidity: u128,
         remaining: I256,
         fee: FeeAmount,
         exp: (U256, U256, U256, U256),
@@ -158,7 +158,7 @@ mod tests {
             TestCase {
                 price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
                 target: U256::from_dec_str("1919023616462402511535565081385034").unwrap(),
-                liquidity: U256::from_dec_str("23130341825817804069").unwrap(),
+                liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18),
                 fee: FeeAmount::Low,
                 exp: (
@@ -171,7 +171,7 @@ mod tests {
             TestCase {
                 price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
                 target: U256::from_dec_str("1919023616462402511535565081385034").unwrap(),
-                liquidity: U256::from_dec_str("23130341825817804069").unwrap(),
+                liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18).neg(),
                 fee: FeeAmount::Low,
                 exp: (
@@ -184,7 +184,7 @@ mod tests {
             TestCase {
                 price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
                 target: U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
-                liquidity: U256::from_dec_str("23130341825817804069").unwrap(),
+                liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18).neg(),
                 fee: FeeAmount::Low,
                 exp: (
@@ -197,7 +197,7 @@ mod tests {
             TestCase {
                 price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
                 target: U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
-                liquidity: U256::from_dec_str("23130341825817804069").unwrap(),
+                liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18),
                 fee: FeeAmount::Low,
                 exp: (

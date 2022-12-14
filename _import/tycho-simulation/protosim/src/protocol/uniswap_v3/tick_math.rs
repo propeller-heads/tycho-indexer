@@ -143,11 +143,8 @@ mod tests {
         ratio: U256,
     }
 
-    fn convert_number() {
-        let no = U256::from_dec_str("291339464771989622907027621153398088495").unwrap();
-        println!("U256({:?})", no.0)
-    }
-
+    /// This generates the unreadable if-expression in get_sqrt_ratio_at_tick.
+    #[allow(dead_code)]
     fn generate_if_statemens() {
         let numbers = vec![
             "0xfff97272373d413259a46990580e213a",
