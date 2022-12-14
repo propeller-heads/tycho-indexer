@@ -5,13 +5,6 @@ use super::{
     sqrt_price_math,
 };
 
-enum FeeAmount {
-    Lowest = 100,
-    Low = 500,
-    Medium = 3000,
-    High = 10_000,
-}
-
 pub fn compute_swap_step(
     sqrt_ratio_current: U256,
     sqrt_ratio_target: U256,
@@ -140,6 +133,8 @@ pub fn compute_swap_step(
 #[cfg(test)]
 mod tests {
     use std::ops::Neg;
+
+    use crate::protocol::uniswap_v3::enums::FeeAmount;
 
     use super::*;
 

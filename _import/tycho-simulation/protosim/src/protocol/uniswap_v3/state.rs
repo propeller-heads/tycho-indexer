@@ -3,6 +3,7 @@ use ethers::types::{Sign, I256, U256};
 use crate::models::ERC20Token;
 
 use super::{
+    enums::FeeAmount,
     liquidity_math, swap_math,
     tick_list::{TickInfo, TickList},
     tick_math,
@@ -14,7 +15,7 @@ pub struct TradeSimulationError {}
 pub struct UniswapV3State {
     liquidity: u128,
     sqrt_price: U256,
-    fee: u32,
+    fee: FeeAmount,
     tick: i32,
     ticks: TickList,
 }
@@ -51,7 +52,7 @@ impl UniswapV3State {
     pub fn new(
         liquidity: u128,
         sqrt_price: U256,
-        fee: u32,
+        fee: FeeAmount,
         tick: i32,
         ticks: Vec<TickInfo>,
     ) -> Self {
@@ -68,13 +69,12 @@ impl UniswapV3State {
         return pool;
     }
 
-    fn get_spacing(fee: u32) -> u16 {
+    fn get_spacing(fee: FeeAmount) -> u16 {
         match fee {
-            100 => 1,
-            500 => 10,
-            3000 => 60,
-            10000 => 200,
-            _ => panic!("Unkown fee tier {}", fee),
+            FeeAmount::Lowest => 1,
+            FeeAmount::Low => 10,
+            FeeAmount::Medium => 60,
+            FeeAmount::High => 200,
         }
     }
 
@@ -152,7 +152,7 @@ impl UniswapV3State {
                 UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
                 state.liquidity,
                 state.amount_remaining,
-                self.fee,
+                self.fee as u32,
             );
             state.sqrt_price = sqrt_price;
 
@@ -245,7 +245,7 @@ mod tests {
         let pool = UniswapV3State::new(
             8330443394424070888454257,
             U256::from_dec_str("188562464004052255423565206602").unwrap(),
-            3000,
+            FeeAmount::Medium,
             17342,
             vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
         );
@@ -272,7 +272,7 @@ mod tests {
         let pool = UniswapV3State::new(
             377952820878029838,
             U256::from_dec_str("28437325270877025820973479874632004").unwrap(),
-            500,
+            FeeAmount::Low,
             255830,
             vec![
                 TickInfo::new(255760, 1759015528199933i128),
