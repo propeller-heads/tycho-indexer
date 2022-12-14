@@ -1,6 +1,12 @@
 use ethers::types::{Sign, I256, U256};
 
-use crate::models::ERC20Token;
+use crate::{
+    models::ERC20Token,
+    protocol::{
+        errors::{TradeSimulationError, TradeSimulationErrorKind},
+        models::GetAmountOutResult,
+    },
+};
 
 use super::{
     enums::FeeAmount,
@@ -8,9 +14,6 @@ use super::{
     tick_list::{TickInfo, TickList},
     tick_math,
 };
-
-#[derive(Debug)]
-pub struct TradeSimulationError {}
 
 pub struct UniswapV3State {
     liquidity: u128,
@@ -40,12 +43,14 @@ struct StepComputation {
     fee_amount: U256,
 }
 
+// TODO: these attributes allow updating the state after a swap
+#[allow(dead_code)]
 struct SwapResults {
     amount_calculated: I256,
     sqrt_price: U256,
     liquidity: u128,
     tick: i32,
-    n_ticks_crossed: u32,
+    gas_used: U256,
 }
 
 impl UniswapV3State {
@@ -83,14 +88,16 @@ impl UniswapV3State {
         amount_in: U256,
         token_a: &ERC20Token,
         token_b: &ERC20Token,
-    ) -> Result<U256, TradeSimulationError> {
+    ) -> Result<GetAmountOutResult, TradeSimulationError> {
         let zero_for_one = token_a < token_b;
         let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
 
-        // TODO: Catch and handle TicksExceededError here
         let result = self.swap(zero_for_one, amount_specified, None)?;
 
-        Ok(result.amount_calculated.abs().into_raw())
+        Ok(GetAmountOutResult::new(
+            result.amount_calculated.abs().into_raw(),
+            result.gas_used,
+        ))
     }
 
     fn swap(
@@ -99,6 +106,12 @@ impl UniswapV3State {
         amount_specified: I256,
         sqrt_price_limit: Option<U256>,
     ) -> Result<SwapResults, TradeSimulationError> {
+        if self.liquidity <= 0 {
+            return Err(TradeSimulationError::new(
+                TradeSimulationErrorKind::NoLiquidity,
+                None,
+            ));
+        }
         let price_limit = if sqrt_price_limit.is_none() {
             if zero_for_one {
                 tick_math::MIN_SQRT_RATIO + 1
@@ -126,7 +139,7 @@ impl UniswapV3State {
             tick: self.tick,
             liquidity: self.liquidity,
         };
-        let mut n_ticks_crossed = 0u32;
+        let mut gas_used = U256::from(130_000);
 
         while state.amount_remaining != I256::zero() && state.sqrt_price != price_limit {
             let (mut next_tick, initialized) = match self
@@ -134,10 +147,23 @@ impl UniswapV3State {
                 .next_initialized_tick_within_one_word(state.tick, zero_for_one)
             {
                 Ok((tick, init)) => (tick, init),
-                Err(_) => {
-                    // TODO: Improved error handling
-                    return Err(TradeSimulationError {});
-                }
+                Err(tick_err) => match tick_err.kind {
+                    super::tick_list::TickListErrorKind::TicksExeeded => {
+                        return Err(TradeSimulationError::new(
+                            TradeSimulationErrorKind::InsufficientData,
+                            Some(GetAmountOutResult::new(
+                                state.amount_calculated.abs().into_raw(),
+                                gas_used,
+                            )),
+                        ));
+                    }
+                    _ => {
+                        return Err(TradeSimulationError::new(
+                            TradeSimulationErrorKind::Unkown,
+                            None,
+                        ));
+                    }
+                },
             };
 
             if next_tick < tick_math::MIN_TICK {
@@ -203,14 +229,14 @@ impl UniswapV3State {
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price);
             }
-            n_ticks_crossed += 1;
+            gas_used += U256::from(2000);
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
             sqrt_price: state.sqrt_price,
             liquidity: state.liquidity,
             tick: state.tick,
-            n_ticks_crossed: n_ticks_crossed,
+            gas_used: gas_used,
         })
     }
 
@@ -252,11 +278,11 @@ mod tests {
         let sell_amount = U256::from(11000) * U256::exp10(18);
         let expected = U256::from_dec_str("61927070842678722935941").unwrap();
 
-        let buy_amount = pool
+        let res = pool
             .get_amount_out(sell_amount, &token_x, &token_y)
             .unwrap();
 
-        assert_eq!(buy_amount, expected);
+        assert_eq!(res.amount, expected);
     }
 
     struct SwapTestCase {
@@ -347,9 +373,50 @@ mod tests {
             } else {
                 (&weth, &wbtc)
             };
-            let out = pool.get_amount_out(case.sell, token_a, token_b).unwrap();
+            let res = pool.get_amount_out(case.sell, token_a, token_b).unwrap();
 
-            assert_eq!(out, case.exp);
+            assert_eq!(res.amount, case.exp);
         }
+    }
+
+    #[test]
+    fn test_err_with_partial_trade() {
+        let dai = ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI");
+        let usdc = ERC20Token::new("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, "USDC");
+        let pool = UniswapV3State::new(
+            73015811375239994,
+            U256::from_dec_str("148273042406850898575413").unwrap(),
+            FeeAmount::High,
+            -263789,
+            vec![
+                TickInfo::new(-269600, 3612326326695492i128),
+                TickInfo::new(-268800, 1487613939516867i128),
+                TickInfo::new(-267800, 1557587121322546i128),
+                TickInfo::new(-267400, 424592076717375i128),
+                TickInfo::new(-267200, 11691597431643916i128),
+                TickInfo::new(-266800, -218742815100986i128),
+                TickInfo::new(-266600, 1118947532495477i128),
+                TickInfo::new(-266200, 1233064286622365i128),
+                TickInfo::new(-265000, 4252603063356107i128),
+                TickInfo::new(-263200, -351282010325232i128),
+                TickInfo::new(-262800, -2352011819117842i128),
+                TickInfo::new(-262600, -424592076717375i128),
+                TickInfo::new(-262200, -11923662433672566i128),
+                TickInfo::new(-261600, -2432911749667741i128),
+                TickInfo::new(-260200, -4032727022572273i128),
+                TickInfo::new(-260000, -22889492064625028i128),
+                TickInfo::new(-259400, -1557587121322546i128),
+                TickInfo::new(-259200, -1487613939516867i128),
+                TickInfo::new(-258400, -400137022888262i128),
+            ],
+        );
+        let amount_in = U256::from_dec_str("50000000000").unwrap();
+        let exp = U256::from_dec_str("6820591625999718100883").unwrap();
+
+        let err = pool.get_amount_out(amount_in, &usdc, &dai).unwrap_err();
+        let res = err.partial_result.unwrap();
+
+        assert_eq!(err.kind, TradeSimulationErrorKind::InsufficientData);
+        assert_eq!(res.amount, exp);
     }
 }

@@ -1,10 +1,8 @@
-use std::cmp::{self};
+use std::cmp;
 
 use ethers::types::U256;
 
 use super::tick_math;
-
-// enum TickSpacing{one: 1, 100, 300, 5000}
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct TickInfo {
@@ -32,7 +30,7 @@ impl PartialOrd for TickInfo {
 
 #[derive(Debug)]
 pub struct TickListError {
-    kind: TickListErrorKind,
+    pub kind: TickListErrorKind,
 }
 
 #[derive(Debug, PartialEq)]
