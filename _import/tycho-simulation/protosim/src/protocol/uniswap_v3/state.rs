@@ -74,6 +74,16 @@ impl UniswapV3State {
         return pool;
     }
 
+    fn fee(&self) -> f64 {
+        return (self.fee as u32) as f64 / 1_000_000.0;
+    }
+
+    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
+        let numer = self.sqrt_price.pow(U256::from(2));
+        let denom = U256::from(2).pow(U256::from(192));
+        0.0
+    }
+
     fn get_spacing(fee: FeeAmount) -> u16 {
         match fee {
             FeeAmount::Lowest => 1,
@@ -418,5 +428,15 @@ mod tests {
 
         assert_eq!(err.kind, TradeSimulationErrorKind::InsufficientData);
         assert_eq!(res.amount, exp);
+    }
+
+    #[test]
+    fn test_convert_u256_to_float() {
+        let price = U256::from(2).pow(U256::from(160)) - U256::one();
+        let integer_part = (price >> 96).as_u128();
+        let frac = (price & ((U256::one() << 96) - 1)).as_u128();
+        let denom = (2 as f64).powi(192);
+
+        let res = (integer_part as f64) + (frac as f64) / denom;
     }
 }
