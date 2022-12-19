@@ -91,7 +91,6 @@ mod tests {
         let honour_bounds = true;
 
         let f = |x: f64| -> f64 { -1_f64 * (1.4_f64 * x - 1.4_f64).powi(2) + 2.0 };
-        println!("{}", f(1.0));
         let (min, _) = gss(
             f,
             U256::from(0u128),
@@ -116,7 +115,6 @@ mod tests {
             5000,
             true,
         );
-        println!("{:?}", min);
         assert_eq!(min, U256::from(300));
     }
 
@@ -132,7 +130,6 @@ mod tests {
             10,
             false,
         );
-        println!("{:?}", min);
         assert!(min == U256::from(1u128));
     }
 }
