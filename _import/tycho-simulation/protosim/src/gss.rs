@@ -13,11 +13,13 @@ pub fn gss<F: Fn(U256) -> U256>(
     max_iter: u64,
     honour_bounds: bool,
 ) -> U256 {
-    if min_bound > max_bound {
-        swap(&mut min_bound, &mut max_bound);
+    if honour_bounds {
+        if min_bound > max_bound {
+            swap(&mut min_bound, &mut max_bound);
+        }
     }
 
-    let mut h = max_bound - min_bound;
+    let mut h = max_bound.abs_diff(min_bound);
     if h.le(&tol) {
         return min_bound;
     }
@@ -40,9 +42,6 @@ pub fn gss<F: Fn(U256) -> U256>(
             h = mul_div(INVPHI, h, PHI_DENOM);
             println!("mul_div xc");
             xc = min_bound + mul_div(INVPHI2, h, PHI_DENOM);
-            if xc > max_bound && !honour_bounds {
-                xc = max_bound;
-            }
             println!("f xc={}", xc);
             println!("min_bound={}", min_bound);
             yc = f(xc);
@@ -54,9 +53,6 @@ pub fn gss<F: Fn(U256) -> U256>(
             h = mul_div(INVPHI, h, PHI_DENOM);
             println!("mul_div xd in else");
             xd = min_bound + mul_div(INVPHI, h, PHI_DENOM);
-            if xd > max_bound && !honour_bounds {
-                xd = max_bound;
-            }
             println!("f xd={}", xd);
             println!("min_bound={}", min_bound);
             yd = f(xd);
