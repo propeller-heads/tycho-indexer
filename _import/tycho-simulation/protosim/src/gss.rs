@@ -1,9 +1,9 @@
 use ethers::types::{U256, U512};
 use std::mem::swap;
 
-const INVPHI: U256 = U256([79, 30, 55, 122]);
-const INVPHI2: U256 = U256([78, 195, 145, 13]);
-const PHI: U256 = U256([79, 207, 27, 155]); // -> 0.618033988749894902525738871 * 32 ** 2
+const INVPHI: U256 = U256([632, 0, 0, 0]); //  632.866804479892380186356604099273681640625_f32
+const INVPHI2: U256 = U256([391, 0, 0, 0]); // 391.133195520107619813643395900726318359375_f32
+const PHI_DENOM: U256 = U256([1024, 0, 0, 0]); // 32 ** 2
 
 pub fn gss<F: Fn(U256) -> U256>(
     f: F,
@@ -22,33 +22,43 @@ pub fn gss<F: Fn(U256) -> U256>(
         return min_bound;
     }
     println!("h={}", h);
-    let mut xc = min_bound + mul_div(INVPHI2, h, PHI);
-    let mut xd = min_bound + mul_div(INVPHI, h, PHI);
+    let mut xc = min_bound + mul_div(INVPHI2, h, PHI_DENOM);
+    let mut xd = min_bound + mul_div(INVPHI, h, PHI_DENOM);
     println!("xc={}", xc);
     let mut yc = f(xc);
     println!("xd={}", xd);
     let mut yd = f(xd);
+    println!("yc={}", yc);
+    println!("yd={}", yd);
 
     for _ in 0..max_iter {
         if yc < yd {
             max_bound = xd;
             xd = xc;
             yd = yc;
-            h = mul_div(INVPHI, h, PHI);
-            xc = min_bound + mul_div(INVPHI2, h, PHI);
+            println!("mul_div H");
+            h = mul_div(INVPHI, h, PHI_DENOM);
+            println!("mul_div xc");
+            xc = min_bound + mul_div(INVPHI2, h, PHI_DENOM);
             if xc > max_bound && !honour_bounds {
                 xc = max_bound;
             }
+            println!("f xc={}", xc);
+            println!("min_bound={}", min_bound);
             yc = f(xc);
         } else {
             min_bound = xc;
             xc = xd;
             yc = yd;
-            h = mul_div(INVPHI, h, PHI);
-            xd = min_bound + mul_div(INVPHI, h, PHI);
+            println!("mul_div H in else");
+            h = mul_div(INVPHI, h, PHI_DENOM);
+            println!("mul_div xd in else");
+            xd = min_bound + mul_div(INVPHI, h, PHI_DENOM);
             if xd > max_bound && !honour_bounds {
                 xd = max_bound;
             }
+            println!("f xd={}", xd);
+            println!("min_bound={}", min_bound);
             yd = f(xd);
         }
     }
@@ -106,18 +116,16 @@ mod tests {
     #[test]
     fn test_gss_large_interval() {
         let f = |x: U256| -> U256 { (U256::from(100) - x) * (U256::from(100) - x) };
-        println!("f(0)={}", f(U256::from(0)));
-        println!("f(18)={}", f(U256::from(18)));
-        println!("f(100)={}", f(U256::from(100)));
+        f(U256::from(100));
         let min = gss(
             f,
             U256::from(0),
             U256::from(100),
             U256::from(1u128),
-            500,
+            10000,
             true,
         );
-        assert_eq!(min, U256::from(300));
+        assert_eq!(min, U256::from(100));
     }
 
     // Test a case where honour_bounds is set to false
@@ -138,9 +146,22 @@ mod tests {
 
 pub fn mul_div(a: U256, b: U256, denom: U256) -> U256 {
     // do fractional math in U512 to allow for bigger range
+    println!("-------");
     let product = U512::from(a) * U512::from(b);
+    println!("product={}", product);
+    let rest: U512 = product % U512::from(denom);
+    println!("denom={}", denom);
+    println!("rest={}", product);
+    let rounder = if rest > (U512::from(denom) / U512::from(2)) {
+        U256::from(1)
+    } else {
+        U256::from(0)
+    };
+    println!("rounder={}", rounder);
     let result: U256 = (product / U512::from(denom))
         .try_into()
         .expect("Integer Overflow");
-    return result;
+    println!("result={}", result);
+    println!("result + rounder={}", result + rounder);
+    return result + rounder;
 }
