@@ -10,7 +10,9 @@ use crate::{
 
 use super::{
     enums::FeeAmount,
-    liquidity_math, swap_math,
+    liquidity_math,
+    q96_math::sqrt_price_q96_to_f64,
+    swap_math,
     tick_list::{TickInfo, TickList},
     tick_math,
 };
@@ -74,14 +76,16 @@ impl UniswapV3State {
         return pool;
     }
 
-    fn fee(&self) -> f64 {
+    pub fn fee(&self) -> f64 {
         return (self.fee as u32) as f64 / 1_000_000.0;
     }
 
-    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
-        let numer = self.sqrt_price.pow(U256::from(2));
-        let denom = U256::from(2).pow(U256::from(192));
-        0.0
+    pub fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
+        if a < b {
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32)
+        } else {
+            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32)
+        }
     }
 
     fn get_spacing(fee: FeeAmount) -> u16 {
@@ -428,15 +432,5 @@ mod tests {
 
         assert_eq!(err.kind, TradeSimulationErrorKind::InsufficientData);
         assert_eq!(res.amount, exp);
-    }
-
-    #[test]
-    fn test_convert_u256_to_float() {
-        let price = U256::from(2).pow(U256::from(160)) - U256::one();
-        let integer_part = (price >> 96).as_u128();
-        let frac = (price & ((U256::one() << 96) - 1)).as_u128();
-        let denom = (2 as f64).powi(192);
-
-        let res = (integer_part as f64) + (frac as f64) / denom;
     }
 }
