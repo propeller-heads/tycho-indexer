@@ -9,32 +9,21 @@ const MAX_U160: U256 = U256([0, 0, 4294967296, 0]);
 ///
 /// # Note
 /// The conversion here is not losless and the obtained f64 value is just an approximation of the actual price.
+/// Max epsilon is 2^32/2^96 = 2^-64
 pub fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u32) -> f64 {
     assert!(x <= MAX_U160);
     let token_correction = 10f64.powi(token_0_decimals as i32 - token_1_decimals as i32);
 
     // if x.bits() < 128 it's square will not exceed 256
-    if x.bits() < 128 {
+    let price = if x.bits() < 128 {
         // price is < 1.0, we assume nomin < denom
         // price = sqrt(price)^2
         // sqrt(price) = x / 2**96 ≈ x >> shr_b / 2^(96 - shr_b)
         // shr_b is chosen such that we can fit the number comfortably as a u64
-        let x_bits = x.bits();
-        let nomin;
-        let denom;
-        if x_bits > 64 {
-            let shr_b = x_bits - 64;
-            let denom_pow = 96 - shr_b;
+        let nomin = x.as_u128() as f64;
+        let denom = 2f64.powi(96);
 
-            nomin = (x >> shr_b).as_u64() as f64;
-            denom = 2f64.powi(denom_pow as i32);
-        } else {
-            // price requires less than 64 bit of precision
-            // we can convert losless (in terms of what float can represent)
-            nomin = x.as_u64() as f64;
-            denom = 2f64.powi(96);
-        }
-        (nomin / denom).powi(2) * token_correction
+        (nomin / denom).powi(2)
     } else {
         // price >= 1.0, we assume nomin >= denom
         // in this case above method won't work consider price uses 320 bits (=160*2)
@@ -45,16 +34,17 @@ pub fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u
         // price = sqrt(price)^2
         // sqrt(price) = x / 2^96 ≈ 2 ^ shr_b * (x >> shr_b) / 2^96
         let x_bits = x.bits();
-        let shr_b = x_bits - 64;
+        let shr_b = x_bits - 128;
         let factor = 2f64.powi(shr_b as i32);
-        let nomin = (x >> shr_b).as_u64() as f64;
-        (factor * (nomin / 2f64.powi(96))).powi(2) * token_correction
-    }
+        let nomin = (x >> shr_b).as_u128() as f64;
+        (factor * (nomin / 2f64.powi(96))).powi(2)
+    };
+    price * token_correction
 }
 
 #[cfg(test)]
 mod tests {
-    use approx::{assert_ulps_eq, relative_eq, ulps_eq};
+    use approx::assert_ulps_eq;
 
     use super::*;
 
