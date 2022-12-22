@@ -1,7 +1,4 @@
-use ethers::{
-    prelude::k256::sha2::digest::typenum::Pow,
-    types::{U256, U512},
-};
+use ethers::types::U256;
 
 const MAX_U160: U256 = U256([0, 0, 4294967296, 0]);
 
@@ -16,20 +13,28 @@ pub fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u
     assert!(x <= MAX_U160);
     let token_correction = 10f64.powi(token_0_decimals as i32 - token_1_decimals as i32);
 
-    // if x.bits() < 128 it's squre will not exceed 256
+    // if x.bits() < 128 it's square will not exceed 256
     if x.bits() < 128 {
         // price is < 1.0, we assume nomin < denom
-        // we use the formula price = (x^2) >> shr_b /(2^(192 - shr_b))
-        // TODO: Should we do this in sqrt space?
-        // sqrt(price) = x / 2**96 = x >> shr_b / 2^(96 - shr_b)
-        let price = U512::from(x).pow(U512::from(2));
-        let price_bits = price.bits();
-        let shr_b = price_bits - 64;
-        let denom_pow = 192 - shr_b;
+        // price = sqrt(price)^2
+        // sqrt(price) = x / 2**96 ≈ x >> shr_b / 2^(96 - shr_b)
+        // shr_b is chosen such that we can fit the number comfortably as a u64
+        let x_bits = x.bits();
+        let nomin;
+        let denom;
+        if x_bits > 64 {
+            let shr_b = x_bits - 64;
+            let denom_pow = 96 - shr_b;
 
-        let res = (price >> shr_b).as_u64() as f64;
-        let denom = 2f64.powi(denom_pow as i32);
-        res as f64 / denom * token_correction
+            nomin = (x >> shr_b).as_u64() as f64;
+            denom = 2f64.powi(denom_pow as i32);
+        } else {
+            // price requires less than 64 bit of precision
+            // we can convert losless (in terms of what float can represent)
+            nomin = x.as_u64() as f64;
+            denom = 2f64.powi(96);
+        }
+        (nomin / denom).powi(2) * token_correction
     } else {
         // price >= 1.0, we assume nomin >= denom
         // in this case above method won't work consider price uses 320 bits (=160*2)
@@ -38,11 +43,11 @@ pub fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u
         // we instead will reduce the nominator in sqrt space and only square in the end
         // To reduce the nominator we do a right shift and introduce a power of two factor
         // price = sqrt(price)^2
-        // sqrt(price) = x / 2^96 = 2 ^ shr_b * (x >> shr_b) / 2^96
+        // sqrt(price) = x / 2^96 ≈ 2 ^ shr_b * (x >> shr_b) / 2^96
         let x_bits = x.bits();
-        let shr_b2 = x_bits - 64;
-        let factor = 2f64.powi(shr_b2 as i32);
-        let nomin = (x >> shr_b2).as_u64() as f64;
+        let shr_b = x_bits - 64;
+        let factor = 2f64.powi(shr_b as i32);
+        let nomin = (x >> shr_b).as_u64() as f64;
         (factor * (nomin / 2f64.powi(96))).powi(2) * token_correction
     }
 }
