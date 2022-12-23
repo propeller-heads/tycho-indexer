@@ -11,3 +11,4 @@ petgraph = "0.6.2"
 
 [dev-dependencies]
 approx = "0.3.2"
+rstest = "0.16.0"
