@@ -11,7 +11,7 @@ use crate::{
 use super::{
     enums::FeeAmount,
     liquidity_math,
-    q96_math::sqrt_price_q96_to_f64,
+    sqrt_price_math::sqrt_price_q96_to_f64,
     swap_math,
     tick_list::{TickInfo, TickList},
     tick_math,

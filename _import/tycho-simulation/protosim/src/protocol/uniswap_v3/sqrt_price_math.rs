@@ -1,3 +1,5 @@
+use crate::u256_num::u256_to_f64;
+
 use super::solidity_math::{mul_div, mul_div_rounding_up};
 use ethers::types::U256;
 const Q96: U256 = U256([0, 4294967296, 0, 0]);
@@ -137,13 +139,26 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
     }
 }
 
+/// Converts a sqrt price in Q96 representation to its approximate f64 representation
+///
+/// # Panics
+/// Will panic if the `x` is bigger than U160.
+pub fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u32) -> f64 {
+    assert!(x < U160_MAX);
+    let token_correction = 10f64.powi(token_0_decimals as i32 - token_1_decimals as i32);
+
+    let price = u256_to_f64(x) / 2.0f64.powi(96);
+    price.powi(2) * token_correction
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_ulps_eq;
+    use rstest::rstest;
 
-    struct TestCase {
-        args: (U256, U256, u128, bool),
-        exp: U256,
+    fn u256(s: &str) -> U256 {
+        U256::from_dec_str(s).unwrap()
     }
 
     #[test]
@@ -156,158 +171,168 @@ mod tests {
         assert_eq!(a, b1);
     }
 
-    #[test]
-    fn test_get_amount0_delta() {
-        let cases = vec![
-            TestCase {
-                args: (
-                    U256::from_dec_str("646922711029656030980122427077").unwrap(),
-                    U256::from_dec_str("78833030112140176575862854579").unwrap(),
-                    1000000000000u128,
-                    true,
-                ),
-                exp: U256::from_dec_str("882542983628").unwrap(),
-            },
-            TestCase {
-                args: (
-                    U256::from_dec_str("646922711029656030980122427077").unwrap(),
-                    U256::from_dec_str("78833030112140176575862854579").unwrap(),
-                    1000000000000u128,
-                    false,
-                ),
-                exp: U256::from_dec_str("882542983627").unwrap(),
-            },
-            TestCase {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    U256::from_dec_str("79394708140106462983274643745").unwrap(),
-                    10000000u128,
-                    true,
-                ),
-                exp: U256::from_dec_str("21477").unwrap(),
-            },
-            TestCase {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    U256::from_dec_str("79394708140106462983274643745").unwrap(),
-                    10000000u128,
-                    false,
-                ),
-                exp: U256::from_dec_str("21476").unwrap(),
-            },
-        ];
-
-        for case in cases {
-            let res = get_amount0_delta(case.args.0, case.args.1, case.args.2, case.args.3);
-            assert_eq!(res, case.exp);
-        }
+    #[rstest]
+    #[case(
+        u256("646922711029656030980122427077"),
+        u256("78833030112140176575862854579"),
+        1000000000000u128,
+        true,
+        u256("882542983628")
+    )]
+    #[case(
+        u256("646922711029656030980122427077"),
+        u256("78833030112140176575862854579"),
+        1000000000000u128,
+        false,
+        u256("882542983627")
+    )]
+    #[case(
+        u256("79224201403219477170569942574"),
+        u256("79394708140106462983274643745"),
+        10000000u128,
+        true,
+        u256("21477")
+    )]
+    #[case(
+        u256("79224201403219477170569942574"),
+        u256("79394708140106462983274643745"),
+        10000000u128,
+        false,
+        u256("21476")
+    )]
+    fn test_get_amount0_delta(
+        #[case] a: U256,
+        #[case] b: U256,
+        #[case] liquidity: u128,
+        #[case] round_up: bool,
+        #[case] exp: U256,
+    ) {
+        let res = get_amount0_delta(a, b, liquidity, round_up);
+        assert_eq!(res, exp);
     }
 
-    #[test]
-    fn test_get_amount1_delta() {
-        let cases = vec![
-            TestCase {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    U256::from_dec_str("79394708140106462983274643745").unwrap(),
-                    10000000,
-                    true,
-                ),
-                exp: U256::from_dec_str("21521").unwrap(),
-            },
-            TestCase {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    U256::from_dec_str("79394708140106462983274643745").unwrap(),
-                    10000000,
-                    false,
-                ),
-                exp: U256::from_dec_str("21520").unwrap(),
-            },
-            TestCase {
-                args: (
-                    U256::from_dec_str("646922711029656030980122427077").unwrap(),
-                    U256::from_dec_str("78833030112140176575862854579").unwrap(),
-                    1000000000000,
-                    true,
-                ),
-                exp: U256::from_dec_str("7170299838965").unwrap(),
-            },
-            TestCase {
-                args: (
-                    U256::from_dec_str("646922711029656030980122427077").unwrap(),
-                    U256::from_dec_str("78833030112140176575862854579").unwrap(),
-                    1000000000000,
-                    false,
-                ),
-                exp: U256::from_dec_str("7170299838964").unwrap(),
-            },
-        ];
-        for case in cases {
-            let res = get_amount1_delta(case.args.0, case.args.1, case.args.2, case.args.3);
-            assert_eq!(res, case.exp);
-        }
+    #[rstest]
+    #[case(
+        u256("79224201403219477170569942574"),
+        u256("79394708140106462983274643745"),
+        10000000u128,
+        true,
+        u256("21521")
+    )]
+    #[case(
+        u256("79224201403219477170569942574"),
+        u256("79394708140106462983274643745"),
+        10000000u128,
+        false,
+        u256("21520")
+    )]
+    #[case(
+        u256("646922711029656030980122427077"),
+        u256("78833030112140176575862854579"),
+        1000000000000u128,
+        true,
+        u256("7170299838965")
+    )]
+    #[case(
+        u256("646922711029656030980122427077"),
+        u256("78833030112140176575862854579"),
+        1000000000000u128,
+        false,
+        u256("7170299838964")
+    )]
+    fn test_get_amount1_delta(
+        #[case] a: U256,
+        #[case] b: U256,
+        #[case] liquidity: u128,
+        #[case] round_up: bool,
+        #[case] exp: U256,
+    ) {
+        let res = get_amount1_delta(a, b, liquidity, round_up);
+        assert_eq!(res, exp);
     }
 
-    struct TestCase2 {
-        args: (U256, u128, U256, bool),
-        exp: U256,
-    }
-    #[test]
-    fn test_get_next_sqrt_price_from_input() {
-        let cases = vec![
-            TestCase2 {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    1000000000000u128,
-                    U256::from_dec_str("1000000").unwrap(),
-                    true,
-                ),
-                exp: U256::from_dec_str("79224122183058203155816882540").unwrap(),
-            },
-            TestCase2 {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    1000000000000u128,
-                    U256::from_dec_str("1000000").unwrap(),
-                    false,
-                ),
-                exp: U256::from_dec_str("79224280631381991434907536117").unwrap(),
-            },
-        ];
-        for case in cases {
-            let res =
-                get_next_sqrt_price_from_input(case.args.0, case.args.1, case.args.2, case.args.3);
-            assert_eq!(res, case.exp);
-        }
+    #[rstest]
+    #[case(
+        u256("79224201403219477170569942574"),
+        1000000000000u128,
+        u256("1000000"),
+        true,
+        u256("79224122183058203155816882540")
+    )]
+    #[case(
+        u256("79224201403219477170569942574"),
+        1000000000000u128,
+        u256("1000000"),
+        false,
+        u256("79224280631381991434907536117")
+    )]
+    fn test_get_next_sqrt_price_from_input(
+        #[case] sqrt_price: U256,
+        #[case] liquidity: u128,
+        #[case] amount_in: U256,
+        #[case] zero_for_one: bool,
+        #[case] exp: U256,
+    ) {
+        let res = get_next_sqrt_price_from_input(sqrt_price, liquidity, amount_in, zero_for_one);
+        assert_eq!(res, exp);
     }
 
-    #[test]
-    fn test_get_next_sqrt_price_from_output() {
-        let cases = vec![
-            TestCase2 {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    1000000000000,
-                    U256::from_dec_str("1000000").unwrap(),
-                    true,
-                ),
-                exp: U256::from_dec_str("79224122175056962906232349030").unwrap(),
-            },
-            TestCase2 {
-                args: (
-                    U256::from_dec_str("79224201403219477170569942574").unwrap(),
-                    1000000000000,
-                    U256::from_dec_str("1000000").unwrap(),
-                    false,
-                ),
-                exp: U256::from_dec_str("79224280623539183744873644932").unwrap(),
-            },
-        ];
-        for case in cases {
-            let res =
-                get_next_sqrt_price_from_output(case.args.0, case.args.1, case.args.2, case.args.3);
-            assert_eq!(res, case.exp);
-        }
+    #[rstest]
+    #[case(
+        u256("79224201403219477170569942574"),
+        1000000000000u128,
+        u256("1000000"),
+        true,
+        u256("79224122175056962906232349030")
+    )]
+    #[case(
+        u256("79224201403219477170569942574"),
+        1000000000000u128,
+        u256("1000000"),
+        false,
+        u256("79224280623539183744873644932")
+    )]
+    fn test_get_next_sqrt_price_from_output(
+        #[case] sqrt_price: U256,
+        #[case] liquidity: u128,
+        #[case] amount_in: U256,
+        #[case] zero_for_one: bool,
+        #[case] exp: U256,
+    ) {
+        let res = get_next_sqrt_price_from_output(sqrt_price, liquidity, amount_in, zero_for_one);
+        assert_eq!(res, exp);
+    }
+
+    #[rstest]
+    #[case::usdc_eth(
+        u256("2209221051636112667296733914466103"),
+        6,
+        18,
+        0.0007775336231174711f64
+    )]
+    #[case::wbtc_eth(
+        u256("29654479368916176338227069900580738"),
+        8,
+        18,
+        14.00946143160293f64
+    )]
+    #[case::wdoge_eth(u256("672045190479078414067608947"), 18, 18, 7.195115788867147e-5)]
+    #[case::shib_usdc(u256("231479673319799999440"), 18, 6, 8.536238764169166e-6)]
+    #[case::min_price(u256("4295128740"), 18, 18, 2.9389568087743114e-39f64)]
+    #[case::max_price(
+        u256("1461446703485210103287273052203988822378723970341"),
+        18,
+        18,
+        3.402567868363881e+38f64
+    )]
+    fn test_q96_to_f64(
+        #[case] sqrt_price: U256,
+        #[case] t0d: u32,
+        #[case] t1d: u32,
+        #[case] exp: f64,
+    ) {
+        let res = sqrt_price_q96_to_f64(sqrt_price, t0d, t1d);
+
+        assert_ulps_eq!(res, exp, epsilon = f64::EPSILON);
     }
 }
