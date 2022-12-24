@@ -5,6 +5,7 @@ pub enum TradeSimulationErrorKind {
     InsufficientData,
     NoLiquidity,
     Unkown,
+    InsufficientAmount,
 }
 
 #[derive(Debug)]

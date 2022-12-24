@@ -5,6 +5,7 @@ use crate::{
     protocol::{
         errors::{TradeSimulationError, TradeSimulationErrorKind},
         models::GetAmountOutResult,
+        state::ProtocolSim,
     },
 };
 
@@ -76,18 +77,6 @@ impl UniswapV3State {
         return pool;
     }
 
-    pub fn fee(&self) -> f64 {
-        return (self.fee as u32) as f64 / 1_000_000.0;
-    }
-
-    pub fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
-        if a < b {
-            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32)
-        } else {
-            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32)
-        }
-    }
-
     fn get_spacing(fee: FeeAmount) -> u16 {
         match fee {
             FeeAmount::Lowest => 1,
@@ -95,23 +84,6 @@ impl UniswapV3State {
             FeeAmount::Medium => 60,
             FeeAmount::High => 200,
         }
-    }
-
-    pub fn get_amount_out(
-        &self,
-        amount_in: U256,
-        token_a: &ERC20Token,
-        token_b: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TradeSimulationError> {
-        let zero_for_one = token_a < token_b;
-        let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
-
-        let result = self.swap(zero_for_one, amount_specified, None)?;
-
-        Ok(GetAmountOutResult::new(
-            result.amount_calculated.abs().into_raw(),
-            result.gas_used,
-        ))
     }
 
     fn swap(
@@ -270,6 +242,37 @@ impl UniswapV3State {
         } else {
             sqrt_price_next
         }
+    }
+}
+
+impl ProtocolSim for UniswapV3State {
+    fn fee(&self) -> f64 {
+        return (self.fee as u32) as f64 / 1_000_000.0;
+    }
+
+    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
+        if a < b {
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32)
+        } else {
+            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32)
+        }
+    }
+
+    fn get_amount_out(
+        &self,
+        amount_in: U256,
+        token_a: &ERC20Token,
+        token_b: &ERC20Token,
+    ) -> Result<GetAmountOutResult, TradeSimulationError> {
+        let zero_for_one = token_a < token_b;
+        let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
+
+        let result = self.swap(zero_for_one, amount_specified, None)?;
+
+        Ok(GetAmountOutResult::new(
+            result.amount_calculated.abs().into_raw(),
+            result.gas_used,
+        ))
     }
 }
 
