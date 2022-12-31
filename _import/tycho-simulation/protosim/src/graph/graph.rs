@@ -4,9 +4,9 @@ use petgraph::{
     algo::all_simple_paths,
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
-    visit::EdgeRef,
+    visit::{EdgeRef, IntoNeighborsDirected},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::from_fn};
 
 use crate::{
     models::{ERC20Token, Opportunity, Swap},
@@ -126,12 +126,7 @@ impl ProtoGraph {
         self.paths.shrink_to_fit();
     }
 
-
-    pub fn iter_paths(){
-        
-    }
-
-    pub fn search_opportunities(&self) -> Vec<Opportunity> {
+    pub fn search_opportunities<F:Fn(Path) -> Option<Opportunity>>(&self, search: F) -> Vec<Opportunity> {
         let mut pairs = Vec::with_capacity(self.n_hops);
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
@@ -157,21 +152,12 @@ impl ProtoGraph {
                 pairs: &pairs,
                 tokens: &tokens,
             };
-            let price = p.price();
-            if price > 1.0 {
-                let amount_in = optimize_path(&p);
-                if amount_in > U256::zero() {
-                    opportunities.push(p.get_swaps(amount_in).unwrap());
-                }
+            if let Some(opp) = search(p) {
+                opportunities.push(opp);
             }
         }
         return opportunities;
     }
-}
-
-fn optimize_path(p: &Path) -> U256 {
-    let res = p.get_amount_out(U256::from(10_000_000)).unwrap();
-    return U256::from(1_000_000)
 }
 
 #[cfg(test)]
@@ -381,6 +367,22 @@ mod tests {
         assert_eq!(paths, exp);
     }
 
+    fn check_arb_possible(p: Path) -> Option<Opportunity> {
+        let price = p.price();
+            if price > 1.0 {
+                let amount_in = optimize_path(&p);
+                if amount_in > U256::zero() {
+                    return Some(p.get_swaps(amount_in).unwrap());
+                }
+            }
+        None
+    }
+
+    fn optimize_path(p: &Path) -> U256 {
+        let res = p.get_amount_out(U256::from(10_000_000)).unwrap();
+        return U256::from(1_000_000)
+    }
+
     #[rstest]
     fn test_simulate_path() {
         let mut g = ProtoGraph::new(4);
@@ -399,8 +401,8 @@ mod tests {
             10_000_000,
         ));
         g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
-        let opps = g.search_opportunities();
+        let opps = g.search_opportunities(check_arb_possible);
 
-        assert!(opps.len() > 0);
+        assert!(opps.len() == 1);
     }
 }
