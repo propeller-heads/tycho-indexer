@@ -1,17 +1,17 @@
 use std::str::FromStr;
 
-use ethers::types::{Address, U256};
+use ethers::types::{H160, U256};
 
 #[derive(Clone, Debug)]
 pub struct ERC20Token {
-    pub address: Address,
+    pub address: H160,
     pub decimals: usize,
     pub symbol: String,
 }
 
 impl ERC20Token {
     pub fn new(address: &str, decimals: usize, symbol: &str) -> Self {
-        let addr = Address::from_str(address).expect("Failed to parse token address");
+        let addr = H160::from_str(address).expect("Failed to parse token address");
         let sym = symbol.to_string();
         ERC20Token {
             address: addr,
@@ -34,6 +34,46 @@ impl PartialOrd for ERC20Token {
 impl PartialEq for ERC20Token {
     fn eq(&self, other: &Self) -> bool {
         self.address == other.address
+    }
+}
+
+pub struct Swap {
+    token_in: H160,
+    amount_in: U256,
+    token_out: H160,
+    amount_out: U256,
+    address: H160,
+}
+
+impl Swap {
+    pub fn new(
+        token_in: H160,
+        amount_in: U256,
+        token_out: H160,
+        amount_out: U256,
+        address: H160,
+    ) -> Self {
+        Swap {
+            token_in,
+            amount_in,
+            token_out,
+            amount_out,
+            address,
+        }
+    }
+}
+
+pub struct Opportunity {
+    actions: Vec<Swap>,
+    gas: U256,
+}
+
+impl Opportunity {
+    pub fn new(actions: Vec<Swap>, gas: U256) -> Self {
+        Opportunity {
+            actions: actions,
+            gas: gas,
+        }
     }
 }
 
