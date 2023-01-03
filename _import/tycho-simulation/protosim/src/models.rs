@@ -61,6 +61,10 @@ impl Swap {
             address,
         }
     }
+
+    pub fn amount_out(&self) -> U256 {
+        return self.amount_out;
+    }
 }
 
 pub struct Opportunity {
@@ -74,6 +78,10 @@ impl Opportunity {
             actions: actions,
             gas: gas,
         }
+    }
+
+    pub fn actions(&self) -> &Vec<Swap> {
+        return &self.actions;
     }
 }
 

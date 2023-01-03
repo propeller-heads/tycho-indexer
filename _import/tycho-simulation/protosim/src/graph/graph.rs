@@ -372,7 +372,12 @@ mod tests {
             if price > 1.0 {
                 let amount_in = optimize_path(&p);
                 if amount_in > U256::zero() {
-                    return Some(p.get_swaps(amount_in).unwrap());
+                    let opp = p.get_swaps(amount_in).unwrap();
+                    let last = &opp.actions()[opp.actions().len() - 1];
+                    if last.amount_out() > amount_in {
+                        return Some(opp);
+                    }
+                    return None;
                 }
             }
         None
@@ -380,7 +385,7 @@ mod tests {
 
     fn optimize_path(p: &Path) -> U256 {
         let res = p.get_amount_out(U256::from(10_000_000)).unwrap();
-        return U256::from(1_000_000)
+        return U256::from(100_000)
     }
 
     #[rstest]
@@ -403,6 +408,6 @@ mod tests {
         g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
         let opps = g.search_opportunities(check_arb_possible);
 
-        assert!(opps.len() == 1);
+        assert_eq!(opps.len(), 1);
     }
 }
