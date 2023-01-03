@@ -1,4 +1,4 @@
-use ethers::types::{H160, U256};
+use ethers::{types::{H160, U256}, prelude::k256::sha2::digest::Key};
 use itertools::Itertools;
 use petgraph::{
     algo::all_simple_paths,
@@ -26,7 +26,15 @@ struct Path<'a> {
     tokens: &'a [&'a ERC20Token],
 }
 
-impl Path<'_> {
+impl <'a>Path<'a> {
+
+    fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Path<'a> {
+        Path {
+            pairs: &pairs,
+            tokens: &tokens,
+        }
+    }
+
     fn price(&self) -> f64 {
         let mut p = 1.0;
         for i in 0..self.pairs.len() {
@@ -72,12 +80,64 @@ impl Path<'_> {
     }
 }
 
+
+struct KeySubsetIterator<'a>{
+    keys: Vec<H160>,
+    data: &'a HashMap<H160, Vec<usize>>,
+    key_idx: usize,
+    vec_idx: usize,
+}
+
+impl <'a>KeySubsetIterator<'a>{
+    fn new(keys: Option<Vec<H160>>, data: &'a HashMap<H160, Vec<usize>>) -> Self {
+        if let Some(subset) = keys {
+            KeySubsetIterator{
+                keys: subset,
+                data: data,
+                key_idx: 0,
+                vec_idx: 0,
+            }
+        } else {
+            let subset = data.keys().map(|x| *x).collect::<Vec<_>>();
+            KeySubsetIterator{
+                keys: subset,
+                data: data,
+                key_idx: 0,
+                vec_idx: 0,
+            }
+        }
+        
+    }
+}
+
+impl Iterator for KeySubsetIterator<'_>{
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.key_idx + 1 >= self.keys.len(){
+            return None;
+        }
+        let addr = self.keys[self.key_idx];
+        let path_indices = self.data.get(&addr).expect("Key not present in data!");
+
+        // we are at the last entry for this vec
+        if self.vec_idx + 2 >= path_indices.len() {
+            self.vec_idx = 0;
+            self.key_idx += 1; 
+        } else {
+            self.vec_idx += 1;
+        }
+        return Some(path_indices[self.vec_idx]);
+    }
+}
+
 pub struct ProtoGraph {
     n_hops: usize,
     tokens: HashMap<H160, TokenEntry>,
     states: HashMap<H160, Pair>,
     graph: UnGraph<H160, H160>,
     paths: Vec<Vec<EdgeIndex>>,
+    path_memberships: HashMap<H160, Vec<usize>>,
 }
 
 impl ProtoGraph {
@@ -88,6 +148,7 @@ impl ProtoGraph {
             states: HashMap::new(),
             graph: UnGraph::new_undirected(),
             paths: Vec::new(),
+            path_memberships: HashMap::new(),
         }
     }
     pub fn insert_pair(&mut self, Pair(properties, state): Pair) -> Option<Pair> {
@@ -118,20 +179,31 @@ impl ProtoGraph {
         let edge_paths =
             all_edge_paths::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops + 1));
         for path in edge_paths {
-            // Only insert normalised path if we don't already have it present.
+            // insert path only if it does not yet exist
             if let Err(pos) = self.paths.binary_search(&path) {
-                self.paths.insert(pos, path)
+                // build membership cache
+                for edge_idx in path.iter() {
+                    let addr = *self.graph.edge_weight(*edge_idx).unwrap();
+                    if let Some(path_indices) = self.path_memberships.get_mut(&addr) {
+                        path_indices.push(pos);
+                    } else {
+                        self.path_memberships.insert(addr, vec![pos]);
+                    }
+                }
+
+                self.paths.insert(pos, path);
             };
         }
         self.paths.shrink_to_fit();
     }
 
-    pub fn search_opportunities<F:Fn(Path) -> Option<Opportunity>>(&self, search: F) -> Vec<Opportunity> {
+    pub fn search_opportunities<F:Fn(Path) -> Option<Opportunity>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<Opportunity> {
         let mut pairs = Vec::with_capacity(self.n_hops);
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
         let mut opportunities = Vec::new();
-        for path in self.paths.iter() {
+        let path_iter = KeySubsetIterator::new(involved_addresses, &self.path_memberships).map(|idx| &self.paths[idx]);
+        for path in path_iter {
             pairs.clear();
             tokens.clear();
             let mut first = true;
@@ -148,10 +220,7 @@ impl ProtoGraph {
                 tokens.push(end);
                 first = false;
             }
-            let p = Path {
-                pairs: &pairs,
-                tokens: &tokens,
-            };
+            let p = Path::new(&tokens, &pairs);
             if let Some(opp) = search(p) {
                 opportunities.push(opp);
             }
@@ -406,7 +475,7 @@ mod tests {
             10_000_000,
         ));
         g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
-        let opps = g.search_opportunities(check_arb_possible);
+        let opps = g.search_opportunities(check_arb_possible, None);
 
         assert_eq!(opps.len(), 1);
     }
