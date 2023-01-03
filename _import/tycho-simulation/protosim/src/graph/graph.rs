@@ -114,20 +114,20 @@ impl Iterator for KeySubsetIterator<'_>{
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.key_idx + 1 >= self.keys.len(){
+        if self.key_idx >= self.keys.len(){
             return None;
         }
         let addr = self.keys[self.key_idx];
         let path_indices = self.data.get(&addr).expect("Key not present in data!");
 
         // we are at the last entry for this vec
-        if self.vec_idx + 2 >= path_indices.len() {
+        if self.vec_idx + 1 >= path_indices.len() {
             self.vec_idx = 0;
             self.key_idx += 1; 
         } else {
             self.vec_idx += 1;
         }
-        return Some(path_indices[self.vec_idx]);
+        return Some(*path_indices.get(self.vec_idx).expect("KeySubsetIterator: data was empty!"));
     }
 }
 
@@ -181,18 +181,19 @@ impl ProtoGraph {
         for path in edge_paths {
             // insert path only if it does not yet exist
             if let Err(pos) = self.paths.binary_search(&path) {
-                // build membership cache
-                for edge_idx in path.iter() {
-                    let addr = *self.graph.edge_weight(*edge_idx).unwrap();
-                    if let Some(path_indices) = self.path_memberships.get_mut(&addr) {
-                        path_indices.push(pos);
-                    } else {
-                        self.path_memberships.insert(addr, vec![pos]);
-                    }
-                }
-
                 self.paths.insert(pos, path);
             };
+        }
+        for pos in 0..self.paths.len() {
+            // build membership cache
+            for edge_idx in self.paths[pos].iter() {
+                let addr = *self.graph.edge_weight(*edge_idx).unwrap();
+                if let Some(path_indices) = self.path_memberships.get_mut(&addr) {
+                    path_indices.push(pos);
+                } else {
+                    self.path_memberships.insert(addr, vec![pos]);
+                }
+            }
         }
         self.paths.shrink_to_fit();
     }
@@ -458,7 +459,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_simulate_path() {
+    #[case(Some(vec![H160::from_str("0x0000000000000000000000000000000000000001").unwrap()]))]
+    #[case(None)]
+    fn test_simulate_path(#[case] addresses: Option<Vec<H160>>) {
         let mut g = ProtoGraph::new(4);
         g.insert_pair(make_pair(
             "0x0000000000000000000000000000000000000001",
@@ -475,8 +478,107 @@ mod tests {
             10_000_000,
         ));
         g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
-        let opps = g.search_opportunities(check_arb_possible, None);
+        let opps = g.search_opportunities(check_arb_possible, addresses);
 
         assert_eq!(opps.len(), 1);
+    }
+
+    #[rstest]
+    #[case::empty(HashMap::new(), None, vec![])]
+    #[case::empty_keys(HashMap::from([(H160::from_low_u64_be(1), vec![1,2]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![]), vec![])]
+    #[case::one_key(HashMap::from([(H160::from_low_u64_be(1), vec![1,2]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(2)]), vec![3,4])]
+    #[case::one_key(HashMap::from([(H160::from_low_u64_be(1), vec![1,2]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(1)]), vec![1,2])]
+    #[case::two_keys(HashMap::from([(H160::from_low_u64_be(1), vec![1]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(1), H160::from_low_u64_be(2)]), vec![1,3,4])]
+    fn test_key_subset_iterator(#[case] data: HashMap<H160, Vec<usize>>, #[case] keys: Option<Vec<H160>>, #[case] exp: Vec<usize> ){
+        let it = KeySubsetIterator::new(keys, &data);
+
+        let mut res: Vec<_> = it.collect();
+        res.sort();
+
+        assert_eq!(res, exp);
+    }
+
+    #[test]
+    fn test_path_price(){
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            10_000_000,
+        );
+        let pair_1 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            25_000_000,
+        );
+        let Pair(props, _ ) = &pair_0;
+        let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
+        let pairs = vec![&pair_0, &pair_1];
+        let path = Path::new(&tokens, &pairs);
+
+        let res = path.price();
+
+        assert_eq!(res, 0.4);
+    }
+
+    #[test]
+    fn test_get_amount_out(){
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            10_000_000,
+        );
+        let pair_1 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            25_000_000,
+        );
+        let Pair(props, _ ) = &pair_0;
+        let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
+        let pairs = vec![&pair_0, &pair_1];
+        let path = Path::new(&tokens, &pairs);
+
+        let res = path.get_amount_out(U256::from(100_000)).unwrap();
+
+        assert_eq!(res.gas, U256::from(240_000));
+        assert_eq!(res.amount, U256::from(39_484));
+    }
+
+    #[test]
+    fn test_get_swaps(){
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            10_000_000,
+        );
+        let pair_1 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            25_000_000,
+        );
+        let Pair(props, _ ) = &pair_0;
+        let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
+        let pairs = vec![&pair_0, &pair_1];
+        let path = Path::new(&tokens, &pairs);
+        let amount_in = U256::from(100_000);
+
+        let res = path.get_swaps(amount_in).unwrap();
+        let actions = res.actions();
+
+        assert_eq!(actions[0].amount_in(), amount_in);
+        assert_eq!(actions[0].amount_out(), actions[1].amount_in());
+        assert_eq!(actions[1].amount_out(), U256::from(39_484))
+
     }
 }

@@ -65,6 +65,10 @@ impl Swap {
     pub fn amount_out(&self) -> U256 {
         return self.amount_out;
     }
+
+    pub fn amount_in(&self) -> U256 {
+        return self.amount_in;
+    }
 }
 
 pub struct Opportunity {
