@@ -198,13 +198,14 @@ impl ProtoGraph {
     }
 
     pub fn search_opportunities<F:Fn(Path) -> Option<Opportunity>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<Opportunity> {
+        // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
+        // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
+        // To optimize this, each worker needs a preallocated collections that are cleared on each invocation.
         let mut pairs = Vec::with_capacity(self.n_hops);
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
         let mut opportunities = Vec::new();
-
-        // TODO: currently we visit the same paths multiple times
-        let path_iter = KeySubsetIterator::new(involved_addresses, &self.path_memberships).map(|idx| &self.paths[idx]);
+        let path_iter = KeySubsetIterator::new(involved_addresses, &self.path_memberships).unique().map(|idx| &self.paths[idx]);
         for path in path_iter {
             pairs.clear();
             tokens.clear();
