@@ -1,12 +1,11 @@
-use ethers::{types::{H160, U256}, prelude::k256::sha2::digest::Key};
+use ethers::types::{H160, U256};
 use itertools::Itertools;
 use petgraph::{
-    algo::all_simple_paths,
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
-    visit::{EdgeRef, IntoNeighborsDirected},
+
 };
-use std::{collections::HashMap, iter::from_fn};
+use std::collections::HashMap;
 
 use crate::{
     models::{ERC20Token, Opportunity, Swap},
@@ -21,7 +20,7 @@ use super::edge_paths::all_edge_paths;
 
 struct TokenEntry(NodeIndex, ERC20Token);
 
-struct Path<'a> {
+pub struct Path<'a> {
     pairs: &'a [&'a Pair],
     tokens: &'a [&'a ERC20Token],
 }
@@ -35,7 +34,7 @@ impl <'a>Path<'a> {
         }
     }
 
-    fn price(&self) -> f64 {
+    pub fn price(&self) -> f64 {
         let mut p = 1.0;
         for i in 0..self.pairs.len() {
             let st = self.tokens[i];
@@ -46,7 +45,7 @@ impl <'a>Path<'a> {
         return p;
     }
 
-    fn get_amount_out(&self, amount_in: U256) -> Result<GetAmountOutResult, TradeSimulationError> {
+    pub fn get_amount_out(&self, amount_in: U256) -> Result<GetAmountOutResult, TradeSimulationError> {
         let mut res = GetAmountOutResult::new(amount_in, U256::zero());
         for i in 0..self.pairs.len() {
             let st = self.tokens[i];
@@ -57,7 +56,7 @@ impl <'a>Path<'a> {
         Ok(res)
     }
 
-    fn get_swaps(&self, amount_in: U256) -> Result<Opportunity, TradeSimulationError> {
+    pub fn get_swaps(&self, amount_in: U256) -> Result<Opportunity, TradeSimulationError> {
         // if we could replace this one with ArrayVec we could shrink this to a single method.
         let mut swaps = Vec::<_>::new();
         let mut res = GetAmountOutResult::new(U256::zero(), U256::zero());
@@ -203,6 +202,8 @@ impl ProtoGraph {
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
         let mut opportunities = Vec::new();
+
+        // TODO: currently we visit the same paths multiple times
         let path_iter = KeySubsetIterator::new(involved_addresses, &self.path_memberships).map(|idx| &self.paths[idx]);
         for path in path_iter {
             pairs.clear();
@@ -454,7 +455,7 @@ mod tests {
     }
 
     fn optimize_path(p: &Path) -> U256 {
-        let res = p.get_amount_out(U256::from(10_000_000)).unwrap();
+        let _res = p.get_amount_out(U256::from(10_000_000)).unwrap();
         return U256::from(100_000)
     }
 

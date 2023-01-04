@@ -62,12 +62,24 @@ impl Swap {
         }
     }
 
+    pub fn token_out(&self) -> H160 {
+        self.token_out
+    }
+
+    pub fn token_in(&self) -> H160 {
+        self.token_in
+    }
+
     pub fn amount_out(&self) -> U256 {
         return self.amount_out;
     }
 
     pub fn amount_in(&self) -> U256 {
         return self.amount_in;
+    }
+
+    pub fn address(&self) -> H160 {
+        self.address
     }
 }
 
@@ -85,7 +97,11 @@ impl Opportunity {
     }
 
     pub fn actions(&self) -> &Vec<Swap> {
-        return &self.actions;
+        &self.actions
+    }
+
+    pub fn gas(&self) -> U256 {
+        self.gas
     }
 }
 
