@@ -41,7 +41,7 @@ pub enum TickListErrorKind {
     TicksExeeded,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TickList {
     tick_spacing: u16,
     ticks: Vec<TickInfo>,
