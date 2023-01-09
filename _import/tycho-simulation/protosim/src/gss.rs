@@ -1,7 +1,6 @@
 use ethers::types::{I256, U256};
 use std::mem::swap;
 
-// 2654435769, 1640531526, 4294967296
 const INVPHI: i64 = 2654435769; // (math.sqrt(5) - 1) / 2 * 2 ** 32
 const INVPHI2: i64 = 1640531526; // (3 - math.sqrt(5)) * 2 ** 32
 const DENOM: i64 = 4294967296; // 2 ** 32
@@ -69,14 +68,6 @@ pub fn gss<F: Fn(I256) -> I256>(
     } else {
         return (I256_to_U256(xc), I256_to_U256(max_bound));
     };
-}
-
-fn I256_to_U256(to_convert: I256) -> U256 {
-    if to_convert <= I256::zero() {
-        return U256::zero();
-    }
-
-    return U256::from_dec_str(&to_convert.to_string()).unwrap();
 }
 
 #[cfg(test)]
@@ -158,6 +149,14 @@ pub fn mul_div(a: I256, b: I256, denom: I256) -> I256 {
     let product = a * b;
     let result: I256 = (product / denom).try_into().expect("Integer Overflow");
     return result;
+}
+
+fn I256_to_U256(to_convert: I256) -> U256 {
+    if to_convert <= I256::zero() {
+        return U256::zero();
+    }
+
+    return U256::from_dec_str(&to_convert.to_string()).unwrap();
 }
 
 pub fn bracket<F: Fn(I256) -> I256>(
@@ -272,7 +271,7 @@ mod bracket_tests {
     }
 
     #[test]
-    fn test_bracket_2() {
+    fn test_bracket_negative_gradient_function() {
         let func = |x: I256| -x + I256::from(5);
         let min_bound = I256::from(0);
         let max_bound = I256::from(200);
