@@ -75,6 +75,7 @@ fn I256_to_U256(to_convert: I256) -> U256 {
     if to_convert <= I256::zero() {
         return U256::zero();
     }
+
     return U256::from_dec_str(&to_convert.to_string()).unwrap();
 }
 
@@ -155,24 +156,19 @@ mod tests {
 
 pub fn mul_div(a: I256, b: I256, denom: I256) -> I256 {
     let product = a * b;
-
     let result: I256 = (product / denom).try_into().expect("Integer Overflow");
-
     return result;
 }
 
 pub fn bracket<F: Fn(I256) -> I256>(
     f: F,
-    min_bound: I256,
-    max_bound: I256,
+    mut min_bound: I256,
+    mut max_bound: I256,
 ) -> (I256, I256, I256, I256) {
-    let mut min_bound = I256::from_dec_str(&min_bound.to_string()).unwrap();
-    let mut max_bound = I256::from_dec_str(&max_bound.to_string()).unwrap();
-
-    let maxiter = I256::from(1000);
+    let maxiter = 1000;
     let grow_limit = I256::from(110);
     let _golden_ration: I256 = I256::from(6949403065_i64); // golden ratio: (1.0+sqrt(5.0))/2.0 *  2 ** 32
-    let denom_i526 = I256::from_dec_str(&DENOM.to_string()).unwrap();
+    let denom_i256 = I256::from(DENOM);
 
     let mut ya = f(min_bound);
     let mut yb = f(max_bound);
@@ -181,10 +177,10 @@ pub fn bracket<F: Fn(I256) -> I256>(
         swap(&mut min_bound, &mut max_bound);
         swap(&mut ya, &mut yb)
     }
-    let mut xc = max_bound + mul_div(_golden_ration, max_bound - min_bound, denom_i526);
+    let mut xc = max_bound + mul_div(_golden_ration, max_bound - min_bound, denom_i256);
     let mut yc = f(xc);
     let mut yw = I256::zero();
-    let mut iter = I256::zero();
+    let mut iter = 0;
 
     while yc < yb {
         let tmp1 = (max_bound - min_bound) * (yb - yc);
@@ -208,7 +204,7 @@ pub fn bracket<F: Fn(I256) -> I256>(
             panic!("Too many iterations.");
         }
 
-        iter = iter + I256::one();
+        iter += 0;
 
         if (w - xc) * (max_bound - w) > I256::zero() {
             yw = f(w);
@@ -224,7 +220,7 @@ pub fn bracket<F: Fn(I256) -> I256>(
                 let yc = yw;
                 return (min_bound, max_bound, xc, yc);
             }
-            w = xc + mul_div(_golden_ration, xc - max_bound, denom_i526);
+            w = xc + mul_div(_golden_ration, xc - max_bound, denom_i256);
             yw = f(w);
         } else if (w - wlim) * (wlim - xc) >= I256::zero() {
             w = wlim;
@@ -234,13 +230,13 @@ pub fn bracket<F: Fn(I256) -> I256>(
             if yw < yc {
                 max_bound = xc;
                 xc = w;
-                w = xc + mul_div(_golden_ration, xc - max_bound, denom_i526);
+                w = xc + mul_div(_golden_ration, xc - max_bound, denom_i256);
                 yb = yc;
                 yc = yw;
                 yw = f(w);
             }
         } else {
-            w = xc + mul_div(_golden_ration, xc - max_bound, denom_i526);
+            w = xc + mul_div(_golden_ration, xc - max_bound, denom_i256);
             yw = f(w);
         }
         min_bound = max_bound;
