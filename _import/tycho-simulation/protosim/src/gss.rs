@@ -139,17 +139,17 @@ mod tests {
     }
 
     #[test]
-    fn test_gss_honouring_bounds() {
+    fn test_gss_bracket() {
         let f = |x| x * x;
         let res = gss(
             f,
             U256::from(10u128),
-            U256::from(0u128),
+            U256::from(200u128),
             I256::from(1u128),
             100,
-            true,
+            false,
         );
-        assert!(res.0 == U256::from(0u128));
+        assert!(res.0 == U256::from(201u128));
     }
 }
 
@@ -163,18 +163,16 @@ pub fn mul_div(a: I256, b: I256, denom: I256) -> I256 {
 
 pub fn bracket<F: Fn(I256) -> I256>(
     f: F,
-    mut min_bound: I256,
-    mut max_bound: I256,
+    min_bound: I256,
+    max_bound: I256,
 ) -> (I256, I256, I256, I256) {
     let mut min_bound = I256::from_dec_str(&min_bound.to_string()).unwrap();
     let mut max_bound = I256::from_dec_str(&max_bound.to_string()).unwrap();
 
     let maxiter = I256::from(1000);
     let grow_limit = I256::from(110);
-    let GOLDEN_RATIO: I256 = I256::from(6949403065_i64); // golden ratio: (1.0+sqrt(5.0))/2.0 *  2 ** 32
+    let _golden_ration: I256 = I256::from(6949403065_i64); // golden ratio: (1.0+sqrt(5.0))/2.0 *  2 ** 32
     let denom_i526 = I256::from_dec_str(&DENOM.to_string()).unwrap();
-    let _verysmall_num = I256::from(100);
-    let _versmall_num_denom = I256::from_dec_str("100000000000000000000000").unwrap();
 
     let mut ya = f(min_bound);
     let mut yb = f(max_bound);
@@ -183,7 +181,7 @@ pub fn bracket<F: Fn(I256) -> I256>(
         swap(&mut min_bound, &mut max_bound);
         swap(&mut ya, &mut yb)
     }
-    let mut xc = max_bound + (GOLDEN_RATIO * (max_bound - min_bound)) / denom_i526;
+    let mut xc = max_bound + mul_div(_golden_ration, max_bound - min_bound, denom_i526);
     let mut yc = f(xc);
     let mut yw = I256::zero();
     let mut iter = I256::zero();
@@ -192,13 +190,18 @@ pub fn bracket<F: Fn(I256) -> I256>(
         let tmp1 = (max_bound - min_bound) * (yb - yc);
         let tmp2 = (max_bound - xc) * (yb - ya);
         let val = tmp2 - tmp1;
-        let mut denom = if val < _verysmall_num {
-            (I256::from(2) * _verysmall_num) / _versmall_num_denom
+
+        let mut w = I256::zero();
+
+        if val.abs() <= I256::zero() {
+            w = max_bound
+                - ((max_bound - xc) * tmp2 - (max_bound - min_bound) * tmp1)
+                    * I256::from_dec_str("500000000000000000000").unwrap();
         } else {
-            I256::from(2) * val
+            w = max_bound
+                - ((max_bound - xc) * tmp2 - (max_bound - min_bound) * tmp1) / I256::from(2) * val;
         };
 
-        let mut w = max_bound - ((max_bound - xc) * tmp2 - (max_bound - min_bound) * tmp1) / denom;
         let wlim = max_bound + grow_limit * (xc - max_bound);
 
         if iter > maxiter {
@@ -221,7 +224,7 @@ pub fn bracket<F: Fn(I256) -> I256>(
                 let yc = yw;
                 return (min_bound, max_bound, xc, yc);
             }
-            w = xc + (GOLDEN_RATIO * (xc - max_bound)) / denom_i526;
+            w = xc + mul_div(_golden_ration, xc - max_bound, denom_i526);
             yw = f(w);
         } else if (w - wlim) * (wlim - xc) >= I256::zero() {
             w = wlim;
@@ -231,13 +234,13 @@ pub fn bracket<F: Fn(I256) -> I256>(
             if yw < yc {
                 max_bound = xc;
                 xc = w;
-                w = xc + (GOLDEN_RATIO * (xc - max_bound)) / denom_i526;
+                w = xc + mul_div(_golden_ration, xc - max_bound, denom_i526);
                 yb = yc;
                 yc = yw;
                 yw = f(w);
             }
         } else {
-            w = xc + (GOLDEN_RATIO * (xc - max_bound)) / denom_i526;
+            w = xc + mul_div(_golden_ration, xc - max_bound, denom_i526);
             yw = f(w);
         }
         min_bound = max_bound;
@@ -259,12 +262,29 @@ mod bracket_tests {
     fn test_bracket() {
         let func = |x: I256| x * x;
         let min_bound = I256::from(0);
-        let max_bound = I256::from(10);
+        let max_bound = I256::from(200);
         let res = bracket(func, min_bound, max_bound);
 
         // max_bound
         assert_eq!(res.0, I256::from(10));
         // min_bound
+        assert_eq!(res.1, I256::from(0));
+        // xc
+        assert_eq!(res.2, I256::from(-16));
+        // yc will always deviate from a implementation using decimals
+        assert_eq!(res.3, I256::from(256));
+    }
+
+    #[test]
+    fn test_bracket_2() {
+        let func = |x: I256| -x + I256::from(5);
+        let min_bound = I256::from(0);
+        let max_bound = I256::from(200);
+        let res = bracket(func, min_bound, max_bound);
+
+        // mix_bound
+        assert_eq!(res.0, I256::from(10));
+        // max_bound
         assert_eq!(res.1, I256::from(0));
         // xc
         assert_eq!(res.2, I256::from(-16));
