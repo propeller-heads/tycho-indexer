@@ -1,4 +1,4 @@
-use ethers::types::{I256, U256};
+use ethers::types::{Sign, I256, U256};
 use std::mem::swap;
 
 const INVPHI: i64 = 2654435769; // (math.sqrt(5) - 1) / 2 * 2 ** 32
@@ -166,55 +166,45 @@ pub fn bracket<F: Fn(I256) -> I256>(
     mut min_bound: I256,
     mut max_bound: I256,
 ) -> (I256, I256, I256, I256) {
-    let maxiter = 1000;
+    let maxiter = 50;
     let grow_limit = I256::from(110);
     let _golden_ration: I256 = I256::from(6949403065_i64); // golden ratio: (1.0+sqrt(5.0))/2.0 *  2 ** 32
     let denom_i256 = I256::from(DENOM);
-    // ya > yb < yc
-    // Finding the right bracket would mean -> ya < yb > yc
-    // Calculate results of the bounds
+
     let mut ya = f(min_bound);
     let mut yb = f(max_bound);
 
-    // If ya > yb swap the bracket
     if ya > yb {
         swap(&mut min_bound, &mut max_bound);
         swap(&mut ya, &mut yb)
     }
 
-    // Calculate xc which is the new max_bounds
-    // now it should be xa < xb < xc
     let mut xc = max_bound + mul_div(_golden_ration, max_bound - min_bound, denom_i256);
     let mut yc = f(xc);
     let mut yw = I256::zero();
     let mut iter = 0;
-
+    let mut w = I256::zero();
     while yb < yc {
-        // max_bound - min_bound should be +
-        // max_bound - xc should be -
-        // yb - yc can be - or +
-        // yb - ya can be - or +
-        // By calculation this we determine ??
         let tmp1 = (max_bound - min_bound) * (yb - yc);
         let tmp2 = (max_bound - xc) * (yb - ya);
         let val = tmp2 - tmp1;
 
-        let mut w = I256::zero();
-        println!("xc {}", xc);
-        println!("tmp2 {}", tmp2);
         if val.abs() <= I256::zero() {
-            println!("val.abs() >= I256::zero()");
-            w = max_bound
-                - ((max_bound - xc) * tmp2 - (max_bound - min_bound) * tmp1)
-                    * I256::from_dec_str("500000000000000000000").unwrap();
+            w = ((max_bound - xc) * tmp2 - (max_bound - min_bound) * tmp1);
+            w = max_bound - w.saturating_mul(I256::from(5000));
         } else {
-            println!("else");
             w = max_bound
                 - ((max_bound - xc) * tmp2 - (max_bound - min_bound) * tmp1)
                     / (I256::from(2) * val);
         };
-        println!("w: {}", w);
-        println!("----");
+
+        if w.abs() > I256::pow(I256::from(2), 32) {
+            let w_sign = w.sign();
+            w = I256::from(-1) * I256::pow(I256::from(2), 32);
+            if w_sign == Sign::Negative {
+                w = I256::from(-1) * w
+            }
+        }
 
         let wlim = max_bound + grow_limit * (xc - max_bound);
 
@@ -222,11 +212,9 @@ pub fn bracket<F: Fn(I256) -> I256>(
             panic!("Too many iterations!");
         }
 
-        iter += 0;
-        // ????
+        iter += 1;
         if (w - xc) * (max_bound - w) > I256::zero() {
             yw = f(w);
-
             if yw > yc {
                 let min_bound = max_bound;
                 let max_bound = w;
@@ -276,11 +264,7 @@ mod bracket_tests {
         let min_bound = I256::from(2);
         let max_bound = I256::from(5);
         let res = bracket(func, min_bound, max_bound);
-        println!("-----------------");
-        println!("min_bound {}", res.0);
-        println!("max_bound {}", res.1);
-        println!("xc {}", res.2);
-        println!("yc {}", res.3);
+
         // min_bound
         assert_eq!(res.0, I256::from(2));
         // max_bound
@@ -294,8 +278,8 @@ mod bracket_tests {
     #[test]
     fn test_bracket_negative_bound() {
         let func = |x| (x - I256::from(2)) * (I256::from(-1) * x + I256::from(10));
-        let min_bound = I256::from(-5);
-        let max_bound = I256::from(-10);
+        let min_bound = I256::from(-10);
+        let max_bound = I256::from(-5);
         let res = bracket(func, min_bound, max_bound);
 
         // min_bound
@@ -330,8 +314,9 @@ mod bracket_tests {
     }
 
     #[test]
+    #[should_panic]
     fn test_bracket_negative_gradient_function() {
-        let func = |x: I256| x + I256::from(5);
+        let func = |x: I256| x;
         let min_bound = I256::from(0);
         let max_bound = I256::from(50);
         let res = bracket(func, min_bound, max_bound);
