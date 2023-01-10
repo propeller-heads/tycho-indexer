@@ -4,7 +4,7 @@ use ethers::types::U256;
 
 use super::tick_math;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
     pub index: i32,
     pub net_liquidity: i128,
@@ -41,7 +41,7 @@ pub enum TickListErrorKind {
     TicksExeeded,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TickList {
     tick_spacing: u16,
     ticks: Vec<TickInfo>,
