@@ -445,17 +445,17 @@ mod tests {
 
     fn atomic_arb_finder(p: Path) -> Option<Opportunity> {
         let price = p.price();
-            if price > 1.0 {
-                let amount_in = optimize_path(&p);
-                if amount_in > U256::zero() {
-                    let opp = p.get_swaps(amount_in).unwrap();
-                    let last = &opp.actions()[opp.actions().len() - 1];
-                    if last.amount_out() > amount_in {
-                        return Some(opp);
-                    }
-                    return None;
+        if price > 1.0 {
+            let amount_in = optimize_path(&p);
+            if amount_in > U256::zero() {
+                let opp = p.get_swaps(amount_in).unwrap();
+                let last = &opp.actions()[opp.actions().len() - 1];
+                if last.amount_out() > amount_in {
+                    return Some(opp);
                 }
+                return None;
             }
+        }
         None
     }
 
