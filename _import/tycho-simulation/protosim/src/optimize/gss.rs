@@ -342,7 +342,6 @@ pub fn mul_div(a: I256, b: I256, denom: U512) -> I256 {
     if a_sign != b_sign {
         new_sign = Sign::Negative;
     }
-    dbg!(result);
     return I256::checked_from_sign_and_abs(new_sign, result)
         .expect("Integer Overflow when casting from U256 to I256");
 }

@@ -37,6 +37,7 @@ impl PartialEq for ERC20Token {
     }
 }
 
+#[derive(Debug)]
 pub struct Swap {
     token_in: H160,
     amount_in: U256,
@@ -83,6 +84,7 @@ impl Swap {
     }
 }
 
+#[derive(Debug)]
 pub struct Opportunity {
     actions: Vec<Swap>,
     gas: U256,

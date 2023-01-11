@@ -236,7 +236,9 @@ impl ProtoGraph {
 mod tests {
     use std::str::FromStr;
 
+    use ethers::types::{I256, Sign};
     use rstest::rstest;
+    use crate::optimize::gss::gss;
     use crate::protocol::models::PairProperties;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
 
@@ -439,7 +441,7 @@ mod tests {
         assert_eq!(paths, exp);
     }
 
-    fn check_arb_possible(p: Path) -> Option<Opportunity> {
+    fn atomic_arb_finder(p: Path) -> Option<Opportunity> {
         let price = p.price();
             if price > 1.0 {
                 let amount_in = optimize_path(&p);
@@ -456,8 +458,28 @@ mod tests {
     }
 
     fn optimize_path(p: &Path) -> U256 {
-        let _res = p.get_amount_out(U256::from(10_000_000)).unwrap();
-        return U256::from(100_000)
+        let sim_arb = |amount_in:I256| {
+            let amount_in_unsigned = if amount_in > I256::zero() { amount_in.into_raw()} else {U256::zero()};
+
+            let amount_out_unsigned;
+            match p.get_amount_out(amount_in_unsigned) {
+                Ok(res) => {
+                    amount_out_unsigned = res.amount;
+                }
+                Err(tse) => {
+                    if let Some(res) = tse.partial_result {
+                        amount_out_unsigned = res.amount;
+                    } else {
+                        amount_out_unsigned = U256::zero();
+                    }
+                } 
+            }
+            let amount_out = I256::checked_from_sign_and_abs(Sign::Positive, amount_out_unsigned).unwrap();
+            let profit = amount_out - amount_in;
+            return profit;
+        };
+        let res = gss(sim_arb, U256::one(), U256::from(100_000), I256::one(), 100, false);
+        return res.0;
     }
 
     #[rstest]
@@ -480,7 +502,7 @@ mod tests {
             10_000_000,
         ));
         g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
-        let opps = g.search_opportunities(check_arb_possible, addresses);
+        let opps = g.search_opportunities(atomic_arb_finder, addresses);
 
         assert_eq!(opps.len(), 1);
     }
