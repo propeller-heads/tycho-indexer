@@ -12,7 +12,7 @@ use crate::{
     protocol::{
         errors::TradeSimulationError,
         models::{GetAmountOutResult, Pair},
-        state::ProtocolSim,
+        state::{ProtocolSim, ProtocolState},
     },
 };
 
@@ -173,6 +173,14 @@ impl ProtoGraph {
             .insert(properties.address, Pair(properties, state))
     }
 
+    pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
+        if let Some(pair) = self.states.get_mut(address) {
+            pair.1 = state;
+            return Some(());
+        }
+        None
+    }
+
     pub fn build_paths(&mut self, start_token: H160) {
         let TokenEntry(node_idx, _) = self.tokens[&start_token];
         let edge_paths =
@@ -267,6 +275,33 @@ mod tests {
         assert_eq!(g.graph.edge_count(), 1);
         assert_eq!(g.graph.node_count(), 2);
     }
+
+    #[test]
+    fn test_update_state() {
+        let mut g = ProtoGraph::new(4);
+        let pair = make_pair(
+            "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            2000,
+            2000,
+        );
+        let address = pair.0.address;
+        let Pair(_, state) = make_pair(
+            "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            1000,
+            2000,
+        );
+        g.insert_pair(pair);
+
+        g.update_state(&address, state.clone());
+        let Pair(_, updated) = &g.states[&address];
+
+        assert_eq!(updated.clone(), state);
+    }
+
 
     fn make_pair(pair: &str, t0: &str, t1: &str, r0: u64, r1: u64) -> Pair {
         let t0 = ERC20Token::new(t0, 3, "T0");
