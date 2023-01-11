@@ -149,35 +149,6 @@ mod tests {
     }
 }
 
-pub fn mul_div(a: I256, b: I256, denom: U512) -> I256 {
-    let a_sign = a.sign();
-    let b_sign = b.sign();
-
-    let a_u512 = if a_sign == Sign::Negative {
-        U512::from_dec_str(&(I256::from(-1) * a).to_string()).unwrap()
-    } else {
-        U512::from_dec_str(&a.to_string()).unwrap()
-    };
-
-    let b_u512 = if b_sign == Sign::Negative {
-        U512::from_dec_str(&(I256::from(-1) * b).to_string()).unwrap()
-    } else {
-        U512::from_dec_str(&b.to_string()).unwrap()
-    };
-
-    let product = a_u512 * b_u512;
-
-    let result: U256 = (product / denom)
-        .try_into()
-        .expect("Integer Overflow when casting from U512 to U256");
-    let mut new_sign = Sign::Positive;
-    if a_sign == Sign::Negative || b_sign == Sign::Negative {
-        new_sign = Sign::Negative;
-    }
-    return I256::checked_from_sign_and_abs(new_sign, result)
-        .expect("Integer Overflow when casting from U256 to I256");
-}
-
 fn I256_to_U256(to_convert: I256) -> U256 {
     if to_convert <= I256::zero() {
         return U256::zero();
@@ -338,10 +309,74 @@ mod bracket_tests {
 
     #[test]
     #[should_panic]
-    fn test_bracket_negative_gradient_function() {
+    fn test_bracket_max_iteration() {
         let func = |x: I256| x;
         let min_bound = I256::from(0);
         let max_bound = I256::from(50);
         let res = bracket(func, min_bound, max_bound);
+    }
+}
+
+pub fn mul_div(a: I256, b: I256, denom: U512) -> I256 {
+    let a_sign = a.sign();
+    let b_sign = b.sign();
+
+    let a_u512 = if a_sign == Sign::Negative {
+        U512::from_dec_str(&(I256::from(-1) * a).to_string()).unwrap()
+    } else {
+        U512::from_dec_str(&a.to_string()).unwrap()
+    };
+
+    let b_u512 = if b_sign == Sign::Negative {
+        U512::from_dec_str(&(I256::from(-1) * b).to_string()).unwrap()
+    } else {
+        U512::from_dec_str(&b.to_string()).unwrap()
+    };
+
+    let product = a_u512 * b_u512;
+
+    let result: U256 = (product / denom)
+        .try_into()
+        .expect("Integer Overflow when casting from U512 to U256");
+    let mut new_sign = Sign::Positive;
+    if a_sign != b_sign {
+        new_sign = Sign::Negative;
+    }
+    dbg!(result);
+    return I256::checked_from_sign_and_abs(new_sign, result)
+        .expect("Integer Overflow when casting from U256 to I256");
+}
+
+#[cfg(test)]
+mod mul_div_tests {
+    use super::*;
+
+    #[test]
+    fn test_mul_div() {
+        let a = I256::from(2147483648_i64); // 0.5 * 2 **32
+        let b = I256::from(50);
+        let res = mul_div(a, b, DENOM);
+
+        assert!(res == I256::from(25));
+        assert!(res.sign() == Sign::Positive);
+    }
+    #[test]
+    fn test_mul_div_negativ_mul() {
+        let a = I256::from(-2147483648_i64); // 0.5 * 2 **32
+        let b = I256::from(50);
+        let res = mul_div(a, b, DENOM);
+
+        assert!(res == I256::from(-25));
+        assert!(res.sign() == Sign::Negative);
+    }
+
+    #[test]
+    fn test_mul_div_both_negativ_mul() {
+        let a = I256::from(-2147483648_i64); // 0.5 * 2 **32
+        let b = I256::from(-50);
+        let res = mul_div(a, b, DENOM);
+
+        assert!(res == I256::from(25));
+        assert!(res.sign() == Sign::Positive);
     }
 }
