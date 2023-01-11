@@ -25,11 +25,11 @@ pub fn gss<F: Fn(I256) -> I256>(
 
     let mut h = max_bound - min_bound;
     if h <= tol {
-        return (I256_to_U256(min_bound), I256_to_U256(max_bound));
+        return (i256_to_u256(min_bound), i256_to_u256(max_bound));
     }
 
-    let mut yc = I256::zero();
-    let mut xc = I256::zero();
+    let mut yc;
+    let mut xc;
 
     if honour_bounds {
         xc = min_bound + mul_div(invphi2_i256, h, DENOM);
@@ -64,9 +64,9 @@ pub fn gss<F: Fn(I256) -> I256>(
     }
 
     if yc < yd {
-        return (I256_to_U256(min_bound), I256_to_U256(xd));
+        return (i256_to_u256(min_bound), i256_to_u256(xd));
     } else {
-        return (I256_to_U256(xc), I256_to_U256(max_bound));
+        return (i256_to_u256(xc), i256_to_u256(max_bound));
     };
 }
 
@@ -149,7 +149,7 @@ mod tests {
     }
 }
 
-fn I256_to_U256(to_convert: I256) -> U256 {
+fn i256_to_u256(to_convert: I256) -> U256 {
     if to_convert <= I256::zero() {
         return U256::zero();
     }
@@ -173,9 +173,9 @@ pub fn bracket<F: Fn(I256) -> I256>(f: F, mut xa: I256, mut xb: I256) -> (I256, 
 
     let mut xc = xb + mul_div(_golden_ratio, xb - xa, DENOM);
     let mut yc = f(xc);
-    let mut yw = I256::zero();
+    let mut yw;
     let mut iter = 0;
-    let mut w = I256::zero();
+    let mut w;
 
     while yb < yc {
         let tmp1 = (xb - xa) * (yb - yc);
@@ -313,7 +313,7 @@ mod bracket_tests {
         let func = |x: I256| x;
         let min_bound = I256::from(0);
         let max_bound = I256::from(50);
-        let res = bracket(func, min_bound, max_bound);
+        bracket(func, min_bound, max_bound);
     }
 }
 
