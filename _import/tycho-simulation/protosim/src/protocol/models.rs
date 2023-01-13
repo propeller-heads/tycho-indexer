@@ -4,7 +4,7 @@ use crate::models::ERC20Token;
 
 use super::state::ProtocolState;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairProperties {
     pub address: H160,
     pub tokens: Vec<ERC20Token>,

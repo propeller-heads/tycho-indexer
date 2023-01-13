@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use ethers::types::{H160, U256};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
     pub address: H160,
     pub decimals: usize,

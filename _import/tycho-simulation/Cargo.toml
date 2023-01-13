@@ -15,7 +15,7 @@ redis = { version = "0.22.1", features = ["tokio-comp"] }
 futures = "0.3.25"
 serde_json = { version = "1.0.91", features = ["arbitrary_precision"] }
 clap = { version = "4.0.32", features = ["derive"] }
-
+reqwest = "0.11.13"
 
 [dev-dependencies]
 rstest = "0.16.0"
