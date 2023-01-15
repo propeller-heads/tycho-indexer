@@ -1952,6 +1952,7 @@ dependencies = [
  "clap",
  "ethers",
  "futures",
+ "http",
  "protosim",
  "rdkafka",
  "redis",
