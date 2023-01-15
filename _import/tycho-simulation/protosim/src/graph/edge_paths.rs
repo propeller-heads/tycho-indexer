@@ -12,8 +12,8 @@ pub fn all_edge_paths<TargetColl, G>(
     graph: G,
     from: G::NodeId,
     to: G::NodeId,
-    min_intermediate_nodes: usize,
-    max_intermediate_nodes: Option<usize>,
+    min_edges: usize,
+    max_edges: Option<usize>,
 ) -> impl Iterator<Item = TargetColl>
 where
     G: EdgeCount + NodeCount,
@@ -22,25 +22,27 @@ where
     G::NodeId: Eq + Hash,
     TargetColl: FromIterator<G::EdgeId>,
 {
-    let max_length = if let Some(l) = max_intermediate_nodes {
-        l + 1
+    let max_length = if let Some(l) = max_edges {
+        l
     } else {
         graph.node_count() - 1
     };
 
-    let min_length = min_intermediate_nodes + 1;
+    let min_length = min_edges;
 
     let mut visited_nodes: IndexSet<G::NodeId> = IndexSet::from_iter(Some(from));
+    // python version has as first element the start
+    // node so that is why we add +1 to the length
     let mut visited: IndexSet<G::EdgeId> = IndexSet::new();
 
     let mut stack = vec![graph.edges_directed(from, Outgoing)];
     from_fn(move || {
         while let Some(edges) = stack.last_mut() {
             if let Some(edge) = edges.next() {
-                if visited_nodes.len() < max_length {
+                if visited.len() + 1 < max_length {
                     // handles all paths that are < max_length but >= min length
                     if edge.target() == to && !visited.contains(&edge.id()) {
-                        if visited_nodes.len() >= min_length {
+                        if visited.len() + 1 >= min_length {
                             let path = visited
                                 .iter()
                                 .cloned()
@@ -59,7 +61,7 @@ where
                     // Handles all paths that are == max_length and >= min length
                     // We are about to abort this path, check if remaining edges that still
                     // fulfill visted.len() == max_length, for a path to target
-                    if visited_nodes.len() > min_length {
+                    if visited.len() + 1 >= min_length {
                         for edge in edges.chain(Some(edge)) {
                             if edge.target() == to && !visited.contains(&edge.id()) {
                                 let path = visited
@@ -88,7 +90,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use petgraph::{prelude::UnGraph, visit::NodeIndexable};
+    use petgraph::{
+        prelude::UnGraph,
+        visit::{EdgeIndexable, NodeIndexable},
+    };
     use rstest::rstest;
 
     #[rstest]
@@ -105,10 +110,34 @@ mod tests {
         #[case] exp: usize,
     ) {
         let g = UnGraph::<(), i32>::from_edges(edges);
-        let node = g.from_index(0);
+        let node = NodeIndexable::from_index(&g, 0);
 
         let paths: Vec<_> = all_edge_paths::<Vec<_>, _>(&g, node, node, 0, Some(length)).collect();
 
         assert_eq!(paths.len(), exp)
+    }
+
+    #[rstest]
+    #[case(1, vec![vec![2]])]
+    #[case(2, vec![vec![0, 1], vec![2]])]
+    #[case(3, vec![vec![0, 1], vec![2], vec![3, 4, 1]])]
+    #[case(5, vec![vec![0, 1], vec![2], vec![3, 4, 1]])]
+    fn test_all_edge_paths_intermediate_nodes(#[case] l: usize, #[case] paths: Vec<Vec<usize>>) {
+        let g = UnGraph::<(), i32>::from_edges(&[(0, 1), (1, 2), (0, 2), (0, 3), (3, 1)]);
+        let s = NodeIndexable::from_index(&g, 0);
+        let e = NodeIndexable::from_index(&g, 2);
+        let exp = paths
+            .iter()
+            .map(|sub| {
+                sub.iter()
+                    .map(|i| EdgeIndexable::from_index(&g, *i))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let mut paths: Vec<_> = all_edge_paths::<Vec<_>, _>(&g, s, e, 1, Some(l)).collect();
+        paths.sort();
+
+        assert_eq!(paths, exp)
     }
 }
