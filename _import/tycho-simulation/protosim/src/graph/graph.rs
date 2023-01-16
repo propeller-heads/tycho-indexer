@@ -113,20 +113,41 @@ impl Iterator for KeySubsetIterator<'_>{
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.key_idx >= self.keys.len(){
-            return None;
+        while self.key_idx < self.keys.len() {
+            let addr = self.keys[self.key_idx];
+            match self.data.get(&addr) {
+                Some(path_indices) => {
+                    if self.vec_idx + 1 >= path_indices.len() {
+                        // we are at the last entry for this vec
+                        self.vec_idx = 0;
+                        self.key_idx += 1; 
+                    } else {
+                        self.vec_idx += 1;
+                    }
+                    return Some(*path_indices.get(self.vec_idx).expect("KeySubsetIterator: data was empty!"));
+                },
+                None => {
+                    self.key_idx += 1;
+                    continue;
+                },
+            };
         }
-        let addr = self.keys[self.key_idx];
-        let path_indices = self.data.get(&addr).expect("Key not present in data!");
+        None
+    }
+}
 
-        // we are at the last entry for this vec
-        if self.vec_idx + 1 >= path_indices.len() {
-            self.vec_idx = 0;
-            self.key_idx += 1; 
-        } else {
-            self.vec_idx += 1;
+
+#[derive(PartialEq, PartialOrd, Eq, Ord, Debug)]
+struct PathEntry{
+    start: NodeIndex, 
+    edges: Vec<EdgeIndex>,
+}
+
+impl PathEntry {
+    fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self{
+        PathEntry{
+            start, edges
         }
-        return Some(*path_indices.get(self.vec_idx).expect("KeySubsetIterator: data was empty!"));
     }
 }
 
@@ -135,7 +156,7 @@ pub struct ProtoGraph {
     tokens: HashMap<H160, TokenEntry>,
     states: HashMap<H160, Pair>,
     graph: UnGraph<H160, H160>,
-    paths: Vec<Vec<EdgeIndex>>,
+    paths: Vec<PathEntry>,
     path_memberships: HashMap<H160, Vec<usize>>,
 }
 
@@ -184,16 +205,19 @@ impl ProtoGraph {
     pub fn build_paths(&mut self, start_token: H160) {
         let TokenEntry(node_idx, _) = self.tokens[&start_token];
         let edge_paths =
-            all_edge_paths::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops + 1));
+            all_edge_paths::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops));
+        println!("Exploring paths");
         for path in edge_paths {
             // insert path only if it does not yet exist
-            if let Err(pos) = self.paths.binary_search(&path) {
-                self.paths.insert(pos, path);
+            let entry = PathEntry::new(node_idx, path);
+            if let Err(pos) = self.paths.binary_search(&entry) {
+                self.paths.insert(pos, entry);
             };
         }
+        println!("Building membership cache");
         for pos in 0..self.paths.len() {
             // build membership cache
-            for edge_idx in self.paths[pos].iter() {
+            for edge_idx in self.paths[pos].edges.iter() {
                 let addr = *self.graph.edge_weight(*edge_idx).unwrap();
                 if let Some(path_indices) = self.path_memberships.get_mut(&addr) {
                     path_indices.push(pos);
@@ -213,30 +237,50 @@ impl ProtoGraph {
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
         let mut opportunities = Vec::new();
+        // KeySubsetIterator will return a list of path ids we make sure the path ids are unique and yield the
+        // corresponding PathEntry object. This way we get all paths that contain any of the changed addresses.
+        // In case we didn't see some address on any path (KeyError on path_memberhips) it is simply skipped.
         let path_iter = KeySubsetIterator::new(involved_addresses, &self.path_memberships).unique().map(|idx| &self.paths[idx]);
+        let mut n_paths_evaluated: u64 = 0;
         for path in path_iter {
             pairs.clear();
             tokens.clear();
-            let mut first = true;
-            for edge_idx in path.iter() {
+            let mut prev_node_idx = path.start;
+            let TokenEntry(_, start) = &self.tokens[self.graph.node_weight(path.start).unwrap()];
+            tokens.push(start);
+            for edge_idx in path.edges.iter() {
                 let state_addr = self.graph.edge_weight(*edge_idx).unwrap();
                 let state = self.states.get(state_addr).unwrap();
                 let (s_idx, e_idx) = self.graph.edge_endpoints(*edge_idx).unwrap();
-                let TokenEntry(_, end) = &self.tokens[self.graph.node_weight(e_idx).unwrap()];
-                if first {
-                    let TokenEntry(_, start) = &self.tokens[self.graph.node_weight(s_idx).unwrap()];
-                    tokens.push(start);
-                }
+                // we need to correctly infer the edge direction here
+                let next_token = if prev_node_idx == s_idx {
+                    prev_node_idx = e_idx;
+                    &self.tokens[self.graph.node_weight(e_idx).unwrap()].1
+                } else if prev_node_idx == e_idx {
+                    prev_node_idx = s_idx;
+                    &self.tokens[self.graph.node_weight(s_idx).unwrap()].1
+                } else {
+                    panic!("Paths node indices did not connect!")
+                };
                 pairs.push(state);
-                tokens.push(end);
-                first = false;
+                tokens.push(next_token);
             }
             let p = Path::new(&tokens, &pairs);
+            n_paths_evaluated += 1;
             if let Some(opp) = search(p) {
                 opportunities.push(opp);
             }
         }
+        println!("Searched {} paths", n_paths_evaluated);
         return opportunities;
+    }
+
+    pub fn info(&self){
+        println!("ProtoGraph(n_hops={}) Stats:", self.n_hops);
+        println!("States: {}", self.states.len());
+        println!("Nodes: {}", self.tokens.len());
+        println!("Paths: {}", self.paths.len());
+        println!("Membership Cache: {}", self.path_memberships.len());
     }
 }
 
@@ -472,7 +516,7 @@ mod tests {
 
         let mut paths = Vec::with_capacity(g.paths.len());
         for p in g.paths {
-            let addr_path: Vec<_> = p.iter().map(|x| *g.graph.edge_weight(*x).unwrap()).collect();
+            let addr_path: Vec<_> = p.edges.iter().map(|x| *g.graph.edge_weight(*x).unwrap()).collect();
             paths.push(addr_path);
         }
         assert_eq!(paths, exp);
