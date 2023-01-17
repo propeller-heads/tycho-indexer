@@ -8,7 +8,7 @@ use petgraph::{
 use std::collections::HashMap;
 
 use crate::{
-    models::{ERC20Token, Opportunity, Swap},
+    models::{ERC20Token, SwapSequence, Swap},
     protocol::{
         errors::TradeSimulationError,
         models::{GetAmountOutResult, Pair},
@@ -56,7 +56,7 @@ impl <'a>Path<'a> {
         Ok(res)
     }
 
-    pub fn get_swaps(&self, amount_in: U256) -> Result<Opportunity, TradeSimulationError> {
+    pub fn get_swaps(&self, amount_in: U256) -> Result<(Vec<Swap>, U256), TradeSimulationError> {
         // if we could replace this one with ArrayVec we could shrink this to a single method.
         let mut swaps = Vec::<_>::new();
         let mut res = GetAmountOutResult::new(U256::zero(), U256::zero());
@@ -75,7 +75,7 @@ impl <'a>Path<'a> {
             ));
             current_amount = res.amount;
         }
-        Ok(Opportunity::new(swaps, res.gas))
+        Ok((swaps, res.gas))
     }
 }
 
@@ -229,7 +229,7 @@ impl ProtoGraph {
         self.paths.shrink_to_fit();
     }
 
-    pub fn search_opportunities<F:Fn(Path) -> Option<Opportunity>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<Opportunity> {
+    pub fn search_opportunities<F:Fn(Path) -> Option<SwapSequence>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<SwapSequence> {
         // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
         // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
         // To optimize this, each worker needs a preallocated collections that are cleared on each invocation.
@@ -522,14 +522,15 @@ mod tests {
         assert_eq!(paths, exp);
     }
 
-    fn atomic_arb_finder(p: Path) -> Option<Opportunity> {
+    fn atomic_arb_finder(p: Path) -> Option<SwapSequence> {
         let price = p.price();
         if price > 1.0 {
             let amount_in = optimize_path(&p);
             if amount_in > U256::zero() {
-                let opp = p.get_swaps(amount_in).unwrap();
-                let last = &opp.actions()[opp.actions().len() - 1];
-                if last.amount_out() > amount_in {
+                let (swaps, gas) = p.get_swaps(amount_in).unwrap();
+                let amount_out = swaps[swaps.len() - 1].amount_out();
+                if amount_out > amount_in {
+                    let opp = SwapSequence::new(swaps, gas);
                     return Some(opp);
                 }
                 return None;
@@ -678,8 +679,7 @@ mod tests {
         let path = Path::new(&tokens, &pairs);
         let amount_in = U256::from(100_000);
 
-        let res = path.get_swaps(amount_in).unwrap();
-        let actions = res.actions();
+        let (actions, gas) = path.get_swaps(amount_in).unwrap();
 
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());

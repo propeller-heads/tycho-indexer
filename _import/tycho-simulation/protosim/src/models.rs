@@ -85,21 +85,21 @@ impl Swap {
 }
 
 #[derive(Debug)]
-pub struct Opportunity {
+pub struct SwapSequence {
     actions: Vec<Swap>,
     gas: U256,
 }
 
-impl Opportunity {
-    pub fn new(actions: Vec<Swap>, gas: U256) -> Self {
-        Opportunity {
-            actions: actions,
+impl SwapSequence {
+    pub fn new(swaps: Vec<Swap>, gas: U256) -> Self {
+        SwapSequence {
+            actions: swaps,
             gas: gas,
         }
     }
 
-    pub fn actions(&self) -> &Vec<Swap> {
-        &self.actions
+    pub fn swaps(self) -> Vec<Swap> {
+        self.actions
     }
 
     pub fn gas(&self) -> U256 {
