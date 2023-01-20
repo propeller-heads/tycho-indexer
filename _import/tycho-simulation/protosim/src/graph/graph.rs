@@ -1,3 +1,4 @@
+use log::{debug, info};
 use ethers::types::{H160, U256};
 use itertools::Itertools;
 use petgraph::{
@@ -20,6 +21,7 @@ use super::edge_paths::all_edge_paths;
 
 struct TokenEntry(NodeIndex, ERC20Token);
 
+#[derive(Debug)]
 pub struct Path<'a> {
     pairs: &'a [&'a Pair],
     tokens: &'a [&'a ERC20Token],
@@ -206,7 +208,7 @@ impl ProtoGraph {
         let TokenEntry(node_idx, _) = self.tokens[&start_token];
         let edge_paths =
             all_edge_paths::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops));
-        println!("Exploring paths");
+        info!("Searching paths...");
         for path in edge_paths {
             // insert path only if it does not yet exist
             let entry = PathEntry::new(node_idx, path);
@@ -214,7 +216,7 @@ impl ProtoGraph {
                 self.paths.insert(pos, entry);
             };
         }
-        println!("Building membership cache");
+        info!("Building membership cache...");
         for pos in 0..self.paths.len() {
             // build membership cache
             for edge_idx in self.paths[pos].edges.iter() {
@@ -271,16 +273,16 @@ impl ProtoGraph {
                 opportunities.push(opp);
             }
         }
-        println!("Searched {} paths", n_paths_evaluated);
+        debug!("Searched {} paths", n_paths_evaluated);
         return opportunities;
     }
 
     pub fn info(&self){
-        println!("ProtoGraph(n_hops={}) Stats:", self.n_hops);
-        println!("States: {}", self.states.len());
-        println!("Nodes: {}", self.tokens.len());
-        println!("Paths: {}", self.paths.len());
-        println!("Membership Cache: {}", self.path_memberships.len());
+        info!("ProtoGraph(n_hops={}) Stats:", self.n_hops);
+        info!("States: {}", self.states.len());
+        info!("Nodes: {}", self.tokens.len());
+        info!("Paths: {}", self.paths.len());
+        info!("Membership Cache: {}", self.path_memberships.len());
     }
 }
 
@@ -679,7 +681,7 @@ mod tests {
         let path = Path::new(&tokens, &pairs);
         let amount_in = U256::from(100_000);
 
-        let (actions, gas) = path.get_swaps(amount_in).unwrap();
+        let (actions, _) = path.get_swaps(amount_in).unwrap();
 
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());

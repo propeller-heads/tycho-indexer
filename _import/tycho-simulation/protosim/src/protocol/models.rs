@@ -10,7 +10,7 @@ pub struct PairProperties {
     pub tokens: Vec<ERC20Token>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Pair(pub PairProperties, pub ProtocolState);
 
 #[derive(Debug)]
