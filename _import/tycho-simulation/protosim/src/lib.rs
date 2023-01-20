@@ -1,5 +1,5 @@
 pub mod models;
-mod protocol;
+pub mod protocol;
 
 pub fn birth() {
     let random_quote = "The way I see it, there's only three kinds of people in this world: \
