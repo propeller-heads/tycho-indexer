@@ -10,7 +10,9 @@ use crate::{
 
 use super::{
     enums::FeeAmount,
-    liquidity_math, swap_math,
+    liquidity_math,
+    sqrt_price_math::sqrt_price_q96_to_f64,
+    swap_math,
     tick_list::{TickInfo, TickList},
     tick_math,
 };
@@ -72,6 +74,18 @@ impl UniswapV3State {
         };
 
         return pool;
+    }
+
+    pub fn fee(&self) -> f64 {
+        return (self.fee as u32) as f64 / 1_000_000.0;
+    }
+
+    pub fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
+        if a < b {
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32)
+        } else {
+            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32)
+        }
     }
 
     fn get_spacing(fee: FeeAmount) -> u16 {
