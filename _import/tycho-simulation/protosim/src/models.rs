@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 use ethers::types::{H160, U256};
@@ -37,7 +38,7 @@ impl PartialEq for ERC20Token {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Swap {
     token_in: H160,
     amount_in: U256,
