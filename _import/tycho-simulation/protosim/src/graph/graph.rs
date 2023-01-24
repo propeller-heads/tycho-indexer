@@ -294,7 +294,7 @@ mod tests {
 
     use ethers::types::{I256, Sign};
     use rstest::rstest;
-    use crate::optimize::gss::gss;
+    use crate::optimize::gss::golden_section_search;
     use crate::protocol::models::PairProperties;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
 
@@ -562,7 +562,7 @@ mod tests {
             let profit = amount_out - amount_in;
             return profit;
         };
-        let res = gss(sim_arb, U256::one(), U256::from(100_000), I256::one(), 100, false);
+        let res = golden_section_search(sim_arb, U256::one(), U256::from(100_000), I256::one(), 100, false);
         return res.0;
     }
 
