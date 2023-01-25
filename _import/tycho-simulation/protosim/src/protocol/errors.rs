@@ -5,7 +5,7 @@ use super::models::GetAmountOutResult;
 pub enum TradeSimulationErrorKind {
     /// Error indicating that there is insufficient data to perform the simulation.
     InsufficientData,
-    /// Error indicating that there is no liquidity in the market to complete the trade.
+    /// Error indicating that there is no liquidity in the venue to complete the trade.
     NoLiquidity,
     /// Error indicating that an unknown error occurred during the simulation.
     Unkown,

@@ -14,6 +14,32 @@
 //!         changes such that the `search_opportunities` method can correctly take 
 //!         into account newly added edges.
 //! 
+//! # Examples
+//! ```
+//! use std::str::FromStr;
+//! 
+//! use ethers::types::{H160, U256};
+//! use protosim::graph::graph::{ProtoGraph, Path};
+//! use protosim::models::ERC20Token;
+//! use protosim::protocol::models::{PairProperties, Pair};
+//! use protosim::protocol::uniswap_v2::state::{UniswapV2State};
+//! 
+//! let mut g = ProtoGraph::new(4);
+//! let pair = {
+//!     let t0 = ERC20Token::new("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 3, "T0");
+//!     let t1 = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ", 3, "T1");
+//!     let props = PairProperties {
+//!         address: H160::from_str("0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8").unwrap(),
+//!         tokens: vec![t0, t1],
+//!     };
+//!     let state = UniswapV2State::new(U256::from(2000), U256::from(2000)).into();
+//!     Pair(props, state)
+//! };
+//! 
+//! let res = g.insert_pair(pair);
+//! 
+//! g.info()
+//! ```
 use log::{debug, info};
 use ethers::types::{H160, U256};
 use itertools::Itertools;

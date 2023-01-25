@@ -33,30 +33,6 @@ use std::{
 ///  ## Panics
 ///
 ///  Panics if `from` or `to` are not present in the graph.
-///
-///  ## Examples
-///
-///  ```
-///  use std::iter::FromIterator;
-///  use petgraph::Graph;
-///  use petgraph::visit::EdgeRef;
-///  use petgraph::prelude::*;
-///
-///  let mut graph = Graph::<&str, &str>::new();
-///  let a = graph.add_node("a");
-///  let b = graph.add_node("b");
-///  let c = graph.add_node("c");
-///  let d = graph.add_node("d");
-///  graph.add_edge(a, b, "ab");
-///  graph.add_edge(b, c, "bc");
-///  graph.add_edge(c, d, "cd");
-///
-///  let paths = all_edge_paths(graph, a, d, 2, Some(3))
-///     .map(|path| path.iter().map(|edge| edge.weight())
-///     .collect::<Vec<_>>()).collect::<Vec<_>>();
-///
-///  assert_eq!(paths, vec![vec!["ab", "bc", "cd"]]);
-///  ```
 pub fn all_edge_paths<TargetColl, G>(
     graph: G,
     from: G::NodeId,

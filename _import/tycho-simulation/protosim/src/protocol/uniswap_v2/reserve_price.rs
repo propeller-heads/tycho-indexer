@@ -5,10 +5,9 @@ use crate::u256_num::u256_to_f64;
 /// Computes a spot price given two token reserves
 ///
 /// To find the most accurate spot price possible:
-///     1. The greatest comon divisor is found and both reserves are divided by it.
-///     2. The reduced fractions nominator and denominator are converted to float (this conversion is lossy)
-///     3. The price is computed by using float division
-///     4. Finally the price is correct for difference in token decimals.
+///     1. The nominator and denominator are converted to float (this conversion is lossy)
+///     2. The price is computed by using float division
+///     3. Finally the price is correct for difference in token decimals.
 ///
 /// # Example
 /// ```
