@@ -1,4 +1,7 @@
-//! Path finding algorithm for edges
+//! Path finding algorithm 
+//! 
+//! This module works on edges instead of nodes to provide better support for MultiGraphs which
+//! can have parallel edges between two nodes.
 use indexmap::IndexSet;
 use petgraph::{
     visit::{EdgeCount, EdgeRef, IntoEdgeReferences, IntoEdgesDirected, NodeCount},
