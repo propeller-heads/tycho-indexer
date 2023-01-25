@@ -1,3 +1,19 @@
+//! Protocol Graph
+//! 
+//! This module contains the `ProtoGraph` struct, which represents a graph
+//!  of protocols that enable trade simulations. The struct contains 
+//! information about the tokens, states and edges of each pair in the graph.
+//!
+//! The struct has several methods:
+//!  - `new`: creates a new ProtoGraph struct with the given maximum number of hops
+//!  - `insert_pair`: Given a `Pair` struct, it adds missing tokens to the graph 
+//!         and creates edges between the tokens. It also records the pair in the states.
+//!  - `update_state`: Given an address and a new `ProtocolState`, it updates the 
+//!         state of the pair with the corresponding address.
+//!  - `build_cache`: this function should be called whenever the graphs topology 
+//!         changes such that the `search_opportunities` method can correctly take 
+//!         into account newly added edges.
+//! 
 use log::{debug, info};
 use ethers::types::{H160, U256};
 use itertools::Itertools;

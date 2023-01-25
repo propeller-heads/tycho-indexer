@@ -1,3 +1,11 @@
+//! Basic data structures
+//!
+//! This module contains basic models that are shared across many
+//! components of the crate, including ERC20Token, Swap and SwapSequence.
+//!
+//! ERC20Tokens provide instructions on how to handle prices and amounts,
+//! while Swap and SwapSequence are usually used as results types.
+
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -5,8 +13,11 @@ use ethers::types::{H160, U256};
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
+    /// The address of the token on the blockchain network
     pub address: H160,
+    /// The number of decimal places that the token uses
     pub decimals: usize,
+    /// The symbol of the token
     pub symbol: String,
 }
 

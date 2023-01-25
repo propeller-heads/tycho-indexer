@@ -1,3 +1,22 @@
+//! Protocol State and Simulation
+//!
+//! This module contains the `ProtocolSim` trait, which defines the methods
+//! that a protocol state must implement in order to be used in the trade
+//! simulation. It also contains the `ProtocolState` enum, which represents
+//! the different protocol states that can be used in the trade simulation.
+//! The `ProtocolSim` trait has three methods: `fee`, `spot_price`, and
+//! `get_amount_out`.
+//!
+//!  * `fee` - returns the fee of the protocol as ratio.
+//!  * `spot_price` - returns the protocols current spot price of two tokens.
+//!  * `get_amount_out` - returns the amount out given an amount in and
+//!         input/output tokens.
+//!
+//! The `ProtocolState` enum has currently two variants:
+//! `UniswapV2` and `UniswapV3`.
+//!
+//! By using the `enum_dispatch` macro, this module allows for a more
+//! efficient runtime dispatch of the trait methods on the enum variants.
 use enum_dispatch::enum_dispatch;
 use ethers::types::U256;
 
@@ -18,7 +37,7 @@ pub trait ProtocolSim {
     /// E.g. if the fee is 1%, the value returned would be 0.01.
     fn fee(&self) -> f64;
 
-    /// Returns the protocols current spot price of twp tokens
+    /// Returns the protocols current spot price of two tokens
     ///
     /// Currency pairs are meant to be compared against one another in
     /// order to understand how much of the quote currency is required

@@ -1,3 +1,29 @@
+//! Pair Properties and ProtocolState
+//!
+//! This module contains the `PairProperties` struct, which represents the
+//! properties of a trading pair. It also contains the `Pair` struct, which
+//! represents a trading pair with its properties and corresponding state.
+//!
+//! Additionally, it contains the `GetAmountOutResult` struct, which
+//! represents the result of getting the amount out of a trading pair.
+//!
+//! The `PairProperties` struct has two fields: `address` and `tokens`.
+//! `address` is the address of the trading pair and `tokens` is a vector
+//! of `ERC20Token` representing the tokens of the trading pair.
+//!
+//! Generally this struct contains immutable properties of the pair. These
+//! are attributes that will never change - not even through governance.
+//!
+//! This is in contrast to `ProtocolState`, which includes ideally only
+//! attributes that can change.
+//!
+//! The `Pair` struct combines the former two: `PairProperties` and
+//! `ProtocolState` into a single struct.
+//!
+//! # Note:
+//! It's worth emphasizin that although the term "pair" used in this
+//! module refers to a trading pair, it does not necessarily imply two
+//! tokens only. Some pairs might have more than two tokens.
 use ethers::types::{H160, U256};
 
 use crate::models::ERC20Token;
