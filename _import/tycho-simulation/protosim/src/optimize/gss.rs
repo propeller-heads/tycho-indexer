@@ -1,3 +1,4 @@
+//! Golden Section Search
 use ethers::types::{Sign, I256, U256, U512};
 use std::mem::swap;
 

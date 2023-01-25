@@ -35,7 +35,7 @@ use super::state::ProtocolState;
 /// # Fields
 ///
 /// * `address`: H160, the address of the trading pair
-/// * `tokens`: Vec<ERC20Token>, the tokens of the trading pair
+/// * `tokens`: `Vec<ERC20Token>`, the tokens of the trading pair
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairProperties {
     pub address: H160,

@@ -1,3 +1,4 @@
+//! Protocol generic errors
 use super::models::GetAmountOutResult;
 
 /// Enumeration of possible errors that can occur during a trade simulation.

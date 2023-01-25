@@ -1,3 +1,4 @@
+//! Path finding algorithm for edges
 use indexmap::IndexSet;
 use petgraph::{
     visit::{EdgeCount, EdgeRef, IntoEdgeReferences, IntoEdgesDirected, NodeCount},
@@ -8,7 +9,7 @@ use std::{
     iter::{from_fn, FromIterator},
 };
 
-/// Returns an iterator over all paths between two nodes in a graph.
+/// Returns an iterator of edge ids over paths between two nodes in a graph.
 ///
 ///  The returned paths are represented as collections of the type specified by
 ///  the `TargetColl` type parameter.

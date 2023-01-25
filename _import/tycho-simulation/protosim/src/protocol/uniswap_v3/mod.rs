@@ -1,3 +1,4 @@
+//! Uniswap V3 Decentralized Exchange
 pub mod enums;
 mod liquidity_math;
 mod solidity_math;
