@@ -28,14 +28,21 @@ pub struct Path<'a> {
 }
 
 impl <'a>Path<'a> {
-
+    /// Represents a path of token trades through a series of pairs.
+    ///
+    /// Creates a new instance of the Path struct.
+    /// - `tokens`: A reference to a vector of references to ERC20Token structs.
+    /// - `pairs`: A reference to a vector of references to Pair structs.
+    /// Returns a new instance of the Path struct.
     fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Path<'a> {
         Path {
             pairs: &pairs,
             tokens: &tokens,
         }
     }
-
+    /// Calculates the price of the path.
+    ///
+    /// Returns the price of the path as a floating point number.
     pub fn price(&self) -> f64 {
         let mut p = 1.0;
         for i in 0..self.pairs.len() {
@@ -46,7 +53,13 @@ impl <'a>Path<'a> {
         }
         return p;
     }
-
+    /// Get the amount of output for a given input.
+    ///
+    /// ## Arguments
+    /// - `amount_in`: A U256 representing the input amount.
+    ///
+    /// ## Returns
+    /// A `Result` containing a `GetAmountOutResult` on success and a `TradeSimulationError` on failure.
     pub fn get_amount_out(&self, amount_in: U256) -> Result<GetAmountOutResult, TradeSimulationError> {
         let mut res = GetAmountOutResult::new(amount_in, U256::zero());
         for i in 0..self.pairs.len() {
@@ -58,6 +71,13 @@ impl <'a>Path<'a> {
         Ok(res)
     }
 
+    /// Get the swaps for a given input.
+    ///
+    /// ## Arguments
+    /// - `amount_in`: A U256 representing the input amount.
+    ///
+    /// ## Returns
+    /// A `Result` containing a tuple of `(Vec<Swap>, U256)` on success and a `TradeSimulationError` on failure.
     pub fn get_swaps(&self, amount_in: U256) -> Result<(Vec<Swap>, U256), TradeSimulationError> {
         // if we could replace this one with ArrayVec we could shrink this to a single method.
         let mut swaps = Vec::<_>::new();
@@ -82,27 +102,44 @@ impl <'a>Path<'a> {
 }
 
 
-struct KeySubsetIterator<'a>{
+struct PathIdSubsetsByMembership<'a>{
     keys: Vec<H160>,
     data: &'a HashMap<H160, Vec<usize>>,
     key_idx: usize,
     vec_idx: usize,
 }
 
-impl <'a>KeySubsetIterator<'a>{
-    fn new(keys: Option<Vec<H160>>, data: &'a HashMap<H160, Vec<usize>>) -> Self {
-        if let Some(subset) = keys {
-            KeySubsetIterator{
+impl <'a>PathIdSubsetsByMembership<'a>{
+    /// Create a new PathIdSubsetsByMembership
+    /// 
+    /// Basically this struct will iterate over the values of a subset of keys in a HashMap. 
+    /// If a subset is not provided, it will iterate over all keys in the HashMap. 
+    /// In this specific case, keys are addresses and each value is a collection of 
+    /// path ids which contain the corresponding pool. The iterator yields the individual
+    /// path ids present in the corresponding values.
+    ///
+    /// # Arguments
+    ///
+    /// `addresses` - An optional subset of addresses to iterate over.
+    /// `memberships` - The path memberships to iterate over.
+    /// 
+    /// # Note
+    /// This iterator can procude duplicated path ids. Especially if a path contains 
+    /// multiple pools. In most cases the user has to take care of deduplicating any
+    /// repeated path ids if this is relevant for the corresponding use case.
+    fn new(addresses: Option<Vec<H160>>, memberships: &'a HashMap<H160, Vec<usize>>) -> Self {
+        if let Some(subset) = addresses {
+            PathIdSubsetsByMembership{
                 keys: subset,
-                data: data,
+                data: memberships,
                 key_idx: 0,
                 vec_idx: 0,
             }
         } else {
-            let subset = data.keys().map(|x| *x).collect::<Vec<_>>();
-            KeySubsetIterator{
+            let subset = memberships.keys().map(|x| *x).collect::<Vec<_>>();
+            PathIdSubsetsByMembership{
                 keys: subset,
-                data: data,
+                data: memberships,
                 key_idx: 0,
                 vec_idx: 0,
             }
@@ -111,7 +148,7 @@ impl <'a>KeySubsetIterator<'a>{
     }
 }
 
-impl Iterator for KeySubsetIterator<'_>{
+impl Iterator for PathIdSubsetsByMembership<'_>{
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -146,6 +183,23 @@ struct PathEntry{
 }
 
 impl PathEntry {
+    /// # Create a new PathEntry
+    ///
+    /// ProtoGraph internal path representation: Represents a path by it's 
+    /// start token (indicating a direction) as well as by a series of 
+    /// edge indices.
+    /// 
+    /// Given a starting NodeIndex and a Vec of EdgeIndexes, creates a new
+    /// PathEntry struct.
+    ///
+    /// # Arguments
+    ///
+    /// * start - The NodeIndex representing the starting point of the path.
+    /// * edges - A Vec of EdgeIndexes representing the edges in the path.
+    ///
+    /// # Returns
+    ///
+    /// A new PathEntry struct.
     fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self{
         PathEntry{
             start, edges
@@ -154,15 +208,25 @@ impl PathEntry {
 }
 
 pub struct ProtoGraph {
+    /// The maximum number of depth for paths searches.
     n_hops: usize,
+    /// A map of token addresses to their corresponding token and node index in the graph.
     tokens: HashMap<H160, TokenEntry>,
+    /// A map of pool addresses to their corresponding pair struct in the graph.
     states: HashMap<H160, Pair>,
+    /// The underlying graph data structure.
     graph: UnGraph<H160, H160>,
+    /// A cache of all paths with length < n_hops in the graph.
     paths: Vec<PathEntry>,
+    /// A cache of the membership of each address in the graph to paths.
     path_memberships: HashMap<H160, Vec<usize>>,
 }
 
 impl ProtoGraph {
+    /// Graph of protocols for swap simulations
+    /// 
+    /// A struct that represents a graph of protocols that enable trade simulations. It contains 
+    /// information about the tokens, states and edges of each pair in the graph.
     pub fn new(n_hops: usize) -> Self {
         ProtoGraph {
             n_hops: n_hops,
@@ -173,6 +237,19 @@ impl ProtoGraph {
             path_memberships: HashMap::new(),
         }
     }
+
+    /// Inserts a trading pair into the graph
+    ///
+    /// Given a `Pair` struct, it adds missing tokens to the graph and creates edges 
+    /// between the tokens. It also records the pair in the states.
+    ///
+    /// # Arguments
+    ///
+    /// * `Pair(properties, state)` - A `Pair` struct that contains information about the trading pair and its state.
+    ///
+    /// # Returns
+    ///
+    /// * `Option<Pair>` - returns the inserted pair, or `None` if it could not be inserted.
     pub fn insert_pair(&mut self, Pair(properties, state): Pair) -> Option<Pair> {
         // add missing tokens to graph
         for token in properties.tokens.iter() {
@@ -196,6 +273,20 @@ impl ProtoGraph {
             .insert(properties.address, Pair(properties, state))
     }
 
+    /// Update a pairs state
+    ///
+    /// Given an address and a new `ProtocolState`, it updates the state 
+    /// of the pair with that address.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The address of the pair to update.
+    /// * `state` - The new state of the pair.
+    ///
+    /// # Returns
+    ///
+    /// * `Option<()>` - returns `Some(())` if the state was updated, or `
+    ///     None` if the pair with that address could not be found.
     pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
         if let Some(pair) = self.states.get_mut(address) {
             pair.1 = state;
@@ -204,6 +295,25 @@ impl ProtoGraph {
         None
     }
 
+    /// Builds the internal path cache for the token graph.
+    /// 
+    /// This function should be called whenever the graphs topology changes
+    /// such that the `search_opportunities` method can correctly take into
+    /// account newly added edges.
+    ///
+    /// # Arguments
+    ///
+    /// * `start_token` - The token address to start building the paths from.
+    /// 
+    /// # Note
+    /// 
+    /// Currently only circular paths are supported which why only the start token
+    /// can be supplied.
+    ///
+    /// # Panics
+    ///
+    /// The function will panic if the token address provided is not present in 
+    /// the graphs `tokens` map.
     pub fn build_paths(&mut self, start_token: H160) {
         let TokenEntry(node_idx, _) = self.tokens[&start_token];
         let edge_paths =
@@ -231,6 +341,16 @@ impl ProtoGraph {
         self.paths.shrink_to_fit();
     }
 
+    /// Given a search function, searches the token graph for trading opportunities over its paths.
+    ///
+    /// # Arguments
+    ///
+    /// * `search` - A function that takes in a `Path` and returns an `Option<SwapSequence>` representing a trading opportunity if one is found.
+    /// * `involved_addresses` - A list of token addresses to filter the paths that are searched on.
+    ///
+    /// # Returns
+    ///
+    /// A vector of all potentially profitable SwapSequences found.
     pub fn search_opportunities<F:Fn(Path) -> Option<SwapSequence>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<SwapSequence> {
         // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
         // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
@@ -239,10 +359,10 @@ impl ProtoGraph {
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
         let mut opportunities = Vec::new();
-        // KeySubsetIterator will return a list of path ids we make sure the path ids are unique and yield the
+        // PathIdSubsetsByMembership will return a list of path ids we make sure the path ids are unique and yield the
         // corresponding PathEntry object. This way we get all paths that contain any of the changed addresses.
         // In case we didn't see some address on any path (KeyError on path_memberhips) it is simply skipped.
-        let path_iter = KeySubsetIterator::new(involved_addresses, &self.path_memberships).unique().map(|idx| &self.paths[idx]);
+        let path_iter = PathIdSubsetsByMembership::new(involved_addresses, &self.path_memberships).unique().map(|idx| &self.paths[idx]);
         let mut n_paths_evaluated: u64 = 0;
         for path in path_iter {
             pairs.clear();
@@ -598,7 +718,7 @@ mod tests {
     #[case::one_key(HashMap::from([(H160::from_low_u64_be(1), vec![1,2]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(1)]), vec![1,2])]
     #[case::two_keys(HashMap::from([(H160::from_low_u64_be(1), vec![1]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(1), H160::from_low_u64_be(2)]), vec![1,3,4])]
     fn test_key_subset_iterator(#[case] data: HashMap<H160, Vec<usize>>, #[case] keys: Option<Vec<H160>>, #[case] exp: Vec<usize> ){
-        let it = KeySubsetIterator::new(keys, &data);
+        let it = PathIdSubsetsByMembership::new(keys, &data);
 
         let mut res: Vec<_> = it.collect();
         res.sort();

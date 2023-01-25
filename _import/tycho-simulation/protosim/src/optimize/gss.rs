@@ -5,6 +5,22 @@ const INVPHI: i64 = 2654435769; // (math.sqrt(5) - 1) / 2 * 2 ** 32
 const INVPHI2: i64 = 1640531526; // (3 - math.sqrt(5)) * 2 ** 32
 const DENOM: U512 = U512([4294967296, 0, 0, 0, 0, 0, 0, 0]); // 2 ** 32
 
+/// Golden Section Search
+///
+/// This function maximizes the function `f` using the Golden Section Search algorithm.
+///
+/// ## Parameters
+///
+/// - `f`: A function that takes a `I256` value as input and returns a `I256` value. The function to be maximized.
+/// - `min_bound`: The lower bound of the search interval, represented as a `U256` value.
+/// - `max_bound`: The upper bound of the search interval, represented as a `U256` value.
+/// - `tol`: The tolerance level, represented as a `I256` value. The search will stop when the difference between the two brackets is less than this tolerance.
+/// - `max_iter`: The maximum number of iterations to perform before stopping the search, represented as a `u64` value.
+/// - `honour_bounds`: A `bool` value indicating whether the algorithm should honour the bounds or not. If true, the algorithm will not search for solutions outside of the `min_bound` and `max_bound` values.
+///
+/// ## Returns
+///
+/// A tuple of `U256` values representing the left and right brackets of the maximum value of the function.
 pub fn golden_section_search<F: Fn(I256) -> I256>(
     f: F,
     mut min_bound: U256,

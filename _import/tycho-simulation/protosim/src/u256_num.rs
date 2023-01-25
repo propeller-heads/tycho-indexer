@@ -8,7 +8,20 @@ use ethers::types::U256;
 ///
 /// Rounds to "nearest even" if the number has to be truncated (number uses more than 53 bits).
 ///
-/// # Additional Reading
+/// ## Rounding rules
+/// This function converts a `U256` value to a `f64` value by applying a rounding
+/// rule to the least significant bits of the `U256` value. The general rule when
+/// rounding binary fractions to the n-th place prescribes to check the digit
+/// following the n-th place in the number (round_bit). If it’s 0, then the number
+/// should always be rounded down. If, instead, the digit is 1 and any of the
+/// following digits (sticky_bits) are also 1, then the number should be rounded up.
+/// If, however, all of the following digits are 0’s, then a tie breaking rule is
+/// applied using the least significant bit (lsb) and usually it’s the ‘ties to even’.
+/// This rule says that we should round to the number that has 0 at the n-th place.
+/// If after rounding, the significand uses more than 53 bits, the significand is
+/// shifted to the right and the exponent is decreased by 1.
+///
+/// ## Additional Reading
 /// - [Double-precision floating-point format](https://en.wikipedia.org/wiki/Double-precision_floating-point_format)
 /// - [Converting uint to float bitwise on SO](https://stackoverflow.com/a/20308114/8648259 )
 /// - [Int to Float rounding on SO](https://stackoverflow.com/a/42032175/8648259)
