@@ -32,3 +32,8 @@ impl TradeSimulationError {
         };
     }
 }
+
+#[derive(Debug)]
+pub enum TransitionError<T> {
+    OutOfOrder { state: T, event: T },
+}

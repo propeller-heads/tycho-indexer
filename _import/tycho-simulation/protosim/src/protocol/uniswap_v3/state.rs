@@ -3,7 +3,8 @@ use ethers::types::{Sign, I256, U256};
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind},
+        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
@@ -11,6 +12,7 @@ use crate::{
 
 use super::{
     enums::FeeAmount,
+    events::UniswapV3Event,
     liquidity_math,
     sqrt_price_math::sqrt_price_q96_to_f64,
     swap_math,
@@ -25,6 +27,7 @@ pub struct UniswapV3State {
     fee: FeeAmount,
     tick: i32,
     ticks: TickList,
+    log_index: LogIndex,
 }
 
 #[derive(Debug)]
@@ -73,6 +76,7 @@ impl UniswapV3State {
             fee,
             tick,
             ticks: tick_list,
+            log_index: (0, 0, 0),
         };
 
         return pool;
@@ -84,6 +88,42 @@ impl UniswapV3State {
             FeeAmount::Low => 10,
             FeeAmount::Medium => 60,
             FeeAmount::High => 200,
+        }
+    }
+
+    pub fn transition(
+        &mut self,
+        event: UniswapV3Event,
+        log_meta: EVMLogMeta,
+    ) -> Result<(), TransitionError<LogIndex>> {
+        check_log_idx(self.log_index, &log_meta)?;
+        match event {
+            UniswapV3Event::Mint(data) => {
+                self.handle_liquidity_change(data.tick_lower, data.tick_upper, data.amount);
+            }
+            UniswapV3Event::Burn(data) => {
+                self.handle_liquidity_change(data.tick_lower, data.tick_upper, -data.amount);
+            }
+            UniswapV3Event::Swap(data) => {
+                self.liquidity = data.liquidity;
+                self.tick = data.tick;
+                self.sqrt_price = data.sqrt_price;
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_liquidity_change(&mut self, lower: i32, upper: i32, amount: i128) {
+        if amount != 0 {
+            if lower <= self.tick && self.tick < upper {
+                // self.liquidity is always positive
+                if amount < 0 {
+                    self.liquidity -= amount.abs() as u128;
+                } else {
+                    self.liquidity += amount as u128;
+                }
+            }
+            self.ticks.apply_liquidity_change(lower, upper, amount);
         }
     }
 
