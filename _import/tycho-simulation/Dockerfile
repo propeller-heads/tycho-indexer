@@ -11,6 +11,6 @@ COPY . .
 RUN cargo build --release
 
 
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 COPY --from=build /build/target/release/prop-builder ./target/release/prop-builder
-CMD ["./target/release/prop-builder"]
+ENTRYPOINT ["./target/release/prop-builder"]
