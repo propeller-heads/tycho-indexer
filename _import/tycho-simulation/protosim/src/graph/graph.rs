@@ -54,7 +54,7 @@ use crate::{
     models::{ERC20Token, SwapSequence, Swap},
     protocol::{
         errors::TradeSimulationError,
-        models::{GetAmountOutResult, Pair},
+        models::{GetAmountOutResult, Pair, PairProperties},
         state::{ProtocolSim, ProtocolState},
     },
 };
@@ -262,6 +262,8 @@ pub struct ProtoGraph {
     paths: Vec<PathEntry>,
     /// A cache of the membership of each address in the graph to paths.
     path_memberships: HashMap<H160, Vec<usize>>,
+    /// "workhorse collection" for state overrides
+    overrides: HashMap<H160, Pair>,
 }
 
 impl ProtoGraph {
@@ -277,7 +279,45 @@ impl ProtoGraph {
             graph: UnGraph::new_undirected(),
             paths: Vec::new(),
             path_memberships: HashMap::new(),
+            overrides: HashMap::new(),
         }
+    }
+
+    pub fn override_pairs<'a>(&mut self, overrides: &'a HashMap<H160, ProtocolState>){
+        let mut pair_overrides = HashMap::new();
+        // this creation of Pairs is not great for performance
+        for (address, state) in overrides.iter() {
+            let properties = self.get_property(address).expect("Override with unkown pair properties ecnountered!");
+            pair_overrides.insert(*address, Pair(properties, state.clone()));
+        }
+        self.overrides.clone_from(&pair_overrides)
+    }
+
+    pub fn get_property(&self, address: &H160) -> Option<PairProperties>{
+        if let Some(Pair(props, _)) = self.states.get(address){
+            return Some(props.clone());
+        }
+        None
+    }
+
+    pub fn clear_overrides(&mut self){
+        self.overrides.clear();
+    }
+
+    pub fn with_overrides<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, overrides: &'a HashMap<H160, ProtocolState>, action: F) -> T {
+        self.override_pairs(overrides);
+        let res = action(self);
+        self.clear_overrides();
+        return res;
+    }
+
+    pub fn get_state(&self, address: &H160) -> Option<&Pair> {
+        if self.overrides.len() > 0 {
+            if let Some(state) = self.overrides.get(address) {
+                return Some(state);
+            }
+        } 
+        self.states.get(address)
     }
 
     /// Inserts a trading pair into the graph
@@ -414,7 +454,7 @@ impl ProtoGraph {
             tokens.push(start);
             for edge_idx in path.edges.iter() {
                 let state_addr = self.graph.edge_weight(*edge_idx).unwrap();
-                let state = self.states.get(state_addr).unwrap();
+                let state = self.get_state(state_addr).unwrap();
                 let (s_idx, e_idx) = self.graph.edge_endpoints(*edge_idx).unwrap();
                 // we need to correctly infer the edge direction here
                 let next_token = if prev_node_idx == s_idx {
@@ -446,6 +486,7 @@ impl ProtoGraph {
         info!("Paths: {}", self.paths.len());
         info!("Membership Cache: {}", self.path_memberships.len());
     }
+
 }
 
 
