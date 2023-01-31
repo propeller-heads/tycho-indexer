@@ -263,7 +263,7 @@ pub struct ProtoGraph {
     /// A cache of the membership of each address in the graph to paths.
     path_memberships: HashMap<H160, Vec<usize>>,
     /// "workhorse collection" for state overrides
-    overrides: HashMap<H160, Pair>,
+    original_states: HashMap<H160, ProtocolState>,
 }
 
 impl ProtoGraph {
@@ -279,29 +279,26 @@ impl ProtoGraph {
             graph: UnGraph::new_undirected(),
             paths: Vec::new(),
             path_memberships: HashMap::new(),
-            overrides: HashMap::new(),
+            original_states: HashMap::new(),
         }
     }
 
+    // TODO: later this should accept log messages
     pub fn override_pairs<'a>(&mut self, overrides: &'a HashMap<H160, ProtocolState>){
-        let mut pair_overrides = HashMap::new();
-        // this creation of Pairs is not great for performance
-        for (address, state) in overrides.iter() {
-            let properties = self.get_property(address).expect("Override with unkown pair properties ecnountered!");
-            pair_overrides.insert(*address, Pair(properties, state.clone()));
+        for (address, state) in overrides.iter(){
+            let Pair(_, old_state) = self.states.get(address).unwrap();
+            self.original_states.insert(*address, old_state.clone());
+            self.update_state(address, state.clone());
         }
-        self.overrides.clone_from(&pair_overrides)
-    }
-
-    pub fn get_property(&self, address: &H160) -> Option<PairProperties>{
-        if let Some(Pair(props, _)) = self.states.get(address){
-            return Some(props.clone());
-        }
-        None
+        
     }
 
     pub fn clear_overrides(&mut self){
-        self.overrides.clear();
+        for (address, state) in self.original_states.iter(){
+            let pair = self.states.get_mut(address).unwrap();
+            pair.1 = state.clone();
+        }
+        self.original_states.clear();
     }
 
     pub fn with_overrides<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, overrides: &'a HashMap<H160, ProtocolState>, action: F) -> T {
@@ -309,15 +306,6 @@ impl ProtoGraph {
         let res = action(self);
         self.clear_overrides();
         return res;
-    }
-
-    pub fn get_state(&self, address: &H160) -> Option<&Pair> {
-        if self.overrides.len() > 0 {
-            if let Some(state) = self.overrides.get(address) {
-                return Some(state);
-            }
-        } 
-        self.states.get(address)
     }
 
     /// Inserts a trading pair into the graph
@@ -370,6 +358,7 @@ impl ProtoGraph {
     /// * `Option<()>` - returns `Some(())` if the state was updated, or `
     ///     None` if the pair with that address could not be found.
     pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
+        //! TODO this should work purely on log updates and the transition
         if let Some(pair) = self.states.get_mut(address) {
             pair.1 = state;
             return Some(());
@@ -454,7 +443,7 @@ impl ProtoGraph {
             tokens.push(start);
             for edge_idx in path.edges.iter() {
                 let state_addr = self.graph.edge_weight(*edge_idx).unwrap();
-                let state = self.get_state(state_addr).unwrap();
+                let state = self.states.get(state_addr).unwrap();
                 let (s_idx, e_idx) = self.graph.edge_endpoints(*edge_idx).unwrap();
                 // we need to correctly infer the edge direction here
                 let next_token = if prev_node_idx == s_idx {
