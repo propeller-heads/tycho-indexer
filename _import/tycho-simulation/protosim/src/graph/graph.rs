@@ -40,7 +40,7 @@
 //! 
 //! g.info()
 //! ```
-use log::{debug, info};
+use log::{debug, info, trace};
 use ethers::types::{H160, U256};
 use itertools::Itertools;
 use petgraph::{
@@ -55,7 +55,7 @@ use crate::{
     protocol::{
         errors::TradeSimulationError,
         models::{GetAmountOutResult, Pair, PairProperties},
-        state::{ProtocolSim, ProtocolState},
+        state::{ProtocolSim, ProtocolState, ProtocolEvent}, events::EVMLogMeta,
     },
 };
 
@@ -283,17 +283,40 @@ impl ProtoGraph {
         }
     }
 
-    // TODO: later this should accept log messages
-    pub fn override_pairs<'a>(&mut self, overrides: &'a HashMap<H160, ProtocolState>){
-        for (address, state) in overrides.iter(){
-            let Pair(_, old_state) = self.states.get(address).unwrap();
-            self.original_states.insert(*address, old_state.clone());
-            self.update_state(address, state.clone());
+    pub fn transition<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]){
+        for (ev, logmeta) in events.iter(){
+            let address = logmeta.from;
+            if let Some(Pair(_, state)) = self.states.get_mut(&address) {
+                state.transition(ev, logmeta);
+            }
         }
-        
     }
 
-    pub fn clear_overrides(&mut self){
+
+    pub fn revertible_transition<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]){
+        if self.original_states.len() > 0 {
+            panic!("Original states not cleared!")
+        }
+        for (ev, logmeta) in events.iter(){
+            let address = logmeta.from;
+            let old_state;
+            if let Some(Pair(_, state)) = self.states.get_mut(&address) {
+                old_state = state;
+            } else {
+                trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
+                continue;
+            };
+            // Only save original state the first time in case there are multiple logs for the
+            // same pool else revert would not properly work anymore.
+            if !self.original_states.contains_key(&address){
+                self.original_states.insert(address, old_state.clone());    
+            }
+            old_state.transition(ev, logmeta).unwrap();
+        }
+    }
+    
+
+    pub fn revert_transition(&mut self){
         for (address, state) in self.original_states.iter(){
             let pair = self.states.get_mut(address).unwrap();
             pair.1 = state.clone();
@@ -301,12 +324,13 @@ impl ProtoGraph {
         self.original_states.clear();
     }
 
-    pub fn with_overrides<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, overrides: &'a HashMap<H160, ProtocolState>, action: F) -> T {
-        self.override_pairs(overrides);
+    pub fn with_temporary_transition<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], action: F) -> T {
+        self.revertible_transition(events);
         let res = action(self);
-        self.clear_overrides();
+        self.revert_transition();
         return res;
     }
+
 
     /// Inserts a trading pair into the graph
     ///

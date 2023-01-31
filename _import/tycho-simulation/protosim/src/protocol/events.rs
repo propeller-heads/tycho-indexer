@@ -22,12 +22,12 @@ pub fn check_log_idx(
 
 #[derive(Debug, Clone)]
 pub struct EVMLogMeta {
-    from: H160,
-    block_number: u64,
-    block_hash: H256,
-    transaction_index: u32,
-    transaction_hash: H256,
-    log_index: u32,
+    pub from: H160,
+    pub block_number: u64,
+    pub block_hash: H256,
+    pub transaction_index: u32,
+    pub transaction_hash: H256,
+    pub log_index: u32,
 }
 
 impl EVMLogMeta {

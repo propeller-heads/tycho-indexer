@@ -108,8 +108,8 @@ pub enum ProtocolState {
 impl ProtocolState {
     pub fn transition(
         &mut self,
-        protocol_event: ProtocolEvent,
-        log: EVMLogMeta,
+        protocol_event: &ProtocolEvent,
+        log: &EVMLogMeta,
     ) -> Result<(), TransitionError<LogIndex>> {
         match self {
             ProtocolState::UniswapV2(state) => {

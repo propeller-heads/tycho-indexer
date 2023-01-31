@@ -39,8 +39,8 @@ impl UniswapV2State {
 
     pub fn transition(
         &mut self,
-        msg: UniswapV2Sync,
-        log_meta: EVMLogMeta,
+        msg: &UniswapV2Sync,
+        log_meta: &EVMLogMeta,
     ) -> Result<(), TransitionError<LogIndex>> {
         check_log_idx(self.log_index, &log_meta)?;
         self.reserve0 = msg.reserve0;
@@ -228,7 +228,7 @@ mod tests {
             1,
         );
 
-        state.transition(event, log_meta.clone()).unwrap();
+        state.transition(&event, &log_meta).unwrap();
 
         assert_eq!(state.reserve0, u256("1500"));
         assert_eq!(state.reserve1, u256("2000"));

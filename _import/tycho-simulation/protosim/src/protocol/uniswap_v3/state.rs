@@ -93,8 +93,8 @@ impl UniswapV3State {
 
     pub fn transition(
         &mut self,
-        event: UniswapV3Event,
-        log_meta: EVMLogMeta,
+        event: &UniswapV3Event,
+        log_meta: &EVMLogMeta,
     ) -> Result<(), TransitionError<LogIndex>> {
         check_log_idx(self.log_index, &log_meta)?;
         match event {
