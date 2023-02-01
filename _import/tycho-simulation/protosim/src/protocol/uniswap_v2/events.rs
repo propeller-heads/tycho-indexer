@@ -1,5 +1,6 @@
 use ethers::types::U256;
 
+#[derive(Debug)]
 pub struct UniswapV2Sync {
     pub reserve0: U256,
     pub reserve1: U256,

@@ -40,7 +40,7 @@
 //! 
 //! g.info()
 //! ```
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use ethers::types::{H160, U256};
 use itertools::Itertools;
 use petgraph::{
@@ -53,9 +53,9 @@ use std::collections::HashMap;
 use crate::{
     models::{ERC20Token, SwapSequence, Swap},
     protocol::{
-        errors::TradeSimulationError,
-        models::{GetAmountOutResult, Pair, PairProperties},
-        state::{ProtocolSim, ProtocolState, ProtocolEvent}, events::EVMLogMeta,
+        errors::{TradeSimulationError, TransitionError},
+        models::{GetAmountOutResult, Pair},
+        state::{ProtocolSim, ProtocolState, ProtocolEvent}, events::{EVMLogMeta, LogIndex},
     },
 };
 
@@ -283,17 +283,27 @@ impl ProtoGraph {
         }
     }
 
-    pub fn transition<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]){
+    pub fn transition_states<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], ignore_errors: bool){
         for (ev, logmeta) in events.iter(){
             let address = logmeta.from;
             if let Some(Pair(_, state)) = self.states.get_mut(&address) {
-                state.transition(ev, logmeta);
+                let res = state.transition(ev, logmeta);
+                if !ignore_errors{
+                    res.expect(&format!("Error transitioning on event {:?} from address {}", ev, address));
+                } else {
+                    if let Err(err) = res {
+                        warn!("Ignoring transitioning error {:?} for event {:?} from address: {}", err, ev, address);
+                    }
+                }
+            } else {
+                trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
+                continue;
             }
         }
     }
 
 
-    pub fn revertible_transition<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]){
+    pub fn transition_states_revertibly<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]) -> Result<(), TransitionError<LogIndex>>{
         if self.original_states.len() > 0 {
             panic!("Original states not cleared!")
         }
@@ -311,12 +321,13 @@ impl ProtoGraph {
             if !self.original_states.contains_key(&address){
                 self.original_states.insert(address, old_state.clone());    
             }
-            old_state.transition(ev, logmeta).unwrap();
+            old_state.transition(ev, logmeta)?;
         }
+        Ok(())
     }
     
 
-    pub fn revert_transition(&mut self){
+    pub fn revert_states(&mut self){
         for (address, state) in self.original_states.iter(){
             let pair = self.states.get_mut(address).unwrap();
             pair.1 = state.clone();
@@ -324,11 +335,11 @@ impl ProtoGraph {
         self.original_states.clear();
     }
 
-    pub fn with_temporary_transition<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], action: F) -> T {
-        self.revertible_transition(events);
+    pub fn with_states_transitioned<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], action: F) -> Result<T, TransitionError<LogIndex>> {
+        self.transition_states_revertibly(events)?;
         let res = action(self);
-        self.revert_transition();
-        return res;
+        self.revert_states();
+        return Ok(res);
     }
 
 

@@ -131,6 +131,7 @@ impl ProtocolState {
     }
 }
 
+#[derive(Debug)]
 pub enum ProtocolEvent {
     UniswapV2(UniswapV2Sync),
     UniswapV3(UniswapV3Event),
