@@ -1,27 +1,22 @@
 # Protosim
 
-Moves slow onchain computation offchain to solve optimization problems. This crate allows to simulate a set of supported protocols offchain. Currently it
-has a focus on token exchange protocols but it is not necessarily limited to this.
+Moves slow on-chain computations off-chain to solve optimization problems. This crate allows simulating a set of supported protocols off-chain. Currently, it has a focus on token exchange protocols, but it is not necessarily limited to this.
 
-To further help solving hard problems in the context of exchanging tokens, the crate provides a graph structure that can be queried for chained token
-exchanges and their parameters. The graph structure evolves over time as protocol states are changed by user actions. These changes are captured using
-events. The implemented protocols are aware of the state mutating events and can transition their state corrctly given such events.
+To further help solve hard problems in the context of exchanging tokens, the crate provides the ProtoGraph structure, which can be queried for chained token exchanges and their parameters. This graph structure evolves over time as protocol states are changed by user actions. These changes are captured using events. The implemented protocols are aware of the state-mutating events and can transition their state correctly given such events.
 
 ## Adding a new Protocol
 
-To add a new protocol the following high level steps are necessary:
+To add a new protocol, you will need to complete the following high-level steps:
 
-1. Add a protocol state struct that implements the `ProtocolSim` struct
-2. Finally add events and implement the transition method on the previously implemented protocol state struct
-3. Finally register events and state struct under `crate::protocol::state::ProtocolState` and `crate::protocol::state::ProtocolEvent` enums respectively.
+1.  Create a protocol state struct that implements the `ProtocolSim` struct.
+2.  Add associated events and implement the transition method on the protocol state struct.
+3.  Register the events and state structs under `crate::protocol::state::ProtocolState` and `crate::protocol::state::ProtocolEvent`, respectively.
 
-Each protocol is supposed to have it's own module under: `protosim/src/protocol`
+Each protocol should have its own module under `protosim/src/protocol`.
 
+### 1\. Adding state & behaviour
 
-## 1. Adding state & behaviour
-
-Simply implement a struct that only contains the state of the protocol. Only the state attributes that are really required to fulfill the `ProtocolSim` trait 
-is required. Next implement the trait:
+Simply implement a struct that contains the state of the protocol. Only the attributes that are necessary to fulfill the `ProtocolSim` trait are required. Then, implement that trait.
 
 ```
 /// ProtocolSim trait
@@ -72,31 +67,22 @@ pub trait ProtocolSim {
 }
 ```
 
-### 2. Adding events
+### 2\. Adding Events
 
-To transition the state we need to implement the transition method. It is not part of the ProtocolSim trait but it is necessary so we can properly implement
-the method on the `ProtolState` enum. This method is not part of the ProtocolSim method because the `enum_dispatch` crate can not create the correct code for 
-it, therefore we need to handle this manually unless we would write our own macro for this.
+To transition the state, we need to implement the `transition` method. This method is not part of the `ProtocolSim` trait because the `enum_dispatch` crate cannot generate the correct code for it. Therefore, we need to handle this manually unless we write our own macro for this.
 
-Anyway the transition methods signature is simple:
+The `transition` method's signature is simple:
 
-```
-fn transition(&mut self, event: [EventType], logmeta: EVMLogMeta);
+```rust
+fn transition(&mut self, event: [EventType], logmeta: EVMLogMeta)
 ```
 
-The logmeta should be used to ensure that the events are applied in the correct order. This is currently a bit biased torwards EVM based chains. You can use
-`crate::protocol::events::check_log_idx` to ensure logs are being processed in the right order.
+The `logmeta` should be used to ensure that the events are applied in the correct order. This is currently biased towards EVM-based chains, but you can use `crate::protocol::events::check_log_idx` to ensure that logs are being processed in the right order.
 
-If a protocol supports multiple events, you can group the structs in a protocol specific enum, and that enum is later used as a member of the ProtocolEvent 
-enum. For convinience make sure to implement the `From<YourProtocolEventEnum> for ProtocolEvent`. This will make it easy to convert from protocol specific 
-enum to the generic one.
+If a protocol supports multiple events, you can group them in a protocol-specific enum, and use that enum as a member of the `ProtocolEvent` enum. To make it easier, make sure to implement `From<YourProtocolEventEnum> for ProtocolEvent`. This will make it easier to convert from the protocol-specific enum to the generic one.
 
-### 3. Register your datastructures
+### 3\. Register Your DataStructures
 
-As a final step you want to register your data structures. This needs to be done in the following places:
+As a final step, you will need to register your data structures. To do this, add your new state struct to the `crate::protocol::state::ProtocolState` enum. Additionally, add your new event enum to the `crate::protocol::state::ProtocolEvent` enum. Finally, add a match arm to the `ProtocolState.transition` method in `crate::protocol::state` to match on both the current state and the received event.
 
-- Add your new state struct to the `crate::protocol::state::ProtocolState` enum.
-- Add your new event enum to the `crate::protocol::state::ProtocolEvent` enum.
-- Add a match arm to the `ProtocolState.transition` method in `crate::protocol::state`, you need to match on both self (the curren state) and the received event.
-
-That should be it.
+That should do it!
