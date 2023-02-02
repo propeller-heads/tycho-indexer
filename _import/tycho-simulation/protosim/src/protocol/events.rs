@@ -51,8 +51,15 @@ impl EVMLogMeta {
 }
 
 impl From<LogMeta> for EVMLogMeta {
-    fn from(value: LogMeta) -> Self {
-        todo!()
+    fn from(log: LogMeta) -> Self {
+        EVMLogMeta {
+            from: log.address,
+            block_number: log.block_number.as_u64(),
+            block_hash: log.block_hash,
+            transaction_index: log.transaction_index.as_u32(),
+            transaction_hash: log.transaction_hash,
+            log_index: log.log_index.as_u32(),
+        }
     }
 }
 
