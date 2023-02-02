@@ -1,18 +1,23 @@
 //! Protocol Graph
 //! 
-//! This module contains the `ProtoGraph` struct, which represents a graph
-//!  of protocols that enable trade simulations. The struct contains 
-//! information about the tokens, states and edges of each pair in the graph.
+//! This module contains the `ProtoGraph` struct, it represents a graph
+//! of token exchange protocols (pools). The graph contains information 
+//! about the tokens on the nodes and protocol states on the edges.
+//! 
+//! The graph helps to solve optimization problems that involve exchanging one token
+//! for another. 
 //!
-//! The struct has several methods:
+//! The graphs main methods are:
 //!  - `new`: creates a new ProtoGraph struct with the given maximum number of hops
 //!  - `insert_pair`: Given a `Pair` struct, it adds missing tokens to the graph 
 //!         and creates edges between the tokens. It also records the pair in the states.
-//!  - `update_state`: Given an address and a new `ProtocolState`, it updates the 
-//!         state of the pair with the corresponding address.
-//!  - `build_cache`: this function should be called whenever the graphs topology 
+//!  - `build_paths`: this function should be called whenever the graphs topology 
 //!         changes such that the `search_opportunities` method can correctly take 
 //!         into account newly added edges.
+//! - `transition_states`: This method can be called to transition states based on
+//!         protocol events.
+//! - `with_states_transitioned`: This method should be called to apply a change,
+//!         query the graph and then immediately revert the changes again.
 //! 
 //! # Examples
 //! ```
