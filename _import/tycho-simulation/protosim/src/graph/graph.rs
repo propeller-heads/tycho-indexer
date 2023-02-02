@@ -1,3 +1,4 @@
+use log::{debug, info};
 use ethers::types::{H160, U256};
 use itertools::Itertools;
 use petgraph::{
@@ -8,11 +9,11 @@ use petgraph::{
 use std::collections::HashMap;
 
 use crate::{
-    models::{ERC20Token, Opportunity, Swap},
+    models::{ERC20Token, SwapSequence, Swap},
     protocol::{
         errors::TradeSimulationError,
         models::{GetAmountOutResult, Pair},
-        state::ProtocolSim,
+        state::{ProtocolSim, ProtocolState},
     },
 };
 
@@ -20,6 +21,7 @@ use super::edge_paths::all_edge_paths;
 
 struct TokenEntry(NodeIndex, ERC20Token);
 
+#[derive(Debug)]
 pub struct Path<'a> {
     pairs: &'a [&'a Pair],
     tokens: &'a [&'a ERC20Token],
@@ -56,7 +58,7 @@ impl <'a>Path<'a> {
         Ok(res)
     }
 
-    pub fn get_swaps(&self, amount_in: U256) -> Result<Opportunity, TradeSimulationError> {
+    pub fn get_swaps(&self, amount_in: U256) -> Result<(Vec<Swap>, U256), TradeSimulationError> {
         // if we could replace this one with ArrayVec we could shrink this to a single method.
         let mut swaps = Vec::<_>::new();
         let mut res = GetAmountOutResult::new(U256::zero(), U256::zero());
@@ -75,7 +77,7 @@ impl <'a>Path<'a> {
             ));
             current_amount = res.amount;
         }
-        Ok(Opportunity::new(swaps, res.gas))
+        Ok((swaps, res.gas))
     }
 }
 
@@ -113,20 +115,41 @@ impl Iterator for KeySubsetIterator<'_>{
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.key_idx >= self.keys.len(){
-            return None;
+        while self.key_idx < self.keys.len() {
+            let addr = self.keys[self.key_idx];
+            match self.data.get(&addr) {
+                Some(path_indices) => {
+                    if self.vec_idx + 1 >= path_indices.len() {
+                        // we are at the last entry for this vec
+                        self.vec_idx = 0;
+                        self.key_idx += 1; 
+                    } else {
+                        self.vec_idx += 1;
+                    }
+                    return Some(*path_indices.get(self.vec_idx).expect("KeySubsetIterator: data was empty!"));
+                },
+                None => {
+                    self.key_idx += 1;
+                    continue;
+                },
+            };
         }
-        let addr = self.keys[self.key_idx];
-        let path_indices = self.data.get(&addr).expect("Key not present in data!");
+        None
+    }
+}
 
-        // we are at the last entry for this vec
-        if self.vec_idx + 1 >= path_indices.len() {
-            self.vec_idx = 0;
-            self.key_idx += 1; 
-        } else {
-            self.vec_idx += 1;
+
+#[derive(PartialEq, PartialOrd, Eq, Ord, Debug)]
+struct PathEntry{
+    start: NodeIndex, 
+    edges: Vec<EdgeIndex>,
+}
+
+impl PathEntry {
+    fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self{
+        PathEntry{
+            start, edges
         }
-        return Some(*path_indices.get(self.vec_idx).expect("KeySubsetIterator: data was empty!"));
     }
 }
 
@@ -135,7 +158,7 @@ pub struct ProtoGraph {
     tokens: HashMap<H160, TokenEntry>,
     states: HashMap<H160, Pair>,
     graph: UnGraph<H160, H160>,
-    paths: Vec<Vec<EdgeIndex>>,
+    paths: Vec<PathEntry>,
     path_memberships: HashMap<H160, Vec<usize>>,
 }
 
@@ -173,19 +196,30 @@ impl ProtoGraph {
             .insert(properties.address, Pair(properties, state))
     }
 
+    pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
+        if let Some(pair) = self.states.get_mut(address) {
+            pair.1 = state;
+            return Some(());
+        }
+        None
+    }
+
     pub fn build_paths(&mut self, start_token: H160) {
         let TokenEntry(node_idx, _) = self.tokens[&start_token];
         let edge_paths =
-            all_edge_paths::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops + 1));
+            all_edge_paths::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops));
+        info!("Searching paths...");
         for path in edge_paths {
             // insert path only if it does not yet exist
-            if let Err(pos) = self.paths.binary_search(&path) {
-                self.paths.insert(pos, path);
+            let entry = PathEntry::new(node_idx, path);
+            if let Err(pos) = self.paths.binary_search(&entry) {
+                self.paths.insert(pos, entry);
             };
         }
+        info!("Building membership cache...");
         for pos in 0..self.paths.len() {
             // build membership cache
-            for edge_idx in self.paths[pos].iter() {
+            for edge_idx in self.paths[pos].edges.iter() {
                 let addr = *self.graph.edge_weight(*edge_idx).unwrap();
                 if let Some(path_indices) = self.path_memberships.get_mut(&addr) {
                     path_indices.push(pos);
@@ -197,7 +231,7 @@ impl ProtoGraph {
         self.paths.shrink_to_fit();
     }
 
-    pub fn search_opportunities<F:Fn(Path) -> Option<Opportunity>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<Opportunity> {
+    pub fn search_opportunities<F:Fn(Path) -> Option<SwapSequence>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<SwapSequence> {
         // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
         // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
         // To optimize this, each worker needs a preallocated collections that are cleared on each invocation.
@@ -205,32 +239,54 @@ impl ProtoGraph {
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
         let mut opportunities = Vec::new();
+        // KeySubsetIterator will return a list of path ids we make sure the path ids are unique and yield the
+        // corresponding PathEntry object. This way we get all paths that contain any of the changed addresses.
+        // In case we didn't see some address on any path (KeyError on path_memberhips) it is simply skipped.
         let path_iter = KeySubsetIterator::new(involved_addresses, &self.path_memberships).unique().map(|idx| &self.paths[idx]);
+        let mut n_paths_evaluated: u64 = 0;
         for path in path_iter {
             pairs.clear();
             tokens.clear();
-            let mut first = true;
-            for edge_idx in path.iter() {
+            let mut prev_node_idx = path.start;
+            let TokenEntry(_, start) = &self.tokens[self.graph.node_weight(path.start).unwrap()];
+            tokens.push(start);
+            for edge_idx in path.edges.iter() {
                 let state_addr = self.graph.edge_weight(*edge_idx).unwrap();
                 let state = self.states.get(state_addr).unwrap();
                 let (s_idx, e_idx) = self.graph.edge_endpoints(*edge_idx).unwrap();
-                let TokenEntry(_, end) = &self.tokens[self.graph.node_weight(e_idx).unwrap()];
-                if first {
-                    let TokenEntry(_, start) = &self.tokens[self.graph.node_weight(s_idx).unwrap()];
-                    tokens.push(start);
-                }
+                // we need to correctly infer the edge direction here
+                let next_token = if prev_node_idx == s_idx {
+                    prev_node_idx = e_idx;
+                    &self.tokens[self.graph.node_weight(e_idx).unwrap()].1
+                } else if prev_node_idx == e_idx {
+                    prev_node_idx = s_idx;
+                    &self.tokens[self.graph.node_weight(s_idx).unwrap()].1
+                } else {
+                    panic!("Paths node indices did not connect!")
+                };
                 pairs.push(state);
-                tokens.push(end);
-                first = false;
+                tokens.push(next_token);
             }
             let p = Path::new(&tokens, &pairs);
+            n_paths_evaluated += 1;
             if let Some(opp) = search(p) {
                 opportunities.push(opp);
             }
         }
+        debug!("Searched {} paths", n_paths_evaluated);
         return opportunities;
     }
+
+    pub fn info(&self){
+        info!("ProtoGraph(n_hops={}) Stats:", self.n_hops);
+        info!("States: {}", self.states.len());
+        info!("Nodes: {}", self.tokens.len());
+        info!("Paths: {}", self.paths.len());
+        info!("Membership Cache: {}", self.path_memberships.len());
+    }
 }
+
+
 
 #[cfg(test)]
 mod tests {
@@ -265,6 +321,33 @@ mod tests {
         assert_eq!(g.graph.edge_count(), 1);
         assert_eq!(g.graph.node_count(), 2);
     }
+
+    #[test]
+    fn test_update_state() {
+        let mut g = ProtoGraph::new(4);
+        let pair = make_pair(
+            "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            2000,
+            2000,
+        );
+        let address = pair.0.address;
+        let Pair(_, state) = make_pair(
+            "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            1000,
+            2000,
+        );
+        g.insert_pair(pair);
+
+        g.update_state(&address, state.clone());
+        let Pair(_, updated) = &g.states[&address];
+
+        assert_eq!(updated.clone(), state);
+    }
+
 
     fn make_pair(pair: &str, t0: &str, t1: &str, r0: u64, r1: u64) -> Pair {
         let t0 = ERC20Token::new(t0, 3, "T0");
@@ -435,25 +518,26 @@ mod tests {
 
         let mut paths = Vec::with_capacity(g.paths.len());
         for p in g.paths {
-            let addr_path: Vec<_> = p.iter().map(|x| *g.graph.edge_weight(*x).unwrap()).collect();
+            let addr_path: Vec<_> = p.edges.iter().map(|x| *g.graph.edge_weight(*x).unwrap()).collect();
             paths.push(addr_path);
         }
         assert_eq!(paths, exp);
     }
 
-    fn atomic_arb_finder(p: Path) -> Option<Opportunity> {
+    fn atomic_arb_finder(p: Path) -> Option<SwapSequence> {
         let price = p.price();
-            if price > 1.0 {
-                let amount_in = optimize_path(&p);
-                if amount_in > U256::zero() {
-                    let opp = p.get_swaps(amount_in).unwrap();
-                    let last = &opp.actions()[opp.actions().len() - 1];
-                    if last.amount_out() > amount_in {
-                        return Some(opp);
-                    }
-                    return None;
+        if price > 1.0 {
+            let amount_in = optimize_path(&p);
+            if amount_in > U256::zero() {
+                let (swaps, gas) = p.get_swaps(amount_in).unwrap();
+                let amount_out = swaps[swaps.len() - 1].amount_out();
+                if amount_out > amount_in {
+                    let opp = SwapSequence::new(swaps, gas);
+                    return Some(opp);
                 }
+                return None;
             }
+        }
         None
     }
 
@@ -597,8 +681,7 @@ mod tests {
         let path = Path::new(&tokens, &pairs);
         let amount_in = U256::from(100_000);
 
-        let res = path.get_swaps(amount_in).unwrap();
-        let actions = res.actions();
+        let (actions, _) = path.get_swaps(amount_in).unwrap();
 
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());
