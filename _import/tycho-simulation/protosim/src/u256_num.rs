@@ -68,35 +68,6 @@ pub fn u256_to_f64(x: U256) -> f64 {
     return f64::from_bits(merged);
 }
 
-/// Computes the greatest common divisor for two unsigned integers
-///
-/// Uses the binary optimized subtractive euclidean algorithm.
-///
-/// # Note
-///
-/// If a and b are very unequal the runtime of this algorithm is quite long.
-pub fn u256_gcd(mut a: U256, mut b: U256) -> U256 {
-    if b == U256::zero() {
-        return a;
-    }
-    if a == U256::zero() {
-        return b;
-    }
-    let shift = (a | b).trailing_zeros();
-    a = a >> a.trailing_zeros();
-    loop {
-        b = b >> b.trailing_zeros();
-        if a > b {
-            (a, b) = (b, a);
-        }
-        b = b - a;
-        if b == U256::zero() {
-            break;
-        }
-    }
-    a << shift
-}
-
 #[cfg(test)]
 mod test {
 
@@ -114,18 +85,5 @@ mod test {
         let res = u256_to_f64(inp);
 
         assert_eq!(res, out);
-    }
-
-    #[rstest]
-    #[case::trigger_deadlock(U256::from(0), U256::from(1), U256::from(1))]
-    #[case::trigger_deadlock(U256::from(1), U256::from(0), U256::from(1))]
-    #[case::trigger_deadlock(U256::from(0), U256::from(0), U256::from(0))]
-    #[case::twelve(U256::from(24), U256::from(36), U256::from(12))]
-    #[case::twelve(U256::from(48), U256::from(36), U256::from(12))]
-    #[case::primes(U256::from(29), U256::from(23), U256::from(1))]
-    fn test_gcd(#[case] a: U256, #[case] b: U256, #[case] exp: U256) {
-        let res = u256_gcd(a, b);
-
-        assert_eq!(res, exp);
     }
 }

@@ -11,6 +11,7 @@ use crate::{
 
 use super::reserve_price::spot_price_from_reserves;
 
+#[derive(Clone, Copy)]
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
@@ -131,8 +132,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(true, 1218.0683462769755f64)]
-    #[case(false, 0.0008209719947624441f64)]
+    #[case(true, 0.0008209719947624441f64)]
+    #[case(false, 1218.0683462769755f64)]
     fn test_spot_price(#[case] zero_to_one: bool, #[case] exp: f64) {
         let state = UniswapV2State::new(u256("36925554990922"), u256("30314846538607556521556"));
         let usdc = ERC20Token::new("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC");

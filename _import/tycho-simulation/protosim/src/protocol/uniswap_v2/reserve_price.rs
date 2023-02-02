@@ -17,7 +17,7 @@ use crate::u256_num::u256_to_f64;
 ///
 /// let res = spot_price_from_reserves(U256::from(100), U256::from(200), 6, 6);
 ///
-/// assert_eq!(res, 0.5f64);
+/// assert_eq!(res, 2.0f64);
 /// ```
 ///
 pub fn spot_price_from_reserves(
@@ -26,8 +26,8 @@ pub fn spot_price_from_reserves(
     token_0_decimals: u32,
     token_1_decimals: u32,
 ) -> f64 {
-    let token_correction = 10f64.powi(token_1_decimals as i32 - token_0_decimals as i32);
-    (u256_to_f64(r0) / u256_to_f64(r1)) * token_correction
+    let token_correction = 10f64.powi(token_0_decimals as i32 - token_1_decimals as i32);
+    (u256_to_f64(r1) / u256_to_f64(r0)) * token_correction
 }
 
 #[cfg(test)]
@@ -48,21 +48,21 @@ mod test {
         u256_str("5271291858877575385159"),
         18,
         18,
-        1225.371422116462f64
+        0.0008160790940209781f64
     )]
     #[case::weth_usdt(
         u256_str("9404438958522240683671"),
         u256_str("11524076256844"),
         18,
         6,
-        0.0008160687892825306f64
+        1225.3868952385467f64
     )]
     #[case::paxg_weth(
         u256_str("1953602660669219944829"),
         u256_str("2875413366760000758700"),
         18,
         18,
-        0.6794162826301834f64
+        1.4718516844029115f64
     )]
     fn test_real_world_examples(
         #[case] r0: U256,

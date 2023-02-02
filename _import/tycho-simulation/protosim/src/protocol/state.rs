@@ -20,6 +20,7 @@ pub trait ProtocolSim {
     ) -> Result<GetAmountOutResult, TradeSimulationError>;
 }
 
+#[derive(Clone)]
 #[enum_dispatch(ProtocolSim)]
 pub enum ProtocolState {
     UniswapV2(UniswapV2State),

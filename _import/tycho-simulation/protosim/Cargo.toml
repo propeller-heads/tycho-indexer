@@ -6,6 +6,8 @@ edition = "2021"
 
 [dependencies]
 ethers = "1.0.1"
+indexmap = { version = "1.7", features = ["std"] }
+itertools = "0.10.5"
 petgraph = "0.6.2"
 enum_dispatch = "0.3.8"
 
