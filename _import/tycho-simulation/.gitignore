@@ -20,3 +20,5 @@ flamegraph.svg
 
 # data folder
 .data/
+
+.vscode/launch.json
