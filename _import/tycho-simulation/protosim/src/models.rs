@@ -1,3 +1,11 @@
+//! Basic data structures
+//!
+//! This module contains basic models that are shared across many
+//! components of the crate, including ERC20Token, Swap and SwapSequence.
+//!
+//! ERC20Tokens provide instructions on how to handle prices and amounts,
+//! while Swap and SwapSequence are usually used as results types.
+
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -5,12 +13,29 @@ use ethers::types::{H160, U256};
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
+    /// The address of the token on the blockchain network
     pub address: H160,
+    /// The number of decimal places that the token uses
     pub decimals: usize,
+    /// The symbol of the token
     pub symbol: String,
 }
 
 impl ERC20Token {
+    /// Constructor for ERC20Token
+    ///
+    /// Creates a new ERC20 token struct
+    ///
+    /// ## Parameters
+    /// - `address`: token address as string
+    /// - `decimals`: token decimal as usize
+    /// - `symbol`: token symbol as string
+    ///
+    /// ## Return
+    /// Return a new ERC20 token struct
+    ///
+    /// ## Panic
+    /// - Panics if the token address string is not in valid format
     pub fn new(address: &str, decimals: usize, symbol: &str) -> Self {
         let addr = H160::from_str(address).expect("Failed to parse token address");
         let sym = symbol.to_string();
@@ -21,6 +46,11 @@ impl ERC20Token {
         }
     }
 
+    /// One
+    /// Get one token in U256 format
+    ///
+    /// ## Return
+    /// Return one token as U256
     pub fn one(&self) -> U256 {
         U256::exp10(self.decimals)
     }
@@ -48,6 +78,16 @@ pub struct Swap {
 }
 
 impl Swap {
+    /// Constructor for Swap struct
+    ///
+    /// This struct desribes a single swap transaction.
+    ///
+    /// This function creates a new instance of the Swap struct. It takes 5 arguments:
+    /// - `token_in`: The address of the token being exchanged.
+    /// - `amount_in`: The amount of the token being exchanged.
+    /// - `token_out`: The address of the token being received.
+    /// - `amount_out`: The amount of the token being received.
+    /// - `address`: The address of the pool supplying the liquidity for the swap.
     pub fn new(
         token_in: H160,
         amount_in: U256,
@@ -64,27 +104,41 @@ impl Swap {
         }
     }
 
+    /// Getter for token_out
+    ///
+    /// Returns the address of the token being received in the swap.
     pub fn token_out(&self) -> H160 {
         self.token_out
     }
 
+    /// Getter for token_in
+    ///
+    /// Returns the address of the token being exchanged in the swap.
     pub fn token_in(&self) -> H160 {
         self.token_in
     }
 
+    /// Getter for amount_out
+    ///
+    /// Returns the amount of the token being received in the swap.
     pub fn amount_out(&self) -> U256 {
         return self.amount_out;
     }
 
+    /// Getter for amount_in
+    ///
+    /// Returns the amount of the token being exchanged in the swap.
     pub fn amount_in(&self) -> U256 {
         return self.amount_in;
     }
 
+    /// Getter for address
+    ///
+    /// Returns the address of the user making the swap.
     pub fn address(&self) -> H160 {
         self.address
     }
 }
-
 #[derive(Debug)]
 pub struct SwapSequence {
     actions: Vec<Swap>,
@@ -92,6 +146,9 @@ pub struct SwapSequence {
 }
 
 impl SwapSequence {
+    /// SwapSequence
+    ///
+    /// A struct that represents a sequence of `Swap` transactions and the gas required to execute them.
     pub fn new(swaps: Vec<Swap>, gas: U256) -> Self {
         SwapSequence {
             actions: swaps,
@@ -99,10 +156,12 @@ impl SwapSequence {
         }
     }
 
+    /// Returns a vector of `Swap` actions.
     pub fn swaps(self) -> Vec<Swap> {
         self.actions
     }
 
+    /// Returns the gas required to execute the sequence of `Swap` actions.
     pub fn gas(&self) -> U256 {
         self.gas
     }

@@ -18,39 +18,73 @@ pub struct UniswapV2State {
 }
 
 impl UniswapV2State {
+    /// New UniswapV2State
+    ///
+    /// Create a new instance of UniswapV2State with the given reserves.
+    ///
+    /// # Arguments
+    ///
+    /// * `reserve0` - Reserve of token 0.
+    /// * `reserve1` - Reserve of token 1.
     pub fn new(reserve0: U256, reserve1: U256) -> Self {
         UniswapV2State { reserve0, reserve1 }
     }
 }
 
 impl ProtocolSim for UniswapV2State {
+    /// Returns the fee for the protocol
+    ///
+    /// # Returns
+    ///
+    /// * `f64` - Protocol fee.
     fn fee(&self) -> f64 {
         0.003
     }
 
-    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
-        if a < b {
+    /// Returns the pools spot price
+    ///
+    /// # Arguments
+    ///
+    /// * `base` - Base token
+    /// * `quote` - Quote token
+    ///
+    /// # Returns
+    ///
+    /// * `f64` - Spot price of the tokens.
+    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64 {
+        if base < quote {
             spot_price_from_reserves(
                 self.reserve0,
                 self.reserve1,
-                a.decimals as u32,
-                b.decimals as u32,
+                base.decimals as u32,
+                quote.decimals as u32,
             )
         } else {
             spot_price_from_reserves(
                 self.reserve1,
                 self.reserve0,
-                a.decimals as u32,
-                b.decimals as u32,
+                base.decimals as u32,
+                quote.decimals as u32,
             )
         }
     }
 
+    /// Returns the amount of output for a given amount of input
+    ///
+    /// # Arguments
+    ///
+    /// * `amount_in` - The amount of input for the trade.
+    /// * `token_in` - The input token ERC20 token.
+    /// * `token_out` - The output token ERC20 token.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GetAmountOutResult, TradeSimulationError>` - A `Result` containing the amount of output and the slippage of the trade, or an error.
     fn get_amount_out(
         &self,
         amount_in: U256,
-        token_a: &ERC20Token,
-        token_b: &ERC20Token,
+        token_in: &ERC20Token,
+        token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, TradeSimulationError> {
         if amount_in == U256::zero() {
             return Result::Err(TradeSimulationError::new(
@@ -58,7 +92,7 @@ impl ProtocolSim for UniswapV2State {
                 None,
             ));
         }
-        let zero2one = token_a.address < token_b.address;
+        let zero2one = token_in.address < token_out.address;
         let reserve_sell = if zero2one {
             self.reserve0
         } else {

@@ -1,3 +1,7 @@
+//! Path finding algorithm 
+//! 
+//! This module works on edges instead of nodes to provide better support for MultiGraphs which
+//! can have parallel edges between two nodes.
 use indexmap::IndexSet;
 use petgraph::{
     visit::{EdgeCount, EdgeRef, IntoEdgeReferences, IntoEdgesDirected, NodeCount},
@@ -8,6 +12,31 @@ use std::{
     iter::{from_fn, FromIterator},
 };
 
+/// Returns an iterator of edge ids over paths between two nodes in a graph.
+///
+///  The returned paths are represented as collections of the type specified by
+///  the `TargetColl` type parameter.
+///
+///  ## Arguments
+///
+///  - `graph`: The graph to search in. Must implement the `EdgeCount`,
+///  `IntoEdgesDirected`, and `IntoEdgeReferences` traits, as well as have `NodeId`
+///  and `EdgeId` types that implement `Eq` and `Hash`.
+///  - `from`: The starting node of the paths.
+///  - `to`: The target node of the paths.
+///  - `min_edges`: The minimum number of edges that a path must have to be included
+///  in the returned iterator.
+///  - `max_edges`: The maximum number of edges that a path can have to be included
+///  in the returned iterator. If not specified, defaults to the number of nodes in
+///  the graph minus one.
+///
+///  ## Return
+///
+///  An iterator over collections of `TargetColl`.
+///
+///  ## Panics
+///
+///  Panics if `from` or `to` are not present in the graph.
 pub fn all_edge_paths<TargetColl, G>(
     graph: G,
     from: G::NodeId,
