@@ -4,6 +4,11 @@ Moves slow on-chain computations off-chain to solve optimization problems. This 
 
 To further help solve hard problems in the context of exchanging tokens, the crate provides the ProtoGraph structure, which can be queried for chained token exchanges and their parameters. This graph structure evolves over time as protocol states are changed by user actions. These changes are captured using events. The implemented protocols are aware of the state-mutating events and can transition their state correctly given such events.
 
+## Currently supported protocols:
+
+- Uniswap V2 and Forks
+- Uniswap V3
+
 ## Adding a new Protocol
 
 To add a new protocol, you will need to complete the following high-level steps:
@@ -18,7 +23,7 @@ Each protocol should have its own module under `protosim/src/protocol`.
 
 Simply implement a struct that contains the state of the protocol. Only the attributes that are necessary to fulfill the `ProtocolSim` trait are required. Then, implement that trait.
 
-```
+```rust
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
