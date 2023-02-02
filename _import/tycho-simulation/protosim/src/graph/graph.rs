@@ -544,10 +544,11 @@ impl ProtoGraph {
 mod tests {
     use std::str::FromStr;
 
-    use ethers::types::{I256, Sign};
+    use ethers::types::{I256, Sign, H256};
     use rstest::rstest;
     use crate::optimize::gss::golden_section_search;
     use crate::protocol::models::PairProperties;
+    use crate::protocol::uniswap_v2::events::UniswapV2Sync;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
 
     use super::*;
@@ -598,6 +599,118 @@ mod tests {
         let Pair(_, updated) = &g.states[&address];
 
         assert_eq!(updated.clone(), state);
+    }
+
+    fn construct_graph() -> ProtoGraph {
+        let mut g = ProtoGraph::new(2);
+        g.insert_pair(make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            20_000_000,
+        ));
+        g.insert_pair(make_pair(
+            "0x0000000000000000000000000000000000000002",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            20_000_000,
+        ));
+        g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        return g;
+    }
+
+    fn logmeta(from: &str, log_idx: LogIndex) -> EVMLogMeta{
+        EVMLogMeta {
+            from: H160::from_str(from).unwrap(),
+            block_number: log_idx.0,
+            block_hash: H256::from_str(
+                "0x8b1cc9f28716bc7c994db5442dd9bb53b90b73f2f6ef7956fd16ab59ecc6f7ad",
+            )
+            .unwrap(),
+            transaction_index: 1,
+            transaction_hash: H256::from_str(
+                "0x8a9b8d0cbbace89ea6d8e70f5a1f69a4ae129b11dccd6d13e96eee71a5c0e446",
+            )
+            .unwrap(),
+            log_index: log_idx.1,
+        }
+    }
+
+    #[test]
+    fn test_transition(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let addr_changed = H160::from_str("0x0000000000000000000000000000000000000002").unwrap();
+        let addr_untouched = H160::from_str("0x0000000000000000000000000000000000000001").unwrap();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (1, 1))
+        )];
+        
+        g.transition_states(events.as_slice(), false);
+
+        assert_ne!(g.states[&addr_changed], original_states[&addr_changed]);
+        assert_eq!(g.states[&addr_untouched], original_states[&addr_untouched]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_transition_err_panic(){
+        let mut g = construct_graph();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 0))
+        )];
+        
+        g.transition_states(events.as_slice(), false);
+    }
+
+    #[test]
+    fn test_transition_err_ignore(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 0))
+        )];
+        
+        g.transition_states(events.as_slice(), true);
+
+        assert_eq!(g.states, original_states);
+    }
+
+    #[test]
+    fn test_transition_revertibly(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 1))
+        )];
+
+        g.transition_states_revertibly(&events).unwrap();
+        assert_ne!(original_states, g.states);
+        
+        g.revert_states();
+        assert_eq!(original_states, g.states);
+    }
+
+    #[test]
+    fn test_with_states_transitioned(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 1))
+        )];
+
+        g.with_states_transitioned(&events, |g| {
+            assert_ne!(original_states, g.states);
+        }).unwrap();
+
+        assert_eq!(original_states, g.states);
     }
 
 

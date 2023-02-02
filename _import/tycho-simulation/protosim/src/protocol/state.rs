@@ -136,3 +136,15 @@ pub enum ProtocolEvent {
     UniswapV2(UniswapV2Sync),
     UniswapV3(UniswapV3Event),
 }
+
+impl From<UniswapV2Sync> for ProtocolEvent {
+    fn from(value: UniswapV2Sync) -> Self {
+        ProtocolEvent::UniswapV2(value)
+    }
+}
+
+impl From<UniswapV3Event> for ProtocolEvent {
+    fn from(value: UniswapV3Event) -> Self {
+        ProtocolEvent::UniswapV3(value)
+    }
+}

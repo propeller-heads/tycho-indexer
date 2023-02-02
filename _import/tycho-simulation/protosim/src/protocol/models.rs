@@ -43,7 +43,7 @@ pub struct PairProperties {
 }
 
 /// Pair struct represents a trading pair with its properties and state
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Pair(pub PairProperties, pub ProtocolState);
 
 /// GetAmountOutResult struct represents the result of getting the amount out of a trading pair
