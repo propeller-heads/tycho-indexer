@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-use ethers::types::{H160, H256, U256};
+use ethers::types::{H160, U256};
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {

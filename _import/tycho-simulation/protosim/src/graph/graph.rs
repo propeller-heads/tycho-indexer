@@ -225,7 +225,7 @@ struct PathEntry{
 }
 
 impl PathEntry {
-    /// # Create a new PathEntry
+    /// Create a new PathEntry
     ///
     /// ProtoGraph internal path representation: Represents a path by it's 
     /// start token (indicating a direction) as well as by a series of 
@@ -283,6 +283,11 @@ impl ProtoGraph {
         }
     }
 
+    /// Transition states using events
+    /// 
+    /// This method will transition the corresponding states with the given events
+    /// inplace. Depending on the ignore_errors the method will either panic on 
+    /// tranistion errors or simply ignore them.
     pub fn transition_states<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], ignore_errors: bool){
         for (ev, logmeta) in events.iter(){
             let address = logmeta.from;
@@ -302,7 +307,17 @@ impl ProtoGraph {
         }
     }
 
-
+    /// Transition states in a revertible manner
+    /// 
+    /// This method will transition states given a collection of events. Previous states are
+    /// recorded separately such that the transition can later be reverted using: `rever_states`
+    /// This is slower but safer in case transition errors need to handled gracefully or
+    /// if the events are not yet fully settled.
+    /// 
+    /// # Note 
+    /// 
+    /// This method can only record a single transition so if called multiple times it must be
+    /// made sure that `revert_states` was called in between.
     pub fn transition_states_revertibly<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]) -> Result<(), TransitionError<LogIndex>>{
         if self.original_states.len() > 0 {
             panic!("Original states not cleared!")
@@ -326,7 +341,10 @@ impl ProtoGraph {
         Ok(())
     }
     
-
+    /// Revert states by a single transition
+    /// 
+    /// Allows to revert the states by one transition. Require have called 
+    /// `transition_states_revertibly` before. 
     pub fn revert_states(&mut self){
         for (address, state) in self.original_states.iter(){
             let pair = self.states.get_mut(address).unwrap();
@@ -335,6 +353,13 @@ impl ProtoGraph {
         self.original_states.clear();
     }
 
+    /// Applies a closure on temporarily transitioned state
+    /// 
+    /// This method will apply some events to the state, then execute the action function
+    /// and finally revert the states again.
+    /// 
+    /// It will return as Result of whatever the action function returned or return 
+    /// an error if the transtion was not successfull.
     pub fn with_states_transitioned<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], action: F) -> Result<T, TransitionError<LogIndex>> {
         self.transition_states_revertibly(events)?;
         let res = action(self);

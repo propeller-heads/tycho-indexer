@@ -100,7 +100,7 @@ impl TickList {
     fn upsert_tick(&mut self, tick: i32, delta: i128) {
         match self.ticks.binary_search_by(|t| t.index.cmp(&tick)) {
             Ok(existing_idx) => {
-                let mut tick = self.ticks[existing_idx];
+                let tick = &mut self.ticks[existing_idx];
                 tick.net_liquidity += delta;
                 if tick.net_liquidity == 0 {
                     self.ticks.remove(existing_idx);
@@ -238,7 +238,7 @@ mod tests {
 
     use rstest::rstest;
 
-    use crate::protocol::uniswap_v3::{events::LiquidityChangeData, tick_math};
+    use crate::protocol::uniswap_v3::tick_math;
 
     use super::*;
 
