@@ -41,6 +41,7 @@ jobs:
   docker_release:
     name: Docker Release
     runs-on: ubuntu-latest
+    if: contains(github.ref,  'master')
 
     steps:
       - name: Check out Repo
