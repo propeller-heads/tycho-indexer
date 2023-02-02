@@ -23,16 +23,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Set up rust cache
-        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.2.0
-      - name: Lint
-        uses: "qernal/github-actions-rust-clippy@v2.0.2"
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
         with:
-          path_glob: "**/src"
-      - name: Build prop-searcher
+          toolchain: ${{ matrix.toolchain }}
+          components: clippy
+          override: true
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2.2.0
+      - name: Build Crate
         run: cargo build --verbose
+      - name: Code Lint
+        uses: giraffate/clippy-action@v1
+        if: ${{ matrix.toolchain == 'stable' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-check
+          level: warning
       - name: Test prop-searcher
         run: cargo test --verbose
       - name: Test protosim
