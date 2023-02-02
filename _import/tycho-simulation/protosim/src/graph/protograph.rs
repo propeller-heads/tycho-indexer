@@ -19,7 +19,7 @@
 //! use std::str::FromStr;
 //! 
 //! use ethers::types::{H160, U256};
-//! use protosim::graph::graph::{ProtoGraph, Path};
+//! use protosim::graph::protograph::{ProtoGraph, Path};
 //! use protosim::models::ERC20Token;
 //! use protosim::protocol::models::{PairProperties, Pair};
 //! use protosim::protocol::uniswap_v2::state::{UniswapV2State};
