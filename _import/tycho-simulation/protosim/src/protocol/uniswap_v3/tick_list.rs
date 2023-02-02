@@ -4,7 +4,7 @@ use ethers::types::U256;
 
 use super::tick_math;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
     pub index: i32,
     pub net_liquidity: i128,
@@ -13,6 +13,8 @@ pub struct TickInfo {
 
 impl TickInfo {
     pub fn new(index: i32, net_liquidity: i128) -> Self {
+        // Note: using this method here returns slightly different values
+        //  compared to the Python implementation, likely more correct
         let sqrt_price = tick_math::get_sqrt_ratio_at_tick(index);
         TickInfo {
             index,
@@ -41,7 +43,7 @@ pub enum TickListErrorKind {
     TicksExeeded,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TickList {
     tick_spacing: u16,
     ticks: Vec<TickInfo>,

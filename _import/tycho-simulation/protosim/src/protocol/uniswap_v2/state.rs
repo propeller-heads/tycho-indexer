@@ -11,7 +11,7 @@ use crate::{
 
 use super::reserve_price::spot_price_from_reserves;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,

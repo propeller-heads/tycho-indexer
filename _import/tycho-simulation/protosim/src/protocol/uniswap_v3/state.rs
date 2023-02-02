@@ -18,7 +18,7 @@ use super::{
     tick_math,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV3State {
     liquidity: u128,
     sqrt_price: U256,

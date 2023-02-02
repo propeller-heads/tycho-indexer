@@ -8,3 +8,14 @@ members = ["protosim"]
 
 [dependencies]
 protosim = { version = "^0.1.0", path = "./protosim" }
+ethers = "1.0.1"
+rdkafka = "0.29.0"
+tokio = { version = "1.23.0", features = ["full"] }
+redis = { version = "0.22.1", features = ["tokio-comp"] }
+futures = "0.3.25"
+serde_json = { version = "1.0.91", features = ["arbitrary_precision"] }
+clap = { version = "4.0.32", features = ["derive"] }
+
+
+[dev-dependencies]
+rstest = "0.16.0"
