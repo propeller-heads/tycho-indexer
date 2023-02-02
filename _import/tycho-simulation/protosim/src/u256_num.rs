@@ -54,10 +54,10 @@ pub fn u256_to_f64(x: U256) -> f64 {
             */
             // least significant bit is be used as tiebreaker
             let lsb = (x >> n_shifts.abs()) & U256::one();
-            let round_bit = (x >> n_shifts.abs() - 1) & U256::one();
+            let round_bit = (x >> (n_shifts.abs() - 1)) & U256::one();
 
             // build mask for sticky bit, handle case when no data for sticky bit is available
-            let sticky_bit = x & (U256::one() << max(n_shifts.abs() - 2, 0)) - U256::one();
+            let sticky_bit = x & ((U256::one() << max(n_shifts.abs() - 2, 0)) - U256::one());
 
             let rounded_torwards_zero = (x >> n_shifts.abs()).as_u64();
             if round_bit == U256::one() {
@@ -79,14 +79,14 @@ pub fn u256_to_f64(x: U256) -> f64 {
         // due to rounding rules significand might be using 54 bits instead of 53 if
         // this is the case we shift to the right once more and decrease the exponent.
         if significant & (1 << 53) > 0 {
-            significant = significant >> 1;
+            significant >>= 1;
             exponent += 1;
         }
 
         let merged = (exponent << 52) | (significant & 0xFFFFFFFFFFFFFu64);
-        return f64::from_bits(merged);
+        f64::from_bits(merged)
     });
-    res.expect(&format!("Conversion f64 -> U256 panicked for {x}"))
+    res.unwrap_or_else(|_| panic!("Conversion f64 -> U256 panicked for {x}"))
 }
 
 #[cfg(test)]

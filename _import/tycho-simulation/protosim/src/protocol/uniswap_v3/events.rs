@@ -23,7 +23,7 @@ impl MintEvent {
         MintEvent(LiquidityChangeData {
             tick_lower: lower,
             tick_upper: upper,
-            amount: amount,
+            amount,
         })
     }
 }
@@ -36,7 +36,7 @@ impl BurnEvent {
         BurnEvent(LiquidityChangeData {
             tick_lower: lower,
             tick_upper: upper,
-            amount: amount,
+            amount,
         })
     }
 }

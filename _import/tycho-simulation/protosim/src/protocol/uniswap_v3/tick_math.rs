@@ -12,7 +12,7 @@ pub const MAX_SQRT_RATIO: U256 = U256([6743328256752651558, 17280870778742802505
 
 pub fn get_sqrt_ratio_at_tick(tick: i32) -> U256 {
     assert!(tick.abs() <= MAX_TICK);
-    let abs_tick = U256::from(tick.abs() as u32);
+    let abs_tick = U256::from(tick.unsigned_abs());
     let mut ratio = if abs_tick.bit(0) {
         U256([12262481743371124737, 18445821805675392311, 0, 0])
     } else {
@@ -82,13 +82,12 @@ pub fn get_sqrt_ratio_at_tick(tick: i32) -> U256 {
     }
 
     let (_, rest) = ratio.div_mod(U256::one() << 32);
-    let sqrt_price = (ratio >> 32)
+    (ratio >> 32)
         + if rest == U256::zero() {
             U256::zero()
         } else {
             U256::one()
-        };
-    return sqrt_price;
+        }
 }
 
 fn most_significant_bit(x: U256) -> usize {
@@ -110,8 +109,9 @@ pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> i32 {
     for i in 0..14 {
         r = r.pow(U256([2, 0, 0, 0])) >> 127;
         let f = r >> 128;
-        log_2 = log_2.bitor(I256::checked_from_sign_and_abs(Sign::Positive, f << 63 - i).unwrap());
-        r = r >> f;
+        log_2 =
+            log_2.bitor(I256::checked_from_sign_and_abs(Sign::Positive, f << (63 - i)).unwrap());
+        r >>= f;
     }
 
     let log_sqrt10001 = log_2 * I256::from_raw(U256([11745905768312294533, 13863, 0, 0]));
@@ -125,12 +125,10 @@ pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> i32 {
 
     if tick_low == tick_high {
         tick_low.as_i32()
+    } else if get_sqrt_ratio_at_tick(tick_high.as_i32()) <= sqrt_price {
+        tick_high.as_i32()
     } else {
-        if get_sqrt_ratio_at_tick(tick_high.as_i32()) <= sqrt_price {
-            tick_high.as_i32()
-        } else {
-            tick_low.as_i32()
-        }
+        tick_low.as_i32()
     }
 }
 

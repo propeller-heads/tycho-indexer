@@ -77,10 +77,7 @@ impl <'a>Path<'a> {
     /// - `pairs`: A reference to a vector of references to Pair structs.
     /// Returns a new instance of the Path struct.
     fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Path<'a> {
-        Path {
-            pairs: &pairs,
-            tokens: &tokens,
-        }
+        Path {pairs, tokens}
     }
     /// Calculates the price of the path.
     ///
@@ -91,9 +88,9 @@ impl <'a>Path<'a> {
             let st = self.tokens[i];
             let et = self.tokens[i + 1];
             let Pair(_, state) = self.pairs[i];
-            p = p * state.spot_price(st, et);
+            p *= state.spot_price(st, et);
         }
-        return p;
+        p
     }
     /// Get the amount of output for a given input.
     ///
@@ -178,7 +175,7 @@ impl <'a>PathIdSubsetsByMembership<'a>{
                 vec_idx: 0,
             }
         } else {
-            let subset = memberships.keys().map(|x| *x).collect::<Vec<_>>();
+            let subset = memberships.keys().copied().collect::<Vec<_>>();
             PathIdSubsetsByMembership{
                 keys: subset,
                 data: memberships,
@@ -273,7 +270,7 @@ impl ProtoGraph {
     /// information about the tokens, states and edges of each pair in the graph.
     pub fn new(n_hops: usize) -> Self {
         ProtoGraph {
-            n_hops: n_hops,
+            n_hops,
             tokens: HashMap::new(),
             states: HashMap::new(),
             graph: UnGraph::new_undirected(),
@@ -288,17 +285,15 @@ impl ProtoGraph {
     /// This method will transition the corresponding states with the given events
     /// inplace. Depending on the ignore_errors the method will either panic on 
     /// tranistion errors or simply ignore them.
-    pub fn transition_states<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], ignore_errors: bool){
+    pub fn transition_states(&mut self, events: &[(ProtocolEvent, EVMLogMeta)], ignore_errors: bool){
         for (ev, logmeta) in events.iter(){
             let address = logmeta.from;
             if let Some(Pair(_, state)) = self.states.get_mut(&address) {
                 let res = state.transition(ev, logmeta);
                 if !ignore_errors{
-                    res.expect(&format!("Error transitioning on event {:?} from address {}", ev, address));
-                } else {
-                    if let Err(err) = res {
-                        warn!("Ignoring transitioning error {:?} for event {:?} from address: {}", err, ev, address);
-                    }
+                    res.unwrap_or_else(|_| panic!("Error transitioning on event {:?} from address {}", ev, address));
+                } else if let Err(err) = res {
+                    warn!("Ignoring transitioning error {:?} for event {:?} from address: {}", err, ev, address);
                 }
             } else {
                 trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
@@ -318,8 +313,8 @@ impl ProtoGraph {
     /// 
     /// This method can only record a single transition so if called multiple times it must be
     /// made sure that `revert_states` was called in between.
-    pub fn transition_states_revertibly<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]) -> Result<(), TransitionError<LogIndex>>{
-        if self.original_states.len() > 0 {
+    pub fn transition_states_revertibly(&mut self, events: &[(ProtocolEvent, EVMLogMeta)]) -> Result<(), TransitionError<LogIndex>>{
+        if !self.original_states.is_empty() {
             panic!("Original states not cleared!")
         }
         for (ev, logmeta) in events.iter(){
@@ -333,9 +328,7 @@ impl ProtoGraph {
             };
             // Only save original state the first time in case there are multiple logs for the
             // same pool else revert would not properly work anymore.
-            if !self.original_states.contains_key(&address){
-                self.original_states.insert(address, old_state.clone());    
-            }
+            self.original_states.entry(address).or_insert_with(|| old_state.clone());
             old_state.transition(ev, logmeta)?;
         }
         Ok(())
@@ -360,11 +353,11 @@ impl ProtoGraph {
     /// 
     /// It will return as Result of whatever the action function returned or return 
     /// an error if the transtion was not successfull.
-    pub fn with_states_transitioned<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], action: F) -> Result<T, TransitionError<LogIndex>> {
+    pub fn with_states_transitioned<T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &[(ProtocolEvent, EVMLogMeta)], action: F) -> Result<T, TransitionError<LogIndex>> {
         self.transition_states_revertibly(events)?;
         let res = action(self);
         self.revert_states();
-        return Ok(res);
+        Ok(res)
     }
 
 
@@ -383,10 +376,9 @@ impl ProtoGraph {
     pub fn insert_pair(&mut self, Pair(properties, state): Pair) -> Option<Pair> {
         // add missing tokens to graph
         for token in properties.tokens.iter() {
-            if !self.tokens.contains_key(&token.address) {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.tokens.entry(token.address) { 
                 let node_idx = self.graph.add_node(token.address);
-                self.tokens
-                    .insert(token.address, TokenEntry(node_idx, token.clone()));
+                e.insert(TokenEntry(node_idx, token.clone()));
             }
         }
 
@@ -525,7 +517,7 @@ impl ProtoGraph {
             }
         }
         debug!("Searched {} paths", n_paths_evaluated);
-        return opportunities;
+        opportunities
     }
 
     pub fn info(&self){

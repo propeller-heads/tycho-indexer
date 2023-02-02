@@ -26,7 +26,7 @@ impl TickInfo {
 
 impl PartialOrd for TickInfo {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        return self.index.partial_cmp(&other.index);
+        self.index.partial_cmp(&other.index)
     }
 }
 
@@ -53,11 +53,11 @@ impl TickList {
     pub fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList {
             tick_spacing: spacing,
-            ticks: ticks,
+            ticks,
         };
         let valid = tick_list.valid_ticks();
         if valid.is_ok() {
-            return tick_list;
+            tick_list
         } else {
             panic!("{}", valid.unwrap_err());
         }
@@ -89,7 +89,7 @@ impl TickList {
             }
         }
 
-        return Ok(true);
+        Ok(true)
     }
 
     pub fn apply_liquidity_change(&mut self, lower: i32, upper: i32, delta: i128) {
@@ -155,7 +155,7 @@ impl TickList {
                 Ok(idx) => &self.ticks[idx],
                 Err(idx) => &self.ticks[idx - 1],
             };
-            return Ok(tick);
+            Ok(tick)
         } else {
             if self.is_at_or_above_largest(index) {
                 return Err(TickListError {
@@ -169,7 +169,7 @@ impl TickList {
                 Ok(idx) => idx + 1,
                 Err(idx) => idx,
             };
-            return Ok(&self.ticks[idx]);
+            Ok(&self.ticks[idx])
         }
     }
 
@@ -198,7 +198,7 @@ impl TickList {
 
             let idx = self.next_initialized_tick(tick, lte)?.index;
             let next_tick_idx = cmp::max(idx, min_in_word);
-            return Ok((next_tick_idx, next_tick_idx == idx));
+            Ok((next_tick_idx, next_tick_idx == idx))
         } else {
             let word_pos = (compressed + 1) >> 8;
             let max_in_word = (((word_pos + 1) << 8) - 1) * spacing;
@@ -218,7 +218,7 @@ impl TickList {
             }
             let idx = self.next_initialized_tick(tick, lte)?.index;
             let next_tick_idx = cmp::min(max_in_word, idx);
-            return Ok((next_tick_idx, next_tick_idx == idx));
+            Ok((next_tick_idx, next_tick_idx == idx))
         }
     }
 }

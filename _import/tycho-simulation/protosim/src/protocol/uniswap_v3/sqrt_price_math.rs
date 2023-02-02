@@ -17,9 +17,9 @@ fn maybe_flip_ratios(a: U256, b: U256) -> (U256, U256) {
 fn div_rounding_up(a: U256, b: U256) -> U256 {
     let (result, rest) = a.div_mod(b);
     if rest > U256::zero() {
-        return result + U256::one();
+        result + U256::one()
     } else {
-        return result;
+        result
     }
 }
 
@@ -102,13 +102,13 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
             }
         }
         // Overflow: liquidity / (liquidity / sqrtPX96 +- amount)
-        return div_rounding_up(numerator1, (numerator1 / sqrt_price) + amount);
+        div_rounding_up(numerator1, (numerator1 / sqrt_price) + amount)
     } else {
         let (product, _) = amount.overflowing_mul(sqrt_price);
         assert!(product / amount == sqrt_price && numerator1 > product);
         let denominator = numerator1 - product;
         // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
-        return mul_div_rounding_up(numerator1, sqrt_price, denominator);
+        mul_div_rounding_up(numerator1, sqrt_price, denominator)
     }
 }
 
@@ -125,7 +125,7 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
             mul_div(amount, Q96, U256::from(liquidity))
         };
 
-        return sqrt_price + quotient;
+        sqrt_price + quotient
     } else {
         let quotient = if amount <= U160_MAX {
             div_rounding_up(amount << RESOLUTION, U256::from(liquidity))
@@ -134,7 +134,7 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
         };
 
         assert!(sqrt_price > quotient);
-        return sqrt_price - quotient;
+        sqrt_price - quotient
     }
 }
 
