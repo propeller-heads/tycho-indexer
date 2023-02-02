@@ -5,12 +5,12 @@ use ethers::{
 
 use super::errors::TransitionError;
 
-pub type LogIndex = (u64, u32, u32);
+pub type LogIndex = (u64, u32);
 
 pub fn check_log_idx(
     index: LogIndex,
     log_meta: &EVMLogMeta,
-) -> Result<(), TransitionError<(u64, u32, u32)>> {
+) -> Result<(), TransitionError<LogIndex>> {
     if index >= log_meta.index() {
         return Err(TransitionError::OutOfOrder {
             state: index,
@@ -57,7 +57,7 @@ impl From<LogMeta> for EVMLogMeta {
 }
 
 impl EVMLogMeta {
-    pub fn index(&self) -> (u64, u32, u32) {
-        (self.block_number, self.transaction_index, self.log_index)
+    pub fn index(&self) -> (u64, u32) {
+        (self.block_number, self.log_index)
     }
 }

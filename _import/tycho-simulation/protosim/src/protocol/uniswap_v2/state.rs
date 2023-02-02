@@ -17,7 +17,7 @@ use super::reserve_price::spot_price_from_reserves;
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
-    pub log_index: (u64, u32, u32),
+    pub log_index: LogIndex,
 }
 
 impl UniswapV2State {
@@ -33,7 +33,7 @@ impl UniswapV2State {
         UniswapV2State {
             reserve0,
             reserve1,
-            log_index: (0, 0, 0),
+            log_index: (0, 0),
         }
     }
 

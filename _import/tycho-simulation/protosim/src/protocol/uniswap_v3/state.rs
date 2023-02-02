@@ -76,7 +76,7 @@ impl UniswapV3State {
             fee,
             tick,
             ticks: tick_list,
-            log_index: (0, 0, 0),
+            log_index: (0, 0),
         };
 
         return pool;
