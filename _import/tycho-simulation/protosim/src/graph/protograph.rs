@@ -615,7 +615,7 @@ mod tests {
             20_000_000,
         ));
         g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
-        return g;
+        g
     }
 
     fn logmeta(from: &str, log_idx: LogIndex) -> EVMLogMeta{
@@ -921,11 +921,10 @@ mod tests {
                 } 
             }
             let amount_out = I256::checked_from_sign_and_abs(Sign::Positive, amount_out_unsigned).unwrap();
-            let profit = amount_out - amount_in;
-            return profit;
+            amount_out - amount_in
         };
         let res = golden_section_search(sim_arb, U256::one(), U256::from(100_000), I256::one(), 100, false);
-        return res.0;
+        res.0
     }
 
     #[rstest]

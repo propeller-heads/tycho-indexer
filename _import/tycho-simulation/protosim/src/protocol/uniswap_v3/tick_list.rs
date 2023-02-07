@@ -253,11 +253,11 @@ mod tests {
     }
 
     fn create_tick_info(idx: i32, liq: i128) -> TickInfo {
-        return TickInfo {
+        TickInfo {
             index: idx,
             net_liquidity: liq,
             sqrt_price: U256::zero(),
-        };
+        }
     }
 
     #[test]
@@ -397,7 +397,7 @@ mod tests {
             create_tick_info(0, -5),
             create_tick_info(tick_math::MAX_TICK - 1, -5),
         ];
-        let tick_list = TickList::from(1, tick_infos.clone());
+        let tick_list = TickList::from(1, tick_infos);
         let cases = vec![
             TestCaseNextInitializedTickWithinWord {
                 args: (-257, true),
@@ -507,7 +507,7 @@ mod tests {
     fn test_next_initialized_tick_within_one_word_spacing() {
         let tick_infos = vec![create_tick_info(0, 5), create_tick_info(512, -5)];
         let tick_list1 = TickList::from(1, tick_infos.clone());
-        let tick_list2 = TickList::from(2, tick_infos.clone());
+        let tick_list2 = TickList::from(2, tick_infos);
 
         assert_eq!(
             tick_list1
@@ -537,7 +537,7 @@ mod tests {
             create_tick_info(0, -5),
             create_tick_info(5100, -5),
         ];
-        let tick_list = TickList::from(10, tick_infos.clone());
+        let tick_list = TickList::from(10, tick_infos);
         let cases = vec![
             TestCaseNextTickError {
                 args: (-1, true),
