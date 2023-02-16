@@ -57,7 +57,6 @@ pub fn get_next_sqrt_price_from_input(
     zero_for_one: bool,
 ) -> U256 {
     assert!(sqrt_price > U256::zero());
-    assert!(liquidity > 0);
 
     if zero_for_one {
         get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, true)

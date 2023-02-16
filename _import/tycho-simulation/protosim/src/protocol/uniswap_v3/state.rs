@@ -206,7 +206,7 @@ impl UniswapV3State {
                         liquidity_raw
                     };
                     state.liquidity =
-                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)
+                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net);
                 }
                 state.tick = if zero_for_one {
                     step.tick_next - 1
