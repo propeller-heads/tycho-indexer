@@ -202,6 +202,19 @@ mod tests {
                     U256::from_dec_str("2190269210").unwrap(),
                 ),
             },
+            TestCase {
+                price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
+                target: U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
+                liquidity: 0u128,
+                remaining: I256::exp10(18),
+                fee: FeeAmount::Low,
+                exp: (
+                    U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
+                    U256::from_dec_str("1").unwrap(),
+                    U256::from_dec_str("0").unwrap(),
+                    U256::from_dec_str("1").unwrap(),
+                ),
+            },
         ];
 
         for case in cases {
