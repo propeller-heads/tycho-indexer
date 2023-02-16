@@ -57,7 +57,10 @@ pub fn get_next_sqrt_price_from_input(
     zero_for_one: bool,
 ) -> U256 {
     assert!(sqrt_price > U256::zero());
-    assert!(liquidity > 0);
+    if liquidity <= 0{
+        assert!(zero_for_one);
+        return U256::from(1);
+    }
 
     if zero_for_one {
         get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, true)
@@ -265,6 +268,13 @@ mod tests {
         u256("1000000"),
         false,
         u256("79224280631381991434907536117")
+    )]
+    #[case(
+        u256("9999"),
+        0u128,
+        u256("9999"),
+        true,
+        u256("1")
     )]
     fn test_get_next_sqrt_price_from_input(
         #[case] sqrt_price: U256,
