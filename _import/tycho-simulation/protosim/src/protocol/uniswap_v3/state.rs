@@ -160,6 +160,14 @@ impl UniswapV3State {
             }
 
             let sqrt_price_next = tick_math::get_sqrt_ratio_at_tick(next_tick);
+            if state.liquidity <= 0 {
+                state.liquidity = self.calculate_next_tick_liquidity(
+                    next_tick,
+                    zero_for_one,
+                    state.liquidity,
+                );
+                continue;
+            }
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
@@ -199,14 +207,11 @@ impl UniswapV3State {
             }
             if state.sqrt_price == step.sqrt_price_next {
                 if step.initialized {
-                    let liquidity_raw = self.ticks.get_tick(step.tick_next).unwrap().net_liquidity;
-                    let liquidity_net = if zero_for_one {
-                        -liquidity_raw
-                    } else {
-                        liquidity_raw
-                    };
-                    state.liquidity =
-                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)
+                    state.liquidity = self.calculate_next_tick_liquidity(
+                        step.tick_next,
+                        zero_for_one,
+                        state.liquidity,
+                    );
                 }
                 state.tick = if zero_for_one {
                     step.tick_next - 1
@@ -243,6 +248,21 @@ impl UniswapV3State {
         } else {
             sqrt_price_next
         }
+    }
+
+    fn calculate_next_tick_liquidity(
+        &self,
+        next_tick: i32,
+        zero_for_one: bool,
+        liquidity: u128,
+    ) -> u128 {
+        let liquidity_raw = self.ticks.get_tick(next_tick).unwrap().net_liquidity;
+        let liquidity_net = if zero_for_one {
+            -liquidity_raw
+        } else {
+            liquidity_raw
+        };
+        return liquidity_math::add_liquidity_delta(liquidity, liquidity_net);
     }
 }
 
