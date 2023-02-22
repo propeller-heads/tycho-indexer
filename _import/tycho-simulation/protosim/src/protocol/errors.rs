@@ -12,6 +12,8 @@ pub enum TradeSimulationErrorKind {
     Unkown,
     /// Error indicating that the amount provided for the trade is insufficient.
     InsufficientAmount,
+    // Error indicating that an arithmetic operation got an U256 to overflow
+    U256Overflow,
 }
 
 /// Struct representing a trade simulation error.
