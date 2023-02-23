@@ -22,13 +22,10 @@ pub fn safe_sub(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
 }
 
 pub fn _construc_result(res: Option<U256>) -> Result<U256, TradeSimulationError> {
-    match res {
-        None => Err(TradeSimulationError::new(
+    res.ok_or_else(|| TradeSimulationError::new(
             TradeSimulationErrorKind::U256Overflow,
             None,
-        )),
-        Some(value) => Ok(value),
-    }
+        ))
 }
 
 #[cfg(test)]
