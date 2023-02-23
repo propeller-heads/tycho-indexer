@@ -1,6 +1,4 @@
 use crate::protocol::errors::{TradeSimulationError, TradeSimulationErrorKind};
-use ethers::core::k256::elliptic_curve::bigint::CheckedMul;
-use ethers::core::k256::elliptic_curve::subtle::CtOption;
 use ethers::types::U256;
 use std::ops::{Add, Div, Mul, Sub};
 use std::panic;
