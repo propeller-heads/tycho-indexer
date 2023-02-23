@@ -9,6 +9,7 @@ use crate::{
         state::ProtocolSim,
     },
 };
+use crate::safe_math::{safe_add, safe_sub};
 
 use super::{
     enums::FeeAmount,
@@ -142,9 +143,9 @@ impl UniswapV3State {
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
         } else if zero_for_one {
-            tick_math::MIN_SQRT_RATIO + 1
+            safe_add(tick_math::MIN_SQRT_RATIO, U256::one())?
         } else {
-            tick_math::MAX_SQRT_RATIO - 1
+            safe_sub(tick_math::MAX_SQRT_RATIO, U256::one())?
         };
 
         if zero_for_one {
@@ -215,7 +216,7 @@ impl UniswapV3State {
             if exact_input {
                 state.amount_remaining -= I256::checked_from_sign_and_abs(
                         Sign::Positive,
-                        step.amount_in + step.fee_amount,
+                        safe_add(step.amount_in ,step.fee_amount)?,
                     )
                     .unwrap();
                 state.amount_calculated -= I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
@@ -223,7 +224,7 @@ impl UniswapV3State {
                 state.amount_remaining += I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
                 state.amount_calculated += I256::checked_from_sign_and_abs(
                         Sign::Positive,
-                        step.amount_in + step.fee_amount,
+                        safe_add(step.amount_in ,step.fee_amount)?,
                     )
                     .unwrap();
             }
@@ -246,7 +247,7 @@ impl UniswapV3State {
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price);
             }
-            gas_used += U256::from(2000);
+            gas_used = safe_add(gas_used,U256::from(2000))?;
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
@@ -315,6 +316,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::protocol::uniswap_v3::events::{SwapEvent, BurnEvent, MintEvent};
+    use crate::safe_math::safe_mul;
 
     use super::*;
 
@@ -330,7 +332,7 @@ mod tests {
             17342,
             vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
         );
-        let sell_amount = U256::from(11000) * U256::exp10(18);
+        let sell_amount = safe_mul(U256::from(11000), U256::exp10(18))?;
         let expected = U256::from_dec_str("61927070842678722935941").unwrap();
 
         let res = pool
