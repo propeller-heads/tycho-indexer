@@ -70,16 +70,14 @@ impl UniswapV3State {
     ) -> Self {
         let spacing = UniswapV3State::get_spacing(fee);
         let tick_list = TickList::from(spacing, ticks);
-        let pool = UniswapV3State {
+        UniswapV3State {
             liquidity,
             sqrt_price,
             fee,
             tick,
             ticks: tick_list,
             log_index: (0, 0),
-        };
-
-        return pool;
+        }
     }
 
     fn get_spacing(fee: FeeAmount) -> u16 {
@@ -96,7 +94,7 @@ impl UniswapV3State {
         event: &UniswapV3Event,
         log_meta: &EVMLogMeta,
     ) -> Result<(), TransitionError<LogIndex>> {
-        check_log_idx(self.log_index, &log_meta)?;
+        check_log_idx(self.log_index, log_meta)?;
         match event {
             UniswapV3Event::Mint(data) => {
                 let amount = data.amount as i128;
@@ -120,7 +118,7 @@ impl UniswapV3State {
             if lower <= self.tick && self.tick < upper {
                 // self.liquidity is always positive
                 if amount < 0 {
-                    self.liquidity -= amount.abs() as u128;
+                    self.liquidity -= amount.unsigned_abs();
                 } else {
                     self.liquidity += amount as u128;
                 }
@@ -135,20 +133,18 @@ impl UniswapV3State {
         amount_specified: I256,
         sqrt_price_limit: Option<U256>,
     ) -> Result<SwapResults, TradeSimulationError> {
-        if self.liquidity <= 0 {
+        if self.liquidity == 0 {
             return Err(TradeSimulationError::new(
                 TradeSimulationErrorKind::NoLiquidity,
                 None,
             ));
         }
-        let price_limit = if sqrt_price_limit.is_none() {
-            if zero_for_one {
-                tick_math::MIN_SQRT_RATIO + 1
-            } else {
-                tick_math::MAX_SQRT_RATIO - 1
-            }
+        let price_limit = if let Some(limit) = sqrt_price_limit {
+            limit
+        } else if zero_for_one {
+            tick_math::MIN_SQRT_RATIO + 1
         } else {
-            sqrt_price_limit.unwrap()
+            tick_math::MAX_SQRT_RATIO - 1
         };
 
         if zero_for_one {
@@ -195,11 +191,7 @@ impl UniswapV3State {
                 },
             };
 
-            if next_tick < tick_math::MIN_TICK {
-                next_tick = tick_math::MIN_TICK
-            } else if next_tick > tick_math::MAX_TICK {
-                next_tick = tick_math::MAX_TICK
-            }
+            next_tick = next_tick.clamp(tick_math::MIN_TICK, tick_math::MAX_TICK);
 
             let sqrt_price_next = tick_math::get_sqrt_ratio_at_tick(next_tick);
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
@@ -221,19 +213,15 @@ impl UniswapV3State {
                 fee_amount,
             };
             if exact_input {
-                state.amount_remaining = state.amount_remaining
-                    - I256::checked_from_sign_and_abs(
+                state.amount_remaining -= I256::checked_from_sign_and_abs(
                         Sign::Positive,
                         step.amount_in + step.fee_amount,
                     )
                     .unwrap();
-                state.amount_calculated = state.amount_calculated
-                    - I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
+                state.amount_calculated -= I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
             } else {
-                state.amount_remaining = state.amount_remaining
-                    + I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
-                state.amount_calculated = state.amount_calculated
-                    + I256::checked_from_sign_and_abs(
+                state.amount_remaining += I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
+                state.amount_calculated += I256::checked_from_sign_and_abs(
                         Sign::Positive,
                         step.amount_in + step.fee_amount,
                     )
@@ -265,7 +253,7 @@ impl UniswapV3State {
             sqrt_price: state.sqrt_price,
             liquidity: state.liquidity,
             tick: state.tick,
-            gas_used: gas_used,
+            gas_used,
         })
     }
 
@@ -290,7 +278,7 @@ impl UniswapV3State {
 
 impl ProtocolSim for UniswapV3State {
     fn fee(&self) -> f64 {
-        return (self.fee as u32) as f64 / 1_000_000.0;
+        (self.fee as u32) as f64 / 1_000_000.0
     }
 
     fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {

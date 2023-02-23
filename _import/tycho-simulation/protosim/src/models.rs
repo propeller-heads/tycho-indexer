@@ -41,7 +41,7 @@ impl ERC20Token {
         let sym = symbol.to_string();
         ERC20Token {
             address: addr,
-            decimals: decimals,
+            decimals,
             symbol: sym,
         }
     }
@@ -122,14 +122,14 @@ impl Swap {
     ///
     /// Returns the amount of the token being received in the swap.
     pub fn amount_out(&self) -> U256 {
-        return self.amount_out;
+        self.amount_out
     }
 
     /// Getter for amount_in
     ///
     /// Returns the amount of the token being exchanged in the swap.
     pub fn amount_in(&self) -> U256 {
-        return self.amount_in;
+        self.amount_in
     }
 
     /// Getter for address
@@ -152,7 +152,7 @@ impl SwapSequence {
     pub fn new(swaps: Vec<Swap>, gas: U256) -> Self {
         SwapSequence {
             actions: swaps,
-            gas: gas,
+            gas,
         }
     }
 

@@ -42,7 +42,7 @@ impl UniswapV2State {
         msg: &UniswapV2Sync,
         log_meta: &EVMLogMeta,
     ) -> Result<(), TransitionError<LogIndex>> {
-        check_log_idx(self.log_index, &log_meta)?;
+        check_log_idx(self.log_index, log_meta)?;
         self.reserve0 = msg.reserve0;
         self.reserve1 = msg.reserve1;
         self.log_index = log_meta.index();

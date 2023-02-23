@@ -1,5 +1,5 @@
-//! Path finding algorithm 
-//! 
+//! Path finding algorithm
+//!
 //! This module works on edges instead of nodes to provide better support for MultiGraphs which
 //! can have parallel edges between two nodes.
 use indexmap::IndexSet;
@@ -141,9 +141,10 @@ mod tests {
         let g = UnGraph::<(), i32>::from_edges(edges);
         let node = NodeIndexable::from_index(&g, 0);
 
-        let paths: Vec<_> = all_edge_paths::<Vec<_>, _>(&g, node, node, 0, Some(length)).collect();
-
-        assert_eq!(paths.len(), exp)
+        assert_eq!(
+            all_edge_paths::<Vec<_>, _>(&g, node, node, 0, Some(length)).count(),
+            exp
+        )
     }
 
     #[rstest]

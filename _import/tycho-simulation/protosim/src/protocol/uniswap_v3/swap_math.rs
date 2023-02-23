@@ -17,7 +17,6 @@ pub fn compute_swap_step(
     let sqrt_ratio_next: U256;
     let mut amount_in = U256::zero();
     let mut amount_out = U256::zero();
-    let fee_amount: U256;
 
     if exact_in {
         let amount_remaining_less_fee = mul_div(
@@ -118,16 +117,16 @@ pub fn compute_swap_step(
         amount_out = amount_remaining.abs().into_raw();
     }
 
-    if exact_in && sqrt_ratio_next != sqrt_ratio_target {
-        fee_amount = amount_remaining.abs().into_raw() - amount_in;
+    let fee_amount = if exact_in && sqrt_ratio_next != sqrt_ratio_target {
+        amount_remaining.abs().into_raw() - amount_in
     } else {
-        fee_amount = mul_div_rounding_up(
+        mul_div_rounding_up(
             amount_in,
             U256::from(fee_pips),
             U256::from(1_000_000 - fee_pips),
         )
-    }
-    return (sqrt_ratio_next, amount_in, amount_out, fee_amount);
+    };
+    (sqrt_ratio_next, amount_in, amount_out, fee_amount)
 }
 
 #[cfg(test)]

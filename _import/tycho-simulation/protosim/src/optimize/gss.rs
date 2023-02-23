@@ -81,10 +81,10 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
     }
 
     if yc < yd {
-        return (i256_to_u256(min_bound), i256_to_u256(xd));
+        (i256_to_u256(min_bound), i256_to_u256(xd))
     } else {
-        return (i256_to_u256(xc), i256_to_u256(max_bound));
-    };
+        (i256_to_u256(xc), i256_to_u256(max_bound))
+    }
 }
 
 #[cfg(test)]
@@ -171,7 +171,7 @@ fn i256_to_u256(to_convert: I256) -> U256 {
         return U256::zero();
     }
 
-    return U256::from_dec_str(&to_convert.to_string()).unwrap();
+    U256::from_dec_str(&to_convert.to_string()).unwrap()
 }
 
 pub fn bracket<F: Fn(I256) -> I256>(f: F, mut xa: I256, mut xb: I256) -> (I256, I256, I256, I256) {
@@ -259,7 +259,7 @@ pub fn bracket<F: Fn(I256) -> I256>(f: F, mut xa: I256, mut xb: I256) -> (I256, 
         yc = yw;
     }
 
-    return (xa, xb, xc, yc);
+    (xa, xb, xc, yc)
 }
 
 #[cfg(test)]
@@ -359,8 +359,8 @@ pub fn mul_div(a: I256, b: I256, denom: U512) -> I256 {
     if a_sign != b_sign {
         new_sign = Sign::Negative;
     }
-    return I256::checked_from_sign_and_abs(new_sign, result)
-        .expect("Integer Overflow when casting from U256 to I256");
+    I256::checked_from_sign_and_abs(new_sign, result)
+        .expect("Integer Overflow when casting from U256 to I256")
 }
 
 #[cfg(test)]
