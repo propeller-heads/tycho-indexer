@@ -2,7 +2,7 @@ use ethers::types::U256;
 
 /// Underlying data structure for mint and burns
 ///
-/// Mint- and BurnEvent below are wrap this so that
+/// Mint- and BurnEvent below are wrapped so that
 /// the From trait can be implemented for these on the UniswapV3
 /// event enum
 ///
