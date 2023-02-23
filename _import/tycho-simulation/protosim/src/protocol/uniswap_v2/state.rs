@@ -1,5 +1,6 @@
 use ethers::types::U256;
 
+use crate::safe_math::{safe_add, safe_div, safe_mul};
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -130,11 +131,14 @@ impl ProtocolSim for UniswapV2State {
             ));
         }
 
-        let amount_in_with_fee = amount_in * U256::from(997);
-        let numerator = amount_in_with_fee * reserve_buy;
-        let denominator = reserve_sell * U256::from(1000) + amount_in_with_fee;
+        let amount_in_with_fee = safe_mul(amount_in, U256::from(997))?;
+        let numerator = safe_mul(amount_in_with_fee, reserve_buy)?;
+        let denominator = safe_add(
+            safe_mul(reserve_sell, U256::from(1000))?,
+            amount_in_with_fee,
+        )?;
 
-        let amount_out = numerator / denominator;
+        let amount_out = safe_div(numerator, denominator)?;
 
         Ok(GetAmountOutResult::new(amount_out, U256::from(120_000)))
     }
@@ -185,6 +189,22 @@ mod tests {
         let res = state.get_amount_out(amount_in, &t0, &t1).unwrap();
 
         assert_eq!(res.amount, exp);
+    }
+
+    #[test]
+    fn test_get_amount_out_overflow() {
+        let r0 = u256("33372357002392258830279");
+        let r1 = u256("43356945776493");
+        let amount_in = U256::max_value();
+        let t0d = 18;
+        let t1d = 16;
+        let t0 = ERC20Token::new("0x0000000000000000000000000000000000000000", t0d, "T0");
+        let t1 = ERC20Token::new("0x0000000000000000000000000000000000000001", t1d, "T0");
+        let state = UniswapV2State::new(r0, r1);
+
+        let res = state.get_amount_out(amount_in, &t0, &t1);
+        assert_eq!(res.is_err(), true);
+        assert_eq!(res.err().unwrap().kind, TradeSimulationErrorKind::U256Overflow)
     }
 
     #[rstest]
