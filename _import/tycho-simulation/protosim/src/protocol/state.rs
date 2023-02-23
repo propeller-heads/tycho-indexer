@@ -42,8 +42,11 @@ use ethers::types::U256;
 use crate::models::ERC20Token;
 
 use super::{
-    errors::TradeSimulationError, models::GetAmountOutResult, uniswap_v2::state::UniswapV2State,
-    uniswap_v3::state::UniswapV3State,
+    errors::{TradeSimulationError, TransitionError},
+    events::{EVMLogMeta, LogIndex},
+    models::GetAmountOutResult,
+    uniswap_v2::{events::UniswapV2Sync, state::UniswapV2State},
+    uniswap_v3::{events::UniswapV3Event, state::UniswapV3State},
 };
 
 /// ProtocolSim trait
@@ -100,4 +103,48 @@ pub trait ProtocolSim {
 pub enum ProtocolState {
     UniswapV2(UniswapV2State),
     UniswapV3(UniswapV3State),
+}
+
+impl ProtocolState {
+    pub fn transition(
+        &mut self,
+        protocol_event: &ProtocolEvent,
+        log: &EVMLogMeta,
+    ) -> Result<(), TransitionError<LogIndex>> {
+        match self {
+            ProtocolState::UniswapV2(state) => {
+                if let ProtocolEvent::UniswapV2(event) = protocol_event {
+                    state.transition(event, log)?;
+                } else {
+                    panic!("Invalid event type for address!")
+                }
+            }
+            ProtocolState::UniswapV3(state) => {
+                if let ProtocolEvent::UniswapV3(event) = protocol_event {
+                    state.transition(event, log)?;
+                } else {
+                    panic!("Invalid event type for address!")
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum ProtocolEvent {
+    UniswapV2(UniswapV2Sync),
+    UniswapV3(UniswapV3Event),
+}
+
+impl From<UniswapV2Sync> for ProtocolEvent {
+    fn from(value: UniswapV2Sync) -> Self {
+        ProtocolEvent::UniswapV2(value)
+    }
+}
+
+impl From<UniswapV3Event> for ProtocolEvent {
+    fn from(value: UniswapV3Event) -> Self {
+        ProtocolEvent::UniswapV3(value)
+    }
 }

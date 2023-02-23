@@ -3,7 +3,8 @@ use ethers::types::{Sign, I256, U256};
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind},
+        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
@@ -11,6 +12,7 @@ use crate::{
 
 use super::{
     enums::FeeAmount,
+    events::UniswapV3Event,
     liquidity_math,
     sqrt_price_math::sqrt_price_q96_to_f64,
     swap_math,
@@ -25,6 +27,7 @@ pub struct UniswapV3State {
     fee: FeeAmount,
     tick: i32,
     ticks: TickList,
+    log_index: LogIndex,
 }
 
 #[derive(Debug)]
@@ -73,6 +76,7 @@ impl UniswapV3State {
             fee,
             tick,
             ticks: tick_list,
+            log_index: (0, 0),
         };
 
         return pool;
@@ -84,6 +88,44 @@ impl UniswapV3State {
             FeeAmount::Low => 10,
             FeeAmount::Medium => 60,
             FeeAmount::High => 200,
+        }
+    }
+
+    pub fn transition(
+        &mut self,
+        event: &UniswapV3Event,
+        log_meta: &EVMLogMeta,
+    ) -> Result<(), TransitionError<LogIndex>> {
+        check_log_idx(self.log_index, &log_meta)?;
+        match event {
+            UniswapV3Event::Mint(data) => {
+                let amount = data.amount as i128;
+                self.handle_liquidity_change(data.tick_lower, data.tick_upper, amount);
+            }
+            UniswapV3Event::Burn(data) => {
+                let amount = data.amount as i128;
+                self.handle_liquidity_change(data.tick_lower, data.tick_upper, -amount);
+            }
+            UniswapV3Event::Swap(data) => {
+                self.liquidity = data.liquidity;
+                self.tick = data.tick;
+                self.sqrt_price = data.sqrt_price;
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_liquidity_change(&mut self, lower: i32, upper: i32, amount: i128) {
+        if amount != 0 {
+            if lower <= self.tick && self.tick < upper {
+                // self.liquidity is always positive
+                if amount < 0 {
+                    self.liquidity -= amount.abs() as u128;
+                } else {
+                    self.liquidity += amount as u128;
+                }
+            }
+            self.ticks.apply_liquidity_change(lower, upper, amount);
         }
     }
 
@@ -279,6 +321,13 @@ impl ProtocolSim for UniswapV3State {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use ethers::types::{H160, H256};
+    use rstest::rstest;
+
+    use crate::protocol::uniswap_v3::events::{SwapEvent, BurnEvent, MintEvent};
+
     use super::*;
 
     #[test]
@@ -437,4 +486,109 @@ mod tests {
         assert_eq!(err.kind, TradeSimulationErrorKind::InsufficientData);
         assert_eq!(res.amount, exp);
     }
+
+
+    fn logmeta()-> EVMLogMeta{
+        EVMLogMeta {
+            from: H160::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
+            block_number: 1,
+            block_hash: H256::from_str(
+                "0x8b1cc9f28716bc7c994db5442dd9bb53b90b73f2f6ef7956fd16ab59ecc6f7ad",
+            )
+            .unwrap(),
+            transaction_index: 1,
+            transaction_hash: H256::from_str(
+                "0x8a9b8d0cbbace89ea6d8e70f5a1f69a4ae129b11dccd6d13e96eee71a5c0e446",
+            )
+            .unwrap(),
+            log_index: 1,
+        }
+    }
+
+    #[rstest]
+    #[case::mint_existing_ticks(
+        MintEvent::new(
+            255760,
+            255900,
+            200,
+        ).into(), 
+        (255760, Some(10200)), 
+        (255900, Some(-10200)),
+        10000200,
+    )]
+    #[case::burn_existing_ticks(
+        BurnEvent::new(
+            255760,
+            255900,
+            200,
+        ).into(), 
+        (255760, Some(9800)), 
+        (255900, Some(-9800)),
+        9999800,
+    )]
+    #[case::mint_new_tick(
+        MintEvent::new(
+            255770,
+            255900,
+            200,
+        ).into(), 
+        (255770, Some(200)), 
+        (255900, Some(-10200)),
+        10000200,
+    )]
+    #[case::burn_new_tick(
+        BurnEvent::new(
+            255770,
+            255900,
+            200,
+        ).into(), 
+        (255770, Some(-200)), 
+        (255900, Some(-9800)),
+        9999800
+    )]
+    fn test_transition_liquidity(
+        #[case] event: UniswapV3Event,
+        #[case] exp_lower: (i32, Option<i128>),
+        #[case] exp_upper: (i32, Option<i128>),
+        #[case] exp_pool_liq: u128,
+    ) {
+        let mut pool = UniswapV3State::new(
+            10000000,
+            U256::from_dec_str("28437325270877025820973479874632004").unwrap(),
+            FeeAmount::Low,
+            255830,
+            vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
+        );
+        
+        pool.transition(&event, &logmeta()).unwrap();
+
+        if let (tick, Some(liq_lower)) = exp_lower {
+            assert_eq!(pool.ticks.get_tick(tick).unwrap().net_liquidity, liq_lower)
+        }
+
+        if let (tick, Some(liq_upper)) = exp_upper {
+            assert_eq!(pool.ticks.get_tick(tick).unwrap().net_liquidity, liq_upper)
+        }
+
+        assert_eq!(pool.liquidity, exp_pool_liq)
+    }
+    
+    #[test]
+    fn test_transition_swap(){
+        let mut pool = UniswapV3State::new(
+            1000,
+            U256::from_dec_str("1000").unwrap(),
+            FeeAmount::Low,
+            100,
+            vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
+        );
+        let event = SwapEvent::new(U256::from(1001), 2000, 120).into();
+
+        pool.transition(&event, &logmeta()).unwrap();
+
+        assert_eq!(pool.sqrt_price, U256::from(1001));
+        assert_eq!(pool.liquidity, 2000);
+        assert_eq!(pool.tick, 120);
+    }
+
 }

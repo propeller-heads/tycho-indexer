@@ -92,17 +92,23 @@ impl TickList {
         return Ok(true);
     }
 
-    #[allow(dead_code)]
-    pub fn push(&mut self, tick: TickInfo) {
-        let index_to_push = self.ticks.binary_search_by(|el| el.index.cmp(&tick.index));
-        if index_to_push.is_ok() {
-            panic!("Tick at index {} already exists!", tick.index)
-        }
+    pub fn apply_liquidity_change(&mut self, lower: i32, upper: i32, delta: i128) {
+        self.upsert_tick(lower, delta);
+        self.upsert_tick(upper, -delta);
+    }
 
-        self.ticks.insert(index_to_push.unwrap_err(), tick);
-        let valid = self.valid_ticks();
-        if valid.is_err() {
-            panic!("{}", valid.unwrap_err());
+    fn upsert_tick(&mut self, tick: i32, delta: i128) {
+        match self.ticks.binary_search_by(|t| t.index.cmp(&tick)) {
+            Ok(existing_idx) => {
+                let tick = &mut self.ticks[existing_idx];
+                tick.net_liquidity += delta;
+                if tick.net_liquidity == 0 {
+                    self.ticks.remove(existing_idx);
+                }
+            }
+            Err(insert_idx) => {
+                self.ticks.insert(insert_idx, TickInfo::new(tick, delta));
+            }
         }
     }
 
@@ -230,6 +236,8 @@ fn div_floor(lhs: i32, rhs: i32) -> i32 {
 #[cfg(test)]
 mod tests {
 
+    use rstest::rstest;
+
     use crate::protocol::uniswap_v3::tick_math;
 
     use super::*;
@@ -257,44 +265,6 @@ mod tests {
         let tick_list = create_tick_list();
         assert_eq!(tick_list.ticks.len(), 3);
         assert_eq!(tick_list.tick_spacing, 10);
-    }
-
-    #[test]
-    fn test_push_new_tick_start() {
-        let mut tick_list = create_tick_list();
-        tick_list.push(create_tick_info(-10, 10));
-        assert_eq!(tick_list.ticks.len(), 4);
-        assert_eq!(tick_list.ticks[0].index, -10)
-    }
-
-    #[test]
-    fn test_push_new_tick_mid() {
-        let mut tick_list = create_tick_list();
-        tick_list.push(create_tick_info(30, 10));
-        assert_eq!(tick_list.ticks.len(), 4);
-        assert_eq!(tick_list.ticks[2].index, 30)
-    }
-
-    #[test]
-    fn test_push_new_tick_end() {
-        let mut tick_list = create_tick_list();
-        tick_list.push(create_tick_info(50, 10));
-        assert_eq!(tick_list.ticks.len(), 4);
-        assert_eq!(tick_list.ticks[3].index, 50)
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_push_tick_duplicate_ix() {
-        let mut tick_list = create_tick_list();
-        tick_list.push(create_tick_info(40, 10));
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_push_tick_invalid_ix() {
-        let mut tick_list = create_tick_list();
-        tick_list.push(create_tick_info(35, 10));
     }
 
     #[test]
@@ -644,5 +614,40 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[rstest]
+    #[case(100)]
+    #[case(-100)]
+    fn test_apply_liquidity_change(#[case] delta: i128) {
+        let tick_infos = vec![
+            create_tick_info(-5100, 10),
+            create_tick_info(0, -5),
+            create_tick_info(5100, -5),
+        ];
+        let mut tick_list = TickList::from(10, tick_infos);
+
+        tick_list.apply_liquidity_change(-10, 10, delta);
+
+        let lower = tick_list.get_tick(-10).unwrap();
+        let upper = tick_list.get_tick(10).unwrap();
+        assert_eq!(lower.net_liquidity, delta);
+        assert_eq!(upper.net_liquidity, -delta);
+    }
+
+    #[test]
+    fn test_apply_liquidity_change_add_remove() {
+        let tick_infos = vec![
+            create_tick_info(-5100, 10),
+            create_tick_info(0, -5),
+            create_tick_info(5100, -5),
+        ];
+        let mut tick_list = TickList::from(10, tick_infos);
+
+        tick_list.apply_liquidity_change(-10, 10, 100);
+        tick_list.apply_liquidity_change(-10, 10, -100);
+
+        assert!(tick_list.get_tick(-10).is_err());
+        assert!(tick_list.get_tick(10).is_err());
     }
 }

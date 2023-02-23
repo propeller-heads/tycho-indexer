@@ -40,7 +40,7 @@
 //! 
 //! g.info()
 //! ```
-use log::{debug, info};
+use log::{debug, info, trace, warn};
 use ethers::types::{H160, U256};
 use itertools::Itertools;
 use petgraph::{
@@ -53,9 +53,9 @@ use std::collections::HashMap;
 use crate::{
     models::{ERC20Token, SwapSequence, Swap},
     protocol::{
-        errors::TradeSimulationError,
+        errors::{TradeSimulationError, TransitionError},
         models::{GetAmountOutResult, Pair},
-        state::{ProtocolSim, ProtocolState},
+        state::{ProtocolSim, ProtocolState, ProtocolEvent}, events::{EVMLogMeta, LogIndex},
     },
 };
 
@@ -225,7 +225,7 @@ struct PathEntry{
 }
 
 impl PathEntry {
-    /// # Create a new PathEntry
+    /// Create a new PathEntry
     ///
     /// ProtoGraph internal path representation: Represents a path by it's 
     /// start token (indicating a direction) as well as by a series of 
@@ -262,6 +262,8 @@ pub struct ProtoGraph {
     paths: Vec<PathEntry>,
     /// A cache of the membership of each address in the graph to paths.
     path_memberships: HashMap<H160, Vec<usize>>,
+    /// "workhorse collection" for state overrides
+    original_states: HashMap<H160, ProtocolState>,
 }
 
 impl ProtoGraph {
@@ -277,8 +279,94 @@ impl ProtoGraph {
             graph: UnGraph::new_undirected(),
             paths: Vec::new(),
             path_memberships: HashMap::new(),
+            original_states: HashMap::new(),
         }
     }
+
+    /// Transition states using events
+    /// 
+    /// This method will transition the corresponding states with the given events
+    /// inplace. Depending on the ignore_errors the method will either panic on 
+    /// tranistion errors or simply ignore them.
+    pub fn transition_states<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], ignore_errors: bool){
+        for (ev, logmeta) in events.iter(){
+            let address = logmeta.from;
+            if let Some(Pair(_, state)) = self.states.get_mut(&address) {
+                let res = state.transition(ev, logmeta);
+                if !ignore_errors{
+                    res.expect(&format!("Error transitioning on event {:?} from address {}", ev, address));
+                } else {
+                    if let Err(err) = res {
+                        warn!("Ignoring transitioning error {:?} for event {:?} from address: {}", err, ev, address);
+                    }
+                }
+            } else {
+                trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
+                continue;
+            }
+        }
+    }
+
+    /// Transition states in a revertible manner
+    /// 
+    /// This method will transition states given a collection of events. Previous states are
+    /// recorded separately such that the transition can later be reverted using: `rever_states`
+    /// This is slower but safer in case transition errors need to handled gracefully or
+    /// if the events are not yet fully settled.
+    /// 
+    /// # Note 
+    /// 
+    /// This method can only record a single transition so if called multiple times it must be
+    /// made sure that `revert_states` was called in between.
+    pub fn transition_states_revertibly<'a>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)]) -> Result<(), TransitionError<LogIndex>>{
+        if self.original_states.len() > 0 {
+            panic!("Original states not cleared!")
+        }
+        for (ev, logmeta) in events.iter(){
+            let address = logmeta.from;
+            let old_state;
+            if let Some(Pair(_, state)) = self.states.get_mut(&address) {
+                old_state = state;
+            } else {
+                trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
+                continue;
+            };
+            // Only save original state the first time in case there are multiple logs for the
+            // same pool else revert would not properly work anymore.
+            if !self.original_states.contains_key(&address){
+                self.original_states.insert(address, old_state.clone());    
+            }
+            old_state.transition(ev, logmeta)?;
+        }
+        Ok(())
+    }
+    
+    /// Revert states by a single transition
+    /// 
+    /// Allows to revert the states by one transition. Require have called 
+    /// `transition_states_revertibly` before. 
+    pub fn revert_states(&mut self){
+        for (address, state) in self.original_states.iter(){
+            let pair = self.states.get_mut(address).unwrap();
+            pair.1 = state.clone();
+        }
+        self.original_states.clear();
+    }
+
+    /// Applies a closure on temporarily transitioned state
+    /// 
+    /// This method will apply some events to the state, then execute the action function
+    /// and finally revert the states again.
+    /// 
+    /// It will return as Result of whatever the action function returned or return 
+    /// an error if the transtion was not successfull.
+    pub fn with_states_transitioned<'a, T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &'a [(ProtocolEvent, EVMLogMeta)], action: F) -> Result<T, TransitionError<LogIndex>> {
+        self.transition_states_revertibly(events)?;
+        let res = action(self);
+        self.revert_states();
+        return Ok(res);
+    }
+
 
     /// Inserts a trading pair into the graph
     ///
@@ -330,6 +418,7 @@ impl ProtoGraph {
     /// * `Option<()>` - returns `Some(())` if the state was updated, or `
     ///     None` if the pair with that address could not be found.
     pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
+        //! TODO this should work purely on log updates and the transition
         if let Some(pair) = self.states.get_mut(address) {
             pair.1 = state;
             return Some(());
@@ -446,6 +535,7 @@ impl ProtoGraph {
         info!("Paths: {}", self.paths.len());
         info!("Membership Cache: {}", self.path_memberships.len());
     }
+
 }
 
 
@@ -454,10 +544,11 @@ impl ProtoGraph {
 mod tests {
     use std::str::FromStr;
 
-    use ethers::types::{I256, Sign};
+    use ethers::types::{I256, Sign, H256};
     use rstest::rstest;
     use crate::optimize::gss::golden_section_search;
     use crate::protocol::models::PairProperties;
+    use crate::protocol::uniswap_v2::events::UniswapV2Sync;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
 
     use super::*;
@@ -508,6 +599,118 @@ mod tests {
         let Pair(_, updated) = &g.states[&address];
 
         assert_eq!(updated.clone(), state);
+    }
+
+    fn construct_graph() -> ProtoGraph {
+        let mut g = ProtoGraph::new(2);
+        g.insert_pair(make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            20_000_000,
+        ));
+        g.insert_pair(make_pair(
+            "0x0000000000000000000000000000000000000002",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            20_000_000,
+        ));
+        g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        return g;
+    }
+
+    fn logmeta(from: &str, log_idx: LogIndex) -> EVMLogMeta{
+        EVMLogMeta {
+            from: H160::from_str(from).unwrap(),
+            block_number: log_idx.0,
+            block_hash: H256::from_str(
+                "0x8b1cc9f28716bc7c994db5442dd9bb53b90b73f2f6ef7956fd16ab59ecc6f7ad",
+            )
+            .unwrap(),
+            transaction_index: 1,
+            transaction_hash: H256::from_str(
+                "0x8a9b8d0cbbace89ea6d8e70f5a1f69a4ae129b11dccd6d13e96eee71a5c0e446",
+            )
+            .unwrap(),
+            log_index: log_idx.1,
+        }
+    }
+
+    #[test]
+    fn test_transition(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let addr_changed = H160::from_str("0x0000000000000000000000000000000000000002").unwrap();
+        let addr_untouched = H160::from_str("0x0000000000000000000000000000000000000001").unwrap();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (1, 1))
+        )];
+        
+        g.transition_states(events.as_slice(), false);
+
+        assert_ne!(g.states[&addr_changed], original_states[&addr_changed]);
+        assert_eq!(g.states[&addr_untouched], original_states[&addr_untouched]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_transition_err_panic(){
+        let mut g = construct_graph();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 0))
+        )];
+        
+        g.transition_states(events.as_slice(), false);
+    }
+
+    #[test]
+    fn test_transition_err_ignore(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 0))
+        )];
+        
+        g.transition_states(events.as_slice(), true);
+
+        assert_eq!(g.states, original_states);
+    }
+
+    #[test]
+    fn test_transition_revertibly(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 1))
+        )];
+
+        g.transition_states_revertibly(&events).unwrap();
+        assert_ne!(original_states, g.states);
+        
+        g.revert_states();
+        assert_eq!(original_states, g.states);
+    }
+
+    #[test]
+    fn test_with_states_transitioned(){
+        let mut g = construct_graph();
+        let original_states = g.states.clone();
+        let events = vec![(
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
+            logmeta("0x0000000000000000000000000000000000000002", (0, 1))
+        )];
+
+        g.with_states_transitioned(&events, |g| {
+            assert_ne!(original_states, g.states);
+        }).unwrap();
+
+        assert_eq!(original_states, g.states);
     }
 
 

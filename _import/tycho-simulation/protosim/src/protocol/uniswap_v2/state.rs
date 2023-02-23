@@ -3,18 +3,21 @@ use ethers::types::U256;
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind},
+        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
 };
 
+use super::events::UniswapV2Sync;
 use super::reserve_price::spot_price_from_reserves;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
+    pub log_index: LogIndex,
 }
 
 impl UniswapV2State {
@@ -27,7 +30,23 @@ impl UniswapV2State {
     /// * `reserve0` - Reserve of token 0.
     /// * `reserve1` - Reserve of token 1.
     pub fn new(reserve0: U256, reserve1: U256) -> Self {
-        UniswapV2State { reserve0, reserve1 }
+        UniswapV2State {
+            reserve0,
+            reserve1,
+            log_index: (0, 0),
+        }
+    }
+
+    pub fn transition(
+        &mut self,
+        msg: &UniswapV2Sync,
+        log_meta: &EVMLogMeta,
+    ) -> Result<(), TransitionError<LogIndex>> {
+        check_log_idx(self.log_index, &log_meta)?;
+        self.reserve0 = msg.reserve0;
+        self.reserve1 = msg.reserve1;
+        self.log_index = log_meta.index();
+        Ok(())
     }
 }
 
@@ -123,8 +142,11 @@ impl ProtocolSim for UniswapV2State {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use approx::assert_ulps_eq;
+    use ethers::types::{H160, H256};
     use rstest::rstest;
 
     fn u256(s: &str) -> U256 {
@@ -189,5 +211,27 @@ mod tests {
         let res = state.fee();
 
         assert_ulps_eq!(res, 0.003);
+    }
+
+    #[test]
+    fn test_transition() {
+        let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
+        let event = UniswapV2Sync::new(u256("1500"), u256("2000"));
+        let log_meta = EVMLogMeta::new(
+            H160::from_str("0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5").unwrap(),
+            1,
+            H256::from_str("0xe4ea49424508471a7f83633fe97dbbee641ddecb106e187896b27e09d0d05e1c")
+                .unwrap(),
+            1,
+            H256::from_str("0xe64a78e6e0fe611ecbf8e079ecb032985f5f08a5d9acba5910f27ec8be8095a9")
+                .unwrap(),
+            1,
+        );
+
+        state.transition(&event, &log_meta).unwrap();
+
+        assert_eq!(state.reserve0, u256("1500"));
+        assert_eq!(state.reserve1, u256("2000"));
+        assert_eq!(state.log_index, log_meta.index());
     }
 }
