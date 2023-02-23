@@ -1,5 +1,4 @@
 use crate::protocol::errors::{TradeSimulationError, TradeSimulationErrorKind};
-use ethers::types::U256;
 use std::ops::{Add, Div, Mul, Sub};
 use std::panic;
 
