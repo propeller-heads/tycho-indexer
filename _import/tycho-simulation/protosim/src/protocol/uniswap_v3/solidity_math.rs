@@ -1,5 +1,5 @@
 use ethers::types::{U256, U512};
-use crate::safe_math::{safe_div, safe_mul_u512};
+use crate::safe_math::{safe_div_u512, safe_mul_u512};
 
 pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> U256 {
     let a_big = U512::from(a);
@@ -16,7 +16,7 @@ pub fn mul_div(a: U256, b: U256, denom: U256) -> U256 {
     let a_big = U512::from(a);
     let b_big = U512::from(b);
     let product = safe_mul_u512(a_big, b_big)?;
-    let result = safe_div(product, denom)?;
+    let result = safe_div_u512(product, U512::from(denom))?;
     result.try_into().expect("Mul div overflow!!")
 }
 

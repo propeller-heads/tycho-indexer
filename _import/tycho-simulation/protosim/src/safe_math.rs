@@ -54,25 +54,6 @@ pub fn safe_sub_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
 }
 
 
-pub fn safe_div<T, G>(a: T, b: G) -> Result<T, TradeSimulationError>
-where
-    T: Div<Output = T> + panic::UnwindSafe + Copy + panic::RefUnwindSafe,
-    G: Div<Output = G> + panic::UnwindSafe + Copy + panic::RefUnwindSafe,
-{
-    let result = panic::catch_unwind(|| {
-        a / b;
-    });
-
-    if result.is_ok() {
-        return Ok(a / b);
-    } else {
-        return Err(TradeSimulationError::new(
-            TradeSimulationErrorKind::U256Overflow,
-            None,
-        ));
-    }
-}
-
 pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, TradeSimulationError> {
     match res {
         None => Err(TradeSimulationError::new(
