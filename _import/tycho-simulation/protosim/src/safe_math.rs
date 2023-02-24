@@ -1,3 +1,5 @@
+use std::ops::Div;
+use std::panic;
 use crate::protocol::errors::{TradeSimulationError, TradeSimulationErrorKind};
 use ethers::types::{U256, U512};
 
@@ -49,6 +51,26 @@ pub fn safe_add_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
 pub fn safe_sub_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
     let res = a.checked_sub(b);
     _construc_result_u512(res)
+}
+
+
+pub fn safe_div<T, G>(a: T, b: G) -> Result<T, TradeSimulationError>
+where
+    T: Div<Output = T> + panic::UnwindSafe + Copy + panic::RefUnwindSafe,
+    G: Div<Output = G> + panic::UnwindSafe + Copy + panic::RefUnwindSafe,
+{
+    let result = panic::catch_unwind(|| {
+        a / b;
+    });
+
+    if result.is_ok() {
+        return Ok(a / b);
+    } else {
+        return Err(TradeSimulationError::new(
+            TradeSimulationErrorKind::U256Overflow,
+            None,
+        ));
+    }
 }
 
 pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, TradeSimulationError> {
