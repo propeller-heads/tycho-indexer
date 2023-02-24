@@ -1,7 +1,6 @@
-use std::ops::Div;
-use std::panic;
 use crate::protocol::errors::{TradeSimulationError, TradeSimulationErrorKind};
 use ethers::types::{U256, U512};
+
 
 pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
     let res = a.checked_mul(b);
@@ -52,7 +51,6 @@ pub fn safe_sub_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
     let res = a.checked_sub(b);
     _construc_result_u512(res)
 }
-
 
 pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, TradeSimulationError> {
     match res {
