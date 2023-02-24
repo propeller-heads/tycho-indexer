@@ -1,6 +1,6 @@
 use ethers::types::U256;
 
-use crate::safe_math::{safe_add, safe_div, safe_mul};
+use crate::safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256};
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -131,14 +131,14 @@ impl ProtocolSim for UniswapV2State {
             ));
         }
 
-        let amount_in_with_fee = safe_mul(amount_in, U256::from(997))?;
-        let numerator = safe_mul(amount_in_with_fee, reserve_buy)?;
-        let denominator = safe_add(
-            safe_mul(reserve_sell, U256::from(1000))?,
+        let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
+        let numerator = safe_mul_u256(amount_in_with_fee, reserve_buy)?;
+        let denominator = safe_add_u256(
+            safe_mul_u256(reserve_sell, U256::from(1000))?,
             amount_in_with_fee,
         )?;
 
-        let amount_out = safe_div(numerator, denominator)?;
+        let amount_out = safe_div_u256(numerator, denominator)?;
 
         Ok(GetAmountOutResult::new(amount_out, U256::from(120_000)))
     }
