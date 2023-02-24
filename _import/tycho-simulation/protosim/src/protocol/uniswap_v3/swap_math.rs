@@ -1,4 +1,4 @@
-use crate::safe_math::safe_sub;
+use crate::safe_math::{safe_sub_u256};
 use ethers::types::{I256, U256};
 
 use super::{
@@ -119,7 +119,7 @@ pub fn compute_swap_step(
     }
 
     let fee_amount = if exact_in && sqrt_ratio_next != sqrt_ratio_target {
-        safe_sub(amount_remaining.abs().into_raw(), amount_in)?
+        safe_sub_u256(amount_remaining.abs().into_raw(), amount_in)?
     } else {
         mul_div_rounding_up(
             amount_in,

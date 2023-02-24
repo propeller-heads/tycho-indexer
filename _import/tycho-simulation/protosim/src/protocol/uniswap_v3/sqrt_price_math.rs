@@ -1,7 +1,7 @@
 use crate::u256_num::u256_to_f64;
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
-use crate::safe_math::{safe_add, safe_div, safe_sub};
+use crate::safe_math::{safe_add_u256, safe_div_u256, safe_sub_u256};
 use ethers::types::U256;
 
 const Q96: U256 = U256([0, 4294967296, 0, 0]);
@@ -19,7 +19,7 @@ fn maybe_flip_ratios(a: U256, b: U256) -> (U256, U256) {
 fn div_rounding_up(a: U256, b: U256) -> U256 {
     let (result, rest) = a.div_mod(b);
     if rest > U256::zero() {
-        safe_add(result, U256::one())?
+        safe_add_u256(result, U256::one())?
     } else {
         result
     }
@@ -98,7 +98,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
         let (product, _) = amount.overflowing_mul(sqrt_price);
         if product / amount == sqrt_price {
             // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
-            let denominator = safe_add(numerator1, product)?;
+            let denominator = safe_add_u256(numerator1, product)?;
             if denominator >= numerator1 {
                 return mul_div_rounding_up(numerator1, sqrt_price, denominator);
             }
@@ -106,12 +106,12 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
         // Overflow: liquidity / (liquidity / sqrtPX96 +- amount)
         div_rounding_up(
             numerator1,
-            safe_add(safe_div(numerator1, sqrt_price)?, amount)?,
+            safe_add_u256(safe_div_u256(numerator1, sqrt_price)?, amount)?,
         )
     } else {
         let (product, _) = amount.overflowing_mul(sqrt_price);
-        assert!(safe_div(product, amount)? == sqrt_price && numerator1 > product);
-        let denominator = safe_sub(numerator1, product)?;
+        assert!(safe_div_u256(product, amount)? == sqrt_price && numerator1 > product);
+        let denominator = safe_sub_u256(numerator1, product)?;
         // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
         mul_div_rounding_up(numerator1, sqrt_price, denominator)
     }
@@ -125,12 +125,12 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
 ) -> U256 {
     if add {
         let quotient = if amount <= U160_MAX {
-            safe_div(amount << RESOLUTION, U256::from(liquidity))?
+            safe_div_u256(amount << RESOLUTION, U256::from(liquidity))?
         } else {
             mul_div(amount, Q96, U256::from(liquidity))
         };
 
-        safe_add(sqrt_price, quotient)?
+        safe_add_u256(sqrt_price, quotient)?
     } else {
         let quotient = if amount <= U160_MAX {
             div_rounding_up(amount << RESOLUTION, U256::from(liquidity))
@@ -139,7 +139,7 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
         };
 
         assert!(sqrt_price > quotient);
-        safe_sub(sqrt_price, quotient)?
+        safe_sub_u256(sqrt_price, quotient)?
     }
 }
 
