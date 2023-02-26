@@ -194,15 +194,22 @@ impl UniswapV3State {
 
             next_tick = next_tick.clamp(tick_math::MIN_TICK, tick_math::MAX_TICK);
 
-            let sqrt_price_next = tick_math::get_sqrt_ratio_at_tick(next_tick);
-            let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
+            let sqrt_price_next = tick_math::get_sqrt_ratio_at_tick(next_tick)?;
+                         let (sqrt_price, amount_in, amount_out, fee_amount) = if let Ok((sqrt_price, amount_in, amount_out, fee_amount)) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
                 state.liquidity,
                 state.amount_remaining,
-                self.fee as u32,
-            );
+                self.fee as u32,) { (sqrt_price, amount_in, amount_out, fee_amount) } else { todo!() };
+            // let Ok((sqrt_price, amount_in, amount_out, fee_amount)) = swap_math::compute_swap_step(
+            //     state.sqrt_price,
+            //     UniswapV3State::get_sqrt_ratio_target(sqrt_price_next?, price_limit, zero_for_one),
+            //     state.liquidity,
+            //     state.amount_remaining,
+            //     self.fee as u32,
+            // );
             state.sqrt_price = sqrt_price;
+            let sqrt_price_next = sqrt_price_next;
 
             let step = StepComputation {
                 sqrt_price_start: state.sqrt_price,
@@ -245,7 +252,7 @@ impl UniswapV3State {
                     step.tick_next
                 };
             } else if state.sqrt_price != step.sqrt_price_start {
-                state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price);
+                state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
             gas_used = safe_add_u256(gas_used,U256::from(2000))?;
         }
@@ -332,7 +339,7 @@ mod tests {
             17342,
             vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
         );
-        let sell_amount = safe_mul_u256(U256::from(11000), U256::exp10(18))?;
+        let sell_amount = U256::from(11000)* U256::exp10(18);
         let expected = U256::from_dec_str("61927070842678722935941").unwrap();
 
         let res = pool

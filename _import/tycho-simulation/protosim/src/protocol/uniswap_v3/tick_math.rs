@@ -1,6 +1,8 @@
 use std::ops::BitOr;
+use ethers::core::k256::elliptic_curve::consts::U2;
 
 use ethers::types::{Sign, I256, U256};
+use crate::protocol::errors::TradeSimulationError;
 use crate::safe_math::{safe_div_u256, safe_mul_u256};
 
 pub const MIN_TICK: i32 = -887272;
@@ -11,7 +13,7 @@ pub const MIN_SQRT_RATIO: U256 = U256([4295128739, 0, 0, 0]);
 // 1461446703485210103287273052203988822378723970342
 pub const MAX_SQRT_RATIO: U256 = U256([6743328256752651558, 17280870778742802505, 4294805859, 0]);
 
-pub fn get_sqrt_ratio_at_tick(tick: i32) -> U256 {
+pub fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, TradeSimulationError> {
     assert!(tick.abs() <= MAX_TICK);
     let abs_tick = U256::from(tick.unsigned_abs());
     let mut ratio = if abs_tick.bit(0) {
@@ -83,12 +85,12 @@ pub fn get_sqrt_ratio_at_tick(tick: i32) -> U256 {
     }
 
     let (_, rest) = ratio.div_mod(U256::one() << 32);
-    (ratio >> 32)
+    Ok((ratio >> 32)
         + if rest == U256::zero() {
             U256::zero()
         } else {
             U256::one()
-        }
+        })
 }
 
 fn most_significant_bit(x: U256) -> usize {
@@ -96,7 +98,7 @@ fn most_significant_bit(x: U256) -> usize {
     x.bits() - 1
 }
 
-pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> i32 {
+pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, TradeSimulationError> {
     assert!(sqrt_price >= MIN_SQRT_RATIO && sqrt_price < MAX_SQRT_RATIO);
     let ratio_x128 = sqrt_price << 32;
     let msb = most_significant_bit(ratio_x128);
@@ -125,11 +127,11 @@ pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> i32 {
     .asr(128);
 
     if tick_low == tick_high {
-        tick_low.as_i32()
-    } else if get_sqrt_ratio_at_tick(tick_high.as_i32()) <= sqrt_price {
-        tick_high.as_i32()
+        Ok(tick_low.as_i32())
+    } else if get_sqrt_ratio_at_tick(tick_high.as_i32())? <= sqrt_price {
+        Ok(tick_high.as_i32())
     } else {
-        tick_low.as_i32()
+        Ok(tick_low.as_i32())
     }
 }
 
@@ -220,7 +222,7 @@ mod tests {
             },
         ];
         for case in cases {
-            assert_eq!(get_sqrt_ratio_at_tick(case.tick), case.ratio);
+            assert_eq!(get_sqrt_ratio_at_tick(case.tick).unwrap(), case.ratio);
         }
     }
 
@@ -258,7 +260,7 @@ mod tests {
             },
         ];
         for case in cases {
-            assert_eq!(get_tick_at_sqrt_ratio(case.ratio), case.tick);
+            assert_eq!(get_tick_at_sqrt_ratio(case.ratio).unwrap(), case.tick);
         }
     }
 }
