@@ -1,5 +1,5 @@
 use crate::protocol::errors::{TradeSimulationError, TradeSimulationErrorKind};
-use ethers::types::{U256, U512};
+use ethers::types::{I256, U256, U512};
 
 pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
     let res = a.checked_mul(b);
@@ -60,6 +60,37 @@ pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, TradeSimulationE
         Some(value) => Ok(value),
     }
 }
+
+pub fn safe_mul_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+    let res = a.checked_mul(b);
+    _construc_result_i256(res)
+}
+
+pub fn safe_div_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+    let res = a.checked_div(b);
+    _construc_result_i256(res)
+}
+
+pub fn safe_add_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+    let res = a.checked_add(b);
+    _construc_result_i256(res)
+}
+
+pub fn safe_sub_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+    let res = a.checked_sub(b);
+    _construc_result_i256(res)
+}
+
+pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, TradeSimulationError> {
+    match res {
+        None => Err(TradeSimulationError::new(
+            TradeSimulationErrorKind::U256Overflow,
+            None,
+        )),
+        Some(value) => Ok(value),
+    }
+}
+
 
 #[cfg(test)]
 mod safe_math_tests {
@@ -218,6 +249,86 @@ mod safe_math_tests {
         #[case] expected: U512,
     ) {
         let res = safe_div_u512(a, b);
+        assert_eq!(res.is_err(), is_err);
+        assert_eq!(res.is_ok(), is_ok);
+
+        if is_ok {
+            assert_eq!(res.unwrap(), expected);
+        }
+    }
+
+        fn i256(s: &str) -> I256 {
+        I256::from_dec_str(s).unwrap()
+    }
+
+    #[rstest]
+    #[case(I256::max_value(), i256("2"), true, false, i256("0"))]
+    #[case(i256("3"), i256("2"), false, true, i256("6"))]
+    fn test_safe_mul_i256(
+        #[case] a: I256,
+        #[case] b: I256,
+        #[case] is_err: bool,
+        #[case] is_ok: bool,
+        #[case] expected: I256,
+    ) {
+        let res = safe_mul_i256(a, b);
+        assert_eq!(res.is_err(), is_err);
+        assert_eq!(res.is_ok(), is_ok);
+
+        if is_ok {
+            assert_eq!(res.unwrap(), expected);
+        }
+    }
+
+    #[rstest]
+    #[case(I256::max_value(), i256("2"), true, false, i256("0"))]
+    #[case(i256("3"), i256("2"), false, true, i256("5"))]
+    fn test_safe_add_i256(
+        #[case] a: I256,
+        #[case] b: I256,
+        #[case] is_err: bool,
+        #[case] is_ok: bool,
+        #[case] expected: I256,
+    ) {
+        let res = safe_add_i256(a, b);
+        assert_eq!(res.is_err(), is_err);
+        assert_eq!(res.is_ok(), is_ok);
+
+        if is_ok {
+            assert_eq!(res.unwrap(), expected);
+        }
+    }
+
+    #[rstest]
+    #[case(i256("0"), i256("2"), true, false, i256("0"))]
+    #[case(i256("10"), i256("2"), false, true, i256("8"))]
+    fn test_safe_sub_i256(
+        #[case] a: I256,
+        #[case] b: I256,
+        #[case] is_err: bool,
+        #[case] is_ok: bool,
+        #[case] expected: I256,
+    ) {
+        let res = safe_sub_i256(a, b);
+        assert_eq!(res.is_err(), is_err);
+        assert_eq!(res.is_ok(), is_ok);
+
+        if is_ok {
+            assert_eq!(res.unwrap(), expected);
+        }
+    }
+
+    #[rstest]
+    #[case(i256("1"), i256("0"), true, false, i256("0"))]
+    #[case(i256("10"), i256("2"), false, true, i256("5"))]
+    fn test_safe_div_i256(
+        #[case] a: I256,
+        #[case] b: I256,
+        #[case] is_err: bool,
+        #[case] is_ok: bool,
+        #[case] expected: I256,
+    ) {
+        let res = safe_div_i256(a, b);
         assert_eq!(res.is_err(), is_err);
         assert_eq!(res.is_ok(), is_ok);
 
