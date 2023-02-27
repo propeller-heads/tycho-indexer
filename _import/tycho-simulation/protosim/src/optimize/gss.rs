@@ -1,6 +1,8 @@
 //! Golden Section Search
 use ethers::types::{Sign, I256, U256, U512};
 use std::mem::swap;
+use crate::protocol::errors::TradeSimulationError;
+use crate::safe_math::{safe_add_i256, safe_div_i256, safe_div_u512, safe_mul_i256, safe_mul_u512, safe_sub_i256};
 
 const INVPHI: i64 = 2654435769; // (math.sqrt(5) - 1) / 2 * 2 ** 32
 const INVPHI2: i64 = 1640531526; // (3 - math.sqrt(5)) * 2 ** 32
@@ -29,7 +31,7 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
     tol: I256,
     max_iter: u64,
     honour_bounds: bool,
-) -> (U256, U256) {
+) -> Result<(U256, U256), TradeSimulationError> {
     let invphi_i256 = I256::from(INVPHI);
     let invphi2_i256 = I256::from(INVPHI2);
 
@@ -42,14 +44,14 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
 
     let mut h = max_bound - min_bound;
     if h <= tol {
-        return (i256_to_u256(min_bound), i256_to_u256(max_bound));
+        return Ok((i256_to_u256(min_bound), i256_to_u256(max_bound)));
     }
 
     let mut yc;
     let mut xc;
 
     if honour_bounds {
-        xc = min_bound + mul_div(invphi2_i256, h, DENOM);
+        xc = safe_add_i256(min_bound , mul_div(invphi2_i256, h, DENOM)?)?;
         yc = f(xc);
     } else {
         let brackets = bracket(&f, min_bound, max_bound);
@@ -59,7 +61,7 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
         yc = brackets.3;
     }
 
-    let mut xd = min_bound + mul_div(invphi_i256, h, DENOM);
+    let mut xd = safe_add_i256(min_bound, mul_div(invphi_i256, h, DENOM)?)?;
     let mut yd = f(xd);
 
     for _ in 0..max_iter {
@@ -67,23 +69,23 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
             max_bound = xd;
             xd = xc;
             yd = yc;
-            h = mul_div(invphi_i256, h, DENOM);
-            xc = min_bound + mul_div(invphi2_i256, h, DENOM);
+            h = mul_div(invphi_i256, h, DENOM)?;
+            xc = safe_add_i256(min_bound, mul_div(invphi2_i256, h, DENOM)?)?;
             yc = f(xc);
         } else {
             min_bound = xc;
             xc = xd;
             yc = yd;
-            h = mul_div(invphi_i256, h, DENOM);
-            xd = min_bound + mul_div(invphi_i256, h, DENOM);
+            h = mul_div(invphi_i256, h, DENOM)?;
+            xd = safe_add_i256(min_bound, mul_div(invphi_i256, h, DENOM)?)?;
             yd = f(xd);
         }
     }
 
     if yc < yd {
-        (i256_to_u256(min_bound), i256_to_u256(xd))
+        Ok((i256_to_u256(min_bound), i256_to_u256(xd)))
     } else {
-        (i256_to_u256(xc), i256_to_u256(max_bound))
+        Ok((i256_to_u256(xc), i256_to_u256(max_bound)))
     }
 }
 
