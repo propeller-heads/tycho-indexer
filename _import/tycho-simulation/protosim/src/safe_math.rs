@@ -300,7 +300,7 @@ mod safe_math_tests {
     }
 
     #[rstest]
-    #[case(i256("0"), i256("2"), true, false, i256("0"))]
+    #[case(I256::min_value(), i256("2"), true, false, i256("0"))]
     #[case(i256("10"), i256("2"), false, true, i256("8"))]
     fn test_safe_sub_i256(
         #[case] a: I256,
