@@ -1,9 +1,9 @@
 use crate::u256_num::u256_to_f64;
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
+use crate::protocol::errors::TradeSimulationError;
 use crate::safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256};
 use ethers::types::U256;
-use crate::protocol::errors::TradeSimulationError;
 
 const Q96: U256 = U256([0, 4294967296, 0, 0]);
 const RESOLUTION: U256 = U256([96, 0, 0, 0]);
@@ -17,7 +17,7 @@ fn maybe_flip_ratios(a: U256, b: U256) -> (U256, U256) {
     }
 }
 
-fn div_rounding_up(a: U256, b: U256) -> Result<U256, TradeSimulationError>{
+fn div_rounding_up(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
     let (result, rest) = a.div_mod(b);
     if rest > U256::zero() {
         let res = safe_add_u256(result, U256::one())?;
@@ -27,7 +27,12 @@ fn div_rounding_up(a: U256, b: U256) -> Result<U256, TradeSimulationError>{
     }
 }
 
-pub fn get_amount0_delta(a: U256, b: U256, liquidity: u128, round_up: bool) -> Result<U256, TradeSimulationError>{
+pub fn get_amount0_delta(
+    a: U256,
+    b: U256,
+    liquidity: u128,
+    round_up: bool,
+) -> Result<U256, TradeSimulationError> {
     let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
 
     let numerator1 = U256::from(liquidity) << RESOLUTION;
@@ -41,16 +46,30 @@ pub fn get_amount0_delta(a: U256, b: U256, liquidity: u128, round_up: bool) -> R
             sqrt_ratio_a,
         )
     } else {
-        safe_div_u256(mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?, sqrt_ratio_a)
+        safe_div_u256(
+            mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?,
+            sqrt_ratio_a,
+        )
     }
 }
 
-pub fn get_amount1_delta(a: U256, b: U256, liquidity: u128, round_up: bool)  -> Result<U256, TradeSimulationError> {
+pub fn get_amount1_delta(
+    a: U256,
+    b: U256,
+    liquidity: u128,
+    round_up: bool,
+) -> Result<U256, TradeSimulationError> {
     let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
     if round_up {
         mul_div_rounding_up(U256::from(liquidity), sqrt_ratio_b - sqrt_ratio_a, Q96)
     } else {
-        safe_div_u256(safe_mul_u256(U256::from(liquidity), safe_sub_u256(sqrt_ratio_b ,sqrt_ratio_a)?)?,  Q96)
+        safe_div_u256(
+            safe_mul_u256(
+                U256::from(liquidity),
+                safe_sub_u256(sqrt_ratio_b, sqrt_ratio_a)?,
+            )?,
+            Q96,
+        )
     }
 }
 
@@ -63,9 +82,13 @@ pub fn get_next_sqrt_price_from_input(
     assert!(sqrt_price > U256::zero());
 
     if zero_for_one {
-        Ok(get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, true)?)
+        Ok(get_next_sqrt_price_from_amount0_rounding_up(
+            sqrt_price, liquidity, amount_in, true,
+        )?)
     } else {
-        Ok(get_next_sqrt_price_from_amount1_rounding_down(sqrt_price, liquidity, amount_in, true)?)
+        Ok(get_next_sqrt_price_from_amount1_rounding_down(
+            sqrt_price, liquidity, amount_in, true,
+        )?)
     }
 }
 
@@ -79,9 +102,13 @@ pub fn get_next_sqrt_price_from_output(
     assert!(liquidity > 0);
 
     if zero_for_one {
-        Ok(get_next_sqrt_price_from_amount1_rounding_down(sqrt_price, liquidity, amount_in, false)?)
+        Ok(get_next_sqrt_price_from_amount1_rounding_down(
+            sqrt_price, liquidity, amount_in, false,
+        )?)
     } else {
-        Ok(get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, false)?)
+        Ok(get_next_sqrt_price_from_amount0_rounding_up(
+            sqrt_price, liquidity, amount_in, false,
+        )?)
     }
 }
 
@@ -102,7 +129,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
             // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
             let denominator = safe_add_u256(numerator1, product)?;
             if denominator >= numerator1 {
-                return mul_div_rounding_up(numerator1, sqrt_price, denominator);
+                mul_div_rounding_up(numerator1, sqrt_price, denominator)
             }
         }
         // Overflow: liquidity / (liquidity / sqrtPX96 +- amount)
@@ -115,7 +142,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
         assert!(safe_div_u256(product, amount)? == sqrt_price && numerator1 > product);
         let denominator = safe_sub_u256(numerator1, product)?;
         // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
-        return mul_div_rounding_up(numerator1, sqrt_price, denominator);
+        mul_div_rounding_up(numerator1, sqrt_price, denominator)
     }
 }
 
@@ -279,7 +306,8 @@ mod tests {
         #[case] zero_for_one: bool,
         #[case] exp: U256,
     ) {
-        let res = get_next_sqrt_price_from_input(sqrt_price, liquidity, amount_in, zero_for_one).unwrap();
+        let res =
+            get_next_sqrt_price_from_input(sqrt_price, liquidity, amount_in, zero_for_one).unwrap();
         assert_eq!(res, exp);
     }
 
@@ -305,7 +333,8 @@ mod tests {
         #[case] zero_for_one: bool,
         #[case] exp: U256,
     ) {
-        let res = get_next_sqrt_price_from_output(sqrt_price, liquidity, amount_in, zero_for_one).unwrap();
+        let res = get_next_sqrt_price_from_output(sqrt_price, liquidity, amount_in, zero_for_one)
+            .unwrap();
         assert_eq!(res, exp);
     }
 

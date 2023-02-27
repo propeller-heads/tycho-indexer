@@ -1,9 +1,7 @@
 use std::cmp;
 
-use ethers::types::U256;
-use crate::protocol::errors::TradeSimulationError;
-
 use super::tick_math;
+use ethers::types::U256;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
