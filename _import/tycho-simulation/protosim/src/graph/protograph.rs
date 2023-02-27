@@ -889,7 +889,7 @@ mod tests {
     fn atomic_arb_finder(p: Path) -> Option<SwapSequence> {
         let price = p.price();
         if price > 1.0 {
-            let amount_in = optimize_path(&p);
+            let amount_in = optimize_path(&p).ok()?;
             if amount_in > U256::zero() {
                 let (swaps, gas) = p.get_swaps(amount_in).unwrap();
                 let amount_out = swaps[swaps.len() - 1].amount_out();
@@ -903,7 +903,7 @@ mod tests {
         None
     }
 
-    fn optimize_path(p: &Path) -> U256 {
+    fn optimize_path(p: &Path) -> Result<U256, TradeSimulationError> {
         let sim_arb = |amount_in:I256| {
             let amount_in_unsigned = if amount_in > I256::zero() { amount_in.into_raw()} else {U256::zero()};
 
@@ -923,8 +923,8 @@ mod tests {
             let amount_out = I256::checked_from_sign_and_abs(Sign::Positive, amount_out_unsigned).unwrap();
             amount_out - amount_in
         };
-        let res = golden_section_search(sim_arb, U256::one(), U256::from(100_000), I256::one(), 100, false);
-        res.0
+        let res = golden_section_search(sim_arb, U256::one(), U256::from(100_000), I256::one(), 100, false)?;
+        Ok(res.0)
     }
 
     #[rstest]
