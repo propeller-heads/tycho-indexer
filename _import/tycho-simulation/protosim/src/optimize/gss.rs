@@ -53,7 +53,7 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
     let mut xc;
 
     if honour_bounds {
-        xc = safe_add_i256(min_bound , mul_div(invphi2_i256, h, DENOM)?)?;
+        xc = safe_add_i256(min_bound, mul_div(invphi2_i256, h, DENOM)?)?;
         yc = f(xc);
     } else {
         let brackets = bracket(&f, min_bound, max_bound);
@@ -104,7 +104,8 @@ mod tests {
         let max_iter = 100;
         let honour_bounds = true;
 
-        let res = golden_section_search(func, min_bound, max_bound, tol, max_iter, honour_bounds);
+        let res = golden_section_search(func, min_bound, max_bound, tol, max_iter, honour_bounds)
+            .unwrap();
 
         assert!(res.0 >= U256::from(3) && res.0 <= U256::from(7));
         assert!(res.1 >= U256::from(3) && res.1 <= U256::from(7));
@@ -129,7 +130,8 @@ mod tests {
             tol,
             max_iter,
             honour_bounds,
-        );
+        )
+        .unwrap();
 
         assert!(res.0 >= U256::from(0) && res.0 <= U256::from(5));
         assert!(res.1 >= U256::from(0) && res.1 <= U256::from(5));
@@ -147,7 +149,8 @@ mod tests {
             I256::from(1u128),
             10000,
             true,
-        );
+        )
+        .unwrap();
 
         assert!(res.0 >= U256::from(45) && res.0 <= U256::from(55));
         assert!(res.1 >= U256::from(45) && res.1 <= U256::from(55));
@@ -164,7 +167,8 @@ mod tests {
             I256::from(1u128),
             100,
             false,
-        );
+        )
+        .unwrap();
         assert!(res.0 >= U256::from(0) && res.0 <= U256::from(10));
         assert!(res.1 >= U256::from(0) && res.1 <= U256::from(10));
     }
