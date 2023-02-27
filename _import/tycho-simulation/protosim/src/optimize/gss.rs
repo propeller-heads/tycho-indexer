@@ -336,7 +336,7 @@ mod bracket_tests {
     }
 }
 
-pub fn mul_div(a: I256, b: I256, denom: U512) -> I256 {
+pub fn mul_div(a: I256, b: I256, denom: U512) -> Result<I256, TradeSimulationError> {
     let a_sign = a.sign();
     let b_sign = b.sign();
 
@@ -352,17 +352,17 @@ pub fn mul_div(a: I256, b: I256, denom: U512) -> I256 {
         U512::from_dec_str(&b.to_string()).unwrap()
     };
 
-    let product = a_u512 * b_u512;
+    let product = safe_mul_u512(a_u512, b_u512)?;
 
-    let result: U256 = (product / denom)
+    let result: U256 = safe_div_u512(product, denom)?
         .try_into()
         .expect("Integer Overflow when casting from U512 to U256");
     let mut new_sign = Sign::Positive;
     if a_sign != b_sign {
         new_sign = Sign::Negative;
     }
-    I256::checked_from_sign_and_abs(new_sign, result)
-        .expect("Integer Overflow when casting from U256 to I256")
+    Ok(I256::checked_from_sign_and_abs(new_sign, result)
+        .expect("Integer Overflow when casting from U256 to I256"))
 }
 
 #[cfg(test)]
@@ -373,7 +373,7 @@ mod mul_div_tests {
     fn test_mul_div() {
         let a = I256::from(2147483648_i64); // 0.5 * 2 **32
         let b = I256::from(50);
-        let res = mul_div(a, b, DENOM);
+        let res = mul_div(a, b, DENOM).unwrap();
 
         assert!(res == I256::from(25));
         assert!(res.sign() == Sign::Positive);
@@ -382,7 +382,7 @@ mod mul_div_tests {
     fn test_mul_div_negativ_mul() {
         let a = I256::from(-2147483648_i64); // 0.5 * 2 **32
         let b = I256::from(50);
-        let res = mul_div(a, b, DENOM);
+        let res = mul_div(a, b, DENOM).unwrap();
 
         assert!(res == I256::from(-25));
         assert!(res.sign() == Sign::Negative);
@@ -392,7 +392,7 @@ mod mul_div_tests {
     fn test_mul_div_both_negativ_mul() {
         let a = I256::from(-2147483648_i64); // 0.5 * 2 **32
         let b = I256::from(-50);
-        let res = mul_div(a, b, DENOM);
+        let res = mul_div(a, b, DENOM).unwrap();
 
         assert!(res == I256::from(25));
         assert!(res.sign() == Sign::Positive);
