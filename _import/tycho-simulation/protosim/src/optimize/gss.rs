@@ -1,8 +1,10 @@
 //! Golden Section Search
+use crate::protocol::errors::TradeSimulationError;
+use crate::safe_math::{
+    safe_add_i256, safe_div_i256, safe_div_u512, safe_mul_i256, safe_mul_u512, safe_sub_i256,
+};
 use ethers::types::{Sign, I256, U256, U512};
 use std::mem::swap;
-use crate::protocol::errors::TradeSimulationError;
-use crate::safe_math::{safe_add_i256, safe_div_i256, safe_div_u512, safe_mul_i256, safe_mul_u512, safe_sub_i256};
 
 const INVPHI: i64 = 2654435769; // (math.sqrt(5) - 1) / 2 * 2 ** 32
 const INVPHI2: i64 = 1640531526; // (3 - math.sqrt(5)) * 2 ** 32
