@@ -1,6 +1,12 @@
+//! Safe Math
+//! This module contains basic functions to perform arithmetic operations on
+//! numerical types of the ethers crate and preventing them from overflowing.
+//! Should an operation cause an overflow a result containing TradeSimulationError
+//! will be returned.
+//! Functions for the types I256, U256, U512 are available.
+
 use crate::protocol::errors::{TradeSimulationError, TradeSimulationErrorKind};
 use ethers::types::{I256, U256, U512};
-
 
 pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
     let res = a.checked_mul(b);
