@@ -1,8 +1,7 @@
 use std::cmp;
 
-use ethers::types::U256;
-
 use super::tick_math;
+use ethers::types::U256;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
@@ -15,7 +14,7 @@ impl TickInfo {
     pub fn new(index: i32, net_liquidity: i128) -> Self {
         // Note: using this method here returns slightly different values
         //  compared to the Python implementation, likely more correct
-        let sqrt_price = tick_math::get_sqrt_ratio_at_tick(index);
+        let sqrt_price = tick_math::get_sqrt_ratio_at_tick(index).unwrap();
         TickInfo {
             index,
             net_liquidity,
