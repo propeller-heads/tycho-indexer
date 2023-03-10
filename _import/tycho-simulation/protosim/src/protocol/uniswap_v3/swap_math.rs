@@ -1,3 +1,5 @@
+use crate::protocol::errors::TradeSimulationError;
+use crate::safe_math::safe_sub_u256;
 use ethers::types::{I256, U256};
 
 use super::{
@@ -11,7 +13,7 @@ pub fn compute_swap_step(
     liquidity: u128,
     amount_remaining: I256,
     fee_pips: u32,
-) -> (U256, U256, U256, U256) {
+) -> Result<(U256, U256, U256, U256), TradeSimulationError> {
     let zero_for_one = sqrt_ratio_current >= sqrt_ratio_target;
     let exact_in = amount_remaining >= I256::zero();
     let sqrt_ratio_next: U256;
@@ -23,21 +25,21 @@ pub fn compute_swap_step(
             amount_remaining.into_raw(),
             U256::from(1_000_000 - fee_pips),
             U256::from(1_000_000),
-        );
+        )?;
         amount_in = if zero_for_one {
             sqrt_price_math::get_amount0_delta(
                 sqrt_ratio_target,
                 sqrt_ratio_current,
                 liquidity,
                 true,
-            )
+            )?
         } else {
             sqrt_price_math::get_amount1_delta(
                 sqrt_ratio_current,
                 sqrt_ratio_target,
                 liquidity,
                 true,
-            )
+            )?
         };
         if amount_remaining_less_fee >= amount_in {
             sqrt_ratio_next = sqrt_ratio_target
@@ -47,7 +49,7 @@ pub fn compute_swap_step(
                 liquidity,
                 amount_remaining_less_fee,
                 zero_for_one,
-            )
+            )?
         }
     } else {
         amount_out = if zero_for_one {
@@ -56,14 +58,14 @@ pub fn compute_swap_step(
                 sqrt_ratio_current,
                 liquidity,
                 false,
-            )
+            )?
         } else {
             sqrt_price_math::get_amount0_delta(
                 sqrt_ratio_current,
                 sqrt_ratio_target,
                 liquidity,
                 false,
-            )
+            )?
         };
         if amount_remaining.abs().into_raw() > amount_out {
             sqrt_ratio_next = sqrt_ratio_target;
@@ -73,7 +75,7 @@ pub fn compute_swap_step(
                 liquidity,
                 amount_remaining.abs().into_raw(),
                 zero_for_one,
-            );
+            )?;
         }
     }
 
@@ -83,7 +85,12 @@ pub fn compute_swap_step(
         amount_in = if max && exact_in {
             amount_in
         } else {
-            sqrt_price_math::get_amount0_delta(sqrt_ratio_next, sqrt_ratio_current, liquidity, true)
+            sqrt_price_math::get_amount0_delta(
+                sqrt_ratio_next,
+                sqrt_ratio_current,
+                liquidity,
+                true,
+            )?
         };
         amount_out = if max && !exact_in {
             amount_out
@@ -93,13 +100,18 @@ pub fn compute_swap_step(
                 sqrt_ratio_current,
                 liquidity,
                 false,
-            )
+            )?
         }
     } else {
         amount_in = if max && exact_in {
             amount_in
         } else {
-            sqrt_price_math::get_amount1_delta(sqrt_ratio_current, sqrt_ratio_next, liquidity, true)
+            sqrt_price_math::get_amount1_delta(
+                sqrt_ratio_current,
+                sqrt_ratio_next,
+                liquidity,
+                true,
+            )?
         };
         amount_out = if max && !exact_in {
             amount_out
@@ -109,7 +121,7 @@ pub fn compute_swap_step(
                 sqrt_ratio_next,
                 liquidity,
                 false,
-            )
+            )?
         };
     }
 
@@ -118,15 +130,15 @@ pub fn compute_swap_step(
     }
 
     let fee_amount = if exact_in && sqrt_ratio_next != sqrt_ratio_target {
-        amount_remaining.abs().into_raw() - amount_in
+        safe_sub_u256(amount_remaining.abs().into_raw(), amount_in)?
     } else {
         mul_div_rounding_up(
             amount_in,
             U256::from(fee_pips),
             U256::from(1_000_000 - fee_pips),
-        )
+        )?
     };
-    (sqrt_ratio_next, amount_in, amount_out, fee_amount)
+    Ok((sqrt_ratio_next, amount_in, amount_out, fee_amount))
 }
 
 #[cfg(test)]
@@ -223,7 +235,8 @@ mod tests {
                 case.liquidity,
                 case.remaining,
                 case.fee as u32,
-            );
+            )
+            .unwrap();
 
             assert_eq!(res, case.exp);
         }

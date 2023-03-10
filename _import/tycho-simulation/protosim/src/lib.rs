@@ -19,4 +19,5 @@ pub mod graph;
 pub mod models;
 pub mod optimize;
 pub mod protocol;
+pub mod safe_math;
 mod u256_num;
