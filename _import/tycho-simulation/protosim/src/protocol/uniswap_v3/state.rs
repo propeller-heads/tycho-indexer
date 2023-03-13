@@ -195,12 +195,12 @@ impl UniswapV3State {
             next_tick = next_tick.clamp(tick_math::MIN_TICK, tick_math::MAX_TICK);
 
             let sqrt_price_next = tick_math::get_sqrt_ratio_at_tick(next_tick)?;
-                         let (sqrt_price, amount_in, amount_out, fee_amount) = if let Ok((sqrt_price, amount_in, amount_out, fee_amount)) = swap_math::compute_swap_step(
+            let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
                 state.liquidity,
                 state.amount_remaining,
-                self.fee as u32,) { (sqrt_price, amount_in, amount_out, fee_amount) } else { todo!() };
+                self.fee as u32,)?;
             state.sqrt_price = sqrt_price;
             let sqrt_price_next = sqrt_price_next;
 
