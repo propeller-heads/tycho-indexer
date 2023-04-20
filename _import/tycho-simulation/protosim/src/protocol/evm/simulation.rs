@@ -1,16 +1,11 @@
-use std::{error::Error, str::FromStr, sync::Arc};
-
 use ethers::{
-    abi::parse_abi,
-    prelude::BaseContract,
-    providers::{Http, Middleware, Provider},
+    providers::Middleware,
     types::{Bytes, H160, U256},
 };
 use revm::{
     db::CacheDB,
-    interpreter::analysis::to_analysed,
     primitives::{Bytecode, EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
-    DatabaseCommit, EVM,
+    EVM,
 };
 
 use super::storage;
@@ -71,7 +66,7 @@ impl<M: Middleware + Clone> SimulationEngine<M> {
         self.vm.env.tx.transact_to = params.revm_to();
         self.vm.env.tx.data = params.revm_data();
         self.vm.env.tx.value = params.revm_value();
-        let ref_tx = self.vm.transact_ref()?;
+        let ref_tx = self.vm.transact()?;
         Ok(ref_tx.result)
     }
 }
@@ -111,9 +106,16 @@ impl SimulationParameters {
 mod tests {
     use std::time::Instant;
 
-    use revm::db::DatabaseRef;
+    use std::{error::Error, str::FromStr, sync::Arc};
 
     use super::*;
+    use ethers::{
+        abi::parse_abi,
+        prelude::BaseContract,
+        providers::{Http, Provider},
+        types::{H160, U256},
+    };
+    use revm::{db::CacheDB, primitives::ExecutionResult, EVM};
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
@@ -126,7 +128,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let mut state = CacheDB::new(storage::EthRpcDB {
+        let state = CacheDB::new(storage::EthRpcDB {
             client,
             runtime: Some(Arc::new(runtime)),
         });
@@ -147,25 +149,6 @@ mod tests {
                 (U256::from(100_000_000), vec![usdc_addr, weth_addr]),
             )
             .unwrap();
-
-        // setup our state so we don't do any requests while simulating
-        // We will need to reimplement CacheDB smarter so this data is stored
-        // whenever there is a cache miss.
-        let caller_address = B160(caller.0);
-        let caller_info = state.basic(caller_address).unwrap().unwrap();
-        state.insert_account_info(caller_address, caller_info);
-
-        let router_address = B160(router_addr.0);
-        let router_info = state.basic(router_address).unwrap().unwrap();
-        state.insert_account_info(router_address, router_info);
-
-        let pair_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let pair_info = state.basic(pair_address).unwrap().unwrap();
-        state.insert_account_info(pair_address, pair_info);
-        let reserves = state.storage(pair_address, rU256::from(8)).unwrap();
-        state
-            .insert_account_storage(pair_address, rU256::from(8), reserves)
-            .expect("Failed inserting reserves into state!");
 
         let sim_params = SimulationParameters {
             caller,
