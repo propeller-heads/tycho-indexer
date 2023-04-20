@@ -1,18 +1,14 @@
-use ethers::types::H256;
-
-use revm::interpreter::analysis::to_analysed;
-
-use revm::db::DatabaseRef;
-
 use std::sync::Arc;
 
-use ethers::providers::Middleware;
-
-use ethers::types::H160;
-
-use ethers::types::U256;
-
-use revm::primitives::{hash_map, AccountInfo, Bytecode, B160, B256, U256 as rU256};
+use ethers::{
+    providers::Middleware,
+    types::{H160, H256, U256},
+};
+use revm::{
+    db::DatabaseRef,
+    interpreter::analysis::to_analysed,
+    primitives::{hash_map, AccountInfo, Bytecode, B160, B256, U256 as rU256},
+};
 
 #[derive(Clone)]
 pub(crate) struct SlotInfo {
