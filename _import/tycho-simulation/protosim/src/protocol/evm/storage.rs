@@ -11,23 +11,23 @@ use revm::{
 };
 
 #[derive(Clone)]
-pub(crate) struct SlotInfo {
-    pub(crate) mutable: bool,
+pub struct SlotInfo {
+    pub mutable: bool,
 }
 
-pub(crate) type ContractStorageLayout = hash_map::HashMap<U256, SlotInfo>;
+pub type ContractStorageLayout = hash_map::HashMap<U256, SlotInfo>;
 
-pub(crate) type ContractStorageUpdate = hash_map::HashMap<H160, hash_map::HashMap<rU256, rU256>>;
+pub type ContractStorageUpdate = hash_map::HashMap<H160, hash_map::HashMap<rU256, rU256>>;
 
 #[derive(Clone)]
-pub(crate) struct EthRpcDB<M: Middleware + Clone> {
-    pub(crate) client: Arc<M>,
-    pub(crate) runtime: Option<Arc<tokio::runtime::Runtime>>,
+pub struct EthRpcDB<M: Middleware + Clone> {
+    pub client: Arc<M>,
+    pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
 impl<M: Middleware + Clone> EthRpcDB<M> {
     /// internal utility function to call tokio feature and wait for output
-    pub(crate) fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
+    pub fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
         // If we get here and have to block the current thread, we really
         // messed up indexing / filling the cache. In that case this will save us
         // at the price of a very high time penalty.
