@@ -10,11 +10,9 @@ use revm::{
 
 use super::storage;
 
-type SimulationDB<M> = CacheDB<storage::EthRpcDB<M>>;
-
 struct SimulationEngine<M: Middleware + Clone> {
-    state: SimulationDB<M>,
-    vm: EVM<SimulationDB<M>>,
+    state: storage::SharedSimulationDB<M>,
+    vm: EVM<storage::SharedSimulationDB<M>>,
 }
 
 impl<M: Middleware + Clone> SimulationEngine<M> {
@@ -29,16 +27,10 @@ impl<M: Middleware + Clone> SimulationEngine<M> {
         Ok(())
     }
 
-    pub fn update_code(&mut self, address: H160, code: Option<Bytecode>) {
+    pub fn update_code(&mut self, address: H160, code: Option<Bytecode>) -> Option<Bytecode> {
         // TODO: handle all edge cases
         let raddr = B160(address.0);
-        let db_info = self.state.accounts.get_mut(&raddr).unwrap();
-        let acc_info = &mut db_info.info;
-        acc_info.code = code;
-    }
-
-    pub fn prepare_state(&mut self) {
-        self.vm.database(self.state.clone());
+        self.state.update_code(raddr, code)
     }
 
     pub fn simulate(
@@ -61,7 +53,7 @@ impl<M: Middleware + Clone> SimulationEngine<M> {
         //      - Risk of deadlocks
         //      - Sync overhead of Arc and Mutex
         //      - Handling that amount of real life code might be difficult
-
+        self.vm.database(self.state.clone());
         self.vm.env.tx.caller = params.revm_caller();
         self.vm.env.tx.transact_to = params.revm_to();
         self.vm.env.tx.data = params.revm_data();
@@ -128,7 +120,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = CacheDB::new(storage::EthRpcDB {
+        let state = storage::SharedSimulationDB::new(storage::EthRpcDB {
             client,
             runtime: Some(Arc::new(runtime)),
         });
@@ -160,7 +152,6 @@ mod tests {
             state,
             vm: EVM::new(),
         };
-        eng.prepare_state();
 
         let computation_result = eng
             .simulate(&sim_params)

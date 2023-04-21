@@ -1,13 +1,18 @@
-use std::sync::Arc;
+use std::{
+    ops::{Deref, DerefMut},
+    sync::{Arc, Mutex},
+};
 
 use ethers::{
     providers::Middleware,
     types::{H160, H256, U256},
 };
+
 use revm::{
-    db::DatabaseRef,
+    db::{CacheDB, DatabaseRef},
     interpreter::analysis::to_analysed,
-    primitives::{hash_map, AccountInfo, Bytecode, B160, B256, U256 as rU256},
+    primitives::{hash_map, AccountInfo, Bytecode, HashMap, B160, B256, U256 as rU256},
+    Database,
 };
 
 #[derive(Clone)]
@@ -19,6 +24,70 @@ pub type ContractStorageLayout = hash_map::HashMap<U256, SlotInfo>;
 
 pub type ContractStorageUpdate = hash_map::HashMap<H160, hash_map::HashMap<rU256, rU256>>;
 
+pub type SimulationDB<M> = CacheDB<EthRpcDB<M>>;
+
+#[derive(Clone)]
+pub struct SharedSimulationDB<M>
+where
+    M: Middleware + Clone,
+{
+    db: Arc<Mutex<SimulationDB<M>>>,
+}
+
+impl<M> SharedSimulationDB<M>
+where
+    M: Middleware + Clone,
+{
+    pub fn new(db: EthRpcDB<M>) -> Self {
+        Self {
+            db: Arc::new(Mutex::new(CacheDB::new(db))),
+        }
+    }
+
+    pub fn replace_account_storage(
+        &mut self,
+        address: B160,
+        storage: HashMap<rU256, rU256>,
+    ) -> Result<(), M::Error> {
+        let mut db_guard = self.db.lock().unwrap();
+        db_guard.replace_account_storage(address, storage)
+    }
+
+    pub fn update_code(&mut self, address: B160, code: Option<Bytecode>) -> Option<Bytecode> {
+        let mut db_guard = self.db.lock().unwrap();
+        let db_info = db_guard.accounts.get_mut(&address).unwrap();
+        let acc_info = &mut db_info.info;
+        let old = acc_info.code.clone();
+        acc_info.code = code;
+        old
+    }
+}
+
+impl<M: Middleware + Clone> Database for SharedSimulationDB<M> {
+    type Error = M::Error;
+
+    fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
+        let mut db_guard = self.db.lock().unwrap();
+        Database::basic(db_guard.deref_mut(), address)
+    }
+
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        let mut db_guard = self.db.lock().unwrap();
+        Database::code_by_hash(db_guard.deref_mut(), code_hash)
+    }
+
+    fn storage(&mut self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
+        let mut db_guard = self.db.lock().unwrap();
+        Database::storage(db_guard.deref_mut(), address, index)
+    }
+
+    fn block_hash(&mut self, number: rU256) -> Result<B256, Self::Error> {
+        let mut db_guard = self.db.lock().unwrap();
+        Database::block_hash(db_guard.deref_mut(), number)
+    }
+}
+
+// If we use SharedDB we might not need the clone trait anymore
 #[derive(Clone)]
 pub struct EthRpcDB<M: Middleware + Clone> {
     pub client: Arc<M>,
