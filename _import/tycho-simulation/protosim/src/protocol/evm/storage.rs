@@ -26,22 +26,19 @@ pub type ContractStorageUpdate = hash_map::HashMap<H160, hash_map::HashMap<rU256
 
 pub type SimulationDB<M> = CacheDB<EthRpcDB<M>>;
 
-#[derive(Clone)]
-pub struct SharedSimulationDB<M>
+pub struct SharedSimulationDB<'a, M>
 where
     M: Middleware + Clone,
 {
-    db: Arc<Mutex<SimulationDB<M>>>,
+    db: &'a mut SimulationDB<M>,
 }
 
-impl<M> SharedSimulationDB<M>
+impl<'a, M> SharedSimulationDB<'a, M>
 where
     M: Middleware + Clone,
 {
-    pub fn new(db: EthRpcDB<M>) -> Self {
-        Self {
-            db: Arc::new(Mutex::new(CacheDB::new(db))),
-        }
+    pub fn new(db: &'a mut SimulationDB<M>) -> Self {
+        Self { db }
     }
 
     pub fn replace_account_storage(
@@ -49,13 +46,11 @@ where
         address: B160,
         storage: HashMap<rU256, rU256>,
     ) -> Result<(), M::Error> {
-        let mut db_guard = self.db.lock().unwrap();
-        db_guard.replace_account_storage(address, storage)
+        self.db.replace_account_storage(address, storage)
     }
 
     pub fn update_code(&mut self, address: B160, code: Option<Bytecode>) -> Option<Bytecode> {
-        let mut db_guard = self.db.lock().unwrap();
-        let db_info = db_guard.accounts.get_mut(&address).unwrap();
+        let db_info = self.db.accounts.get_mut(&address).unwrap();
         let acc_info = &mut db_info.info;
         let old = acc_info.code.clone();
         acc_info.code = code;
@@ -63,27 +58,23 @@ where
     }
 }
 
-impl<M: Middleware + Clone> Database for SharedSimulationDB<M> {
+impl<'a, M: Middleware + Clone> Database for SharedSimulationDB<'a, M> {
     type Error = M::Error;
 
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        let mut db_guard = self.db.lock().unwrap();
-        Database::basic(db_guard.deref_mut(), address)
+        Database::basic(self.db, address)
     }
 
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let mut db_guard = self.db.lock().unwrap();
-        Database::code_by_hash(db_guard.deref_mut(), code_hash)
+        Database::code_by_hash(self.db, code_hash)
     }
 
     fn storage(&mut self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        let mut db_guard = self.db.lock().unwrap();
-        Database::storage(db_guard.deref_mut(), address, index)
+        Database::storage(self.db, address, index)
     }
 
     fn block_hash(&mut self, number: rU256) -> Result<B256, Self::Error> {
-        let mut db_guard = self.db.lock().unwrap();
-        Database::block_hash(db_guard.deref_mut(), number)
+        Database::block_hash(self.db, number)
     }
 }
 

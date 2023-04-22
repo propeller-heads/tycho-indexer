@@ -3,16 +3,14 @@ use ethers::{
     types::{Bytes, H160, U256},
 };
 use revm::{
-    db::CacheDB,
-    primitives::{Bytecode, EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
+    primitives::{Bytecode, EVMError, Env, ExecutionResult, TransactTo, B160, U256 as rU256},
     EVM,
 };
 
 use super::storage;
 
 struct SimulationEngine<M: Middleware + Clone> {
-    state: storage::SharedSimulationDB<M>,
-    vm: EVM<storage::SharedSimulationDB<M>>,
+    pub state: storage::SimulationDB<M>,
 }
 
 impl<M: Middleware + Clone> SimulationEngine<M> {
@@ -30,35 +28,29 @@ impl<M: Middleware + Clone> SimulationEngine<M> {
     pub fn update_code(&mut self, address: H160, code: Option<Bytecode>) -> Option<Bytecode> {
         // TODO: handle all edge cases
         let raddr = B160(address.0);
-        self.state.update_code(raddr, code)
+        let mut db_ref = storage::SharedSimulationDB::new(&mut self.state);
+        db_ref.update_code(raddr, code)
     }
 
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
     ) -> Result<ExecutionResult, EVMError<M::Error>> {
-        // PERF: currently this will require a lot of cloning due to EVM.database(db: DB) consuming the DB
-        //  ideally we could try and pass reference object into it which prevents concurrent writes Mutex<Arc<DB>>
-        //  copying data could be limited by having a single exec engine per pool state although that might be
-        //  quite limiting in case we want to simulate token transfers
-        //  although to simulate token logic we could use some vanille code that simulates a well behaved transfer.
-        //  This code is basically provided as a precompile and it's address can be adjusted to the pools tokens.
-        //  According to chatGPT we could define a wrapper db that will hold an Arc<Mutex<DB>> and then implement
-        //  the trait on that wrapper type this way we have single db for all contracts we need to simulate
-        //  (protocols & tokens).
-        //  The benefits are:
-        //      - Close to real life sim will let us handle complex fee on transfer tokens
-        //      - Exact gas estimations
-        //  The drawbacks are:
-        //      - Risk of deadlocks
-        //      - Sync overhead of Arc and Mutex
-        //      - Handling that amount of real life code might be difficult
-        self.vm.database(self.state.clone());
-        self.vm.env.tx.caller = params.revm_caller();
-        self.vm.env.tx.transact_to = params.revm_to();
-        self.vm.env.tx.data = params.revm_data();
-        self.vm.env.tx.value = params.revm_value();
-        let ref_tx = self.vm.transact()?;
+        // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
+        // concurrentl save shared reference and write locked object. Note that conurrently
+        // calling this method is therefore not possible.
+        // There is no need to keep an EVM on the struct as it only holds the environment and the
+        // db, the db is simply a reference wrapper. To avoid lifetimes leaking we don't let the evm
+        // struct outlive this scope.
+        let mut vm = EVM::new();
+
+        let db_ref = storage::SharedSimulationDB::new(&mut self.state);
+        vm.database(db_ref);
+        vm.env.tx.caller = params.revm_caller();
+        vm.env.tx.transact_to = params.revm_to();
+        vm.env.tx.data = params.revm_data();
+        vm.env.tx.value = params.revm_value();
+        let ref_tx = vm.transact()?;
         Ok(ref_tx.result)
     }
 }
@@ -89,10 +81,19 @@ impl SimulationParameters {
 }
 
 // next steps:
-//  - implement the DatabaseRef
-//  - move things to separate files
-//  - try to simulate a v2 pool with the engine
-//  -
+//  - convienient way to set up storage
+//      - Way to specify the same code for multiple addresses
+//      - Should potentially allow to mock e.g. token contracts
+//      - Allow direct access to underlying storage providing a
+//          data type this will be much faster e.g. for spot price
+//          calculations then actually querying the storage with evm bytecode.
+//  - add ability to simulate with state overrides
+//    - we will need a way to apply state overrides temporarily to the database
+//    - Ideally without cloning the entire state as this might be potentially huge
+//    - So we should just record what was changed, added or removed
+//    - The overrides should be a parameter to the simulation as the DB is global
+//          and holds the state for all swaps, we wouldn't want it to micromanage
+//          state overrides of other dependencies.
 
 #[cfg(test)]
 mod tests {
@@ -120,7 +121,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = storage::SharedSimulationDB::new(storage::EthRpcDB {
+        let state = storage::SimulationDB::new(storage::EthRpcDB {
             client,
             runtime: Some(Arc::new(runtime)),
         });
@@ -148,10 +149,7 @@ mod tests {
             data: encoded,
             value: U256::zero(),
         };
-        let mut eng = SimulationEngine {
-            state,
-            vm: EVM::new(),
-        };
+        let mut eng = SimulationEngine { state };
 
         let computation_result = eng
             .simulate(&sim_params)
