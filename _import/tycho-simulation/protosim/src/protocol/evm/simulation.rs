@@ -1,37 +1,30 @@
+use std::collections::HashMap;
+
 use ethers::{
     providers::Middleware,
-    types::{Bytes, H160, U256},
+    types::{Bytes, H160, H256, U256},
 };
 use revm::{
-    primitives::{Bytecode, EVMError, Env, ExecutionResult, TransactTo, B160, U256 as rU256},
+    interpreter::analysis::to_analysed,
+    primitives::{
+        AccountInfo, Bytecode, Bytes as rBytes, EVMError, ExecutionResult, TransactTo, B160, B256,
+        U256 as rU256,
+    },
     EVM,
 };
 
 use super::storage;
+
+struct SimulationResult {
+    result: ExecutionResult,
+}
 
 struct SimulationEngine<M: Middleware + Clone> {
     pub state: storage::SimulationDB<M>,
 }
 
 impl<M: Middleware + Clone> SimulationEngine<M> {
-    pub fn update_contract_storage(
-        &mut self,
-        updates: storage::ContractStorageUpdate,
-    ) -> Result<(), M::Error> {
-        for (address, storage_update) in updates {
-            self.state
-                .replace_account_storage(B160(address.0), storage_update)?;
-        }
-        Ok(())
-    }
-
-    pub fn update_code(&mut self, address: H160, code: Option<Bytecode>) -> Option<Bytecode> {
-        // TODO: handle all edge cases
-        let raddr = B160(address.0);
-        let mut db_ref = storage::SharedSimulationDB::new(&mut self.state);
-        db_ref.update_code(raddr, code)
-    }
-
+    // TODO: return StateUpdate and Bytes
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
@@ -80,21 +73,6 @@ impl SimulationParameters {
     }
 }
 
-// next steps:
-//  - convienient way to set up storage
-//      - Way to specify the same code for multiple addresses
-//      - Should potentially allow to mock e.g. token contracts
-//      - Allow direct access to underlying storage providing a
-//          data type this will be much faster e.g. for spot price
-//          calculations then actually querying the storage with evm bytecode.
-//  - add ability to simulate with state overrides
-//    - we will need a way to apply state overrides temporarily to the database
-//    - Ideally without cloning the entire state as this might be potentially huge
-//    - So we should just record what was changed, added or removed
-//    - The overrides should be a parameter to the simulation as the DB is global
-//          and holds the state for all swaps, we wouldn't want it to micromanage
-//          state overrides of other dependencies.
-
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
@@ -124,6 +102,7 @@ mod tests {
         let state = storage::SimulationDB::new(storage::EthRpcDB {
             client,
             runtime: Some(Arc::new(runtime)),
+            block: None,
         });
 
         // any random address will work
