@@ -1,25 +1,15 @@
-use std::collections::HashMap;
-
 use ethers::{
     providers::Middleware,
-    types::{Bytes, H160, H256, U256},
+    types::{Bytes, H160, U256},
 };
 use revm::{
-    interpreter::analysis::to_analysed,
-    primitives::{
-        AccountInfo, Bytecode, Bytes as rBytes, EVMError, ExecutionResult, TransactTo, B160, B256,
-        U256 as rU256,
-    },
+    primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
     EVM,
 };
 
 use super::storage;
 
-struct SimulationResult {
-    result: ExecutionResult,
-}
-
-struct SimulationEngine<M: Middleware + Clone> {
+pub struct SimulationEngine<M: Middleware + Clone> {
     pub state: storage::SimulationDB<M>,
 }
 
