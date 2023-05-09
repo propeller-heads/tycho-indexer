@@ -39,10 +39,10 @@ impl<M: Middleware + Clone> SimulationEngine<M> {
 }
 
 pub struct SimulationParameters {
-    caller: H160,
-    to: H160,
-    data: Bytes,
-    value: U256,
+    pub caller: H160,
+    pub to: H160,
+    pub data: Bytes,
+    pub value: U256,
 }
 
 impl SimulationParameters {

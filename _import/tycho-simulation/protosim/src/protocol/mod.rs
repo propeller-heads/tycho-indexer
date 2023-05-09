@@ -1,4 +1,5 @@
 //! Supported Swap Protocols
+pub mod dodo;
 pub mod errors;
 pub mod events;
 pub mod models;
