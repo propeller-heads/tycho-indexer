@@ -16,7 +16,7 @@ use crate::{
     u256_num::u256_to_f64,
 };
 
-pub struct DodoPoolState<M: Middleware + Clone> {
+pub struct DodoPoolState<DB: Database> {
     pool_address: H160,
     pool_abi: BaseContract,
     // TODO: Not sure how DODO handles these... so I am adding it here for no to not have to query every time
@@ -24,11 +24,11 @@ pub struct DodoPoolState<M: Middleware + Clone> {
     helper_address: H160,
     helper_abi: BaseContract,
     // TODO: it would be nicer to move all the caching behind a RefCell instead of exposing it to the user
-    engine: RefCell<SimulationEngine<M>>,
+    engine: RefCell<SimulationEngine<DB>>,
     spot_price_cache: RefCell<Option<(f64, f64)>>,
 }
 
-impl<M: Middleware + Clone> DodoPoolState<M> {
+impl<DB: Database> DodoPoolState<DB> {
     fn simulate_spot_prices(
         &self,
         base: &crate::models::ERC20Token,
@@ -42,10 +42,8 @@ impl<M: Middleware + Clone> DodoPoolState<M> {
             value: U256::zero(),
         };
         let mut engine = self.engine.borrow_mut();
-        let res = engine
-            .simulate(&params)
-            .expect("DODO: Spot price simulation while requesting data from node!");
-        let spot_price_u256 = match res {
+        let simulation_result = engine.simulate(&params).unwrap_or_else(|_| panic!("Error in simulation"));
+        let spot_price_u256 = match simulation_result {
             ExecutionResult::Success {
                 reason: _,
                 gas_used: _,
@@ -70,7 +68,7 @@ impl<M: Middleware + Clone> DodoPoolState<M> {
     }
 }
 
-impl<M: Middleware + Clone> ProtocolSim for DodoPoolState<M> {
+impl<DB: Database> ProtocolSim for DodoPoolState<DB> {
     /// Dodo fees
     ///
     ///  Fee rates are in slot 8 and 9 they are accessed directly.
@@ -79,12 +77,12 @@ impl<M: Middleware + Clone> ProtocolSim for DodoPoolState<M> {
         let lp_fee = engine
             .state
             .storage(B160(self.pool_address.0), rU256::from(8))
-            .expect("DODO: Error while requesting data from node!");
-        let mantainer_fee = engine
+            .unwrap_or_else(|_| panic!("Error while requesting data from node."));
+        let maintainer_fee = engine
             .state
             .storage(B160(self.pool_address.0), rU256::from(8))
-            .expect("DODO: Error while requesting data from node!");
-        let total_fee = U256::from_little_endian((lp_fee + mantainer_fee).as_le_slice());
+            .unwrap_or_else(|_| panic!("Error while requesting data from node."));
+        let total_fee = U256::from_little_endian((lp_fee + maintainer_fee).as_le_slice());
         u256_to_f64(total_fee) / 1e18f64
     }
 
@@ -134,10 +132,8 @@ impl<M: Middleware + Clone> ProtocolSim for DodoPoolState<M> {
             value: U256::zero(),
         };
         let mut engine = self.engine.borrow_mut();
-        let (amount_out, gas) = match engine
-            .simulate(&params)
-            .expect("DODO: get_amount_out simulation failed while requesting data from node")
-        {
+        let simulation_result = engine.simulate(&params).unwrap_or_else(|_| panic!("Error in simulation."));
+        let (amount_out, gas) = match simulation_result {
             ExecutionResult::Success {
                 reason: _,
                 gas_used,

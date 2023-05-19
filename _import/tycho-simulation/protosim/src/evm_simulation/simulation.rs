@@ -2,23 +2,20 @@ use ethers::{
     providers::Middleware,
     types::{Bytes, H160, U256},
 };
-use revm::{
-    primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
-    EVM,
-};
+use revm::{primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256}, EVM, Database};
 
 use super::storage;
 
-pub struct SimulationEngine<M: Middleware + Clone> {
-    pub state: storage::SimulationDB<M>,
+pub struct SimulationEngine<DB: Database> {
+    pub state: storage::SimulationDB<DB>,
 }
 
-impl<M: Middleware + Clone> SimulationEngine<M> {
+impl<DB: Database> SimulationEngine<DB> {
     // TODO: return StateUpdate and Bytes
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
-    ) -> Result<ExecutionResult, EVMError<M::Error>> {
+    ) -> Result<ExecutionResult, EVMError<DB::Error>> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrentl save shared reference and write locked object. Note that conurrently
         // calling this method is therefore not possible.
@@ -27,6 +24,8 @@ impl<M: Middleware + Clone> SimulationEngine<M> {
         // struct outlive this scope.
         let mut vm = EVM::new();
 
+        // The below call to vm.database consumes its argument. By wrapping state in a new object,
+        // we protect the state from being consumed.
         let db_ref = storage::SharedSimulationDB::new(&mut self.state);
         vm.database(db_ref);
         vm.env.tx.caller = params.revm_caller();
@@ -77,6 +76,7 @@ mod tests {
         types::{H160, U256},
     };
     use revm::{db::CacheDB, primitives::ExecutionResult, EVM};
+    use revm::db::ethersdb;
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
@@ -89,11 +89,9 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = storage::SimulationDB::new(storage::EthRpcDB {
-            client,
-            runtime: Some(Arc::new(runtime)),
-            block: None,
-        });
+        let state = storage::SimulationDB::new(
+            ethersdb::EthersDB::new(client, None).unwrap()
+        );
 
         // any random address will work
         let caller = H160::from_str("0x0000000000000000000000000000000000000000")?;
@@ -148,13 +146,14 @@ mod tests {
         );
 
         let start = Instant::now();
-        for _ in 0..1000 {
+        let n_iter = 3;
+        for _ in 0..n_iter {
             eng.simulate(&sim_params).expect("Benchmark sim failed");
         }
         let duration = start.elapsed();
 
         println!("Using revm:");
-        println!("Total Duration [n_iter=1000]: {:?}", duration);
+        println!("Total Duration [n_iter={n_iter}]: {:?}", duration);
         println!("Single get_amount_out call: {:?}", duration / 1000);
 
         Ok(())
