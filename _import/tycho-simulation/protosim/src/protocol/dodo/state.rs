@@ -16,7 +16,7 @@ use crate::{
     u256_num::u256_to_f64,
 };
 
-pub struct DodoPoolState<DB: Database> {
+pub struct DodoPoolState<M: Middleware> {
     pool_address: H160,
     pool_abi: BaseContract,
     // TODO: Not sure how DODO handles these... so I am adding it here for no to not have to query every time
@@ -24,11 +24,11 @@ pub struct DodoPoolState<DB: Database> {
     helper_address: H160,
     helper_abi: BaseContract,
     // TODO: it would be nicer to move all the caching behind a RefCell instead of exposing it to the user
-    engine: RefCell<SimulationEngine<DB>>,
+    engine: RefCell<SimulationEngine<M>>,
     spot_price_cache: RefCell<Option<(f64, f64)>>,
 }
 
-impl<DB: Database> DodoPoolState<DB> {
+impl<M: Middleware> DodoPoolState<M> {
     fn simulate_spot_prices(
         &self,
         base: &crate::models::ERC20Token,
@@ -68,7 +68,7 @@ impl<DB: Database> DodoPoolState<DB> {
     }
 }
 
-impl<DB: Database> ProtocolSim for DodoPoolState<DB> {
+impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
     /// Dodo fees
     ///
     ///  Fee rates are in slot 8 and 9 they are accessed directly.

@@ -6,16 +6,16 @@ use revm::{primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU2
 
 use super::storage;
 
-pub struct SimulationEngine<DB: Database> {
-    pub state: storage::SimulationDB<DB>,
+pub struct SimulationEngine<M: Middleware> {
+    pub state: storage::SimulationDB<M>,
 }
 
-impl<DB: Database> SimulationEngine<DB> {
+impl<M: Middleware> SimulationEngine<M> where EVMError<<M as Middleware>::Error>: From<EVMError<()>>{
     // TODO: return StateUpdate and Bytes
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
-    ) -> Result<ExecutionResult, EVMError<DB::Error>> {
+    ) -> Result<ExecutionResult, EVMError<M::Error>> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrentl save shared reference and write locked object. Note that conurrently
         // calling this method is therefore not possible.
@@ -89,9 +89,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = storage::SimulationDB::new(
-            ethersdb::EthersDB::new(client, None).unwrap()
-        );
+        let state = storage::SimulationDB::new(client);
 
         // any random address will work
         let caller = H160::from_str("0x0000000000000000000000000000000000000000")?;
