@@ -254,7 +254,10 @@ impl<M: Middleware> SimulationDB<M> {
     fn get_ethers_db(&mut self) -> EthersDB<M> {
         EthersDB::new(
             self.client.clone(), 
-            Some(BlockId::Number(BlockNumber::Number(U64::from(self.block.unwrap().number))))
+            match self.block.as_ref() { 
+                Some(value) => Some(BlockId::Number(BlockNumber::Number(U64::from(value.number)))),
+                None => None
+            }
         ).unwrap()
     }
 }

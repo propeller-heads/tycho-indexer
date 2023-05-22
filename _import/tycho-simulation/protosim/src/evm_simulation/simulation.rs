@@ -32,7 +32,7 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.transact_to = params.revm_to();
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
-        let ref_tx = vm.transact()?;
+        let ref_tx = vm.transact().unwrap();
         Ok(ref_tx.result)
     }
 }
