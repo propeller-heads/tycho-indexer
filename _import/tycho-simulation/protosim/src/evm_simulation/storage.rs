@@ -251,9 +251,9 @@ impl<M: Middleware> SimulationDB<M> {
         revert_updates
     }
     
-    fn get_ethers_db(&mut self) -> EthersDB<&M> {
+    fn get_ethers_db(&mut self) -> EthersDB<M> {
         EthersDB::new(
-            Arc::new(self.client.as_ref()), 
+            self.client.clone(), 
             Some(BlockId::Number(BlockNumber::Number(U64::from(self.block.unwrap().number))))
         ).unwrap()
     }
@@ -266,8 +266,11 @@ impl<M: Middleware> Database for SimulationDB<M> {
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
         self.track_miss(address);
         self.get_ethers_db().basic(address)
+        // let value = self.get_ethers_db().basic(address).or_else(Self::Error());
+        // return value;
+        // value.or_else(Middleware::convert_err(value.err()))
     }
-
+        
     fn code_by_hash(&mut self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
         panic!("Not implemented")
     }

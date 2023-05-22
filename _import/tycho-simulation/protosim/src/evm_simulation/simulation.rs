@@ -10,7 +10,7 @@ pub struct SimulationEngine<M: Middleware> {
     pub state: storage::SimulationDB<M>,
 }
 
-impl<M: Middleware> SimulationEngine<M> where EVMError<<M as Middleware>::Error>: From<EVMError<()>>{
+impl<M: Middleware> SimulationEngine<M> {
     // TODO: return StateUpdate and Bytes
     pub fn simulate(
         &mut self,
