@@ -195,7 +195,7 @@ impl<M: Middleware> SimulationDB<M> {
     }
 
     pub fn query_account_info(
-        &mut self,
+        &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as Database>::Error> {
         let fut = async {
@@ -225,7 +225,7 @@ impl<M: Middleware> SimulationDB<M> {
     }
 
     pub fn query_storage(
-        &mut self,
+        &self,
         address: B160,
         index: rU256,
     ) -> Result<rU256, <SimulationDB<M> as Database>::Error> {
@@ -388,12 +388,14 @@ impl<M: Middleware> Database for SimulationDB<M> {
 #[cfg(test)]
 mod tests {
     use revm::primitives::U256 as rU256;
+    use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr, sync::Arc};
 
     use super::*;
     use ethers::providers::{Http, Provider};
 
-    pub fn construct_db() -> SimulationDB<Provider<Http>> {
+    #[fixture]
+    pub fn sim_db() -> SimulationDB<Provider<Http>> {
         // let (client, mock) = Provider::mocked();
         let client = Provider::<Http>::try_from(
             "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
@@ -407,14 +409,13 @@ mod tests {
 
         SimulationDB::new(client, Some(Arc::new(runtime)))
     }
-    #[test]
-    fn test_query_account_info() {
-        let mut simdb = construct_db();
 
+    #[rstest]
+    fn test_query_account_info(sim_db: SimulationDB<Provider<Http>>) {
         // Dead address
         let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
-        let acc_info = simdb.query_account_info(address).unwrap();
+        let acc_info = sim_db.query_account_info(address).unwrap();
         assert_eq!(acc_info.balance, rU256::from(1111663073377778101_i64));
         assert_eq!(acc_info.nonce, 44900_u64);
         assert_eq!(
@@ -422,5 +423,11 @@ mod tests {
             B256::from_str("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
                 .unwrap()
         );
+    }
+
+    #[rstest]
+    fn test_query_storage(sim_db: SimulationDB<Provider<Http>>) {
+        // Dead address
+        todo!()
     }
 }
