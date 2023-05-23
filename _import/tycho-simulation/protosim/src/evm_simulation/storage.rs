@@ -1,16 +1,13 @@
+use ethers::{
+    providers::Middleware,
+    types::{BlockId, BlockNumber, H160, H256},
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
-use ethers::prelude::storage;
-use ethers::{
-    providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256},
-};
-
 use ethers::types::U64;
-use ethersdb::EthersDB;
 use revm::db::{ethersdb, AccountState, DbAccount};
 use revm::interpreter::gas::account_access_gas;
 use revm::primitives::{HashMap as rHashMap, KECCAK_EMPTY};
@@ -322,7 +319,6 @@ impl<M: Middleware> SimulationDB<M> {
         }
         revert_updates
     }
-
 }
 impl<M: Middleware> Database for SimulationDB<M> {
     type Error = ();
@@ -384,75 +380,44 @@ impl<M: Middleware> Database for SimulationDB<M> {
     }
 }
 
-// // If we use SharedDB we might not need the clone trait anymore
-// pub struct EthRpcDB<M: Middleware + Clone> {
-//     pub client: Arc<M>,
-//     pub block: Option<BlockId>,
-//     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
-// }
-//
-// impl<M: Middleware + Clone> EthRpcDB<M> {
-//     /// internal utility function to call tokio feature and wait for output
-//     pub fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
-//         // If we get here and have to block the current thread, we really
-//         // messed up indexing / filling the cache. In that case this will save us
-//         // at the price of a very high time penalty.
-//         match &self.runtime {
-//             Some(runtime) => runtime.block_on(f),
-//             None => futures::executor::block_on(f),
-//         }
-//     }
-// }
-//
-// // Unfortunately EthersDB does not implement the DatabaseRef trait
-// impl<M: Middleware + Clone> DatabaseRef for EthRpcDB<M> {
-//     type Error = M::Error;
-//
-//     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-//         println!("loading basic data {address}!");
-//         let fut = async {
-//             tokio::join!(
-//                 self.client.get_balance(H160(address.0), None),
-//                 self.client.get_transaction_count(H160(address.0), None),
-//                 self.client.get_code(H160(address.0), None),
-//             )
-//         };
-//
-//         let (balance, nonce, code) = self.block_on(fut);
-//
-//         Ok(Some(AccountInfo::new(
-//             rU256::from_limbs(
-//                 balance
-//                     .unwrap_or_else(|e| panic!("ethers get balance error: {e:?}"))
-//                     .0,
-//             ),
-//             nonce
-//                 .unwrap_or_else(|e| panic!("ethers get nonce error: {e:?}"))
-//                 .as_u64(),
-//             to_analysed(Bytecode::new_raw(
-//                 code.unwrap_or_else(|e| panic!("ethers get code error: {e:?}"))
-//                     .0,
-//             )),
-//         )))
-//     }
-//
-//     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-//         panic!("Should not be called. Code is already loaded");
-//         // not needed because we already load code with basic info
-//     }
-//
-//     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-//         println!("Loading storage {address}, {index}");
-//         let add = H160::from(address.0);
-//         let index = H256::from(index.to_be_bytes());
-//         let fut = async {
-//             let storage = self.client.get_storage_at(add, index, None).await.unwrap();
-//             rU256::from_be_bytes(storage.to_fixed_bytes())
-//         };
-//         Ok(self.block_on(fut))
-//     }
-//
-//     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
-//         todo!()
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use revm::primitives::U256 as rU256;
+    use std::{error::Error, str::FromStr, sync::Arc};
+
+    use super::*;
+    use ethers::providers::{Http, Provider};
+
+    pub fn construct_db() -> SimulationDB<Provider<Http>> {
+        // let (client, mock) = Provider::mocked();
+        let client = Provider::<Http>::try_from(
+            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
+        )
+        .unwrap();
+        let client = Arc::new(client);
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| tokio::runtime::Runtime::new().unwrap())
+            .unwrap();
+
+        SimulationDB::new(client, Some(Arc::new(runtime)))
+    }
+    #[test]
+    fn test_query_account_info() -> Result<(), Box<dyn Error>> {
+        let mut simdb = construct_db();
+
+        // Dead address
+        let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
+
+        let acc_info = simdb.query_account_info(address).unwrap();
+
+        assert_eq!(acc_info.balance, rU256::from(1111663073377778101_i64));
+        assert_eq!(acc_info.nonce, 44900_u64);
+        assert_eq!(
+            acc_info.code_hash,
+            B256::from_str("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+                .unwrap()
+        );
+        Ok(())
+    }
+}
