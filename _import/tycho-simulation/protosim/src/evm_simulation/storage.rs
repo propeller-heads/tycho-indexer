@@ -247,13 +247,6 @@ impl<M: Middleware> SimulationDB<M> {
         };
         let storage = self.block_on(fut);
 
-        self.cache
-            .accounts
-            .get_mut(&address)
-            .unwrap()
-            .storage
-            .insert(index, storage);
-
         Ok(storage)
     }
 
@@ -359,16 +352,28 @@ impl<M: Middleware> Database for SimulationDB<M> {
         } else {
             match self.cache.accounts.get(&address) {
                 Some(account) => match account.storage.get(&index) {
-                    Some(storage) => Ok(storage.clone()),
+                    Some(storage) => Ok(*storage),
                     None => {
                         let storage = self.query_storage(address, index).unwrap();
+                        self.cache
+                            .accounts
+                            .get_mut(&address)
+                            .unwrap()
+                            .storage
+                            .insert(index, storage);
                         Ok(storage)
                     }
                 },
                 None => {
                     let account_info = self.query_account_info(address)?;
-                    self.init_account(address, account_info.clone(), false);
+                    self.init_account(address, account_info, false);
                     let storage = self.query_storage(address, index).unwrap();
+                    self.cache
+                        .accounts
+                        .get_mut(&address)
+                        .unwrap()
+                        .storage
+                        .insert(index, storage);
                     Ok(storage)
                 }
             }
@@ -403,14 +408,13 @@ mod tests {
         SimulationDB::new(client, Some(Arc::new(runtime)))
     }
     #[test]
-    fn test_query_account_info() -> Result<(), Box<dyn Error>> {
+    fn test_query_account_info() {
         let mut simdb = construct_db();
 
         // Dead address
         let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
         let acc_info = simdb.query_account_info(address).unwrap();
-
         assert_eq!(acc_info.balance, rU256::from(1111663073377778101_i64));
         assert_eq!(acc_info.nonce, 44900_u64);
         assert_eq!(
@@ -418,6 +422,5 @@ mod tests {
             B256::from_str("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
                 .unwrap()
         );
-        Ok(())
     }
 }
