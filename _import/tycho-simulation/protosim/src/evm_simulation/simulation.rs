@@ -91,7 +91,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = storage::SimulationDB::new(client, Some(Arc::new(runtime)));
+        let state = storage::SimulationDB::new(client, Some(Arc::new(runtime)), None);
 
         // any random address will work
         let caller = H160::from_str("0x0000000000000000000000000000000000000000")?;

@@ -1,13 +1,12 @@
 use ethers::{
     providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256},
+    types::{BlockId, BlockNumber, H160, H256, U64},
 };
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
-use ethers::types::U64;
 use revm::db::{ethersdb, AccountState, DbAccount};
 use revm::interpreter::gas::account_access_gas;
 use revm::primitives::{HashMap as rHashMap, KECCAK_EMPTY};
@@ -20,15 +19,15 @@ use revm::{
 /// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
 /// ownership of it.
 pub struct SharedSimulationDB<'a, M>
-where
-    M: Middleware,
+    where
+        M: Middleware,
 {
     db: &'a mut SimulationDB<M>,
 }
 
 impl<'a, M> SharedSimulationDB<'a, M>
-where
-    M: Middleware,
+    where
+        M: Middleware,
 {
     pub fn new(db: &'a mut SimulationDB<M>) -> Self {
         Self { db }
@@ -125,13 +124,13 @@ pub struct SimulationDB<M: Middleware> {
 }
 
 impl<M: Middleware> SimulationDB<M> {
-    pub fn new(client: Arc<M>, runtime: Option<Arc<tokio::runtime::Runtime>>) -> Self {
+    pub fn new(client: Arc<M>, runtime: Option<Arc<tokio::runtime::Runtime>>, block: Option<BlockHeader>) -> Self {
         Self {
             client,
             cache: CachedData::new(),
             missed_accounts: HashSet::new(),
             mocked_accounts: HashSet::new(),
-            block: None,
+            block,
             runtime,
         }
     }
@@ -224,6 +223,7 @@ impl<M: Middleware> SimulationDB<M> {
         ))
     }
 
+    // TODO: Why is this method public?
     pub fn query_storage(
         &self,
         address: B160,
@@ -313,6 +313,7 @@ impl<M: Middleware> SimulationDB<M> {
         revert_updates
     }
 }
+
 impl<M: Middleware> Database for SimulationDB<M> {
     type Error = ();
 
@@ -429,5 +430,56 @@ mod tests {
     fn test_query_storage(sim_db: SimulationDB<Provider<Http>>) {
         // Dead address
         todo!()
+    }
+    
+    #[test]
+    fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
+        let mut db = SimulationDB::new(get_client(), get_runtime(), None);
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let index = rU256::from(8);
+        db.init_account(address, AccountInfo::default(), false);
+
+        let result = db.query_storage(address, index);
+
+        println!("current block: {}", result.unwrap());
+        Ok(())
+    }
+
+    #[test]
+    fn test_query_storage_past_block() -> Result<(), Box<dyn Error>> {
+        let mut db = SimulationDB::new(
+            get_client(),
+            get_runtime(),
+            Some(
+                BlockHeader { number: 17322706, hash: H256::default(), timestamp: u64::default() }
+            ),
+        );
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let index = rU256::from(8);
+        db.init_account(address, AccountInfo::default(), false);
+
+        let result = db.query_storage(address, index);
+
+        println!("past block: {}", result.unwrap());
+        assert_eq!(result.unwrap(), rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
+        Ok(())
+    }
+    
+    // --- helpers ---
+
+    fn get_runtime() -> Option<Arc<Runtime>> {
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| tokio::runtime::Runtime::new().unwrap())
+            .unwrap();
+        Some(Arc::new(runtime))
+    }
+
+    fn get_client() -> Arc<Provider<Http>> {
+        let client = Provider::<Http>::try_from(
+            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
+        )
+            .unwrap();
+        Arc::new(client)
     }
 }
