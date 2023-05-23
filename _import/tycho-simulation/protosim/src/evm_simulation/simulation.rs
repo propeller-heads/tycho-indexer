@@ -2,7 +2,10 @@ use ethers::{
     providers::Middleware,
     types::{Bytes, H160, U256},
 };
-use revm::{primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256}, EVM, Database};
+use revm::{
+    primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
+    EVM,
+};
 
 use super::storage;
 
@@ -75,8 +78,7 @@ mod tests {
         providers::{Http, Provider},
         types::{H160, U256},
     };
-    use revm::{db::CacheDB, primitives::ExecutionResult, EVM};
-    use revm::db::ethersdb;
+    use revm::primitives::ExecutionResult;
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
@@ -89,7 +91,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = storage::SimulationDB::new(client);
+        let state = storage::SimulationDB::new(client, Some(Arc::new(runtime)));
 
         // any random address will work
         let caller = H160::from_str("0x0000000000000000000000000000000000000000")?;

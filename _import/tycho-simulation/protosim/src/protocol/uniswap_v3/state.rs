@@ -316,7 +316,6 @@ mod tests {
     use rstest::rstest;
 
     use crate::protocol::uniswap_v3::events::{SwapEvent, BurnEvent, MintEvent};
-    use crate::safe_math::safe_mul_u256;
 
     use super::*;
 
