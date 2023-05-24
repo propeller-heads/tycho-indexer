@@ -447,10 +447,10 @@ mod tests {
         let index = rU256::from(8);
         sim_db.init_account(address, AccountInfo::default(), false);
 
-        let result = sim_db.query_storage(address, index);
+        let result = sim_db.query_storage(address, index).unwrap();
 
-        println!("past block: {}", result.unwrap());
-        assert_eq!(result.unwrap(), rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
+        println!("past block: {}", result);
+        assert_eq!(result, rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
         Ok(())
     }
     
