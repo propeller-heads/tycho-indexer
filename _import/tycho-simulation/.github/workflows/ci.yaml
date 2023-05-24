@@ -19,8 +19,6 @@ jobs:
       matrix:
         toolchain:
           - stable
-          - beta
-          - nightly
     steps:
       - name: Checkout
         uses: actions/checkout@v3
