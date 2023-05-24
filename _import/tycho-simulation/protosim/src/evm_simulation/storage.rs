@@ -7,12 +7,19 @@ use std::{
     sync::Arc,
 };
 
+use ethers::{
+    providers::Middleware,
+    types::{BlockId, BlockNumber, H160, H256, U64},
+};
+
+use ethers::types::U64;
 use log::warn;
-use revm::primitives::KECCAK_EMPTY;
-use revm::{db::DbAccount, primitives::B256};
 use revm::{
+    db::DbAccount,
     interpreter::analysis::to_analysed,
-    primitives::{hash_map, AccountInfo, Bytecode, Bytes, Log, B160, U256 as rU256},
+    primitives::{
+        hash_map, AccountInfo, Bytecode, Bytes, Log, B160, B256, KECCAK_EMPTY, U256 as rU256,
+    },
     Database,
 };
 
@@ -537,7 +544,7 @@ mod tests {
         sim_db.cache.accounts.insert(mock_acc_address, mock_acc);
 
         sim_db.clear_temp_accounts();
-        assert!(sim_db.cache.accounts.contains_key(&mock_acc_address));
+        assert!(sim_db.mocked_accounts.contains(&mock_acc_address));
         assert!(sim_db.cache.accounts.contains_key(&mock_acc_address));
         Ok(())
     }
