@@ -7,9 +7,8 @@ use std::{
     sync::Arc,
 };
 
-use revm::db::{ethersdb, AccountState, DbAccount};
-use revm::interpreter::gas::account_access_gas;
-use revm::primitives::{HashMap as rHashMap, KECCAK_EMPTY};
+use revm::db::{DbAccount};
+use revm::primitives::{KECCAK_EMPTY};
 use revm::{
     interpreter::analysis::to_analysed,
     primitives::{hash_map, AccountInfo, Bytecode, Bytes, Log, B160, B256, U256 as rU256},
@@ -454,7 +453,7 @@ mod tests {
     fn get_runtime() -> Option<Arc<Runtime>> {
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
+            .then(|| Runtime::new().unwrap())
             .unwrap();
         Some(Arc::new(runtime))
     }
