@@ -492,3 +492,93 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rstest::{fixture, rstest};
+    use std::{error::Error, str::FromStr, sync::Arc};
+
+    use super::*;
+    use ethers::providers::{Http, Provider};
+    use revm::db::DbAccount;
+    use tokio::runtime::Runtime;
+
+    #[fixture]
+    pub fn sim_db() -> SimulationDB<Provider<Http>> {
+        // let (client, mock) = Provider::mocked();
+        SimulationDB::new(get_client(), get_runtime())
+    }
+
+    #[rstest]
+    fn test_mock_account_get_acc_info(
+        mut sim_db: SimulationDB<Provider<Http>>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        sim_db.mocked_accounts.insert(mock_acc_address);
+
+        let acc_info = sim_db.basic(mock_acc_address).unwrap().unwrap();
+        // if we found out how to mock, check if provider has not been called.
+        assert!(!sim_db.temp_accounts.contains(&mock_acc_address));
+        assert_eq!(DEFAULT_MOCK_ACCOUNT_INFO, acc_info);
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_mock_account_clear_missed_accounts(
+        mut sim_db: SimulationDB<Provider<Http>>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let mock_acc: DbAccount = DbAccount {
+            info: DEFAULT_MOCK_ACCOUNT_INFO,
+            account_state: Default::default(),
+            storage: Default::default(),
+        };
+        sim_db.mocked_accounts.insert(mock_acc_address);
+        sim_db.cache.accounts.insert(mock_acc_address, mock_acc);
+
+        sim_db.clear_temp_accounts();
+        assert!(sim_db.cache.accounts.contains_key(&mock_acc_address));
+        assert!(sim_db.cache.accounts.contains_key(&mock_acc_address));
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_mock_account_get_storage(
+        mut sim_db: SimulationDB<Provider<Http>>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let storage_address = rU256::ZERO;
+        let mock_acc = DbAccount {
+            info: DEFAULT_MOCK_ACCOUNT_INFO,
+            account_state: Default::default(),
+            storage: Default::default(),
+        };
+
+        sim_db.mocked_accounts.insert(mock_acc_address);
+        sim_db.cache.accounts.insert(mock_acc_address, mock_acc);
+
+        let storage = sim_db.storage(mock_acc_address, storage_address).unwrap();
+        // if we found out how to mock, check if provider has not been called.
+        assert!(!sim_db.temp_accounts.contains(&mock_acc_address));
+        assert_eq!(rU256::ZERO, storage);
+        Ok(())
+    }
+
+    // --- helpers ---
+
+    fn get_runtime() -> Option<Arc<Runtime>> {
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| tokio::runtime::Runtime::new().unwrap())
+            .unwrap();
+        Some(Arc::new(runtime))
+    }
+
+    fn get_client() -> Arc<Provider<Http>> {
+        let client = Provider::<Http>::try_from(
+            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
+        )
+        .unwrap();
+        Arc::new(client)
+    }
+}
