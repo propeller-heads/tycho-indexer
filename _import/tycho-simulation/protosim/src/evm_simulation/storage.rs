@@ -3,17 +3,14 @@ use std::{
     sync::Arc,
 };
 
-use ethers::prelude::storage;
 use ethers::{
     providers::Middleware,
     types::{BlockId, BlockNumber, H160, H256},
 };
 
 use ethers::types::U64;
-use ethersdb::EthersDB;
-use revm::db::{ethersdb, AccountState, DbAccount};
-use revm::interpreter::gas::account_access_gas;
-use revm::primitives::{HashMap as rHashMap, KECCAK_EMPTY};
+use revm::db::{DbAccount};
+use revm::primitives::{KECCAK_EMPTY};
 use revm::{
     interpreter::analysis::to_analysed,
     primitives::{hash_map, AccountInfo, Bytecode, Bytes, Log, B160, B256, U256 as rU256},
@@ -363,7 +360,7 @@ impl<M: Middleware> Database for SimulationDB<M> {
         } else {
             match self.cache.accounts.get(&address) {
                 Some(account) => match account.storage.get(&index) {
-                    Some(storage) => Ok(storage.clone()),
+                    Some(storage) => Ok(*storage),
                     None => {
                         let storage = self.query_storage(address, index).unwrap();
                         Ok(storage)
@@ -371,7 +368,7 @@ impl<M: Middleware> Database for SimulationDB<M> {
                 },
                 None => {
                     let account_info = self.query_account_info(address)?;
-                    self.init_account(address, account_info.clone(), false);
+                    self.init_account(address, account_info, false);
                     let storage = self.query_storage(address, index).unwrap();
                     Ok(storage)
                 }
