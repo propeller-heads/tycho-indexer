@@ -194,8 +194,11 @@ impl<M: Middleware> SimulationDB<M> {
         }
     }
 
-    pub fn query_account_info(
-        &mut self,
+    /// Query blockchain for account info
+    /// 
+    /// Gets account information not including storage: balance, nonce and code.
+    fn query_account_info(
+        &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as Database>::Error> {
         let fut = async {
@@ -224,18 +227,21 @@ impl<M: Middleware> SimulationDB<M> {
         ))
     }
 
-    pub fn query_storage(
+    /// Query blockchain for account storage at certain index
+    /// 
+    /// Received data is put into cache. TODO: update this
+    fn query_storage(
         &mut self,
         address: B160,
         index: rU256,
     ) -> Result<rU256, <SimulationDB<M> as Database>::Error> {
         let index_h256 = H256::from(index.to_be_bytes());
         let fut = async {
-            let add = H160::from(address.0);
+            let address = H160::from(address.0);
             let storage = self
                 .client
                 .get_storage_at(
-                    add,
+                    address,
                     index_h256,
                     self.block
                         .as_ref()

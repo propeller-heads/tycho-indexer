@@ -18,7 +18,7 @@ impl<M: Middleware> SimulationEngine<M> {
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
-    ) -> Result<ExecutionResult, EVMError<M::Error>> {
+    ) -> ExecutionResult {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrentl save shared reference and write locked object. Note that conurrently
         // calling this method is therefore not possible.
@@ -36,7 +36,7 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
         let ref_tx = vm.transact().unwrap();
-        Ok(ref_tx.result)
+        ref_tx.result
     }
 }
 
@@ -118,9 +118,7 @@ mod tests {
         };
         let mut eng = SimulationEngine { state };
 
-        let computation_result = eng
-            .simulate(&sim_params)
-            .unwrap_or_else(|e| panic!("Execution failed: {e:?}"));
+        let computation_result = eng.simulate(&sim_params);
 
         let amounts_out = match computation_result {
             ExecutionResult::Success {
@@ -148,7 +146,7 @@ mod tests {
         let start = Instant::now();
         let n_iter = 3;
         for _ in 0..n_iter {
-            eng.simulate(&sim_params).expect("Benchmark sim failed");
+            eng.simulate(&sim_params);
         }
         let duration = start.elapsed();
 
