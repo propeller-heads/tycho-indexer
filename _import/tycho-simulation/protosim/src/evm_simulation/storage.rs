@@ -7,16 +7,24 @@ use std::{
     sync::Arc,
 };
 
-use revm::db::{DbAccount};
-use revm::primitives::{KECCAK_EMPTY};
+use log::warn;
+use revm::primitives::KECCAK_EMPTY;
+use revm::{db::DbAccount, primitives::B256};
 use revm::{
     interpreter::analysis::to_analysed,
-    primitives::{hash_map, AccountInfo, Bytecode, Bytes, Log, B160, B256, U256 as rU256},
+    primitives::{hash_map, AccountInfo, Bytecode, Bytes, Log, B160, U256 as rU256},
     Database,
 };
 
 /// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
 /// ownership of it.
+
+const DEFAULT_MOCK_ACCOUNT_INFO: AccountInfo = AccountInfo {
+    balance: rU256::ZERO,
+    nonce: 0,
+    code_hash: KECCAK_EMPTY,
+    code: None,
+};
 pub struct SharedSimulationDB<'a, M>
 where
     M: Middleware,
@@ -112,8 +120,9 @@ pub struct SimulationDB<M: Middleware> {
     client: Arc<M>,
     /// Cached data
     cache: CachedData,
-    /// Accounts that we had to query because we didn't expect them to be accessed during simulations
-    missed_accounts: HashSet<B160>,
+    /// Accounts that we had to query because we didn't expect them to be accessed during simulations.
+    /// They will only be stored temporarily.
+    temp_accounts: HashSet<B160>,
     /// Accounts that should not fallback to using a storage query
     mocked_accounts: HashSet<B160>,
     /// Current block
@@ -127,16 +136,16 @@ impl<M: Middleware> SimulationDB<M> {
         Self {
             client,
             cache: CachedData::new(),
-            missed_accounts: HashSet::new(),
+            temp_accounts: HashSet::new(),
             mocked_accounts: HashSet::new(),
             block,
             runtime,
         }
     }
 
-    fn track_miss(&mut self, address: B160) {
+    fn track_temp_accounts(&mut self, address: B160) {
         if !self.cache.accounts.contains_key(&address) {
-            self.missed_accounts.insert(address);
+            self.temp_accounts.insert(address);
         }
     }
 
@@ -144,14 +153,14 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// It is recommended to call this after a new block is received,
     /// to avoid cached state leading to wrong results.
-    pub fn clear_missed_accounts(&mut self) {
-        for address in self.missed_accounts.iter() {
+    pub fn clear_temp_accounts(&mut self) {
+        for address in self.temp_accounts.iter() {
             self.cache
                 .accounts
                 .remove(address)
                 .expect("Inconsistency between missed_accounts and cache.accounts");
         }
-        self.missed_accounts.clear();
+        self.temp_accounts.clear();
     }
 
     /// Sets up the code at multiple accounts.
@@ -175,10 +184,11 @@ impl<M: Middleware> SimulationDB<M> {
                 code: Some(bytecode.clone()),
             };
             self.cache.insert_account_info(*addr, info);
-            self.missed_accounts.insert(*addr);
-        }
-        if mock {
-            self.mocked_accounts.extend(addresses.iter());
+
+            match mock {
+                true => self.mocked_accounts.insert(*addr),
+                false => self.temp_accounts.insert(*addr),
+            };
         }
     }
 
@@ -193,7 +203,7 @@ impl<M: Middleware> SimulationDB<M> {
     }
 
     /// Query blockchain for account info
-    /// 
+    ///
     /// Gets account information not including storage: balance, nonce and code.
     /// /// Received data is NOT put into cache; this must be done separately.
     fn query_account_info(
@@ -227,7 +237,7 @@ impl<M: Middleware> SimulationDB<M> {
     }
 
     /// Query blockchain for account storage at certain index
-    /// 
+    ///
     /// Received data is NOT put into cache; this must be done separately.
     fn query_storage(
         &self,
@@ -271,7 +281,7 @@ impl<M: Middleware> SimulationDB<M> {
 
     /// Update the simulation state.
     ///
-    /// Updates the underlying smart contract storage. Any previously missed account,
+    /// Updates the underlying smart contract storage. Any previously temp account,
     /// which was queried and whose state now is in the cache will be cleared.
     ///
     /// Returns a state update struct to revert this update.
@@ -311,10 +321,13 @@ impl<M: Middleware> SimulationDB<M> {
 
                 revert_updates.insert(*address, revert_entry);
             } else {
-                //raise a warning here about receiving an update for an uninitialized account
-                todo!()
+                warn!(
+                    "Account with address {:?} got an update, but was never initialized",
+                    address
+                );
             }
         }
+        self.clear_temp_accounts();
         revert_updates
     }
 }
@@ -323,11 +336,14 @@ impl<M: Middleware> Database for SimulationDB<M> {
     type Error = M::Error;
 
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        self.track_miss(address);
         match self.cache.accounts.get(&address) {
             Some(account) => Ok(Some(account.info.clone())),
             None => {
+                if self.mocked_accounts.contains(&address) {
+                    return Ok(Some(DEFAULT_MOCK_ACCOUNT_INFO));
+                }
                 let account_info = self.query_account_info(address)?;
+                self.track_temp_accounts(address);
                 self.init_account(address, account_info.clone(), false);
                 Ok(Some(account_info))
             }
@@ -339,10 +355,7 @@ impl<M: Middleware> Database for SimulationDB<M> {
     }
 
     fn storage(&mut self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        // Note: we do only check on account level, not storage level as the existence
-        // of an account is interpreted as the account being tracked.
-        self.track_miss(address);
-        // if we are accessing a mocked contract, we should now allow it to do a
+        // if we are accessing a mocked contract, we should not allow it to do a
         // query as the query might return garbage, so in case we would do a query we
         // return an empty slot instead.
         if self.mocked_accounts.contains(&address) {
@@ -356,6 +369,9 @@ impl<M: Middleware> Database for SimulationDB<M> {
                 Ok(rU256::ZERO)
             }
         } else {
+            // Note: we do only check on account level, not storage level as the existence
+            // of an account is interpreted as the account being tracked.
+            self.track_temp_accounts(address);
             match self.cache.accounts.get(&address) {
                 Some(account) => match account.storage.get(&index) {
                     Some(storage) => Ok(*storage),
@@ -413,7 +429,7 @@ mod tests {
             ),
         )
     }
-    
+
     // region HELPERS
     fn get_runtime() -> Option<Arc<Runtime>> {
         let runtime = tokio::runtime::Handle::try_current()
@@ -446,7 +462,7 @@ mod tests {
                 .unwrap()
         );
     }
-    
+
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
