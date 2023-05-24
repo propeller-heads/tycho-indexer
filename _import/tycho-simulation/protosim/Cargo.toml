@@ -22,6 +22,9 @@ revm = { git = "https://github.com/bluealloy/revm", tag = "v22", features = [
 approx = "0.3.2"
 rstest = "0.16.0"
 
+[features]
+default = ["run_network_tests"]
+run_network_tests = []
 
 [profile.bench]
 debug = true

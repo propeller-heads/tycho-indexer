@@ -414,8 +414,8 @@ mod tests {
     }
 
     #[rstest]
+    #[cfg_attr(not(feature = "run_network_tests"), ignore)]
     fn test_query_account_info(sim_db: SimulationDB<Provider<Http>>) {
-        // Dead address
         let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
         let acc_info = sim_db.query_account_info(address).unwrap();
@@ -429,6 +429,7 @@ mod tests {
     }
     
     #[rstest]
+    #[cfg_attr(not(feature = "run_network_tests"), ignore)]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
         let mut db = SimulationDB::new(get_client(), get_runtime(), None);
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
@@ -442,6 +443,7 @@ mod tests {
     }
 
     #[rstest]
+    #[cfg_attr(not(feature = "run_network_tests"), ignore)]
     fn test_query_storage_past_block(mut sim_db: SimulationDB<Provider<Http>>) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
