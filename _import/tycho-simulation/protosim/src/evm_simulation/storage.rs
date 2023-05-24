@@ -394,21 +394,18 @@ mod tests {
 
     use super::*;
     use ethers::providers::{Http, Provider};
+    use tokio::runtime::Runtime;
 
     #[fixture]
     pub fn sim_db() -> SimulationDB<Provider<Http>> {
         // let (client, mock) = Provider::mocked();
-        let client = Provider::<Http>::try_from(
-            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
+        SimulationDB::new(
+            get_client(),
+            get_runtime(),
+            Some(
+                BlockHeader { number: 17322706, hash: H256::default(), timestamp: u64::default() }
+            ),
         )
-        .unwrap();
-        let client = Arc::new(client);
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-
-        SimulationDB::new(client, Some(Arc::new(runtime)))
     }
 
     #[rstest]
@@ -425,14 +422,8 @@ mod tests {
                 .unwrap()
         );
     }
-
-    #[rstest]
-    fn test_query_storage(sim_db: SimulationDB<Provider<Http>>) {
-        // Dead address
-        todo!()
-    }
     
-    #[test]
+    #[rstest]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
         let mut db = SimulationDB::new(get_client(), get_runtime(), None);
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
@@ -445,20 +436,13 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_query_storage_past_block() -> Result<(), Box<dyn Error>> {
-        let mut db = SimulationDB::new(
-            get_client(),
-            get_runtime(),
-            Some(
-                BlockHeader { number: 17322706, hash: H256::default(), timestamp: u64::default() }
-            ),
-        );
+    #[rstest]
+    fn test_query_storage_past_block(mut sim_db: SimulationDB<Provider<Http>>) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
-        db.init_account(address, AccountInfo::default(), false);
+        sim_db.init_account(address, AccountInfo::default(), false);
 
-        let result = db.query_storage(address, index);
+        let result = sim_db.query_storage(address, index);
 
         println!("past block: {}", result.unwrap());
         assert_eq!(result.unwrap(), rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
