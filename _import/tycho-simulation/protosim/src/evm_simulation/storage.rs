@@ -25,13 +25,6 @@ use revm::{
 
 /// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
 /// ownership of it.
-
-const DEFAULT_MOCK_ACCOUNT_INFO: AccountInfo = AccountInfo {
-    balance: rU256::ZERO,
-    nonce: 0,
-    code_hash: KECCAK_EMPTY,
-    code: None,
-};
 pub struct SharedSimulationDB<'a, M>
 where
     M: Middleware,
@@ -347,7 +340,7 @@ impl<M: Middleware> Database for SimulationDB<M> {
             Some(account) => Ok(Some(account.info.clone())),
             None => {
                 if self.mocked_accounts.contains(&address) {
-                    return Ok(Some(DEFAULT_MOCK_ACCOUNT_INFO));
+                    return Ok(Some(AccountInfo::default()));
                 }
                 let account_info = self.query_account_info(address)?;
                 self.track_temp_accounts(address);
@@ -526,7 +519,7 @@ mod tests {
         let acc_info = sim_db.basic(mock_acc_address).unwrap().unwrap();
         // if we found out how to mock, check if provider has not been called.
         assert!(!sim_db.temp_accounts.contains(&mock_acc_address));
-        assert_eq!(DEFAULT_MOCK_ACCOUNT_INFO, acc_info);
+        assert_eq!(AccountInfo::default(), acc_info);
         Ok(())
     }
 
@@ -536,7 +529,7 @@ mod tests {
     ) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let mock_acc: DbAccount = DbAccount {
-            info: DEFAULT_MOCK_ACCOUNT_INFO,
+            info: AccountInfo::default(),
             account_state: Default::default(),
             storage: Default::default(),
         };
@@ -556,7 +549,7 @@ mod tests {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::ZERO;
         let mock_acc = DbAccount {
-            info: DEFAULT_MOCK_ACCOUNT_INFO,
+            info: AccountInfo::default(),
             account_state: Default::default(),
             storage: Default::default(),
         };
