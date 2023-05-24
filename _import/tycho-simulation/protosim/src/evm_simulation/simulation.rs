@@ -3,7 +3,7 @@ use ethers::{
     types::{Bytes, H160, U256},
 };
 use revm::{
-    primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
+    primitives::{ExecutionResult, TransactTo, B160, U256 as rU256},
     EVM,
 };
 
@@ -15,10 +15,7 @@ pub struct SimulationEngine<M: Middleware> {
 
 impl<M: Middleware> SimulationEngine<M> {
     // TODO: return StateUpdate and Bytes
-    pub fn simulate(
-        &mut self,
-        params: &SimulationParameters,
-    ) -> ExecutionResult {
+    pub fn simulate(&mut self, params: &SimulationParameters) -> ExecutionResult {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrentl save shared reference and write locked object. Note that conurrently
         // calling this method is therefore not possible.
@@ -35,7 +32,7 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.transact_to = params.revm_to();
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
-        let ref_tx = vm.transact()?;
+        let ref_tx = vm.transact().unwrap();
         ref_tx.result
     }
 }
