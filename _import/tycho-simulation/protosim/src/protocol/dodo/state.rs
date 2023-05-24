@@ -42,7 +42,7 @@ impl<M: Middleware> DodoPoolState<M> {
             value: U256::zero(),
         };
         let mut engine = self.engine.borrow_mut();
-        let simulation_result = engine.simulate(&params).unwrap_or_else(|_| panic!("Error in simulation"));
+        let simulation_result = engine.simulate(&params);
         let spot_price_u256 = match simulation_result {
             ExecutionResult::Success {
                 reason: _,
@@ -132,7 +132,7 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
             value: U256::zero(),
         };
         let mut engine = self.engine.borrow_mut();
-        let simulation_result = engine.simulate(&params).unwrap_or_else(|_| panic!("Error in simulation."));
+        let simulation_result = engine.simulate(&params);
         let (amount_out, gas) = match simulation_result {
             ExecutionResult::Success {
                 reason: _,

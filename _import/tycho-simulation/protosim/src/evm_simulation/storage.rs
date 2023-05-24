@@ -18,15 +18,15 @@ use revm::{
 /// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
 /// ownership of it.
 pub struct SharedSimulationDB<'a, M>
-    where
-        M: Middleware,
+where
+    M: Middleware,
 {
     db: &'a mut SimulationDB<M>,
 }
 
 impl<'a, M> SharedSimulationDB<'a, M>
-    where
-        M: Middleware,
+where
+    M: Middleware,
 {
     pub fn new(db: &'a mut SimulationDB<M>) -> Self {
         Self { db }
@@ -34,7 +34,7 @@ impl<'a, M> SharedSimulationDB<'a, M>
 }
 
 impl<'a, M: Middleware> Database for SharedSimulationDB<'a, M> {
-    type Error = ();
+    type Error = M::Error;
 
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
         Database::basic(self.db, address)
@@ -192,7 +192,11 @@ impl<M: Middleware> SimulationDB<M> {
         }
     }
 
-    pub fn query_account_info(
+    /// Query blockchain for account info
+    /// 
+    /// Gets account information not including storage: balance, nonce and code.
+    /// /// Received data is NOT put into cache; this must be done separately.
+    fn query_account_info(
         &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as Database>::Error> {
@@ -222,19 +226,21 @@ impl<M: Middleware> SimulationDB<M> {
         ))
     }
 
-    // TODO: Why is this method public?
-    pub fn query_storage(
+    /// Query blockchain for account storage at certain index
+    /// 
+    /// Received data is NOT put into cache; this must be done separately.
+    fn query_storage(
         &self,
         address: B160,
         index: rU256,
     ) -> Result<rU256, <SimulationDB<M> as Database>::Error> {
         let index_h256 = H256::from(index.to_be_bytes());
         let fut = async {
-            let add = H160::from(address.0);
+            let address = H160::from(address.0);
             let storage = self
                 .client
                 .get_storage_at(
-                    add,
+                    address,
                     index_h256,
                     self.block
                         .as_ref()
@@ -314,7 +320,7 @@ impl<M: Middleware> SimulationDB<M> {
 }
 
 impl<M: Middleware> Database for SimulationDB<M> {
-    type Error = ();
+    type Error = M::Error;
 
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
         self.track_miss(address);
