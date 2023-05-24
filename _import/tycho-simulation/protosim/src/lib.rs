@@ -15,6 +15,7 @@
 //! The crate also provides optimization methods, such as golden
 //! section search, to find optimal amounts for a specific sequence.
 
+pub mod evm_simulation;
 pub mod graph;
 pub mod models;
 pub mod optimize;
