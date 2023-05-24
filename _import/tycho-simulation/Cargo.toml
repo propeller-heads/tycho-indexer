@@ -14,7 +14,7 @@ log = "0.4.17"
 simplelog = "0.12.0"
 time = "0.3.17"
 protosim = { version = "^0.1.0", path = "./protosim" }
-ethers = "1.0.1"
+ethers = "^2.0.2"
 rdkafka = "0.29.0"
 tokio = { version = "1.23.0", features = ["full"] }
 redis = { version = "0.22.1", features = ["tokio-comp"] }
