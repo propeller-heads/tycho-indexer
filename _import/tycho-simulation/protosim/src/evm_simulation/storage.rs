@@ -2,17 +2,12 @@ use ethers::{
     providers::Middleware,
     types::{BlockId, BlockNumber, H160, H256, U64},
 };
+
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
-use ethers::{
-    providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256, U64},
-};
-
-use ethers::types::U64;
 use log::warn;
 use revm::{
     db::DbAccount,
@@ -132,7 +127,11 @@ pub struct SimulationDB<M: Middleware> {
 }
 
 impl<M: Middleware> SimulationDB<M> {
-    pub fn new(client: Arc<M>, runtime: Option<Arc<tokio::runtime::Runtime>>, block: Option<BlockHeader>) -> Self {
+    pub fn new(
+        client: Arc<M>,
+        runtime: Option<Arc<tokio::runtime::Runtime>>,
+        block: Option<BlockHeader>,
+    ) -> Self {
         Self {
             client,
             cache: CachedData::new(),
@@ -424,9 +423,11 @@ mod tests {
         SimulationDB::new(
             get_client(),
             get_runtime(),
-            Some(
-                BlockHeader { number: 17322706, hash: H256::default(), timestamp: u64::default() }
-            ),
+            Some(BlockHeader {
+                number: 17322706,
+                hash: H256::default(),
+                timestamp: u64::default(),
+            }),
         )
     }
 
@@ -443,7 +444,7 @@ mod tests {
         let client = Provider::<Http>::try_from(
             "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
         )
-            .unwrap();
+        .unwrap();
         Arc::new(client)
     }
     // endregion helpers
@@ -481,32 +482,20 @@ mod tests {
 
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
-    fn test_query_storage_past_block(mut sim_db: SimulationDB<Provider<Http>>) -> Result<(), Box<dyn Error>> {
+    fn test_query_storage_past_block(
+        mut sim_db: SimulationDB<Provider<Http>>,
+    ) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
         sim_db.init_account(address, AccountInfo::default(), false);
 
         let result = sim_db.query_storage(address, index).unwrap();
 
-        assert_eq!(result, rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
+        assert_eq!(
+            result,
+            rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?
+        );
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use rstest::{fixture, rstest};
-    use std::{error::Error, str::FromStr, sync::Arc};
-
-    use super::*;
-    use ethers::providers::{Http, Provider};
-    use revm::db::DbAccount;
-    use tokio::runtime::Runtime;
-
-    #[fixture]
-    pub fn sim_db() -> SimulationDB<Provider<Http>> {
-        // let (client, mock) = Provider::mocked();
-        SimulationDB::new(get_client(), get_runtime())
     }
 
     #[rstest]
@@ -517,6 +506,7 @@ mod tests {
         sim_db.mocked_accounts.insert(mock_acc_address);
 
         let acc_info = sim_db.basic(mock_acc_address).unwrap().unwrap();
+
         // if we found out how to mock, check if provider has not been called.
         assert!(!sim_db.temp_accounts.contains(&mock_acc_address));
         assert_eq!(AccountInfo::default(), acc_info);
@@ -524,7 +514,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_mock_account_clear_missed_accounts(
+    fn test_clear_temp_accounts_doesnt_clear_mocked(
         mut sim_db: SimulationDB<Provider<Http>>,
     ) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
@@ -537,6 +527,7 @@ mod tests {
         sim_db.cache.accounts.insert(mock_acc_address, mock_acc);
 
         sim_db.clear_temp_accounts();
+
         assert!(sim_db.mocked_accounts.contains(&mock_acc_address));
         assert!(sim_db.cache.accounts.contains_key(&mock_acc_address));
         Ok(())
@@ -553,32 +544,14 @@ mod tests {
             account_state: Default::default(),
             storage: Default::default(),
         };
-
         sim_db.mocked_accounts.insert(mock_acc_address);
         sim_db.cache.accounts.insert(mock_acc_address, mock_acc);
 
         let storage = sim_db.storage(mock_acc_address, storage_address).unwrap();
+
         // if we found out how to mock, check if provider has not been called.
         assert!(!sim_db.temp_accounts.contains(&mock_acc_address));
-        assert_eq!(rU256::ZERO, storage);
+        assert_eq!(storage, rU256::ZERO);
         Ok(())
-    }
-
-    // --- helpers ---
-
-    fn get_runtime() -> Option<Arc<Runtime>> {
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-        Some(Arc::new(runtime))
-    }
-
-    fn get_client() -> Arc<Provider<Http>> {
-        let client = Provider::<Http>::try_from(
-            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
-        )
-        .unwrap();
-        Arc::new(client)
     }
 }

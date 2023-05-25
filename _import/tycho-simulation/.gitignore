@@ -30,11 +30,7 @@ flamegraph.svg
 !.vscode/*.code-snippets
 
 # Pycharm User-specific stuff
-.idea/**/workspace.xml
-.idea/**/tasks.xml
-.idea/**/usage.statistics.xml
-.idea/**/dictionaries
-.idea/**/shelf
+.idea/*
 
 # Local History for Visual Studio Code
 .history/
