@@ -402,6 +402,7 @@ mod tests {
     use tokio::runtime::Runtime;
 
     #[fixture]
+    /// SimulationDB at block 17322706
     pub fn sim_db() -> SimulationDB<Provider<Http>> {
         // let (client, mock) = Provider::mocked();
         SimulationDB::new(
@@ -412,6 +413,24 @@ mod tests {
             ),
         )
     }
+    
+    // region HELPERS
+    fn get_runtime() -> Option<Arc<Runtime>> {
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| Runtime::new().unwrap())
+            .unwrap();
+        Some(Arc::new(runtime))
+    }
+
+    fn get_client() -> Arc<Provider<Http>> {
+        let client = Provider::<Http>::try_from(
+            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
+        )
+            .unwrap();
+        Arc::new(client)
+    }
+    // endregion helpers
 
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
@@ -455,23 +474,5 @@ mod tests {
 
         assert_eq!(result, rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
         Ok(())
-    }
-    
-    // --- helpers ---
-
-    fn get_runtime() -> Option<Arc<Runtime>> {
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| Runtime::new().unwrap())
-            .unwrap();
-        Some(Arc::new(runtime))
-    }
-
-    fn get_client() -> Arc<Provider<Http>> {
-        let client = Provider::<Http>::try_from(
-            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
-        )
-            .unwrap();
-        Arc::new(client)
     }
 }
