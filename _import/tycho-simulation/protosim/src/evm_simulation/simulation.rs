@@ -22,7 +22,7 @@ impl<M: Middleware> SimulationEngine<M> {
         params: &SimulationParameters,
     ) -> ExecutionResult {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
-        // concurrentl save shared reference and write locked object. Note that conurrently
+        // concurrently save shared reference and write locked object. Note that concurrently
         // calling this method is therefore not possible.
         // There is no need to keep an EVM on the struct as it only holds the environment and the
         // db, the db is simply a reference wrapper. To avoid lifetimes leaking we don't let the evm
@@ -37,7 +37,7 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.transact_to = params.revm_to();
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
-        vm.env.tx.gas_limit = params.gas_limit.unwrap_or(u64::MAX);
+        vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(u64::MAX);
         let ref_tx = vm.transact().unwrap();
         ref_tx.result
     }
@@ -104,7 +104,6 @@ impl SimulationParameters {
 mod tests {
     use std::time::Instant;
     use std::{error::Error, str::FromStr, sync::Arc};
-    use rstest::{fixture, rstest};
     use super::*;
     use ethers::{
         abi::parse_abi,
