@@ -6,6 +6,7 @@ use revm::{
     primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
     EVM,
 };
+use revm::precompile::HashMap;
 
 use super::storage;
 
@@ -15,6 +16,7 @@ pub struct SimulationEngine<M: Middleware> {
 
 impl<M: Middleware> SimulationEngine<M> {
     // TODO: return StateUpdate and Bytes
+    // TODO: support overrides
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
@@ -35,18 +37,31 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.transact_to = params.revm_to();
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
+        vm.env.tx.gas_limit = params.gas_limit.unwrap_or(u64::MAX);
         let ref_tx = vm.transact().unwrap();
         ref_tx.result
     }
 }
 
+/// Data needed to invoke a transaction simulation
 pub struct SimulationParameters {
+    /// Address of the sending account
     pub caller: H160,
+    /// Address of the receiving account/contract
     pub to: H160,
+    /// Calldata
     pub data: Bytes,
+    /// Amount of native token sent
     pub value: U256,
+    /// EVM state overrides.
+    /// Will be merged with existing state. Will take effect only for current simulation.
+    pub overrides: Option<HashMap<U256, U256>>,
+    /// Limit of gas to be used by the transaction
+    pub gas_limit: Option<u64>,
 }
 
+
+// Converters of fields to revm types
 impl SimulationParameters {
     fn revm_caller(&self) -> B160 {
         B160::from_slice(&self.caller.0)
@@ -63,14 +78,28 @@ impl SimulationParameters {
     fn revm_value(&self) -> rU256 {
         rU256::from_limbs(self.value.0)
     }
+    
+    fn revm_overrides(&self) -> Option<HashMap<rU256, rU256>> {
+        match &self.overrides {
+            None => { None },
+            Some(original) => {
+                let mut result = HashMap::new();
+                for (key, value) in original {
+                    result.insert(
+                        rU256::from_limbs(key.0), 
+                        rU256::from_limbs(value.0));
+                }
+                Some(result)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
-
     use std::{error::Error, str::FromStr, sync::Arc};
-
+    use rstest::{fixture, rstest};
     use super::*;
     use ethers::{
         abi::parse_abi,
@@ -78,8 +107,10 @@ mod tests {
         providers::{Http, Provider},
         types::{H160, U256},
     };
+    use revm::db::CacheDB;
     use revm::primitives::ExecutionResult;
-
+    
+    
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
         let client = Provider::<Http>::try_from(
@@ -115,6 +146,8 @@ mod tests {
             to: router_addr,
             data: encoded,
             value: U256::zero(),
+            overrides: None,
+            gas_limit: None,
         };
         let mut eng = SimulationEngine { state };
 

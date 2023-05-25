@@ -40,6 +40,8 @@ impl<M: Middleware> DodoPoolState<M> {
             to: self.pool_address,
             data: spot_price_calldata,
             value: U256::zero(),
+            overrides: None,
+            gas_limit: None,
         };
         let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params);
@@ -130,6 +132,8 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
             to: self.helper_address,
             data: calldata,
             value: U256::zero(),
+            overrides: None,
+            gas_limit: None,
         };
         let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params);
