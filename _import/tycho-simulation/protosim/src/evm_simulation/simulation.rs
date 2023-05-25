@@ -107,8 +107,50 @@ mod tests {
         providers::{Http, Provider},
         types::{H160, U256},
     };
-    use revm::db::CacheDB;
     use revm::primitives::ExecutionResult;
+    
+    #[test]
+    fn test_converting_overrides_to_revm() {
+        let params = SimulationParameters{
+            caller: H160::zero(),
+            to: H160::zero(),
+            data: Bytes::new(),
+            value: U256::zero(),
+            overrides: Some(
+                [
+                    (U256::from(1), U256::from(11)),
+                    (U256::from(2), U256::from(22)),
+                ].iter().cloned().collect()
+            ),
+            gas_limit: None,
+        };
+        
+        let result = params.revm_overrides().unwrap();
+        
+        // Below I am using `from_str` instead of `from`, because `from` for this type gives
+        // an ugly false positive error in Pycharm.
+        let expected = [
+            (rU256::from_str("1").unwrap(), rU256::from_str("11").unwrap()),
+            (rU256::from_str("2").unwrap(), rU256::from_str("22").unwrap()),
+        ].iter().cloned().collect();
+        assert_eq!(result, expected)
+    }
+    
+    #[test]
+    fn test_converting_none_overrides_to_revm() {
+        let params = SimulationParameters{
+            caller: H160::zero(),
+            to: H160::zero(),
+            data: Bytes::new(),
+            value: U256::zero(),
+            overrides: None,
+            gas_limit: None,
+        };
+        
+        let result = params.revm_overrides();
+        
+        assert_eq!(result, None)
+    }
     
     
     #[test]
