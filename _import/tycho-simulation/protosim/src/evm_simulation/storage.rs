@@ -436,9 +436,11 @@ mod tests {
         let index = rU256::from(8);
         db.init_account(address, AccountInfo::default(), false);
 
-        let result = db.query_storage(address, index);
+        db.query_storage(address, index).unwrap();
 
-        println!("current block: {}", result.unwrap());
+        // There is no assertion, but has the querying failed, we would have panicked by now.
+        // This test is not deterministic as it depends on the current state of the blockchain.
+        // See the next test where we do this for a specific block.
         Ok(())
     }
 
@@ -451,7 +453,6 @@ mod tests {
 
         let result = sim_db.query_storage(address, index).unwrap();
 
-        println!("past block: {}", result);
         assert_eq!(result, rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
         Ok(())
     }
