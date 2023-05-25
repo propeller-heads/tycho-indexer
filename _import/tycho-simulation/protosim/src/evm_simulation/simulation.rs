@@ -6,6 +6,7 @@ use revm::{
     primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
     EVM,
 };
+use revm::precompile::HashMap;
 
 use super::storage;
 
@@ -15,12 +16,13 @@ pub struct SimulationEngine<M: Middleware> {
 
 impl<M: Middleware> SimulationEngine<M> {
     // TODO: return StateUpdate and Bytes
+    // TODO: support overrides
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
     ) -> ExecutionResult {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
-        // concurrentl save shared reference and write locked object. Note that conurrently
+        // concurrently save shared reference and write locked object. Note that concurrently
         // calling this method is therefore not possible.
         // There is no need to keep an EVM on the struct as it only holds the environment and the
         // db, the db is simply a reference wrapper. To avoid lifetimes leaking we don't let the evm
@@ -35,18 +37,31 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.transact_to = params.revm_to();
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
+        vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(u64::MAX);
         let ref_tx = vm.transact().unwrap();
         ref_tx.result
     }
 }
 
+/// Data needed to invoke a transaction simulation
 pub struct SimulationParameters {
+    /// Address of the sending account
     pub caller: H160,
+    /// Address of the receiving account/contract
     pub to: H160,
+    /// Calldata
     pub data: Bytes,
+    /// Amount of native token sent
     pub value: U256,
+    /// EVM state overrides.
+    /// Will be merged with existing state. Will take effect only for current simulation.
+    pub overrides: Option<HashMap<U256, U256>>,
+    /// Limit of gas to be used by the transaction
+    pub gas_limit: Option<u64>,
 }
 
+
+// Converters of fields to revm types
 impl SimulationParameters {
     fn revm_caller(&self) -> B160 {
         B160::from_slice(&self.caller.0)
@@ -63,14 +78,29 @@ impl SimulationParameters {
     fn revm_value(&self) -> rU256 {
         rU256::from_limbs(self.value.0)
     }
+    
+    fn revm_overrides(&self) -> Option<HashMap<rU256, rU256>> {
+        self.overrides.clone().map(|original| {
+            let mut result = HashMap::new();
+            for (key, value) in original {
+                result.insert(
+                    rU256::from_limbs(key.0),
+                    rU256::from_limbs(value.0));
+            }
+            result
+        })
+    }
+    
+    fn revm_gas_limit(&self) -> Option<u64> {
+        // In this case we don't need to convert. The method is here just for consistency.
+        self.gas_limit
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
-
     use std::{error::Error, str::FromStr, sync::Arc};
-
     use super::*;
     use ethers::{
         abi::parse_abi,
@@ -79,7 +109,57 @@ mod tests {
         types::{H160, U256},
     };
     use revm::primitives::ExecutionResult;
-
+    
+    #[test]
+    fn test_converting_to_revm() {
+        let address_string = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
+        let params = SimulationParameters{
+            caller: H160::from_str(address_string).unwrap(),
+            to: H160::from_str(address_string).unwrap(),
+            data: Bytes::from_static(b"Hello"),
+            value: U256::from(123),
+            overrides: Some(
+                [
+                    (U256::from(1), U256::from(11)),
+                    (U256::from(2), U256::from(22)),
+                ].iter().cloned().collect()
+            ),
+            gas_limit: Some(33),
+        };
+        
+        assert_eq!(params.revm_caller(), B160::from_str(address_string).unwrap());
+        assert_eq!(
+            if let TransactTo::Call(value) = params.revm_to() {value} else {panic!()},
+            B160::from_str(address_string).unwrap()
+        );
+        assert_eq!(params.revm_data(), revm::primitives::Bytes::from_static(b"Hello"));
+        assert_eq!(params.revm_value(), rU256::from_str("123").unwrap());
+        // Below I am using `from_str` instead of `from`, because `from` for this type gives
+        // an ugly false positive error in Pycharm.
+        let expected_overrides = [
+            (rU256::from_str("1").unwrap(), rU256::from_str("11").unwrap()),
+            (rU256::from_str("2").unwrap(), rU256::from_str("22").unwrap()),
+        ].iter().cloned().collect();
+        assert_eq!(params.revm_overrides().unwrap(), expected_overrides);
+        assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
+    }
+    
+    #[test]
+    fn test_converting_nones_to_revm() {
+        let params = SimulationParameters{
+            caller: H160::zero(),
+            to: H160::zero(),
+            data: Bytes::new(),
+            value: U256::zero(),
+            overrides: None,
+            gas_limit: None,
+        };
+        
+        assert_eq!(params.revm_overrides(), None);
+        assert_eq!(params.revm_gas_limit(), None);
+    }
+    
+    
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
         let client = Provider::<Http>::try_from(
@@ -115,6 +195,8 @@ mod tests {
             to: router_addr,
             data: encoded,
             value: U256::zero(),
+            overrides: None,
+            gas_limit: None,
         };
         let mut eng = SimulationEngine { state };
 
