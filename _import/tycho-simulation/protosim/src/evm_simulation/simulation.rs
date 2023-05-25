@@ -80,18 +80,15 @@ impl SimulationParameters {
     }
     
     fn revm_overrides(&self) -> Option<HashMap<rU256, rU256>> {
-        match &self.overrides {
-            None => { None },
-            Some(original) => {
-                let mut result = HashMap::new();
-                for (key, value) in original {
-                    result.insert(
-                        rU256::from_limbs(key.0), 
-                        rU256::from_limbs(value.0));
-                }
-                Some(result)
+        self.overrides.clone().map(|original| {
+            let mut result = HashMap::new();
+            for (key, value) in original {
+                result.insert(
+                    rU256::from_limbs(key.0),
+                    rU256::from_limbs(value.0));
             }
-        }
+            result
+        })
     }
     
     fn revm_gas_limit(&self) -> Option<u64> {
