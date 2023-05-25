@@ -23,8 +23,8 @@ approx = "0.3.2"
 rstest = "0.16.0"
 
 [features]
-default = ["run_network_tests"]
-run_network_tests = []
+default = ["network_tests"]
+network_tests = []
 
 [profile.bench]
 debug = true
