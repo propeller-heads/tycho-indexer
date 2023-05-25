@@ -93,6 +93,11 @@ impl SimulationParameters {
             }
         }
     }
+    
+    fn revm_gas_limit(&self) -> Option<u64> {
+        // In this case we don't need to convert. The method is here just for consistency.
+        self.gas_limit
+    }
 }
 
 #[cfg(test)]
@@ -110,34 +115,41 @@ mod tests {
     use revm::primitives::ExecutionResult;
     
     #[test]
-    fn test_converting_overrides_to_revm() {
+    fn test_converting_to_revm() {
+        let address_string = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
         let params = SimulationParameters{
-            caller: H160::zero(),
-            to: H160::zero(),
-            data: Bytes::new(),
-            value: U256::zero(),
+            caller: H160::from_str(address_string).unwrap(),
+            to: H160::from_str(address_string).unwrap(),
+            data: Bytes::from_static(b"Hello"),
+            value: U256::from(123),
             overrides: Some(
                 [
                     (U256::from(1), U256::from(11)),
                     (U256::from(2), U256::from(22)),
                 ].iter().cloned().collect()
             ),
-            gas_limit: None,
+            gas_limit: Some(33),
         };
         
-        let result = params.revm_overrides().unwrap();
-        
+        assert_eq!(params.revm_caller(), B160::from_str(address_string).unwrap());
+        assert_eq!(
+            if let TransactTo::Call(value) = params.revm_to() {value} else {panic!()},
+            B160::from_str(address_string).unwrap()
+        );
+        assert_eq!(params.revm_data(), revm::primitives::Bytes::from_static(b"Hello"));
+        assert_eq!(params.revm_value(), rU256::from_str("123").unwrap());
         // Below I am using `from_str` instead of `from`, because `from` for this type gives
         // an ugly false positive error in Pycharm.
-        let expected = [
+        let expected_overrides = [
             (rU256::from_str("1").unwrap(), rU256::from_str("11").unwrap()),
             (rU256::from_str("2").unwrap(), rU256::from_str("22").unwrap()),
         ].iter().cloned().collect();
-        assert_eq!(result, expected)
+        assert_eq!(params.revm_overrides().unwrap(), expected_overrides);
+        assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
     }
     
     #[test]
-    fn test_converting_none_overrides_to_revm() {
+    fn test_converting_nones_to_revm() {
         let params = SimulationParameters{
             caller: H160::zero(),
             to: H160::zero(),
@@ -147,9 +159,8 @@ mod tests {
             gas_limit: None,
         };
         
-        let result = params.revm_overrides();
-        
-        assert_eq!(result, None)
+        assert_eq!(params.revm_overrides(), None);
+        assert_eq!(params.revm_gas_limit(), None);
     }
     
     
