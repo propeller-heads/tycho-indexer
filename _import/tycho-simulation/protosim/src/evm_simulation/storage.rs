@@ -1,14 +1,12 @@
+use ethers::{
+    providers::Middleware,
+    types::{BlockId, BlockNumber, H160, H256, U64},
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
-use ethers::{
-    providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256},
-};
-
-use ethers::types::U64;
 use revm::db::{DbAccount};
 use revm::primitives::{KECCAK_EMPTY};
 use revm::{
@@ -125,13 +123,13 @@ pub struct SimulationDB<M: Middleware> {
 }
 
 impl<M: Middleware> SimulationDB<M> {
-    pub fn new(client: Arc<M>, runtime: Option<Arc<tokio::runtime::Runtime>>) -> Self {
+    pub fn new(client: Arc<M>, runtime: Option<Arc<tokio::runtime::Runtime>>, block: Option<BlockHeader>) -> Self {
         Self {
             client,
             cache: CachedData::new(),
             missed_accounts: HashSet::new(),
             mocked_accounts: HashSet::new(),
-            block: None,
+            block,
             runtime,
         }
     }
@@ -197,6 +195,7 @@ impl<M: Middleware> SimulationDB<M> {
     /// Query blockchain for account info
     /// 
     /// Gets account information not including storage: balance, nonce and code.
+    /// /// Received data is NOT put into cache; this must be done separately.
     fn query_account_info(
         &self,
         address: B160,
@@ -229,9 +228,9 @@ impl<M: Middleware> SimulationDB<M> {
 
     /// Query blockchain for account storage at certain index
     /// 
-    /// Received data is put into cache. TODO: update this
+    /// Received data is NOT put into cache; this must be done separately.
     fn query_storage(
-        &mut self,
+        &self,
         address: B160,
         index: rU256,
     ) -> Result<rU256, <SimulationDB<M> as Database>::Error> {
@@ -252,13 +251,6 @@ impl<M: Middleware> SimulationDB<M> {
             rU256::from_be_bytes(storage.to_fixed_bytes())
         };
         let storage = self.block_on(fut);
-
-        self.cache
-            .accounts
-            .get_mut(&address)
-            .unwrap()
-            .storage
-            .insert(index, storage);
 
         Ok(storage)
     }
@@ -325,8 +317,8 @@ impl<M: Middleware> SimulationDB<M> {
         }
         revert_updates
     }
-
 }
+
 impl<M: Middleware> Database for SimulationDB<M> {
     type Error = M::Error;
 
@@ -369,6 +361,12 @@ impl<M: Middleware> Database for SimulationDB<M> {
                     Some(storage) => Ok(*storage),
                     None => {
                         let storage = self.query_storage(address, index).unwrap();
+                        self.cache
+                            .accounts
+                            .get_mut(&address)
+                            .unwrap()
+                            .storage
+                            .insert(index, storage);
                         Ok(storage)
                     }
                 },
@@ -376,6 +374,12 @@ impl<M: Middleware> Database for SimulationDB<M> {
                     let account_info = self.query_account_info(address)?;
                     self.init_account(address, account_info, false);
                     let storage = self.query_storage(address, index).unwrap();
+                    self.cache
+                        .accounts
+                        .get_mut(&address)
+                        .unwrap()
+                        .storage
+                        .insert(index, storage);
                     Ok(storage)
                 }
             }
@@ -387,75 +391,88 @@ impl<M: Middleware> Database for SimulationDB<M> {
     }
 }
 
-// // If we use SharedDB we might not need the clone trait anymore
-// pub struct EthRpcDB<M: Middleware + Clone> {
-//     pub client: Arc<M>,
-//     pub block: Option<BlockId>,
-//     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
-// }
-//
-// impl<M: Middleware + Clone> EthRpcDB<M> {
-//     /// internal utility function to call tokio feature and wait for output
-//     pub fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
-//         // If we get here and have to block the current thread, we really
-//         // messed up indexing / filling the cache. In that case this will save us
-//         // at the price of a very high time penalty.
-//         match &self.runtime {
-//             Some(runtime) => runtime.block_on(f),
-//             None => futures::executor::block_on(f),
-//         }
-//     }
-// }
-//
-// // Unfortunately EthersDB does not implement the DatabaseRef trait
-// impl<M: Middleware + Clone> DatabaseRef for EthRpcDB<M> {
-//     type Error = M::Error;
-//
-//     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-//         println!("loading basic data {address}!");
-//         let fut = async {
-//             tokio::join!(
-//                 self.client.get_balance(H160(address.0), None),
-//                 self.client.get_transaction_count(H160(address.0), None),
-//                 self.client.get_code(H160(address.0), None),
-//             )
-//         };
-//
-//         let (balance, nonce, code) = self.block_on(fut);
-//
-//         Ok(Some(AccountInfo::new(
-//             rU256::from_limbs(
-//                 balance
-//                     .unwrap_or_else(|e| panic!("ethers get balance error: {e:?}"))
-//                     .0,
-//             ),
-//             nonce
-//                 .unwrap_or_else(|e| panic!("ethers get nonce error: {e:?}"))
-//                 .as_u64(),
-//             to_analysed(Bytecode::new_raw(
-//                 code.unwrap_or_else(|e| panic!("ethers get code error: {e:?}"))
-//                     .0,
-//             )),
-//         )))
-//     }
-//
-//     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-//         panic!("Should not be called. Code is already loaded");
-//         // not needed because we already load code with basic info
-//     }
-//
-//     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-//         println!("Loading storage {address}, {index}");
-//         let add = H160::from(address.0);
-//         let index = H256::from(index.to_be_bytes());
-//         let fut = async {
-//             let storage = self.client.get_storage_at(add, index, None).await.unwrap();
-//             rU256::from_be_bytes(storage.to_fixed_bytes())
-//         };
-//         Ok(self.block_on(fut))
-//     }
-//
-//     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
-//         todo!()
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use revm::primitives::U256 as rU256;
+    use rstest::{fixture, rstest};
+    use std::{error::Error, str::FromStr, sync::Arc};
+
+    use super::*;
+    use ethers::providers::{Http, Provider};
+    use tokio::runtime::Runtime;
+
+    #[fixture]
+    /// SimulationDB at block 17322706
+    pub fn sim_db() -> SimulationDB<Provider<Http>> {
+        // let (client, mock) = Provider::mocked();
+        SimulationDB::new(
+            get_client(),
+            get_runtime(),
+            Some(
+                BlockHeader { number: 17322706, hash: H256::default(), timestamp: u64::default() }
+            ),
+        )
+    }
+    
+    // region HELPERS
+    fn get_runtime() -> Option<Arc<Runtime>> {
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| Runtime::new().unwrap())
+            .unwrap();
+        Some(Arc::new(runtime))
+    }
+
+    fn get_client() -> Arc<Provider<Http>> {
+        let client = Provider::<Http>::try_from(
+            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
+        )
+            .unwrap();
+        Arc::new(client)
+    }
+    // endregion helpers
+
+    #[rstest]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_query_account_info(sim_db: SimulationDB<Provider<Http>>) {
+        let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
+
+        let acc_info = sim_db.query_account_info(address).unwrap();
+        assert_eq!(acc_info.balance, rU256::from(1111663073377778101_i64));
+        assert_eq!(acc_info.nonce, 44900_u64);
+        assert_eq!(
+            acc_info.code_hash,
+            B256::from_str("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+                .unwrap()
+        );
+    }
+    
+    #[rstest]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
+        let mut db = SimulationDB::new(get_client(), get_runtime(), None);
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let index = rU256::from(8);
+        db.init_account(address, AccountInfo::default(), false);
+
+        db.query_storage(address, index).unwrap();
+
+        // There is no assertion, but has the querying failed, we would have panicked by now.
+        // This test is not deterministic as it depends on the current state of the blockchain.
+        // See the next test where we do this for a specific block.
+        Ok(())
+    }
+
+    #[rstest]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_query_storage_past_block(mut sim_db: SimulationDB<Provider<Http>>) -> Result<(), Box<dyn Error>> {
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let index = rU256::from(8);
+        sim_db.init_account(address, AccountInfo::default(), false);
+
+        let result = sim_db.query_storage(address, index).unwrap();
+
+        assert_eq!(result, rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?);
+        Ok(())
+    }
+}
