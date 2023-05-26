@@ -3,7 +3,7 @@ use ethers::{
     types::{Bytes, H160, U256},
 };
 use revm::{
-    primitives::{EVMError, ExecutionResult, TransactTo, B160, U256 as rU256},
+    primitives::{ExecutionResult, TransactTo, B160, U256 as rU256},
     EVM,
 };
 use revm::precompile::HashMap;
@@ -17,10 +17,7 @@ pub struct SimulationEngine<M: Middleware> {
 impl<M: Middleware> SimulationEngine<M> {
     // TODO: return StateUpdate and Bytes
     // TODO: support overrides
-    pub fn simulate(
-        &mut self,
-        params: &SimulationParameters,
-    ) -> ExecutionResult {
+    pub fn simulate(&mut self, params: &SimulationParameters) -> ExecutionResult {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrently save shared reference and write locked object. Note that concurrently
         // calling this method is therefore not possible.
@@ -78,7 +75,7 @@ impl SimulationParameters {
     fn revm_value(&self) -> rU256 {
         rU256::from_limbs(self.value.0)
     }
-    
+
     fn revm_overrides(&self) -> Option<HashMap<rU256, rU256>> {
         self.overrides.clone().map(|original| {
             let mut result = HashMap::new();
@@ -90,7 +87,7 @@ impl SimulationParameters {
             result
         })
     }
-    
+
     fn revm_gas_limit(&self) -> Option<u64> {
         // In this case we don't need to convert. The method is here just for consistency.
         self.gas_limit
@@ -109,7 +106,7 @@ mod tests {
         types::{H160, U256},
     };
     use revm::primitives::ExecutionResult;
-    
+
     #[test]
     fn test_converting_to_revm() {
         let address_string = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
@@ -126,7 +123,7 @@ mod tests {
             ),
             gas_limit: Some(33),
         };
-        
+
         assert_eq!(params.revm_caller(), B160::from_str(address_string).unwrap());
         assert_eq!(
             if let TransactTo::Call(value) = params.revm_to() {value} else {panic!()},
@@ -143,7 +140,7 @@ mod tests {
         assert_eq!(params.revm_overrides().unwrap(), expected_overrides);
         assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
     }
-    
+
     #[test]
     fn test_converting_nones_to_revm() {
         let params = SimulationParameters{
@@ -154,12 +151,12 @@ mod tests {
             overrides: None,
             gas_limit: None,
         };
-        
+
         assert_eq!(params.revm_overrides(), None);
         assert_eq!(params.revm_gas_limit(), None);
     }
-    
-    
+
+
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
         let client = Provider::<Http>::try_from(
