@@ -62,14 +62,18 @@ pub struct BlockHeader {
     timestamp: u64,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct StateUpdate {
-    storage: Option<hash_map::HashMap<rU256, rU256>>,
-    balance: Option<rU256>,
-    code: Option<Bytes>,
+    // TODO: This is our internal structure, consider changing types to ethers ones
+    pub storage: Option<hash_map::HashMap<rU256, rU256>>,
+    pub balance: Option<rU256>,
+    pub code: Option<Bytes>,
 }
 
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.
 struct CachedData {
+    // TODO: consider changing types to ethers ones
+    //  e.g. B160, B256 and rU256 are revm types. 
     pub accounts: HashMap<B160, DbAccount>,
     pub contracts: HashMap<B256, Bytecode>,
     pub logs: Vec<Log>,

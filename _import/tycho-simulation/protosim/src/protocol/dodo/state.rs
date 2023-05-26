@@ -45,6 +45,7 @@ impl<M: Middleware> DodoPoolState<M> {
         };
         let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params);
+        let simulation_result = simulation_result.unwrap().evm_result.unwrap().result;
         let spot_price_u256 = match simulation_result {
             ExecutionResult::Success {
                 reason: _,
@@ -137,6 +138,7 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
         };
         let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params);
+        let simulation_result = simulation_result.unwrap().evm_result.unwrap().result;
         let (amount_out, gas) = match simulation_result {
             ExecutionResult::Success {
                 reason: _,
