@@ -4,6 +4,21 @@ use log::warn;
 
 use revm::primitives::{hash_map, AccountInfo, B160, U256 as rU256};
 
+// TODO: Add doc-string explaining the types
+#[derive(PartialEq, Default)]
+pub enum AccountType {
+    #[default]
+    Temp,
+    Permanent,
+    Mocked,
+}
+#[derive(Default)]
+pub struct Account {
+    pub info: AccountInfo,
+    pub storage: hash_map::HashMap<rU256, rU256>,
+    pub account_type: AccountType,
+}
+
 #[derive(Default)]
 pub struct StateUpdate {
     pub storage: Option<hash_map::HashMap<rU256, rU256>>,
@@ -12,8 +27,7 @@ pub struct StateUpdate {
 #[derive(Default)]
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.
 pub struct CachedData {
-    accounts: HashMap<B160, AccountInfo>,
-    storage: HashMap<B160, hash_map::HashMap<rU256, rU256>>,
+    accounts: HashMap<B160, Account>,
 }
 
 impl CachedData {
@@ -27,6 +41,7 @@ impl CachedData {
     /// * `address` - The address of the account to insert.
     /// * `info` - The account information to insert.
     /// * `storage` - Optional storage information associated with the account.
+    /// * `account_type` - Determines the type of the account
     ///
     /// # Notes
     ///
@@ -34,21 +49,29 @@ impl CachedData {
     /// collection. If so, it logs a warning and returns without modifying the instance.
     /// Otherwise, it inserts the `info` into the `accounts` collection. If `storage` is provided,
     /// it inserts the `storage` information into the `storage` collection associated with the `address`.
-    pub fn insert_account_data(
+    pub fn init_account(
         &mut self,
         address: B160,
         info: AccountInfo,
         storage: Option<hash_map::HashMap<rU256, rU256>>,
+        account_type: AccountType,
     ) {
         if self.accounts.contains_key(&address) {
-            warn!("Tried to insert account info that was already inserted");
+            warn!("Tried to init account that was already initialized");
             return;
         }
 
-        self.accounts.insert(address, info);
-        if let Some(s) = storage {
-            self.storage.insert(address, s);
-        }
+        self.accounts.insert(
+            address,
+            Account {
+                info,
+                storage: match storage {
+                    Some(s) => s,
+                    None => hash_map::HashMap::default(),
+                },
+                account_type,
+            },
+        );
     }
 
     /// Updates the account information and storage associated with the given address.
@@ -67,42 +90,33 @@ impl CachedData {
     /// in the `update` parameter.
     ///
     /// If the `address` is not found in either collection, a warning is logged and no changes are made.
-    pub fn update_account_info(&mut self, address: &B160, update: &StateUpdate) {
+    pub fn update_account(&mut self, address: &B160, update: &StateUpdate) {
         if let Some(account) = self.accounts.get_mut(address) {
             if let Some(new_balance) = update.balance {
-                account.balance = new_balance;
+                account.info.balance = new_balance;
             }
-        } else {
-            warn!(
-                "Tried to update account {:?} that was not initialized",
-                address
-            );
-        }
-
-        if let Some(storage) = self.storage.get_mut(address) {
             if let Some(new_storage) = &update.storage {
                 for (index, value) in new_storage {
-                    storage.insert(*index, *value);
+                    account.storage.insert(*index, *value);
                 }
+            } else {
+                warn!(
+                    "Tried to update account {:?} that was not initialized",
+                    address
+                );
             }
-        } else {
-            warn!(
-                "Tried to update storage {:?} that was not initialized",
-                address
-            );
         }
     }
 
-    pub fn get_account(&self, address: &B160) -> Option<&AccountInfo> {
-        self.accounts.get(address)
+    pub fn get_account_info(&self, address: &B160) -> Option<&AccountInfo> {
+        match self.accounts.get(address) {
+            Some(acc) => Some(&acc.info),
+            None => None,
+        }
     }
 
-    pub fn get_mut_account(&mut self, address: &B160) -> Option<&mut AccountInfo> {
-        self.accounts.get_mut(address)
-    }
-
-    pub fn remove_account(&mut self, address: &B160) -> Option<AccountInfo> {
-        self.accounts.remove(address)
+    pub fn remove_account(&mut self, address: &B160) {
+        self.accounts.remove(address);
     }
 
     pub fn account_present(&self, address: &B160) -> bool {
@@ -110,30 +124,54 @@ impl CachedData {
     }
 
     pub fn set_storage(&mut self, address: B160, index: rU256, value: rU256) {
-        self.storage
-            .entry(address)
-            .or_default()
-            .insert(index, value);
+        if let Some(acc) = self.accounts.get_mut(&address) {
+            acc.storage.insert(index, value);
+        } else {
+            warn!("Try to set storage on unitialized account. Account will be initialized.");
+            let mut storage_map = hash_map::HashMap::new();
+            storage_map.insert(index, value);
+            self.init_account(
+                address,
+                AccountInfo::default(),
+                Some(storage_map),
+                AccountType::Temp,
+            )
+        }
     }
 
     pub fn get_storage(&self, address: &B160, index: &rU256) -> Option<&rU256> {
-        match self.storage.get(address) {
-            Some(s) => match s.get(index) {
-                Some(value) => Some(value),
-                None => None,
-            },
+        match self.accounts.get(address) {
+            Some(acc) => acc.storage.get(index),
             None => None,
         }
     }
 
-    pub fn clone_storage(&self, address: &B160) -> Option<hash_map::HashMap<rU256, rU256>> {
-        self.storage.get(address).cloned()
+    pub fn clone_account_storage(
+        &mut self,
+        address: &B160,
+    ) -> Option<hash_map::HashMap<rU256, rU256>> {
+        match self.accounts.get_mut(address) {
+            Some(acc) => Some(acc.storage.clone()),
+            None => None,
+        }
+    }
+
+    pub fn clear_temp_accounts(&mut self) {
+        self.accounts
+            .retain(|&_address, acc| acc.account_type != AccountType::Temp);
+    }
+
+    pub fn is_account_type(&self, address: &B160, account_type: &AccountType) -> bool {
+        match self.accounts.get(address) {
+            Some(acc) => &acc.account_type == account_type,
+            None => false,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::cache::CachedData;
+    use crate::evm_simulation::cache::{Account, AccountType, CachedData};
     use revm::primitives::hash_map;
     use revm::primitives::{AccountInfo, B160, KECCAK_EMPTY, U256 as rU256};
     use std::{error::Error, str::FromStr};
@@ -156,9 +194,9 @@ mod tests {
         let expected_storage_value = rU256::from_str("5").unwrap();
         storage_new.insert(rU256::from_str("1").unwrap(), expected_storage_value);
 
-        cache.insert_account_data(acc_address, info, Some(storage_new));
+        cache.init_account(acc_address, info, Some(storage_new), AccountType::Temp);
 
-        let acc = cache.get_account(&acc_address).unwrap();
+        let acc = cache.get_account_info(&acc_address).unwrap();
         let storage_value = cache
             .get_storage(&acc_address, &rU256::from_str("1").unwrap())
             .unwrap();
@@ -179,11 +217,19 @@ mod tests {
             code: None,
             code_hash: KECCAK_EMPTY,
         };
-        cache.accounts.insert(acc_address, info);
-        let mut storage_new = hash_map::HashMap::new();
+
+        let mut og_storage = hash_map::HashMap::new();
         let storage_index = rU256::from_str("1").unwrap();
-        storage_new.insert(storage_index, rU256::from_str("5").unwrap());
-        cache.storage.insert(acc_address, storage_new);
+        og_storage.insert(storage_index, rU256::from_str("5").unwrap());
+
+        cache.accounts.insert(
+            acc_address,
+            Account {
+                info,
+                storage: og_storage,
+                account_type: AccountType::Temp,
+            },
+        );
         let updated_balance = Some(rU256::from(100));
         let updated_storage_value = rU256::from_str("999").unwrap();
         let mut updated_storage = hash_map::HashMap::new();
@@ -193,10 +239,10 @@ mod tests {
             storage: Some(updated_storage),
         };
 
-        cache.update_account_info(&acc_address, &state_update);
+        cache.update_account(&acc_address, &state_update);
 
         assert_eq!(
-            cache.get_account(&acc_address).unwrap().balance,
+            cache.get_account_info(&acc_address).unwrap().balance,
             updated_balance.unwrap()
         );
         assert_eq!(

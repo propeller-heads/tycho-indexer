@@ -3,16 +3,11 @@ use ethers::{
     types::{BlockId, BlockNumber, H160, H256, U64},
 };
 
-use std::{
-    collections::{HashMap, HashSet},
-    default,
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use ethers::{
-    prelude::k256::sha2::digest::KeyInit,
     providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256, U256},
+    types::{BlockId, BlockNumber, H160, H256},
 };
 
 use ethers::types::U64;
@@ -22,12 +17,12 @@ use revm::{
     db::DbAccount,
     interpreter::analysis::to_analysed,
     primitives::{
-        hash_map, AccountInfo, Bytecode, BytecodeState, B160, B256, KECCAK_EMPTY, U256 as rU256,
+        hash_map, AccountInfo, Bytecode, B160, B256, KECCAK_EMPTY, U256 as rU256,
     },
     Database,
 };
 
-use super::cache::{CachedData, StateUpdate};
+use super::cache::{AccountType, CachedData, StateUpdate};
 
 /// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
 /// ownership of it.
@@ -78,11 +73,6 @@ pub struct SimulationDB<M: Middleware> {
     client: Arc<M>,
     /// Cached data
     cache: CachedData,
-    /// Accounts that we had to query because we didn't expect them to be accessed during simulations.
-    /// They will only be stored temporarily.
-    temp_accounts: HashSet<B160>,
-    /// Accounts that should not fallback to using a storage query
-    mocked_accounts: HashSet<B160>,
     /// Current block
     block: Option<BlockHeader>,
 
@@ -98,9 +88,7 @@ impl<M: Middleware> SimulationDB<M> {
         Self {
             client,
             cache: CachedData::new(),
-            temp_accounts: HashSet::new(),
-            mocked_accounts: HashSet::new(),
-            block,
+            block: None,
             runtime,
         }
     }
@@ -122,17 +110,14 @@ impl<M: Middleware> SimulationDB<M> {
         address: B160,
         mut account: AccountInfo,
         storage: Option<hash_map::HashMap<rU256, rU256>>,
-        mock: bool,
+        account_type: AccountType,
     ) {
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
 
-        self.cache.insert_account_data(address, account, storage);
-
-        if mock {
-            self.mocked_accounts.insert(address);
-        }
+        self.cache
+            .init_account(address, account, storage, account_type);
     }
 
     /// Update the simulation state.
@@ -155,13 +140,13 @@ impl<M: Middleware> SimulationDB<M> {
         self.block = Some(block);
         for (address, update_info) in updates.iter() {
             let mut revert_entry = StateUpdate::default();
-            if let Some(current_account) = self.cache.get_mut_account(address) {
+            if let Some(current_account) = self.cache.get_account_info(address) {
                 revert_entry.balance = Some(current_account.balance);
             }
-            revert_entry.storage = self.cache.clone_storage(&address);
+            revert_entry.storage = self.cache.clone_account_storage(address);
             revert_updates.insert(*address, revert_entry);
 
-            self.cache.update_account_info(address, update_info);
+            self.cache.update_account(address, update_info);
         }
         revert_updates
     }
@@ -170,13 +155,8 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// It is recommended to call this after a new block is received,
     /// to avoid cached state leading to wrong results.
-    pub fn clear_temp_accounts(&mut self) {
-        for address in self.temp_accounts.iter() {
-            self.cache
-                .remove_account(address)
-                .expect("Inconsistency between missed_accounts and cache.accounts");
-        }
-        self.temp_accounts.clear();
+    pub fn clear_missed_accounts(&mut self) {
+        self.cache.clear_temp_accounts();
     }
 
     /// Query blockchain for account info
@@ -242,12 +222,6 @@ impl<M: Middleware> SimulationDB<M> {
         Ok(storage)
     }
 
-    fn track_miss(&mut self, address: B160) {
-        if !self.cache.account_present(&address) {
-            self.missed_accounts.insert(address);
-        }
-    }
-
     pub fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
         // If we get here and have to block the current thread, we really
         // messed up indexing / filling the cache. In that case this will save us
@@ -263,7 +237,7 @@ impl<M: Middleware> Database for SimulationDB<M> {
     type Error = M::Error;
 
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        match self.cache.get_account(&address) {
+        match self.cache.get_account_info(&address) {
             Some(account) => Ok(Some(account.clone())),
             None => {
                 if self.mocked_accounts.contains(&address) {
@@ -271,7 +245,7 @@ impl<M: Middleware> Database for SimulationDB<M> {
                 }
                 let account_info = self.query_account_info(address)?;
                 self.track_temp_accounts(address);
-                self.init_account(address, account_info.clone(), None, false);
+                self.init_account(address, account_info.clone(), None, AccountType::Temp);
                 Ok(Some(account_info))
             }
         }
@@ -285,35 +259,28 @@ impl<M: Middleware> Database for SimulationDB<M> {
         // if we are accessing a mocked contract, we should not allow it to do a
         // query as the query might return garbage, so in case we would do a query we
         // return an empty slot instead.
-        if self.mocked_accounts.contains(&address) {
+        if self.cache.is_account_type(&address, &AccountType::Mocked) {
             if let Some(value) = self.cache.get_storage(&address, &index) {
                 Ok(*value)
             } else {
                 Ok(rU256::ZERO)
             }
         } else {
-            // Note: we do only check on account level, not storage level as the existence
-            // of an account is interpreted as the account being tracked.
-            self.track_temp_accounts(address);
-            match self.cache.get_storage(&address, &index) {
-                Some(storage) => Ok(*storage),
-                None => {
-                    let storage = self.query_storage(address, index).unwrap();
-                        self.cache
-                            .accounts
-                            .get_mut(&address)
-                            .unwrap()
-                            .storage
-                            .insert(index, storage);
-                    self.cache.set_storage(address, index, storage);
-                    Ok(storage)
-                }
-                None => {
+            match self.cache.account_present(&address) {
+                true => match self.cache.get_storage(&address, &index) {
+                    Some(s) => Ok(*s),
+                    None => {
+                        let storage = self.query_storage(address, index).unwrap();
+                        self.cache.set_storage(address, index, storage);
+                        Ok(storage)
+                    }
+                },
+                false => {
                     let account_info = self.query_account_info(address)?;
                     let storage_value = self.query_storage(address, index)?;
                     let mut storage = hash_map::HashMap::default();
                     storage.insert(index, storage_value);
-                    self.init_account(address, account_info, Some(storage), false);
+                    self.init_account(address, account_info, Some(storage), AccountType::Temp);
 
                     self.cache
                         .accounts
