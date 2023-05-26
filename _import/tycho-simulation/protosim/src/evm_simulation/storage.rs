@@ -326,7 +326,6 @@ impl<M: Middleware> SimulationDB<M> {
                 );
             }
         }
-        self.clear_temp_accounts();
         revert_updates
     }
 }
@@ -420,7 +419,6 @@ mod tests {
     use tokio::runtime::Runtime;
 
     #[fixture]
-    /// SimulationDB at block 17322706
     pub fn mock_sim_db() -> SimulationDB<Provider<MockProvider>> {
         let (client, _) = Provider::mocked();
         SimulationDB::new(Arc::new(client), get_runtime(), None)
@@ -445,7 +443,6 @@ mod tests {
     // endregion helpers
 
     #[rstest]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_query_account_info(mock_sim_db: SimulationDB<Provider<MockProvider>>) {
         //ethers::types::Bytes::from
         let response_code = U256::from(128_u64);
@@ -486,7 +483,7 @@ mod tests {
     }
 
     #[rstest]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
+
     fn test_query_storage_past_block(
         mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
@@ -568,7 +565,6 @@ mod tests {
             .storage(mock_acc_address, storage_address)
             .unwrap();
 
-        // if we found out how to mock, check if provider has not been called.
         assert!(!mock_sim_db.temp_accounts.contains(&mock_acc_address));
         assert_eq!(storage, rU256::ZERO);
         Ok(())
