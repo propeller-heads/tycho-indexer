@@ -144,7 +144,7 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// It is recommended to call this after a new block is received,
     /// to avoid cached state leading to wrong results.
-    pub fn clear_missed_accounts(&mut self) {
+    pub fn clear_temp_accounts(&mut self) {
         self.cache.clear_temp_accounts();
     }
 
