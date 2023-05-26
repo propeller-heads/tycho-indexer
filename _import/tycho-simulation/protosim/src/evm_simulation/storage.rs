@@ -37,7 +37,7 @@ where
 }
 
 impl<'a, M: Middleware> Database for SharedSimulationDB<'a, M> {
-    type Error = ();
+    type Error = M::Error;
 
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
         Database::basic(self.db, address)
@@ -332,7 +332,7 @@ impl<M: Middleware> SimulationDB<M> {
 }
 
 impl<M: Middleware> Database for SimulationDB<M> {
-    type Error = ();
+    type Error = M::Error;
 
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
         match self.cache.accounts.get(&address) {
