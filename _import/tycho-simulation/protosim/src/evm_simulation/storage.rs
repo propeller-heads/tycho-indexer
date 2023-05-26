@@ -413,22 +413,17 @@ mod tests {
     use std::{error::Error, str::FromStr, sync::Arc};
 
     use super::*;
-    use ethers::providers::{Http, Provider};
+    use ethers::{
+        providers::{Http, MockProvider, Provider},
+        types::U256,
+    };
     use tokio::runtime::Runtime;
 
     #[fixture]
     /// SimulationDB at block 17322706
-    pub fn sim_db() -> SimulationDB<Provider<Http>> {
-        // let (client, mock) = Provider::mocked();
-        SimulationDB::new(
-            get_client(),
-            get_runtime(),
-            Some(BlockHeader {
-                number: 17322706,
-                hash: H256::default(),
-                timestamp: u64::default(),
-            }),
-        )
+    pub fn mock_sim_db() -> SimulationDB<Provider<MockProvider>> {
+        let (client, _) = Provider::mocked();
+        SimulationDB::new(Arc::new(client), get_runtime(), None)
     }
 
     // region HELPERS
@@ -451,16 +446,26 @@ mod tests {
 
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
-    fn test_query_account_info(sim_db: SimulationDB<Provider<Http>>) {
+    fn test_query_account_info(mock_sim_db: SimulationDB<Provider<MockProvider>>) {
+        //ethers::types::Bytes::from
+        let response_code = U256::from(128_u64);
+        let response_nonce = U256::from(50_i64);
+        let response_balance = U256::from(500_i64);
+        // Note: The mocked provider takes the pushed requests from the top of the stack
+        mock_sim_db.client.as_ref().as_ref().push(response_code);
+        mock_sim_db.client.as_ref().as_ref().push(response_nonce);
+        mock_sim_db.client.as_ref().as_ref().push(response_balance);
         let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
-        let acc_info = sim_db.query_account_info(address).unwrap();
-        assert_eq!(acc_info.balance, rU256::from(1111663073377778101_i64));
-        assert_eq!(acc_info.nonce, 44900_u64);
+        let acc_info = mock_sim_db.query_account_info(address).unwrap();
+
+        assert_eq!(acc_info.balance, rU256::from_limbs(response_balance.0));
+        assert_eq!(acc_info.nonce, response_nonce.as_u64());
         assert_eq!(
-            acc_info.code_hash,
-            B256::from_str("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
-                .unwrap()
+            acc_info.code,
+            Some(to_analysed(Bytecode::new_raw(
+                ethers::types::Bytes::from([128; 1]).0
+            )))
         );
     }
 
@@ -483,39 +488,43 @@ mod tests {
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_query_storage_past_block(
-        mut sim_db: SimulationDB<Provider<Http>>,
+        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
-        sim_db.init_account(address, AccountInfo::default(), false);
+        let response_storage = H256::from_low_u64_le(123);
+        mock_sim_db.init_account(address, AccountInfo::default(), false);
+        mock_sim_db.client.as_ref().as_ref().push(response_storage);
 
-        let result = sim_db.query_storage(address, index).unwrap();
+        let result = mock_sim_db.query_storage(address, index).unwrap();
 
         assert_eq!(
             result,
-            rU256::from_str("0x646cd61b00000000036d7b35b7a8fb2e023d00000000000000001b458d0135c5")?
+            rU256::from_be_bytes(response_storage.to_fixed_bytes())
         );
         Ok(())
     }
 
     #[rstest]
     fn test_mock_account_get_acc_info(
-        mut sim_db: SimulationDB<Provider<Http>>,
+        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
+        // Tests if mock accounts are not considered temp accounts and if the provider has not been queried.
+        // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        sim_db.mocked_accounts.insert(mock_acc_address);
+        mock_sim_db.mocked_accounts.insert(mock_acc_address);
 
-        let acc_info = sim_db.basic(mock_acc_address).unwrap().unwrap();
+        let acc_info = mock_sim_db.basic(mock_acc_address).unwrap().unwrap();
 
-        // if we found out how to mock, check if provider has not been called.
-        assert!(!sim_db.temp_accounts.contains(&mock_acc_address));
+        assert!(!mock_sim_db.temp_accounts.contains(&mock_acc_address));
+        assert!(!mock_sim_db.cache.accounts.contains_key(&mock_acc_address));
         assert_eq!(AccountInfo::default(), acc_info);
         Ok(())
     }
 
     #[rstest]
     fn test_clear_temp_accounts_doesnt_clear_mocked(
-        mut sim_db: SimulationDB<Provider<Http>>,
+        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let mock_acc: DbAccount = DbAccount {
@@ -523,20 +532,25 @@ mod tests {
             account_state: Default::default(),
             storage: Default::default(),
         };
-        sim_db.mocked_accounts.insert(mock_acc_address);
-        sim_db.cache.accounts.insert(mock_acc_address, mock_acc);
+        mock_sim_db.mocked_accounts.insert(mock_acc_address);
+        mock_sim_db
+            .cache
+            .accounts
+            .insert(mock_acc_address, mock_acc);
 
-        sim_db.clear_temp_accounts();
+        mock_sim_db.clear_temp_accounts();
 
-        assert!(sim_db.mocked_accounts.contains(&mock_acc_address));
-        assert!(sim_db.cache.accounts.contains_key(&mock_acc_address));
+        assert!(mock_sim_db.mocked_accounts.contains(&mock_acc_address));
+        assert!(mock_sim_db.cache.accounts.contains_key(&mock_acc_address));
         Ok(())
     }
 
     #[rstest]
     fn test_mock_account_get_storage(
-        mut sim_db: SimulationDB<Provider<Http>>,
+        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
+        // Tests if mock accounts are not considered temp accounts and if the provider has not been queried.
+        // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::ZERO;
         let mock_acc = DbAccount {
@@ -544,13 +558,18 @@ mod tests {
             account_state: Default::default(),
             storage: Default::default(),
         };
-        sim_db.mocked_accounts.insert(mock_acc_address);
-        sim_db.cache.accounts.insert(mock_acc_address, mock_acc);
+        mock_sim_db.mocked_accounts.insert(mock_acc_address);
+        mock_sim_db
+            .cache
+            .accounts
+            .insert(mock_acc_address, mock_acc);
 
-        let storage = sim_db.storage(mock_acc_address, storage_address).unwrap();
+        let storage = mock_sim_db
+            .storage(mock_acc_address, storage_address)
+            .unwrap();
 
         // if we found out how to mock, check if provider has not been called.
-        assert!(!sim_db.temp_accounts.contains(&mock_acc_address));
+        assert!(!mock_sim_db.temp_accounts.contains(&mock_acc_address));
         assert_eq!(storage, rU256::ZERO);
         Ok(())
     }
