@@ -5,20 +5,9 @@ use ethers::{
 
 use std::sync::Arc;
 
-use ethers::{
-    providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256},
-};
-
-use ethers::types::U64;
-
-use log::warn;
 use revm::{
-    db::DbAccount,
     interpreter::analysis::to_analysed,
-    primitives::{
-        hash_map, AccountInfo, Bytecode, B160, B256, KECCAK_EMPTY, U256 as rU256,
-    },
+    primitives::{hash_map, AccountInfo, Bytecode, B160, B256, U256 as rU256},
     Database,
 };
 
@@ -240,11 +229,11 @@ impl<M: Middleware> Database for SimulationDB<M> {
         match self.cache.get_account_info(&address) {
             Some(account) => Ok(Some(account.clone())),
             None => {
-                if self.mocked_accounts.contains(&address) {
-                    return Ok(Some(AccountInfo::default()));
+                if self.cache.is_account_type(&address, &AccountType::Mocked) {
+                    let info = self.cache.get_account_info(&address).unwrap().clone();
+                    return Ok(Some(info));
                 }
                 let account_info = self.query_account_info(address)?;
-                self.track_temp_accounts(address);
                 self.init_account(address, account_info.clone(), None, AccountType::Temp);
                 Ok(Some(account_info))
             }
@@ -281,13 +270,6 @@ impl<M: Middleware> Database for SimulationDB<M> {
                     let mut storage = hash_map::HashMap::default();
                     storage.insert(index, storage_value);
                     self.init_account(address, account_info, Some(storage), AccountType::Temp);
-
-                    self.cache
-                        .accounts
-                        .get_mut(&address)
-                        .unwrap()
-                        .storage
-                        .insert(index, storage);
                     Ok(storage_value)
                 }
             }
@@ -366,7 +348,7 @@ mod tests {
         let mut db = SimulationDB::new(get_client(), get_runtime(), None);
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
-        db.init_account(address, AccountInfo::default(), false);
+        db.init_account(address, AccountInfo::default(), None, AccountType::Temp);
 
         db.query_storage(address, index).unwrap();
 
@@ -384,7 +366,7 @@ mod tests {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
         let response_storage = H256::from_low_u64_le(123);
-        mock_sim_db.init_account(address, AccountInfo::default(), false);
+        mock_sim_db.init_account(address, AccountInfo::default(), None, AccountType::Temp);
         mock_sim_db.client.as_ref().as_ref().push(response_storage);
 
         let result = mock_sim_db.query_storage(address, index).unwrap();
@@ -400,39 +382,25 @@ mod tests {
     fn test_mock_account_get_acc_info(
         mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
-        // Tests if mock accounts are not considered temp accounts and if the provider has not been queried.
+        // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_sim_db.mocked_accounts.insert(mock_acc_address);
+        mock_sim_db.init_account(
+            mock_acc_address,
+            AccountInfo::default(),
+            None,
+            AccountType::Mocked,
+        );
 
         let acc_info = mock_sim_db.basic(mock_acc_address).unwrap().unwrap();
 
-        assert!(!mock_sim_db.temp_accounts.contains(&mock_acc_address));
-        assert!(!mock_sim_db.cache.accounts.contains_key(&mock_acc_address));
-        assert_eq!(AccountInfo::default(), acc_info);
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_clear_temp_accounts_doesnt_clear_mocked(
-        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
-    ) -> Result<(), Box<dyn Error>> {
-        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let mock_acc: DbAccount = DbAccount {
-            info: AccountInfo::default(),
-            account_state: Default::default(),
-            storage: Default::default(),
-        };
-        mock_sim_db.mocked_accounts.insert(mock_acc_address);
-        mock_sim_db
-            .cache
-            .accounts
-            .insert(mock_acc_address, mock_acc);
-
-        mock_sim_db.clear_temp_accounts();
-
-        assert!(mock_sim_db.mocked_accounts.contains(&mock_acc_address));
-        assert!(mock_sim_db.cache.accounts.contains_key(&mock_acc_address));
+        assert_eq!(
+            mock_sim_db
+                .cache
+                .get_account_info(&mock_acc_address)
+                .unwrap(),
+            &acc_info
+        );
         Ok(())
     }
 
@@ -444,23 +412,76 @@ mod tests {
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::ZERO;
-        let mock_acc = DbAccount {
-            info: AccountInfo::default(),
-            account_state: Default::default(),
-            storage: Default::default(),
-        };
-        mock_sim_db.mocked_accounts.insert(mock_acc_address);
-        mock_sim_db
-            .cache
-            .accounts
-            .insert(mock_acc_address, mock_acc);
+        mock_sim_db.init_account(
+            mock_acc_address,
+            AccountInfo::default(),
+            None,
+            AccountType::Mocked,
+        );
 
         let storage = mock_sim_db
             .storage(mock_acc_address, storage_address)
             .unwrap();
 
-        assert!(!mock_sim_db.temp_accounts.contains(&mock_acc_address));
         assert_eq!(storage, rU256::ZERO);
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_update_state(
+        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
+    ) -> Result<(), Box<dyn Error>> {
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        mock_sim_db.init_account(
+            address,
+            AccountInfo::default(),
+            None,
+            AccountType::Permanent,
+        );
+
+        let mut new_storage = hash_map::HashMap::default();
+        let new_storage_value_index = rU256::from(123);
+        new_storage.insert(new_storage_value_index, new_storage_value_index);
+        let new_balance = rU256::from(500_i64);
+        let update = StateUpdate {
+            storage: Some(new_storage),
+            balance: Some(new_balance),
+        };
+        let mut updates = hash_map::HashMap::default();
+        updates.insert(address, update);
+        let new_block = BlockHeader {
+            number: 1,
+            hash: H256::default(),
+            timestamp: 234,
+        };
+        let revers_update = mock_sim_db.update_state(&updates, new_block);
+
+        assert_eq!(
+            mock_sim_db
+                .cache
+                .get_storage(&address, &new_storage_value_index)
+                .unwrap(),
+            &new_storage_value_index
+        );
+        assert_eq!(
+            mock_sim_db
+                .cache
+                .get_account_info(&address)
+                .unwrap()
+                .balance,
+            new_balance
+        );
+        assert_eq!(mock_sim_db.block.unwrap().number, 1);
+
+        assert_eq!(
+            revers_update.get(&address).unwrap().balance.unwrap(),
+            AccountInfo::default().balance
+        );
+        assert_eq!(
+            revers_update.get(&address).unwrap().storage,
+            Some(hash_map::HashMap::default())
+        );
+
         Ok(())
     }
 }
