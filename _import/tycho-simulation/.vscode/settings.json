@@ -1,5 +1,6 @@
 {
-    "rust-analyzer.linkedProjects": [
-        "./protosim/Cargo.toml"
-    ]
+  "rust-analyzer.linkedProjects": [
+    "./protosim/Cargo.toml",
+    "./protosim/Cargo.toml"
+  ]
 }
