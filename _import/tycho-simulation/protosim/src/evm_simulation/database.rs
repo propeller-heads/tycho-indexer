@@ -269,25 +269,16 @@ impl<M: Middleware> Database for SimulationDB<M> {
     ///
     /// * If the account is present in the cache, the function returns a clone of the cached account information.
     ///
-    /// * If the account is not present in the cache and is of type `AccountType::Mocked`, the function retrieves the account
-    ///   information from the cache and returns a clone of it. Mocked accounts are treated differently as they are not expected
-    ///   to have valid information in the cache, but the function still returns the available information.
-    ///
-    /// * If the account is not present in the cache and is not of type `AccountType::Mocked`, the function queries the account
+    /// * If the account is not present in the cache, the function queries the account
     ///   information from the contract, initializes the account in the cache with the retrieved information, and returns a clone
     ///   of the account information.
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        match self.cache.get_account_info(&address) {
-            Some(account) => Ok(Some(account.clone())),
-            None => {
-                if self.cache.is_account_type(&address, &AccountType::Mocked) {
-                    let info = self.cache.get_account_info(&address).cloned();
-                    return Ok(info);
-                }
-                let account_info = self.query_account_info(address)?;
-                self.init_account(address, account_info.clone(), None, AccountType::Temp);
-                Ok(Some(account_info))
-            }
+        if let Some(account) = self.cache.get_account_info(&address) {
+            Ok(Some(account.clone()))
+        } else {
+            let account_info = self.query_account_info(address)?;
+            self.init_account(address, account_info.clone(), None, AccountType::Temp);
+            Ok(Some(account_info))
         }
     }
 
@@ -327,30 +318,23 @@ impl<M: Middleware> Database for SimulationDB<M> {
     /// * If the contract is not present in the cache, the function queries the account info and storage value from
     ///   the contract, initializes the account in the cache with the retrieved information, and returns the storage value.
     fn storage(&mut self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        if self.cache.is_account_type(&address, &AccountType::Mocked) {
-            if let Some(value) = self.cache.get_storage(&address, &index) {
-                Ok(*value)
-            } else {
-                Ok(rU256::ZERO)
+        if let Some(storage) = self.cache.get_storage(&address, &index) {
+            return Ok(*storage);
+        }
+        match self.cache.get_account_type(&address) {
+            Some(AccountType::Mocked) => Ok(rU256::ZERO),
+            Some(AccountType::Permanent | AccountType::Temp) => {
+                let storage = self.query_storage(address, index)?;
+                self.cache.set_storage(address, index, storage);
+                Ok(storage)
             }
-        } else {
-            match self.cache.account_present(&address) {
-                true => match self.cache.get_storage(&address, &index) {
-                    Some(s) => Ok(*s),
-                    None => {
-                        let storage = self.query_storage(address, index)?;
-                        self.cache.set_storage(address, index, storage);
-                        Ok(storage)
-                    }
-                },
-                false => {
-                    let account_info = self.query_account_info(address)?;
-                    let storage_value = self.query_storage(address, index)?;
-                    let mut storage = hash_map::HashMap::default();
-                    storage.insert(index, storage_value);
-                    self.init_account(address, account_info, Some(storage), AccountType::Temp);
-                    Ok(storage_value)
-                }
+            None => {
+                let account_info = self.query_account_info(address)?;
+                let storage_value = self.query_storage(address, index)?;
+                let mut storage = hash_map::HashMap::default();
+                storage.insert(index, storage_value);
+                self.init_account(address, account_info, Some(storage), AccountType::Temp);
+                Ok(storage_value)
             }
         }
     }

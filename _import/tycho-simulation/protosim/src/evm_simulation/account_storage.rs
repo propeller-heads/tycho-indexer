@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use log::warn;
 
 use revm::primitives::{hash_map, AccountInfo, B160, U256 as rU256};
-
+use std::collections::hash_map::Entry::Vacant;
 /// Represents the type of an Ethereum account.
 ///
 /// The `AccountType` enum defines the different types of Ethereum accounts, including `Temp`,
@@ -14,7 +14,7 @@ use revm::primitives::{hash_map, AccountInfo, B160, U256 as rU256};
 /// * `Temp`: Represents a temporary account. Only accounts queried during runtime will be considered temp and will be deleted with every new block.
 /// * `Permanent`: Represents a permanent account. Will be updated with every new block. If data is missing it will be queried.
 /// * `Mocked`: Represents a mocked account used for testing or simulation purposes. Will stay in the cache, if data is missing a default value will be returned
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
 pub enum AccountType {
     #[default]
     Temp,
@@ -65,22 +65,18 @@ impl AccountStorage {
         storage: Option<hash_map::HashMap<rU256, rU256>>,
         account_type: AccountType,
     ) {
-        if self.accounts.contains_key(&address) {
-            warn!("Tried to init account that was already initialized");
-            return;
-        }
-
-        self.accounts.insert(
-            address,
-            Account {
+        if let Vacant(e) = self.accounts.entry(address) {
+            e.insert(Account {
                 info,
                 storage: match storage {
                     Some(s) => s,
                     None => hash_map::HashMap::default(),
                 },
                 account_type,
-            },
-        );
+            });
+        } else {
+            warn!("Tried to init account that was already initialized");
+        }
     }
 
     /// Updates the account information and storage associated with the given address.
@@ -158,10 +154,11 @@ impl AccountStorage {
             .retain(|&_address, acc| !acc.account_type.eq(&type_to_remove));
     }
 
-    pub fn is_account_type(&self, address: &B160, account_type: &AccountType) -> bool {
-        match self.accounts.get(address) {
-            Some(acc) => acc.account_type.eq(account_type),
-            None => false,
+    pub fn get_account_type(&self, address: &B160) -> Option<&AccountType> {
+        if let Some(acc) = self.accounts.get(address) {
+            Some(&acc.account_type)
+        } else {
+            None
         }
     }
 }
@@ -368,19 +365,22 @@ mod tests {
             account_type: AccountType::Permanent,
             ..Default::default()
         };
-        account_stroage.accounts.insert(address_1, account_1);
-        account_stroage.accounts.insert(address_2, account_2);
+        account_stroage
+            .accounts
+            .insert(address_1, account_1.clone());
+        account_stroage
+            .accounts
+            .insert(address_2, account_2.clone());
 
         // Test for an existing account with the correct account type
-        let is_right_type = account_stroage.is_account_type(&address_1, &AccountType::Temp);
+        let temp_account = account_stroage.get_account_type(&address_1).unwrap();
         // Test for an existing account with a different account type
-        let is_false_type = account_stroage.is_account_type(&address_2, &AccountType::Temp);
+        let is_false_type = account_stroage.get_account_type(&address_2).unwrap();
         // Test for a non-existing account
+        let is_not_present = account_stroage.get_account_type(&address_3);
 
-        let is_not_present = account_stroage.is_account_type(&address_3, &AccountType::Temp);
-
-        assert!(is_right_type);
-        assert!(!is_false_type);
-        assert!(!is_not_present);
+        assert_eq!(temp_account, &account_1.account_type);
+        assert_eq!(is_false_type, &account_2.account_type);
+        assert_eq!(is_not_present, None);
     }
 }

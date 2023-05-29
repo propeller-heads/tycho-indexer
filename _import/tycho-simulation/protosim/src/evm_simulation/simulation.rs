@@ -9,9 +9,9 @@ use revm::{
 use revm::precompile::HashMap;
 use revm::primitives::{bytes, EVMResult, Output, State};  // `bytes` is an external crate
 use crate::evm_simulation::storage::StateUpdate;
-use super::storage;
+use super::database;
 
-/// An error representing any transaction simulation result other than successful execution 
+/// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]
 pub enum SimulationError {
     /// Something went wrong while getting storage; might be caused by network issues
@@ -31,7 +31,7 @@ pub struct SimulationResult {
 }
 
 pub struct SimulationEngine<M: Middleware> {
-    pub state: storage::SimulationDB<M>,
+    pub state: database::SimulationDB<M>,
 }
 
 impl<M: Middleware> SimulationEngine<M> {
@@ -50,7 +50,7 @@ impl<M: Middleware> SimulationEngine<M> {
 
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
-        let db_ref = storage::SharedSimulationDB::new(&mut self.state);
+        let db_ref = database::SharedSimulationDB::new(&mut self.state);
         vm.database(db_ref);
         vm.env.tx.caller = params.revm_caller();
         vm.env.tx.transact_to = params.revm_to();
@@ -65,25 +65,25 @@ impl<M: Middleware> SimulationEngine<M> {
 }
 
 /// Convert a complex EVMResult into a simpler structure
-/// 
+///
 /// EVMResult is not of an error type even if the transaction was not successful.
 /// This function returns an Ok if and only if the transaction was successful.
 /// In case the transaction was reverted, halted, or another error occurred (like an error
 /// when accessing storage), this function returns an Err with a simple String description
 /// of an underlying cause.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `evm_result` - output from calling `revm.transact()`
-/// 
+///
 /// # Errors
-/// 
+///
 /// * `SimulationError` - simulation wasn't successful for any reason. See variants for details.
-/// 
+///
 fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>) -> Result<SimulationResult, SimulationError> {
     match evm_result {
         Ok(result_and_state) => {
-            match result_and_state.result { 
+            match result_and_state.result {
                 ExecutionResult::Success {gas_used, gas_refunded, output, ..} =>
                     Ok(interpret_evm_success(gas_used, gas_refunded, output, result_and_state.state)),
                 ExecutionResult::Revert { output, .. } => {
@@ -97,9 +97,9 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>
         },
         Err(evm_error) => {
             match evm_error {
-                EVMError::Transaction(invalid_tx) => 
+                EVMError::Transaction(invalid_tx) =>
                     Err(SimulationError::TransactionError(format!("EVM error: {invalid_tx:?}"))),
-                EVMError::PrevrandaoNotSet => 
+                EVMError::PrevrandaoNotSet =>
                     Err(SimulationError::TransactionError("EVM error: PrevrandaoNotSet".to_string())),
                 EVMError::Database(db_error) =>
                     Err(SimulationError::StorageError(format!("Storage error: {db_error:?}"))),
@@ -109,17 +109,17 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>
 }
 
 // Helper function to extract some details from a successful transaction execution
-fn interpret_evm_success(gas_used: u64, gas_refunded: u64, output: Output, state: State) 
+fn interpret_evm_success(gas_used: u64, gas_refunded: u64, output: Output, state: State)
     -> SimulationResult {
     SimulationResult {
         result: output.into_data(),
         state_updates: {
             // For each account mentioned in state updates in REVM output, we will have
-            // one record in our hashmap. Such record contains *new* values of account's 
+            // one record in our hashmap. Such record contains *new* values of account's
             // state. This record's optional `storage` field will contain
-            // account's storage changes (as a hashmap from slot index to slot value), 
+            // account's storage changes (as a hashmap from slot index to slot value),
             // unless REVM output doesn't contain any storage for this account, in which case
-            // we set this field to None. If REVM did return storage, we return one record 
+            // we set this field to None. If REVM did return storage, we return one record
             // per *modified* slot (sometimes REVM returns a storage record for an account
             // even if the slots are not modified).
             let mut account_updates: HashMap<Address, StateUpdate> = HashMap::new();
@@ -287,7 +287,7 @@ mod tests {
                 },
                 state: [
                     (   // storage has changed
-                        rB160::from(Address::zero()), 
+                        rB160::from(Address::zero()),
                         Account{
                             info: AccountInfo {
                                 balance: rU256::from_limbs([1, 0, 0, 0]),
@@ -316,10 +316,10 @@ mod tests {
                 ].iter().cloned().collect(),
             }
         );
-        
+
         let result = interpret_evm_result(evm_result);
         let simulation_result = result.unwrap();
-        
+
         assert_eq!(simulation_result.result, bytes::Bytes::from_static(b"output"));
         let expected_state_updates = [
             (
@@ -362,7 +362,7 @@ mod tests {
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
-    
+
     #[test]
     fn test_interpret_result_ok_halt() {
         let evm_result: EVMResult<ProviderError> = Ok(
@@ -385,7 +385,7 @@ mod tests {
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
-    
+
     #[test]
     fn test_interpret_result_err_invalid_transaction() {
         let evm_result: EVMResult<ProviderError> = Err(
@@ -402,7 +402,7 @@ mod tests {
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
-    
+
     #[test]
     fn test_interpret_result_err_db_error() {
         let evm_result: EVMResult<ProviderError> = Err(
@@ -419,7 +419,7 @@ mod tests {
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
-    
+
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
@@ -432,7 +432,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = database::SimulationDB::new(client, Some(Arc::new(runtime)), None);
 
         // any random address will work
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
