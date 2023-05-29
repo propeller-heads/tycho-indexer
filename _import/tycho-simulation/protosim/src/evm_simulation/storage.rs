@@ -153,7 +153,7 @@ impl<M: Middleware> SimulationDB<M> {
         self.cache.remove_accounts_by_type(AccountType::Temp);
     }
 
-    /// Query information about an Ethereum account.#
+    /// Query information about an Ethereum account.
     /// Gets account information not including storage.
     ///
     /// # Arguments
@@ -231,7 +231,7 @@ impl<M: Middleware> SimulationDB<M> {
         Ok(storage)
     }
 
-    pub fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
+    fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
         // If we get here and have to block the current thread, we really
         // messed up indexing / filling the cache. In that case this will save us
         // at the price of a very high time penalty.
@@ -245,13 +245,44 @@ impl<M: Middleware> SimulationDB<M> {
 impl<M: Middleware> Database for SimulationDB<M> {
     type Error = M::Error;
 
+    /// Retrieves basic information about an account.
+    ///
+    /// This function retrieves the basic account information for the specified address.
+    /// If the account is present in the cache, the cached account information is returned.
+    /// If the account is not present in the cache, the function queries the account information from the contract
+    /// and initializes the account in the cache with the retrieved information.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: The address of the account to retrieve the information for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing an `Option` that holds the account information if it exists. If the account is not found,
+    /// `None` is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there was an issue querying the account information from the contract or accessing the cache.
+    ///
+    /// # Notes
+    ///
+    /// * If the account is present in the cache, the function returns a clone of the cached account information.
+    ///
+    /// * If the account is not present in the cache and is of type `AccountType::Mocked`, the function retrieves the account
+    ///   information from the cache and returns a clone of it. Mocked accounts are treated differently as they are not expected
+    ///   to have valid information in the cache, but the function still returns the available information.
+    ///
+    /// * If the account is not present in the cache and is not of type `AccountType::Mocked`, the function queries the account
+    ///   information from the contract, initializes the account in the cache with the retrieved information, and returns a clone
+    ///   of the account information.
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
         match self.cache.get_account_info(&address) {
             Some(account) => Ok(Some(account.clone())),
             None => {
                 if self.cache.is_account_type(&address, &AccountType::Mocked) {
-                    let info = self.cache.get_account_info(&address).unwrap().clone();
-                    return Ok(Some(info));
+                    let info = self.cache.get_account_info(&address).cloned();
+                    return Ok(info);
                 }
                 let account_info = self.query_account_info(address)?;
                 self.init_account(address, account_info.clone(), None, AccountType::Temp);
@@ -264,10 +295,38 @@ impl<M: Middleware> Database for SimulationDB<M> {
         panic!("Not implemented")
     }
 
+    /// Retrieves the storage value at the specified address and index.
+    ///
+    /// If the accessed contract is of type `AccountType::Mocked`, the function returns an empty slot
+    /// instead of querying the storage to avoid potentially returning garbage values.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: The address of the contract to retrieve the storage value from.
+    /// * `index`: The index of the storage value to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the storage value if it exists. If the contract is of type `AccountType::Mocked`
+    /// and the storage value is not found in the cache, an empty slot is returned as `rU256::ZERO`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there was an issue querying the storage value from the contract or accessing the cache.
+    ///
+    /// # Notes
+    ///
+    /// * If the contract is present in the cache and is of type `AccountType::Mocked`, the function first checks if
+    ///   the storage value exists in the cache. If found, it returns the cached value. If not found, it returns an empty slot.
+    ///   Mocked contracts are not expected to have valid storage values, so the function does not query the storage in this case.
+    ///
+    /// * If the contract is present in the cache, the function checks if the storage value exists in the cache.
+    ///   If found, it returns the cached value.
+    ///   If not found, it queries the storage value from the contract, stores it in the cache, and returns it.
+    ///
+    /// * If the contract is not present in the cache, the function queries the account info and storage value from
+    ///   the contract, initializes the account in the cache with the retrieved information, and returns the storage value.
     fn storage(&mut self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        // if we are accessing a mocked contract, we should not allow it to do a
-        // query as the query might return garbage, so in case we would do a query we
-        // return an empty slot instead.
         if self.cache.is_account_type(&address, &AccountType::Mocked) {
             if let Some(value) = self.cache.get_storage(&address, &index) {
                 Ok(*value)
@@ -279,7 +338,7 @@ impl<M: Middleware> Database for SimulationDB<M> {
                 true => match self.cache.get_storage(&address, &index) {
                     Some(s) => Ok(*s),
                     None => {
-                        let storage = self.query_storage(address, index).unwrap();
+                        let storage = self.query_storage(address, index)?;
                         self.cache.set_storage(address, index, storage);
                         Ok(storage)
                     }
