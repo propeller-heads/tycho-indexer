@@ -108,12 +108,12 @@ impl CachedData {
                 for (index, value) in new_storage {
                     account.storage.insert(*index, *value);
                 }
-            } else {
-                warn!(
-                    "Tried to update account {:?} that was not initialized",
-                    address
-                );
             }
+        } else {
+            warn!(
+                "Tried to update account {:?} that was not initialized",
+                address
+            );
         }
     }
 
