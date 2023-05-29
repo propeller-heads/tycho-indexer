@@ -21,8 +21,11 @@ pub enum SimulationError {
 }
 
 pub struct SimulationResult {
+    /// Bytes result of transaction execution
     pub result: bytes::Bytes,
+    /// State changes caused by the transaction
     pub state_updates: HashMap<Address, StateUpdate>,
+    /// Gas used by the transaction (already reduced by the refunded gas)
     pub gas_used: u64,
 }
 
@@ -80,7 +83,7 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>
     match evm_result {
         Ok(result_and_state) => {
             match result_and_state.result { 
-                ExecutionResult::Success {gas_used, output, ..} => {
+                ExecutionResult::Success {gas_used, gas_refunded, output, ..} => {
                     Ok(SimulationResult {
                         result: output.into_data(),
                         state_updates: {
@@ -115,7 +118,7 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>
                             }
                             account_updates
                         },
-                        gas_used
+                        gas_used: gas_used - gas_refunded,
                     })
                 },
                 ExecutionResult::Revert { output, .. } => {
@@ -322,7 +325,7 @@ mod tests {
             )
         ].iter().cloned().collect();
         assert_eq!(simulation_result.state_updates, expected_state_updates);
-        assert_eq!(simulation_result.gas_used, 100);
+        assert_eq!(simulation_result.gas_used, 90);
     }
 
     #[test]
