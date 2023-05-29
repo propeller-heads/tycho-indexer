@@ -11,6 +11,7 @@ use revm::primitives::{bytes, EVMResult, Output, State};  // `bytes` is an exter
 use crate::evm_simulation::storage::StateUpdate;
 use super::storage;
 
+/// An error representing any transaction simulation result other than successful execution 
 #[derive(Debug)]
 pub enum SimulationError {
     /// Something went wrong while getting storage; might be caused by network issues
@@ -19,8 +20,9 @@ pub enum SimulationError {
     TransactionError(String),
 }
 
+/// A result of a successful transaction simulation
 pub struct SimulationResult {
-    /// Bytes result of transaction execution
+    /// Output of transaction execution as bytes
     pub result: bytes::Bytes,
     /// State changes caused by the transaction
     pub state_updates: HashMap<Address, StateUpdate>,
@@ -58,20 +60,6 @@ impl<M: Middleware> SimulationEngine<M> {
 
         let evm_result = vm.transact();
 
-        println!("{:?}", evm_result.as_ref().unwrap());
-        println!();
-        for (key, value) in evm_result.as_ref().unwrap().state.iter() {
-            println!("changes for address {key:?}:");
-            println!("  balance: {:?}, nonce: {}", value.info.balance, value.info.nonce);
-            for (index, slot) in value.storage.iter() {
-                if slot.is_changed(){
-                    println!("  {index:?}:\n    original: {}\n    new: {}", slot.original_value, slot.present_value)
-                } else {
-                    println!("  slot {index} not changed");
-                }
-            }
-        }
-
         interpret_evm_result(evm_result)
     }
 }
@@ -83,6 +71,15 @@ impl<M: Middleware> SimulationEngine<M> {
 /// In case the transaction was reverted, halted, or another error occurred (like an error
 /// when accessing storage), this function returns an Err with a simple String description
 /// of an underlying cause.
+/// 
+/// # Arguments
+/// 
+/// * `evm_result` - output from calling `revm.transact()`
+/// 
+/// # Errors
+/// 
+/// * `SimulationError` - simulation wasn't successful for any reason. See variants for details.
+/// 
 fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>) -> Result<SimulationResult, SimulationError> {
     match evm_result {
         Ok(result_and_state) => {
