@@ -8,7 +8,7 @@ use revm::{
     EVM,
 };
 use revm::precompile::HashMap;
-use revm::primitives::{bytes, EVMResult};  // `bytes` is an external crate
+use revm::primitives::{bytes, EVMResult, Output, ResultAndState, State};  // `bytes` is an external crate
 use crate::evm_simulation::storage::{SharedSimulationDB, StateUpdate};
 use super::storage;
 
@@ -34,7 +34,6 @@ pub struct SimulationEngine<M: Middleware> {
 }
 
 impl<M: Middleware> SimulationEngine<M> {
-    // TODO: return StateUpdate and Bytes
     // TODO: support overrides
     pub fn simulate(
         &mut self,
@@ -78,57 +77,26 @@ impl<M: Middleware> SimulationEngine<M> {
     }
 }
 
-/// This is, beyond all discussion, the prettiest function ever written.
+/// Convert a complex EVMResult into a simpler structure
+/// 
+/// EVMResult is not of an error type even if the transaction was not successful.
+/// This function returns an Ok if and only if the transaction was successful.
+/// In case the transaction was reverted, halted, or another error occurred (like an error
+/// when accessing storage), this function returns an Err with a simple String description
+/// of an underlying cause.
 fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>) -> Result<SimulationResult, SimulationError> {
     match evm_result {
         Ok(result_and_state) => {
             match result_and_state.result { 
-                ExecutionResult::Success {gas_used, gas_refunded, output, ..} => {
-                    Ok(SimulationResult {
-                        result: output.into_data(),
-                        state_updates: {
-                            let mut account_updates: HashMap<Address, StateUpdate> = HashMap::new();
-                            for (address, account) in result_and_state.state {
-                                account_updates.insert(
-                                    Address::from(address),
-                                    StateUpdate{
-                                        // revm doesn't say if the balance was actually changed
-                                        balance: Some(account.info.balance),
-                                        // revm doesn't say if the code was actually changed
-                                        code: account.info.code.map(|x| x.bytecode),
-                                        storage: {
-                                            if account.storage.is_empty() { 
-                                                None 
-                                            } else {
-                                                let mut slot_updates: HashMap<rU256, rU256> = HashMap::new();
-                                                for (index, slot) in account.storage {
-                                                    if slot.is_changed() {
-                                                        slot_updates.insert(index, slot.present_value);
-                                                    }
-                                                }
-                                                if slot_updates.is_empty() {
-                                                    None
-                                                } else { 
-                                                    Some(slot_updates)
-                                                }
-                                            }
-                                        }
-                                    }
-                                );
-                            }
-                            account_updates
-                        },
-                        gas_used: gas_used - gas_refunded,
-                    })
-                },
+                ExecutionResult::Success {gas_used, gas_refunded, output, ..} =>
+                    Ok(interpret_evm_success(gas_used, gas_refunded, output, result_and_state.state)),
                 ExecutionResult::Revert { output, .. } => {
                     let revert_msg = std::str::from_utf8(output.as_ref())
                         .unwrap_or("[can't decode output]");
                     Err(SimulationError::TransactionError(format!("Execution reverted: {revert_msg}")))
                 },
-                ExecutionResult::Halt {reason, ..} => {
-                    Err(SimulationError::TransactionError(format!("Execution halted: {reason:?}")))
-                }
+                ExecutionResult::Halt {reason, ..} =>
+                    Err(SimulationError::TransactionError(format!("Execution halted: {reason:?}"))),
             }
         },
         Err(evm_error) => {
@@ -141,6 +109,55 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>
                     Err(SimulationError::StorageError(format!("Storage error: {db_error:?}"))),
             }
         }
+    }
+}
+
+// Helper function to extract some details from a successful transaction execution
+fn interpret_evm_success(gas_used: u64, gas_refunded: u64, output: Output, state: State) 
+    -> SimulationResult {
+    SimulationResult {
+        result: output.into_data(),
+        state_updates: {
+            // For each account mentioned in state updates in REVM output, we will have
+            // one record in our hashmap. Such record contains *new* values of account's 
+            // state. This record's optional `storage` field will contain
+            // account's storage changes (as a hashmap from slot index to slot value), 
+            // unless REVM output doesn't contain any storage for this account, in which case
+            // we set this field to None. If REVM did return storage, we return one record 
+            // per *modified* slot (sometimes REVM returns a storage record for an account
+            // even if the slots are not modified).
+            let mut account_updates: HashMap<Address, StateUpdate> = HashMap::new();
+            for (address, account) in state {
+                account_updates.insert(
+                    Address::from(address),
+                    StateUpdate {
+                        // revm doesn't say if the balance was actually changed
+                        balance: Some(account.info.balance),
+                        // revm doesn't say if the code was actually changed
+                        code: account.info.code.map(|x| x.bytecode),
+                        storage: {
+                            if account.storage.is_empty() {
+                                None
+                            } else {
+                                let mut slot_updates: HashMap<rU256, rU256> = HashMap::new();
+                                for (index, slot) in account.storage {
+                                    if slot.is_changed() {
+                                        slot_updates.insert(index, slot.present_value);
+                                    }
+                                }
+                                if slot_updates.is_empty() {
+                                    None
+                                } else {
+                                    Some(slot_updates)
+                                }
+                            }
+                        }
+                    }
+                );
+            }
+            account_updates
+        },
+        gas_used: gas_used - gas_refunded,
     }
 }
 
