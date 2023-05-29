@@ -20,19 +20,11 @@ pub enum SimulationError {
     TransactionError(String),
 }
 
-/// TODO: remove this
-pub struct SimulationResult<DB> {
-    pub evm_result: EVMResult<DB>,
-}
-
-/// TODO: remove 2 from the name
-pub struct SimulationResult2 {
+pub struct SimulationResult {
     pub result: bytes::Bytes,
     pub state_updates: HashMap<Address, StateUpdate>,
     pub gas_used: u64,
 }
-
-
 
 pub struct SimulationEngine<M: Middleware> {
     pub state: storage::SimulationDB<M>,
@@ -44,7 +36,7 @@ impl<M: Middleware> SimulationEngine<M> {
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
-    ) -> Result<SimulationResult<M::Error>, SimulationError> {
+    ) -> Result<SimulationResult, SimulationError> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrently save shared reference and write locked object. Note that concurrently
         // calling this method is therefore not possible.
@@ -79,21 +71,17 @@ impl<M: Middleware> SimulationEngine<M> {
             }
         }
 
-        self.interpret_evm_result(evm_result)
-    }
-
-    fn interpret_evm_result<DBError>(&self, evm_result: EVMResult<DBError>) -> Result<SimulationResult<DBError>, SimulationError> {
-        Ok(SimulationResult { evm_result })
+        interpret_evm_result(evm_result)
     }
 }
 
 /// This is, beyond all discussion, the prettiest function ever written.
-fn interpret_evm_result2<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>) -> Result<SimulationResult2, SimulationError> {
+fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>) -> Result<SimulationResult, SimulationError> {
     match evm_result {
         Ok(result_and_state) => {
             match result_and_state.result { 
                 ExecutionResult::Success {gas_used, output, ..} => {
-                    Ok(SimulationResult2 {
+                    Ok(SimulationResult {
                         result: output.into_data(),
                         state_updates: {
                             let mut account_updates: HashMap<Address, StateUpdate> = HashMap::new();
@@ -314,7 +302,7 @@ mod tests {
             }
         );
         
-        let result = interpret_evm_result2(evm_result);
+        let result = interpret_evm_result(evm_result);
         let simulation_result = result.unwrap();
         
         assert_eq!(simulation_result.result, bytes::Bytes::from_static(b"output"));
@@ -349,7 +337,7 @@ mod tests {
             }
         );
 
-        let result = interpret_evm_result2(evm_result);
+        let result = interpret_evm_result(evm_result);
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -372,7 +360,7 @@ mod tests {
             }
         );
 
-        let result = interpret_evm_result2(evm_result);
+        let result = interpret_evm_result(evm_result);
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -389,7 +377,7 @@ mod tests {
             EVMError::Transaction(InvalidTransaction::GasMaxFeeGreaterThanPriorityFee)
         );
 
-        let result = interpret_evm_result2(evm_result);
+        let result = interpret_evm_result(evm_result);
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -406,7 +394,7 @@ mod tests {
             EVMError::Database(ProviderError::CustomError("boo".to_string()))
         );
 
-        let result = interpret_evm_result2(evm_result);
+        let result = interpret_evm_result(evm_result);
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -461,27 +449,9 @@ mod tests {
         let result = eng.simulate(&sim_params);
 
         let amounts_out = match result {
-            Ok(SimulationResult { evm_result }) => {
-                let evm_result = evm_result.unwrap();
-                match evm_result.result {
-                    ExecutionResult::Success {
-                        reason: _,
-                        gas_used: _,
-                        gas_refunded: _,
-                        logs: _,
-                        output,
-                    } => match output {
-                        revm::primitives::Output::Call(data) => {
-                            router_abi.decode_output::<Vec<U256>, _>("getAmountsOut", data)?
-                        }
-                        revm::primitives::Output::Create(_, _) => {
-                            panic!("contract creation has not output")
-                        }
-                    },
-                    _ => panic!("Exxecution reverted!"),
-                }
-            },
-            _ => panic!("Exxecution reverted!"),
+            Ok(SimulationResult { result, state_updates, gas_used }) =>
+                router_abi.decode_output::<Vec<U256>, _>("getAmountsOut", result)?,
+            _ => panic!("Execution reverted!"),
         };
 
         println!(
@@ -490,9 +460,9 @@ mod tests {
         );
 
         let start = Instant::now();
-        let n_iter = 3;
+        let n_iter = 3;  // TODO: increase when caching works
         for _ in 0..n_iter {
-            eng.simulate(&sim_params);
+            eng.simulate(&sim_params).unwrap();
         }
         let duration = start.elapsed();
 
