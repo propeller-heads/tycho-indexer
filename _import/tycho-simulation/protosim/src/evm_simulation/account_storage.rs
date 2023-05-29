@@ -113,6 +113,17 @@ impl AccountStorage {
         }
     }
 
+    /// Retrieves the account information for a given address.
+    ///
+    /// This function retrieves the account information associated with the specified address from the cache.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: The address of the account to retrieve the information for.
+    ///
+    /// # Returns
+    ///
+    /// Returns an `Option` that holds a reference to the `AccountInfo`. If the account is not found, `None` is returned.
     pub fn get_account_info(&self, address: &B160) -> Option<&AccountInfo> {
         match self.accounts.get(address) {
             Some(acc) => Some(&acc.info),
@@ -120,10 +131,30 @@ impl AccountStorage {
         }
     }
 
+    /// Checks if an account with the given address is present in the cache.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: A reference to the address of the account to check.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if an account with the specified address is present in the cache,
+    /// otherwise returns `false`.
     pub fn account_present(&self, address: &B160) -> bool {
         self.accounts.contains_key(address)
     }
 
+    /// Sets the storage value at the specified index for the given account.
+    ///
+    /// If the account exists in the cache, the storage value at the specified `index` is updated.
+    /// If the account does not exist, a warning message is logged indicating an attempt to set storage on an uninitialized account.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: The address of the account to set the storage value for.
+    /// * `index`: The index of the storage value to set.
+    /// * `value`: The new value to set for the storage.
     pub fn set_storage(&mut self, address: B160, index: rU256, value: rU256) {
         if let Some(acc) = self.accounts.get_mut(&address) {
             acc.storage.insert(index, value);
@@ -132,6 +163,19 @@ impl AccountStorage {
         }
     }
 
+    /// Retrieves the storage value at the specified index for the given account, if it exists.
+    ///
+    /// If the account exists in the cache, the storage value at the specified `index` is returned as a reference.
+    /// If the account does not exist, `None` is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: A reference to the address of the account to retrieve the storage value from.
+    /// * `index`: A reference to the index of the storage value to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// Returns an `Option` containing a reference to the storage value if it exists, otherwise returns `None`.
     pub fn get_storage(&self, address: &B160, index: &rU256) -> Option<&rU256> {
         match self.accounts.get(address) {
             Some(acc) => acc.storage.get(index),
@@ -139,11 +183,29 @@ impl AccountStorage {
         }
     }
 
+    /// Removes all accounts of the specified type from the cache.
+    ///
+    /// Iterates over the accounts in the cache and removes those that have a matching `account_type`
+    /// as the one provided in the `type_to_remove` parameter.
+    ///
+    /// # Arguments
+    ///
+    /// * `type_to_remove`: The `AccountType` to match for removal.
     pub fn remove_accounts_by_type(&mut self, type_to_remove: AccountType) {
         self.accounts
             .retain(|&_address, acc| !acc.account_type.eq(&type_to_remove));
     }
 
+    /// Retrieves the account type associated with the specified address from the cache.
+    ///
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: The address of the account to retrieve the type for.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a reference to the `AccountType` if the account exists, or `None` otherwise.
     pub fn get_account_type(&self, address: &B160) -> Option<&AccountType> {
         if let Some(acc) = self.accounts.get(address) {
             Some(&acc.account_type)
