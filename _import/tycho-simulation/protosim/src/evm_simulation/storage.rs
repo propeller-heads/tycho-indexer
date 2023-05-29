@@ -2,6 +2,7 @@ use ethers::{
     providers::Middleware,
     types::{BlockId, BlockNumber, H160, H256, U64},
 };
+use log::info;
 
 use std::sync::Arc;
 
@@ -77,7 +78,7 @@ impl<M: Middleware> SimulationDB<M> {
         Self {
             client,
             cache: CachedData::new(),
-            block: None,
+            block,
             runtime,
         }
     }
@@ -92,8 +93,7 @@ impl<M: Middleware> SimulationDB<M> {
     /// * `address` - Address of the account
     /// * `account` - The account information
     /// * `storage` - Storage to init the account with
-    /// * `mock` - If set true account will be tracked as mocked. Mocked accounts will not be allowed to query the
-    /// underlying node for any missing state
+    /// * `account_type` - Determines the type of the account.
     pub fn init_account(
         &mut self,
         address: B160,
@@ -101,6 +101,10 @@ impl<M: Middleware> SimulationDB<M> {
         storage: Option<hash_map::HashMap<rU256, rU256>>,
         account_type: AccountType,
     ) {
+        account_type
+            .eq(&AccountType::Temp)
+            .then(|| info!("Add temp account {:?} to cache.", address));
+
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
@@ -125,6 +129,7 @@ impl<M: Middleware> SimulationDB<M> {
         updates: &hash_map::HashMap<B160, StateUpdate>,
         block: BlockHeader,
     ) -> hash_map::HashMap<B160, StateUpdate> {
+        info!("Received account state update.");
         let mut revert_updates = hash_map::HashMap::new();
         self.block = Some(block);
         for (address, update_info) in updates.iter() {
@@ -145,13 +150,20 @@ impl<M: Middleware> SimulationDB<M> {
     /// It is recommended to call this after a new block is received,
     /// to avoid cached state leading to wrong results.
     pub fn clear_temp_accounts(&mut self) {
-        self.cache.clear_temp_accounts();
+        self.cache.remove_accounts_by_type(AccountType::Temp);
     }
 
-    /// Query blockchain for account info
+    /// Query information about an Ethereum account.#
+    /// Gets account information not including storage.
     ///
-    /// Gets account information not including storage: balance, nonce and code.
-    /// /// Received data is NOT put into cache; this must be done separately.
+    /// # Arguments
+    ///
+    /// * `address` - The Ethereum address to query.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing either an `AccountInfo` object with balance, nonce, and code information,
+    /// or an error of type `SimulationDB<M>::Error` if the query fails.
     fn query_account_info(
         &self,
         address: B160,
@@ -182,9 +194,17 @@ impl<M: Middleware> SimulationDB<M> {
         ))
     }
 
-    /// Query blockchain for account storage at certain index
+    /// Queries a value from storage at the specified index for a given Ethereum account.
     ///
-    /// Received data is NOT put into cache; this must be done separately.
+    /// # Arguments
+    ///
+    /// * `address` - The Ethereum address of the account.
+    /// * `index` - The index of the storage value to query.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the value from storage at the specified index as an `rU256`,
+    /// or an error of type `SimulationDB<M>::Error` if the query fails.
     fn query_storage(
         &self,
         address: B160,
@@ -485,4 +505,3 @@ mod tests {
         Ok(())
     }
 }
-// TODO: Add test for update_state

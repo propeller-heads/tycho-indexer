@@ -4,15 +4,24 @@ use log::warn;
 
 use revm::primitives::{hash_map, AccountInfo, B160, U256 as rU256};
 
-// TODO: Add doc-string explaining the types
-#[derive(PartialEq, Default)]
+/// Represents the type of an Ethereum account.
+///
+/// The `AccountType` enum defines the different types of Ethereum accounts, including `Temp`,
+/// `Permanent`, and `Mocked`.
+///
+/// # Variants
+///
+/// * `Temp`: Represents a temporary account. Only accounts queried during runtime will be considered temp and will be deleted with every new block.
+/// * `Permanent`: Represents a permanent account. Will be updated with every new block. If data is missing it will be queried.
+/// * `Mocked`: Represents a mocked account used for testing or simulation purposes. Will stay in the cache, if data is missing a default value will be returned
+#[derive(Clone, PartialEq, Eq, Default)]
 pub enum AccountType {
     #[default]
     Temp,
     Permanent,
     Mocked,
 }
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Account {
     pub info: AccountInfo,
     pub storage: hash_map::HashMap<rU256, rU256>,
@@ -115,10 +124,6 @@ impl CachedData {
         }
     }
 
-    pub fn remove_account(&mut self, address: &B160) {
-        self.accounts.remove(address);
-    }
-
     pub fn account_present(&self, address: &B160) -> bool {
         self.accounts.contains_key(address)
     }
@@ -127,15 +132,7 @@ impl CachedData {
         if let Some(acc) = self.accounts.get_mut(&address) {
             acc.storage.insert(index, value);
         } else {
-            warn!("Try to set storage on unitialized account. Account will be initialized.");
-            let mut storage_map = hash_map::HashMap::new();
-            storage_map.insert(index, value);
-            self.init_account(
-                address,
-                AccountInfo::default(),
-                Some(storage_map),
-                AccountType::Temp,
-            )
+            warn!("Trying to set storage on unitialized account.");
         }
     }
 
@@ -156,14 +153,14 @@ impl CachedData {
         }
     }
 
-    pub fn clear_temp_accounts(&mut self) {
+    pub fn remove_accounts_by_type(&mut self, type_to_remove: AccountType) {
         self.accounts
-            .retain(|&_address, acc| acc.account_type != AccountType::Temp);
+            .retain(|&_address, acc| !acc.account_type.eq(&type_to_remove));
     }
 
     pub fn is_account_type(&self, address: &B160, account_type: &AccountType) -> bool {
         match self.accounts.get(address) {
-            Some(acc) => &acc.account_type == account_type,
+            Some(acc) => acc.account_type.eq(account_type),
             None => false,
         }
     }
@@ -250,5 +247,131 @@ mod tests {
             &updated_storage_value
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_get_account_info() {
+        let mut cache = CachedData::default();
+        let address_1 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let account_info_1 = AccountInfo::default();
+        let account_info_2 = AccountInfo {
+            nonce: 500,
+            ..Default::default()
+        };
+        cache.init_account(address_1, account_info_1, None, AccountType::Permanent);
+        cache.init_account(address_2, account_info_2, None, AccountType::Permanent);
+
+        let existing_account = cache.get_account_info(&address_1);
+        let address_3 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
+        let non_existing_account = cache.get_account_info(&address_3);
+
+        assert_eq!(existing_account, Some(&AccountInfo::default()));
+        assert_eq!(non_existing_account, None);
+    }
+
+    #[test]
+    fn test_account_present() {
+        let mut cache = CachedData::default();
+        let existing_account =
+            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let non_existing_account =
+            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
+        cache.accounts.insert(existing_account, Account::default());
+        cache.accounts.insert(address_2, Account::default());
+
+        assert!(cache.account_present(&existing_account));
+        assert!(!cache.account_present(&non_existing_account));
+    }
+
+    #[test]
+    fn test_set_get_storage() {
+        // Create a new instance of the struct for testing
+        let mut cache = CachedData::default();
+        // Add a test account
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let non_existing_address =
+            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let account = Account::default();
+        cache.accounts.insert(address, account);
+        let index = rU256::from_str("1").unwrap();
+        let value = rU256::from_str("1").unwrap();
+
+        // Set storage for an existing account
+        cache.set_storage(address, index, value);
+        // Check if the storage value has been set correctly
+        let storage = cache.get_storage(&address, &index);
+        assert_eq!(storage, Some(&value));
+
+        // Set storage for a non-existing account
+        let non_existing_index = rU256::from_str("2").unwrap();
+        let non_existing_value = rU256::from_str("2").unwrap();
+        cache.set_storage(non_existing_address, non_existing_index, non_existing_value);
+        let empty_storage = cache.get_storage(&non_existing_address, &non_existing_index);
+
+        assert_eq!(empty_storage, None);
+    }
+
+    #[test]
+    fn test_remove_accounts_by_type() {
+        let mut cache = CachedData::default();
+        let address_1 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let address_3 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
+        let temp_account_1 = Account {
+            account_type: AccountType::Temp,
+            ..Default::default()
+        };
+        let perm_account = Account {
+            account_type: AccountType::Permanent,
+            ..Default::default()
+        };
+        let temp_account_2 = Account {
+            account_type: AccountType::Temp,
+            ..Default::default()
+        };
+        cache.accounts.insert(address_1, temp_account_1);
+        cache.accounts.insert(address_2, perm_account);
+        cache.accounts.insert(address_3, temp_account_2);
+
+        // Remove accounts of type AccountType::Temp
+        cache.remove_accounts_by_type(AccountType::Temp);
+
+        // Check if accounts of type AccountType::Temp have been removed
+        assert!(!cache.accounts.contains_key(&address_1));
+        assert!(!cache.accounts.contains_key(&address_3));
+        // Check if account of type AccountType::Permanent is still present
+        assert!(cache.accounts.contains_key(&address_2));
+    }
+
+    #[test]
+    fn test_is_account_type() {
+        let mut cache = CachedData::default();
+        let address_1 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let address_3 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
+        let account_1 = Account {
+            account_type: AccountType::Temp,
+            ..Default::default()
+        };
+        let account_2 = Account {
+            account_type: AccountType::Permanent,
+            ..Default::default()
+        };
+        cache.accounts.insert(address_1, account_1);
+        cache.accounts.insert(address_2, account_2);
+
+        // Test for an existing account with the correct account type
+        let is_right_type = cache.is_account_type(&address_1, &AccountType::Temp);
+        // Test for an existing account with a different account type
+        let is_false_type = cache.is_account_type(&address_2, &AccountType::Temp);
+        // Test for a non-existing account
+
+        let is_not_present = cache.is_account_type(&address_3, &AccountType::Temp);
+
+        assert!(is_right_type);
+        assert!(!is_false_type);
+        assert!(!is_not_present);
     }
 }
