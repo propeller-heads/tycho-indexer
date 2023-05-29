@@ -1,4 +1,3 @@
-use std::ops::Add;
 use ethers::{
     providers::Middleware,
     types::{Bytes, U256, Address},  // Address is an alias of H160
@@ -8,8 +7,8 @@ use revm::{
     EVM,
 };
 use revm::precompile::HashMap;
-use revm::primitives::{bytes, EVMResult, Output, ResultAndState, State};  // `bytes` is an external crate
-use crate::evm_simulation::storage::{SharedSimulationDB, StateUpdate};
+use revm::primitives::{bytes, EVMResult, Output, State};  // `bytes` is an external crate
+use crate::evm_simulation::storage::StateUpdate;
 use super::storage;
 
 #[derive(Debug)]
@@ -217,8 +216,7 @@ impl SimulationParameters {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-    use std::{error::Error, str::FromStr, sync::Arc};
+    use std::{time::Instant, error::Error, str::FromStr, sync::Arc};
     use super::*;
     use ethers::{
         abi::parse_abi,
@@ -281,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_ok_success() {
-        let evm_result: EVMResult<ProviderError> = EVMResult::Ok(
+        let evm_result: EVMResult<ProviderError> = Ok(
             ResultAndState {
                 result: ExecutionResult::Success {
                     reason: Eval::Return,
@@ -347,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_ok_revert() {
-        let evm_result: EVMResult<ProviderError> = EVMResult::Ok(
+        let evm_result: EVMResult<ProviderError> = Ok(
             ResultAndState {
                 result: ExecutionResult::Revert {
                     gas_used: 100_u64,
@@ -370,7 +368,7 @@ mod tests {
     
     #[test]
     fn test_interpret_result_ok_halt() {
-        let evm_result: EVMResult<ProviderError> = EVMResult::Ok(
+        let evm_result: EVMResult<ProviderError> = Ok(
             ResultAndState {
                 result: ExecutionResult::Halt {
                     reason: Halt::OutOfGas(OutOfGasError::BasicOutOfGas),
@@ -393,7 +391,7 @@ mod tests {
     
     #[test]
     fn test_interpret_result_err_invalid_transaction() {
-        let evm_result: EVMResult<ProviderError> = EVMResult::Err(
+        let evm_result: EVMResult<ProviderError> = Err(
             EVMError::Transaction(InvalidTransaction::GasMaxFeeGreaterThanPriorityFee)
         );
 
@@ -410,7 +408,7 @@ mod tests {
     
     #[test]
     fn test_interpret_result_err_db_error() {
-        let evm_result = EVMResult::Err(
+        let evm_result: EVMResult<ProviderError> = Err(
             EVMError::Database(ProviderError::CustomError("boo".to_string()))
         );
 
@@ -437,7 +435,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = storage::SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = SimulationDB::new(client, Some(Arc::new(runtime)), None);
 
         // any random address will work
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
@@ -469,7 +467,7 @@ mod tests {
         let result = eng.simulate(&sim_params);
 
         let amounts_out = match result {
-            Ok(SimulationResult { result, state_updates, gas_used }) =>
+            Ok(SimulationResult { result, .. }) =>
                 router_abi.decode_output::<Vec<U256>, _>("getAmountsOut", result)?,
             _ => panic!("Execution reverted!"),
         };
