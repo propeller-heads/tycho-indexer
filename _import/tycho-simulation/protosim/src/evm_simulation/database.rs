@@ -62,7 +62,7 @@ pub struct SimulationDB<M: Middleware> {
     /// Client to connect to the RPC
     client: Arc<M>,
     /// Cached data
-    cache: AccountStorage,
+    account_storage: AccountStorage,
     /// Current block
     block: Option<BlockHeader>,
 
@@ -77,7 +77,7 @@ impl<M: Middleware> SimulationDB<M> {
     ) -> Self {
         Self {
             client,
-            cache: AccountStorage::new(),
+            account_storage: AccountStorage::new(),
             block,
             runtime,
         }
@@ -103,20 +103,20 @@ impl<M: Middleware> SimulationDB<M> {
     ) {
         account_type
             .eq(&AccountType::Temp)
-            .then(|| info!("Add temp account {:?} to cache.", address));
+            .then(|| info!("Add temp account {:?} to account storage.", address));
 
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
 
-        self.cache
+        self.account_storage
             .init_account(address, account, storage, account_type);
     }
 
     /// Update the simulation state.
     ///
     /// Updates the underlying smart contract storage. Any previously missed account,
-    /// which was queried and whose state now is in the cache will be cleared.
+    /// which was queried and whose state now is in the account_storage will be cleared.
     ///
     /// # Arguments
     ///
@@ -134,13 +134,13 @@ impl<M: Middleware> SimulationDB<M> {
         self.block = Some(block);
         for (address, update_info) in updates.iter() {
             let mut revert_entry = StateUpdate::default();
-            if let Some(current_account) = self.cache.get_account_info(address) {
+            if let Some(current_account) = self.account_storage.get_account_info(address) {
                 revert_entry.balance = Some(current_account.balance);
             }
             if update_info.storage.is_some() {
                 let mut revert_storage = hash_map::HashMap::default();
                 for index in update_info.storage.as_ref().unwrap().keys() {
-                    if let Some(s) = self.cache.get_storage(address, index) {
+                    if let Some(s) = self.account_storage.get_storage(address, index) {
                         revert_storage.insert(*index, *s);
                     }
                 }
@@ -148,7 +148,7 @@ impl<M: Middleware> SimulationDB<M> {
             }
             revert_updates.insert(*address, revert_entry);
 
-            self.cache.update_account(address, update_info);
+            self.account_storage.update_account(address, update_info);
         }
         revert_updates
     }
@@ -156,9 +156,10 @@ impl<M: Middleware> SimulationDB<M> {
     /// Clears accounts from state that were loaded using a query
     ///
     /// It is recommended to call this after a new block is received,
-    /// to avoid cached state leading to wrong results.
+    /// to avoid stored state leading to wrong results.
     pub fn clear_temp_accounts(&mut self) {
-        self.cache.remove_accounts_by_type(AccountType::Temp);
+        self.account_storage
+            .remove_accounts_by_type(AccountType::Temp);
     }
 
     /// Query information about an Ethereum account.
@@ -241,7 +242,7 @@ impl<M: Middleware> SimulationDB<M> {
 
     fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
         // If we get here and have to block the current thread, we really
-        // messed up indexing / filling the cache. In that case this will save us
+        // messed up indexing / filling the storage. In that case this will save us
         // at the price of a very high time penalty.
         match &self.runtime {
             Some(runtime) => runtime.block_on(f),
@@ -256,9 +257,9 @@ impl<M: Middleware> Database for SimulationDB<M> {
     /// Retrieves basic information about an account.
     ///
     /// This function retrieves the basic account information for the specified address.
-    /// If the account is present in the cache, the cached account information is returned.
-    /// If the account is not present in the cache, the function queries the account information from the contract
-    /// and initializes the account in the cache with the retrieved information.
+    /// If the account is present in the storage, the stored account information is returned.
+    /// If the account is not present in the storage, the function queries the account information from the contract
+    /// and initializes the account in the storage with the retrieved information.
     ///
     /// # Arguments
     ///
@@ -271,17 +272,17 @@ impl<M: Middleware> Database for SimulationDB<M> {
     ///
     /// # Errors
     ///
-    /// Returns an error if there was an issue querying the account information from the contract or accessing the cache.
+    /// Returns an error if there was an issue querying the account information from the contract or accessing the storage.
     ///
     /// # Notes
     ///
-    /// * If the account is present in the cache, the function returns a clone of the cached account information.
+    /// * If the account is present in the storage, the function returns a clone of the stored account information.
     ///
-    /// * If the account is not present in the cache, the function queries the account
-    ///   information from the contract, initializes the account in the cache with the retrieved information, and returns a clone
+    /// * If the account is not present in the storage, the function queries the account
+    ///   information from the contract, initializes the account in the storage with the retrieved information, and returns a clone
     ///   of the account information.
     fn basic(&mut self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self.cache.get_account_info(&address) {
+        if let Some(account) = self.account_storage.get_account_info(&address) {
             Ok(Some(account.clone()))
         } else {
             let account_info = self.query_account_info(address)?;
@@ -307,33 +308,33 @@ impl<M: Middleware> Database for SimulationDB<M> {
     /// # Returns
     ///
     /// Returns a `Result` containing the storage value if it exists. If the contract is of type `AccountType::Mocked`
-    /// and the storage value is not found in the cache, an empty slot is returned as `rU256::ZERO`.
+    /// and the storage value is not found in the storage, an empty slot is returned as `rU256::ZERO`.
     ///
     /// # Errors
     ///
-    /// Returns an error if there was an issue querying the storage value from the contract or accessing the cache.
+    /// Returns an error if there was an issue querying the storage value from the contract or accessing the storage.
     ///
     /// # Notes
     ///
-    /// * If the contract is present in the cache and is of type `AccountType::Mocked`, the function first checks if
-    ///   the storage value exists in the cache. If found, it returns the cached value. If not found, it returns an empty slot.
+    /// * If the contract is present in the storage and is of type `AccountType::Mocked`, the function first checks if
+    ///   the storage value exists in the storage. If found, it returns the stored value. If not found, it returns an empty slot.
     ///   Mocked contracts are not expected to have valid storage values, so the function does not query the storage in this case.
     ///
-    /// * If the contract is present in the cache, the function checks if the storage value exists in the cache.
-    ///   If found, it returns the cached value.
-    ///   If not found, it queries the storage value from the contract, stores it in the cache, and returns it.
+    /// * If the contract is present in the storage, the function checks if the storage value exists in the storage.
+    ///   If found, it returns the stored value.
+    ///   If not found, it queries the storage value from the contract, stores it in the storage, and returns it.
     ///
-    /// * If the contract is not present in the cache, the function queries the account info and storage value from
-    ///   the contract, initializes the account in the cache with the retrieved information, and returns the storage value.
+    /// * If the contract is not present in the storage, the function queries the account info and storage value from
+    ///   the contract, initializes the account in the storage with the retrieved information, and returns the storage value.
     fn storage(&mut self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        if let Some(storage) = self.cache.get_storage(&address, &index) {
+        if let Some(storage) = self.account_storage.get_storage(&address, &index) {
             return Ok(*storage);
         }
-        match self.cache.get_account_type(&address) {
+        match self.account_storage.get_account_type(&address) {
             Some(AccountType::Mocked) => Ok(rU256::ZERO),
             Some(AccountType::Permanent | AccountType::Temp) => {
                 let storage = self.query_storage(address, index)?;
-                self.cache.set_storage(address, index, storage);
+                self.account_storage.set_storage(address, index, storage);
                 Ok(storage)
             }
             None => {
@@ -467,7 +468,7 @@ mod tests {
 
         assert_eq!(
             mock_sim_db
-                .cache
+                .account_storage
                 .get_account_info(&mock_acc_address)
                 .unwrap(),
             &acc_info
@@ -529,14 +530,14 @@ mod tests {
 
         assert_eq!(
             mock_sim_db
-                .cache
+                .account_storage
                 .get_storage(&address, &new_storage_value_index)
                 .unwrap(),
             &new_storage_value_index
         );
         assert_eq!(
             mock_sim_db
-                .cache
+                .account_storage
                 .get_account_info(&address)
                 .unwrap()
                 .balance,

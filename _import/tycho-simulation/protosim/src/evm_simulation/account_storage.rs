@@ -13,7 +13,7 @@ use std::collections::hash_map::Entry::Vacant;
 ///
 /// * `Temp`: Represents a temporary account. Only accounts queried during runtime will be considered temp and will be deleted with every new block.
 /// * `Permanent`: Represents a permanent account. Will be updated with every new block. If data is missing it will be queried.
-/// * `Mocked`: Represents a mocked account used for testing or simulation purposes. Will stay in the cache, if data is missing a default value will be returned
+/// * `Mocked`: Represents a mocked account used for testing or simulation purposes. Will stay in the storage, if data is missing a default value will be returned
 #[derive(Clone, PartialEq, Eq, Default, Debug)]
 pub enum AccountType {
     #[default]
@@ -115,7 +115,7 @@ impl AccountStorage {
 
     /// Retrieves the account information for a given address.
     ///
-    /// This function retrieves the account information associated with the specified address from the cache.
+    /// This function retrieves the account information associated with the specified address from the storage.
     ///
     /// # Arguments
     ///
@@ -131,7 +131,7 @@ impl AccountStorage {
         }
     }
 
-    /// Checks if an account with the given address is present in the cache.
+    /// Checks if an account with the given address is present in the storage.
     ///
     /// # Arguments
     ///
@@ -139,7 +139,7 @@ impl AccountStorage {
     ///
     /// # Returns
     ///
-    /// Returns `true` if an account with the specified address is present in the cache,
+    /// Returns `true` if an account with the specified address is present in the storage,
     /// otherwise returns `false`.
     pub fn account_present(&self, address: &B160) -> bool {
         self.accounts.contains_key(address)
@@ -147,7 +147,7 @@ impl AccountStorage {
 
     /// Sets the storage value at the specified index for the given account.
     ///
-    /// If the account exists in the cache, the storage value at the specified `index` is updated.
+    /// If the account exists in the storage, the storage value at the specified `index` is updated.
     /// If the account does not exist, a warning message is logged indicating an attempt to set storage on an uninitialized account.
     ///
     /// # Arguments
@@ -165,7 +165,7 @@ impl AccountStorage {
 
     /// Retrieves the storage value at the specified index for the given account, if it exists.
     ///
-    /// If the account exists in the cache, the storage value at the specified `index` is returned as a reference.
+    /// If the account exists in the storage, the storage value at the specified `index` is returned as a reference.
     /// If the account does not exist, `None` is returned.
     ///
     /// # Arguments
@@ -183,9 +183,9 @@ impl AccountStorage {
         }
     }
 
-    /// Removes all accounts of the specified type from the cache.
+    /// Removes all accounts of the specified type from the storage.
     ///
-    /// Iterates over the accounts in the cache and removes those that have a matching `account_type`
+    /// Iterates over the accounts in the storage and removes those that have a matching `account_type`
     /// as the one provided in the `type_to_remove` parameter.
     ///
     /// # Arguments
@@ -196,7 +196,7 @@ impl AccountStorage {
             .retain(|&_address, acc| !acc.account_type.eq(&type_to_remove));
     }
 
-    /// Retrieves the account type associated with the specified address from the cache.
+    /// Retrieves the account type associated with the specified address from the storage.
     ///
     ///
     /// # Arguments
