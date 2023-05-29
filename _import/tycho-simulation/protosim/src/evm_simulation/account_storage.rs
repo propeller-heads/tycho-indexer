@@ -139,16 +139,6 @@ impl AccountStorage {
         }
     }
 
-    pub fn clone_account_storage(
-        &mut self,
-        address: &B160,
-    ) -> Option<hash_map::HashMap<rU256, rU256>> {
-        match self.accounts.get_mut(address) {
-            Some(acc) => Some(acc.storage.clone()),
-            None => None,
-        }
-    }
-
     pub fn remove_accounts_by_type(&mut self, type_to_remove: AccountType) {
         self.accounts
             .retain(|&_address, acc| !acc.account_type.eq(&type_to_remove));

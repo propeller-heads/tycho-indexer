@@ -137,7 +137,15 @@ impl<M: Middleware> SimulationDB<M> {
             if let Some(current_account) = self.cache.get_account_info(address) {
                 revert_entry.balance = Some(current_account.balance);
             }
-            revert_entry.storage = self.cache.clone_account_storage(address);
+            if update_info.storage.is_some() {
+                let mut revert_storage = hash_map::HashMap::default();
+                for index in update_info.storage.as_ref().unwrap().keys() {
+                    if let Some(s) = self.cache.get_storage(address, index) {
+                        revert_storage.insert(*index, *s);
+                    }
+                }
+                revert_entry.storage = Some(revert_storage);
+            }
             revert_updates.insert(*address, revert_entry);
 
             self.cache.update_account(address, update_info);
