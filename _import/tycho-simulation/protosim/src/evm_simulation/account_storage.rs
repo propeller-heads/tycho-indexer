@@ -4,6 +4,7 @@ use log::warn;
 
 use revm::primitives::{hash_map, AccountInfo, B160, U256 as rU256};
 use std::collections::hash_map::Entry::Vacant;
+
 /// Represents the type of an Ethereum account.
 ///
 /// The `AccountType` enum defines the different types of Ethereum accounts, including `Temp`,
@@ -43,6 +44,7 @@ impl AccountStorage {
     pub fn new() -> Self {
         Self::default()
     }
+
     /// Inserts account data into the current instance.
     ///
     /// # Arguments
@@ -68,10 +70,7 @@ impl AccountStorage {
         if let Vacant(e) = self.accounts.entry(address) {
             e.insert(Account {
                 info,
-                storage: match storage {
-                    Some(s) => s,
-                    None => hash_map::HashMap::default(),
-                },
+                storage: storage.unwrap_or_default(),
                 account_type,
             });
         } else {
@@ -125,10 +124,7 @@ impl AccountStorage {
     ///
     /// Returns an `Option` that holds a reference to the `AccountInfo`. If the account is not found, `None` is returned.
     pub fn get_account_info(&self, address: &B160) -> Option<&AccountInfo> {
-        match self.accounts.get(address) {
-            Some(acc) => Some(&acc.info),
-            None => None,
-        }
+        self.accounts.get(address).map(|acc| &acc.info)
     }
 
     /// Checks if an account with the given address is present in the storage.
@@ -159,7 +155,10 @@ impl AccountStorage {
         if let Some(acc) = self.accounts.get_mut(&address) {
             acc.storage.insert(index, value);
         } else {
-            warn!("Trying to set storage on unitialized account.");
+            warn!(
+                "Trying to set storage on unitialized account {:?}.",
+                address
+            );
         }
     }
 

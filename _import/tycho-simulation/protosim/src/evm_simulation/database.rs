@@ -327,15 +327,16 @@ impl<M: Middleware> Database for SimulationDB<M> {
     /// * If the contract is not present in the storage, the function queries the account info and storage value from
     ///   the contract, initializes the account in the storage with the retrieved information, and returns the storage value.
     fn storage(&mut self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        if let Some(storage) = self.account_storage.get_storage(&address, &index) {
-            return Ok(*storage);
+        if let Some(storage_value) = self.account_storage.get_storage(&address, &index) {
+            return Ok(*storage_value);
         }
         match self.account_storage.get_account_type(&address) {
             Some(AccountType::Mocked) => Ok(rU256::ZERO),
             Some(AccountType::Permanent | AccountType::Temp) => {
-                let storage = self.query_storage(address, index)?;
-                self.account_storage.set_storage(address, index, storage);
-                Ok(storage)
+                let storage_value = self.query_storage(address, index)?;
+                self.account_storage
+                    .set_storage(address, index, storage_value);
+                Ok(storage_value)
             }
             None => {
                 let account_info = self.query_account_info(address)?;
