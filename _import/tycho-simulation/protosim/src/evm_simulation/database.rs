@@ -12,7 +12,7 @@ use revm::{
     Database,
 };
 
-use super::cache::{AccountType, CachedData, StateUpdate};
+use super::account_storage::{AccountStorage, AccountType, StateUpdate};
 
 /// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
 /// ownership of it.
@@ -62,7 +62,7 @@ pub struct SimulationDB<M: Middleware> {
     /// Client to connect to the RPC
     client: Arc<M>,
     /// Cached data
-    cache: CachedData,
+    cache: AccountStorage,
     /// Current block
     block: Option<BlockHeader>,
 
@@ -77,7 +77,7 @@ impl<M: Middleware> SimulationDB<M> {
     ) -> Self {
         Self {
             client,
-            cache: CachedData::new(),
+            cache: AccountStorage::new(),
             block,
             runtime,
         }
