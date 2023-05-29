@@ -130,7 +130,14 @@ fn interpret_evm_result2<DBError>(evm_result: EVMResult<DBError>) -> Result<Simu
                         gas_used
                     })
                 },
-                _ => todo!()  // non-success (yet non-error) cases
+                ExecutionResult::Revert { output, .. } => {
+                    let revert_msg = std::str::from_utf8(output.as_ref())
+                        .unwrap_or("[can't decode output]");
+                    Err(SimulationError::TransactionError(format!("Execution reverted: {revert_msg}")))
+                },
+                ExecutionResult::Halt {reason, ..} => {
+                    Err(SimulationError::TransactionError(format!("Execution halted: {reason:?}")))
+                }
             }
         },
         Err(evm_error) => {
@@ -206,8 +213,10 @@ mod tests {
     };
     use ethers::prelude::spoof::State;
     use petgraph::visit::Walker;
-    use revm::primitives::{Account, AccountInfo, B256, bytes, Eval, ExecutionResult, Output, ResultAndState, StorageSlot};
+    use revm::primitives::{Account, AccountInfo, B256, bytes, Eval, ExecutionResult, Output, ResultAndState, StorageSlot, State as rState, Halt, OutOfGasError};
     use crate::evm_simulation::storage::SimulationDB;
+
+
     #[test]
     fn test_converting_to_revm() {
         let address_string = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
@@ -301,28 +310,74 @@ mod tests {
         );
         
         let result = interpret_evm_result2(evm_result);
-        
         let simulation_result = result.unwrap();
         
         assert_eq!(simulation_result.result, bytes::Bytes::from_static(b"output"));
         let expected_state_updates = [
             (
                 Address::zero(),
-                StateUpdate{
+                StateUpdate {
                     storage: Some(
                         [
-                            (rU256::from_limbs([3,1,0,0]), 
-                             rU256::from_limbs([5,0,0,0]))
+                            (rU256::from_limbs([3, 1, 0, 0]),
+                             rU256::from_limbs([5, 0, 0, 0]))
                         ].iter().cloned().collect()
                     ),
-                    balance: Some(rU256::from_limbs([1,0,0,0])),
-                    code: None
+                    balance: Some(rU256::from_limbs([1, 0, 0, 0])),
+                    code: None,
                 }
             )
         ].iter().cloned().collect();
         assert_eq!(simulation_result.state_updates, expected_state_updates);
         assert_eq!(simulation_result.gas_used, 100);
     }
+
+    #[test]
+    fn test_interpret_result_revert() {
+        let evm_result: EVMResult<SimulationDB<Provider<Http>>> = EVMResult::Ok(
+            ResultAndState {
+                result: ExecutionResult::Revert {
+                    gas_used: 100_u64,
+                    output: bytes::Bytes::from_static(b"output"),
+                },
+                state: rState::new(),
+            }
+        );
+
+        let result = interpret_evm_result2(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::TransactionError(msg) =>
+                assert_eq!(msg, "Execution reverted: output"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
+    #[test]
+    fn test_interpret_result_halt() {
+        let evm_result: EVMResult<SimulationDB<Provider<Http>>> = EVMResult::Ok(
+            ResultAndState {
+                result: ExecutionResult::Halt {
+                    reason: Halt::OutOfGas(OutOfGasError::BasicOutOfGas),
+                    gas_used: 100_u64,
+                },
+                state: rState::new(),
+            }
+        );
+
+        let result = interpret_evm_result2(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::TransactionError(msg) =>
+                assert_eq!(msg, "Execution halted: OutOfGas(BasicOutOfGas)"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
