@@ -29,7 +29,7 @@ pub struct Account {
     pub account_type: AccountType,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub struct StateUpdate {
     pub storage: Option<hash_map::HashMap<rU256, rU256>>,
     pub balance: Option<rU256>,
