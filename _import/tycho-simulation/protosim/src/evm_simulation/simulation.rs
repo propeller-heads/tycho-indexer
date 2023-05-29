@@ -88,7 +88,7 @@ impl<M: Middleware> SimulationEngine<M> {
 }
 
 /// This is, beyond all discussion, the prettiest function ever written.
-fn interpret_evm_result2<DBError>(evm_result: EVMResult<DBError>) -> Result<SimulationResult2, SimulationError> {
+fn interpret_evm_result2<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>) -> Result<SimulationResult2, SimulationError> {
     match evm_result {
         Ok(result_and_state) => {
             match result_and_state.result { 
@@ -141,7 +141,14 @@ fn interpret_evm_result2<DBError>(evm_result: EVMResult<DBError>) -> Result<Simu
             }
         },
         Err(evm_error) => {
-            todo!()  // error cases
+            match evm_error {
+                EVMError::Transaction(invalid_tx) => 
+                    Err(SimulationError::TransactionError(format!("EVM error: {invalid_tx:?}"))),
+                EVMError::PrevrandaoNotSet => 
+                    Err(SimulationError::TransactionError("EVM error: PrevrandaoNotSet".to_string())),
+                EVMError::Database(db_error) =>
+                    Err(SimulationError::StorageError(format!("Storage error: {db_error:?}"))),
+            }
         }
     }
 }
@@ -208,12 +215,10 @@ mod tests {
     use ethers::{
         abi::parse_abi,
         prelude::BaseContract,
-        providers::{Http, Provider},
+        providers::{Http, Provider, ProviderError},
         types::{Address, U256},
     };
-    use ethers::prelude::spoof::State;
-    use petgraph::visit::Walker;
-    use revm::primitives::{Account, AccountInfo, B256, bytes, Eval, ExecutionResult, Output, ResultAndState, StorageSlot, State as rState, Halt, OutOfGasError};
+    use revm::primitives::{Account, AccountInfo, B256, bytes, Eval, ExecutionResult, Output, ResultAndState, StorageSlot, State as rState, Halt, OutOfGasError, InvalidTransaction};
     use crate::evm_simulation::storage::SimulationDB;
 
 
@@ -267,8 +272,8 @@ mod tests {
     }
 
     #[test]
-    fn test_interpret_result_ok() {
-        let evm_result: EVMResult<SimulationDB<Provider<Http>>> = EVMResult::Ok(
+    fn test_interpret_result_ok_success() {
+        let evm_result: EVMResult<ProviderError> = EVMResult::Ok(
             ResultAndState {
                 result: ExecutionResult::Success {
                     reason: Eval::Return,
@@ -333,8 +338,8 @@ mod tests {
     }
 
     #[test]
-    fn test_interpret_result_revert() {
-        let evm_result: EVMResult<SimulationDB<Provider<Http>>> = EVMResult::Ok(
+    fn test_interpret_result_ok_revert() {
+        let evm_result: EVMResult<ProviderError> = EVMResult::Ok(
             ResultAndState {
                 result: ExecutionResult::Revert {
                     gas_used: 100_u64,
@@ -356,8 +361,8 @@ mod tests {
     }
     
     #[test]
-    fn test_interpret_result_halt() {
-        let evm_result: EVMResult<SimulationDB<Provider<Http>>> = EVMResult::Ok(
+    fn test_interpret_result_ok_halt() {
+        let evm_result: EVMResult<ProviderError> = EVMResult::Ok(
             ResultAndState {
                 result: ExecutionResult::Halt {
                     reason: Halt::OutOfGas(OutOfGasError::BasicOutOfGas),
@@ -374,6 +379,40 @@ mod tests {
         match err {
             SimulationError::TransactionError(msg) =>
                 assert_eq!(msg, "Execution halted: OutOfGas(BasicOutOfGas)"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
+    #[test]
+    fn test_interpret_result_err_invalid_transaction() {
+        let evm_result: EVMResult<ProviderError> = EVMResult::Err(
+            EVMError::Transaction(InvalidTransaction::GasMaxFeeGreaterThanPriorityFee)
+        );
+
+        let result = interpret_evm_result2(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::TransactionError(msg) =>
+                assert_eq!(msg, "EVM error: GasMaxFeeGreaterThanPriorityFee"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
+    #[test]
+    fn test_interpret_result_err_db_error() {
+        let evm_result = EVMResult::Err(
+            EVMError::Database(ProviderError::CustomError("boo".to_string()))
+        );
+
+        let result = interpret_evm_result2(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::StorageError(msg) =>
+                assert_eq!(msg, "Storage error: CustomError(\"boo\")"),
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
