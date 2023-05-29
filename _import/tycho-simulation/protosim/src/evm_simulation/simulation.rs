@@ -1,23 +1,45 @@
 use ethers::{
     providers::Middleware,
-    types::{Bytes, H160, U256},
+    types::{Bytes, U256, Address},  // Address is an alias of H160
 };
 use revm::{
-    primitives::{ExecutionResult, TransactTo, B160, U256 as rU256},
+    primitives::{EVMError, ExecutionResult, TransactTo, B160 as rB160, U256 as rU256},
     EVM,
 };
 use revm::precompile::HashMap;
-
+use revm::primitives::{bytes, EVMResult, Output, State};  // `bytes` is an external crate
+use crate::evm_simulation::storage::StateUpdate;
 use super::storage;
+
+/// An error representing any transaction simulation result other than successful execution 
+#[derive(Debug)]
+pub enum SimulationError {
+    /// Something went wrong while getting storage; might be caused by network issues
+    StorageError(String),
+    /// Simulation didn't succeed; likely not related to network, so retrying won't help
+    TransactionError(String),
+}
+
+/// A result of a successful transaction simulation
+pub struct SimulationResult {
+    /// Output of transaction execution as bytes
+    pub result: bytes::Bytes,
+    /// State changes caused by the transaction
+    pub state_updates: HashMap<Address, StateUpdate>,
+    /// Gas used by the transaction (already reduced by the refunded gas)
+    pub gas_used: u64,
+}
 
 pub struct SimulationEngine<M: Middleware> {
     pub state: storage::SimulationDB<M>,
 }
 
 impl<M: Middleware> SimulationEngine<M> {
-    // TODO: return StateUpdate and Bytes
     // TODO: support overrides
-    pub fn simulate(&mut self, params: &SimulationParameters) -> ExecutionResult {
+    pub fn simulate(
+        &mut self,
+        params: &SimulationParameters,
+    ) -> Result<SimulationResult, SimulationError> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrently save shared reference and write locked object. Note that concurrently
         // calling this method is therefore not possible.
@@ -35,17 +57,112 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
         vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(u64::MAX);
-        let ref_tx = vm.transact().unwrap();
-        ref_tx.result
+
+        let evm_result = vm.transact();
+
+        interpret_evm_result(evm_result)
+    }
+}
+
+/// Convert a complex EVMResult into a simpler structure
+/// 
+/// EVMResult is not of an error type even if the transaction was not successful.
+/// This function returns an Ok if and only if the transaction was successful.
+/// In case the transaction was reverted, halted, or another error occurred (like an error
+/// when accessing storage), this function returns an Err with a simple String description
+/// of an underlying cause.
+/// 
+/// # Arguments
+/// 
+/// * `evm_result` - output from calling `revm.transact()`
+/// 
+/// # Errors
+/// 
+/// * `SimulationError` - simulation wasn't successful for any reason. See variants for details.
+/// 
+fn interpret_evm_result<DBError: std::fmt::Debug>(evm_result: EVMResult<DBError>) -> Result<SimulationResult, SimulationError> {
+    match evm_result {
+        Ok(result_and_state) => {
+            match result_and_state.result { 
+                ExecutionResult::Success {gas_used, gas_refunded, output, ..} =>
+                    Ok(interpret_evm_success(gas_used, gas_refunded, output, result_and_state.state)),
+                ExecutionResult::Revert { output, .. } => {
+                    let revert_msg = std::str::from_utf8(output.as_ref())
+                        .unwrap_or("[can't decode output]");
+                    Err(SimulationError::TransactionError(format!("Execution reverted: {revert_msg}")))
+                },
+                ExecutionResult::Halt {reason, ..} =>
+                    Err(SimulationError::TransactionError(format!("Execution halted: {reason:?}"))),
+            }
+        },
+        Err(evm_error) => {
+            match evm_error {
+                EVMError::Transaction(invalid_tx) => 
+                    Err(SimulationError::TransactionError(format!("EVM error: {invalid_tx:?}"))),
+                EVMError::PrevrandaoNotSet => 
+                    Err(SimulationError::TransactionError("EVM error: PrevrandaoNotSet".to_string())),
+                EVMError::Database(db_error) =>
+                    Err(SimulationError::StorageError(format!("Storage error: {db_error:?}"))),
+            }
+        }
+    }
+}
+
+// Helper function to extract some details from a successful transaction execution
+fn interpret_evm_success(gas_used: u64, gas_refunded: u64, output: Output, state: State) 
+    -> SimulationResult {
+    SimulationResult {
+        result: output.into_data(),
+        state_updates: {
+            // For each account mentioned in state updates in REVM output, we will have
+            // one record in our hashmap. Such record contains *new* values of account's 
+            // state. This record's optional `storage` field will contain
+            // account's storage changes (as a hashmap from slot index to slot value), 
+            // unless REVM output doesn't contain any storage for this account, in which case
+            // we set this field to None. If REVM did return storage, we return one record 
+            // per *modified* slot (sometimes REVM returns a storage record for an account
+            // even if the slots are not modified).
+            let mut account_updates: HashMap<Address, StateUpdate> = HashMap::new();
+            for (address, account) in state {
+                account_updates.insert(
+                    Address::from(address),
+                    StateUpdate {
+                        // revm doesn't say if the balance was actually changed
+                        balance: Some(account.info.balance),
+                        // revm doesn't say if the code was actually changed
+                        code: account.info.code.map(|x| x.bytecode),
+                        storage: {
+                            if account.storage.is_empty() {
+                                None
+                            } else {
+                                let mut slot_updates: HashMap<rU256, rU256> = HashMap::new();
+                                for (index, slot) in account.storage {
+                                    if slot.is_changed() {
+                                        slot_updates.insert(index, slot.present_value);
+                                    }
+                                }
+                                if slot_updates.is_empty() {
+                                    None
+                                } else {
+                                    Some(slot_updates)
+                                }
+                            }
+                        }
+                    }
+                );
+            }
+            account_updates
+        },
+        gas_used: gas_used - gas_refunded,
     }
 }
 
 /// Data needed to invoke a transaction simulation
 pub struct SimulationParameters {
     /// Address of the sending account
-    pub caller: H160,
+    pub caller: Address,
     /// Address of the receiving account/contract
-    pub to: H160,
+    pub to: Address,
     /// Calldata
     pub data: Bytes,
     /// Amount of native token sent
@@ -60,12 +177,12 @@ pub struct SimulationParameters {
 
 // Converters of fields to revm types
 impl SimulationParameters {
-    fn revm_caller(&self) -> B160 {
-        B160::from_slice(&self.caller.0)
+    fn revm_caller(&self) -> rB160 {
+        rB160::from_slice(&self.caller.0)
     }
 
     fn revm_to(&self) -> TransactTo {
-        TransactTo::Call(B160::from_slice(&self.to.0))
+        TransactTo::Call(rB160::from_slice(&self.to.0))
     }
 
     fn revm_data(&self) -> revm::primitives::Bytes {
@@ -96,23 +213,24 @@ impl SimulationParameters {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-    use std::{error::Error, str::FromStr, sync::Arc};
+    use std::{time::Instant, error::Error, str::FromStr, sync::Arc};
     use super::*;
     use ethers::{
         abi::parse_abi,
         prelude::BaseContract,
-        providers::{Http, Provider},
-        types::{H160, U256},
+        providers::{Http, Provider, ProviderError},
+        types::{Address, U256},
     };
-    use revm::primitives::ExecutionResult;
+    use revm::primitives::{Account, AccountInfo, B256, bytes, Eval, ExecutionResult, Output, ResultAndState, StorageSlot, State as rState, Halt, OutOfGasError, InvalidTransaction};
+    use crate::evm_simulation::storage::SimulationDB;
+
 
     #[test]
     fn test_converting_to_revm() {
         let address_string = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-        let params = SimulationParameters{
-            caller: H160::from_str(address_string).unwrap(),
-            to: H160::from_str(address_string).unwrap(),
+        let params = SimulationParameters {
+            caller: Address::from_str(address_string).unwrap(),
+            to: Address::from_str(address_string).unwrap(),
             data: Bytes::from_static(b"Hello"),
             value: U256::from(123),
             overrides: Some(
@@ -124,10 +242,10 @@ mod tests {
             gas_limit: Some(33),
         };
 
-        assert_eq!(params.revm_caller(), B160::from_str(address_string).unwrap());
+        assert_eq!(params.revm_caller(), rB160::from_str(address_string).unwrap());
         assert_eq!(
             if let TransactTo::Call(value) = params.revm_to() {value} else {panic!()},
-            B160::from_str(address_string).unwrap()
+            rB160::from_str(address_string).unwrap()
         );
         assert_eq!(params.revm_data(), revm::primitives::Bytes::from_static(b"Hello"));
         assert_eq!(params.revm_value(), rU256::from_str("123").unwrap());
@@ -144,8 +262,8 @@ mod tests {
     #[test]
     fn test_converting_nones_to_revm() {
         let params = SimulationParameters{
-            caller: H160::zero(),
-            to: H160::zero(),
+            caller: Address::zero(),
+            to: Address::zero(),
             data: Bytes::new(),
             value: U256::zero(),
             overrides: None,
@@ -156,30 +274,176 @@ mod tests {
         assert_eq!(params.revm_gas_limit(), None);
     }
 
+    #[test]
+    fn test_interpret_result_ok_success() {
+        let evm_result: EVMResult<ProviderError> = Ok(
+            ResultAndState {
+                result: ExecutionResult::Success {
+                    reason: Eval::Return,
+                    gas_used: 100_u64,
+                    gas_refunded: 10_u64,
+                    logs: Vec::new(),
+                    output: Output::Call(bytes::Bytes::from_static(b"output")),
+                },
+                state: [
+                    (   // storage has changed
+                        rB160::from(Address::zero()), 
+                        Account{
+                            info: AccountInfo {
+                                balance: rU256::from_limbs([1, 0, 0, 0]),
+                                nonce: 2,
+                                code_hash: B256::zero(),
+                                code: None,
+                            },
+                            storage: [
+                                // this slot has changed
+                                (rU256::from_limbs([3,1,0,0]), StorageSlot{
+                                    original_value: rU256::from_limbs([4, 0, 0, 0]),
+                                    present_value: rU256::from_limbs([5,0,0,0]),
+                                }),
+                                // this slot hasn't changed
+                                (rU256::from_limbs([3,2,0,0]), StorageSlot{
+                                    original_value: rU256::from_limbs([4, 0, 0, 0]),
+                                    present_value: rU256::from_limbs([4,0,0,0]),
+                                })
+                            ].iter().cloned().collect(),
+                            storage_cleared: false,
+                            is_destroyed: false,
+                            is_touched: true,
+                            is_not_existing: false,
+                        }
+                    )
+                ].iter().cloned().collect(),
+            }
+        );
+        
+        let result = interpret_evm_result(evm_result);
+        let simulation_result = result.unwrap();
+        
+        assert_eq!(simulation_result.result, bytes::Bytes::from_static(b"output"));
+        let expected_state_updates = [
+            (
+                Address::zero(),
+                StateUpdate {
+                    storage: Some(
+                        [
+                            (rU256::from_limbs([3, 1, 0, 0]),
+                             rU256::from_limbs([5, 0, 0, 0]))
+                        ].iter().cloned().collect()
+                    ),
+                    balance: Some(rU256::from_limbs([1, 0, 0, 0])),
+                    code: None,
+                }
+            )
+        ].iter().cloned().collect();
+        assert_eq!(simulation_result.state_updates, expected_state_updates);
+        assert_eq!(simulation_result.gas_used, 90);
+    }
+
+    #[test]
+    fn test_interpret_result_ok_revert() {
+        let evm_result: EVMResult<ProviderError> = Ok(
+            ResultAndState {
+                result: ExecutionResult::Revert {
+                    gas_used: 100_u64,
+                    output: bytes::Bytes::from_static(b"output"),
+                },
+                state: rState::new(),
+            }
+        );
+
+        let result = interpret_evm_result(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::TransactionError(msg) =>
+                assert_eq!(msg, "Execution reverted: output"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
+    #[test]
+    fn test_interpret_result_ok_halt() {
+        let evm_result: EVMResult<ProviderError> = Ok(
+            ResultAndState {
+                result: ExecutionResult::Halt {
+                    reason: Halt::OutOfGas(OutOfGasError::BasicOutOfGas),
+                    gas_used: 100_u64,
+                },
+                state: rState::new(),
+            }
+        );
+
+        let result = interpret_evm_result(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::TransactionError(msg) =>
+                assert_eq!(msg, "Execution halted: OutOfGas(BasicOutOfGas)"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
+    #[test]
+    fn test_interpret_result_err_invalid_transaction() {
+        let evm_result: EVMResult<ProviderError> = Err(
+            EVMError::Transaction(InvalidTransaction::GasMaxFeeGreaterThanPriorityFee)
+        );
+
+        let result = interpret_evm_result(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::TransactionError(msg) =>
+                assert_eq!(msg, "EVM error: GasMaxFeeGreaterThanPriorityFee"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
+    #[test]
+    fn test_interpret_result_err_db_error() {
+        let evm_result: EVMResult<ProviderError> = Err(
+            EVMError::Database(ProviderError::CustomError("boo".to_string()))
+        );
+
+        let result = interpret_evm_result(evm_result);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            SimulationError::StorageError(msg) =>
+                assert_eq!(msg, "Storage error: CustomError(\"boo\")"),
+            _ => panic!("Wrong type of SimulationError!"),
+        }
+    }
+    
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
         let client = Provider::<Http>::try_from(
             "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
         )
-        .unwrap();
+            .unwrap();
         let client = Arc::new(client);
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = storage::SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = SimulationDB::new(client, Some(Arc::new(runtime)), None);
 
         // any random address will work
-        let caller = H160::from_str("0x0000000000000000000000000000000000000000")?;
-        let router_addr = H160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")?;
+        let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
+        let router_addr = Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")?;
         let router_abi = BaseContract::from(
         parse_abi(&[
             "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory amounts)",
         ])?
         );
-        let weth_addr = H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")?;
-        let usdc_addr = H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")?;
+        let weth_addr = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")?;
+        let usdc_addr = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")?;
         let encoded = router_abi
             .encode(
                 "getAmountsOut",
@@ -197,24 +461,12 @@ mod tests {
         };
         let mut eng = SimulationEngine { state };
 
-        let computation_result = eng.simulate(&sim_params);
+        let result = eng.simulate(&sim_params);
 
-        let amounts_out = match computation_result {
-            ExecutionResult::Success {
-                reason: _,
-                gas_used: _,
-                gas_refunded: _,
-                logs: _,
-                output,
-            } => match output {
-                revm::primitives::Output::Call(data) => {
-                    router_abi.decode_output::<Vec<U256>, _>("getAmountsOut", data)?
-                }
-                revm::primitives::Output::Create(_, _) => {
-                    panic!("contract creation has not output")
-                }
-            },
-            _ => panic!("Exxecution reverted!"),
+        let amounts_out = match result {
+            Ok(SimulationResult { result, .. }) =>
+                router_abi.decode_output::<Vec<U256>, _>("getAmountsOut", result)?,
+            _ => panic!("Execution reverted!"),
         };
 
         println!(
@@ -223,9 +475,9 @@ mod tests {
         );
 
         let start = Instant::now();
-        let n_iter = 3;
+        let n_iter = 3;  // TODO: increase when caching works
         for _ in 0..n_iter {
-            eng.simulate(&sim_params);
+            eng.simulate(&sim_params).unwrap();
         }
         let duration = start.elapsed();
 

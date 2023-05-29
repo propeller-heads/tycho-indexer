@@ -62,10 +62,11 @@ pub struct BlockHeader {
     timestamp: u64,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct StateUpdate {
-    storage: Option<hash_map::HashMap<rU256, rU256>>,
-    balance: Option<rU256>,
-    code: Option<Bytes>,
+    pub storage: Option<hash_map::HashMap<rU256, rU256>>,
+    pub balance: Option<rU256>,
+    pub code: Option<Bytes>,
 }
 
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.

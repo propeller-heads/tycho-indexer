@@ -44,25 +44,10 @@ impl<M: Middleware> DodoPoolState<M> {
             gas_limit: None,
         };
         let mut engine = self.engine.borrow_mut();
-        let simulation_result = engine.simulate(&params);
-        let spot_price_u256 = match simulation_result {
-            ExecutionResult::Success {
-                reason: _,
-                gas_used: _,
-                gas_refunded: _,
-                logs: _,
-                output,
-            } => {
-                if let Output::Call(data) = output {
-                    self.pool_abi
-                        .decode_output::<U256, _>("getMidPrice", data)
-                        .expect("DODO: Failed decoding spot price result!")
-                } else {
-                    panic!("DODO: spot price calculation resulted in a contract creation!")
-                }
-            }
-            _ => panic!("DODO: Spot prices: EVM execution reverted"),
-        };
+        let simulation_result = engine.simulate(&params).unwrap();
+        let spot_price_u256 = self.pool_abi
+            .decode_output::<U256, _>("getMidPrice", simulation_result.result)
+            .expect("DODO: Failed decoding spot price result!");
         (
             u256_to_f64(spot_price_u256) / 10f64.powi(quote.decimals as i32),
             10f64.powi(base.decimals as i32) / u256_to_f64(spot_price_u256),
@@ -136,31 +121,13 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
             gas_limit: None,
         };
         let mut engine = self.engine.borrow_mut();
-        let simulation_result = engine.simulate(&params);
-        let (amount_out, gas) = match simulation_result {
-            ExecutionResult::Success {
-                reason: _,
-                gas_used,
-                gas_refunded,
-                logs: _,
-                output,
-            } => {
-                if let Output::Call(data) = output {
-                    (
-                        self.pool_abi
-                            .decode_output::<U256, _>("querySellBaseToken", data)
-                            .expect("DODO: Failed decoding get_amount_out result!"),
-                        gas_used - gas_refunded,
-                    )
-                } else {
-                    panic!("DODO: get_amount_out calculation resulted in a contract creation!")
-                }
-            }
-            _ => panic!("DODO: get_amount_out: EVM execution reverted"),
-        };
+        let simulation_result = engine.simulate(&params).unwrap();
+        let amount_out = self.pool_abi
+            .decode_output::<U256, _>("querySellBaseToken", simulation_result.result)
+            .expect("DODO: Failed decoding get_amount_out result!");
         Ok(GetAmountOutResult {
             amount: amount_out,
-            gas: U256::from(gas),
+            gas: U256::from(simulation_result.gas_used),
         })
     }
 }
