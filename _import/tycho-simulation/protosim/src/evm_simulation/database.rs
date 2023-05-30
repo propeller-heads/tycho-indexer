@@ -388,7 +388,7 @@ mod tests {
 
     fn get_client() -> Arc<Provider<Http>> {
         let client = Provider::<Http>::try_from(
-            "https://nd-476-591-342.p2pify.com/47924752fae22aeef1e970c35e88efa0",
+            "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
         )
         .unwrap();
         Arc::new(client)
