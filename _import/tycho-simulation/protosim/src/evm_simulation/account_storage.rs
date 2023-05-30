@@ -186,6 +186,24 @@ impl AccountStorage {
         }
     }
 
+    /// Retrieves the permanent storage value for the given address and index.
+    ///
+    /// If an account with the specified address exists in the account storage, this function
+    /// retrieves the corresponding permanent storage value associated with the given index.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The address of the account.
+    /// * `index` - The index of the desired storage value.
+    ///
+    pub fn get_permanent_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
+        if let Some(acc) = self.accounts.get(address) {
+            acc.permanent_storage.get(index).copied()
+        } else {
+            None
+        }
+    }
+
     /// Removes all temp storage values.
     ///
     /// Iterates over the accounts in the storage and removes all temp storage values
@@ -508,6 +526,39 @@ mod tests {
         assert_eq!(
             account_2_temp_storage, 0,
             "Temporary storage of account 2 should be cleared"
+        );
+    }
+
+    #[test]
+    fn test_get_permanent_storage() {
+        let mut account_storage = AccountStorage::default();
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let non_existing_address =
+            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let index = rU256::from_str("123").unwrap();
+        let value = rU256::from_str("456").unwrap();
+        let mut account = Account::default();
+        account.permanent_storage.insert(index, value);
+        account_storage.accounts.insert(address, account);
+
+        let result = account_storage.get_permanent_storage(&address, &index);
+        let not_existing_result =
+            account_storage.get_permanent_storage(&non_existing_address, &index);
+        let empty_index = rU256::from_str("789").unwrap();
+        let no_storage = account_storage.get_permanent_storage(&address, &empty_index);
+
+        assert_eq!(
+            result,
+            Some(value),
+            "Expected value for existing account with permanent storage"
+        );
+        assert_eq!(
+            not_existing_result, None,
+            "Expected None for non-existing account"
+        );
+        assert_eq!(
+            no_storage, None,
+            "Expected None for existing account without permanent storage"
         );
     }
 }

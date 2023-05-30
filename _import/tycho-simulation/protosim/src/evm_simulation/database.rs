@@ -144,7 +144,7 @@ impl<M: Middleware> SimulationDB<M> {
             if update_info.storage.is_some() {
                 let mut revert_storage = hash_map::HashMap::default();
                 for index in update_info.storage.as_ref().unwrap().keys() {
-                    if let Some(s) = self.account_storage.get_storage(address, index) {
+                    if let Some(s) = self.account_storage.get_permanent_storage(address, index) {
                         revert_storage.insert(*index, s);
                     }
                 }
