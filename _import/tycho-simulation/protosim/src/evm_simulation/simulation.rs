@@ -523,7 +523,7 @@ mod tests {
         );
 
         let start = Instant::now();
-        let n_iter = 3; // TODO: increase when caching works
+        let n_iter = 1000;
         for _ in 0..n_iter {
             eng.simulate(&sim_params).unwrap();
         }
@@ -531,7 +531,7 @@ mod tests {
 
         println!("Using revm:");
         println!("Total Duration [n_iter={n_iter}]: {:?}", duration);
-        println!("Single get_amount_out call: {:?}", duration / 1000);
+        println!("Single get_amount_out call: {:?}", duration / n_iter);
 
         Ok(())
     }

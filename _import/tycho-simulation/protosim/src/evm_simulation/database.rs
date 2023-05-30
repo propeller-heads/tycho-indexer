@@ -17,24 +17,18 @@ use super::account_storage::{AccountStorage, StateUpdate};
 
 /// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
 /// ownership of it.
-pub struct SharedSimulationDB<'a, M>
-where
-    M: Middleware,
-{
-    db: &'a SimulationDB<M>,
+pub struct SharedSimulationDB<'a, DB: DatabaseRef> {
+    db: &'a DB,
 }
 
-impl<'a, M> SharedSimulationDB<'a, M>
-where
-    M: Middleware,
-{
-    pub fn new(db: &'a SimulationDB<M>) -> Self {
+impl<'a, DB: DatabaseRef> SharedSimulationDB<'a, DB> {
+    pub fn new(db: &'a DB) -> Self {
         Self { db }
     }
 }
 
-impl<'a, M: Middleware> DatabaseRef for SharedSimulationDB<'a, M> {
-    type Error = M::Error;
+impl<'a, DB: DatabaseRef> DatabaseRef for SharedSimulationDB<'a, DB> {
+    type Error = DB::Error;
 
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
         DatabaseRef::basic(self.db, address)
