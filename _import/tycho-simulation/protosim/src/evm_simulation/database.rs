@@ -426,7 +426,7 @@ mod tests {
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
         let db = SimulationDB::new(get_client(), get_runtime(), None);
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let index = rU256::from(8);
+        let index = rU256::from_limbs_slice(&[8]);
         db.init_account(address, AccountInfo::default(), None, false);
 
         db.query_storage(address, index).unwrap();
@@ -442,7 +442,7 @@ mod tests {
         mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let index = rU256::from(8);
+        let index = rU256::from_limbs_slice(&[8]);
         let response_storage = H256::from_low_u64_le(123);
         mock_sim_db.init_account(address, AccountInfo::default(), None, false);
         mock_sim_db.client.as_ref().as_ref().push(response_storage).unwrap();
@@ -503,9 +503,9 @@ mod tests {
         mock_sim_db.init_account(address, AccountInfo::default(), None, false);
 
         let mut new_storage = hash_map::HashMap::default();
-        let new_storage_value_index = rU256::from(123);
+        let new_storage_value_index = rU256::from_limbs_slice(&[123]);
         new_storage.insert(new_storage_value_index, new_storage_value_index);
-        let new_balance = rU256::from(500_i64);
+        let new_balance = rU256::from_limbs_slice(&[500]);
         let update = StateUpdate {
             storage: Some(new_storage),
             balance: Some(new_balance),
