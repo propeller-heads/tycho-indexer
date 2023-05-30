@@ -6,8 +6,8 @@ use ethers::{
     types::{H160, U256},
 };
 use revm::{
-    primitives::{ExecutionResult, Output, B160, U256 as rU256},
-    Database,
+    primitives::{B160, U256 as rU256},
+    db::DatabaseRef,
 };
 
 use crate::{
@@ -43,7 +43,7 @@ impl<M: Middleware> DodoPoolState<M> {
             overrides: None,
             gas_limit: None,
         };
-        let mut engine = self.engine.borrow_mut();
+        let engine = self.engine.borrow();
         let simulation_result = engine.simulate(&params).unwrap();
         let spot_price_u256 = self
             .pool_abi
@@ -61,7 +61,7 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
     ///
     ///  Fee rates are in slot 8 and 9 they are accessed directly.
     fn fee(&self) -> f64 {
-        let mut engine = self.engine.borrow_mut();
+        let engine = self.engine.borrow();
         let lp_fee = engine
             .state
             .storage(B160(self.pool_address.0), rU256::from(8))
@@ -121,7 +121,7 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
             overrides: None,
             gas_limit: None,
         };
-        let mut engine = self.engine.borrow_mut();
+        let engine = self.engine.borrow();
         let simulation_result = engine.simulate(&params).unwrap();
         let amount_out = self
             .pool_abi
