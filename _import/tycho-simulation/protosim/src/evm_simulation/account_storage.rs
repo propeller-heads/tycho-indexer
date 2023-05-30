@@ -44,7 +44,6 @@ impl AccountStorage {
     /// * `address` - The address of the account to insert.
     /// * `info` - The account information to insert.
     /// * `permanent_storage` - Optional storage information associated with the account.
-    /// * `account_type` - Determines the type of the account
     ///
     /// # Notes
     ///
