@@ -327,7 +327,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the contract is not present in the storage, the function queries the account info and storage value from
     ///   the contract, initializes the account in the storage with the retrieved information, and returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        let mut is_mocked;
+        let is_mocked;
         {
             // This scope is to not make two simultaneous borrows (one occurs inside init_account)
             let borrowed_storage = self.account_storage.borrow();
@@ -404,9 +404,9 @@ mod tests {
         let response_nonce = U256::from(50_i64);
         let response_balance = U256::from(500_i64);
         // Note: The mocked provider takes the pushed requests from the top of the stack
-        mock_sim_db.client.as_ref().as_ref().push(response_code);
-        mock_sim_db.client.as_ref().as_ref().push(response_nonce);
-        mock_sim_db.client.as_ref().as_ref().push(response_balance);
+        mock_sim_db.client.as_ref().as_ref().push(response_code).unwrap();
+        mock_sim_db.client.as_ref().as_ref().push(response_nonce).unwrap();
+        mock_sim_db.client.as_ref().as_ref().push(response_balance).unwrap();
         let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
         let acc_info = mock_sim_db.query_account_info(address).unwrap();
@@ -424,7 +424,7 @@ mod tests {
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
-        let mut db = SimulationDB::new(get_client(), get_runtime(), None);
+        let db = SimulationDB::new(get_client(), get_runtime(), None);
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
         db.init_account(address, AccountInfo::default(), None, false);
@@ -439,13 +439,13 @@ mod tests {
 
     #[rstest]
     fn test_query_storage_past_block(
-        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
+        mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from(8);
         let response_storage = H256::from_low_u64_le(123);
         mock_sim_db.init_account(address, AccountInfo::default(), None, false);
-        mock_sim_db.client.as_ref().as_ref().push(response_storage);
+        mock_sim_db.client.as_ref().as_ref().push(response_storage).unwrap();
 
         let result = mock_sim_db.query_storage(address, index).unwrap();
 
@@ -458,7 +458,7 @@ mod tests {
 
     #[rstest]
     fn test_mock_account_get_acc_info(
-        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
+        mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
         // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
@@ -479,7 +479,7 @@ mod tests {
 
     #[rstest]
     fn test_mock_account_get_storage(
-        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
+        mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
         // Tests if mock accounts are not considered temp accounts and if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.

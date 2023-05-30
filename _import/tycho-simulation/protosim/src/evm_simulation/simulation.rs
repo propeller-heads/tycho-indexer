@@ -506,7 +506,7 @@ mod tests {
             overrides: None,
             gas_limit: None,
         };
-        let mut eng = SimulationEngine { state };
+        let eng = SimulationEngine { state };
 
         let result = eng.simulate(&sim_params);
 
