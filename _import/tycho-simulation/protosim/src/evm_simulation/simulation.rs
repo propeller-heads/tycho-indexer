@@ -36,7 +36,7 @@ pub struct SimulationEngine<M: Middleware> {
 impl<M: Middleware> SimulationEngine<M> {
     // TODO: support overrides
     pub fn simulate(
-        &mut self,
+        &self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
@@ -49,7 +49,7 @@ impl<M: Middleware> SimulationEngine<M> {
 
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
-        let db_ref = database::SharedSimulationDB::new(&mut self.state);
+        let db_ref = database::SharedSimulationDB::new(&self.state);
         vm.database(db_ref);
         vm.env.tx.caller = params.revm_caller();
         vm.env.tx.transact_to = params.revm_to();
@@ -57,7 +57,7 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.value = params.revm_value();
         vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(u64::MAX);
 
-        let evm_result = vm.transact();
+        let evm_result = vm.transact_ref();
 
         interpret_evm_result(evm_result)
     }
