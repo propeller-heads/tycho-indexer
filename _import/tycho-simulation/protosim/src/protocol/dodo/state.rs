@@ -1,4 +1,4 @@
-use std::{cell::RefCell};
+use std::cell::RefCell;
 
 use ethers::{
     prelude::BaseContract,
@@ -45,7 +45,8 @@ impl<M: Middleware> DodoPoolState<M> {
         };
         let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params).unwrap();
-        let spot_price_u256 = self.pool_abi
+        let spot_price_u256 = self
+            .pool_abi
             .decode_output::<U256, _>("getMidPrice", simulation_result.result)
             .expect("DODO: Failed decoding spot price result!");
         (
@@ -122,7 +123,8 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
         };
         let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params).unwrap();
-        let amount_out = self.pool_abi
+        let amount_out = self
+            .pool_abi
             .decode_output::<U256, _>("querySellBaseToken", simulation_result.result)
             .expect("DODO: Failed decoding get_amount_out result!");
         Ok(GetAmountOutResult {
