@@ -49,15 +49,15 @@ impl<'a, DB: DatabaseRef> DatabaseRef for SharedSimulationDB<'a, DB> {
 }
 
 /// A wrapper over an actual SimulationDB that allows overriding specific storage slots
-pub struct OverriddenSimulationDB<'a, 'b, DB: DatabaseRef> {
+pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
     /// Wrapped database. Will be queried if a requested item is not found in the overrides.
     pub inner_db: &'a DB,
     /// A mapping from account address to storage. 
     /// Storage is a mapping from slot index to slot value.
-    pub overrides: &'b HashMap<B160, HashMap<rU256, rU256>>,
+    pub overrides: &'a HashMap<B160, HashMap<rU256, rU256>>,
 }
 
-impl<'a, 'b, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, 'b, DB> {
+impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     type Error = DB::Error;
 
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
