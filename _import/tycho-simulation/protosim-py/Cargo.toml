@@ -1,0 +1,15 @@
+[package]
+name = "protosim-py"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "protosim_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = "0.18.3"
+protosim = { path = "../protosim" }
+tokio = { version = "1.23.0", features = ["full"] }
+ethers = "^2.0.2"
