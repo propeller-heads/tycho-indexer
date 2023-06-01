@@ -13,3 +13,4 @@ pyo3 = "0.18.3"
 protosim = { path = "../protosim" }
 tokio = { version = "1.23.0", features = ["full"] }
 ethers = "^2.0.2"
+once_cell = "1.17.2"

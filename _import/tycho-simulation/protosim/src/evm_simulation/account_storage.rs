@@ -13,7 +13,7 @@ use std::collections::hash_map::Entry::Vacant;
 /// * `permanent_storage` - The permanent storage of the account.
 /// * `temp_storage` - The temporary storage of the account.
 /// * `mocked` - A boolean flag indicating whether the account is mocked.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Account {
     pub info: AccountInfo,
     pub permanent_storage: hash_map::HashMap<rU256, rU256>,
@@ -26,7 +26,7 @@ pub struct StateUpdate {
     pub storage: Option<hash_map::HashMap<rU256, rU256>>,
     pub balance: Option<rU256>,
 }
-#[derive(Default)]
+#[derive(Default, Debug)]
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.
 pub struct AccountStorage {
     accounts: HashMap<B160, Account>,

@@ -29,12 +29,12 @@ pub struct SimulationResult {
     pub gas_used: u64,
 }
 
-pub struct SimulationEngine<M: Middleware> {
-    pub state: database::SimulationDB<M>,
+#[derive(Debug)]
+pub struct SimulationEngine<'life, M: Middleware> {
+    pub state: &'life database::SimulationDB<M>,
 }
 
-impl<M: Middleware> SimulationEngine<M> {
-    // TODO: support overrides
+impl<M: Middleware> SimulationEngine<'_, M> {
     pub fn simulate(
         &self,
         params: &SimulationParameters,
@@ -479,7 +479,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = database::SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = &database::SimulationDB::new(client, Some(Arc::new(runtime)), None);
 
         // any random address will work
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;

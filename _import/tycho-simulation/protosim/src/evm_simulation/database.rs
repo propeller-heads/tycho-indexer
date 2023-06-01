@@ -1,16 +1,16 @@
-use std::cell::RefCell;
 use ethers::{
     providers::Middleware,
     types::{BlockId, BlockNumber, H160, H256, U64},
 };
 use log::info;
+use std::cell::RefCell;
 
 use std::sync::Arc;
 
 use revm::{
+    db::DatabaseRef,
     interpreter::analysis::to_analysed,
     primitives::{hash_map, AccountInfo, Bytecode, B160, B256, U256 as rU256},
-    db::DatabaseRef,
 };
 
 use super::account_storage::{AccountStorage, StateUpdate};
@@ -52,13 +52,13 @@ impl<'a, M: Middleware> DatabaseRef for SharedSimulationDB<'a, M> {
         DatabaseRef::block_hash(self.db, number)
     }
 }
-
+#[derive(Debug)]
 pub struct BlockHeader {
     number: u64,
     hash: H256,
     timestamp: u64,
 }
-
+#[derive(Debug)]
 pub struct SimulationDB<M: Middleware> {
     /// Client to connect to the RPC
     client: Arc<M>,
@@ -68,7 +68,10 @@ pub struct SimulationDB<M: Middleware> {
     block: Option<BlockHeader>,
 
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
+    pub test_val: i32,
 }
+
+unsafe impl<M: Middleware> Sync for SimulationDB<M> {}
 
 impl<M: Middleware> SimulationDB<M> {
     pub fn new(
@@ -81,9 +84,13 @@ impl<M: Middleware> SimulationDB<M> {
             account_storage: RefCell::new(AccountStorage::new()),
             block,
             runtime,
+            test_val: 1,
         }
     }
 
+    pub fn increase_val(&mut self) {
+        self.test_val += 1;
+    }
     /// Sets up a single account
     ///
     /// Full control over setting up an accounts. Allows to set up EOAs as
@@ -107,7 +114,8 @@ impl<M: Middleware> SimulationDB<M> {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
 
-        self.account_storage.borrow_mut()
+        self.account_storage
+            .borrow_mut()
             .init_account(address, account, permanent_storage, mocked);
     }
 
@@ -132,17 +140,17 @@ impl<M: Middleware> SimulationDB<M> {
         self.block = Some(block);
         for (address, update_info) in updates.iter() {
             let mut revert_entry = StateUpdate::default();
-            if let Some(current_account) = self.account_storage
-                .borrow()
-                .get_account_info(address) {
+            if let Some(current_account) = self.account_storage.borrow().get_account_info(address) {
                 revert_entry.balance = Some(current_account.balance);
             }
             if update_info.storage.is_some() {
                 let mut revert_storage = hash_map::HashMap::default();
                 for index in update_info.storage.as_ref().unwrap().keys() {
-                    if let Some(s) = self.account_storage
+                    if let Some(s) = self
+                        .account_storage
                         .borrow()
-                        .get_permanent_storage(address, index) {
+                        .get_permanent_storage(address, index)
+                    {
                         revert_storage.insert(*index, s);
                     }
                 }
@@ -150,7 +158,9 @@ impl<M: Middleware> SimulationDB<M> {
             }
             revert_updates.insert(*address, revert_entry);
 
-            self.account_storage.borrow_mut().update_account(address, update_info);
+            self.account_storage
+                .borrow_mut()
+                .update_account(address, update_info);
         }
         revert_updates
     }
@@ -340,7 +350,8 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             Some(true) => Ok(rU256::ZERO),
             Some(false) => {
                 let storage_value = self.query_storage(address, index)?;
-                self.account_storage.borrow_mut()
+                self.account_storage
+                    .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
                 Ok(storage_value)
             }
@@ -348,7 +359,8 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                 let account_info = self.query_account_info(address)?;
                 let storage_value = self.query_storage(address, index)?;
                 self.init_account(address, account_info, None, false);
-                self.account_storage.borrow_mut()
+                self.account_storage
+                    .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
                 Ok(storage_value)
             }
@@ -404,9 +416,24 @@ mod tests {
         let response_nonce = U256::from(50_i64);
         let response_balance = U256::from(500_i64);
         // Note: The mocked provider takes the pushed requests from the top of the stack
-        mock_sim_db.client.as_ref().as_ref().push(response_code).unwrap();
-        mock_sim_db.client.as_ref().as_ref().push(response_nonce).unwrap();
-        mock_sim_db.client.as_ref().as_ref().push(response_balance).unwrap();
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(response_code)
+            .unwrap();
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(response_nonce)
+            .unwrap();
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(response_balance)
+            .unwrap();
         let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
         let acc_info = mock_sim_db.query_account_info(address).unwrap();
@@ -445,7 +472,12 @@ mod tests {
         let index = rU256::from(8);
         let response_storage = H256::from_low_u64_le(123);
         mock_sim_db.init_account(address, AccountInfo::default(), None, false);
-        mock_sim_db.client.as_ref().as_ref().push(response_storage).unwrap();
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(response_storage)
+            .unwrap();
 
         let result = mock_sim_db.query_storage(address, index).unwrap();
 
@@ -469,7 +501,8 @@ mod tests {
 
         assert_eq!(
             mock_sim_db
-                .account_storage.borrow()
+                .account_storage
+                .borrow()
                 .get_account_info(&mock_acc_address)
                 .unwrap(),
             &acc_info
@@ -521,14 +554,16 @@ mod tests {
 
         assert_eq!(
             mock_sim_db
-                .account_storage.borrow()
+                .account_storage
+                .borrow()
                 .get_storage(&address, &new_storage_value_index)
                 .unwrap(),
             new_storage_value_index
         );
         assert_eq!(
             mock_sim_db
-                .account_storage.borrow()
+                .account_storage
+                .borrow()
                 .get_account_info(&address)
                 .unwrap()
                 .balance,
