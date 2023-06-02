@@ -1,10 +1,10 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
 use ethers::{
     providers::Middleware,
     types::{BlockId, BlockNumber, H160, H256, U64},
 };
 use log::info;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 use std::sync::Arc;
 
@@ -52,7 +52,7 @@ impl<'a, DB: DatabaseRef> DatabaseRef for SharedSimulationDB<'a, DB> {
 pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
     /// Wrapped database. Will be queried if a requested item is not found in the overrides.
     pub inner_db: &'a DB,
-    /// A mapping from account address to storage. 
+    /// A mapping from account address to storage.
     /// Storage is a mapping from slot index to slot value.
     pub overrides: &'a HashMap<B160, HashMap<rU256, rU256>>,
 }
@@ -69,14 +69,12 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     }
 
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        match self.overrides.get(&address) { 
+        match self.overrides.get(&address) {
             None => self.inner_db.storage(address, index),
-            Some(overrides) => {
-                match overrides.get(&index) { 
-                    Some(value) => Ok(*value),
-                    None => self.inner_db.storage(address, index),
-                }
-            }
+            Some(overrides) => match overrides.get(&index) {
+                Some(value) => Ok(*value),
+                None => self.inner_db.storage(address, index),
+            },
         }
     }
 
@@ -102,10 +100,7 @@ pub struct SimulationDB<M: Middleware> {
     block: Option<BlockHeader>,
 
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
-    pub test_val: i32,
 }
-
-unsafe impl<M: Middleware> Sync for SimulationDB<M> {}
 
 impl<M: Middleware> SimulationDB<M> {
     pub fn new(
@@ -118,13 +113,9 @@ impl<M: Middleware> SimulationDB<M> {
             account_storage: RefCell::new(AccountStorage::new()),
             block,
             runtime,
-            test_val: 1,
         }
     }
 
-    pub fn increase_val(&mut self) {
-        self.test_val += 1;
-    }
     /// Sets up a single account
     ///
     /// Full control over setting up an accounts. Allows to set up EOAs as
@@ -413,7 +404,10 @@ mod tests {
     use std::{error::Error, str::FromStr, sync::Arc};
 
     use super::*;
-    use ethers::{providers::{Http, MockProvider, Provider}, types::U256};
+    use ethers::{
+        providers::{Http, MockProvider, Provider},
+        types::U256,
+    };
     use tokio::runtime::Runtime;
 
     #[fixture]
@@ -613,96 +607,133 @@ mod tests {
 
         Ok(())
     }
-    
+
     #[rstest]
     fn test_overridden_db(
-        mock_sim_db: SimulationDB<Provider<MockProvider>>
+        mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
         // GIVEN...
         let slot1 = rU256::from_limbs_slice(&[1]);
         let slot2 = rU256::from_limbs_slice(&[2]);
         let orig_value1 = rU256::from_limbs_slice(&[100]);
         let orig_value2 = rU256::from_limbs_slice(&[200]);
-        let original_storage: hash_map::HashMap<rU256, rU256> = [
-            (slot1, orig_value1), (slot2, orig_value2),
-        ].iter().cloned().collect();
-        
+        let original_storage: hash_map::HashMap<rU256, rU256> =
+            [(slot1, orig_value1), (slot2, orig_value2)]
+                .iter()
+                .cloned()
+                .collect();
+
         let address1 = B160::from(1);
         mock_sim_db.init_account(
             address1,
             AccountInfo::default(),
             Some(original_storage.clone()),
-            false
+            false,
         );
         let address2 = B160::from(2);
         mock_sim_db.init_account(
             address2,
             AccountInfo::default(),
             Some(original_storage.clone()),
-            false
+            false,
         );
-        
+
         // override slot 1 of address 2
         // and slot 1 of address 3 which doesn't exist in the original DB
         let address3 = B160::from(3);
         let overridden_value1 = rU256::from_limbs_slice(&[101]);
-        let mut overrides: HashMap<B160, HashMap<revm::primitives::U256, revm::primitives::U256>> 
-            = HashMap::new();
-        overrides.insert(address2, [(slot1, overridden_value1)].iter().cloned().collect());
-        overrides.insert(address3, [(slot1, overridden_value1)].iter().cloned().collect());
-        
+        let mut overrides: HashMap<B160, HashMap<revm::primitives::U256, revm::primitives::U256>> =
+            HashMap::new();
+        overrides.insert(
+            address2,
+            [(slot1, overridden_value1)].iter().cloned().collect(),
+        );
+        overrides.insert(
+            address3,
+            [(slot1, overridden_value1)].iter().cloned().collect(),
+        );
+
         // WHEN...
-        let overriden_db = OverriddenSimulationDB{inner_db: &mock_sim_db, overrides: &overrides};
-        
+        let overriden_db = OverriddenSimulationDB {
+            inner_db: &mock_sim_db,
+            overrides: &overrides,
+        };
+
         // THEN...
         assert_eq!(
-            overriden_db.storage(address1, slot1)
-                .expect("Value should be available"), 
+            overriden_db
+                .storage(address1, slot1)
+                .expect("Value should be available"),
             orig_value1,
             "Slots of non-overridden account should hold original values."
         );
-        
+
         assert_eq!(
-            overriden_db.storage(address1, slot2)
-                .expect("Value should be available"), 
+            overriden_db
+                .storage(address1, slot2)
+                .expect("Value should be available"),
             orig_value2,
             "Slots of non-overridden account should hold original values."
         );
-        
+
         assert_eq!(
-            overriden_db.storage(address2, slot1)
-                .expect("Value should be available"), 
+            overriden_db
+                .storage(address2, slot1)
+                .expect("Value should be available"),
             overridden_value1,
             "Overridden slot of overridden account should hold an overridden value."
         );
-        
+
         assert_eq!(
-            overriden_db.storage(address2, slot2)
-                .expect("Value should be available"), 
+            overriden_db
+                .storage(address2, slot2)
+                .expect("Value should be available"),
             orig_value2,
             "Non-overridden slot of an account with other slots overridden \
             should hold an original value."
         );
-        
+
         assert_eq!(
-            overriden_db.storage(address3, slot1)
-                .expect("Value should be available"), 
+            overriden_db
+                .storage(address3, slot1)
+                .expect("Value should be available"),
             overridden_value1,
             "Overridden slot of an overridden non-existent account should hold an overriden value."
         );
-        
+
         // storage
-        mock_sim_db.client.as_ref().as_ref().push(H256::from_low_u64_be(123)).unwrap();
-        mock_sim_db.client.as_ref().as_ref().push(U256::from(128)).unwrap();  // code
-        mock_sim_db.client.as_ref().as_ref().push(U256::zero()).unwrap();  // nonce
-        mock_sim_db.client.as_ref().as_ref().push(U256::zero()).unwrap();  // balance
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(H256::from_low_u64_be(123))
+            .unwrap();
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(U256::from(128))
+            .unwrap(); // code
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(U256::zero())
+            .unwrap(); // nonce
+        mock_sim_db
+            .client
+            .as_ref()
+            .as_ref()
+            .push(U256::zero())
+            .unwrap(); // balance
         assert_eq!(
-            overriden_db.storage(address3, slot2)
-                .expect("Value should be available"), 
+            overriden_db
+                .storage(address3, slot2)
+                .expect("Value should be available"),
             rU256::from_limbs_slice(&[123]),
             "Non-overridden slot of a non-existent account should query a node."
         );
-        
+
         Ok(())
     }
 }
