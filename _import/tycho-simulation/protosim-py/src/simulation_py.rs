@@ -4,24 +4,15 @@ use ethers::{
     providers::{Http, Provider},
     types::{Address, Bytes, U256},
 };
-use pyo3::{
-    exceptions::PyRuntimeError,
-    prelude::*
-};
+use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use revm::precompile::HashMap as revmHashMap;
 use tokio::runtime::Runtime;
 
-use protosim::{
-    evm_simulation::{
-        account_storage::StateUpdate,
-        database::SimulationDB,
-        simulation::{
-            SimulationEngine,
-            SimulationError,
-            SimulationParameters,
-            SimulationResult
-        }
-    }
+use protosim::evm_simulation::{
+    account_storage::StateUpdate,
+    database::SimulationDB,
+    simulation,
+    simulation::{SimulationError, SimulationParameters, SimulationResult},
 };
 
 /// Data needed to invoke a transaction simulation
@@ -46,25 +37,24 @@ impl From<PySimulationParameters> for SimulationParameters {
     fn from(params: PySimulationParameters) -> Self {
         let overrides = match params.overrides {
             Some(py_overrides) => {
-                let mut rust_overrides: revmHashMap<Address, revmHashMap<U256, U256>> = revmHashMap::new();
+                let mut rust_overrides: revmHashMap<Address, revmHashMap<U256, U256>> =
+                    revmHashMap::new();
                 for (address, py_slots) in py_overrides {
                     let mut rust_slots = revmHashMap::new();
                     for (index, value) in py_slots {
                         rust_slots.insert(
                             U256::from_str(index.as_str())
                                 .expect("Can't decode storage slot index"),
-                            U256::from_str(value.as_str())
-                                .expect("Can't decode storage value"),
+                            U256::from_str(value.as_str()).expect("Can't decode storage value"),
                         );
                     }
                     rust_overrides.insert(
-                        Address::from_str(address.as_str())
-                            .expect("Wrong address format"),
+                        Address::from_str(address.as_str()).expect("Wrong address format"),
                         rust_slots,
                     );
                 }
                 Some(rust_overrides)
-            },
+            }
             None => None,
         };
         SimulationParameters {
@@ -127,7 +117,9 @@ impl From<SimulationResult> for PySimulationResult {
             );
         }
         PySimulationResult {
-            result: rust_result.result.try_into()
+            result: rust_result
+                .result
+                .try_into()
                 .expect("Can't convert output bytes to a Python-compatible type"),
             state_updates: py_state_updates,
             gas_used: rust_result.gas_used,
@@ -168,20 +160,19 @@ fn get_client() -> Arc<Provider<Http>> {
 }
 
 #[pyclass]
-pub struct WrappedSimulationEnginePy(SimulationEngine<Provider<Http>>);
+pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 
 #[pymethods]
-impl WrappedSimulationEnginePy {
+impl SimulationEngine {
     #[new]
     fn new() -> Self {
         let db = SimulationDB::new(get_client(), get_runtime(), None);
-        let engine = SimulationEngine { state: db };
+        let engine = simulation::SimulationEngine { state: db };
         Self(engine)
     }
 
     fn run_sim(self_: PyRef<Self>, params: PySimulationParameters) -> PyResult<PySimulationResult> {
-        let rust_result = self_.0
-            .simulate(&SimulationParameters::from(params));
+        let rust_result = self_.0.simulate(&SimulationParameters::from(params));
         match rust_result {
             Ok(sim_res) => Ok(PySimulationResult::from(sim_res)),
             Err(sim_err) => Err(PyErr::from(PySimulationError::from(sim_err))),

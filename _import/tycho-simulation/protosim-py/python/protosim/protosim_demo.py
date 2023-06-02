@@ -1,5 +1,5 @@
 from typing import Optional
-from protosim_py import WrappedSimulationEnginePy
+from protosim_py import SimulationEngine
 
 
 class SimulationParameters:
@@ -22,7 +22,7 @@ class SimulationParameters:
 
 def test():
     print("Run test function")
-    sim = WrappedSimulationEnginePy()
+    sim = SimulationEngine()
     params = SimulationParameters(
         caller="0x0000000000000000000000000000000000000000",
         to="0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
