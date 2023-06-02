@@ -2657,6 +2657,7 @@ dependencies = [
  "once_cell",
  "protosim",
  "pyo3",
+ "revm",
  "tokio",
 ]
 

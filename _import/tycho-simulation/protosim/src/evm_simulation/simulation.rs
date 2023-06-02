@@ -30,11 +30,11 @@ pub struct SimulationResult {
 }
 
 #[derive(Debug)]
-pub struct SimulationEngine<'life, M: Middleware> {
-    pub state: &'life database::SimulationDB<M>,
+pub struct SimulationEngine<M: Middleware> {
+    pub state: database::SimulationDB<M>,
 }
 
-impl<M: Middleware> SimulationEngine<'_, M> {
+impl<M: Middleware> SimulationEngine<M> {
     pub fn simulate(
         &self,
         params: &SimulationParameters,
@@ -171,7 +171,7 @@ fn interpret_evm_success(
         gas_used: gas_used - gas_refunded,
     }
 }
-
+#[derive(Debug)]
 /// Data needed to invoke a transaction simulation
 pub struct SimulationParameters {
     /// Address of the sending account
@@ -479,7 +479,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = &database::SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = database::SimulationDB::new(client, Some(Arc::new(runtime)), None);
 
         // any random address will work
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
@@ -497,6 +497,8 @@ mod tests {
                 (U256::from(100_000_000), vec![usdc_addr, weth_addr]),
             )
             .unwrap();
+
+        println!("{:?}", encoded.to_vec());
 
         let sim_params = SimulationParameters {
             caller,
