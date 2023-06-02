@@ -81,7 +81,9 @@ impl From<PySimulationParameters> for SimulationParameters {
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct PyStateUpdate {
+    #[pyo3(get)]
     pub storage: Option<stdHashMap<String, String>>,
+    #[pyo3(get)]
     pub balance: Option<String>,
 }
 
@@ -105,10 +107,13 @@ impl From<StateUpdate> for PyStateUpdate {
 #[derive(Clone)]
 pub struct PySimulationResult {
     /// Output of transaction execution as bytes
+    #[pyo3(get)]
     pub result: Vec<u8>,
     /// State changes caused by the transaction
+    #[pyo3(get)]
     pub state_updates: stdHashMap<String, PyStateUpdate>,
     /// Gas used by the transaction (already reduced by the refunded gas)
+    #[pyo3(get)]
     pub gas_used: u64,
 }
 
