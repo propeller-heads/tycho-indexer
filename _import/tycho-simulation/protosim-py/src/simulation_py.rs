@@ -1,13 +1,28 @@
+use std::{collections::HashMap as stdHashMap, str::FromStr, sync::Arc};
+
 use ethers::{
     providers::{Http, Provider},
     types::{Address, Bytes, U256},
 };
-use protosim::evm_simulation::{account_storage::StateUpdate, database::SimulationDB, simulation::{self, SimulationEngine}};
-use pyo3::prelude::*;
+use pyo3::{
+    exceptions::PyRuntimeError,
+    prelude::*
+};
 use revm::precompile::HashMap as revmHashMap;
-use std::{collections::HashMap as stdHashMap, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime;
-use protosim::evm_simulation::simulation::{SimulationParameters, SimulationResult};
+
+use protosim::{
+    evm_simulation::{
+        account_storage::StateUpdate,
+        database::SimulationDB,
+        simulation::{
+            SimulationEngine,
+            SimulationError,
+            SimulationParameters,
+            SimulationResult
+        }
+    }
+};
 
 /// Data needed to invoke a transaction simulation
 #[derive(FromPyObject, Clone, Debug)]
@@ -115,6 +130,21 @@ impl From<SimulationResult> for PySimulationResult {
     }
 }
 
+#[pyclass]
+struct PySimulationError(SimulationError);
+
+impl From<PySimulationError> for PyErr {
+    fn from(err: PySimulationError) -> PyErr {
+        PyRuntimeError::new_err(format!("{:?}", err.0))
+    }
+}
+
+impl From<SimulationError> for PySimulationError {
+    fn from(err: SimulationError) -> Self {
+        Self(err)
+    }
+}
+
 fn get_runtime() -> Option<Arc<Runtime>> {
     let runtime = tokio::runtime::Handle::try_current()
         .is_err()
@@ -145,9 +175,11 @@ impl WrappedSimulationEnginePy {
     }
 
     fn run_sim(self_: PyRef<Self>, params: PySimulationParameters) -> PyResult<PySimulationResult> {
-        let res = self_.0
-            .simulate(&SimulationParameters::from(params))
-            .unwrap();  // TODO return error
-        Ok(PySimulationResult::from(res))
+        let rust_result = self_.0
+            .simulate(&SimulationParameters::from(params));
+        match rust_result {
+            Ok(sim_res) => Ok(PySimulationResult::from(sim_res)),
+            Err(sim_err) => Err(PyErr::from(PySimulationError::from(sim_err))),
+        }
     }
 }
