@@ -1,16 +1,15 @@
 use super::{account_storage::StateUpdate, database};
+use crate::evm_simulation::database::OverriddenSimulationDB;
 use ethers::{
     providers::Middleware,
     types::{Address, Bytes, U256}, // Address is an alias of H160
 };
-use ethers::core::k256::elliptic_curve::weierstrass::add;
-use revm::precompile::HashMap;
 use revm::primitives::{bytes, EVMResult, Output, State}; // `bytes` is an external crate
 use revm::{
     primitives::{EVMError, ExecutionResult, TransactTo, B160 as rB160, U256 as rU256},
     EVM,
 };
-use crate::evm_simulation::database::OverriddenSimulationDB;
+use std::collections::HashMap;
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]
@@ -31,6 +30,7 @@ pub struct SimulationResult {
     pub gas_used: u64,
 }
 
+#[derive(Debug)]
 pub struct SimulationEngine<M: Middleware> {
     pub state: database::SimulationDB<M>,
 }
@@ -50,11 +50,11 @@ impl<M: Middleware> SimulationEngine<M> {
 
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
-        let db_ref = OverriddenSimulationDB{
-            inner_db: &self.state, 
-            overrides: &params.revm_overrides().unwrap_or_default()
+        let db_ref = OverriddenSimulationDB {
+            inner_db: &self.state,
+            overrides: &params.revm_overrides().unwrap_or_default(),
         };
-        
+
         vm.database(db_ref);
         vm.env.tx.caller = params.revm_caller();
         vm.env.tx.transact_to = params.revm_to();
@@ -176,7 +176,7 @@ fn interpret_evm_success(
         gas_used: gas_used - gas_refunded,
     }
 }
-
+#[derive(Debug)]
 /// Data needed to invoke a transaction simulation
 pub struct SimulationParameters {
     /// Address of the sending account
@@ -213,17 +213,14 @@ impl SimulationParameters {
     }
 
     fn revm_overrides(
-        &self
+        &self,
     ) -> Option<std::collections::HashMap<rB160, std::collections::HashMap<rU256, rU256>>> {
         self.overrides.clone().map(|original| {
             let mut result = std::collections::HashMap::new();
             for (address, storage) in original {
                 let mut account_storage = std::collections::HashMap::new();
                 for (key, value) in storage {
-                    account_storage.insert(
-                        rU256::from_limbs(key.0), 
-                        rU256::from_limbs(value.0)
-                    );
+                    account_storage.insert(rU256::from_limbs(key.0), rU256::from_limbs(value.0));
                 }
                 result.insert(rB160::from(address), account_storage);
             }
@@ -261,16 +258,19 @@ mod tests {
             data: Bytes::from_static(b"Hello"),
             value: U256::from(123),
             overrides: Some(
-                [
-                    (
-                        Address::zero(),
-                        [
-                            (U256::from(1), U256::from(11)),
-                            (U256::from(2), U256::from(22)),
-                        ]
-                        .iter().cloned().collect()
-                    )
-                ].iter().cloned().collect(),
+                [(
+                    Address::zero(),
+                    [
+                        (U256::from(1), U256::from(11)),
+                        (U256::from(2), U256::from(22)),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
             ),
             gas_limit: Some(33),
         };
@@ -294,21 +294,25 @@ mod tests {
         assert_eq!(params.revm_value(), rU256::from_str("123").unwrap());
         // Below I am using `from_str` instead of `from`, because `from` for this type gives
         // an ugly false positive error in Pycharm.
-        let expected_overrides = [
-            (
-                rB160::zero(),
-                [
-                    (
-                        rU256::from_str("1").unwrap(),
-                        rU256::from_str("11").unwrap(),
-                    ),
-                    (
-                        rU256::from_str("2").unwrap(),
-                        rU256::from_str("22").unwrap(),
-                    ),
-                ].iter().cloned().collect()
-            )
-        ].iter().cloned().collect();
+        let expected_overrides = [(
+            rB160::zero(),
+            [
+                (
+                    rU256::from_str("1").unwrap(),
+                    rU256::from_str("11").unwrap(),
+                ),
+                (
+                    rU256::from_str("2").unwrap(),
+                    rU256::from_str("22").unwrap(),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )]
+        .iter()
+        .cloned()
+        .collect();
         assert_eq!(params.revm_overrides().unwrap(), expected_overrides);
         assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
     }
