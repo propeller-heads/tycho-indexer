@@ -9,7 +9,8 @@ name = "protosim_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.18.3"
+num-bigint = "0.4.3"
+pyo3 = { version = "0.18.3", features = ["num-bigint"] }
 protosim = { path = "../protosim" }
 tokio = { version = "1.23.0", features = ["full"] }
 ethers = "^2.0.2"

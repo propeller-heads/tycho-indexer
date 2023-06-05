@@ -1,23 +1,7 @@
-from typing import Optional
-from protosim_py import SimulationEngine
+from protosim_py import SimulationEngine, SimulationParameters
 
 
-class SimulationParameters:
-    def __init__(
-        self,
-        caller: str,
-        to: str,
-        data: bytearray,
-        value: str,
-        overrides: Optional[dict[str, str]],
-        gas_limit: Optional[int],
-    ):
-        self.caller = caller
-        self.to = to
-        self.data = data
-        self.value = value
-        self.overrides = overrides
-        self.gas_limit = gas_limit
+U256MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935
 
 
 def test():
@@ -38,8 +22,8 @@ def test():
             14, 92, 79, 39, 234, 217, 8, 60, 117, 108, 194
         ]),
         # fmt: on
-        value="0",
-        overrides=dict(),
+        value=0,
+        overrides={"0x0000000000000000000000000000000000000001": {U256MAX: U256MAX}},
         gas_limit=500000000000000,
     )
     print("Run test sim")
