@@ -132,7 +132,7 @@ impl<M: Middleware> SimulationDB<M> {
         &self,
         address: B160,
         mut account: AccountInfo,
-        permanent_storage: Option<hash_map::HashMap<rU256, rU256>>,
+        permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
     ) {
         if account.code.is_some() {
@@ -169,7 +169,7 @@ impl<M: Middleware> SimulationDB<M> {
                 revert_entry.balance = Some(current_account.balance);
             }
             if update_info.storage.is_some() {
-                let mut revert_storage = hash_map::HashMap::default();
+                let mut revert_storage = HashMap::default();
                 for index in update_info.storage.as_ref().unwrap().keys() {
                     if let Some(s) = self
                         .account_storage
@@ -560,7 +560,7 @@ mod tests {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_sim_db.init_account(address, AccountInfo::default(), None, false);
 
-        let mut new_storage = hash_map::HashMap::default();
+        let mut new_storage = HashMap::default();
         let new_storage_value_index = rU256::from_limbs_slice(&[123]);
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = rU256::from_limbs_slice(&[500]);
@@ -602,7 +602,7 @@ mod tests {
         );
         assert_eq!(
             revers_update.get(&address).unwrap().storage,
-            Some(hash_map::HashMap::default())
+            Some(HashMap::default())
         );
 
         Ok(())
@@ -617,11 +617,10 @@ mod tests {
         let slot2 = rU256::from_limbs_slice(&[2]);
         let orig_value1 = rU256::from_limbs_slice(&[100]);
         let orig_value2 = rU256::from_limbs_slice(&[200]);
-        let original_storage: hash_map::HashMap<rU256, rU256> =
-            [(slot1, orig_value1), (slot2, orig_value2)]
-                .iter()
-                .cloned()
-                .collect();
+        let original_storage: HashMap<rU256, rU256> = [(slot1, orig_value1), (slot2, orig_value2)]
+            .iter()
+            .cloned()
+            .collect();
 
         let address1 = B160::from(1);
         mock_sim_db.init_account(

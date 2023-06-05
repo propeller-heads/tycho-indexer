@@ -1,11 +1,10 @@
-use std::{collections::HashMap as stdHashMap, str::FromStr, sync::Arc};
-
 use ethers::{
     providers::{Http, Provider},
     types::{Address, Bytes, U256},
 };
+
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::precompile::HashMap as revmHashMap;
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime;
 
 use protosim::evm_simulation::{
@@ -28,7 +27,7 @@ pub struct PySimulationParameters {
     pub value: String,
     /// EVM state overrides.
     /// Will be merged with existing state. Will take effect only for current simulation.
-    pub overrides: Option<stdHashMap<String, stdHashMap<String, String>>>,
+    pub overrides: Option<HashMap<String, HashMap<String, String>>>,
     /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
 }
@@ -37,10 +36,9 @@ impl From<PySimulationParameters> for SimulationParameters {
     fn from(params: PySimulationParameters) -> Self {
         let overrides = match params.overrides {
             Some(py_overrides) => {
-                let mut rust_overrides: revmHashMap<Address, revmHashMap<U256, U256>> =
-                    revmHashMap::new();
+                let mut rust_overrides: HashMap<Address, HashMap<U256, U256>> = HashMap::new();
                 for (address, py_slots) in py_overrides {
-                    let mut rust_slots = revmHashMap::new();
+                    let mut rust_slots: HashMap<U256, U256> = HashMap::new();
                     for (index, value) in py_slots {
                         rust_slots.insert(
                             U256::from_str(index.as_str())
@@ -72,14 +70,14 @@ impl From<PySimulationParameters> for SimulationParameters {
 #[derive(Clone, Debug)]
 pub struct PyStateUpdate {
     #[pyo3(get)]
-    pub storage: Option<stdHashMap<String, String>>,
+    pub storage: Option<HashMap<String, String>>,
     #[pyo3(get)]
     pub balance: Option<String>,
 }
 
 impl From<StateUpdate> for PyStateUpdate {
     fn from(state_update: StateUpdate) -> Self {
-        let mut py_storage = stdHashMap::new();
+        let mut py_storage = HashMap::new();
         if let Some(rust_storage) = state_update.storage {
             for (key, val) in rust_storage {
                 py_storage.insert(key.to_string(), val.to_string());
@@ -101,7 +99,7 @@ pub struct PySimulationResult {
     pub result: Vec<u8>,
     /// State changes caused by the transaction
     #[pyo3(get)]
-    pub state_updates: stdHashMap<String, PyStateUpdate>,
+    pub state_updates: HashMap<String, PyStateUpdate>,
     /// Gas used by the transaction (already reduced by the refunded gas)
     #[pyo3(get)]
     pub gas_used: u64,
@@ -109,7 +107,7 @@ pub struct PySimulationResult {
 
 impl From<SimulationResult> for PySimulationResult {
     fn from(rust_result: SimulationResult) -> Self {
-        let mut py_state_updates = stdHashMap::new();
+        let mut py_state_updates = HashMap::new();
         for (key, val) in rust_result.state_updates {
             py_state_updates.insert(
                 Address::from(&key.to_fixed_bytes()).to_string(),

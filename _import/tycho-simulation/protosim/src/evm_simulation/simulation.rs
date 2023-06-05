@@ -4,12 +4,12 @@ use ethers::{
     providers::Middleware,
     types::{Address, Bytes, U256}, // Address is an alias of H160
 };
-use revm::precompile::HashMap;
 use revm::primitives::{bytes, EVMResult, Output, State}; // `bytes` is an external crate
 use revm::{
     primitives::{EVMError, ExecutionResult, TransactTo, B160 as rB160, U256 as rU256},
     EVM,
 };
+use std::collections::HashMap;
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]

@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use log::warn;
-
-use revm::primitives::{hash_map, AccountInfo, B160, U256 as rU256};
+use revm::primitives::{AccountInfo, B160, U256 as rU256};
 use std::collections::hash_map::Entry::Vacant;
 
 /// Represents an account in the account storage.
@@ -16,14 +15,14 @@ use std::collections::hash_map::Entry::Vacant;
 #[derive(Clone, Default, Debug)]
 pub struct Account {
     pub info: AccountInfo,
-    pub permanent_storage: hash_map::HashMap<rU256, rU256>,
-    pub temp_storage: hash_map::HashMap<rU256, rU256>,
+    pub permanent_storage: HashMap<rU256, rU256>,
+    pub temp_storage: HashMap<rU256, rU256>,
     pub mocked: bool,
 }
 
 #[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub struct StateUpdate {
-    pub storage: Option<hash_map::HashMap<rU256, rU256>>,
+    pub storage: Option<HashMap<rU256, rU256>>,
     pub balance: Option<rU256>,
 }
 #[derive(Default, Debug)]
@@ -55,14 +54,14 @@ impl AccountStorage {
         &mut self,
         address: B160,
         info: AccountInfo,
-        permanent_storage: Option<hash_map::HashMap<rU256, rU256>>,
+        permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
     ) {
         if let Vacant(e) = self.accounts.entry(address) {
             e.insert(Account {
                 info,
                 permanent_storage: permanent_storage.unwrap_or_default(),
-                temp_storage: hash_map::HashMap::new(),
+                temp_storage: HashMap::new(),
                 mocked,
             });
         } else {
@@ -219,12 +218,11 @@ impl AccountStorage {
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::account_storage::{Account, AccountStorage};
-    use revm::primitives::hash_map;
-    use revm::primitives::{AccountInfo, B160, KECCAK_EMPTY, U256 as rU256};
-    use std::{error::Error, str::FromStr};
-
     use super::StateUpdate;
+    use crate::evm_simulation::account_storage::{Account, AccountStorage};
+    use revm::primitives::{AccountInfo, B160, KECCAK_EMPTY, U256 as rU256};
+    use std::collections::HashMap;
+    use std::{error::Error, str::FromStr};
 
     #[test]
     fn test_insert_account() -> Result<(), Box<dyn Error>> {
@@ -238,7 +236,7 @@ mod tests {
             code: None,
             code_hash: KECCAK_EMPTY,
         };
-        let mut storage_new = hash_map::HashMap::new();
+        let mut storage_new = HashMap::new();
         let expected_storage_value = rU256::from_str("5").unwrap();
         storage_new.insert(rU256::from_str("1").unwrap(), expected_storage_value);
 
@@ -277,7 +275,7 @@ mod tests {
             code: None,
             code_hash: KECCAK_EMPTY,
         };
-        let mut original_storage = hash_map::HashMap::new();
+        let mut original_storage = HashMap::new();
         let storage_index = rU256::from_str("1").unwrap();
         original_storage.insert(storage_index, rU256::from_str("5").unwrap());
         account_storage.accounts.insert(
@@ -285,13 +283,13 @@ mod tests {
             Account {
                 info,
                 permanent_storage: original_storage,
-                temp_storage: hash_map::HashMap::new(),
+                temp_storage: HashMap::new(),
                 mocked: false,
             },
         );
         let updated_balance = rU256::from(100);
         let updated_storage_value = rU256::from_str("999").unwrap();
-        let mut updated_storage = hash_map::HashMap::new();
+        let mut updated_storage = HashMap::new();
         updated_storage.insert(storage_index, updated_storage_value);
         let state_update = StateUpdate {
             balance: Some(updated_balance),
