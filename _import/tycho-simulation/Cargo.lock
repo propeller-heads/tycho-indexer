@@ -2654,6 +2654,7 @@ name = "protosim-py"
 version = "0.1.0"
 dependencies = [
  "ethers",
+ "num-bigint",
  "once_cell",
  "protosim",
  "pyo3",
@@ -2671,6 +2672,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset",
+ "num-bigint",
  "parking_lot",
  "pyo3-build-config",
  "pyo3-ffi",
