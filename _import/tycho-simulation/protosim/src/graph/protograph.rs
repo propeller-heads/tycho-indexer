@@ -454,24 +454,26 @@ impl ProtoGraph {
     /// # Arguments
     ///
     /// * `start_token` - The token address to start building the routes from.
-    ///
-    /// # Note
-    ///
-    /// Currently only circular routes are supported which why only the start token
-    /// can be supplied.
+    /// * `end_token` - The token address the built routes must end with.
     ///
     /// # Panics
     ///
-    /// The function will panic if the token address provided is not present in
-    /// the graphs `tokens` map.
-    pub fn build_routes(&mut self, start_token: H160) {
-        let TokenEntry(node_idx, _) = self.tokens[&start_token];
-        let edge_routes =
-            all_edge_routes::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops));
+    /// The function will panic if one of the token addresses provided are not present in
+    /// the graph's `tokens` map.
+    pub fn build_routes(&mut self, start_token: H160, end_token: H160) {
+        let TokenEntry(start_node_idx, _) = self.tokens[&start_token];
+        let TokenEntry(end_node_idx, _) = self.tokens[&end_token];
+        let edge_routes = all_edge_routes::<Vec<_>, _>(
+            &self.graph,
+            start_node_idx,
+            end_node_idx,
+            1,
+            Some(self.n_hops),
+        );
         info!("Searching routes...");
         for route in edge_routes {
             // insert route only if it does not yet exist
-            let entry = RouteEntry::new(node_idx, route);
+            let entry = RouteEntry::new(start_node_idx, route);
             if let Err(pos) = self.routes.binary_search(&entry) {
                 self.routes.insert(pos, entry);
             };
@@ -544,9 +546,9 @@ impl ProtoGraph {
                 pairs.push(state);
                 tokens.push(next_token);
             }
-            let p = Route::new(&tokens, &pairs);
+            let r = Route::new(&tokens, &pairs);
             n_routes_evaluated += 1;
-            if let Some(opp) = search(p) {
+            if let Some(opp) = search(r) {
                 opportunities.push(opp);
             }
         }
@@ -640,7 +642,10 @@ mod tests {
             20_000_000,
             20_000_000,
         ));
-        g.build_routes(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
         g
     }
 
@@ -902,11 +907,14 @@ mod tests {
             g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
         }
 
-        g.build_routes(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
 
         let mut routes = Vec::with_capacity(g.routes.len());
-        for p in g.routes {
-            let addr_route: Vec<_> = p
+        for r in g.routes {
+            let addr_route: Vec<_> = routes
                 .edges
                 .iter()
                 .map(|x| *g.graph.edge_weight(*x).unwrap())
@@ -988,7 +996,10 @@ mod tests {
             20_000_000,
             10_000_000,
         ));
-        g.build_routes(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
         let opps = g.search_opportunities(atomic_arb_finder, addresses);
 
         assert_eq!(opps.len(), 1);
