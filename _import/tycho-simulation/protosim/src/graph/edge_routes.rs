@@ -1,4 +1,4 @@
-//! Path finding algorithm
+//! Route finding algorithm
 //!
 //! This module works on edges instead of nodes to provide better support for MultiGraphs which
 //! can have parallel edges between two nodes.
@@ -12,9 +12,9 @@ use std::{
     iter::{from_fn, FromIterator},
 };
 
-/// Returns an iterator of edge ids over paths between two nodes in a graph.
+/// Returns an iterator of edge ids over routes between two nodes in a graph.
 ///
-///  The returned paths are represented as collections of the type specified by
+///  The returned routes are represented as collections of the type specified by
 ///  the `TargetColl` type parameter.
 ///
 ///  ## Arguments
@@ -22,11 +22,11 @@ use std::{
 ///  - `graph`: The graph to search in. Must implement the `EdgeCount`,
 ///  `IntoEdgesDirected`, and `IntoEdgeReferences` traits, as well as have `NodeId`
 ///  and `EdgeId` types that implement `Eq` and `Hash`.
-///  - `from`: The starting node of the paths.
-///  - `to`: The target node of the paths.
-///  - `min_edges`: The minimum number of edges that a path must have to be included
+///  - `from`: The starting node of the routes.
+///  - `to`: The target node of the routes.
+///  - `min_edges`: The minimum number of edges that a route must have to be included
 ///  in the returned iterator.
-///  - `max_edges`: The maximum number of edges that a path can have to be included
+///  - `max_edges`: The maximum number of edges that a route can have to be included
 ///  in the returned iterator. If not specified, defaults to the number of nodes in
 ///  the graph minus one.
 ///
@@ -37,7 +37,7 @@ use std::{
 ///  ## Panics
 ///
 ///  Panics if `from` or `to` are not present in the graph.
-pub fn all_edge_paths<TargetColl, G>(
+pub fn all_edge_routes<TargetColl, G>(
     graph: G,
     from: G::NodeId,
     to: G::NodeId,
@@ -69,15 +69,15 @@ where
         while let Some(edges) = stack.last_mut() {
             if let Some(edge) = edges.next() {
                 if visited.len() + 1 < max_length {
-                    // handles all paths that are < max_length but >= min length
+                    // handles all routes that are < max_length but >= min length
                     if edge.target() == to && !visited.contains(&edge.id()) {
                         if visited.len() + 1 >= min_length {
-                            let path = visited
+                            let route = visited
                                 .iter()
                                 .cloned()
                                 .chain(Some(edge.id()))
                                 .collect::<TargetColl>();
-                            return Some(path);
+                            return Some(route);
                         }
                     } else if !visited_nodes.contains(&edge.target())
                         && !visited.contains(&edge.id())
@@ -87,18 +87,18 @@ where
                         stack.push(graph.edges_directed(edge.target(), Outgoing));
                     }
                 } else {
-                    // Handles all paths that are == max_length and >= min length
-                    // We are about to abort this path, check if remaining edges that still
-                    // fulfill visted.len() == max_length, for a path to target
+                    // Handles all routes that are == max_length and >= min length
+                    // We are about to abort this route, check if remaining edges that still
+                    // fulfill visted.len() == max_length, for a route to target
                     if visited.len() + 1 >= min_length {
                         for edge in edges.chain(Some(edge)) {
                             if edge.target() == to && !visited.contains(&edge.id()) {
-                                let path = visited
+                                let route = visited
                                     .iter()
                                     .cloned()
                                     .chain(Some(edge.id()))
                                     .collect::<TargetColl>();
-                                return Some(path);
+                                return Some(route);
                             }
                         }
                     }
@@ -133,7 +133,7 @@ mod tests {
     #[case::doubled_pool_at_start_token(&[(0, 1), (0, 2), (1, 2), (0, 1)], 4, 6)]
     #[case::doubled_pool_at_start_token(&[(0, 1), (0, 2), (1, 2), (0, 2)], 4,  6)]
     #[case::doubled_pool_not_at_start_token(&[(0, 1), (0, 2), (1, 2), (1, 2)], 4, 4)]
-    fn test_all_edge_paths(
+    fn test_all_edge_routes(
         #[case] edges: &[(u32, u32)],
         #[case] length: usize,
         #[case] exp: usize,
@@ -142,7 +142,7 @@ mod tests {
         let node = NodeIndexable::from_index(&g, 0);
 
         assert_eq!(
-            all_edge_paths::<Vec<_>, _>(&g, node, node, 0, Some(length)).count(),
+            all_edge_routes::<Vec<_>, _>(&g, node, node, 0, Some(length)).count(),
             exp
         )
     }
@@ -152,11 +152,11 @@ mod tests {
     #[case(2, vec![vec![0, 1], vec![2]])]
     #[case(3, vec![vec![0, 1], vec![2], vec![3, 4, 1]])]
     #[case(5, vec![vec![0, 1], vec![2], vec![3, 4, 1]])]
-    fn test_all_edge_paths_intermediate_nodes(#[case] l: usize, #[case] paths: Vec<Vec<usize>>) {
+    fn test_all_edge_routes_intermediate_nodes(#[case] l: usize, #[case] routes: Vec<Vec<usize>>) {
         let g = UnGraph::<(), i32>::from_edges(&[(0, 1), (1, 2), (0, 2), (0, 3), (3, 1)]);
         let s = NodeIndexable::from_index(&g, 0);
         let e = NodeIndexable::from_index(&g, 2);
-        let exp = paths
+        let exp = routes
             .iter()
             .map(|sub| {
                 sub.iter()
@@ -165,9 +165,9 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let mut paths: Vec<_> = all_edge_paths::<Vec<_>, _>(&g, s, e, 1, Some(l)).collect();
-        paths.sort();
+        let mut routes: Vec<_> = all_edge_routes::<Vec<_>, _>(&g, s, e, 1, Some(l)).collect();
+        routes.sort();
 
-        assert_eq!(paths, exp)
+        assert_eq!(routes, exp)
     }
 }
