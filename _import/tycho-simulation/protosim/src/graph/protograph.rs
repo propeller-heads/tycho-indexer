@@ -57,7 +57,7 @@ use std::{collections::HashMap, error::Error};
 use crate::{
     models::{ERC20Token, Swap, SwapSequence},
     protocol::{
-        errors::{TradeSimulationError, TransitionError},
+        errors::{TradeSimulationError, TransitionError, UnknownTokenError},
         events::{EVMLogMeta, LogIndex},
         models::{GetAmountOutResult, Pair},
         state::{ProtocolEvent, ProtocolSim, ProtocolState},
@@ -464,26 +464,18 @@ impl ProtoGraph {
         &mut self,
         start_token: H160,
         end_token: H160,
-    ) -> Result<(), Box<dyn Error>> {
-        let start_node_idx = match self.tokens.get(&start_token) {
-            Some(&TokenEntry(start_node_idx, _)) => start_node_idx,
-            None => {
-                return Err(Box::<dyn Error>::from(format!(
-                    "Token address {:?} not found",
-                    start_token
-                )))
-            }
-        };
+    ) -> Result<(), UnknownTokenError> {
+        let start_node_idx = self
+            .tokens
+            .get(&start_token)
+            .ok_or_else(|| UnknownTokenError::new(start_token))
+            .map(|&TokenEntry(start_node_idx, _)| start_node_idx)?;
 
-        let end_node_idx = match self.tokens.get(&end_token) {
-            Some(&TokenEntry(end_node_idx, _)) => end_node_idx,
-            None => {
-                return Err(Box::<dyn Error>::from(format!(
-                    "Token address {:?} not found",
-                    end_token
-                )))
-            }
-        };
+        let end_node_idx = self
+            .tokens
+            .get(&end_token)
+            .ok_or_else(|| UnknownTokenError::new(end_token))
+            .map(|&TokenEntry(end_node_idx, _)| end_node_idx)?;
 
         let edge_routes = all_edge_routes::<Vec<_>, _>(
             &self.graph,
@@ -1083,7 +1075,7 @@ mod tests {
                 .collect();
             routes.push(addr_route);
         }
-        // dbg!(routes);
+
         assert_eq!(routes, exp);
     }
 
@@ -1118,9 +1110,10 @@ mod tests {
 
         assert!(res.is_err());
         if let Err(error) = res {
+            assert!(matches!(error, UnknownTokenError { .. }));
             assert_eq!(
                 error.to_string(),
-                "Token address 0x0000000000000000000000000000000000000004 not found"
+                "Unknown token: 0x0000000000000000000000000000000000000004"
             )
         }
     }
