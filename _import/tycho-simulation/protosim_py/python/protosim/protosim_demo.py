@@ -29,7 +29,7 @@ def test():
     print("Run test sim")
     res = sim.run_sim(params)
     print("Sim done")
-    print(res)
+    print(f"{res.result=}")
 
 
 if __name__ == "__main__":
