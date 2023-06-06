@@ -2,8 +2,6 @@ use ethers::providers::{Http, Provider};
 use num_bigint::BigUint;
 use revm::primitives::{B160, U256 as rU256};
 
-
-use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use crate::structs_py::{
     AccountInfo, BlockHeader, PySimulationError, PySimulationResult, SimulationParameters,
     StateUpdate,
