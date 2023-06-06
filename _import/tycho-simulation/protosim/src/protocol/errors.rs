@@ -44,6 +44,7 @@ pub enum TransitionError<T> {
     OutOfOrder { state: T, event: T },
 }
 
+#[derive(Debug)]
 pub struct UnknownTokenError {
     /// The unknown token's address
     pub address: H160,
