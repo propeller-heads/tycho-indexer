@@ -111,7 +111,7 @@ impl From<account_storage::StateUpdate> for StateUpdate {
 
 #[pyclass]
 #[derive(Clone)]
-pub struct PySimulationResult {
+pub struct SimulationResult {
     /// Output of transaction execution as bytes
     #[pyo3(get)]
     pub result: Vec<u8>,
@@ -123,7 +123,7 @@ pub struct PySimulationResult {
     pub gas_used: u64,
 }
 
-impl From<simulation::SimulationResult> for PySimulationResult {
+impl From<simulation::SimulationResult> for SimulationResult {
     fn from(rust_result: simulation::SimulationResult) -> Self {
         let mut py_state_updates = HashMap::new();
         for (key, val) in rust_result.state_updates {
@@ -132,7 +132,7 @@ impl From<simulation::SimulationResult> for PySimulationResult {
                 StateUpdate::from(val),
             );
         }
-        PySimulationResult {
+        SimulationResult {
             result: rust_result
                 .result
                 .try_into()
@@ -144,15 +144,15 @@ impl From<simulation::SimulationResult> for PySimulationResult {
 }
 
 #[pyclass]
-struct PySimulationError(simulation::SimulationError);
+struct SimulationError(simulation::SimulationError);
 
-impl From<PySimulationError> for PyErr {
-    fn from(err: PySimulationError) -> PyErr {
+impl From<SimulationError> for PyErr {
+    fn from(err: SimulationError) -> PyErr {
         PyRuntimeError::new_err(format!("{:?}", err.0))
     }
 }
 
-impl From<simulation::SimulationError> for PySimulationError {
+impl From<simulation::SimulationError> for SimulationError {
     fn from(err: simulation::SimulationError) -> Self {
         Self(err)
     }
@@ -187,13 +187,13 @@ impl SimulationEngine {
         Self(engine)
     }
 
-    fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<PySimulationResult> {
+    fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
         let rust_result = self_
             .0
             .simulate(&simulation::SimulationParameters::from(params));
         match rust_result {
-            Ok(sim_res) => Ok(PySimulationResult::from(sim_res)),
-            Err(sim_err) => Err(PyErr::from(PySimulationError::from(sim_err))),
+            Ok(sim_res) => Ok(SimulationResult::from(sim_res)),
+            Err(sim_err) => Err(PyErr::from(SimulationError::from(sim_err))),
         }
     }
 }
