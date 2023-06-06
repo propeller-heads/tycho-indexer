@@ -92,16 +92,16 @@ impl SimulationEngine {
             );
         }
 
-        let revers_update = self_.0.state.update_state(&rust_updates, block);
+        let reverse_updates = self_.0.state.update_state(&rust_updates, block);
 
         let mut py_reverse_updates: HashMap<String, StateUpdate> = HashMap::new();
-        for (key, value) in revers_update {
+        for (key, value) in reverse_updates {
             py_reverse_updates.insert(key.to_string(), StateUpdate::from(value));
         }
         Ok(py_reverse_updates)
     }
 
-    fn clear_temp_storage(self_: PyRef<Self>) {
+    fn clear_temp_storage(mut self_: PyRefMut<Self>) {
         self_.0.state.clear_temp_storage();
     }
 }

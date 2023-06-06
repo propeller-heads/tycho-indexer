@@ -194,7 +194,7 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// It is recommended to call this after a new block is received,
     /// to avoid stored state leading to wrong results.
-    pub fn clear_temp_storage(&self) {
+    pub fn clear_temp_storage(&mut self) {
         self.account_storage.borrow_mut().clean_temp_storage();
     }
 
