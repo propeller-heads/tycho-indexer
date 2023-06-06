@@ -1,3 +1,9 @@
+"""Example of running a simulation in Rust from Python.
+
+(Build and) install the `protosim_py` package in your Python before running this.
+See the Readme.md file for instructions.
+"""
+
 from protosim_py import SimulationEngine, SimulationParameters
 
 
