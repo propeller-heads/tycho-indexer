@@ -30,6 +30,8 @@ jobs:
           override: true
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2.2.0
+      - name: Format Check
+        run: cargo fmt --check
       - name: Build Crate
         run: cargo build --verbose
       - name: Code Lint
