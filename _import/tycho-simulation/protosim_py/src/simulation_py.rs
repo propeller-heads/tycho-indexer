@@ -11,21 +11,30 @@ use tokio::runtime::Runtime;
 use protosim::evm_simulation::{account_storage, database::SimulationDB, simulation};
 
 /// Data needed to invoke a transaction simulation
-#[pyclass]
+/// 
+/// Attributes
+/// ----------
+/// caller: str
+///     Address of the sending account
+/// to: str
+///     Address of the receiving account/contract
+/// data: bytearray
+///     Calldata
+/// value: int
+///     Amount of native token sent
+/// overrides: Optional[dict[str, dict[int, int]]]
+///     EVM state overrides. Will be merged with existing state. Will take effect only for current
+///     simulation. It's a ``dict[account_address, dict[storage_slot, storage_value]]``.
+/// gas_limit: Optional[int]
+///     Limit of gas to be used by the transaction
+#[pyclass(text_signature = "(caller, to, data, value, overrides=None, gas_limit=None)")]
 #[derive(Clone, Debug)]
 pub struct SimulationParameters {
-    /// Address of the sending account
     pub caller: String,
-    /// Address of the receiving account/contract
     pub to: String,
-    /// Calldata
     pub data: Vec<u8>,
-    /// Amount of native token sent
     pub value: BigUint,
-    /// EVM state overrides.
-    /// Will be merged with existing state. Will take effect only for current simulation.
     pub overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
-    /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
 }
 
@@ -84,13 +93,21 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
     }
 }
 
+/// Changes to an account made by a transaction
+/// 
+/// Attributes
+/// ----------
+/// storage: Optional[dict[int, int]]
+///     New values of storage slots
+/// balance: Optional[int]
+///     New native token balance
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct StateUpdate {
     #[pyo3(get)]
-    pub storage: Option<HashMap<String, String>>,
+    pub storage: Option<HashMap<BigUint, BigUint>>,
     #[pyo3(get)]
-    pub balance: Option<String>,
+    pub balance: Option<BigUint>,
 }
 
 impl From<account_storage::StateUpdate> for StateUpdate {
@@ -98,27 +115,38 @@ impl From<account_storage::StateUpdate> for StateUpdate {
         let mut py_storage = HashMap::new();
         if let Some(rust_storage) = state_update.storage {
             for (key, val) in rust_storage {
-                py_storage.insert(key.to_string(), val.to_string());
+                py_storage.insert(
+                    BigUint::from_bytes_le(key.as_le_slice()), 
+                    BigUint::from_bytes_le(val.as_le_slice())
+                );
             }
         }
 
         StateUpdate {
             storage: Some(py_storage),
-            balance: Some(state_update.balance.unwrap().to_string()),
+            balance: state_update.balance.map(|x| BigUint::from_bytes_le(x.as_le_slice())),
         }
     }
 }
 
+/// The result of a successful simulation
+/// 
+/// Attributes
+/// ----------
+/// 
+/// result: bytearray
+///     Output of transaction execution as bytes
+/// state_updates: dict[str, StateUpdate]
+///     State changes caused by the transaction
+/// gas_used: int
+///     Gas used by the transaction (already reduced by the refunded gas)
 #[pyclass]
 #[derive(Clone)]
 pub struct SimulationResult {
-    /// Output of transaction execution as bytes
     #[pyo3(get)]
     pub result: Vec<u8>,
-    /// State changes caused by the transaction
     #[pyo3(get)]
     pub state_updates: HashMap<String, StateUpdate>,
-    /// Gas used by the transaction (already reduced by the refunded gas)
     #[pyo3(get)]
     pub gas_used: u64,
 }
@@ -175,6 +203,12 @@ fn get_client() -> Arc<Provider<Http>> {
     Arc::new(client)
 }
 
+/// This class lets you simulate transactions.
+/// 
+/// Data will be queried from an Ethereum node*, if needed. You can also override account balance or
+/// storage. See the methods.
+/// 
+/// *Currently the connection to a node is hardcoded. This will be changed in the future.
 #[pyclass]
 pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 
@@ -187,6 +221,9 @@ impl SimulationEngine {
         Self(engine)
     }
 
+    /// Simulate transaction.
+    /// 
+    /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
     fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
         let rust_result = self_
             .0

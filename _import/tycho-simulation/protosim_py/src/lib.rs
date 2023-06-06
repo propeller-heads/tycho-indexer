@@ -3,7 +3,7 @@ use simulation_py::{SimulationEngine, SimulationParameters, StateUpdate};
 
 mod simulation_py;
 
-/// A Python module implemented in Rust.
+/// Transaction simulation using EVM implemented in Rust
 #[pymodule]
 fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<SimulationEngine>()?;
