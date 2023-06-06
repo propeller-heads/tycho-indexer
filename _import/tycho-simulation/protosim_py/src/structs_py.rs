@@ -131,17 +131,15 @@ impl From<StateUpdate> for account_storage::StateUpdate {
         if let Some(py_storage) = py_state_update.storage {
             for (key, val) in py_storage {
                 rust_storage.insert(
-                    rU256::from_limbs_slice(key.to_u64_digits().as_slice()),
-                    rU256::from_limbs_slice(val.to_u64_digits().as_slice()),
+                    rU256::from_str(&key.to_string()).unwrap(),
+                    rU256::from_str(&val.to_string()).unwrap(),
                 );
             }
         }
 
         let mut rust_balance = None;
         if let Some(py_balance) = py_state_update.balance {
-            rust_balance = Some(rU256::from_limbs_slice(
-                py_balance.to_u64_digits().as_slice(),
-            ));
+            rust_balance = Some(rU256::from_str(&py_balance.to_string()).unwrap());
         }
 
         account_storage::StateUpdate {
@@ -225,7 +223,7 @@ impl From<AccountInfo> for revm::primitives::AccountInfo {
         }
 
         revm::primitives::AccountInfo {
-            balance: rU256::from_limbs_slice(py_info.balance.to_u64_digits().as_slice()),
+            balance: rU256::from_str(&py_info.balance.to_string()).unwrap(),
             nonce: py_info.nonce,
             code_hash: B256::from_str(&py_info.code_hash).unwrap(),
             code,

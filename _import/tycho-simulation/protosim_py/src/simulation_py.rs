@@ -65,8 +65,8 @@ impl SimulationEngine {
         if let Some(storage) = permanent_storage {
             for (index, value) in storage {
                 rust_slots.insert(
-                    rU256::from_limbs_slice(index.to_u64_digits().as_slice()),
-                    rU256::from_limbs_slice(value.to_u64_digits().as_slice()),
+                    rU256::from_str(&index.to_string()).unwrap(),
+                    rU256::from_str(&value.to_string()).unwrap(),
                 );
             }
         }
