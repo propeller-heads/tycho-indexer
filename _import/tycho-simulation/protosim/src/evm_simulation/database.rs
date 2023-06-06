@@ -523,7 +523,7 @@ mod tests {
         mock_sim_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
 
         let acc_info = mock_sim_db.basic(mock_acc_address).unwrap().unwrap();
-        dbg!(acc_info.clone());
+
         assert_eq!(
             mock_sim_db
                 .account_storage
