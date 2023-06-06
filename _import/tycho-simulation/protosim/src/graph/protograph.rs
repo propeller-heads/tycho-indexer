@@ -52,7 +52,7 @@ use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 
 use crate::{
     models::{ERC20Token, Swap, SwapSequence},
@@ -456,13 +456,35 @@ impl ProtoGraph {
     /// * `start_token` - The token address to start building the routes from.
     /// * `end_token` - The token address the built routes must end with.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// The function will panic if one of the token addresses provided are not present in
+    /// The function will error if one of the token addresses provided are not present in
     /// the graph's `tokens` map.
-    pub fn build_routes(&mut self, start_token: H160, end_token: H160) {
-        let TokenEntry(start_node_idx, _) = self.tokens[&start_token];
-        let TokenEntry(end_node_idx, _) = self.tokens[&end_token];
+    pub fn build_routes(
+        &mut self,
+        start_token: H160,
+        end_token: H160,
+    ) -> Result<(), Box<dyn Error>> {
+        let start_node_idx = match self.tokens.get(&start_token) {
+            Some(&TokenEntry(start_node_idx, _)) => start_node_idx,
+            None => {
+                return Err(Box::<dyn Error>::from(format!(
+                    "Token address {:?} not found",
+                    start_token
+                )))
+            }
+        };
+
+        let end_node_idx = match self.tokens.get(&end_token) {
+            Some(&TokenEntry(end_node_idx, _)) => end_node_idx,
+            None => {
+                return Err(Box::<dyn Error>::from(format!(
+                    "Token address {:?} not found",
+                    end_token
+                )))
+            }
+        };
+
         let edge_routes = all_edge_routes::<Vec<_>, _>(
             &self.graph,
             start_node_idx,
@@ -470,6 +492,7 @@ impl ProtoGraph {
             1,
             Some(self.n_hops),
         );
+
         info!("Searching routes...");
         for route in edge_routes {
             // insert route only if it does not yet exist
@@ -478,6 +501,7 @@ impl ProtoGraph {
                 self.routes.insert(pos, entry);
             };
         }
+
         info!("Building membership cache...");
         for pos in 0..self.routes.len() {
             // build membership cache
@@ -491,6 +515,8 @@ impl ProtoGraph {
             }
         }
         self.routes.shrink_to_fit();
+
+        Ok(())
     }
 
     /// Given a search function, searches the token graph for trading opportunities over its routes.
@@ -922,6 +948,44 @@ mod tests {
             routes.push(addr_route);
         }
         assert_eq!(routes, exp);
+    }
+
+    #[rstest]
+    fn test_build_routes_missing_token() {
+        let mut g = ProtoGraph::new(4);
+        let pairs = [
+            (
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002",
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000002",
+            ),
+            (
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000003 ",
+            ),
+        ];
+        for p in pairs {
+            g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
+        }
+
+        let res = g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000004").unwrap(),
+        );
+
+        assert!(res.is_err());
+        if let Err(error) = res {
+            assert_eq!(
+                error.to_string(),
+                "Token address 0x0000000000000000000000000000000000000004 not found"
+            )
+        }
     }
 
     fn atomic_arb_finder(r: Route) -> Option<SwapSequence> {
