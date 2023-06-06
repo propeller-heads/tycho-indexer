@@ -1,5 +1,6 @@
 use ethers::types::{Address, Bytes, H256, U256};
 use num_bigint::BigUint;
+use pyo3;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use revm::primitives::{Bytecode, B256, U256 as rU256};
 
@@ -94,6 +95,7 @@ pub struct StateUpdate {
 #[pymethods]
 impl StateUpdate {
     #[new]
+    #[pyo3(signature = (storage=None, balance=None))]
     fn new(storage: Option<HashMap<BigUint, BigUint>>, balance: Option<BigUint>) -> Self {
         Self { storage, balance }
     }
@@ -204,6 +206,7 @@ pub struct AccountInfo {
 #[pymethods]
 impl AccountInfo {
     #[new]
+    #[pyo3(signature = (balance, nonce, code_hash, code=None))]
     fn new(balance: BigUint, nonce: u64, code_hash: String, code: Option<Vec<u8>>) -> Self {
         Self {
             balance,
@@ -241,6 +244,7 @@ pub struct BlockHeader {
 #[pymethods]
 impl BlockHeader {
     #[new]
+    #[pyo3(signature = (number, hash, timestamp))]
     fn new(number: u64, hash: String, timestamp: u64) -> Self {
         Self {
             number,
