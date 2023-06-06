@@ -1,6 +1,11 @@
 # Protosim
 
-Moves slow on-chain computations off-chain to solve optimization problems. This crate allows simulating a set of supported protocols off-chain. Currently, it has a focus on token exchange protocols, but it is not necessarily limited to this.
+Moves slow on-chain computations off-chain to solve optimization problems. 
+
+This crate allows simulating a set of supported protocols off-chain. Currently, it has a focus on token exchange protocols, but it is not necessarily limited to this.
+
+> **See also:**
+> The `evm_simulation` module allows for simulating _any_ transaction; it is agnostic to protocol. See module's documentation.
 
 To further help solve hard problems in the context of exchanging tokens, the crate provides the ProtoGraph structure, which can be queried for chained token exchanges and their parameters. This graph structure evolves over time as protocol states are changed by user actions. These changes are captured using events. The implemented protocols are aware of the state-mutating events and can transition their state correctly given such events.
 
@@ -8,6 +13,8 @@ To further help solve hard problems in the context of exchanging tokens, the cra
 
 - Uniswap V2 and Forks
 - Uniswap V3
+
+See also `evm_simulation` module which can simulate any transaction.
 
 ## Adding a new Protocol
 
