@@ -101,7 +101,7 @@ impl SimulationEngine {
         Ok(py_reverse_updates)
     }
 
-    fn clear_temp_storage(mut self_: PyRefMut<Self>) {
+    fn clear_temp_storage(self_: PyRef<Self>) {
         self_.0.state.clear_temp_storage();
     }
 }

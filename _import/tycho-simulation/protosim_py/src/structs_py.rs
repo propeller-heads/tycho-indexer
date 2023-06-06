@@ -111,14 +111,14 @@ impl From<account_storage::StateUpdate> for StateUpdate {
             }
         }
 
-        let mut py_balancer = None;
-        if let Some(rust_balancer) = state_update.balance {
-            py_balancer = Some(BigUint::from_bytes_le(rust_balancer.as_le_slice()))
+        let mut py_balances = None;
+        if let Some(rust_balances) = state_update.balance {
+            py_balances = Some(BigUint::from_bytes_le(rust_balances.as_le_slice()))
         }
 
         StateUpdate {
             storage: Some(py_storage),
-            balance: py_balancer,
+            balance: py_balances,
         }
     }
 }
