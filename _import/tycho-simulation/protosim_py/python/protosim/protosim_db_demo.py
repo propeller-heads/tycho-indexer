@@ -6,8 +6,13 @@ U256MAX = 1157920892373161954235709850086879078532699846656405640394575840079131
 def test():
     print("Run test function")
     sim = SimulationEngine()
-    
-    acc_info = AccountInfo(balance=U256MAX,nonce=20, code_hash="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470", code= bytearray([
+
+    acc_info = AccountInfo(
+        balance=U256MAX,
+        nonce=20,
+        code_hash="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+        # fmt: off
+        code=bytearray([
             208, 108, 166, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 245, 225, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0,
@@ -16,10 +21,12 @@ def test():
             198, 33, 139, 54, 193, 209, 157, 74, 46, 158, 176, 206, 54, 6, 235, 72, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 42, 170, 57, 178, 35, 254, 141, 10,
             14, 92, 79, 39, 234, 217, 8, 60, 117, 108, 194
-        ]))
+        ]),
+        # fmt: on
+    )
     perm_storage = {500: 500000, 20: 2000}
     print("Inserting Account")
-    sim.init_account( 
+    sim.init_account(
         address="0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
         account=acc_info,
         mocked=False,
@@ -29,15 +36,19 @@ def test():
     print("Clear temp storage")
     sim.clear_temp_storage()
 
-    bh = BlockHeader(    number= 50,
-    hash="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-    timestamp=200,)
-    
+    bh = BlockHeader(
+        number=50,
+        hash="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+        timestamp=200,
+    )
+
     print("Attempting update")
-    update = {"0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc": StateUpdate(balance= U256MAX, storage={U256MAX: U256MAX, 500: U256MAX})}
-    sim.update_state(updates=update ,block=bh)
-
-
+    update = {
+        "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc": StateUpdate(
+            balance=U256MAX, storage={U256MAX: U256MAX, 500: U256MAX}
+        )
+    }
+    sim.update_state(updates=update, block=bh)
 
 
 if __name__ == "__main__":
