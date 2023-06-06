@@ -98,7 +98,6 @@ pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, TradeSimulationE
     }
 }
 
-
 #[cfg(test)]
 mod safe_math_tests {
     use super::*;
@@ -264,7 +263,7 @@ mod safe_math_tests {
         }
     }
 
-        fn i256(s: &str) -> I256 {
+    fn i256(s: &str) -> I256 {
         I256::from_dec_str(s).unwrap()
     }
 

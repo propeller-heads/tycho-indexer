@@ -6,8 +6,8 @@ use ethers::{
     types::{H160, U256},
 };
 use revm::{
-    primitives::{B160, U256 as rU256},
     db::DatabaseRef,
+    primitives::{B160, U256 as rU256},
 };
 
 use crate::{

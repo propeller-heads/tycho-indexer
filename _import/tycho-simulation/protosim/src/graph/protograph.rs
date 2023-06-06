@@ -1,34 +1,34 @@
 //! Protocol Graph
-//! 
+//!
 //! This module contains the `ProtoGraph` struct, it represents a graph
-//! of token exchange protocols (pools). The graph contains information 
+//! of token exchange protocols (pools). The graph contains information
 //! about the tokens on the nodes and protocol states on the edges.
-//! 
+//!
 //! The graph helps to solve optimization problems that involve exchanging one token
-//! for another. 
+//! for another.
 //!
 //! The graphs main methods are:
 //!  - `new`: creates a new ProtoGraph struct with the given maximum number of hops
-//!  - `insert_pair`: Given a `Pair` struct, it adds missing tokens to the graph 
+//!  - `insert_pair`: Given a `Pair` struct, it adds missing tokens to the graph
 //!         and creates edges between the tokens. It also records the pair in the states.
-//!  - `build_paths`: this function should be called whenever the graphs topology 
-//!         changes such that the `search_opportunities` method can correctly take 
+//!  - `build_paths`: this function should be called whenever the graphs topology
+//!         changes such that the `search_opportunities` method can correctly take
 //!         into account newly added edges.
 //! - `transition_states`: This method can be called to transition states based on
 //!         protocol events.
 //! - `with_states_transitioned`: This method should be called to apply a change,
 //!         query the graph and then immediately revert the changes again.
-//! 
+//!
 //! # Examples
 //! ```
 //! use std::str::FromStr;
-//! 
+//!
 //! use ethers::types::{H160, U256};
 //! use protosim::graph::protograph::{ProtoGraph, Path};
 //! use protosim::models::ERC20Token;
 //! use protosim::protocol::models::{PairProperties, Pair};
 //! use protosim::protocol::uniswap_v2::state::{UniswapV2State};
-//! 
+//!
 //! let mut g = ProtoGraph::new(4);
 //! let pair = {
 //!     let t0 = ERC20Token::new("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 3, "T0");
@@ -40,27 +40,27 @@
 //!     let state = UniswapV2State::new(U256::from(2000), U256::from(2000)).into();
 //!     Pair(props, state)
 //! };
-//! 
+//!
 //! let res = g.insert_pair(pair);
-//! 
+//!
 //! g.info()
 //! ```
-use log::{debug, info, trace, warn};
 use ethers::types::{H160, U256};
 use itertools::Itertools;
+use log::{debug, info, trace, warn};
 use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
-
 };
 use std::collections::HashMap;
 
 use crate::{
-    models::{ERC20Token, SwapSequence, Swap},
+    models::{ERC20Token, Swap, SwapSequence},
     protocol::{
         errors::{TradeSimulationError, TransitionError},
+        events::{EVMLogMeta, LogIndex},
         models::{GetAmountOutResult, Pair},
-        state::{ProtocolSim, ProtocolState, ProtocolEvent}, events::{EVMLogMeta, LogIndex},
+        state::{ProtocolEvent, ProtocolSim, ProtocolState},
     },
 };
 
@@ -74,7 +74,7 @@ pub struct Path<'a> {
     tokens: &'a [&'a ERC20Token],
 }
 
-impl <'a>Path<'a> {
+impl<'a> Path<'a> {
     /// Represents a path of token trades through a series of pairs.
     ///
     /// Creates a new instance of the Path struct.
@@ -82,7 +82,7 @@ impl <'a>Path<'a> {
     /// - `pairs`: A reference to a vector of references to Pair structs.
     /// Returns a new instance of the Path struct.
     fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Path<'a> {
-        Path {pairs, tokens}
+        Path { pairs, tokens }
     }
     /// Calculates the price of the path.
     ///
@@ -104,7 +104,10 @@ impl <'a>Path<'a> {
     ///
     /// ## Returns
     /// A `Result` containing a `GetAmountOutResult` on success and a `TradeSimulationError` on failure.
-    pub fn get_amount_out(&self, amount_in: U256) -> Result<GetAmountOutResult, TradeSimulationError> {
+    pub fn get_amount_out(
+        &self,
+        amount_in: U256,
+    ) -> Result<GetAmountOutResult, TradeSimulationError> {
         let mut res = GetAmountOutResult::new(amount_in, U256::zero());
         for i in 0..self.pairs.len() {
             let st = self.tokens[i];
@@ -145,20 +148,19 @@ impl <'a>Path<'a> {
     }
 }
 
-
-struct PathIdSubsetsByMembership<'a>{
+struct PathIdSubsetsByMembership<'a> {
     keys: Vec<H160>,
     data: &'a HashMap<H160, Vec<usize>>,
     key_idx: usize,
     vec_idx: usize,
 }
 
-impl <'a>PathIdSubsetsByMembership<'a>{
+impl<'a> PathIdSubsetsByMembership<'a> {
     /// Create a new PathIdSubsetsByMembership
-    /// 
-    /// Basically this struct will iterate over the values of a subset of keys in a HashMap. 
-    /// If a subset is not provided, it will iterate over all keys in the HashMap. 
-    /// In this specific case, keys are addresses and each value is a collection of 
+    ///
+    /// Basically this struct will iterate over the values of a subset of keys in a HashMap.
+    /// If a subset is not provided, it will iterate over all keys in the HashMap.
+    /// In this specific case, keys are addresses and each value is a collection of
     /// path ids which contain the corresponding pool. The iterator yields the individual
     /// path ids present in the corresponding values.
     ///
@@ -166,14 +168,14 @@ impl <'a>PathIdSubsetsByMembership<'a>{
     ///
     /// `addresses` - An optional subset of addresses to iterate over.
     /// `memberships` - The path memberships to iterate over.
-    /// 
+    ///
     /// # Note
-    /// This iterator can procude duplicated path ids. Especially if a path contains 
+    /// This iterator can procude duplicated path ids. Especially if a path contains
     /// multiple pools. In most cases the user has to take care of deduplicating any
     /// repeated path ids if this is relevant for the corresponding use case.
     fn new(addresses: Option<Vec<H160>>, memberships: &'a HashMap<H160, Vec<usize>>) -> Self {
         if let Some(subset) = addresses {
-            PathIdSubsetsByMembership{
+            PathIdSubsetsByMembership {
                 keys: subset,
                 data: memberships,
                 key_idx: 0,
@@ -181,18 +183,17 @@ impl <'a>PathIdSubsetsByMembership<'a>{
             }
         } else {
             let subset = memberships.keys().copied().collect::<Vec<_>>();
-            PathIdSubsetsByMembership{
+            PathIdSubsetsByMembership {
                 keys: subset,
                 data: memberships,
                 key_idx: 0,
                 vec_idx: 0,
             }
         }
-        
     }
 }
 
-impl Iterator for PathIdSubsetsByMembership<'_>{
+impl Iterator for PathIdSubsetsByMembership<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -203,36 +204,39 @@ impl Iterator for PathIdSubsetsByMembership<'_>{
                     if self.vec_idx + 1 >= path_indices.len() {
                         // we are at the last entry for this vec
                         self.vec_idx = 0;
-                        self.key_idx += 1; 
+                        self.key_idx += 1;
                     } else {
                         self.vec_idx += 1;
                     }
-                    return Some(*path_indices.get(self.vec_idx).expect("KeySubsetIterator: data was empty!"));
-                },
+                    return Some(
+                        *path_indices
+                            .get(self.vec_idx)
+                            .expect("KeySubsetIterator: data was empty!"),
+                    );
+                }
                 None => {
                     self.key_idx += 1;
                     continue;
-                },
+                }
             };
         }
         None
     }
 }
 
-
 #[derive(PartialEq, PartialOrd, Eq, Ord, Debug)]
-struct PathEntry{
-    start: NodeIndex, 
+struct PathEntry {
+    start: NodeIndex,
     edges: Vec<EdgeIndex>,
 }
 
 impl PathEntry {
     /// Create a new PathEntry
     ///
-    /// ProtoGraph internal path representation: Represents a path by it's 
-    /// start token (indicating a direction) as well as by a series of 
+    /// ProtoGraph internal path representation: Represents a path by it's
+    /// start token (indicating a direction) as well as by a series of
     /// edge indices.
-    /// 
+    ///
     /// Given a starting NodeIndex and a Vec of EdgeIndexes, creates a new
     /// PathEntry struct.
     ///
@@ -244,10 +248,8 @@ impl PathEntry {
     /// # Returns
     ///
     /// A new PathEntry struct.
-    fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self{
-        PathEntry{
-            start, edges
-        }
+    fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self {
+        PathEntry { start, edges }
     }
 }
 
@@ -270,8 +272,8 @@ pub struct ProtoGraph {
 
 impl ProtoGraph {
     /// Graph of protocols for swap simulations
-    /// 
-    /// A struct that represents a graph of protocols that enable trade simulations. It contains 
+    ///
+    /// A struct that represents a graph of protocols that enable trade simulations. It contains
     /// information about the tokens, states and edges of each pair in the graph.
     pub fn new(n_hops: usize) -> Self {
         ProtoGraph {
@@ -286,19 +288,31 @@ impl ProtoGraph {
     }
 
     /// Transition states using events
-    /// 
+    ///
     /// This method will transition the corresponding states with the given events
-    /// inplace. Depending on the ignore_errors the method will either panic on 
+    /// inplace. Depending on the ignore_errors the method will either panic on
     /// tranistion errors or simply ignore them.
-    pub fn transition_states(&mut self, events: &[(ProtocolEvent, EVMLogMeta)], ignore_errors: bool){
-        for (ev, logmeta) in events.iter(){
+    pub fn transition_states(
+        &mut self,
+        events: &[(ProtocolEvent, EVMLogMeta)],
+        ignore_errors: bool,
+    ) {
+        for (ev, logmeta) in events.iter() {
             let address = logmeta.from;
             if let Some(Pair(_, state)) = self.states.get_mut(&address) {
                 let res = state.transition(ev, logmeta);
-                if !ignore_errors{
-                    res.unwrap_or_else(|_| panic!("Error transitioning on event {:?} from address {}", ev, address));
+                if !ignore_errors {
+                    res.unwrap_or_else(|_| {
+                        panic!(
+                            "Error transitioning on event {:?} from address {}",
+                            ev, address
+                        )
+                    });
                 } else if let Err(err) = res {
-                    warn!("Ignoring transitioning error {:?} for event {:?} from address: {}", err, ev, address);
+                    warn!(
+                        "Ignoring transitioning error {:?} for event {:?} from address: {}",
+                        err, ev, address
+                    );
                 }
             } else {
                 trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
@@ -308,21 +322,24 @@ impl ProtoGraph {
     }
 
     /// Transition states in a revertible manner
-    /// 
+    ///
     /// This method will transition states given a collection of events. Previous states are
     /// recorded separately such that the transition can later be reverted using: `rever_states`
     /// This is slower but safer in case transition errors need to handled gracefully or
     /// if the events are not yet fully settled.
-    /// 
-    /// # Note 
-    /// 
+    ///
+    /// # Note
+    ///
     /// This method can only record a single transition so if called multiple times it must be
     /// made sure that `revert_states` was called in between.
-    pub fn transition_states_revertibly(&mut self, events: &[(ProtocolEvent, EVMLogMeta)]) -> Result<(), TransitionError<LogIndex>>{
+    pub fn transition_states_revertibly(
+        &mut self,
+        events: &[(ProtocolEvent, EVMLogMeta)],
+    ) -> Result<(), TransitionError<LogIndex>> {
         if !self.original_states.is_empty() {
             panic!("Original states not cleared!")
         }
-        for (ev, logmeta) in events.iter(){
+        for (ev, logmeta) in events.iter() {
             let address = logmeta.from;
             let old_state;
             if let Some(Pair(_, state)) = self.states.get_mut(&address) {
@@ -333,18 +350,20 @@ impl ProtoGraph {
             };
             // Only save original state the first time in case there are multiple logs for the
             // same pool else revert would not properly work anymore.
-            self.original_states.entry(address).or_insert_with(|| old_state.clone());
+            self.original_states
+                .entry(address)
+                .or_insert_with(|| old_state.clone());
             old_state.transition(ev, logmeta)?;
         }
         Ok(())
     }
-    
+
     /// Revert states by a single transition
-    /// 
-    /// Allows to revert the states by one transition. Require have called 
-    /// `transition_states_revertibly` before. 
-    pub fn revert_states(&mut self){
-        for (address, state) in self.original_states.iter(){
+    ///
+    /// Allows to revert the states by one transition. Require have called
+    /// `transition_states_revertibly` before.
+    pub fn revert_states(&mut self) {
+        for (address, state) in self.original_states.iter() {
             let pair = self.states.get_mut(address).unwrap();
             pair.1 = state.clone();
         }
@@ -352,23 +371,26 @@ impl ProtoGraph {
     }
 
     /// Applies a closure on temporarily transitioned state
-    /// 
+    ///
     /// This method will apply some events to the state, then execute the action function
     /// and finally revert the states again.
-    /// 
-    /// It will return as Result of whatever the action function returned or return 
+    ///
+    /// It will return as Result of whatever the action function returned or return
     /// an error if the transtion was not successfull.
-    pub fn with_states_transitioned<T, F:Fn(&ProtoGraph) -> T>(&mut self, events: &[(ProtocolEvent, EVMLogMeta)], action: F) -> Result<T, TransitionError<LogIndex>> {
+    pub fn with_states_transitioned<T, F: Fn(&ProtoGraph) -> T>(
+        &mut self,
+        events: &[(ProtocolEvent, EVMLogMeta)],
+        action: F,
+    ) -> Result<T, TransitionError<LogIndex>> {
         self.transition_states_revertibly(events)?;
         let res = action(self);
         self.revert_states();
         Ok(res)
     }
 
-
     /// Inserts a trading pair into the graph
     ///
-    /// Given a `Pair` struct, it adds missing tokens to the graph and creates edges 
+    /// Given a `Pair` struct, it adds missing tokens to the graph and creates edges
     /// between the tokens. It also records the pair in the states.
     ///
     /// # Arguments
@@ -381,7 +403,7 @@ impl ProtoGraph {
     pub fn insert_pair(&mut self, Pair(properties, state): Pair) -> Option<Pair> {
         // add missing tokens to graph
         for token in properties.tokens.iter() {
-            if let std::collections::hash_map::Entry::Vacant(e) = self.tokens.entry(token.address) { 
+            if let std::collections::hash_map::Entry::Vacant(e) = self.tokens.entry(token.address) {
                 let node_idx = self.graph.add_node(token.address);
                 e.insert(TokenEntry(node_idx, token.clone()));
             }
@@ -402,7 +424,7 @@ impl ProtoGraph {
 
     /// Update a pairs state
     ///
-    /// Given an address and a new `ProtocolState`, it updates the state 
+    /// Given an address and a new `ProtocolState`, it updates the state
     /// of the pair with that address.
     ///
     /// # Arguments
@@ -424,7 +446,7 @@ impl ProtoGraph {
     }
 
     /// Builds the internal path cache for the token graph.
-    /// 
+    ///
     /// This function should be called whenever the graphs topology changes
     /// such that the `search_opportunities` method can correctly take into
     /// account newly added edges.
@@ -432,15 +454,15 @@ impl ProtoGraph {
     /// # Arguments
     ///
     /// * `start_token` - The token address to start building the paths from.
-    /// 
+    ///
     /// # Note
-    /// 
+    ///
     /// Currently only circular paths are supported which why only the start token
     /// can be supplied.
     ///
     /// # Panics
     ///
-    /// The function will panic if the token address provided is not present in 
+    /// The function will panic if the token address provided is not present in
     /// the graphs `tokens` map.
     pub fn build_paths(&mut self, start_token: H160) {
         let TokenEntry(node_idx, _) = self.tokens[&start_token];
@@ -479,7 +501,11 @@ impl ProtoGraph {
     /// # Returns
     ///
     /// A vector of all potentially profitable SwapSequences found.
-    pub fn search_opportunities<F:Fn(Path) -> Option<SwapSequence>>(&self, search: F, involved_addresses: Option<Vec<H160>>) -> Vec<SwapSequence> {
+    pub fn search_opportunities<F: Fn(Path) -> Option<SwapSequence>>(
+        &self,
+        search: F,
+        involved_addresses: Option<Vec<H160>>,
+    ) -> Vec<SwapSequence> {
         // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
         // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
         // To optimize this, each worker needs a preallocated collections that are cleared on each invocation.
@@ -490,7 +516,9 @@ impl ProtoGraph {
         // PathIdSubsetsByMembership will return a list of path ids we make sure the path ids are unique and yield the
         // corresponding PathEntry object. This way we get all paths that contain any of the changed addresses.
         // In case we didn't see some address on any path (KeyError on path_memberhips) it is simply skipped.
-        let path_iter = PathIdSubsetsByMembership::new(involved_addresses, &self.path_memberships).unique().map(|idx| &self.paths[idx]);
+        let path_iter = PathIdSubsetsByMembership::new(involved_addresses, &self.path_memberships)
+            .unique()
+            .map(|idx| &self.paths[idx]);
         let mut n_paths_evaluated: u64 = 0;
         for path in path_iter {
             pairs.clear();
@@ -525,28 +553,25 @@ impl ProtoGraph {
         opportunities
     }
 
-    pub fn info(&self){
+    pub fn info(&self) {
         info!("ProtoGraph(n_hops={}) Stats:", self.n_hops);
         info!("States: {}", self.states.len());
         info!("Nodes: {}", self.tokens.len());
         info!("Paths: {}", self.paths.len());
         info!("Membership Cache: {}", self.path_memberships.len());
     }
-
 }
-
-
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use ethers::types::{I256, Sign, H256};
-    use rstest::rstest;
     use crate::optimize::gss::golden_section_search;
     use crate::protocol::models::PairProperties;
     use crate::protocol::uniswap_v2::events::UniswapV2Sync;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
+    use ethers::types::{Sign, H256, I256};
+    use rstest::rstest;
 
     use super::*;
 
@@ -618,7 +643,7 @@ mod tests {
         g
     }
 
-    fn logmeta(from: &str, log_idx: LogIndex) -> EVMLogMeta{
+    fn logmeta(from: &str, log_idx: LogIndex) -> EVMLogMeta {
         EVMLogMeta {
             from: H160::from_str(from).unwrap(),
             block_number: log_idx.0,
@@ -636,16 +661,16 @@ mod tests {
     }
 
     #[test]
-    fn test_transition(){
+    fn test_transition() {
         let mut g = construct_graph();
         let original_states = g.states.clone();
         let addr_changed = H160::from_str("0x0000000000000000000000000000000000000002").unwrap();
         let addr_untouched = H160::from_str("0x0000000000000000000000000000000000000001").unwrap();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
-            logmeta("0x0000000000000000000000000000000000000002", (1, 1))
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            logmeta("0x0000000000000000000000000000000000000002", (1, 1)),
         )];
-        
+
         g.transition_states(events.as_slice(), false);
 
         assert_ne!(g.states[&addr_changed], original_states[&addr_changed]);
@@ -654,62 +679,62 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_transition_err_panic(){
+    fn test_transition_err_panic() {
         let mut g = construct_graph();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
-            logmeta("0x0000000000000000000000000000000000000002", (0, 0))
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            logmeta("0x0000000000000000000000000000000000000002", (0, 0)),
         )];
-        
+
         g.transition_states(events.as_slice(), false);
     }
 
     #[test]
-    fn test_transition_err_ignore(){
+    fn test_transition_err_ignore() {
         let mut g = construct_graph();
         let original_states = g.states.clone();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
-            logmeta("0x0000000000000000000000000000000000000002", (0, 0))
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            logmeta("0x0000000000000000000000000000000000000002", (0, 0)),
         )];
-        
+
         g.transition_states(events.as_slice(), true);
 
         assert_eq!(g.states, original_states);
     }
 
     #[test]
-    fn test_transition_revertibly(){
+    fn test_transition_revertibly() {
         let mut g = construct_graph();
         let original_states = g.states.clone();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
-            logmeta("0x0000000000000000000000000000000000000002", (0, 1))
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            logmeta("0x0000000000000000000000000000000000000002", (0, 1)),
         )];
 
         g.transition_states_revertibly(&events).unwrap();
         assert_ne!(original_states, g.states);
-        
+
         g.revert_states();
         assert_eq!(original_states, g.states);
     }
 
     #[test]
-    fn test_with_states_transitioned(){
+    fn test_with_states_transitioned() {
         let mut g = construct_graph();
         let original_states = g.states.clone();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(), 
-            logmeta("0x0000000000000000000000000000000000000002", (0, 1))
+            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            logmeta("0x0000000000000000000000000000000000000002", (0, 1)),
         )];
 
         g.with_states_transitioned(&events, |g| {
             assert_ne!(original_states, g.states);
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(original_states, g.states);
     }
-
 
     fn make_pair(pair: &str, t0: &str, t1: &str, r0: u64, r1: u64) -> Pair {
         let t0 = ERC20Token::new(t0, 3, "T0");
@@ -729,7 +754,7 @@ mod tests {
                 "0x0000000000000000000000000000000000000001", 
                 "0x0000000000000000000000000000000000000001",
                 "0x0000000000000000000000000000000000000002"
-            ), 
+            ),
             (
                 "0x0000000000000000000000000000000000000002",
                 "0x0000000000000000000000000000000000000003",
@@ -740,7 +765,7 @@ mod tests {
                 "0x0000000000000000000000000000000000000001",
                 "0x0000000000000000000000000000000000000003 ",
             )
-        ], 
+        ],
     vec![
         vec![
             "0x0000000000000000000000000000000000000001", 
@@ -759,7 +784,7 @@ mod tests {
                 "0x0000000000000000000000000000000000000001", 
                 "0x0000000000000000000000000000000000000001",
                 "0x0000000000000000000000000000000000000002"
-            ), 
+            ),
             (
                 "0x0000000000000000000000000000000000000002",
                 "0x0000000000000000000000000000000000000001",
@@ -783,7 +808,7 @@ mod tests {
                 "0x0000000000000000000000000000000000000001", 
                 "0x0000000000000000000000000000000000000001",
                 "0x0000000000000000000000000000000000000002"
-            ), 
+            ),
             (
                 "0x0000000000000000000000000000000000000002",
                 "0x0000000000000000000000000000000000000002",
@@ -854,7 +879,6 @@ mod tests {
                 "0x0000000000000000000000000000000000000002",
                 "0x0000000000000000000000000000000000000001", 
             ],
-            
             vec![
                 "0x0000000000000000000000000000000000000004",
                 "0x0000000000000000000000000000000000000006",
@@ -865,22 +889,27 @@ mod tests {
     )]
     fn test_build_paths(#[case] pairs: &[(&str, &str, &str)], #[case] exp: Vec<Vec<&str>>) {
         let mut g = ProtoGraph::new(4);
-        let exp: Vec<_> = exp.iter().map(|v| v.iter().map(|s| H160::from_str(s).unwrap()).collect::<Vec<_>>()).collect();
+        let exp: Vec<_> = exp
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|s| H160::from_str(s).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
         for p in pairs {
-            g.insert_pair(make_pair(
-                p.0,
-                p.1,
-                p.2,
-                2000,
-                2000,
-            ));
+            g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
         }
 
         g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
 
         let mut paths = Vec::with_capacity(g.paths.len());
         for p in g.paths {
-            let addr_path: Vec<_> = p.edges.iter().map(|x| *g.graph.edge_weight(*x).unwrap()).collect();
+            let addr_path: Vec<_> = p
+                .edges
+                .iter()
+                .map(|x| *g.graph.edge_weight(*x).unwrap())
+                .collect();
             paths.push(addr_path);
         }
         assert_eq!(paths, exp);
@@ -904,8 +933,12 @@ mod tests {
     }
 
     fn optimize_path(p: &Path) -> Result<U256, TradeSimulationError> {
-        let sim_arb = |amount_in:I256| {
-            let amount_in_unsigned = if amount_in > I256::zero() { amount_in.into_raw()} else {U256::zero()};
+        let sim_arb = |amount_in: I256| {
+            let amount_in_unsigned = if amount_in > I256::zero() {
+                amount_in.into_raw()
+            } else {
+                U256::zero()
+            };
 
             let amount_out_unsigned;
             match p.get_amount_out(amount_in_unsigned) {
@@ -918,12 +951,20 @@ mod tests {
                     } else {
                         amount_out_unsigned = U256::zero();
                     }
-                } 
+                }
             }
-            let amount_out = I256::checked_from_sign_and_abs(Sign::Positive, amount_out_unsigned).unwrap();
+            let amount_out =
+                I256::checked_from_sign_and_abs(Sign::Positive, amount_out_unsigned).unwrap();
             amount_out - amount_in
         };
-        let res = golden_section_search(sim_arb, U256::one(), U256::from(100_000), I256::one(), 100, false)?;
+        let res = golden_section_search(
+            sim_arb,
+            U256::one(),
+            U256::from(100_000),
+            I256::one(),
+            100,
+            false,
+        )?;
         Ok(res.0)
     }
 
@@ -958,7 +999,11 @@ mod tests {
     #[case::one_key(HashMap::from([(H160::from_low_u64_be(1), vec![1,2]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(2)]), vec![3,4])]
     #[case::one_key(HashMap::from([(H160::from_low_u64_be(1), vec![1,2]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(1)]), vec![1,2])]
     #[case::two_keys(HashMap::from([(H160::from_low_u64_be(1), vec![1]), (H160::from_low_u64_be(2), vec![3,4]),]), Some(vec![H160::from_low_u64_be(1), H160::from_low_u64_be(2)]), vec![1,3,4])]
-    fn test_key_subset_iterator(#[case] data: HashMap<H160, Vec<usize>>, #[case] keys: Option<Vec<H160>>, #[case] exp: Vec<usize> ){
+    fn test_key_subset_iterator(
+        #[case] data: HashMap<H160, Vec<usize>>,
+        #[case] keys: Option<Vec<H160>>,
+        #[case] exp: Vec<usize>,
+    ) {
         let it = PathIdSubsetsByMembership::new(keys, &data);
 
         let mut res: Vec<_> = it.collect();
@@ -968,7 +1013,7 @@ mod tests {
     }
 
     #[test]
-    fn test_path_price(){
+    fn test_path_price() {
         let pair_0 = make_pair(
             "0x0000000000000000000000000000000000000001",
             "0x0000000000000000000000000000000000000001",
@@ -983,7 +1028,7 @@ mod tests {
             20_000_000,
             25_000_000,
         );
-        let Pair(props, _ ) = &pair_0;
+        let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
         let path = Path::new(&tokens, &pairs);
@@ -994,7 +1039,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_amount_out(){
+    fn test_get_amount_out() {
         let pair_0 = make_pair(
             "0x0000000000000000000000000000000000000001",
             "0x0000000000000000000000000000000000000001",
@@ -1009,7 +1054,7 @@ mod tests {
             20_000_000,
             25_000_000,
         );
-        let Pair(props, _ ) = &pair_0;
+        let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
         let path = Path::new(&tokens, &pairs);
@@ -1021,7 +1066,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_swaps(){
+    fn test_get_swaps() {
         let pair_0 = make_pair(
             "0x0000000000000000000000000000000000000001",
             "0x0000000000000000000000000000000000000001",
@@ -1036,7 +1081,7 @@ mod tests {
             20_000_000,
             25_000_000,
         );
-        let Pair(props, _ ) = &pair_0;
+        let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
         let path = Path::new(&tokens, &pairs);
@@ -1047,6 +1092,5 @@ mod tests {
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
-
     }
 }
