@@ -11,7 +11,7 @@ use tokio::runtime::Runtime;
 use protosim::evm_simulation::{account_storage, database::SimulationDB, simulation};
 
 /// Data needed to invoke a transaction simulation
-/// 
+///
 /// Attributes
 /// ----------
 /// caller: str
@@ -94,7 +94,7 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
 }
 
 /// Changes to an account made by a transaction
-/// 
+///
 /// Attributes
 /// ----------
 /// storage: Optional[dict[int, int]]
@@ -116,24 +116,26 @@ impl From<account_storage::StateUpdate> for StateUpdate {
         if let Some(rust_storage) = state_update.storage {
             for (key, val) in rust_storage {
                 py_storage.insert(
-                    BigUint::from_bytes_le(key.as_le_slice()), 
-                    BigUint::from_bytes_le(val.as_le_slice())
+                    BigUint::from_bytes_le(key.as_le_slice()),
+                    BigUint::from_bytes_le(val.as_le_slice()),
                 );
             }
         }
 
         StateUpdate {
             storage: Some(py_storage),
-            balance: state_update.balance.map(|x| BigUint::from_bytes_le(x.as_le_slice())),
+            balance: state_update
+                .balance
+                .map(|x| BigUint::from_bytes_le(x.as_le_slice())),
         }
     }
 }
 
 /// The result of a successful simulation
-/// 
+///
 /// Attributes
 /// ----------
-/// 
+///
 /// result: bytearray
 ///     Output of transaction execution as bytes
 /// state_updates: dict[str, StateUpdate]
@@ -204,10 +206,10 @@ fn get_client() -> Arc<Provider<Http>> {
 }
 
 /// This class lets you simulate transactions.
-/// 
+///
 /// Data will be queried from an Ethereum node*, if needed. You can also override account balance or
 /// storage. See the methods.
-/// 
+///
 /// *Currently the connection to a node is hardcoded. This will be changed in the future.
 #[pyclass]
 pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
@@ -222,7 +224,7 @@ impl SimulationEngine {
     }
 
     /// Simulate transaction.
-    /// 
+    ///
     /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
     fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
         let rust_result = self_
