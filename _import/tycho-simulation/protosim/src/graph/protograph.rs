@@ -940,7 +940,7 @@ mod tests {
 
         let mut routes = Vec::with_capacity(g.routes.len());
         for r in g.routes {
-            let addr_route: Vec<_> = routes
+            let addr_route: Vec<_> = r
                 .edges
                 .iter()
                 .map(|x| *g.graph.edge_weight(*x).unwrap())
