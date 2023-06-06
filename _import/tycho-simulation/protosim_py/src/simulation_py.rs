@@ -3,16 +3,12 @@ use ethers::{
     types::{Address, Bytes, U256},
 };
 
+use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime;
-use num_bigint::BigUint;
 
-use protosim::evm_simulation::{
-    account_storage,
-    database::SimulationDB,
-    simulation,
-};
+use protosim::evm_simulation::{account_storage, database::SimulationDB, simulation};
 
 /// Data needed to invoke a transaction simulation
 #[pyclass]
@@ -37,14 +33,21 @@ pub struct SimulationParameters {
 impl SimulationParameters {
     #[new]
     fn new(
-        caller: String, 
-        to: String, 
-        data: Vec<u8>, 
-        value: BigUint, 
-        overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>, 
-        gas_limit: Option<u64>
+        caller: String,
+        to: String,
+        data: Vec<u8>,
+        value: BigUint,
+        overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
+        gas_limit: Option<u64>,
     ) -> Self {
-        Self { caller, to, data, value, overrides, gas_limit }
+        Self {
+            caller,
+            to,
+            data,
+            value,
+            overrides,
+            gas_limit,
+        }
     }
 }
 
@@ -185,7 +188,9 @@ impl SimulationEngine {
     }
 
     fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<PySimulationResult> {
-        let rust_result = self_.0.simulate(&simulation::SimulationParameters::from(params));
+        let rust_result = self_
+            .0
+            .simulate(&simulation::SimulationParameters::from(params));
         match rust_result {
             Ok(sim_res) => Ok(PySimulationResult::from(sim_res)),
             Err(sim_err) => Err(PyErr::from(PySimulationError::from(sim_err))),

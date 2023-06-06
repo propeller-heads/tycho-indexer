@@ -204,7 +204,10 @@ mod tests {
 
         let res = state.get_amount_out(amount_in, &t0, &t1);
         assert_eq!(res.is_err(), true);
-        assert_eq!(res.err().unwrap().kind, TradeSimulationErrorKind::U256Overflow)
+        assert_eq!(
+            res.err().unwrap().kind,
+            TradeSimulationErrorKind::U256Overflow
+        )
     }
 
     #[rstest]

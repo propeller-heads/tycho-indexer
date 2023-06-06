@@ -1,5 +1,6 @@
 use ethers::types::{Sign, I256, U256};
 
+use crate::safe_math::{safe_add_u256, safe_sub_u256};
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -9,7 +10,6 @@ use crate::{
         state::ProtocolSim,
     },
 };
-use crate::safe_math::{safe_add_u256, safe_sub_u256};
 
 use super::{
     enums::FeeAmount,
@@ -200,7 +200,8 @@ impl UniswapV3State {
                 UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
                 state.liquidity,
                 state.amount_remaining,
-                self.fee as u32,)?;
+                self.fee as u32,
+            )?;
             state.sqrt_price = sqrt_price;
             let sqrt_price_next = sqrt_price_next;
 
@@ -215,18 +216,20 @@ impl UniswapV3State {
             };
             if exact_input {
                 state.amount_remaining -= I256::checked_from_sign_and_abs(
-                        Sign::Positive,
-                        safe_add_u256(step.amount_in ,step.fee_amount)?,
-                    )
-                    .unwrap();
-                state.amount_calculated -= I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
+                    Sign::Positive,
+                    safe_add_u256(step.amount_in, step.fee_amount)?,
+                )
+                .unwrap();
+                state.amount_calculated -=
+                    I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
             } else {
-                state.amount_remaining += I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
+                state.amount_remaining +=
+                    I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
                 state.amount_calculated += I256::checked_from_sign_and_abs(
-                        Sign::Positive,
-                        safe_add_u256(step.amount_in ,step.fee_amount)?,
-                    )
-                    .unwrap();
+                    Sign::Positive,
+                    safe_add_u256(step.amount_in, step.fee_amount)?,
+                )
+                .unwrap();
             }
             if state.sqrt_price == step.sqrt_price_next {
                 if step.initialized {
@@ -247,7 +250,7 @@ impl UniswapV3State {
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
-            gas_used = safe_add_u256(gas_used,U256::from(2000))?;
+            gas_used = safe_add_u256(gas_used, U256::from(2000))?;
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
@@ -315,7 +318,7 @@ mod tests {
     use ethers::types::{H160, H256};
     use rstest::rstest;
 
-    use crate::protocol::uniswap_v3::events::{SwapEvent, BurnEvent, MintEvent};
+    use crate::protocol::uniswap_v3::events::{BurnEvent, MintEvent, SwapEvent};
 
     use super::*;
 
@@ -331,7 +334,7 @@ mod tests {
             17342,
             vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
         );
-        let sell_amount = U256::from(11000)* U256::exp10(18);
+        let sell_amount = U256::from(11000) * U256::exp10(18);
         let expected = U256::from_dec_str("61927070842678722935941").unwrap();
 
         let res = pool
@@ -476,8 +479,7 @@ mod tests {
         assert_eq!(res.amount, exp);
     }
 
-
-    fn logmeta()-> EVMLogMeta{
+    fn logmeta() -> EVMLogMeta {
         EVMLogMeta {
             from: H160::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
             block_number: 1,
@@ -500,8 +502,8 @@ mod tests {
             255760,
             255900,
             200,
-        ).into(), 
-        (255760, Some(10200)), 
+        ).into(),
+        (255760, Some(10200)),
         (255900, Some(-10200)),
         10000200,
     )]
@@ -510,8 +512,8 @@ mod tests {
             255760,
             255900,
             200,
-        ).into(), 
-        (255760, Some(9800)), 
+        ).into(),
+        (255760, Some(9800)),
         (255900, Some(-9800)),
         9999800,
     )]
@@ -520,8 +522,8 @@ mod tests {
             255770,
             255900,
             200,
-        ).into(), 
-        (255770, Some(200)), 
+        ).into(),
+        (255770, Some(200)),
         (255900, Some(-10200)),
         10000200,
     )]
@@ -530,8 +532,8 @@ mod tests {
             255770,
             255900,
             200,
-        ).into(), 
-        (255770, Some(-200)), 
+        ).into(),
+        (255770, Some(-200)),
         (255900, Some(-9800)),
         9999800
     )]
@@ -548,7 +550,7 @@ mod tests {
             255830,
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
         );
-        
+
         pool.transition(&event, &logmeta()).unwrap();
 
         if let (tick, Some(liq_lower)) = exp_lower {
@@ -561,9 +563,9 @@ mod tests {
 
         assert_eq!(pool.liquidity, exp_pool_liq)
     }
-    
+
     #[test]
-    fn test_transition_swap(){
+    fn test_transition_swap() {
         let mut pool = UniswapV3State::new(
             1000,
             U256::from_dec_str("1000").unwrap(),
@@ -579,5 +581,4 @@ mod tests {
         assert_eq!(pool.liquidity, 2000);
         assert_eq!(pool.tick, 120);
     }
-
 }
