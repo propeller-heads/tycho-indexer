@@ -7,7 +7,8 @@ name = "prop-builder"
 path = "src/main.rs"
 
 [workspace]
-members = ["protosim", "protosim_py"]
+members = ["protosim"]
+exclude = ["protosim_py"]
 
 [dependencies]
 log = "0.4.17"
