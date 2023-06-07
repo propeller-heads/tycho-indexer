@@ -11,7 +11,7 @@ use std::sync::Arc;
 use revm::{
     db::DatabaseRef,
     interpreter::analysis::to_analysed,
-    primitives::{hash_map, AccountInfo, Bytecode, B160, B256, U256 as rU256},
+    primitives::{AccountInfo, Bytecode, B160, B256, U256 as rU256},
 };
 
 use super::account_storage::{AccountStorage, StateUpdate};
@@ -85,9 +85,9 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
 
 #[derive(Debug)]
 pub struct BlockHeader {
-    number: u64,
-    hash: H256,
-    timestamp: u64,
+    pub number: u64,
+    pub hash: H256,
+    pub timestamp: u64,
 }
 
 #[derive(Debug)]
@@ -157,11 +157,11 @@ impl<M: Middleware> SimulationDB<M> {
     /// Returns a state update struct to revert this update.
     pub fn update_state(
         &mut self,
-        updates: &hash_map::HashMap<B160, StateUpdate>,
+        updates: &HashMap<B160, StateUpdate>,
         block: BlockHeader,
-    ) -> hash_map::HashMap<B160, StateUpdate> {
+    ) -> HashMap<B160, StateUpdate> {
         info!("Received account state update.");
-        let mut revert_updates = hash_map::HashMap::new();
+        let mut revert_updates = HashMap::new();
         self.block = Some(block);
         for (address, update_info) in updates.iter() {
             let mut revert_entry = StateUpdate::default();
@@ -568,7 +568,7 @@ mod tests {
             storage: Some(new_storage),
             balance: Some(new_balance),
         };
-        let mut updates = hash_map::HashMap::default();
+        let mut updates = HashMap::default();
         updates.insert(address, update);
         let new_block = BlockHeader {
             number: 1,
