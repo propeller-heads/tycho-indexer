@@ -1,8 +1,4 @@
 //! Protocol generic errors
-use std::fmt;
-
-use ethers::types::H160;
-
 use super::models::GetAmountOutResult;
 
 /// Enumeration of possible errors that can occur during a trade simulation.
@@ -42,24 +38,4 @@ impl TradeSimulationError {
 #[derive(Debug)]
 pub enum TransitionError<T> {
     OutOfOrder { state: T, event: T },
-}
-
-#[derive(Debug)]
-pub struct UnknownTokenError {
-    /// The unknown token's address
-    pub address: H160,
-}
-
-impl UnknownTokenError {
-    /// Creates a new unknown token error with the given token address.
-    pub fn new(address: H160) -> Self {
-        UnknownTokenError { address }
-    }
-}
-
-impl fmt::Display for UnknownTokenError {
-    /// Formats the string representation of the unknown token error
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Unknown token: {:?}", self.address)
-    }
 }

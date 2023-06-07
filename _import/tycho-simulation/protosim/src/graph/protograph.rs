@@ -52,12 +52,12 @@ use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, fmt};
 
 use crate::{
     models::{ERC20Token, Swap, SwapSequence},
     protocol::{
-        errors::{TradeSimulationError, TransitionError, UnknownTokenError},
+        errors::{TradeSimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
         models::{GetAmountOutResult, Pair},
         state::{ProtocolEvent, ProtocolSim, ProtocolState},
@@ -250,6 +250,27 @@ impl RouteEntry {
     /// A new RouteEntry struct.
     fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self {
         RouteEntry { start, edges }
+    }
+}
+
+#[derive(Debug)]
+pub struct UnknownTokenError {
+    /// The unknown token's address
+    pub address: H160,
+}
+
+impl UnknownTokenError {
+    /// Creates a new unknown token error with the given token address.
+    /// Raised when the graph cannot find a given token in its token map.
+    pub fn new(address: H160) -> Self {
+        UnknownTokenError { address }
+    }
+}
+
+impl fmt::Display for UnknownTokenError {
+    /// Formats the string representation of the unknown token error
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Unknown token: {:?}", self.address)
     }
 }
 
