@@ -126,8 +126,8 @@ impl<M: Middleware> SimulationDB<M> {
     /// * `address` - Address of the account
     /// * `account` - The account information
     /// * `permanent_storage` - Storage to init the account with this storage can only be updated manually.
-    /// * `temp_storage` - Storage to init the account with. This storage will be removed after each now block.
-    /// * `account_type` - Determines the type of the account.
+    /// * `mocked` - Whether this account should be considered mocked. For mocked accounts, nothing
+    ///   is downloaded from a node; all data must be inserted manually.
     pub fn init_account(
         &self,
         address: B160,
@@ -332,8 +332,8 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
 
     /// Retrieves the storage value at the specified address and index.
     ///
-    /// If the accessed contract is of type `AccountType::Mocked`, the function returns an empty slot
-    /// instead of querying the storage to avoid potentially returning garbage values.
+    /// If we don't know the value, and the accessed contract is mocked, the function returns
+    /// an empty slot instead of querying a node, to avoid potentially returning garbage values.
     ///
     /// # Arguments
     ///
@@ -342,8 +342,8 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     ///
     /// # Returns
     ///
-    /// Returns a `Result` containing the storage value if it exists. If the contract is of type `AccountType::Mocked`
-    /// and the storage value is not found in the storage, an empty slot is returned as `rU256::ZERO`.
+    /// Returns a `Result` containing the storage value if it exists. If the contract is mocked
+    /// and the storage value is not found locally, an empty slot is returned as `rU256::ZERO`.
     ///
     /// # Errors
     ///
@@ -351,18 +351,18 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     ///
     /// # Notes
     ///
-    /// * If the contract is present in the storage and is of type `AccountType::Mocked`, the function first checks if
-    ///   the storage value exists in the storage. If found, it returns the stored value. If not found, it returns an empty slot.
-    ///   Mocked contracts are not expected to have valid storage values, so the function does not query the storage in this case.
+    /// * If the contract is present locally and is mocked, the function first checks if
+    ///   the storage value exists locally. If found, it returns the stored value. If not found, it returns an empty slot.
+    ///   Mocked contracts are not expected to have valid storage values, so the function does not query a node in this case.
     ///
-    /// * If the contract is present in the storage, the function checks if the storage value exists in the storage.
+    /// * If the contract is present locally and is not mocked, the function checks if the storage value exists locally.
     ///   If found, it returns the stored value.
-    ///   If not found, it queries the storage value from the contract, stores it in the storage, and returns it.
+    ///   If not found, it queries the storage value from a node, stores it locally, and returns it.
     ///
-    /// * If the contract is not present in the storage, the function queries the account info and storage value from
-    ///   the contract, initializes the account in the storage with the retrieved information, and returns the storage value.
+    /// * If the contract is not present locally, the function queries the account info and storage value from
+    ///   a node, initializes the account locally with the retrieved information, and returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        let is_mocked;
+        let is_mocked;  // will be None if we don't have this account at all
         {
             // This scope is to not make two simultaneous borrows (one occurs inside init_account)
             let borrowed_storage = self.account_storage.borrow();
@@ -371,6 +371,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             }
             is_mocked = borrowed_storage.is_mocked_account(&address);
         }
+        // At this point we know we don't have data for this storage slot.
         match is_mocked {
             Some(true) => Ok(rU256::ZERO),
             Some(false) => {
