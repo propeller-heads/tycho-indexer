@@ -3,7 +3,7 @@ use num_bigint::BigUint;
 use revm::primitives::{B160, U256 as rU256};
 
 use crate::structs_py::{
-    AccountInfo, BlockHeader, PySimulationError, PySimulationResult, SimulationParameters,
+    AccountInfo, BlockHeader, SimulationError, SimulationResult, SimulationParameters,
     StateUpdate,
 };
 use pyo3::prelude::*;
