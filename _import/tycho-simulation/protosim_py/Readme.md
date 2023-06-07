@@ -55,7 +55,7 @@ This will install the Python module to the same environment that you use for bui
 You don't need `maturin` to _use_ this crate in Python; it is only needed to _build_ it. You can install a pre-built wheel in a different target environment.
 
 1. Activate your build Python venv where `maturin` is installed
-2. Run `maturin build` in the crate root folder. You can add `--release` flag to turn on optimizations.
+2. Run `maturin build --release` in the crate root folder (`--release` flag is optional; it turns on optimizations).
 
    This will create a wheel (`.whl`) file in `<repo root>/target/wheels/` folder*, named accordingly to the architecture it supports, e.g. `protosim_py-0.1.0-cp39-cp39-manylinux_2_34_x86_64.whl`.
 
