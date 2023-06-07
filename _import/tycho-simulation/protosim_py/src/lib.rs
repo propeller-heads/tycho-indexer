@@ -5,6 +5,7 @@ use structs_py::{AccountInfo, BlockHeader, SimulationParameters, StateUpdate};
 mod simulation_py;
 mod structs_py;
 
+/// Transaction simulation using EVM implemented in Rust
 #[pymodule]
 fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<SimulationEngine>()?;

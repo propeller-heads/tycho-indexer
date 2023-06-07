@@ -10,21 +10,30 @@ use protosim::evm_simulation::{account_storage, simulation};
 use std::fmt::Debug;
 
 /// Data needed to invoke a transaction simulation
-#[pyclass]
+///
+/// Attributes
+/// ----------
+/// caller: str
+///     Address of the sending account
+/// to: str
+///     Address of the receiving account/contract
+/// data: bytearray
+///     Calldata
+/// value: int
+///     Amount of native token sent
+/// overrides: Optional[dict[str, dict[int, int]]]
+///     EVM state overrides. Will be merged with existing state. Will take effect only for current
+///     simulation. It's a ``dict[account_address, dict[storage_slot, storage_value]]``.
+/// gas_limit: Optional[int]
+///     Limit of gas to be used by the transaction
+#[pyclass(text_signature = "(caller, to, data, value, overrides=None, gas_limit=None)")]
 #[derive(Clone, Debug)]
 pub struct SimulationParameters {
-    /// Address of the sending account
     pub caller: String,
-    /// Address of the receiving account/contract
     pub to: String,
-    /// Calldata
     pub data: Vec<u8>,
-    /// Amount of native token sent
     pub value: BigUint,
-    /// EVM state overrides.
-    /// Will be merged with existing state. Will take effect only for current simulation.
     pub overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
-    /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
 }
 
@@ -83,6 +92,14 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
     }
 }
 
+/// Changes to an account made by a transaction
+///
+/// Attributes
+/// ----------
+/// storage: Optional[dict[int, int]]
+///     New values of storage slots
+/// balance: Optional[int]
+///     New native token balance
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct StateUpdate {
@@ -149,21 +166,29 @@ impl From<StateUpdate> for account_storage::StateUpdate {
     }
 }
 
+/// The result of a successful simulation
+///
+/// Attributes
+/// ----------
+///
+/// result: bytearray
+///     Output of transaction execution as bytes
+/// state_updates: dict[str, StateUpdate]
+///     State changes caused by the transaction
+/// gas_used: int
+///     Gas used by the transaction (already reduced by the refunded gas)
 #[pyclass]
 #[derive(Clone)]
-pub struct PySimulationResult {
-    /// Output of transaction execution as bytes
+pub struct SimulationResult {
     #[pyo3(get)]
     pub result: Vec<u8>,
-    /// State changes caused by the transaction
     #[pyo3(get)]
     pub state_updates: HashMap<String, StateUpdate>,
-    /// Gas used by the transaction (already reduced by the refunded gas)
     #[pyo3(get)]
     pub gas_used: u64,
 }
 
-impl From<simulation::SimulationResult> for PySimulationResult {
+impl From<simulation::SimulationResult> for SimulationResult {
     fn from(rust_result: simulation::SimulationResult) -> Self {
         let mut py_state_updates = HashMap::new();
         for (key, val) in rust_result.state_updates {
@@ -172,7 +197,7 @@ impl From<simulation::SimulationResult> for PySimulationResult {
                 StateUpdate::from(val),
             );
         }
-        PySimulationResult {
+        SimulationResult {
             result: rust_result
                 .result
                 .try_into()
@@ -183,20 +208,27 @@ impl From<simulation::SimulationResult> for PySimulationResult {
     }
 }
 
+/// Basic info about an ethereum account
+///
+/// Attributes
+/// ----------
+/// balance: int
+///     Account balance.
+/// nonce: int
+///     Account nonce.
+/// code_hash: str
+///     Hash of the contract code.
+/// code: Optional[bytearray]
+///     Contract code. Note: empty code also has a hash.
 #[pyclass]
 #[derive(Clone)]
 pub struct AccountInfo {
-    /// Account balance.
     #[pyo3(get, set)]
     pub balance: BigUint,
-    /// Account nonce.
     #[pyo3(get, set)]
     pub nonce: u64,
-    /// code hash,
     #[pyo3(get, set)]
     pub code_hash: String,
-    /// code: if None, `code_by_hash` will be used to fetch it if code needs to be loaded from
-    /// inside of revm.
     #[pyo3(get, set)]
     pub code: Option<Vec<u8>>,
 }
@@ -263,15 +295,15 @@ impl From<BlockHeader> for protosim::evm_simulation::database::BlockHeader {
 }
 
 #[pyclass]
-pub(crate) struct PySimulationError(simulation::SimulationError);
+pub(crate) struct SimulationError(simulation::SimulationError);
 
-impl From<PySimulationError> for PyErr {
-    fn from(err: PySimulationError) -> PyErr {
+impl From<SimulationError> for PyErr {
+    fn from(err: SimulationError) -> PyErr {
         PyRuntimeError::new_err(format!("{:?}", err.0))
     }
 }
 
-impl From<simulation::SimulationError> for PySimulationError {
+impl From<simulation::SimulationError> for SimulationError {
     fn from(err: simulation::SimulationError) -> Self {
         Self(err)
     }

@@ -43,13 +43,13 @@ impl AccountStorage {
     /// * `address` - The address of the account to insert.
     /// * `info` - The account information to insert.
     /// * `permanent_storage` - Optional storage information associated with the account.
+    /// * `mocked` - Whether this account should be considered mocked.
     ///
     /// # Notes
     ///
     /// This function checks if the `address` is already present in the `accounts`
     /// collection. If so, it logs a warning and returns without modifying the instance.
-    /// Otherwise, it inserts the `info` into the `accounts` collection. If `storage` is provided,
-    /// it inserts the `storage` information into the `storage` collection associated with the `address`.
+    /// Otherwise, it stores a new `Account` instance with the provided data at the given address.
     pub fn init_account(
         &mut self,
         address: B160,

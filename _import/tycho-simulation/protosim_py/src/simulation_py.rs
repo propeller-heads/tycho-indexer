@@ -3,8 +3,7 @@ use num_bigint::BigUint;
 use revm::primitives::{B160, U256 as rU256};
 
 use crate::structs_py::{
-    AccountInfo, BlockHeader, PySimulationError, PySimulationResult, SimulationParameters,
-    StateUpdate,
+    AccountInfo, BlockHeader, SimulationError, SimulationParameters, SimulationResult, StateUpdate,
 };
 use pyo3::prelude::*;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -29,6 +28,12 @@ fn get_client() -> Arc<Provider<Http>> {
     Arc::new(client)
 }
 
+/// This class lets you simulate transactions.
+///
+/// Data will be queried from an Ethereum node*, if needed. You can also override account balance or
+/// storage. See the methods.
+///
+/// *Currently the connection to a node is hardcoded. This will be changed in the future.
 #[pyclass]
 pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 
@@ -41,13 +46,16 @@ impl SimulationEngine {
         Self(engine)
     }
 
-    fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<PySimulationResult> {
+    /// Simulate transaction.
+    ///
+    /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
+    fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
         let rust_result = self_
             .0
             .simulate(&simulation::SimulationParameters::from(params));
         match rust_result {
-            Ok(sim_res) => Ok(PySimulationResult::from(sim_res)),
-            Err(sim_err) => Err(PyErr::from(PySimulationError::from(sim_err))),
+            Ok(sim_res) => Ok(SimulationResult::from(sim_res)),
+            Err(sim_err) => Err(PyErr::from(SimulationError::from(sim_err))),
         }
     }
 
