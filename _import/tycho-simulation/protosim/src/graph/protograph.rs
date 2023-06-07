@@ -8,10 +8,10 @@
 //! for another.
 //!
 //! The graphs main methods are:
-//!  - `new`: creates a new ProtoGraph struct with the given maximum number of hops
+//!  - `new`: creates a new ProtoGraph struct with the given maximum number of hops.
 //!  - `insert_pair`: Given a `Pair` struct, it adds missing tokens to the graph
 //!         and creates edges between the tokens. It also records the pair in the states.
-//!  - `build_paths`: this function should be called whenever the graphs topology
+//!  - `build_routes`: this function should be called whenever the graphs topology
 //!         changes such that the `search_opportunities` method can correctly take
 //!         into account newly added edges.
 //! - `transition_states`: This method can be called to transition states based on
@@ -24,7 +24,7 @@
 //! use std::str::FromStr;
 //!
 //! use ethers::types::{H160, U256};
-//! use protosim::graph::protograph::{ProtoGraph, Path};
+//! use protosim::graph::protograph::{ProtoGraph, Route};
 //! use protosim::models::ERC20Token;
 //! use protosim::protocol::models::{PairProperties, Pair};
 //! use protosim::protocol::uniswap_v2::state::{UniswapV2State};
@@ -52,7 +52,7 @@ use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use crate::{
     models::{ERC20Token, Swap, SwapSequence},
@@ -64,29 +64,29 @@ use crate::{
     },
 };
 
-use super::edge_paths::all_edge_paths;
+use super::edge_routes::all_edge_routes;
 
 struct TokenEntry(NodeIndex, ERC20Token);
 
 #[derive(Debug)]
-pub struct Path<'a> {
+pub struct Route<'a> {
     pairs: &'a [&'a Pair],
     tokens: &'a [&'a ERC20Token],
 }
 
-impl<'a> Path<'a> {
-    /// Represents a path of token trades through a series of pairs.
+impl<'a> Route<'a> {
+    /// Represents a route of token trades through a series of pairs.
     ///
-    /// Creates a new instance of the Path struct.
+    /// Creates a new instance of the Route struct.
     /// - `tokens`: A reference to a vector of references to ERC20Token structs.
     /// - `pairs`: A reference to a vector of references to Pair structs.
-    /// Returns a new instance of the Path struct.
-    fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Path<'a> {
-        Path { pairs, tokens }
+    /// Returns a new instance of the Route struct.
+    fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
+        Route { pairs, tokens }
     }
-    /// Calculates the price of the path.
+    /// Calculates the price of the route.
     ///
-    /// Returns the price of the path as a floating point number.
+    /// Returns the price of the route as a floating point number.
     pub fn price(&self) -> f64 {
         let mut p = 1.0;
         for i in 0..self.pairs.len() {
@@ -148,34 +148,34 @@ impl<'a> Path<'a> {
     }
 }
 
-struct PathIdSubsetsByMembership<'a> {
+struct RouteIdSubsetsByMembership<'a> {
     keys: Vec<H160>,
     data: &'a HashMap<H160, Vec<usize>>,
     key_idx: usize,
     vec_idx: usize,
 }
 
-impl<'a> PathIdSubsetsByMembership<'a> {
-    /// Create a new PathIdSubsetsByMembership
+impl<'a> RouteIdSubsetsByMembership<'a> {
+    /// Create a new RouteIdSubsetsByMembership
     ///
     /// Basically this struct will iterate over the values of a subset of keys in a HashMap.
     /// If a subset is not provided, it will iterate over all keys in the HashMap.
     /// In this specific case, keys are addresses and each value is a collection of
-    /// path ids which contain the corresponding pool. The iterator yields the individual
-    /// path ids present in the corresponding values.
+    /// route ids which contain the corresponding pool. The iterator yields the individual
+    /// route ids present in the corresponding values.
     ///
     /// # Arguments
     ///
     /// `addresses` - An optional subset of addresses to iterate over.
-    /// `memberships` - The path memberships to iterate over.
+    /// `memberships` - The route memberships to iterate over.
     ///
     /// # Note
-    /// This iterator can procude duplicated path ids. Especially if a path contains
+    /// This iterator can procude duplicated route ids. Especially if a route contains
     /// multiple pools. In most cases the user has to take care of deduplicating any
-    /// repeated path ids if this is relevant for the corresponding use case.
+    /// repeated route ids if this is relevant for the corresponding use case.
     fn new(addresses: Option<Vec<H160>>, memberships: &'a HashMap<H160, Vec<usize>>) -> Self {
         if let Some(subset) = addresses {
-            PathIdSubsetsByMembership {
+            RouteIdSubsetsByMembership {
                 keys: subset,
                 data: memberships,
                 key_idx: 0,
@@ -183,7 +183,7 @@ impl<'a> PathIdSubsetsByMembership<'a> {
             }
         } else {
             let subset = memberships.keys().copied().collect::<Vec<_>>();
-            PathIdSubsetsByMembership {
+            RouteIdSubsetsByMembership {
                 keys: subset,
                 data: memberships,
                 key_idx: 0,
@@ -193,15 +193,15 @@ impl<'a> PathIdSubsetsByMembership<'a> {
     }
 }
 
-impl Iterator for PathIdSubsetsByMembership<'_> {
+impl Iterator for RouteIdSubsetsByMembership<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.key_idx < self.keys.len() {
             let addr = self.keys[self.key_idx];
             match self.data.get(&addr) {
-                Some(path_indices) => {
-                    if self.vec_idx + 1 >= path_indices.len() {
+                Some(route_indices) => {
+                    if self.vec_idx + 1 >= route_indices.len() {
                         // we are at the last entry for this vec
                         self.vec_idx = 0;
                         self.key_idx += 1;
@@ -209,7 +209,7 @@ impl Iterator for PathIdSubsetsByMembership<'_> {
                         self.vec_idx += 1;
                     }
                     return Some(
-                        *path_indices
+                        *route_indices
                             .get(self.vec_idx)
                             .expect("KeySubsetIterator: data was empty!"),
                     );
@@ -225,36 +225,57 @@ impl Iterator for PathIdSubsetsByMembership<'_> {
 }
 
 #[derive(PartialEq, PartialOrd, Eq, Ord, Debug)]
-struct PathEntry {
+struct RouteEntry {
     start: NodeIndex,
     edges: Vec<EdgeIndex>,
 }
 
-impl PathEntry {
-    /// Create a new PathEntry
+impl RouteEntry {
+    /// Create a new RouteEntry
     ///
-    /// ProtoGraph internal path representation: Represents a path by it's
+    /// ProtoGraph internal route representation: Represents a route by it's
     /// start token (indicating a direction) as well as by a series of
     /// edge indices.
     ///
     /// Given a starting NodeIndex and a Vec of EdgeIndexes, creates a new
-    /// PathEntry struct.
+    /// RouteEntry struct.
     ///
     /// # Arguments
     ///
-    /// * start - The NodeIndex representing the starting point of the path.
-    /// * edges - A Vec of EdgeIndexes representing the edges in the path.
+    /// * start - The NodeIndex representing the starting point of the route.
+    /// * edges - A Vec of EdgeIndexes representing the edges in the route.
     ///
     /// # Returns
     ///
-    /// A new PathEntry struct.
+    /// A new RouteEntry struct.
     fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self {
-        PathEntry { start, edges }
+        RouteEntry { start, edges }
+    }
+}
+
+#[derive(Debug)]
+pub struct UnknownTokenError {
+    /// The unknown token's address
+    pub address: H160,
+}
+
+impl UnknownTokenError {
+    /// Creates a new unknown token error with the given token address.
+    /// Raised when the graph cannot find a given token in its token map.
+    pub fn new(address: H160) -> Self {
+        UnknownTokenError { address }
+    }
+}
+
+impl fmt::Display for UnknownTokenError {
+    /// Formats the string representation of the unknown token error
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Unknown token: {:?}", self.address)
     }
 }
 
 pub struct ProtoGraph {
-    /// The maximum number of depth for paths searches.
+    /// The maximum number of depth for route searches.
     n_hops: usize,
     /// A map of token addresses to their corresponding token and node index in the graph.
     tokens: HashMap<H160, TokenEntry>,
@@ -262,10 +283,10 @@ pub struct ProtoGraph {
     states: HashMap<H160, Pair>,
     /// The underlying graph data structure.
     graph: UnGraph<H160, H160>,
-    /// A cache of all paths with length < n_hops in the graph.
-    paths: Vec<PathEntry>,
-    /// A cache of the membership of each address in the graph to paths.
-    path_memberships: HashMap<H160, Vec<usize>>,
+    /// A cache of all routes with length < n_hops in the graph.
+    routes: Vec<RouteEntry>,
+    /// A cache of the membership of each address in the graph to routes.
+    route_memberships: HashMap<H160, Vec<usize>>,
     /// "workhorse collection" for state overrides
     original_states: HashMap<H160, ProtocolState>,
 }
@@ -281,8 +302,8 @@ impl ProtoGraph {
             tokens: HashMap::new(),
             states: HashMap::new(),
             graph: UnGraph::new_undirected(),
-            paths: Vec::new(),
-            path_memberships: HashMap::new(),
+            routes: Vec::new(),
+            route_memberships: HashMap::new(),
             original_states: HashMap::new(),
         }
     }
@@ -437,7 +458,7 @@ impl ProtoGraph {
     /// * `Option<()>` - returns `Some(())` if the state was updated, or `
     ///     None` if the pair with that address could not be found.
     pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
-        //! TODO this should work purely on log updates and the transition
+        // TODO this should work purely on log updates and the transition
         if let Some(pair) = self.states.get_mut(address) {
             pair.1 = state;
             return Some(());
@@ -445,7 +466,7 @@ impl ProtoGraph {
         None
     }
 
-    /// Builds the internal path cache for the token graph.
+    /// Builds the internal route cache for the token graph.
     ///
     /// This function should be called whenever the graphs topology changes
     /// such that the `search_opportunities` method can correctly take into
@@ -453,55 +474,75 @@ impl ProtoGraph {
     ///
     /// # Arguments
     ///
-    /// * `start_token` - The token address to start building the paths from.
+    /// * `start_token` - The token address to start building the routes from.
+    /// * `end_token` - The token address the built routes must end with.
     ///
-    /// # Note
+    /// # Errors
     ///
-    /// Currently only circular paths are supported which why only the start token
-    /// can be supplied.
-    ///
-    /// # Panics
-    ///
-    /// The function will panic if the token address provided is not present in
-    /// the graphs `tokens` map.
-    pub fn build_paths(&mut self, start_token: H160) {
-        let TokenEntry(node_idx, _) = self.tokens[&start_token];
-        let edge_paths =
-            all_edge_paths::<Vec<_>, _>(&self.graph, node_idx, node_idx, 1, Some(self.n_hops));
-        info!("Searching paths...");
-        for path in edge_paths {
-            // insert path only if it does not yet exist
-            let entry = PathEntry::new(node_idx, path);
-            if let Err(pos) = self.paths.binary_search(&entry) {
-                self.paths.insert(pos, entry);
+    /// The function will error if one of the token addresses provided are not present in
+    /// the graph's `tokens` map.
+    pub fn build_routes(
+        &mut self,
+        start_token: H160,
+        end_token: H160,
+    ) -> Result<(), UnknownTokenError> {
+        let start_node_idx = self
+            .tokens
+            .get(&start_token)
+            .ok_or_else(|| UnknownTokenError::new(start_token))
+            .map(|&TokenEntry(start_node_idx, _)| start_node_idx)?;
+
+        let end_node_idx = self
+            .tokens
+            .get(&end_token)
+            .ok_or_else(|| UnknownTokenError::new(end_token))
+            .map(|&TokenEntry(end_node_idx, _)| end_node_idx)?;
+
+        let edge_routes = all_edge_routes::<Vec<_>, _>(
+            &self.graph,
+            start_node_idx,
+            end_node_idx,
+            1,
+            Some(self.n_hops),
+        );
+
+        info!("Searching routes...");
+        for route in edge_routes {
+            // insert route only if it does not yet exist
+            let entry = RouteEntry::new(start_node_idx, route);
+            if let Err(pos) = self.routes.binary_search(&entry) {
+                self.routes.insert(pos, entry);
             };
         }
+
         info!("Building membership cache...");
-        for pos in 0..self.paths.len() {
+        for pos in 0..self.routes.len() {
             // build membership cache
-            for edge_idx in self.paths[pos].edges.iter() {
+            for edge_idx in self.routes[pos].edges.iter() {
                 let addr = *self.graph.edge_weight(*edge_idx).unwrap();
-                if let Some(path_indices) = self.path_memberships.get_mut(&addr) {
-                    path_indices.push(pos);
+                if let Some(route_indices) = self.route_memberships.get_mut(&addr) {
+                    route_indices.push(pos);
                 } else {
-                    self.path_memberships.insert(addr, vec![pos]);
+                    self.route_memberships.insert(addr, vec![pos]);
                 }
             }
         }
-        self.paths.shrink_to_fit();
+        self.routes.shrink_to_fit();
+
+        Ok(())
     }
 
-    /// Given a search function, searches the token graph for trading opportunities over its paths.
+    /// Given a search function, searches the token graph for trading opportunities over its routes.
     ///
     /// # Arguments
     ///
-    /// * `search` - A function that takes in a `Path` and returns an `Option<SwapSequence>` representing a trading opportunity if one is found.
-    /// * `involved_addresses` - A list of token addresses to filter the paths that are searched on.
+    /// * `search` - A function that takes in a `Route` and returns an `Option<SwapSequence>` representing a trading opportunity if one is found.
+    /// * `involved_addresses` - A list of token addresses to filter the routes that are searched on.
     ///
     /// # Returns
     ///
     /// A vector of all potentially profitable SwapSequences found.
-    pub fn search_opportunities<F: Fn(Path) -> Option<SwapSequence>>(
+    pub fn search_opportunities<F: Fn(Route) -> Option<SwapSequence>>(
         &self,
         search: F,
         involved_addresses: Option<Vec<H160>>,
@@ -513,20 +554,21 @@ impl ProtoGraph {
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
         // allocates only if there is an opportunity
         let mut opportunities = Vec::new();
-        // PathIdSubsetsByMembership will return a list of path ids we make sure the path ids are unique and yield the
-        // corresponding PathEntry object. This way we get all paths that contain any of the changed addresses.
-        // In case we didn't see some address on any path (KeyError on path_memberhips) it is simply skipped.
-        let path_iter = PathIdSubsetsByMembership::new(involved_addresses, &self.path_memberships)
-            .unique()
-            .map(|idx| &self.paths[idx]);
-        let mut n_paths_evaluated: u64 = 0;
-        for path in path_iter {
+        // RouteIdSubsetsByMembership will return a list of route ids we make sure the route ids are unique and yield the
+        // corresponding RouteEntry object. This way we get all routes that contain any of the changed addresses.
+        // In case we didn't see some address on any route (KeyError on route_memberhips) it is simply skipped.
+        let route_iter =
+            RouteIdSubsetsByMembership::new(involved_addresses, &self.route_memberships)
+                .unique()
+                .map(|idx| &self.routes[idx]);
+        let mut n_routes_evaluated: u64 = 0;
+        for route in route_iter {
             pairs.clear();
             tokens.clear();
-            let mut prev_node_idx = path.start;
-            let TokenEntry(_, start) = &self.tokens[self.graph.node_weight(path.start).unwrap()];
+            let mut prev_node_idx = route.start;
+            let TokenEntry(_, start) = &self.tokens[self.graph.node_weight(route.start).unwrap()];
             tokens.push(start);
-            for edge_idx in path.edges.iter() {
+            for edge_idx in route.edges.iter() {
                 let state_addr = self.graph.edge_weight(*edge_idx).unwrap();
                 let state = self.states.get(state_addr).unwrap();
                 let (s_idx, e_idx) = self.graph.edge_endpoints(*edge_idx).unwrap();
@@ -538,18 +580,18 @@ impl ProtoGraph {
                     prev_node_idx = s_idx;
                     &self.tokens[self.graph.node_weight(s_idx).unwrap()].1
                 } else {
-                    panic!("Paths node indices did not connect!")
+                    panic!("Routes node indices did not connect!")
                 };
                 pairs.push(state);
                 tokens.push(next_token);
             }
-            let p = Path::new(&tokens, &pairs);
-            n_paths_evaluated += 1;
-            if let Some(opp) = search(p) {
+            let r = Route::new(&tokens, &pairs);
+            n_routes_evaluated += 1;
+            if let Some(opp) = search(r) {
                 opportunities.push(opp);
             }
         }
-        debug!("Searched {} paths", n_paths_evaluated);
+        debug!("Searched {} route", n_routes_evaluated);
         opportunities
     }
 
@@ -557,8 +599,8 @@ impl ProtoGraph {
         info!("ProtoGraph(n_hops={}) Stats:", self.n_hops);
         info!("States: {}", self.states.len());
         info!("Nodes: {}", self.tokens.len());
-        info!("Paths: {}", self.paths.len());
-        info!("Membership Cache: {}", self.path_memberships.len());
+        info!("Routes: {}", self.routes.len());
+        info!("Membership Cache: {}", self.route_memberships.len());
     }
 }
 
@@ -639,7 +681,10 @@ mod tests {
             20_000_000,
             20_000_000,
         ));
-        g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
         g
     }
 
@@ -887,7 +932,7 @@ mod tests {
             ],
         ]
     )]
-    fn test_build_paths(#[case] pairs: &[(&str, &str, &str)], #[case] exp: Vec<Vec<&str>>) {
+    fn test_build_cyclic_routes(#[case] pairs: &[(&str, &str, &str)], #[case] exp: Vec<Vec<&str>>) {
         let mut g = ProtoGraph::new(4);
         let exp: Vec<_> = exp
             .iter()
@@ -901,26 +946,205 @@ mod tests {
             g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
         }
 
-        g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
 
-        let mut paths = Vec::with_capacity(g.paths.len());
-        for p in g.paths {
-            let addr_path: Vec<_> = p
+        let mut routes = Vec::with_capacity(g.routes.len());
+        for r in g.routes {
+            let addr_route: Vec<_> = r
                 .edges
                 .iter()
                 .map(|x| *g.graph.edge_weight(*x).unwrap())
                 .collect();
-            paths.push(addr_path);
+            routes.push(addr_route);
         }
-        assert_eq!(paths, exp);
+        assert_eq!(routes, exp);
     }
 
-    fn atomic_arb_finder(p: Path) -> Option<SwapSequence> {
-        let price = p.price();
+    #[rstest]
+    #[case::simple_triangle(
+        &[
+            (
+                "0x0000000000000000000000000000000000000001", 
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002"
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000002",
+            ),
+            (
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000003 ",
+            )
+        ],
+    vec![
+        vec![
+            "0x0000000000000000000000000000000000000001", 
+            "0x0000000000000000000000000000000000000002",
+        ],
+        vec![
+            "0x0000000000000000000000000000000000000003",
+        ]
+    ])]
+    #[case::double_pool(
+        &[
+            (
+                "0x0000000000000000000000000000000000000001", 
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000003"
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000003"
+            ),
+        ],
+        vec![
+            vec![
+                "0x0000000000000000000000000000000000000001",
+            ],
+            vec![
+                "0x0000000000000000000000000000000000000002",
+            ]
+        ]
+    )]
+    #[case::diamond_doubled_edges(
+        &[
+            (
+                "0x0000000000000000000000000000000000000001", 
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002"
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000003"
+            ),
+            (
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000004"
+            ),
+            (
+                "0x0000000000000000000000000000000000000004",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000004",
+            ),
+            (
+                "0x0000000000000000000000000000000000000005",
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000003",
+            ),
+            (
+                "0x0000000000000000000000000000000000000006",
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000004",
+            ),
+        ],
+        vec![
+            vec![
+                "0x0000000000000000000000000000000000000001", 
+                "0x0000000000000000000000000000000000000002",
+            ],
+            vec![
+                "0x0000000000000000000000000000000000000001", 
+                "0x0000000000000000000000000000000000000005",
+            ],
+            vec![
+                "0x0000000000000000000000000000000000000004", 
+                "0x0000000000000000000000000000000000000003",
+            ],
+            vec![
+                "0x0000000000000000000000000000000000000004", 
+                "0x0000000000000000000000000000000000000006",
+            ],
+        ]
+    )]
+    fn test_build_non_cyclic_routes(
+        #[case] pairs: &[(&str, &str, &str)],
+        #[case] exp: Vec<Vec<&str>>,
+    ) {
+        let mut g = ProtoGraph::new(4);
+        let exp: Vec<_> = exp
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|s| H160::from_str(s).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for p in pairs {
+            g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
+        }
+
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000003").unwrap(),
+        );
+
+        let mut routes = Vec::with_capacity(g.routes.len());
+        for r in g.routes {
+            let addr_route: Vec<_> = r
+                .edges
+                .iter()
+                .map(|x| *g.graph.edge_weight(*x).unwrap())
+                .collect();
+            routes.push(addr_route);
+        }
+
+        assert_eq!(routes, exp);
+    }
+
+    #[rstest]
+    fn test_build_routes_missing_token() {
+        let mut g = ProtoGraph::new(4);
+        let pairs = [
+            (
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002",
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000002",
+            ),
+            (
+                "0x0000000000000000000000000000000000000003",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000003 ",
+            ),
+        ];
+        for p in pairs {
+            g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
+        }
+
+        let res = g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000004").unwrap(),
+        );
+
+        assert!(res.is_err());
+        if let Err(error) = res {
+            assert!(matches!(error, UnknownTokenError { .. }));
+            assert_eq!(
+                error.to_string(),
+                "Unknown token: 0x0000000000000000000000000000000000000004"
+            )
+        }
+    }
+
+    fn atomic_arb_finder(r: Route) -> Option<SwapSequence> {
+        let price = r.price();
         if price > 1.0 {
-            let amount_in = optimize_path(&p).ok()?;
+            let amount_in = optimize_route(&r).ok()?;
             if amount_in > U256::zero() {
-                let (swaps, gas) = p.get_swaps(amount_in).unwrap();
+                let (swaps, gas) = r.get_swaps(amount_in).unwrap();
                 let amount_out = swaps[swaps.len() - 1].amount_out();
                 if amount_out > amount_in {
                     let opp = SwapSequence::new(swaps, gas);
@@ -932,7 +1156,7 @@ mod tests {
         None
     }
 
-    fn optimize_path(p: &Path) -> Result<U256, TradeSimulationError> {
+    fn optimize_route(p: &Route) -> Result<U256, TradeSimulationError> {
         let sim_arb = |amount_in: I256| {
             let amount_in_unsigned = if amount_in > I256::zero() {
                 amount_in.into_raw()
@@ -971,7 +1195,7 @@ mod tests {
     #[rstest]
     #[case(Some(vec![H160::from_str("0x0000000000000000000000000000000000000001").unwrap()]))]
     #[case(None)]
-    fn test_simulate_path(#[case] addresses: Option<Vec<H160>>) {
+    fn test_simulate_route(#[case] addresses: Option<Vec<H160>>) {
         let mut g = ProtoGraph::new(4);
         g.insert_pair(make_pair(
             "0x0000000000000000000000000000000000000001",
@@ -987,7 +1211,10 @@ mod tests {
             20_000_000,
             10_000_000,
         ));
-        g.build_paths(H160::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
         let opps = g.search_opportunities(atomic_arb_finder, addresses);
 
         assert_eq!(opps.len(), 1);
@@ -1004,7 +1231,7 @@ mod tests {
         #[case] keys: Option<Vec<H160>>,
         #[case] exp: Vec<usize>,
     ) {
-        let it = PathIdSubsetsByMembership::new(keys, &data);
+        let it = RouteIdSubsetsByMembership::new(keys, &data);
 
         let mut res: Vec<_> = it.collect();
         res.sort();
@@ -1013,7 +1240,7 @@ mod tests {
     }
 
     #[test]
-    fn test_path_price() {
+    fn test_route_price() {
         let pair_0 = make_pair(
             "0x0000000000000000000000000000000000000001",
             "0x0000000000000000000000000000000000000001",
@@ -1031,9 +1258,9 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let path = Path::new(&tokens, &pairs);
+        let route = Route::new(&tokens, &pairs);
 
-        let res = path.price();
+        let res = route.price();
 
         assert_eq!(res, 0.4);
     }
@@ -1057,9 +1284,9 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let path = Path::new(&tokens, &pairs);
+        let route = Route::new(&tokens, &pairs);
 
-        let res = path.get_amount_out(U256::from(100_000)).unwrap();
+        let res = route.get_amount_out(U256::from(100_000)).unwrap();
 
         assert_eq!(res.gas, U256::from(240_000));
         assert_eq!(res.amount, U256::from(39_484));
@@ -1084,10 +1311,10 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let path = Path::new(&tokens, &pairs);
+        let route = Route::new(&tokens, &pairs);
         let amount_in = U256::from(100_000);
 
-        let (actions, _) = path.get_swaps(amount_in).unwrap();
+        let (actions, _) = route.get_swaps(amount_in).unwrap();
 
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());

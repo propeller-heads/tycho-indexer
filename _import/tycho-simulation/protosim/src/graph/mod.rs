@@ -1,4 +1,4 @@
 //! ProtocolStates as MultiGraph
-mod edge_paths;
+mod edge_routes;
 pub mod protograph;
 pub mod tick;
