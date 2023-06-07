@@ -209,7 +209,7 @@ impl From<simulation::SimulationResult> for SimulationResult {
 }
 
 /// Basic info about an ethereum account
-/// 
+///
 /// Attributes
 /// ----------
 /// balance: int

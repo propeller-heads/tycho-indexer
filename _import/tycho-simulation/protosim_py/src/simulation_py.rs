@@ -3,8 +3,7 @@ use num_bigint::BigUint;
 use revm::primitives::{B160, U256 as rU256};
 
 use crate::structs_py::{
-    AccountInfo, BlockHeader, SimulationError, SimulationResult, SimulationParameters,
-    StateUpdate,
+    AccountInfo, BlockHeader, SimulationError, SimulationParameters, SimulationResult, StateUpdate,
 };
 use pyo3::prelude::*;
 use std::{collections::HashMap, str::FromStr, sync::Arc};

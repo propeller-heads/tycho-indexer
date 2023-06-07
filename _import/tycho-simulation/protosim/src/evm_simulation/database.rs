@@ -362,7 +362,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the contract is not present locally, the function queries the account info and storage value from
     ///   a node, initializes the account locally with the retrieved information, and returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        let is_mocked;  // will be None if we don't have this account at all
+        let is_mocked; // will be None if we don't have this account at all
         {
             // This scope is to not make two simultaneous borrows (one occurs inside init_account)
             let borrowed_storage = self.account_storage.borrow();
