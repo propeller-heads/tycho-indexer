@@ -7,7 +7,7 @@
 `evm_simulation` module from `protosim` crate implements simulating on-chain transactions. This crate - `protosim_py` - wraps `evm_simulation` in order to allow using it in Python.
 
 ```
- Rust                                                                   Python
+ Rust                                                                  Python
 ┌────────────────────────────────────────────────────────────────┐    ┌────────────────────────────┐
 │                                                                │    │                            │
 │  protosim::evm_simulation             protosim_py              │    │   protosim_py              │

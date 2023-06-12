@@ -243,9 +243,10 @@ mod tests {
         providers::{Http, Provider, ProviderError},
         types::{Address, U256},
     };
+    use revm::db::DatabaseRef;
     use revm::primitives::{
-        bytes, Account, AccountInfo, Eval, ExecutionResult, Halt, InvalidTransaction,
-        OutOfGasError, Output, ResultAndState, State as rState, StorageSlot, B256,
+        bytes, Account, AccountInfo, Bytecode, Eval, ExecutionResult, Halt, InvalidTransaction,
+        OutOfGasError, Output, ResultAndState, State as rState, StorageSlot, B160, B256,
     };
     use std::{error::Error, str::FromStr, sync::Arc, time::Instant};
 
@@ -555,6 +556,82 @@ mod tests {
         println!("Using revm:");
         println!("Total Duration [n_iter={n_iter}]: {:?}", duration);
         println!("Single get_amount_out call: {:?}", duration / n_iter);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_contract_deployment() -> Result<(), Box<dyn Error>> {
+        let readonly_state = database::SimulationDB::new(
+            Arc::new(
+                Provider::<Http>::try_from(
+                    "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
+                )
+                .unwrap(),
+            ),
+            Some(Arc::new(
+                tokio::runtime::Handle::try_current()
+                    .is_err()
+                    .then(|| tokio::runtime::Runtime::new().unwrap())
+                    .unwrap(),
+            )),
+            None,
+        );
+        let state = database::SimulationDB::new(
+            Arc::new(
+                Provider::<Http>::try_from(
+                    "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
+                )
+                .unwrap(),
+            ),
+            Some(Arc::new(
+                tokio::runtime::Handle::try_current()
+                    .is_err()
+                    .then(|| tokio::runtime::Runtime::new().unwrap())
+                    .unwrap(),
+            )),
+            None,
+        );
+
+        let usdt_address = B160::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+        let true_usdt = readonly_state.basic(usdt_address).unwrap().unwrap();
+
+        let mocked_bytecode = std::fs::read(
+            "/home/mdank/repos/datarevenue/DEFI/defibot-solver/defibot/swaps/pool_state/dodo/compiled/ERC20.bin-runtime"
+        ).unwrap();
+        let contract_acc_info = AccountInfo::new(
+            rU256::from(0),
+            0,
+            // Bytecode::new_raw(revm::precompile::Bytes::from(mocked_bytecode)),
+            true_usdt.code.unwrap(),
+        );
+        state.init_account(usdt_address, contract_acc_info, None, false);
+        let eng = SimulationEngine { state };
+
+        let erc20_abi = BaseContract::from(parse_abi(&[
+            "function balanceOf(address account) public view virtual returns (uint256)",
+        ])?);
+
+        let eoa_address = Address::from_str("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d")?;
+        let calldata = erc20_abi.encode("balanceOf", eoa_address).unwrap();
+        let sim_params = SimulationParameters {
+            caller: Address::from_str("0x0000000000000000000000000000000000000000")?,
+            to: Address::from(usdt_address),
+            data: calldata,
+            value: U256::zero(),
+            overrides: None,
+            gas_limit: None,
+        };
+
+        let result = eng.simulate(&sim_params);
+
+        let balance = match result {
+            Ok(SimulationResult { result, .. }) => {
+                erc20_abi.decode_output::<U256, _>("balanceOf", result)?
+            }
+            Err(error) => panic!("{:?}", error),
+        };
+        println!("Balance: {}", balance);
 
         Ok(())
     }
