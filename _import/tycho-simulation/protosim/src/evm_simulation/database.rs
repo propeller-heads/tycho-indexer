@@ -16,7 +16,6 @@ use revm::{
 
 use super::account_storage::{AccountStorage, StateUpdate};
 
-
 /// A wrapper over an actual SimulationDB that allows overriding specific storage slots
 pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
     /// Wrapped database. Will be queried if a requested item is not found in the overrides.
@@ -338,7 +337,15 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             let borrowed_storage = self.account_storage.borrow();
             is_mocked = borrowed_storage.is_mocked_account(&address);
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
-                println!("Got value locally. This is {} account. Value: {}", (if is_mocked.unwrap_or(false) {"mocked"} else {"non-mocked"}), storage_value);
+                println!(
+                    "Got value locally. This is {} account. Value: {}",
+                    (if is_mocked.unwrap_or(false) {
+                        "mocked"
+                    } else {
+                        "non-mocked"
+                    }),
+                    storage_value
+                );
                 return Ok(storage_value);
             }
         }
@@ -346,14 +353,17 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
         match is_mocked {
             Some(true) => {
                 println!("This is a mocked account for which we don't have data. Returning zero.");
-                Ok(rU256::ZERO) 
-            },
+                Ok(rU256::ZERO)
+            }
             Some(false) => {
                 let storage_value = self.query_storage(address, index)?;
                 self.account_storage
                     .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
-                println!("This is non-mocked account for which we didn't have data. Fetched value: {}", storage_value);
+                println!(
+                    "This is non-mocked account for which we didn't have data. Fetched value: {}",
+                    storage_value
+                );
                 Ok(storage_value)
             }
             None => {
@@ -363,7 +373,10 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                 self.account_storage
                     .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
-                println!("This is non-initialised account. Fetched value: {}", storage_value);
+                println!(
+                    "This is non-initialised account. Fetched value: {}",
+                    storage_value
+                );
                 Ok(storage_value)
             }
         }
@@ -610,7 +623,7 @@ mod tests {
         mock_sim_db.init_account(
             address2,
             AccountInfo::default(),
-            Some(original_storage.clone()),
+            Some(original_storage),
             false,
         );
 
