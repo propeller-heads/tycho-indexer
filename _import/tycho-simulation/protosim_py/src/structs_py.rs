@@ -1,8 +1,7 @@
 use ethers::types::{Address, Bytes, H256, U256};
 use num_bigint::BigUint;
-use pyo3;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Bytecode, B256, U256 as rU256};
+use revm::primitives::{Bytecode, U256 as rU256};
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -228,20 +227,17 @@ pub struct AccountInfo {
     #[pyo3(get, set)]
     pub nonce: u64,
     #[pyo3(get, set)]
-    pub code_hash: String,
-    #[pyo3(get, set)]
     pub code: Option<Vec<u8>>,
 }
 
 #[pymethods]
 impl AccountInfo {
     #[new]
-    #[pyo3(signature = (balance, nonce, code_hash, code=None))]
-    fn new(balance: BigUint, nonce: u64, code_hash: String, code: Option<Vec<u8>>) -> Self {
+    #[pyo3(signature = (balance, nonce, code=None))]
+    fn new(balance: BigUint, nonce: u64, code: Option<Vec<u8>>) -> Self {
         Self {
             balance,
             nonce,
-            code_hash,
             code,
         }
     }
@@ -249,17 +245,18 @@ impl AccountInfo {
 
 impl From<AccountInfo> for revm::primitives::AccountInfo {
     fn from(py_info: AccountInfo) -> Self {
-        let mut code = None;
+        let code;
         if let Some(c) = py_info.code {
-            code = Some(Bytecode::new_raw(Bytes::from(c).0));
+            code = Bytecode::new_raw(Bytes::from(c).0);
+        } else {
+            code = Bytecode::new()
         }
 
-        revm::primitives::AccountInfo {
-            balance: rU256::from_str(&py_info.balance.to_string()).unwrap(),
-            nonce: py_info.nonce,
-            code_hash: B256::from_str(&py_info.code_hash).unwrap(),
+        revm::primitives::AccountInfo::new(
+            rU256::from_str(&py_info.balance.to_string()).unwrap(),
+            py_info.nonce,
             code,
-        }
+        )
     }
 }
 
