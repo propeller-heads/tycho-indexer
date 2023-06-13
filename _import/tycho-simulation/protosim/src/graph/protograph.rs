@@ -70,6 +70,7 @@ struct TokenEntry(NodeIndex, ERC20Token);
 
 #[derive(Debug)]
 pub struct Route<'a> {
+    id: usize,
     pairs: &'a [&'a Pair],
     tokens: &'a [&'a ERC20Token],
 }
@@ -78,11 +79,12 @@ impl<'a> Route<'a> {
     /// Represents a route of token trades through a series of pairs.
     ///
     /// Creates a new instance of the Route struct.
+    /// - `id`: The route's unique integer ID
     /// - `tokens`: A reference to a vector of references to ERC20Token structs.
     /// - `pairs`: A reference to a vector of references to Pair structs.
     /// Returns a new instance of the Route struct.
-    fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
-        Route { pairs, tokens }
+    fn new(id: usize, tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
+        Route { id, pairs, tokens }
     }
     /// Calculates the price of the route.
     ///
@@ -556,13 +558,13 @@ impl ProtoGraph {
         let mut opportunities = Vec::new();
         // RouteIdSubsetsByMembership will return a list of route ids we make sure the route ids are unique and yield the
         // corresponding RouteEntry object. This way we get all routes that contain any of the changed addresses.
-        // In case we didn't see some address on any route (KeyError on route_memberhips) it is simply skipped.
+        // In case we didn't see some address on any route (KeyError on route_memberships) it is simply skipped.
         let route_iter =
             RouteIdSubsetsByMembership::new(involved_addresses, &self.route_memberships)
                 .unique()
                 .map(|idx| &self.routes[idx]);
         let mut n_routes_evaluated: u64 = 0;
-        for route in route_iter {
+        for (id, route) in route_iter.enumerate() {
             pairs.clear();
             tokens.clear();
             let mut prev_node_idx = route.start;
@@ -585,7 +587,7 @@ impl ProtoGraph {
                 pairs.push(state);
                 tokens.push(next_token);
             }
-            let r = Route::new(&tokens, &pairs);
+            let r = Route::new(id, &tokens, &pairs);
             n_routes_evaluated += 1;
             if let Some(opp) = search(r) {
                 opportunities.push(opp);
@@ -1258,7 +1260,7 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(&tokens, &pairs);
+        let route = Route::new(1, &tokens, &pairs);
 
         let res = route.price();
 
@@ -1284,7 +1286,7 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(&tokens, &pairs);
+        let route = Route::new(1, &tokens, &pairs);
 
         let res = route.get_amount_out(U256::from(100_000)).unwrap();
 
@@ -1311,7 +1313,7 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(&tokens, &pairs);
+        let route = Route::new(1, &tokens, &pairs);
         let amount_in = U256::from(100_000);
 
         let (actions, _) = route.get_swaps(amount_in).unwrap();
