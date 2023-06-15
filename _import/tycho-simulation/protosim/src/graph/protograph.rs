@@ -621,10 +621,11 @@ impl ProtoGraph {
             }
             let r = Route::new(id, &tokens, &pairs);
             n_routes_evaluated += 1;
-            processor.process(r);
-            match processor.get_results() {
-                Ok(opp) => {
-                    opportunities.push(opp);
+            match processor.process(r) {
+                Ok(()) => {
+                    if let Ok(opp) = processor.get_results() {
+                        opportunities.push(opp);
+                    }
                 }
                 Err(_) => {
                     trace!(
