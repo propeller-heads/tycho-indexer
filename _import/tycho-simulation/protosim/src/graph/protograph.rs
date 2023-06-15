@@ -1203,8 +1203,6 @@ mod tests {
                         let opp = SwapSequence::new(swaps, gas);
                         self.swap_sequence = Some(opp);
                     }
-            }
-            }
                 }
             }
             Ok(())
@@ -1385,4 +1383,3 @@ mod tests {
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
     }
 }
-
