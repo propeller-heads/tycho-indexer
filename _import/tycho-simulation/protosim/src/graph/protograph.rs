@@ -55,7 +55,7 @@ use petgraph::{
 use std::{collections::HashMap, fmt};
 
 use crate::{
-    models::{ERC20Token, Swap, SwapSequence},
+    models::{ERC20Token, Swap},
     protocol::{
         errors::{TradeSimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
@@ -652,6 +652,7 @@ impl ProtoGraph {
 mod tests {
     use std::str::FromStr;
 
+    use crate::models::SwapSequence;
     use crate::optimize::gss::golden_section_search;
     use crate::protocol::errors::TradeSimulationErrorKind;
     use crate::protocol::models::PairProperties;
