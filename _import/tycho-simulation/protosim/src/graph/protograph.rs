@@ -565,21 +565,22 @@ impl ProtoGraph {
         Ok(())
     }
 
-    /// Given a search function, searches the token graph for trading opportunities over its routes.
+    /// Given a route processor, searches the token graph for trading opportunities over its routes.
     ///
     /// # Arguments
     ///
-    /// * `search` - A function that takes in a `Route` and returns an `Option<SwapSequence>` representing a trading opportunity if one is found.
-    /// * `involved_addresses` - A list of token addresses to filter the routes that are searched on.
+    /// * `processor` - The `RouteProcessor` implementation used to identify opportunities.
+    /// * `involved_addresses` - Optional list of addresses to filter the routes. If provided, only routes involving
+    /// the specified addresses will be processed.
     ///
     /// # Returns
     ///
-    /// A vector of all potentially profitable SwapSequences found.
-    pub fn search_opportunities<F: Fn(Route) -> Option<SwapSequence>>(
+    /// A vector of all potentially profitable opportunities found.
+    pub fn search_opportunities<P: RouteProcessor>(
         &self,
-        search: F,
+        mut processor: P,
         involved_addresses: Option<Vec<H160>>,
-    ) -> Vec<SwapSequence> {
+    ) -> Vec<P::Output> {
         // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
         // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
         // To optimize this, each worker needs a preallocated collections that are cleared on each invocation.
@@ -620,8 +621,17 @@ impl ProtoGraph {
             }
             let r = Route::new(id, &tokens, &pairs);
             n_routes_evaluated += 1;
-            if let Some(opp) = search(r) {
-                opportunities.push(opp);
+            processor.process(r);
+            match processor.get_results() {
+                Ok(opp) => {
+                    opportunities.push(opp);
+                }
+                Err(_) => {
+                    trace!(
+                        "Optimization returned a faulty swap sequence on {:?}!",
+                        Route::new(id, &tokens, &pairs)
+                    )
+                }
             }
         }
         debug!("Searched {} route", n_routes_evaluated);
@@ -642,6 +652,7 @@ mod tests {
     use std::str::FromStr;
 
     use crate::optimize::gss::golden_section_search;
+    use crate::protocol::errors::TradeSimulationErrorKind;
     use crate::protocol::models::PairProperties;
     use crate::protocol::uniswap_v2::events::UniswapV2Sync;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
@@ -1172,21 +1183,38 @@ mod tests {
         }
     }
 
-    fn atomic_arb_finder(r: Route) -> Option<SwapSequence> {
-        let price = r.price();
-        if price > 1.0 {
-            let amount_in = optimize_route(&r).ok()?;
-            if amount_in > U256::zero() {
-                let (swaps, gas) = r.get_swaps(amount_in).unwrap();
-                let amount_out = swaps[swaps.len() - 1].amount_out();
-                if amount_out > amount_in {
-                    let opp = SwapSequence::new(swaps, gas);
-                    return Some(opp);
-                }
-                return None;
+    struct AtomicArbFinder {
+        swap_sequence: Option<SwapSequence>,
+    }
+
+    impl RouteProcessor for AtomicArbFinder {
+        type Error = TradeSimulationError;
+        type Output = SwapSequence;
+
+        fn process(&mut self, route: Route) -> Result<(), Self::Error> {
+            self.swap_sequence = None;
+            let price = route.price();
+            if price > 1.0 {
+                let amount_in = optimize_route(&route)?;
+                if amount_in > U256::zero() {
+                    let (swaps, gas) = route.get_swaps(amount_in)?;
+                    let amount_out = swaps[swaps.len() - 1].amount_out();
+                    if amount_out > amount_in {
+                        let opp = SwapSequence::new(swaps, gas);
+                        self.swap_sequence = Some(opp);
+                    }
             }
+            }
+                }
+            }
+            Ok(())
         }
-        None
+
+        fn get_results(&mut self) -> Result<Self::Output, Self::Error> {
+            self.swap_sequence
+                .take()
+                .ok_or_else(|| TradeSimulationError::new(TradeSimulationErrorKind::Unkown, None))
+        }
     }
 
     fn optimize_route(p: &Route) -> Result<U256, TradeSimulationError> {
@@ -1248,7 +1276,10 @@ mod tests {
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
         );
-        let opps = g.search_opportunities(atomic_arb_finder, addresses);
+        let processor = AtomicArbFinder {
+            swap_sequence: None,
+        };
+        let opps = g.search_opportunities(processor, addresses);
 
         assert_eq!(opps.len(), 1);
     }
@@ -1354,3 +1385,4 @@ mod tests {
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
     }
 }
+
