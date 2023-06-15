@@ -255,6 +255,37 @@ impl RouteEntry {
     }
 }
 
+/// RouteProcessor trait
+/// This trait defines the methods that a route processor must implement in order
+/// to be used to search for trade opportunities.
+pub trait RouteProcessor {
+    /// The type representing the error that can occur during route processing.
+    type Error;
+
+    /// The type representing the output or opportunity found during route processing.
+    type Output;
+
+    /// Processes the given route and updates the processor's internal result.
+    ///
+    /// # Arguments
+    ///
+    /// * `route` - the route to process
+    ///
+    /// # Returns
+    ///
+    /// An `Ok` result if the route was successfully processed, or an `Err` with an error if
+    /// processing failed.
+    fn process(&mut self, route: Route) -> Result<(), Self::Error>;
+
+    /// Returns the opportunity if one was found during processing.
+    ///
+    /// # Returns
+    ///
+    /// An `Ok` result containing the opportunity if one was found, or an `Err` with an error
+    /// if no results are available or processing failed.
+    fn get_results(&mut self) -> Result<Self::Output, Self::Error>;
+}
+
 #[derive(Debug)]
 pub struct UnknownTokenError {
     /// The unknown token's address
