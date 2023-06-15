@@ -55,7 +55,7 @@ use petgraph::{
 use std::{collections::HashMap, fmt};
 
 use crate::{
-    models::{ERC20Token, Swap},
+    models::{ERC20Token, Swap, SwapSequence},
     protocol::{
         errors::{TradeSimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
