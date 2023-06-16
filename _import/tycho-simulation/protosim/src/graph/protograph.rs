@@ -258,6 +258,7 @@ impl RouteEntry {
 /// RouteProcessor trait
 /// This trait defines the methods that a route processor must implement in order
 /// to be used to search for trade opportunities.
+#[allow(clippy::result_unit_err)]
 pub trait RouteProcessor {
     /// The type representing the error that can occur during route processing.
     type Error;
@@ -283,7 +284,7 @@ pub trait RouteProcessor {
     ///
     /// An `Ok` result containing the opportunities if any were found, or an `Err` with an error
     /// if no results are available or processing failed.
-    fn get_results(&mut self) -> Result<Self::Output, Self::Error>;
+    fn get_results(&mut self) -> Result<Self::Output, ()>;
 }
 
 #[derive(Debug)]
@@ -1187,8 +1188,7 @@ mod tests {
         type Output = Vec<SwapSequence>;
 
         fn process(&mut self, route: Route) -> Result<(), Self::Error> {
-            let price = route.price();
-            if price > 1.0 {
+            if route.price() > 1.0 {
                 let amount_in = optimize_route(&route)?;
                 if amount_in > U256::zero() {
                     let (swaps, gas) = route.get_swaps(amount_in)?;
@@ -1202,15 +1202,8 @@ mod tests {
             Ok(())
         }
 
-        fn get_results(&mut self) -> Result<Self::Output, Self::Error> {
-            if self.swap_sequence.is_empty() {
-                Err(TradeSimulationError::new(
-                    TradeSimulationErrorKind::Unkown,
-                    None,
-                ))
-            } else {
-                Ok(take(&mut self.swap_sequence))
-            }
+        fn get_results(&mut self) -> Result<Self::Output, ()> {
+            Ok(take(&mut self.swap_sequence))
         }
     }
 
