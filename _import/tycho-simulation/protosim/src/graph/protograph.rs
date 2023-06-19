@@ -282,9 +282,8 @@ pub trait RouteProcessor {
     ///
     /// # Returns
     ///
-    /// An `Ok` result containing the opportunities if any were found, or an `Err` with an error
-    /// if no results are available or processing failed.
-    fn get_results(&mut self) -> Result<Self::Output, ()>;
+    /// All opportunities found during processing.
+    fn get_results(&mut self) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -647,7 +646,6 @@ mod tests {
 
     use crate::models::SwapSequence;
     use crate::optimize::gss::golden_section_search;
-    use crate::protocol::errors::TradeSimulationErrorKind;
     use crate::protocol::models::PairProperties;
     use crate::protocol::uniswap_v2::events::UniswapV2Sync;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
@@ -1202,8 +1200,8 @@ mod tests {
             Ok(())
         }
 
-        fn get_results(&mut self) -> Result<Self::Output, ()> {
-            Ok(take(&mut self.swap_sequence))
+        fn get_results(&mut self) -> Self::Output {
+            take(&mut self.swap_sequence)
         }
     }
 
@@ -1265,12 +1263,14 @@ mod tests {
         g.build_routes(
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-        );
+        )
+        .expect("Not expecting an error");
         let mut processor = AtomicArbFinder::default();
-        g.search_opportunities(&mut processor, addresses);
-        let opps = processor.get_results().ok();
+        g.search_opportunities(&mut processor, addresses)
+            .expect("Should not error");
+        let opps = processor.get_results();
 
-        assert_eq!(opps.as_ref().map(Vec::len), Some(1));
+        assert_eq!(opps.len(), 1);
     }
 
     #[rstest]
