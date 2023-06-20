@@ -42,7 +42,6 @@ def test():
     res = engine.run_sim(params)
     print("Sim done")
     print(f"{res.result=}")
-    print(f"{res.state_updates=}")
 
     # Demonstrate manually inserting and updating an account
 
