@@ -64,7 +64,11 @@ impl AccountStorage {
                 temp_storage: HashMap::new(),
                 mocked,
             });
-            println!("Inserted a {} account {}", if mocked {"mocked"} else {"non-mocked"}, address);
+            println!(
+                "Inserted a {} account {}",
+                if mocked { "mocked" } else { "non-mocked" },
+                address
+            );
         } else {
             warn!("Tried to init account that was already initialized");
         }
