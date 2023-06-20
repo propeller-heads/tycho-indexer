@@ -42,6 +42,7 @@ def test():
     res = engine.run_sim(params)
     print("Sim done")
     print(f"{res.result=}")
+    print(f"{res.state_updates=}")
 
     # Demonstrate manually inserting and updating an account
 
@@ -51,7 +52,6 @@ def test():
         account=AccountInfo(
             balance=U256MAX,
             nonce=20,
-            code_hash="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
             code=None,
         ),
         mocked=False,  # i.e. missing storage will be queried from a node
