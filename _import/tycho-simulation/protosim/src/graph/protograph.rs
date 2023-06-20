@@ -55,7 +55,7 @@ use petgraph::{
 use std::{collections::HashMap, fmt};
 
 use crate::{
-    models::{ERC20Token, Swap, SwapSequence},
+    models::{ERC20Token, Swap},
     protocol::{
         errors::{TradeSimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
@@ -70,6 +70,7 @@ struct TokenEntry(NodeIndex, ERC20Token);
 
 #[derive(Debug)]
 pub struct Route<'a> {
+    id: usize,
     pairs: &'a [&'a Pair],
     tokens: &'a [&'a ERC20Token],
 }
@@ -78,11 +79,12 @@ impl<'a> Route<'a> {
     /// Represents a route of token trades through a series of pairs.
     ///
     /// Creates a new instance of the Route struct.
+    /// - `id`: The route's unique integer ID
     /// - `tokens`: A reference to a vector of references to ERC20Token structs.
     /// - `pairs`: A reference to a vector of references to Pair structs.
     /// Returns a new instance of the Route struct.
-    fn new(tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
-        Route { pairs, tokens }
+    fn new(id: usize, tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
+        Route { id, pairs, tokens }
     }
     /// Calculates the price of the route.
     ///
@@ -251,6 +253,37 @@ impl RouteEntry {
     fn new(start: NodeIndex, edges: Vec<EdgeIndex>) -> Self {
         RouteEntry { start, edges }
     }
+}
+
+/// RouteProcessor trait
+/// This trait defines the methods that a route processor must implement in order
+/// to be used to search for trade opportunities.
+#[allow(clippy::result_unit_err)]
+pub trait RouteProcessor {
+    /// The type representing the error that can occur during route processing.
+    type Error;
+
+    /// The type representing all opportunities found during route processing.
+    type Output;
+
+    /// Processes the given route and updates the processor's internal result.
+    ///
+    /// # Arguments
+    ///
+    /// * `route` - the route to process
+    ///
+    /// # Returns
+    ///
+    /// An `Ok` result if the route was successfully processed, or an `Err` with an error if
+    /// processing failed.
+    fn process(&mut self, route: Route) -> Result<(), Self::Error>;
+
+    /// Returns the opportunity if one was found during processing.
+    ///
+    /// # Returns
+    ///
+    /// All opportunities found during processing.
+    fn get_results(&mut self) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -532,37 +565,36 @@ impl ProtoGraph {
         Ok(())
     }
 
-    /// Given a search function, searches the token graph for trading opportunities over its routes.
+    /// Given a route processor, searches the token graph for trading opportunities over its routes.
     ///
     /// # Arguments
     ///
-    /// * `search` - A function that takes in a `Route` and returns an `Option<SwapSequence>` representing a trading opportunity if one is found.
-    /// * `involved_addresses` - A list of token addresses to filter the routes that are searched on.
+    /// * `processor` - The `RouteProcessor` implementation used to identify and store opportunities.
+    /// * `involved_addresses` - Optional list of addresses to filter the routes. If provided, only routes involving
+    /// the specified addresses will be processed.
     ///
     /// # Returns
     ///
-    /// A vector of all potentially profitable SwapSequences found.
-    pub fn search_opportunities<F: Fn(Route) -> Option<SwapSequence>>(
+    /// Returns an `Ok` after searching all routes.
+    pub fn search_opportunities<P: RouteProcessor>(
         &self,
-        search: F,
+        processor: &mut P,
         involved_addresses: Option<Vec<H160>>,
-    ) -> Vec<SwapSequence> {
+    ) -> Result<(), P::Error> {
         // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
         // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
         // To optimize this, each worker needs a preallocated collections that are cleared on each invocation.
         let mut pairs = Vec::with_capacity(self.n_hops);
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
-        // allocates only if there is an opportunity
-        let mut opportunities = Vec::new();
         // RouteIdSubsetsByMembership will return a list of route ids we make sure the route ids are unique and yield the
         // corresponding RouteEntry object. This way we get all routes that contain any of the changed addresses.
-        // In case we didn't see some address on any route (KeyError on route_memberhips) it is simply skipped.
+        // In case we didn't see some address on any route (KeyError on route_memberships) it is simply skipped.
         let route_iter =
             RouteIdSubsetsByMembership::new(involved_addresses, &self.route_memberships)
                 .unique()
                 .map(|idx| &self.routes[idx]);
         let mut n_routes_evaluated: u64 = 0;
-        for route in route_iter {
+        for (id, route) in route_iter.enumerate() {
             pairs.clear();
             tokens.clear();
             let mut prev_node_idx = route.start;
@@ -585,14 +617,17 @@ impl ProtoGraph {
                 pairs.push(state);
                 tokens.push(next_token);
             }
-            let r = Route::new(&tokens, &pairs);
+            let r = Route::new(id, &tokens, &pairs);
             n_routes_evaluated += 1;
-            if let Some(opp) = search(r) {
-                opportunities.push(opp);
+            if processor.process(r).is_err() {
+                trace!(
+                    "Optimization returned a faulty swap sequence on {:?}!",
+                    Route::new(id, &tokens, &pairs)
+                )
             }
         }
-        debug!("Searched {} route", n_routes_evaluated);
-        opportunities
+        debug!("Searched {} routes", n_routes_evaluated);
+        Ok(())
     }
 
     pub fn info(&self) {
@@ -606,8 +641,10 @@ impl ProtoGraph {
 
 #[cfg(test)]
 mod tests {
+    use std::mem::take;
     use std::str::FromStr;
 
+    use crate::models::SwapSequence;
     use crate::optimize::gss::golden_section_search;
     use crate::protocol::models::PairProperties;
     use crate::protocol::uniswap_v2::events::UniswapV2Sync;
@@ -1139,21 +1176,33 @@ mod tests {
         }
     }
 
-    fn atomic_arb_finder(r: Route) -> Option<SwapSequence> {
-        let price = r.price();
-        if price > 1.0 {
-            let amount_in = optimize_route(&r).ok()?;
-            if amount_in > U256::zero() {
-                let (swaps, gas) = r.get_swaps(amount_in).unwrap();
-                let amount_out = swaps[swaps.len() - 1].amount_out();
-                if amount_out > amount_in {
-                    let opp = SwapSequence::new(swaps, gas);
-                    return Some(opp);
+    #[derive(Default)]
+    struct AtomicArbFinder {
+        swap_sequence: Vec<SwapSequence>,
+    }
+
+    impl RouteProcessor for AtomicArbFinder {
+        type Error = TradeSimulationError;
+        type Output = Vec<SwapSequence>;
+
+        fn process(&mut self, route: Route) -> Result<(), Self::Error> {
+            if route.price() > 1.0 {
+                let amount_in = optimize_route(&route)?;
+                if amount_in > U256::zero() {
+                    let (swaps, gas) = route.get_swaps(amount_in)?;
+                    let amount_out = swaps[swaps.len() - 1].amount_out();
+                    if amount_out > amount_in {
+                        let opp = SwapSequence::new(swaps, gas);
+                        self.swap_sequence.push(opp);
+                    }
                 }
-                return None;
             }
+            Ok(())
         }
-        None
+
+        fn get_results(&mut self) -> Self::Output {
+            take(&mut self.swap_sequence)
+        }
     }
 
     fn optimize_route(p: &Route) -> Result<U256, TradeSimulationError> {
@@ -1214,8 +1263,12 @@ mod tests {
         g.build_routes(
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-        );
-        let opps = g.search_opportunities(atomic_arb_finder, addresses);
+        )
+        .expect("Not expecting an error");
+        let mut processor = AtomicArbFinder::default();
+        g.search_opportunities(&mut processor, addresses)
+            .expect("Should not error");
+        let opps = processor.get_results();
 
         assert_eq!(opps.len(), 1);
     }
@@ -1258,7 +1311,7 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(&tokens, &pairs);
+        let route = Route::new(1, &tokens, &pairs);
 
         let res = route.price();
 
@@ -1284,7 +1337,7 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(&tokens, &pairs);
+        let route = Route::new(1, &tokens, &pairs);
 
         let res = route.get_amount_out(U256::from(100_000)).unwrap();
 
@@ -1311,7 +1364,7 @@ mod tests {
         let Pair(props, _) = &pair_0;
         let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
         let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(&tokens, &pairs);
+        let route = Route::new(1, &tokens, &pairs);
         let amount_in = U256::from(100_000);
 
         let (actions, _) = route.get_swaps(amount_in).unwrap();
