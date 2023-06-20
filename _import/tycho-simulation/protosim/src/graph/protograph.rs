@@ -52,7 +52,11 @@ use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    str::FromStr,
+};
 
 use crate::{
     models::{ERC20Token, Swap},
@@ -284,6 +288,55 @@ pub trait RouteProcessor {
     ///
     /// All opportunities found during processing.
     fn get_results(&mut self) -> Self::Output;
+}
+
+struct NativeTokenQuoter<F: Fn(HashMap<u64, U256>) -> U256> {
+    /// How much to quote
+    quote_amount: U256,
+    /// The address of the token to quote - on mainnet this is WETH
+    quote_token: H160,
+    /// Stores base amount per route id
+    base_amounts: HashMap<H160, HashMap<u64, U256>>,
+    /// Stores which base amounts were updated
+    touched_tokens: HashSet<H160>,
+    /// Logic on how to aggregate the prices
+    aggregator: F,
+}
+
+impl<F: Fn(HashMap<u64, U256>) -> U256> NativeTokenQuoter<F> {
+    /// Creates a new NativeTokenQuoter token struct
+    ///
+    /// ## Parameters
+    /// - `quote_amount`: the quote amount as U256
+    /// - `quote_token`: the quote token address as string
+    /// - `aggregator`: the aggregator function - Fn(HashMap<u64, U256>) -> U256
+    ///
+    /// ## Return
+    /// Return a new NativeTokenQuoter struct
+    ///
+    /// ## Panic
+    /// - Panics if the quote token address string is not in valid format
+    pub fn new(quote_amount: U256, quote_token: &str, aggregator: F) -> Self {
+        let addr = H160::from_str(quote_token).expect("Failed to parse token address");
+        NativeTokenQuoter {
+            quote_amount,
+            quote_token: addr,
+            base_amounts: HashMap::new(),
+            touched_tokens: HashSet::new(),
+            aggregator,
+        }
+    }
+
+    /// Configures the given graph by building routes from all tokens in the graph to the
+    /// quote token.
+    pub fn setup(&self, graph: &mut ProtoGraph) {
+        let tokens: Vec<_> = graph.tokens.keys().cloned().collect();
+        for token in tokens {
+            if let Err(err) = graph.build_routes(token, self.quote_token) {
+                warn!("Error contructing graph: {:?}", err);
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
