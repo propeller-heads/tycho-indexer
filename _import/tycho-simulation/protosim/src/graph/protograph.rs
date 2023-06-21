@@ -262,7 +262,6 @@ impl RouteEntry {
 /// RouteProcessor trait
 /// This trait defines the methods that a route processor must implement in order
 /// to be used to search for trade opportunities.
-#[allow(clippy::result_unit_err)]
 pub trait RouteProcessor {
     /// The type representing the error that can occur during route processing.
     type Error;
@@ -1425,5 +1424,82 @@ mod tests {
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
+    }
+
+    #[rstest]
+    #[case::connected_pools(
+        &[
+            (
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002"
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000003"
+            ),
+        ],
+        vec![
+            vec![
+                "0x0000000000000000000000000000000000000001"
+            ],
+            vec![
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000001"
+            ]
+        ]
+    )]
+    #[case::unconnected_pools(
+        &[
+            (
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002"
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000004",
+                "0x0000000000000000000000000000000000000003"
+            ),
+        ],
+        vec![
+            vec![
+                "0x0000000000000000000000000000000000000001"
+            ],
+        ]
+    )]
+    fn test_token_quoter_set_up(#[case] pairs: &[(&str, &str, &str)], #[case] exp: Vec<Vec<&str>>) {
+        let quoter = NativeTokenQuoter::new(
+            U256::zero(),
+            "0x0000000000000000000000000000000000000001",
+            |_| U256::zero(),
+        );
+
+        let mut g = ProtoGraph::new(4);
+        let exp: Vec<_> = exp
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|s| H160::from_str(s).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for p in pairs {
+            g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
+        }
+
+        quoter.setup(&mut g);
+
+        let mut routes = Vec::with_capacity(g.routes.len());
+        for r in g.routes {
+            let addr_route: Vec<_> = r
+                .edges
+                .iter()
+                .map(|x| *g.graph.edge_weight(*x).unwrap())
+                .collect();
+            routes.push(addr_route);
+        }
+        assert_eq!(routes, exp);
     }
 }
