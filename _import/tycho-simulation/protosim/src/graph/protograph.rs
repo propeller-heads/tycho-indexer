@@ -261,7 +261,7 @@ impl RouteEntry {
 #[allow(clippy::result_unit_err)]
 pub trait RouteProcessor {
     /// The type representing the error that can occur during route processing.
-    type Error;
+    type Error: std::fmt::Debug;
 
     /// The type representing all opportunities found during route processing.
     type Output;
