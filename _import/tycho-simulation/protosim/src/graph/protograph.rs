@@ -375,8 +375,10 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F
     }
 
     fn get_results(&mut self) -> Self::Output {
-        // TODO: update return type to Result<Self::Output, Self::Error>
-        todo!("aggregate the prices for tokens in touched tokens")
+        self.base_amounts
+            .iter()
+            .map(|(token, route_prices)| (*token, (self.aggregator)(route_prices.clone())))
+            .collect()
     }
 }
 
@@ -1546,7 +1548,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_first_route() {
+    fn test_process_first_quoter_route() {
         let mut quoter = NativeTokenQuoter::new(
             U256::from(1000),
             "0x0000000000000000000000000000000000000001",
@@ -1666,7 +1668,7 @@ mod tests {
         1,
         1
     )]
-    fn test_process_subsequent_routes(
+    fn test_process_subsequent_quoter_routes(
         #[case] pair: Pair,
         #[case] route_id: usize,
         #[case] exp_processed_tokens: usize,
@@ -1704,5 +1706,40 @@ mod tests {
         let token_routes = quoter.base_amounts.get(&props.tokens[0].address).unwrap();
         assert_eq!(token_routes.len(), exp_processed_routes);
         assert_eq!(token_routes.get(&route_id), Some(&U256::from(738)))
+    }
+
+    #[test]
+    fn test_get_quoter_results() {
+        let mut quoter = NativeTokenQuoter::new(
+            U256::from(1000),
+            "0x0000000000000000000000000000000000000001",
+            |route_prices: HashMap<usize, U256>| {
+                let mut sum = U256::zero();
+                let count = U256::from(route_prices.len());
+                for price in route_prices.values() {
+                    sum += *price;
+                }
+                sum / count
+            },
+        );
+        let tokens = [
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000002").unwrap(),
+        ];
+        for (idx, token) in tokens.iter().enumerate() {
+            quoter
+                .base_amounts
+                .entry(*token)
+                .or_insert_with(HashMap::new)
+                .insert(idx, U256::from(100 * (idx + 1)));
+        }
+        quoter.touched_tokens.extend(tokens.iter());
+
+        let results = quoter.get_results();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get(&tokens[0]).cloned(), Some(U256::from(150)));
+        assert_eq!(results.get(&tokens[2]).cloned(), Some(U256::from(300)));
     }
 }
