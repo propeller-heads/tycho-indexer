@@ -289,20 +289,20 @@ pub trait RouteProcessor {
     fn get_results(&mut self) -> Self::Output;
 }
 
-struct NativeTokenQuoter<F: Fn(HashMap<u64, U256>) -> U256> {
+struct NativeTokenQuoter<F: Fn(HashMap<usize, U256>) -> U256> {
     /// How much to quote
     quote_amount: U256,
     /// The address of the token to quote - on mainnet this is WETH
     quote_token: H160,
     /// Stores base amount per route id
-    base_amounts: HashMap<H160, HashMap<u64, U256>>,
+    base_amounts: HashMap<H160, HashMap<usize, U256>>,
     /// Stores which base amounts were updated
     touched_tokens: HashSet<H160>,
     /// Logic on how to aggregate the prices
     aggregator: F,
 }
 
-impl<F: Fn(HashMap<u64, U256>) -> U256> NativeTokenQuoter<F> {
+impl<F: Fn(HashMap<usize, U256>) -> U256> NativeTokenQuoter<F> {
     /// Creates a new NativeTokenQuoter token struct
     ///
     /// ## Parameters
@@ -335,6 +335,48 @@ impl<F: Fn(HashMap<u64, U256>) -> U256> NativeTokenQuoter<F> {
                 warn!("Error contructing graph: {:?}", err);
             }
         }
+    }
+}
+
+/// An error representing any quoter route processing result other than successful execution
+#[derive(Debug)]
+pub enum TokenQuoterError {
+    /// The route does not satify processing requirements
+    InvalidRouteError(String),
+    /// Simulation didn't succeed - related trade simulation error is provided
+    SimulationError(TradeSimulationError),
+}
+
+impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F> {
+    type Output = HashMap<H160, U256>;
+    type Error = TokenQuoterError;
+
+    fn process(&mut self, route: Route) -> Result<(), Self::Error> {
+        if route.tokens[route.tokens.len() - 1].address != self.quote_token {
+            return Err(TokenQuoterError::InvalidRouteError(format!(
+                "Route (id={}) does not end on quote token",
+                route.id
+            )));
+        }
+
+        match route.get_amount_out(self.quote_amount) {
+            Ok(result) => {
+                let price = result.amount;
+                self.touched_tokens.insert(route.tokens[0].address);
+                self.base_amounts
+                    .entry(route.tokens[0].address)
+                    .or_insert_with(HashMap::new)
+                    .insert(route.id, price);
+            }
+            Err(err) => return Err(TokenQuoterError::SimulationError(err)),
+        }
+
+        Ok(())
+    }
+
+    fn get_results(&mut self) -> Self::Output {
+        // TODO: update return type to Result<Self::Output, Self::Error>
+        todo!("aggregate the prices for tokens in touched tokens")
     }
 }
 
@@ -1501,5 +1543,166 @@ mod tests {
             routes.push(addr_route);
         }
         assert_eq!(routes, exp);
+    }
+
+    #[test]
+    fn test_process_first_route() {
+        let mut quoter = NativeTokenQuoter::new(
+            U256::from(1000),
+            "0x0000000000000000000000000000000000000001",
+            |_| U256::zero(),
+        );
+
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000003",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            10_000_000,
+        );
+        let pair_1 = make_pair(
+            "0x0000000000000000000000000000000000000002",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            25_000_000,
+        );
+        let Pair(props0, _) = &pair_0;
+        let Pair(props1, _) = &pair_1;
+        let tokens = vec![&props0.tokens[0], &props0.tokens[1], &props1.tokens[0]];
+        let pairs = vec![&pair_0, &pair_1];
+        let route = Route::new(1, &tokens, &pairs);
+
+        assert!(quoter.process(route).is_ok());
+        assert_eq!(quoter.base_amounts.len(), 1);
+        assert_eq!(quoter.touched_tokens.len(), 1);
+        assert_eq!(
+            quoter
+                .base_amounts
+                .get(&props0.tokens[0].address)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_process_invalid_quoter_route() {
+        let mut quoter = NativeTokenQuoter::new(
+            U256::from(1000),
+            "0x0000000000000000000000000000000000000001",
+            |_| U256::zero(),
+        );
+
+        // route is considered invalid as it does not end with our quote token
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            10_000_000,
+        );
+        let pair_1 = make_pair(
+            "0x0000000000000000000000000000000000000002",
+            "0x0000000000000000000000000000000000000003",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            25_000_000,
+        );
+        let Pair(props0, _) = &pair_0;
+        let Pair(props1, _) = &pair_1;
+        let tokens = vec![&props0.tokens[0], &props0.tokens[1], &props1.tokens[0]];
+        let pairs = vec![&pair_0, &pair_1];
+        let route = Route::new(1, &tokens, &pairs);
+
+        let result = quoter.process(route);
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        match err {
+            TokenQuoterError::InvalidRouteError(msg) => {
+                assert_eq!(msg, "Route (id=1) does not end on quote token");
+            }
+            _ => panic!("Expected a TokenQuoterError error"),
+        }
+        assert_eq!(quoter.base_amounts.len(), 0);
+        assert_eq!(quoter.touched_tokens.len(), 0)
+    }
+
+    #[rstest]
+    #[case::add_new_token_entry(
+        make_pair(
+            "0x0000000000000000000000000000000000000003",
+            "0x0000000000000000000000000000000000000002",
+            "0x0000000000000000000000000000000000000001",
+            20_000_000,
+            27_000_000
+        ),
+        2,
+        2,
+        1
+    )]
+    #[case::update_token_entry_with_new_route(
+        make_pair(
+            "0x0000000000000000000000000000000000000003",
+            "0x0000000000000000000000000000000000000003",
+            "0x0000000000000000000000000000000000000001",
+            20_000_000,
+            27_000_000
+        ),
+        2,
+        1,
+        2
+    )]
+    #[case::update_token_entry_existing_route(
+        make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000003",
+            "0x0000000000000000000000000000000000000001",
+            20_000_000,
+            27_000_000
+        ),
+        1,
+        1,
+        1
+    )]
+    fn test_process_subsequent_routes(
+        #[case] pair: Pair,
+        #[case] route_id: usize,
+        #[case] exp_processed_tokens: usize,
+        #[case] exp_processed_routes: usize,
+    ) {
+        let mut quoter = NativeTokenQuoter::new(
+            U256::from(1000),
+            "0x0000000000000000000000000000000000000001",
+            |_| U256::zero(),
+        );
+
+        // existing route
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000003",
+            "0x0000000000000000000000000000000000000001",
+            20_000_000,
+            10_000_000,
+        );
+        let Pair(props, _) = &pair_0;
+        let tokens = vec![&props.tokens[0], &props.tokens[1]];
+        let pairs = vec![&pair_0];
+        let existing_route = Route::new(1, &tokens, &pairs);
+        quoter.process(existing_route).expect("Should not error");
+
+        //new route
+        let Pair(props, _) = &pair;
+        let tokens = vec![&props.tokens[0], &props.tokens[1]];
+        let pairs = vec![&pair];
+        let new_route = Route::new(route_id, &tokens, &pairs);
+
+        assert!(quoter.process(new_route).is_ok());
+        assert_eq!(quoter.base_amounts.len(), exp_processed_tokens);
+        assert_eq!(quoter.touched_tokens.len(), exp_processed_tokens);
+        let token_routes = quoter.base_amounts.get(&props.tokens[0].address).unwrap();
+        assert_eq!(token_routes.len(), exp_processed_routes);
+        assert_eq!(token_routes.get(&route_id), Some(&U256::from(738)))
     }
 }
