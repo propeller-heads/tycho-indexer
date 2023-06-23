@@ -4,12 +4,14 @@ use ethers::{
     providers::Middleware,
     types::{Address, Bytes, U256}, // Address is an alias of H160
 };
+use log::debug;
 use revm::primitives::{bytes, CreateScheme, EVMResult, Output, State}; // `bytes` is an external crate
 use revm::{
     primitives::{EVMError, ExecutionResult, TransactTo, B160 as rB160, U256 as rU256},
     EVM,
 };
 use std::collections::HashMap;
+
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]
@@ -89,7 +91,7 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
 ) -> Result<SimulationResult, SimulationError> {
     match evm_result {
         Ok(result_and_state) => {
-            dbg!(&result_and_state);
+            debug!("{:?}", &result_and_state);
             match result_and_state.result {
                 ExecutionResult::Success {
                     gas_used,

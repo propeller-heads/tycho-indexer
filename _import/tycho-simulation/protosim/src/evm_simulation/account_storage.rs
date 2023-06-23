@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use log::warn;
+use log::{debug, warn};
 use revm::primitives::{AccountInfo, B160, U256 as rU256};
 use std::collections::hash_map::Entry::Vacant;
 
@@ -64,7 +64,11 @@ impl AccountStorage {
                 temp_storage: HashMap::new(),
                 mocked,
             });
-            println!("Inserted a {} account {}", if mocked {"mocked"} else {"non-mocked"}, address);
+            debug!(
+                "Inserted a {} account {}",
+                if mocked { "mocked" } else { "non-mocked" },
+                address
+            );
         } else {
             warn!("Tried to init account that was already initialized");
         }

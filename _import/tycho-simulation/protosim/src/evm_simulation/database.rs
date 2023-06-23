@@ -2,7 +2,7 @@ use ethers::{
     providers::Middleware,
     types::{BlockId, BlockNumber, H160, H256, U64},
 };
-use log::info;
+use log::{debug, info};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -330,14 +330,14 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the contract is not present locally, the function queries the account info and storage value from
     ///   a node, initializes the account locally with the retrieved information, and returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        println!("Requested storage of account {} slot {}", address, index);
+        debug!("Requested storage of account {} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
             // This scope is to not make two simultaneous borrows (one occurs inside init_account)
             let borrowed_storage = self.account_storage.borrow();
             is_mocked = borrowed_storage.is_mocked_account(&address);
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
-                println!(
+                debug!(
                     "Got value locally. This is {} account. Value: {}",
                     (if is_mocked.unwrap_or(false) {
                         "mocked"
@@ -352,7 +352,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
         // At this point we know we don't have data for this storage slot.
         match is_mocked {
             Some(true) => {
-                println!("This is a mocked account for which we don't have data. Returning zero.");
+                debug!("This is a mocked account for which we don't have data. Returning zero.");
                 Ok(rU256::ZERO)
             }
             Some(false) => {
@@ -360,7 +360,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                 self.account_storage
                     .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
-                println!(
+                debug!(
                     "This is non-mocked account for which we didn't have data. Fetched value: {}",
                     storage_value
                 );
@@ -373,7 +373,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                 self.account_storage
                     .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
-                println!(
+                debug!(
                     "This is non-initialised account. Fetched value: {}",
                     storage_value
                 );
