@@ -352,7 +352,7 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F
     type Error = TokenQuoterError;
 
     fn process(&mut self, route: Route) -> Result<(), Self::Error> {
-        if route.tokens[route.tokens.len() - 1].address != self.quote_token {
+        if route.tokens.last().unwrap().address != self.quote_token {
             return Err(TokenQuoterError::InvalidRouteError(format!(
                 "Route (id={}) does not end on quote token",
                 route.id
@@ -365,7 +365,7 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F
                 self.touched_tokens.insert(route.tokens[0].address);
                 self.base_amounts
                     .entry(route.tokens[0].address)
-                    .or_insert_with(HashMap::new)
+                    .or_default()
                     .insert(route.id, price);
             }
             Err(err) => return Err(TokenQuoterError::SimulationError(err)),
