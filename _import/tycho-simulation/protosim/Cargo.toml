@@ -25,6 +25,3 @@ rstest = "0.16.0"
 [features]
 default = ["network_tests"]
 network_tests = []
-
-[profile.bench]
-debug = true
