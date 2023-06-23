@@ -12,7 +12,6 @@ use revm::{
 };
 use std::collections::HashMap;
 
-
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]
 pub enum SimulationError {
