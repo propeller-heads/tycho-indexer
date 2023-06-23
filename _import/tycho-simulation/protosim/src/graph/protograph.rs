@@ -341,8 +341,8 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> NativeTokenQuoter<F> {
 /// An error representing any quoter route processing result other than successful execution
 #[derive(Debug)]
 pub enum TokenQuoterError {
-    /// The route does not satify processing requirements
-    InvalidRouteError(String),
+    /// The route does not satify processing requirements - route id and reason is provided
+    InvalidRouteError { route_id: usize, msg: String },
     /// Simulation didn't succeed - related trade simulation error is provided
     SimulationError(TradeSimulationError),
 }
@@ -353,10 +353,10 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F
 
     fn process(&mut self, route: Route) -> Result<(), Self::Error> {
         if route.tokens.last().unwrap().address != self.quote_token {
-            return Err(TokenQuoterError::InvalidRouteError(format!(
-                "Route (id={}) does not end on quote token",
-                route.id
-            )));
+            return Err(TokenQuoterError::InvalidRouteError {
+                route_id: route.id,
+                msg: "Does not end on quote token".to_string(),
+            });
         }
 
         match route.get_amount_out(self.quote_amount) {
@@ -1622,8 +1622,9 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            TokenQuoterError::InvalidRouteError(msg) => {
-                assert_eq!(msg, "Route (id=1) does not end on quote token");
+            TokenQuoterError::InvalidRouteError { route_id, msg } => {
+                assert_eq!(route_id, 1);
+                assert_eq!(msg, "Does not end on quote token");
             }
             _ => panic!("Expected a TokenQuoterError error"),
         }
