@@ -191,10 +191,7 @@ impl From<simulation::SimulationResult> for SimulationResult {
     fn from(rust_result: simulation::SimulationResult) -> Self {
         let mut py_state_updates = HashMap::new();
         for (key, val) in rust_result.state_updates {
-            py_state_updates.insert(
-                Address::from(&key.to_fixed_bytes()).to_string(),
-                StateUpdate::from(val),
-            );
+            py_state_updates.insert(format!("{:#x}", key), StateUpdate::from(val));
         }
         SimulationResult {
             result: rust_result
