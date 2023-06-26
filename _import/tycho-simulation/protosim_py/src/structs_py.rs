@@ -56,6 +56,10 @@ impl SimulationParameters {
             gas_limit,
         }
     }
+    
+    fn __str__(&self) -> String {
+        format!("{:#?}", self)
+    }
 }
 
 impl From<SimulationParameters> for simulation::SimulationParameters {
