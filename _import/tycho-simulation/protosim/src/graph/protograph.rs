@@ -289,16 +289,37 @@ pub trait RouteProcessor {
     fn get_results(&mut self) -> Self::Output;
 }
 
+/// NativeTokenQuoter represents a token quoter that calculates aggregated token prices
+/// using a given aggregator function. It provides functionality to configure a graph by building
+/// routes from all tokens in the graph to the quote token, to processes token -> quote token routes
+/// and maintains base amounts per token address and route ID. The quoter allows quoting a specific amount
+/// in the quote token and provides the aggregated token price based on the provided aggregator
+/// function.
+///
+/// # Generic Parameters
+///
+/// - `F`: The type of the aggregator function, which accepts a `HashMap<usize, U256>`
+///   representing route IDs and base prices, and returns the aggregated token price as `U256`.
+///
+/// # Fields
+///
+/// - `quote_amount`: The amount to quote (`U256`).
+/// - `quote_token`: The address of the quote token (`H160`).
+/// - `base_amounts`: Stores base amounts per token address and route ID (`HashMap<H160, HashMap<usize, U256>>`).
+/// - `touched_tokens`: Keeps track of which base amounts were updated (`HashSet<H160>`).
+/// - `aggregator`: The aggregator function that calculates the aggregated token price (`F`).
 struct NativeTokenQuoter<F: Fn(HashMap<usize, U256>) -> U256> {
     /// How much to quote
     quote_amount: U256,
     /// The address of the token to quote - on mainnet this is WETH
     quote_token: H160,
-    /// Stores base amount per route id
+    /// Stores base amount per token address and route id
     base_amounts: HashMap<H160, HashMap<usize, U256>>,
     /// Stores which base amounts were updated
     touched_tokens: HashSet<H160>,
-    /// Logic on how to aggregate the prices
+    /// Logic on how to aggregate all route prices for a token. The function should
+    /// accept a hashmap of route id to base price (HashMap<usize, U256>) and should
+    /// return the aggregated token price as U256.
     aggregator: F,
 }
 
@@ -308,7 +329,7 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> NativeTokenQuoter<F> {
     /// ## Parameters
     /// - `quote_amount`: the quote amount as U256
     /// - `quote_token`: the quote token address as string
-    /// - `aggregator`: the aggregator function - Fn(HashMap<u64, U256>) -> U256
+    /// - `aggregator`: the aggregator function - Fn(HashMap<usize, U256>) -> U256
     ///
     /// ## Return
     /// Return a new NativeTokenQuoter struct
@@ -1451,6 +1472,20 @@ mod tests {
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
     }
 
+    /// Test for setting up a graph to be used by the token quoter.
+    ///
+    /// This test verifies the behavior of the `setup` method in the `NativeTokenQuoter` struct.
+    /// It checks whether the graph is correctly configured i.e. routes were built from all tokens
+    /// in the graph to the quote token (where possible).
+    ///
+    /// The test is parameterized with two cases:
+    ///
+    /// - `connected_pools`: Test case where the pools are connected, meaning there are routes
+    ///   between all the tokens in the pairs provided. The graph should therefore build
+    ///   token -> quote_token routes for all graph tokens.
+    /// - `unconnected_pools`: Test case where the pools are unconnected, meaning there are no
+    ///   routes between some of the tokens in the pairs provided. The graph should therefore only
+    ///   build token -> quote_token routes for tokens where such a route is possible.
     #[rstest]
     #[case::connected_pools(
         &[
