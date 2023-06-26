@@ -9,7 +9,7 @@ pub enum TradeSimulationErrorKind {
     /// Error indicating that there is no liquidity in the venue to complete the trade.
     NoLiquidity,
     /// Error indicating that an unknown error occurred during the simulation.
-    Unkown,
+    Unknown,
     /// Error indicating that the amount provided for the trade is insufficient.
     InsufficientAmount,
     // Error indicating that an arithmetic operation got an U256 to overflow

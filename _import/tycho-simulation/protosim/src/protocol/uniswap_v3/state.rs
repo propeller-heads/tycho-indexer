@@ -185,7 +185,7 @@ impl UniswapV3State {
                     }
                     _ => {
                         return Err(TradeSimulationError::new(
-                            TradeSimulationErrorKind::Unkown,
+                            TradeSimulationErrorKind::Unknown,
                             None,
                         ));
                     }

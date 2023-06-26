@@ -52,7 +52,11 @@ use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    str::FromStr,
+};
 
 use crate::{
     models::{ERC20Token, Swap},
@@ -258,7 +262,6 @@ impl RouteEntry {
 /// RouteProcessor trait
 /// This trait defines the methods that a route processor must implement in order
 /// to be used to search for trade opportunities.
-#[allow(clippy::result_unit_err)]
 pub trait RouteProcessor {
     /// The type representing the error that can occur during route processing.
     type Error;
@@ -284,6 +287,76 @@ pub trait RouteProcessor {
     ///
     /// All opportunities found during processing.
     fn get_results(&mut self) -> Self::Output;
+}
+
+/// NativeTokenQuoter represents a token quoter that calculates aggregated token prices
+/// using a given aggregator function. It provides functionality to configure a graph by building
+/// routes from all tokens in the graph to the quote token, to processes token -> quote token routes
+/// and maintains base amounts per token address and route ID. The quoter allows quoting a specific amount
+/// in the quote token and provides the aggregated token price based on the provided aggregator
+/// function.
+///
+/// # Generic Parameters
+///
+/// - `F`: The type of the aggregator function, which accepts a `HashMap<usize, U256>`
+///   representing route IDs and base prices, and returns the aggregated token price as `U256`.
+///
+/// # Fields
+///
+/// - `quote_amount`: The amount to quote (`U256`).
+/// - `quote_token`: The address of the quote token (`H160`).
+/// - `base_amounts`: Stores base amounts per token address and route ID (`HashMap<H160, HashMap<usize, U256>>`).
+/// - `touched_tokens`: Keeps track of which base amounts were updated (`HashSet<H160>`).
+/// - `aggregator`: The aggregator function that calculates the aggregated token price (`F`).
+struct NativeTokenQuoter<F: Fn(HashMap<usize, U256>) -> U256> {
+    /// How much to quote
+    quote_amount: U256,
+    /// The address of the token to quote - on mainnet this is WETH
+    quote_token: H160,
+    /// Stores base amount per token address and route id
+    base_amounts: HashMap<H160, HashMap<usize, U256>>,
+    /// Stores which base amounts were updated
+    touched_tokens: HashSet<H160>,
+    /// Logic on how to aggregate all route prices for a token. The function should
+    /// accept a hashmap of route id to base price (HashMap<usize, U256>) and should
+    /// return the aggregated token price as U256.
+    aggregator: F,
+}
+
+impl<F: Fn(HashMap<usize, U256>) -> U256> NativeTokenQuoter<F> {
+    /// Creates a new NativeTokenQuoter token struct
+    ///
+    /// ## Parameters
+    /// - `quote_amount`: the quote amount as U256
+    /// - `quote_token`: the quote token address as string
+    /// - `aggregator`: the aggregator function - Fn(HashMap<usize, U256>) -> U256
+    ///
+    /// ## Return
+    /// Return a new NativeTokenQuoter struct
+    ///
+    /// ## Panic
+    /// - Panics if the quote token address string is not in valid format
+    pub fn new(quote_amount: U256, quote_token: &str, aggregator: F) -> Self {
+        let addr = H160::from_str(quote_token).expect("Failed to parse token address");
+        NativeTokenQuoter {
+            quote_amount,
+            quote_token: addr,
+            base_amounts: HashMap::new(),
+            touched_tokens: HashSet::new(),
+            aggregator,
+        }
+    }
+
+    /// Configures the given graph by building routes from all tokens in the graph to the
+    /// quote token.
+    pub fn setup(&self, graph: &mut ProtoGraph) {
+        let tokens: Vec<_> = graph.tokens.keys().cloned().collect();
+        for token in tokens {
+            if let Err(err) = graph.build_routes(token, self.quote_token) {
+                warn!("Error contructing graph: {:?}", err);
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1372,5 +1445,96 @@ mod tests {
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
+    }
+
+    /// Test for setting up a graph to be used by the token quoter.
+    ///
+    /// This test verifies the behavior of the `setup` method in the `NativeTokenQuoter` struct.
+    /// It checks whether the graph is correctly configured i.e. routes were built from all tokens
+    /// in the graph to the quote token (where possible).
+    ///
+    /// The test is parameterized with two cases:
+    ///
+    /// - `connected_pools`: Test case where the pools are connected, meaning there are routes
+    ///   between all the tokens in the pairs provided. The graph should therefore build
+    ///   token -> quote_token routes for all graph tokens.
+    /// - `unconnected_pools`: Test case where the pools are unconnected, meaning there are no
+    ///   routes between some of the tokens in the pairs provided. The graph should therefore only
+    ///   build token -> quote_token routes for tokens where such a route is possible.
+    #[rstest]
+    #[case::connected_pools(
+        &[
+            (
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002"
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000003"
+            ),
+        ],
+        vec![
+            vec![
+                "0x0000000000000000000000000000000000000001"
+            ],
+            vec![
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000001"
+            ]
+        ]
+    )]
+    #[case::unconnected_pools(
+        &[
+            (
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000002"
+            ),
+            (
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000004",
+                "0x0000000000000000000000000000000000000003"
+            ),
+        ],
+        vec![
+            vec![
+                "0x0000000000000000000000000000000000000001"
+            ],
+        ]
+    )]
+    fn test_token_quoter_set_up(#[case] pairs: &[(&str, &str, &str)], #[case] exp: Vec<Vec<&str>>) {
+        let quoter = NativeTokenQuoter::new(
+            U256::zero(),
+            "0x0000000000000000000000000000000000000001",
+            |_| U256::zero(),
+        );
+
+        let mut g = ProtoGraph::new(4);
+        let exp: Vec<_> = exp
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|s| H160::from_str(s).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for p in pairs {
+            g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
+        }
+
+        quoter.setup(&mut g);
+
+        let mut routes = Vec::with_capacity(g.routes.len());
+        for r in g.routes {
+            let addr_route: Vec<_> = r
+                .edges
+                .iter()
+                .map(|x| *g.graph.edge_weight(*x).unwrap())
+                .collect();
+            routes.push(addr_route);
+        }
+        assert_eq!(routes, exp);
     }
 }
