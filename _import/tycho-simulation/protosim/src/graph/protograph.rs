@@ -264,7 +264,7 @@ pub trait RouteProcessor {
     type Error: std::fmt::Debug;
 
     /// The type representing all opportunities found during route processing.
-    type Output;
+    type Output: std::fmt::Debug;
 
     /// Processes the given route and updates the processor's internal result.
     ///
@@ -283,7 +283,7 @@ pub trait RouteProcessor {
     /// # Returns
     ///
     /// All opportunities found during processing.
-    fn get_results(&mut self) -> Self::Output;
+    fn get_results(&mut self) -> Vec<Self::Output>;
 }
 
 #[derive(Debug)]
@@ -1183,7 +1183,7 @@ mod tests {
 
     impl RouteProcessor for AtomicArbFinder {
         type Error = TradeSimulationError;
-        type Output = Vec<SwapSequence>;
+        type Output = SwapSequence;
 
         fn process(&mut self, route: Route) -> Result<(), Self::Error> {
             if route.price() > 1.0 {
@@ -1200,7 +1200,7 @@ mod tests {
             Ok(())
         }
 
-        fn get_results(&mut self) -> Self::Output {
+        fn get_results(&mut self) -> Vec<Self::Output> {
             take(&mut self.swap_sequence)
         }
     }
