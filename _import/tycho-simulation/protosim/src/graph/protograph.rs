@@ -338,37 +338,18 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> NativeTokenQuoter<F> {
     }
 }
 
-/// An error representing any quoter route processing result other than successful execution
-#[derive(Debug)]
-pub enum TokenQuoterError {
-    /// The route does not satify processing requirements - route id and reason is provided
-    InvalidRouteError { route_id: usize, msg: String },
-    /// Simulation didn't succeed - related trade simulation error is provided
-    SimulationError(TradeSimulationError),
-}
-
 impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F> {
     type Output = HashMap<H160, U256>;
-    type Error = TokenQuoterError;
+    type Error = TradeSimulationError;
 
     fn process(&mut self, route: Route) -> Result<(), Self::Error> {
-        if route.tokens.last().unwrap().address != self.quote_token {
-            return Err(TokenQuoterError::InvalidRouteError {
-                route_id: route.id,
-                msg: "Does not end on quote token".to_string(),
-            });
-        }
-
-        match route.get_amount_out(self.quote_amount) {
-            Ok(result) => {
-                let price = result.amount;
-                self.touched_tokens.insert(route.tokens[0].address);
-                self.base_amounts
-                    .entry(route.tokens[0].address)
-                    .or_default()
-                    .insert(route.id, price);
-            }
-            Err(err) => return Err(TokenQuoterError::SimulationError(err)),
+        if route.tokens.last().unwrap().address == self.quote_token {
+            let base_amount = route.get_amount_out(self.quote_amount)?.amount;
+            self.touched_tokens.insert(route.tokens[0].address);
+            self.base_amounts
+                .entry(route.tokens[0].address)
+                .or_default()
+                .insert(route.id, base_amount);
         }
 
         Ok(())
@@ -1617,17 +1598,7 @@ mod tests {
         let pairs = vec![&pair_0, &pair_1];
         let route = Route::new(1, &tokens, &pairs);
 
-        let result = quoter.process(route);
-
-        assert!(result.is_err());
-        let err = result.err().unwrap();
-        match err {
-            TokenQuoterError::InvalidRouteError { route_id, msg } => {
-                assert_eq!(route_id, 1);
-                assert_eq!(msg, "Does not end on quote token");
-            }
-            _ => panic!("Expected a TokenQuoterError error"),
-        }
+        assert!(quoter.process(route).is_ok());
         assert_eq!(quoter.base_amounts.len(), 0);
         assert_eq!(quoter.touched_tokens.len(), 0)
     }
