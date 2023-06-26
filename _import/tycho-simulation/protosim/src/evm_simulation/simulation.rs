@@ -104,11 +104,15 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                     result_and_state.state,
                 )),
                 ExecutionResult::Revert { output, .. } => {
-                    let revert_msg =
-                        std::str::from_utf8(output.as_ref()).unwrap_or("[can't decode output]");
-                    Err(SimulationError::TransactionError(format!(
-                        "Execution reverted: {revert_msg}"
-                    )))
+                    if let Ok(revert_msg) = std::str::from_utf8(output.as_ref()) {
+                        Err(SimulationError::TransactionError(format!(
+                            "Execution reverted: {revert_msg}",
+                        )))
+                    } else {
+                        Err(SimulationError::TransactionError(format!(
+                            "Execution reverted (raw output, couldn't decode): {:?}", output
+                        )))
+                    }
                 }
                 ExecutionResult::Halt { reason, .. } => Err(SimulationError::TransactionError(
                     format!("Execution halted: {reason:?}"),
