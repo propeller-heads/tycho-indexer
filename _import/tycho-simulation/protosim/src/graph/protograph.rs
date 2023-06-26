@@ -395,13 +395,12 @@ impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F
 /// The average price as a `U256` type
 pub fn average_prices(route_prices: HashMap<usize, U256>) -> U256 {
     let num_prices = route_prices.len();
-    let mut total = U256::zero();
-
-    for price in route_prices.values() {
-        total += *price;
-    }
 
     if num_prices > 0 {
+        let mut total = U256::zero();
+        for price in route_prices.values() {
+            total += *price;
+        }
         total / num_prices
     } else {
         U256::zero()
