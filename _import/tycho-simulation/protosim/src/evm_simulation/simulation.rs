@@ -110,7 +110,8 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                         )))
                     } else {
                         Err(SimulationError::TransactionError(format!(
-                            "Execution reverted (raw output, couldn't decode): {:?}", output
+                            "Execution reverted (raw output, couldn't decode): {:?}",
+                            output
                         )))
                     }
                 }

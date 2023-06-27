@@ -56,8 +56,8 @@ impl SimulationParameters {
             gas_limit,
         }
     }
-    
-    fn __str__(&self) -> String {
+
+    fn __repr__(&self) -> String {
         format!("{:#?}", self)
     }
 }
@@ -181,7 +181,7 @@ impl From<StateUpdate> for account_storage::StateUpdate {
 /// gas_used: int
 ///     Gas used by the transaction (already reduced by the refunded gas)
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SimulationResult {
     #[pyo3(get)]
     pub result: Vec<u8>,
@@ -189,6 +189,13 @@ pub struct SimulationResult {
     pub state_updates: HashMap<String, StateUpdate>,
     #[pyo3(get)]
     pub gas_used: u64,
+}
+
+#[pymethods]
+impl SimulationResult {
+    fn __repr__(&self) -> String {
+        format!("{:#?}", self)
+    }
 }
 
 impl From<simulation::SimulationResult> for SimulationResult {
