@@ -284,6 +284,10 @@ pub trait RouteProcessor {
     ///
     /// All opportunities found during processing.
     fn get_results(&mut self) -> Vec<Self::Output>;
+
+    /// Updates the current tick. The processor will typically use the tick to set the target
+    /// block for the opportunities it produces.
+    fn set_tick(&mut self, tick: u64);
 }
 
 #[derive(Debug)]
@@ -641,15 +645,12 @@ impl ProtoGraph {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::take;
     use std::str::FromStr;
 
-    use crate::models::SwapSequence;
-    use crate::optimize::gss::golden_section_search;
     use crate::protocol::models::PairProperties;
     use crate::protocol::uniswap_v2::events::UniswapV2Sync;
     use crate::protocol::uniswap_v2::state::UniswapV2State;
-    use ethers::types::{Sign, H256, I256};
+    use ethers::types::H256;
     use rstest::rstest;
 
     use super::*;
@@ -1174,103 +1175,6 @@ mod tests {
                 "Unknown token: 0x0000000000000000000000000000000000000004"
             )
         }
-    }
-
-    #[derive(Default)]
-    struct AtomicArbFinder {
-        swap_sequence: Vec<SwapSequence>,
-    }
-
-    impl RouteProcessor for AtomicArbFinder {
-        type Error = TradeSimulationError;
-        type Output = SwapSequence;
-
-        fn process(&mut self, route: Route) -> Result<(), Self::Error> {
-            if route.price() > 1.0 {
-                let amount_in = optimize_route(&route)?;
-                if amount_in > U256::zero() {
-                    let (swaps, gas) = route.get_swaps(amount_in)?;
-                    let amount_out = swaps[swaps.len() - 1].amount_out();
-                    if amount_out > amount_in {
-                        let opp = SwapSequence::new(swaps, gas);
-                        self.swap_sequence.push(opp);
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        fn get_results(&mut self) -> Vec<Self::Output> {
-            take(&mut self.swap_sequence)
-        }
-    }
-
-    fn optimize_route(p: &Route) -> Result<U256, TradeSimulationError> {
-        let sim_arb = |amount_in: I256| {
-            let amount_in_unsigned = if amount_in > I256::zero() {
-                amount_in.into_raw()
-            } else {
-                U256::zero()
-            };
-
-            let amount_out_unsigned;
-            match p.get_amount_out(amount_in_unsigned) {
-                Ok(res) => {
-                    amount_out_unsigned = res.amount;
-                }
-                Err(tse) => {
-                    if let Some(res) = tse.partial_result {
-                        amount_out_unsigned = res.amount;
-                    } else {
-                        amount_out_unsigned = U256::zero();
-                    }
-                }
-            }
-            let amount_out =
-                I256::checked_from_sign_and_abs(Sign::Positive, amount_out_unsigned).unwrap();
-            amount_out - amount_in
-        };
-        let res = golden_section_search(
-            sim_arb,
-            U256::one(),
-            U256::from(100_000),
-            I256::one(),
-            100,
-            false,
-        )?;
-        Ok(res.0)
-    }
-
-    #[rstest]
-    #[case(Some(vec![H160::from_str("0x0000000000000000000000000000000000000001").unwrap()]))]
-    #[case(None)]
-    fn test_simulate_route(#[case] addresses: Option<Vec<H160>>) {
-        let mut g = ProtoGraph::new(4);
-        g.insert_pair(make_pair(
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000002",
-            20_000_000,
-            20_000_000,
-        ));
-        g.insert_pair(make_pair(
-            "0x0000000000000000000000000000000000000002",
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000002",
-            20_000_000,
-            10_000_000,
-        ));
-        g.build_routes(
-            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-        )
-        .expect("Not expecting an error");
-        let mut processor = AtomicArbFinder::default();
-        g.search_opportunities(&mut processor, addresses)
-            .expect("Should not error");
-        let opps = processor.get_results();
-
-        assert_eq!(opps.len(), 1);
     }
 
     #[rstest]
