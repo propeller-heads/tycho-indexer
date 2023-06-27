@@ -24,6 +24,8 @@ serde_json = { version = "1.0.91", features = ["arbitrary_precision"] }
 serde = "1.0.152"
 clap = { version = "4.2.7", features = ["derive"] }
 reqwest = "0.11.14"
+async-trait = "0.1"
+
 
 [dev-dependencies]
 rstest = "0.16.0"
