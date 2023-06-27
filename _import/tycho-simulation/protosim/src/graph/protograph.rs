@@ -258,7 +258,6 @@ impl RouteEntry {
 /// RouteProcessor trait
 /// This trait defines the methods that a route processor must implement in order
 /// to be used to search for trade opportunities.
-#[allow(clippy::result_unit_err)]
 pub trait RouteProcessor {
     /// The type representing the error that can occur during route processing.
     type Error: std::fmt::Debug;
@@ -282,7 +281,8 @@ pub trait RouteProcessor {
     ///
     /// # Returns
     ///
-    /// All opportunities found during processing.
+    /// All opportunities found during processing, ordered by profitability if applicable
+    /// (highest to lowest).
     fn get_results(&mut self) -> Vec<Self::Output>;
 
     /// Updates the current tick. The processor will typically use the tick to set the target
