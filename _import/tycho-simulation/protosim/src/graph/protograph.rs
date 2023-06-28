@@ -83,9 +83,28 @@ impl<'a> Route<'a> {
     /// - `tokens`: A reference to a vector of references to ERC20Token structs.
     /// - `pairs`: A reference to a vector of references to Pair structs.
     /// Returns a new instance of the Route struct.
-    fn new(id: usize, tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
+    pub fn new(id: usize, tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
         Route { id, pairs, tokens }
     }
+
+    /// Retrieves all the tokens associated with the route.
+    ///
+    /// # Returns
+    ///
+    /// A slice containing references to the tokens associated with the route.
+    pub fn get_tokens(&self) -> &'a [&'a ERC20Token] {
+        self.tokens
+    }
+
+    /// Retrieves the ID associated with the route.
+    ///
+    /// # Returns
+    ///
+    /// The route ID as a usize.
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+
     /// Calculates the price of the route.
     ///
     /// Returns the price of the route as a floating point number.
@@ -99,6 +118,7 @@ impl<'a> Route<'a> {
         }
         p
     }
+
     /// Get the amount of output for a given input.
     ///
     /// ## Arguments
@@ -290,6 +310,31 @@ pub trait RouteProcessor {
     fn set_tick(&mut self, tick: u64);
 }
 
+/// Averages the given route prices
+///
+/// Given a HashMap of route_id to route_price, it calculates the average of all the route prices.
+///
+/// # Arguments
+///
+/// * `route_prices` - A hashmap of route ids to route prices
+///
+/// # Returns
+///
+/// The average price as a `U256` type
+pub fn average_prices(route_prices: HashMap<usize, U256>) -> U256 {
+    let num_prices = route_prices.len();
+
+    if num_prices > 0 {
+        let mut total = U256::zero();
+        for price in route_prices.values() {
+            total += *price;
+        }
+        total / num_prices
+    } else {
+        U256::zero()
+    }
+}
+
 #[derive(Debug)]
 pub struct UnknownTokenError {
     /// The unknown token's address
@@ -343,6 +388,33 @@ impl ProtoGraph {
             route_memberships: HashMap::new(),
             original_states: HashMap::new(),
         }
+    }
+
+    /// Retrieves all the tokens present in the graph.
+    ///
+    /// # Returns
+    ///
+    /// A vector containing the token addresses present in the graph.
+    pub fn get_tokens(&mut self) -> Vec<H160> {
+        self.tokens.keys().cloned().collect()
+    }
+
+    /// Returns all the graphs routes as pair addresses.
+    ///
+    /// # Returns
+    ///
+    /// A vector of routes given as a vector of pair addresses.
+    pub fn get_route_pairs(&self) -> Vec<Vec<H160>> {
+        let mut routes = Vec::with_capacity(self.routes.len());
+        for r in &self.routes {
+            let addr_route: Vec<_> = r
+                .edges
+                .iter()
+                .map(|x| *self.graph.edge_weight(*x).unwrap())
+                .collect();
+            routes.push(addr_route);
+        }
+        routes
     }
 
     /// Transition states using events

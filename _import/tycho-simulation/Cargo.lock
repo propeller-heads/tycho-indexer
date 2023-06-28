@@ -2608,6 +2608,7 @@ dependencies = [
 name = "prop-builder"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "clap 4.3.0",
  "ethers",
  "futures",
