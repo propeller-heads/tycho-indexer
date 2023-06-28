@@ -52,11 +52,7 @@ use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-    str::FromStr,
-};
+use std::{collections::HashMap, fmt};
 
 use crate::{
     models::{ERC20Token, Swap},
@@ -87,9 +83,28 @@ impl<'a> Route<'a> {
     /// - `tokens`: A reference to a vector of references to ERC20Token structs.
     /// - `pairs`: A reference to a vector of references to Pair structs.
     /// Returns a new instance of the Route struct.
-    fn new(id: usize, tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
+    pub fn new(id: usize, tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
         Route { id, pairs, tokens }
     }
+
+    /// Retrieves all the tokens associated with the route.
+    ///
+    /// # Returns
+    ///
+    /// A slice containing references to the tokens associated with the route.
+    pub fn get_tokens(&self) -> &'a [&'a ERC20Token] {
+        self.tokens
+    }
+
+    /// Retrieves the ID associated with the route.
+    ///
+    /// # Returns
+    ///
+    /// The route ID as a usize.
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+
     /// Calculates the price of the route.
     ///
     /// Returns the price of the route as a floating point number.
@@ -103,6 +118,7 @@ impl<'a> Route<'a> {
         }
         p
     }
+
     /// Get the amount of output for a given input.
     ///
     /// ## Arguments
@@ -289,101 +305,6 @@ pub trait RouteProcessor {
     fn get_results(&mut self) -> Self::Output;
 }
 
-/// NativeTokenQuoter represents a token quoter that calculates aggregated token prices
-/// using a given aggregator function. It provides functionality to configure a graph by building
-/// routes from all tokens in the graph to the quote token, to processes token -> quote token routes
-/// and maintains base amounts per token address and route ID. The quoter allows quoting a specific amount
-/// in the quote token and provides the aggregated token price based on the provided aggregator
-/// function.
-///
-/// # Generic Parameters
-///
-/// - `F`: The type of the aggregator function, which accepts a `HashMap<usize, U256>`
-///   representing route IDs and base prices, and returns the aggregated token price as `U256`.
-///
-/// # Fields
-///
-/// - `quote_amount`: The amount to quote (`U256`).
-/// - `quote_token`: The address of the quote token (`H160`).
-/// - `base_amounts`: Stores base amounts per token address and route ID (`HashMap<H160, HashMap<usize, U256>>`).
-/// - `touched_tokens`: Keeps track of which base amounts were updated (`HashSet<H160>`).
-/// - `aggregator`: The aggregator function that calculates the aggregated token price (`F`).
-struct NativeTokenQuoter<F: Fn(HashMap<usize, U256>) -> U256> {
-    /// How much to quote
-    quote_amount: U256,
-    /// The address of the token to quote - on mainnet this is WETH
-    quote_token: H160,
-    /// Stores base amount per token address and route id
-    base_amounts: HashMap<H160, HashMap<usize, U256>>,
-    /// Stores which base amounts were updated
-    touched_tokens: HashSet<H160>,
-    /// Logic on how to aggregate all route prices for a token. The function should
-    /// accept a hashmap of route id to base price (HashMap<usize, U256>) and should
-    /// return the aggregated token price as U256.
-    aggregator: F,
-}
-
-impl<F: Fn(HashMap<usize, U256>) -> U256> NativeTokenQuoter<F> {
-    /// Creates a new NativeTokenQuoter token struct
-    ///
-    /// ## Parameters
-    /// - `quote_amount`: the quote amount as U256
-    /// - `quote_token`: the quote token address as string
-    /// - `aggregator`: the aggregator function - Fn(HashMap<usize, U256>) -> U256
-    ///
-    /// ## Return
-    /// Return a new NativeTokenQuoter struct
-    ///
-    /// ## Panic
-    /// - Panics if the quote token address string is not in valid format
-    pub fn new(quote_amount: U256, quote_token: &str, aggregator: F) -> Self {
-        let addr = H160::from_str(quote_token).expect("Failed to parse token address");
-        NativeTokenQuoter {
-            quote_amount,
-            quote_token: addr,
-            base_amounts: HashMap::new(),
-            touched_tokens: HashSet::new(),
-            aggregator,
-        }
-    }
-
-    /// Configures the given graph by building routes from all tokens in the graph to the
-    /// quote token.
-    pub fn setup(&self, graph: &mut ProtoGraph) {
-        let tokens: Vec<_> = graph.tokens.keys().cloned().collect();
-        for token in tokens {
-            if let Err(err) = graph.build_routes(token, self.quote_token) {
-                warn!("Error contructing graph: {:?}", err);
-            }
-        }
-    }
-}
-
-impl<F: Fn(HashMap<usize, U256>) -> U256> RouteProcessor for NativeTokenQuoter<F> {
-    type Output = HashMap<H160, U256>;
-    type Error = TradeSimulationError;
-
-    fn process(&mut self, route: Route) -> Result<(), Self::Error> {
-        if route.tokens.last().unwrap().address == self.quote_token {
-            let base_amount = route.get_amount_out(self.quote_amount)?.amount;
-            self.touched_tokens.insert(route.tokens[0].address);
-            self.base_amounts
-                .entry(route.tokens[0].address)
-                .or_default()
-                .insert(route.id, base_amount);
-        }
-
-        Ok(())
-    }
-
-    fn get_results(&mut self) -> Self::Output {
-        self.base_amounts
-            .iter()
-            .map(|(token, route_prices)| (*token, (self.aggregator)(route_prices.clone())))
-            .collect()
-    }
-}
-
 /// Averages the given route prices
 ///
 /// Given a HashMap of route_id to route_price, it calculates the average of all the route prices.
@@ -462,6 +383,33 @@ impl ProtoGraph {
             route_memberships: HashMap::new(),
             original_states: HashMap::new(),
         }
+    }
+
+    /// Retrieves all the tokens present in the graph.
+    ///
+    /// # Returns
+    ///
+    /// A vector containing the token addresses present in the graph.
+    pub fn get_tokens(&mut self) -> Vec<H160> {
+        self.tokens.keys().cloned().collect()
+    }
+
+    /// Returns all the graphs routes as pair addresses.
+    ///
+    /// # Returns
+    ///
+    /// A vector of routes given as a vector of pair addresses.
+    pub fn get_route_pairs(&self) -> Vec<Vec<H160>> {
+        let mut routes = Vec::with_capacity(self.routes.len());
+        for r in &self.routes {
+            let addr_route: Vec<_> = r
+                .edges
+                .iter()
+                .map(|x| *self.graph.edge_weight(*x).unwrap())
+                .collect();
+            routes.push(addr_route);
+        }
+        routes
     }
 
     /// Transition states using events
@@ -1495,304 +1443,5 @@ mod tests {
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
-    }
-
-    /// Test for setting up a graph to be used by the token quoter.
-    ///
-    /// This test verifies the behavior of the `setup` method in the `NativeTokenQuoter` struct.
-    /// It checks whether the graph is correctly configured i.e. routes were built from all tokens
-    /// in the graph to the quote token (where possible).
-    ///
-    /// The test is parameterized with two cases:
-    ///
-    /// - `connected_pools`: Test case where the pools are connected, meaning there are routes
-    ///   between all the tokens in the pairs provided. The graph should therefore build
-    ///   token -> quote_token routes for all graph tokens.
-    /// - `unconnected_pools`: Test case where the pools are unconnected, meaning there are no
-    ///   routes between some of the tokens in the pairs provided. The graph should therefore only
-    ///   build token -> quote_token routes for tokens where such a route is possible.
-    #[rstest]
-    #[case::connected_pools(
-        &[
-            (
-                "0x0000000000000000000000000000000000000001",
-                "0x0000000000000000000000000000000000000001",
-                "0x0000000000000000000000000000000000000002"
-            ),
-            (
-                "0x0000000000000000000000000000000000000002",
-                "0x0000000000000000000000000000000000000002",
-                "0x0000000000000000000000000000000000000003"
-            ),
-        ],
-        vec![
-            vec![
-                "0x0000000000000000000000000000000000000001"
-            ],
-            vec![
-                "0x0000000000000000000000000000000000000002",
-                "0x0000000000000000000000000000000000000001"
-            ]
-        ]
-    )]
-    #[case::unconnected_pools(
-        &[
-            (
-                "0x0000000000000000000000000000000000000001",
-                "0x0000000000000000000000000000000000000001",
-                "0x0000000000000000000000000000000000000002"
-            ),
-            (
-                "0x0000000000000000000000000000000000000002",
-                "0x0000000000000000000000000000000000000004",
-                "0x0000000000000000000000000000000000000003"
-            ),
-        ],
-        vec![
-            vec![
-                "0x0000000000000000000000000000000000000001"
-            ],
-        ]
-    )]
-    fn test_token_quoter_set_up(#[case] pairs: &[(&str, &str, &str)], #[case] exp: Vec<Vec<&str>>) {
-        let quoter = NativeTokenQuoter::new(
-            U256::zero(),
-            "0x0000000000000000000000000000000000000001",
-            |_| U256::zero(),
-        );
-
-        let mut g = ProtoGraph::new(4);
-        let exp: Vec<_> = exp
-            .iter()
-            .map(|v| {
-                v.iter()
-                    .map(|s| H160::from_str(s).unwrap())
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        for p in pairs {
-            g.insert_pair(make_pair(p.0, p.1, p.2, 2000, 2000));
-        }
-
-        quoter.setup(&mut g);
-
-        let mut routes = Vec::with_capacity(g.routes.len());
-        for r in g.routes {
-            let addr_route: Vec<_> = r
-                .edges
-                .iter()
-                .map(|x| *g.graph.edge_weight(*x).unwrap())
-                .collect();
-            routes.push(addr_route);
-        }
-        assert_eq!(routes, exp);
-    }
-
-    #[test]
-    fn test_process_first_quoter_route() {
-        let mut quoter = NativeTokenQuoter::new(
-            U256::from(1000),
-            "0x0000000000000000000000000000000000000001",
-            |_| U256::zero(),
-        );
-
-        let pair_0 = make_pair(
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000003",
-            "0x0000000000000000000000000000000000000002",
-            20_000_000,
-            10_000_000,
-        );
-        let pair_1 = make_pair(
-            "0x0000000000000000000000000000000000000002",
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000002",
-            20_000_000,
-            25_000_000,
-        );
-        let Pair(props0, _) = &pair_0;
-        let Pair(props1, _) = &pair_1;
-        let tokens = vec![&props0.tokens[0], &props0.tokens[1], &props1.tokens[0]];
-        let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(1, &tokens, &pairs);
-
-        assert!(quoter.process(route).is_ok());
-        assert_eq!(quoter.base_amounts.len(), 1);
-        assert_eq!(quoter.touched_tokens.len(), 1);
-        assert_eq!(
-            quoter
-                .base_amounts
-                .get(&props0.tokens[0].address)
-                .unwrap()
-                .len(),
-            1
-        );
-    }
-
-    #[test]
-    fn test_process_invalid_quoter_route() {
-        let mut quoter = NativeTokenQuoter::new(
-            U256::from(1000),
-            "0x0000000000000000000000000000000000000001",
-            |_| U256::zero(),
-        );
-
-        // route is considered invalid as it does not end with our quote token
-        let pair_0 = make_pair(
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000002",
-            20_000_000,
-            10_000_000,
-        );
-        let pair_1 = make_pair(
-            "0x0000000000000000000000000000000000000002",
-            "0x0000000000000000000000000000000000000003",
-            "0x0000000000000000000000000000000000000002",
-            20_000_000,
-            25_000_000,
-        );
-        let Pair(props0, _) = &pair_0;
-        let Pair(props1, _) = &pair_1;
-        let tokens = vec![&props0.tokens[0], &props0.tokens[1], &props1.tokens[0]];
-        let pairs = vec![&pair_0, &pair_1];
-        let route = Route::new(1, &tokens, &pairs);
-
-        assert!(quoter.process(route).is_ok());
-        assert_eq!(quoter.base_amounts.len(), 0);
-        assert_eq!(quoter.touched_tokens.len(), 0)
-    }
-
-    #[rstest]
-    #[case::add_new_token_entry(
-        make_pair(
-            "0x0000000000000000000000000000000000000003",
-            "0x0000000000000000000000000000000000000002",
-            "0x0000000000000000000000000000000000000001",
-            20_000_000,
-            27_000_000
-        ),
-        2,
-        2,
-        1
-    )]
-    #[case::update_token_entry_with_new_route(
-        make_pair(
-            "0x0000000000000000000000000000000000000003",
-            "0x0000000000000000000000000000000000000003",
-            "0x0000000000000000000000000000000000000001",
-            20_000_000,
-            27_000_000
-        ),
-        2,
-        1,
-        2
-    )]
-    #[case::update_token_entry_existing_route(
-        make_pair(
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000003",
-            "0x0000000000000000000000000000000000000001",
-            20_000_000,
-            27_000_000
-        ),
-        1,
-        1,
-        1
-    )]
-    fn test_process_subsequent_quoter_routes(
-        #[case] pair: Pair,
-        #[case] route_id: usize,
-        #[case] exp_processed_tokens: usize,
-        #[case] exp_processed_routes: usize,
-    ) {
-        let mut quoter = NativeTokenQuoter::new(
-            U256::from(1000),
-            "0x0000000000000000000000000000000000000001",
-            |_| U256::zero(),
-        );
-
-        // existing route
-        let pair_0 = make_pair(
-            "0x0000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000003",
-            "0x0000000000000000000000000000000000000001",
-            20_000_000,
-            10_000_000,
-        );
-        let Pair(props, _) = &pair_0;
-        let tokens = vec![&props.tokens[0], &props.tokens[1]];
-        let pairs = vec![&pair_0];
-        let existing_route = Route::new(1, &tokens, &pairs);
-        quoter.process(existing_route).expect("Should not error");
-
-        //new route
-        let Pair(props, _) = &pair;
-        let tokens = vec![&props.tokens[0], &props.tokens[1]];
-        let pairs = vec![&pair];
-        let new_route = Route::new(route_id, &tokens, &pairs);
-
-        assert!(quoter.process(new_route).is_ok());
-        assert_eq!(quoter.base_amounts.len(), exp_processed_tokens);
-        assert_eq!(quoter.touched_tokens.len(), exp_processed_tokens);
-        let token_routes = quoter.base_amounts.get(&props.tokens[0].address).unwrap();
-        assert_eq!(token_routes.len(), exp_processed_routes);
-        assert_eq!(token_routes.get(&route_id), Some(&U256::from(738)))
-    }
-
-    #[test]
-    fn test_get_quoter_results() {
-        let mut quoter = NativeTokenQuoter::new(
-            U256::from(1000),
-            "0x0000000000000000000000000000000000000001",
-            |route_prices: HashMap<usize, U256>| {
-                let mut sum = U256::zero();
-                let count = U256::from(route_prices.len());
-                for price in route_prices.values() {
-                    sum += *price;
-                }
-                sum / count
-            },
-        );
-        let tokens = [
-            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-            H160::from_str("0x0000000000000000000000000000000000000002").unwrap(),
-        ];
-        for (idx, token) in tokens.iter().enumerate() {
-            quoter
-                .base_amounts
-                .entry(*token)
-                .or_insert_with(HashMap::new)
-                .insert(idx, U256::from(100 * (idx + 1)));
-        }
-        quoter.touched_tokens.extend(tokens.iter());
-
-        let results = quoter.get_results();
-
-        assert_eq!(results.len(), 2);
-        assert_eq!(results.get(&tokens[0]).cloned(), Some(U256::from(150)));
-        assert_eq!(results.get(&tokens[2]).cloned(), Some(U256::from(300)));
-    }
-
-    #[test]
-    fn test_average_prices() {
-        let mut route_prices: HashMap<usize, U256> = HashMap::new();
-        route_prices.insert(0, U256::from(100));
-        route_prices.insert(1, U256::from(200));
-        route_prices.insert(2, U256::from(300));
-
-        let average = average_prices(route_prices.clone());
-
-        assert_eq!(average, U256::from(200));
-    }
-
-    #[test]
-    fn test_average_prices_empty() {
-        let route_prices: HashMap<usize, U256> = HashMap::new();
-
-        let average = average_prices(route_prices);
-
-        assert_eq!(average, U256::zero());
     }
 }
