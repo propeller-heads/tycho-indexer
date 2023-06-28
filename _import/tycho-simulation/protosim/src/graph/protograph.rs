@@ -305,6 +305,31 @@ pub trait RouteProcessor {
     fn get_results(&mut self) -> Self::Output;
 }
 
+/// Averages the given route prices
+///
+/// Given a HashMap of route_id to route_price, it calculates the average of all the route prices.
+///
+/// # Arguments
+///
+/// * `route_prices` - A hashmap of route ids to route prices
+///
+/// # Returns
+///
+/// The average price as a `U256` type
+pub fn average_prices(route_prices: HashMap<usize, U256>) -> U256 {
+    let num_prices = route_prices.len();
+
+    if num_prices > 0 {
+        let mut total = U256::zero();
+        for price in route_prices.values() {
+            total += *price;
+        }
+        total / num_prices
+    } else {
+        U256::zero()
+    }
+}
+
 #[derive(Debug)]
 pub struct UnknownTokenError {
     /// The unknown token's address
