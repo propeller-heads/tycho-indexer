@@ -285,6 +285,14 @@ pub trait RouteProcessor {
     /// The type representing all opportunities found during route processing.
     type Output: std::fmt::Debug;
 
+    /// Configures the given graph by building all routes the route processor will use.
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - a mutable reference to the graph to configure
+    /// * `tokens` - a vec of tokens considered as acceptable start/end tokens for routes to build
+    fn set_up(&self, graph: &mut ProtoGraph, tokens: &[H160]);
+
     /// Processes the given route and updates the processor's internal result.
     ///
     /// # Arguments
