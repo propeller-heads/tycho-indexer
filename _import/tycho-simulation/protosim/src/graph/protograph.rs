@@ -285,6 +285,14 @@ pub trait RouteProcessor {
     /// The type representing all opportunities found during route processing.
     type Output: std::fmt::Debug;
 
+    /// Configures the given graph by building all routes the route processor will use.
+    ///
+    /// # Arguments
+    ///
+    /// * `graph` - a mutable reference to the graph to configure
+    /// * `tokens` - a vec of tokens considered as acceptable start/end tokens for routes to build
+    fn set_up(&self, graph: &mut ProtoGraph, tokens: &[H160]);
+
     /// Processes the given route and updates the processor's internal result.
     ///
     /// # Arguments
@@ -308,31 +316,6 @@ pub trait RouteProcessor {
     /// Updates the current tick. The processor will typically use the tick to set the target
     /// block for the opportunities it produces.
     fn set_tick(&mut self, tick: u64);
-}
-
-/// Averages the given route prices
-///
-/// Given a HashMap of route_id to route_price, it calculates the average of all the route prices.
-///
-/// # Arguments
-///
-/// * `route_prices` - A hashmap of route ids to route prices
-///
-/// # Returns
-///
-/// The average price as a `U256` type
-pub fn average_prices(route_prices: HashMap<usize, U256>) -> U256 {
-    let num_prices = route_prices.len();
-
-    if num_prices > 0 {
-        let mut total = U256::zero();
-        for price in route_prices.values() {
-            total += *price;
-        }
-        total / num_prices
-    } else {
-        U256::zero()
-    }
 }
 
 #[derive(Debug)]
