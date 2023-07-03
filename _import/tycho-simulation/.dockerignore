@@ -1,4 +1,7 @@
-/.vscode/
-/target
-/.github/
-/.vscode/
+.vscode/
+target
+*/target/
+.github
+venv
+*/venv
+.idea

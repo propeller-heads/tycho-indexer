@@ -2,7 +2,7 @@ use ethers::{
     providers::Middleware,
     types::{BlockId, BlockNumber, H160, H256, U64},
 };
-use log::info;
+use log::{debug, info};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -15,38 +15,6 @@ use revm::{
 };
 
 use super::account_storage::{AccountStorage, StateUpdate};
-
-/// Short-lived object that wraps an actual SimulationDB and can be passed to REVM which takes
-/// ownership of it.
-pub struct SharedSimulationDB<'a, DB: DatabaseRef> {
-    db: &'a DB,
-}
-
-impl<'a, DB: DatabaseRef> SharedSimulationDB<'a, DB> {
-    pub fn new(db: &'a DB) -> Self {
-        Self { db }
-    }
-}
-
-impl<'a, DB: DatabaseRef> DatabaseRef for SharedSimulationDB<'a, DB> {
-    type Error = DB::Error;
-
-    fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        DatabaseRef::basic(self.db, address)
-    }
-
-    fn code_by_hash(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        DatabaseRef::code_by_hash(self.db, code_hash)
-    }
-
-    fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        DatabaseRef::storage(self.db, address, index)
-    }
-
-    fn block_hash(&self, number: rU256) -> Result<B256, Self::Error> {
-        DatabaseRef::block_hash(self.db, number)
-    }
-}
 
 /// A wrapper over an actual SimulationDB that allows overriding specific storage slots
 pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
@@ -362,23 +330,40 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the contract is not present locally, the function queries the account info and storage value from
     ///   a node, initializes the account locally with the retrieved information, and returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
+        debug!("Requested storage of account {} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
             // This scope is to not make two simultaneous borrows (one occurs inside init_account)
             let borrowed_storage = self.account_storage.borrow();
+            is_mocked = borrowed_storage.is_mocked_account(&address);
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
+                debug!(
+                    "Got value locally. This is {} account. Value: {}",
+                    (if is_mocked.unwrap_or(false) {
+                        "mocked"
+                    } else {
+                        "non-mocked"
+                    }),
+                    storage_value
+                );
                 return Ok(storage_value);
             }
-            is_mocked = borrowed_storage.is_mocked_account(&address);
         }
         // At this point we know we don't have data for this storage slot.
         match is_mocked {
-            Some(true) => Ok(rU256::ZERO),
+            Some(true) => {
+                debug!("This is a mocked account for which we don't have data. Returning zero.");
+                Ok(rU256::ZERO)
+            }
             Some(false) => {
                 let storage_value = self.query_storage(address, index)?;
                 self.account_storage
                     .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
+                debug!(
+                    "This is non-mocked account for which we didn't have data. Fetched value: {}",
+                    storage_value
+                );
                 Ok(storage_value)
             }
             None => {
@@ -388,6 +373,10 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                 self.account_storage
                     .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
+                debug!(
+                    "This is non-initialised account. Fetched value: {}",
+                    storage_value
+                );
                 Ok(storage_value)
             }
         }
@@ -634,7 +623,7 @@ mod tests {
         mock_sim_db.init_account(
             address2,
             AccountInfo::default(),
-            Some(original_storage.clone()),
+            Some(original_storage),
             false,
         );
 

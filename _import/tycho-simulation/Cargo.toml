@@ -30,3 +30,6 @@ async-trait = "0.1"
 [dev-dependencies]
 rstest = "0.16.0"
 http = "0.2.8"
+
+[profile.bench]
+debug = true

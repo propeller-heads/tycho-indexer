@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.17"
+env_logger = "0.10.0"
 ethers = "^2.0.2"
 indexmap = { version = "1.7", features = ["std"] }
 itertools = "0.10.5"
@@ -25,6 +26,3 @@ rstest = "0.16.0"
 [features]
 default = ["network_tests"]
 network_tests = []
-
-[profile.bench]
-debug = true

@@ -7,7 +7,7 @@
 `evm_simulation` module from `protosim` crate implements simulating on-chain transactions. This crate - `protosim_py` - wraps `evm_simulation` in order to allow using it in Python.
 
 ```
- Rust                                                                   Python
+ Rust                                                                  Python
 ┌────────────────────────────────────────────────────────────────┐    ┌────────────────────────────┐
 │                                                                │    │                            │
 │  protosim::evm_simulation             protosim_py              │    │   protosim_py              │
@@ -34,15 +34,30 @@ _Editable chart [here](https://asciiflow.com/#/share/eJyrVspLzE1VslIqKMovyS%2FOz
 
 ## Building and installation
 
+### Build in `manylinux` docker image
+
+This way is recommended (necessary?) if you want to install the resulting wheel in a `defibot` Docker image.
+
+To build a wheel, go to **repo root** and run:
+```shell
+sudo ./protosim_py/build_protosim_wheel.sh
+```
+A wheel file will be created in `protosim_py/target/wheels`. 
+
+In the script file, there's a commented out line for pushing the wheel to S3. Execute it if you want to publish the wheel for defibot to use it. Be careful - this file will be immediately used by defibot CI!
+
+
+### Build locally
+
 The crate should be built using [maturin](https://www.maturin.rs/) tool.
 
-### Prepare Python environment for building
+#### Prepare Python environment for building
 
 1. Create a Python virtual environment (e.g. with `conda create --name myenv`).
 2. Activate your Python virtual environment (e.g. with `conda activate myenv`)
 3. Install `maturin` in your venv: `pip install maturin`
 
-### Build and install in development mode 
+#### Build and install in development mode 
 (faster but less optimized, according to maturin docs)
 
 This will install the Python module to the same environment that you use for building.
@@ -51,15 +66,14 @@ This will install the Python module to the same environment that you use for bui
 2. Run `maturin develop` in the crate root folder
 3. Enjoy. Try running `python ./protosim_demo.py`
 
-### Build wheel and install it
+#### Build wheel and install it
 You don't need `maturin` to _use_ this crate in Python; it is only needed to _build_ it. You can install a pre-built wheel in a different target environment.
 
 1. Activate your build Python venv where `maturin` is installed
 2. Run `maturin build --release` in the crate root folder (`--release` flag is optional; it turns on optimizations).
 
-   This will create a wheel (`.whl`) file in `<repo root>/target/wheels/` folder*, named accordingly to the architecture it supports, e.g. `protosim_py-0.1.0-cp39-cp39-manylinux_2_34_x86_64.whl`.
+   This will create a wheel (`.whl`) file in `protosim_py/target/wheels/` folder, named accordingly to the architecture it supports, e.g. `protosim_py-0.1.0-cp39-cp39-manylinux_2_34_x86_64.whl`.
 
-   *(Note that repo root is one level above the crate root.)
 3. Deactivate your build Python environment. Activate your target environment.
 4. Run `pip install <path_to_wheel_file>`
 5. Enjoy.

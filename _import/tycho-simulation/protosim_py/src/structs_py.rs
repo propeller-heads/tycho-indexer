@@ -1,8 +1,7 @@
 use ethers::types::{Address, Bytes, H256, U256};
 use num_bigint::BigUint;
-use pyo3;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Bytecode, B256, U256 as rU256};
+use revm::primitives::{Bytecode, U256 as rU256};
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -56,6 +55,10 @@ impl SimulationParameters {
             overrides,
             gas_limit,
         }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:#?}", self)
     }
 }
 
@@ -178,7 +181,7 @@ impl From<StateUpdate> for account_storage::StateUpdate {
 /// gas_used: int
 ///     Gas used by the transaction (already reduced by the refunded gas)
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SimulationResult {
     #[pyo3(get)]
     pub result: Vec<u8>,
@@ -188,14 +191,18 @@ pub struct SimulationResult {
     pub gas_used: u64,
 }
 
+#[pymethods]
+impl SimulationResult {
+    fn __repr__(&self) -> String {
+        format!("{:#?}", self)
+    }
+}
+
 impl From<simulation::SimulationResult> for SimulationResult {
     fn from(rust_result: simulation::SimulationResult) -> Self {
         let mut py_state_updates = HashMap::new();
         for (key, val) in rust_result.state_updates {
-            py_state_updates.insert(
-                Address::from(&key.to_fixed_bytes()).to_string(),
-                StateUpdate::from(val),
-            );
+            py_state_updates.insert(format!("{:#x}", key), StateUpdate::from(val));
         }
         SimulationResult {
             result: rust_result
@@ -228,20 +235,17 @@ pub struct AccountInfo {
     #[pyo3(get, set)]
     pub nonce: u64,
     #[pyo3(get, set)]
-    pub code_hash: String,
-    #[pyo3(get, set)]
     pub code: Option<Vec<u8>>,
 }
 
 #[pymethods]
 impl AccountInfo {
     #[new]
-    #[pyo3(signature = (balance, nonce, code_hash, code=None))]
-    fn new(balance: BigUint, nonce: u64, code_hash: String, code: Option<Vec<u8>>) -> Self {
+    #[pyo3(signature = (balance, nonce, code=None))]
+    fn new(balance: BigUint, nonce: u64, code: Option<Vec<u8>>) -> Self {
         Self {
             balance,
             nonce,
-            code_hash,
             code,
         }
     }
@@ -249,17 +253,18 @@ impl AccountInfo {
 
 impl From<AccountInfo> for revm::primitives::AccountInfo {
     fn from(py_info: AccountInfo) -> Self {
-        let mut code = None;
+        let code;
         if let Some(c) = py_info.code {
-            code = Some(Bytecode::new_raw(Bytes::from(c).0));
+            code = Bytecode::new_raw(Bytes::from(c).0);
+        } else {
+            code = Bytecode::new()
         }
 
-        revm::primitives::AccountInfo {
-            balance: rU256::from_str(&py_info.balance.to_string()).unwrap(),
-            nonce: py_info.nonce,
-            code_hash: B256::from_str(&py_info.code_hash).unwrap(),
+        revm::primitives::AccountInfo::new(
+            rU256::from_str(&py_info.balance.to_string()).unwrap(),
+            py_info.nonce,
             code,
-        }
+        )
     }
 }
 
