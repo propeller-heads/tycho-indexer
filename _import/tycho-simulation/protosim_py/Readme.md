@@ -53,7 +53,7 @@ The crate should be built using [maturin](https://www.maturin.rs/) tool.
 
 #### Prepare Python environment for building
 
-1. Create a Python virtual environment (e.g. with `conda create --name myenv python=3.9.12 `).
+1. Create a Python virtual environment (e.g. with `conda create --name myenv python=3.9`).
 2. Activate your Python virtual environment (e.g. with `conda activate myenv`)
 3. Install `maturin` in your venv: `pip install maturin`
 
