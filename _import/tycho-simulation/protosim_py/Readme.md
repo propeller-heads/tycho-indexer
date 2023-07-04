@@ -82,7 +82,10 @@ You don't need `maturin` to _use_ this crate in Python; it is only needed to _bu
 
 ### See also
 
-Maturin documentation on building: https://www.maturin.rs/distribution.html
+- Readme in `protosim::evm_simulation`
+- Maturin documentation on building: https://www.maturin.rs/distribution.html
+- Documentation on using this module to implement a `PoolState` in
+  defibot: https://github.com/propeller-heads/defibot/blob/master/defibot/swaps/protosim/Readme.md
 
 ### Troubleshooting
 
