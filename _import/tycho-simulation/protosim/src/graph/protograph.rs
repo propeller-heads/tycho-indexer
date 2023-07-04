@@ -598,7 +598,6 @@ impl ProtoGraph {
             Some(self.n_hops),
         );
 
-        info!("Searching routes...");
         for route in edge_routes {
             // insert route only if it does not yet exist
             let entry = RouteEntry::new(start_node_idx, route);
@@ -607,7 +606,6 @@ impl ProtoGraph {
             };
         }
 
-        info!("Building membership cache...");
         for pos in 0..self.routes.len() {
             // build membership cache
             for edge_idx in self.routes[pos].edges.iter() {
