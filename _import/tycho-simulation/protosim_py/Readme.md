@@ -80,8 +80,19 @@ You don't need `maturin` to _use_ this crate in Python; it is only needed to _bu
 4. Run `pip install <path_to_wheel_file>`
 5. Enjoy.
 
-> **Warning**
-> Building on macOS is not tested yet!
-
 ### See also
+
 Maturin documentation on building: https://www.maturin.rs/distribution.html
+
+### Troubleshooting
+
+> When I `pip install` the wheel, I get `ERROR: <wheel_name>.whl is not a supported wheel on this platform`.
+
+1. Make sure you used the same Python version in your build environment as the one in the environment you're installing
+   the wheel into.
+2. Check
+   out [this SO answer](https://stackoverflow.com/questions/65888506/error-wheel-whl-is-not-a-supported-wheel-on-this-platform/68295012#68295012)
+   and try renaming the wheel.
+3. On macOS, Try building with MACOSX_DEPLOYMENT_TARGET environment variable set.
+   See [here](https://www.maturin.rs/environment-variables.html#other-environment-variables)
+   and [here](https://www.maturin.rs/migration.html?highlight=MACOSX_DEPLOYMENT_TARGET#macos-deployment-target-version-defaults-what-rustc-supports).
