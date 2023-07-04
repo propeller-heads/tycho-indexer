@@ -42,7 +42,7 @@ An overriden account may be set as mocked or non-mocked.
 
 For non-mocked accounts (`mocked=false`), missing storage slots will be queried from a node.
 
-For mocked accounts (`mocked=true`), nothing will be queried from a node. Missing slots have value of 0: if a certain storage slot is needed during simulation, but has not been set in account's permanent storage (see previous section) nor in simulation-time overrides (see next section), then the value of such slot will be 0.
+For mocked accounts (`mocked=true`), nothing will be queried from a node. Missing slots have value of 0: if a certain storage slot is needed during simulation, but has neither been set in the account's permanent storage (see the previous section) nor in the simulation-time overrides (see the next section), then the value of such slot will be 0.
 
 If you are overriding contract code, you most probably want to set the account to be mocked. That's because overridden code might use different storage slots than the code on-chain, so querying a node for storage of such account wouldn't make sense.
 
