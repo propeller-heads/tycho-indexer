@@ -41,8 +41,7 @@ pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 impl SimulationEngine {
     #[new]
     fn new(block: Option<BlockHeader>) -> Self {
-        let mut a = None;
-        if let Some(b) = block{a=Some(protosim::evm_simulation::database::BlockHeader::from(b))}
+        let a = block.map(|b| protosim::evm_simulation::database::BlockHeader::from(b));
         let db = SimulationDB::new(get_client(), get_runtime(), a);
         let engine = simulation::SimulationEngine { state: db };
         Self(engine)
