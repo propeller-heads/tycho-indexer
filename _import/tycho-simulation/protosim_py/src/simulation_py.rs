@@ -34,14 +34,20 @@ fn get_client() -> Arc<Provider<Http>> {
 /// storage. See the methods.
 ///
 /// *Currently the connection to a node is hardcoded. This will be changed in the future.
+///
+/// Attributes
+/// ----------
+/// block: Optional[BlockHeader]
+///     Optional BlockHeader. If None, current block will be used.
 #[pyclass]
 pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 
 #[pymethods]
 impl SimulationEngine {
     #[new]
-    fn new() -> Self {
-        let db = SimulationDB::new(get_client(), get_runtime(), None);
+    fn new(block: Option<BlockHeader>) -> Self {
+        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
+        let db = SimulationDB::new(get_client(), get_runtime(), block);
         let engine = simulation::SimulationEngine { state: db };
         Self(engine)
     }
