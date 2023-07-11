@@ -268,6 +268,16 @@ impl From<AccountInfo> for revm::primitives::AccountInfo {
     }
 }
 
+/// Block header
+///
+/// Attributes
+/// ----------
+/// number: int
+///     block number
+/// hash: str
+///     block hash
+/// timestamp: int
+///     block timestamp
 #[pyclass]
 #[derive(Clone)]
 pub struct BlockHeader {
