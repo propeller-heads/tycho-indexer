@@ -28,11 +28,17 @@ use std::fmt::Debug;
 #[pyclass(text_signature = "(caller, to, data, value, overrides=None, gas_limit=None)")]
 #[derive(Clone, Debug)]
 pub struct SimulationParameters {
+    #[pyo3(get)]
     pub caller: String,
+    #[pyo3(get)]
     pub to: String,
+    #[pyo3(get)]
     pub data: Vec<u8>,
+    #[pyo3(get)]
     pub value: BigUint,
+    #[pyo3(get)]
     pub overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
+    #[pyo3(get)]
     pub gas_limit: Option<u64>,
 }
 
