@@ -39,16 +39,21 @@ fn get_client() -> Arc<Provider<Http>> {
 /// ----------
 /// block: Optional[BlockHeader]
 ///     Optional BlockHeader. If None, current block will be used.
+/// trace: Optional[bool]
+///     If set to true, simulations will print the entire execution trace.
 #[pyclass]
 pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 
 #[pymethods]
 impl SimulationEngine {
     #[new]
-    fn new(block: Option<BlockHeader>) -> Self {
+    fn new(block: Option<BlockHeader>, trace: Option<bool>) -> Self {
         let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
         let db = SimulationDB::new(get_client(), get_runtime(), block);
-        let engine = simulation::SimulationEngine { state: db };
+        let engine = simulation::SimulationEngine {
+            state: db,
+            trace: trace.unwrap_or(false),
+        };
         Self(engine)
     }
 

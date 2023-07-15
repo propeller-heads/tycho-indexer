@@ -5,7 +5,10 @@ use ethers::{
     types::{Address, Bytes, U256}, // Address is an alias of H160
 };
 use log::debug;
-use revm::primitives::{bytes, CreateScheme, EVMResult, Output, State}; // `bytes` is an external crate
+use revm::{
+    inspectors::CustomPrintTracer,
+    primitives::{bytes, CreateScheme, EVMResult, Output, State},
+}; // `bytes` is an external crate
 use revm::{
     primitives::{EVMError, ExecutionResult, TransactTo, B160 as rB160, U256 as rU256},
     EVM,
@@ -34,6 +37,7 @@ pub struct SimulationResult {
 #[derive(Debug)]
 pub struct SimulationEngine<M: Middleware> {
     pub state: database::SimulationDB<M>,
+    pub trace: bool,
 }
 
 impl<M: Middleware> SimulationEngine<M> {
@@ -62,8 +66,14 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
         vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(u64::MAX);
+        debug!("Starting simulation with tx parameters: {:#?}", vm.env.tx);
 
-        let evm_result = vm.transact_ref();
+        let evm_result = if self.trace {
+            let tracer = CustomPrintTracer::default();
+            vm.inspect_ref(tracer)
+        } else {
+            vm.transact_ref()
+        };
 
         interpret_evm_result(evm_result)
     }
@@ -546,7 +556,10 @@ mod tests {
             overrides: None,
             gas_limit: None,
         };
-        let eng = SimulationEngine { state };
+        let eng = SimulationEngine {
+            state,
+            trace: false,
+        };
 
         let result = eng.simulate(&sim_params);
 
@@ -685,7 +698,10 @@ mod tests {
             gas_limit: None,
         };
 
-        let eng = SimulationEngine { state };
+        let eng = SimulationEngine {
+            state,
+            trace: false,
+        };
 
         // println!("Deploying a mocked contract!");
         // let deployment_result = eng.simulate(&deployment_params);

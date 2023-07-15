@@ -181,6 +181,7 @@ impl<M: Middleware> SimulationDB<M> {
         &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as DatabaseRef>::Error> {
+        debug!("Querying account info for {:x?}", address);
         let fut = async {
             tokio::join!(
                 self.client.get_balance(H160(address.0), None),
@@ -330,7 +331,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the contract is not present locally, the function queries the account info and storage value from
     ///   a node, initializes the account locally with the retrieved information, and returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        debug!("Requested storage of account {} slot {}", address, index);
+        debug!("Requested storage of account {:x?} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
             // This scope is to not make two simultaneous borrows (one occurs inside init_account)
@@ -338,7 +339,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             is_mocked = borrowed_storage.is_mocked_account(&address);
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
                 debug!(
-                    "Got value locally. This is {} account. Value: {}",
+                    "Got value locally. This is a {} account. Value: {}",
                     (if is_mocked.unwrap_or(false) {
                         "mocked"
                     } else {

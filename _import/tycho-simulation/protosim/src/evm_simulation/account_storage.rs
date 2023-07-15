@@ -65,7 +65,7 @@ impl AccountStorage {
                 mocked,
             });
             debug!(
-                "Inserted a {} account {}",
+                "Inserted a {} account {:x?}",
                 if mocked { "mocked" } else { "non-mocked" },
                 address
             );
@@ -102,7 +102,7 @@ impl AccountStorage {
             }
         } else {
             warn!(
-                "Tried to update account {:?} that was not initialized",
+                "Tried to update account {:x?} that was not initialized",
                 address
             );
         }
@@ -152,7 +152,7 @@ impl AccountStorage {
             acc.temp_storage.insert(index, value);
         } else {
             warn!(
-                "Trying to set storage on unitialized account {:?}.",
+                "Trying to set storage on unitialized account {:x?}.",
                 address
             );
         }
