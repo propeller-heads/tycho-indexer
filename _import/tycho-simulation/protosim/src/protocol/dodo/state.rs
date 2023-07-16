@@ -42,6 +42,8 @@ impl<M: Middleware> DodoPoolState<M> {
             value: U256::zero(),
             overrides: None,
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
         let engine = self.engine.borrow();
         let simulation_result = engine.simulate(&params).unwrap();
@@ -100,7 +102,7 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
         &self,
         amount_in: ethers::types::U256,
         token_in: &crate::models::ERC20Token,
-        token_out: &crate::models::ERC20Token,
+        _token_out: &crate::models::ERC20Token,
     ) -> Result<
         crate::protocol::models::GetAmountOutResult,
         crate::protocol::errors::TradeSimulationError,
@@ -120,6 +122,8 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
             value: U256::zero(),
             overrides: None,
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
         let engine = self.engine.borrow();
         let simulation_result = engine.simulate(&params).unwrap();

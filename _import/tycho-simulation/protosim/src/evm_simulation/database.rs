@@ -296,7 +296,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     }
 
     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-        panic!("Not implemented")
+        panic!("Code by hash is not implemented")
     }
 
     /// Retrieves the storage value at the specified address and index.
@@ -384,7 +384,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     }
 
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
-        panic!("Not implemented")
+        Ok(B256::default())
     }
 }
 

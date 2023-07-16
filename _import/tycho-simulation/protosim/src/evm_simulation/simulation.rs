@@ -61,11 +61,13 @@ impl<M: Middleware> SimulationEngine<M> {
         };
 
         vm.database(db_ref);
+        vm.env.block.number = params.revm_block_number();
+        vm.env.block.timestamp = params.revm_timestamp();
         vm.env.tx.caller = params.revm_caller();
         vm.env.tx.transact_to = params.revm_to();
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
-        vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(u64::MAX);
+        vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(8_000_000);
         debug!("Starting simulation with tx parameters: {:#?}", vm.env.tx);
 
         let evm_result = if self.trace {
@@ -99,37 +101,34 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
     evm_result: EVMResult<DBError>,
 ) -> Result<SimulationResult, SimulationError> {
     match evm_result {
-        Ok(result_and_state) => {
-            debug!("{:?}", &result_and_state);
-            match result_and_state.result {
-                ExecutionResult::Success {
-                    gas_used,
-                    gas_refunded,
-                    output,
-                    ..
-                } => Ok(interpret_evm_success(
-                    gas_used,
-                    gas_refunded,
-                    output,
-                    result_and_state.state,
-                )),
-                ExecutionResult::Revert { output, gas_used } => {
-                    if let Ok(revert_msg) = std::str::from_utf8(output.as_ref()) {
-                        Err(SimulationError::TransactionError(format!(
-                            "Execution reverted after {gas_used} gas: {revert_msg}",
-                        )))
-                    } else {
-                        Err(SimulationError::TransactionError(format!(
-                            "Execution reverted after {gas_used} gas (raw output, couldn't decode): {:?}",
-                            output
-                        )))
-                    }
+        Ok(result_and_state) => match result_and_state.result {
+            ExecutionResult::Success {
+                gas_used,
+                gas_refunded,
+                output,
+                ..
+            } => Ok(interpret_evm_success(
+                gas_used,
+                gas_refunded,
+                output,
+                result_and_state.state,
+            )),
+            ExecutionResult::Revert { output, gas_used } => {
+                if let Ok(revert_msg) = std::str::from_utf8(output.as_ref()) {
+                    Err(SimulationError::TransactionError(format!(
+                        "Execution reverted after {gas_used} gas: {revert_msg}",
+                    )))
+                } else {
+                    Err(SimulationError::TransactionError(format!(
+                        "Execution reverted after {gas_used} gas (raw output, couldn't decode): {:?}",
+                        output
+                    )))
                 }
-                ExecutionResult::Halt { reason, .. } => Err(SimulationError::TransactionError(
-                    format!("Execution halted: {reason:?}"),
-                )),
             }
-        }
+            ExecutionResult::Halt { reason, .. } => Err(SimulationError::TransactionError(
+                format!("Execution halted: {reason:?}"),
+            )),
+        },
         Err(evm_error) => match evm_error {
             EVMError::Transaction(invalid_tx) => Err(SimulationError::TransactionError(format!(
                 "EVM error: {invalid_tx:?}"
@@ -211,6 +210,10 @@ pub struct SimulationParameters {
     pub overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
     /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
+    /// The block number to be used by the transaction
+    pub block_number: u64,
+    /// The timestamp to be used by the transaction
+    pub timestamp: u64,
 }
 
 // Converters of fields to revm types
@@ -257,6 +260,14 @@ impl SimulationParameters {
         // In this case we don't need to convert. The method is here just for consistency.
         self.gas_limit
     }
+
+    fn revm_block_number(&self) -> rU256 {
+        rU256::from(self.block_number)
+    }
+
+    fn revm_timestamp(&self) -> rU256 {
+        rU256::from(self.timestamp)
+    }
 }
 
 #[cfg(test)]
@@ -300,6 +311,8 @@ mod tests {
                 .collect(),
             ),
             gas_limit: Some(33),
+            block_number: 0,
+            timestamp: 0,
         };
 
         assert_eq!(
@@ -353,6 +366,8 @@ mod tests {
             value: U256::zero(),
             overrides: None,
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
 
         assert_eq!(params.revm_overrides(), None);
@@ -557,6 +572,8 @@ mod tests {
             value: U256::zero(),
             overrides: None,
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
         let eng = SimulationEngine {
             state,
@@ -698,6 +715,8 @@ mod tests {
             value: U256::zero(),
             overrides: Some(overrides),
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
 
         let eng = SimulationEngine {
