@@ -1,5 +1,5 @@
 use super::{account_storage::StateUpdate, database};
-use crate::evm_simulation::database::OverriddenSimulationDB;
+use crate::evm_simulation::database::{BlockHeader, OverriddenSimulationDB};
 use ethers::{
     providers::Middleware,
     types::{Address, Bytes, U256}, // Address is an alias of H160
@@ -14,6 +14,7 @@ use revm::{
     EVM,
 };
 use std::collections::HashMap;
+use ethers::types::H256;
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]
@@ -41,8 +42,11 @@ pub struct SimulationEngine<M: Middleware> {
 }
 
 impl<M: Middleware> SimulationEngine<M> {
+    /// Simulate a transaction
+    /// 
+    /// State's block will be modified to be the last block before the simulation's block. 
     pub fn simulate(
-        &self,
+        &mut self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
@@ -53,6 +57,12 @@ impl<M: Middleware> SimulationEngine<M> {
         // struct outlive this scope.
         let mut vm = EVM::new();
 
+        self.state.set_block(Some(BlockHeader{
+            number: params.block_number - 1,  // last block before the simulated transaction
+            hash: H256::zero(),  // doesn't matter here
+            timestamp: params.timestamp,  // doesn't matter here
+        }));
+        
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
         let db_ref = OverriddenSimulationDB {
@@ -575,7 +585,7 @@ mod tests {
             block_number: 0,
             timestamp: 0,
         };
-        let eng = SimulationEngine {
+        let mut eng = SimulationEngine {
             state,
             trace: false,
         };
@@ -719,7 +729,7 @@ mod tests {
             timestamp: 0,
         };
 
-        let eng = SimulationEngine {
+        let mut eng = SimulationEngine {
             state,
             trace: false,
         };

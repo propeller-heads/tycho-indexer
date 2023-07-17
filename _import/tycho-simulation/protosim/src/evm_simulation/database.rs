@@ -51,11 +51,15 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockHeader {
     pub number: u64,
     pub hash: H256,
     pub timestamp: u64,
+}
+
+fn as_block_id(block_header: Option<BlockHeader>) -> Option<BlockId> {
+    block_header.map(|block_header| BlockId::from(block_header.number))
 }
 
 #[derive(Debug)]
@@ -66,6 +70,8 @@ pub struct SimulationDB<M: Middleware> {
     account_storage: RefCell<AccountStorage>,
     /// Current block
     block: Option<BlockHeader>,
+    /// Same thing but as a different type
+    block_id: Option<BlockId>,
 
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
@@ -79,9 +85,16 @@ impl<M: Middleware> SimulationDB<M> {
         Self {
             client,
             account_storage: RefCell::new(AccountStorage::new()),
-            block,
+            block: block.clone(),
+            block_id: as_block_id(block),
             runtime,
         }
+    }
+    
+    /// Set the block that will be used when querying a node
+    pub fn set_block(&mut self, block: Option<BlockHeader>) {
+        self.block = block.clone();
+        self.block_id = as_block_id(block);
     }
 
     /// Sets up a single account
@@ -184,9 +197,9 @@ impl<M: Middleware> SimulationDB<M> {
         debug!("Querying account info for {:x?}", address);
         let fut = async {
             tokio::join!(
-                self.client.get_balance(H160(address.0), None),
-                self.client.get_transaction_count(H160(address.0), None),
-                self.client.get_code(H160(address.0), None),
+                self.client.get_balance(H160(address.0), self.block_id),
+                self.client.get_transaction_count(H160(address.0), self.block_id),
+                self.client.get_code(H160(address.0), self.block_id),
             )
         };
 
@@ -232,9 +245,7 @@ impl<M: Middleware> SimulationDB<M> {
                 .get_storage_at(
                     address,
                     index_h256,
-                    self.block
-                        .as_ref()
-                        .map(|value| BlockId::Number(BlockNumber::Number(U64::from(value.number)))),
+                    self.block_id,
                 )
                 .await
                 .unwrap();
@@ -383,8 +394,20 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
         }
     }
 
+    /// If block header is set, returns the hash. Otherwise returns a zero hash
+    /// instead of querying a node.
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
-        Ok(B256::default())
+        match &self.block {
+            Some(header) => Ok(B256::from(header.hash)),
+            None => {
+                Ok(B256::zero())
+                // let fut = async { 
+                //     self.client.as_ref().get_block_number().await 
+                // };
+                // let block_number = self.block_on(fut);
+                // block_number.map(|v| B256::from_low_u64_be(v.as_u64()))
+            }
+        }
     }
 }
 
@@ -561,12 +584,8 @@ mod tests {
         };
         let mut updates = HashMap::default();
         updates.insert(address, update);
-        let new_block = BlockHeader {
-            number: 1,
-            hash: H256::default(),
-            timestamp: 234,
-        };
-        let revers_update = mock_sim_db.update_state(&updates, new_block);
+        
+        let revers_update = mock_sim_db.update_state(&updates);
 
         assert_eq!(
             mock_sim_db

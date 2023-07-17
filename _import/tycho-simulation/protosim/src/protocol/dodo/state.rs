@@ -45,7 +45,7 @@ impl<M: Middleware> DodoPoolState<M> {
             block_number: 0,
             timestamp: 0,
         };
-        let engine = self.engine.borrow();
+        let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params).unwrap();
         let spot_price_u256 = self
             .pool_abi
@@ -125,7 +125,7 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
             block_number: 0,
             timestamp: 0,
         };
-        let engine = self.engine.borrow();
+        let mut engine = self.engine.borrow_mut();
         let simulation_result = engine.simulate(&params).unwrap();
         let amount_out = self
             .pool_abi
