@@ -455,7 +455,9 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError(msg) => assert_eq!(msg, "Execution reverted: output"),
+            SimulationError::TransactionError(msg) => {
+                assert_eq!(msg, "Execution reverted after 100 gas: output")
+            }
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
