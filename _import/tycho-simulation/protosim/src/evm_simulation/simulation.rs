@@ -2,19 +2,26 @@ use super::{account_storage::StateUpdate, database};
 use crate::evm_simulation::database::{BlockHeader, OverriddenSimulationDB};
 use ethers::{
     providers::Middleware,
-    types::{Address, Bytes, U256}, // Address is an alias of H160
+    types::{Address, Bytes, H256, U256}, // Address is an alias of H160
 };
 use log::debug;
 use revm::{
     inspectors::CustomPrintTracer,
-    primitives::{bytes, CreateScheme, EVMResult, Output, State},
-}; // `bytes` is an external crate
-use revm::{
-    primitives::{EVMError, ExecutionResult, TransactTo, B160 as rB160, U256 as rU256},
+    primitives::{
+        bytes, // `bytes` is an external crate
+        CreateScheme,
+        EVMError,
+        EVMResult,
+        ExecutionResult,
+        Output,
+        State,
+        TransactTo,
+        B160 as rB160,
+        U256 as rU256,
+    },
     EVM,
 };
 use std::collections::HashMap;
-use ethers::types::H256;
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]
@@ -43,8 +50,8 @@ pub struct SimulationEngine<M: Middleware> {
 
 impl<M: Middleware> SimulationEngine<M> {
     /// Simulate a transaction
-    /// 
-    /// State's block will be modified to be the last block before the simulation's block. 
+    ///
+    /// State's block will be modified to be the last block before the simulation's block.
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
@@ -57,12 +64,12 @@ impl<M: Middleware> SimulationEngine<M> {
         // struct outlive this scope.
         let mut vm = EVM::new();
 
-        self.state.set_block(Some(BlockHeader{
-            number: params.block_number - 1,  // last block before the simulated transaction
-            hash: H256::zero(),  // doesn't matter here
-            timestamp: params.timestamp,  // doesn't matter here
+        self.state.set_block(Some(BlockHeader {
+            number: params.block_number - 1, // last block before the simulated transaction
+            hash: H256::zero(),              // doesn't matter here
+            timestamp: params.timestamp,     // doesn't matter here
         }));
-        
+
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
         let db_ref = OverriddenSimulationDB {

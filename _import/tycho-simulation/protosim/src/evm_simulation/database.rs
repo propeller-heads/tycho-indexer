@@ -90,7 +90,7 @@ impl<M: Middleware> SimulationDB<M> {
             runtime,
         }
     }
-    
+
     /// Set the block that will be used when querying a node
     pub fn set_block(&mut self, block: Option<BlockHeader>) {
         self.block = block.clone();
@@ -198,7 +198,8 @@ impl<M: Middleware> SimulationDB<M> {
         let fut = async {
             tokio::join!(
                 self.client.get_balance(H160(address.0), self.block_id),
-                self.client.get_transaction_count(H160(address.0), self.block_id),
+                self.client
+                    .get_transaction_count(H160(address.0), self.block_id),
                 self.client.get_code(H160(address.0), self.block_id),
             )
         };
@@ -242,11 +243,7 @@ impl<M: Middleware> SimulationDB<M> {
             let address = H160::from(address.0);
             let storage = self
                 .client
-                .get_storage_at(
-                    address,
-                    index_h256,
-                    self.block_id,
-                )
+                .get_storage_at(address, index_h256, self.block_id)
                 .await
                 .unwrap();
             rU256::from_be_bytes(storage.to_fixed_bytes())
@@ -401,8 +398,8 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             Some(header) => Ok(B256::from(header.hash)),
             None => {
                 Ok(B256::zero())
-                // let fut = async { 
-                //     self.client.as_ref().get_block_number().await 
+                // let fut = async {
+                //     self.client.as_ref().get_block_number().await
                 // };
                 // let block_number = self.block_on(fut);
                 // block_number.map(|v| B256::from_low_u64_be(v.as_u64()))
@@ -584,7 +581,7 @@ mod tests {
         };
         let mut updates = HashMap::default();
         updates.insert(address, update);
-        
+
         let revers_update = mock_sim_db.update_state(&updates);
 
         assert_eq!(
