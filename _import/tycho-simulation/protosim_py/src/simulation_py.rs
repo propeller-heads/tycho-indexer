@@ -60,7 +60,10 @@ impl SimulationEngine {
     /// Simulate transaction.
     ///
     /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
-    fn run_sim(mut self_: PyRefMut<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
+    fn run_sim(
+        mut self_: PyRefMut<Self>,
+        params: SimulationParameters,
+    ) -> PyResult<SimulationResult> {
         let rust_result = self_
             .0
             .simulate(&simulation::SimulationParameters::from(params));
@@ -99,7 +102,9 @@ impl SimulationEngine {
     fn update_state(
         mut self_: PyRefMut<Self>,
         updates: HashMap<String, StateUpdate>,
+        block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
+        let block = protosim::evm_simulation::database::BlockHeader::from(block);
         let mut rust_updates: HashMap<B160, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(
@@ -108,7 +113,7 @@ impl SimulationEngine {
             );
         }
 
-        let reverse_updates = self_.0.state.update_state(&rust_updates);
+        let reverse_updates = self_.0.state.update_state(&rust_updates, block);
 
         let mut py_reverse_updates: HashMap<String, StateUpdate> = HashMap::new();
         for (key, value) in reverse_updates {
