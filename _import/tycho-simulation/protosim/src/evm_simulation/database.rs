@@ -194,7 +194,10 @@ impl<M: Middleware> SimulationDB<M> {
         &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as DatabaseRef>::Error> {
-        debug!("Querying account info of {:x?} at block {:?}", address, self.block_id);
+        debug!(
+            "Querying account info of {:x?} at block {:?}",
+            address, self.block_id
+        );
         let fut = async {
             tokio::join!(
                 self.client.get_balance(H160(address.0), self.block_id),
