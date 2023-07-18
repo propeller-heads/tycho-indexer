@@ -70,7 +70,7 @@ impl<M: Middleware> SimulationEngine<M> {
                 hash: H256::zero(),              // doesn't matter here
                 timestamp: params.timestamp,     // doesn't matter here
             }));
-        } else { 
+        } else {
             // block_number=0 indicates the current block
             self.state.set_block(None);
         }
@@ -90,7 +90,10 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
         vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(8_000_000);
-        debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.env.tx, vm.env.block);
+        debug!(
+            "Starting simulation with tx parameters: {:#?} {:#?}",
+            vm.env.tx, vm.env.block
+        );
 
         let evm_result = if self.trace {
             let tracer = CustomPrintTracer::default();
