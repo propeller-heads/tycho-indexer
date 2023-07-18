@@ -64,11 +64,16 @@ impl<M: Middleware> SimulationEngine<M> {
         // struct outlive this scope.
         let mut vm = EVM::new();
 
-        self.state.set_block(Some(BlockHeader {
-            number: params.block_number - 1, // last block before the simulated transaction
-            hash: H256::zero(),              // doesn't matter here
-            timestamp: params.timestamp,     // doesn't matter here
-        }));
+        if params.block_number > 0 {
+            self.state.set_block(Some(BlockHeader {
+                number: params.block_number - 1, // last block before the simulated transaction
+                hash: H256::zero(),              // doesn't matter here
+                timestamp: params.timestamp,     // doesn't matter here
+            }));
+        } else { 
+            // block_number=0 indicates the current block
+            self.state.set_block(None);
+        }
 
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
@@ -85,7 +90,7 @@ impl<M: Middleware> SimulationEngine<M> {
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
         vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(8_000_000);
-        debug!("Starting simulation with tx parameters: {:#?}", vm.env.tx);
+        debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.env.tx, vm.env.block);
 
         let evm_result = if self.trace {
             let tracer = CustomPrintTracer::default();
@@ -227,7 +232,7 @@ pub struct SimulationParameters {
     pub overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
     /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
-    /// The block number to be used by the transaction
+    /// The block number to be used by the transaction. 0 indicates the current block.
     pub block_number: u64,
     /// The timestamp to be used by the transaction
     pub timestamp: u64,
@@ -279,11 +284,11 @@ impl SimulationParameters {
     }
 
     fn revm_block_number(&self) -> rU256 {
-        rU256::from(self.block_number)
+        rU256::from_limbs([self.block_number, 0, 0, 0])
     }
 
     fn revm_timestamp(&self) -> rU256 {
-        rU256::from(self.timestamp)
+        rU256::from_limbs([self.timestamp, 0, 0, 0])
     }
 }
 
@@ -372,6 +377,8 @@ mod tests {
         .collect();
         assert_eq!(params.revm_overrides().unwrap(), expected_overrides);
         assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
+        assert_eq!(params.revm_block_number(), rU256::ZERO);
+        assert_eq!(params.revm_timestamp(), rU256::ZERO);
     }
 
     #[test]

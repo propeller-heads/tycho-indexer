@@ -1,6 +1,6 @@
 use ethers::{
     providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256, U64},
+    types::{BlockId, H160, H256},
 };
 use log::{debug, info};
 use std::cell::RefCell;
@@ -194,7 +194,7 @@ impl<M: Middleware> SimulationDB<M> {
         &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as DatabaseRef>::Error> {
-        debug!("Querying account info for {:x?}", address);
+        debug!("Querying account info of {:x?} at block {:?}", address, self.block_id);
         let fut = async {
             tokio::join!(
                 self.client.get_balance(H160(address.0), self.block_id),
