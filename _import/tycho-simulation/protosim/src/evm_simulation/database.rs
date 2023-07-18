@@ -581,8 +581,13 @@ mod tests {
         };
         let mut updates = HashMap::default();
         updates.insert(address, update);
+        let new_block = BlockHeader {
+            number: 1,
+            hash: H256::default(),
+            timestamp: 234,
+        };
 
-        let revers_update = mock_sim_db.update_state(&updates);
+        let reverse_update = mock_sim_db.update_state(&updates, new_block);
 
         assert_eq!(
             mock_sim_db
@@ -604,11 +609,11 @@ mod tests {
         assert_eq!(mock_sim_db.block.unwrap().number, 1);
 
         assert_eq!(
-            revers_update.get(&address).unwrap().balance.unwrap(),
+            reverse_update.get(&address).unwrap().balance.unwrap(),
             AccountInfo::default().balance
         );
         assert_eq!(
-            revers_update.get(&address).unwrap().storage,
+            reverse_update.get(&address).unwrap().storage,
             Some(HashMap::default())
         );
 
