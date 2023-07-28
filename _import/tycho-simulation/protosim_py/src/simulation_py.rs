@@ -21,7 +21,7 @@ fn get_runtime() -> Option<Arc<Runtime>> {
 }
 
 fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
-    let client = Provider::<Http>::try_from(rpx_url).unwrap();
+    let client = Provider::<Http>::try_from(rpc_url).unwrap();
     Arc::new(client)
 }
 
