@@ -75,7 +75,7 @@ jobs:
         with:
           name: protosim-py-0.1
           path: |
-            protosim_py/target/wheel/*.whl
+            ./protosim_py/target/wheels/*.whl
 
   docker_release:
     name: Docker Release
