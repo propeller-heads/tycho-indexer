@@ -61,7 +61,7 @@ jobs:
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: stable
       - name: Install Maturin
         run: |
           python -m pip install --upgrade pip
