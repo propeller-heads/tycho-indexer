@@ -1,13 +1,24 @@
 use super::{account_storage::StateUpdate, database};
-use crate::evm_simulation::database::OverriddenSimulationDB;
+use crate::evm_simulation::database::{BlockHeader, OverriddenSimulationDB};
 use ethers::{
     providers::Middleware,
-    types::{Address, Bytes, U256}, // Address is an alias of H160
+    types::{Address, Bytes, H256, U256}, // Address is an alias of H160
 };
 use log::debug;
-use revm::primitives::{bytes, CreateScheme, EVMResult, Output, State}; // `bytes` is an external crate
 use revm::{
-    primitives::{EVMError, ExecutionResult, TransactTo, B160 as rB160, U256 as rU256},
+    inspectors::CustomPrintTracer,
+    primitives::{
+        bytes, // `bytes` is an external crate
+        CreateScheme,
+        EVMError,
+        EVMResult,
+        ExecutionResult,
+        Output,
+        State,
+        TransactTo,
+        B160 as rB160,
+        U256 as rU256,
+    },
     EVM,
 };
 use std::collections::HashMap;
@@ -34,11 +45,15 @@ pub struct SimulationResult {
 #[derive(Debug)]
 pub struct SimulationEngine<M: Middleware> {
     pub state: database::SimulationDB<M>,
+    pub trace: bool,
 }
 
 impl<M: Middleware> SimulationEngine<M> {
+    /// Simulate a transaction
+    ///
+    /// State's block will be modified to be the last block before the simulation's block.
     pub fn simulate(
-        &self,
+        &mut self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
@@ -49,6 +64,17 @@ impl<M: Middleware> SimulationEngine<M> {
         // struct outlive this scope.
         let mut vm = EVM::new();
 
+        if params.block_number > 0 {
+            self.state.set_block(Some(BlockHeader {
+                number: params.block_number - 1, // last block before the simulated transaction
+                hash: H256::zero(),              // doesn't matter here
+                timestamp: params.timestamp,     // doesn't matter here
+            }));
+        } else {
+            // block_number=0 indicates the current block
+            self.state.set_block(None);
+        }
+
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
         let db_ref = OverriddenSimulationDB {
@@ -57,13 +83,24 @@ impl<M: Middleware> SimulationEngine<M> {
         };
 
         vm.database(db_ref);
+        vm.env.block.number = params.revm_block_number();
+        vm.env.block.timestamp = params.revm_timestamp();
         vm.env.tx.caller = params.revm_caller();
         vm.env.tx.transact_to = params.revm_to();
         vm.env.tx.data = params.revm_data();
         vm.env.tx.value = params.revm_value();
-        vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(u64::MAX);
+        vm.env.tx.gas_limit = params.revm_gas_limit().unwrap_or(8_000_000);
+        debug!(
+            "Starting simulation with tx parameters: {:#?} {:#?}",
+            vm.env.tx, vm.env.block
+        );
 
-        let evm_result = vm.transact_ref();
+        let evm_result = if self.trace {
+            let tracer = CustomPrintTracer::default();
+            vm.inspect_ref(tracer)
+        } else {
+            vm.transact_ref()
+        };
 
         interpret_evm_result(evm_result)
     }
@@ -89,37 +126,34 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
     evm_result: EVMResult<DBError>,
 ) -> Result<SimulationResult, SimulationError> {
     match evm_result {
-        Ok(result_and_state) => {
-            debug!("{:?}", &result_and_state);
-            match result_and_state.result {
-                ExecutionResult::Success {
-                    gas_used,
-                    gas_refunded,
-                    output,
-                    ..
-                } => Ok(interpret_evm_success(
-                    gas_used,
-                    gas_refunded,
-                    output,
-                    result_and_state.state,
-                )),
-                ExecutionResult::Revert { output, .. } => {
-                    if let Ok(revert_msg) = std::str::from_utf8(output.as_ref()) {
-                        Err(SimulationError::TransactionError(format!(
-                            "Execution reverted: {revert_msg}",
-                        )))
-                    } else {
-                        Err(SimulationError::TransactionError(format!(
-                            "Execution reverted (raw output, couldn't decode): {:?}",
-                            output
-                        )))
-                    }
+        Ok(result_and_state) => match result_and_state.result {
+            ExecutionResult::Success {
+                gas_used,
+                gas_refunded,
+                output,
+                ..
+            } => Ok(interpret_evm_success(
+                gas_used,
+                gas_refunded,
+                output,
+                result_and_state.state,
+            )),
+            ExecutionResult::Revert { output, gas_used } => {
+                if let Ok(revert_msg) = std::str::from_utf8(output.as_ref()) {
+                    Err(SimulationError::TransactionError(format!(
+                        "Execution reverted after {gas_used} gas: {revert_msg}",
+                    )))
+                } else {
+                    Err(SimulationError::TransactionError(format!(
+                        "Execution reverted after {gas_used} gas (raw output, couldn't decode): {:?}",
+                        output
+                    )))
                 }
-                ExecutionResult::Halt { reason, .. } => Err(SimulationError::TransactionError(
-                    format!("Execution halted: {reason:?}"),
-                )),
             }
-        }
+            ExecutionResult::Halt { reason, .. } => Err(SimulationError::TransactionError(
+                format!("Execution halted: {reason:?}"),
+            )),
+        },
         Err(evm_error) => match evm_error {
             EVMError::Transaction(invalid_tx) => Err(SimulationError::TransactionError(format!(
                 "EVM error: {invalid_tx:?}"
@@ -201,6 +235,10 @@ pub struct SimulationParameters {
     pub overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
     /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
+    /// The block number to be used by the transaction. 0 indicates the current block.
+    pub block_number: u64,
+    /// The timestamp to be used by the transaction
+    pub timestamp: u64,
 }
 
 // Converters of fields to revm types
@@ -247,6 +285,14 @@ impl SimulationParameters {
         // In this case we don't need to convert. The method is here just for consistency.
         self.gas_limit
     }
+
+    fn revm_block_number(&self) -> rU256 {
+        rU256::from_limbs([self.block_number, 0, 0, 0])
+    }
+
+    fn revm_timestamp(&self) -> rU256 {
+        rU256::from_limbs([self.timestamp, 0, 0, 0])
+    }
 }
 
 #[cfg(test)]
@@ -290,6 +336,8 @@ mod tests {
                 .collect(),
             ),
             gas_limit: Some(33),
+            block_number: 0,
+            timestamp: 0,
         };
 
         assert_eq!(
@@ -332,6 +380,8 @@ mod tests {
         .collect();
         assert_eq!(params.revm_overrides().unwrap(), expected_overrides);
         assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
+        assert_eq!(params.revm_block_number(), rU256::ZERO);
+        assert_eq!(params.revm_timestamp(), rU256::ZERO);
     }
 
     #[test]
@@ -343,6 +393,8 @@ mod tests {
             value: U256::zero(),
             overrides: None,
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
 
         assert_eq!(params.revm_overrides(), None);
@@ -445,7 +497,9 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError(msg) => assert_eq!(msg, "Execution reverted: output"),
+            SimulationError::TransactionError(msg) => {
+                assert_eq!(msg, "Execution reverted after 100 gas: output")
+            }
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
@@ -545,8 +599,13 @@ mod tests {
             value: U256::zero(),
             overrides: None,
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
-        let eng = SimulationEngine { state };
+        let mut eng = SimulationEngine {
+            state,
+            trace: false,
+        };
 
         let result = eng.simulate(&sim_params);
 
@@ -683,9 +742,14 @@ mod tests {
             value: U256::zero(),
             overrides: Some(overrides),
             gas_limit: None,
+            block_number: 0,
+            timestamp: 0,
         };
 
-        let eng = SimulationEngine { state };
+        let mut eng = SimulationEngine {
+            state,
+            trace: false,
+        };
 
         // println!("Deploying a mocked contract!");
         // let deployment_result = eng.simulate(&deployment_params);

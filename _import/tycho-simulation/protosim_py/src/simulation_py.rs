@@ -39,23 +39,31 @@ fn get_client() -> Arc<Provider<Http>> {
 /// ----------
 /// block: Optional[BlockHeader]
 ///     Optional BlockHeader. If None, current block will be used.
+/// trace: Optional[bool]
+///     If set to true, simulations will print the entire execution trace.
 #[pyclass]
 pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 
 #[pymethods]
 impl SimulationEngine {
     #[new]
-    fn new(block: Option<BlockHeader>) -> Self {
+    fn new(block: Option<BlockHeader>, trace: Option<bool>) -> Self {
         let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
         let db = SimulationDB::new(get_client(), get_runtime(), block);
-        let engine = simulation::SimulationEngine { state: db };
+        let engine = simulation::SimulationEngine {
+            state: db,
+            trace: trace.unwrap_or(false),
+        };
         Self(engine)
     }
 
     /// Simulate transaction.
     ///
     /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
-    fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
+    fn run_sim(
+        mut self_: PyRefMut<Self>,
+        params: SimulationParameters,
+    ) -> PyResult<SimulationResult> {
         let rust_result = self_
             .0
             .simulate(&simulation::SimulationParameters::from(params));
@@ -97,7 +105,6 @@ impl SimulationEngine {
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
         let block = protosim::evm_simulation::database::BlockHeader::from(block);
-
         let mut rust_updates: HashMap<B160, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(

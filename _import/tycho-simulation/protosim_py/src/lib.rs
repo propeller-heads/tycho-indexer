@@ -8,6 +8,7 @@ mod structs_py;
 /// Transaction simulation using EVM implemented in Rust
 #[pymodule]
 fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
+    env_logger::init();
     m.add_class::<SimulationEngine>()?;
     m.add_class::<SimulationParameters>()?;
     m.add_class::<StateUpdate>()?;

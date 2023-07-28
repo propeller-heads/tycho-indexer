@@ -1,6 +1,6 @@
 use ethers::{
     providers::Middleware,
-    types::{BlockId, BlockNumber, H160, H256, U64},
+    types::{BlockId, H160, H256},
 };
 use log::{debug, info};
 use std::cell::RefCell;
@@ -51,11 +51,15 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockHeader {
     pub number: u64,
     pub hash: H256,
     pub timestamp: u64,
+}
+
+fn as_block_id(block_header: Option<BlockHeader>) -> Option<BlockId> {
+    block_header.map(|block_header| BlockId::from(block_header.number))
 }
 
 #[derive(Debug)]
@@ -66,6 +70,8 @@ pub struct SimulationDB<M: Middleware> {
     account_storage: RefCell<AccountStorage>,
     /// Current block
     block: Option<BlockHeader>,
+    /// Same thing but as a different type
+    block_id: Option<BlockId>,
 
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
@@ -79,9 +85,16 @@ impl<M: Middleware> SimulationDB<M> {
         Self {
             client,
             account_storage: RefCell::new(AccountStorage::new()),
-            block,
+            block: block.clone(),
+            block_id: as_block_id(block),
             runtime,
         }
+    }
+
+    /// Set the block that will be used when querying a node
+    pub fn set_block(&mut self, block: Option<BlockHeader>) {
+        self.block = block.clone();
+        self.block_id = as_block_id(block);
     }
 
     /// Sets up a single account
@@ -181,11 +194,16 @@ impl<M: Middleware> SimulationDB<M> {
         &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as DatabaseRef>::Error> {
+        debug!(
+            "Querying account info of {:x?} at block {:?}",
+            address, self.block_id
+        );
         let fut = async {
             tokio::join!(
-                self.client.get_balance(H160(address.0), None),
-                self.client.get_transaction_count(H160(address.0), None),
-                self.client.get_code(H160(address.0), None),
+                self.client.get_balance(H160(address.0), self.block_id),
+                self.client
+                    .get_transaction_count(H160(address.0), self.block_id),
+                self.client.get_code(H160(address.0), self.block_id),
             )
         };
 
@@ -228,13 +246,7 @@ impl<M: Middleware> SimulationDB<M> {
             let address = H160::from(address.0);
             let storage = self
                 .client
-                .get_storage_at(
-                    address,
-                    index_h256,
-                    self.block
-                        .as_ref()
-                        .map(|value| BlockId::Number(BlockNumber::Number(U64::from(value.number)))),
-                )
+                .get_storage_at(address, index_h256, self.block_id)
                 .await
                 .unwrap();
             rU256::from_be_bytes(storage.to_fixed_bytes())
@@ -295,7 +307,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     }
 
     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-        panic!("Not implemented")
+        panic!("Code by hash is not implemented")
     }
 
     /// Retrieves the storage value at the specified address and index.
@@ -330,7 +342,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the contract is not present locally, the function queries the account info and storage value from
     ///   a node, initializes the account locally with the retrieved information, and returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        debug!("Requested storage of account {} slot {}", address, index);
+        debug!("Requested storage of account {:x?} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
             // This scope is to not make two simultaneous borrows (one occurs inside init_account)
@@ -338,7 +350,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             is_mocked = borrowed_storage.is_mocked_account(&address);
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
                 debug!(
-                    "Got value locally. This is {} account. Value: {}",
+                    "Got value locally. This is a {} account. Value: {}",
                     (if is_mocked.unwrap_or(false) {
                         "mocked"
                     } else {
@@ -382,8 +394,20 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
         }
     }
 
+    /// If block header is set, returns the hash. Otherwise returns a zero hash
+    /// instead of querying a node.
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
-        panic!("Not implemented")
+        match &self.block {
+            Some(header) => Ok(B256::from(header.hash)),
+            None => {
+                Ok(B256::zero())
+                // let fut = async {
+                //     self.client.as_ref().get_block_number().await
+                // };
+                // let block_number = self.block_on(fut);
+                // block_number.map(|v| B256::from_low_u64_be(v.as_u64()))
+            }
+        }
     }
 }
 
@@ -565,7 +589,8 @@ mod tests {
             hash: H256::default(),
             timestamp: 234,
         };
-        let revers_update = mock_sim_db.update_state(&updates, new_block);
+
+        let reverse_update = mock_sim_db.update_state(&updates, new_block);
 
         assert_eq!(
             mock_sim_db
@@ -587,11 +612,11 @@ mod tests {
         assert_eq!(mock_sim_db.block.unwrap().number, 1);
 
         assert_eq!(
-            revers_update.get(&address).unwrap().balance.unwrap(),
+            reverse_update.get(&address).unwrap().balance.unwrap(),
             AccountInfo::default().balance
         );
         assert_eq!(
-            revers_update.get(&address).unwrap().storage,
+            reverse_update.get(&address).unwrap().storage,
             Some(HashMap::default())
         );
 
