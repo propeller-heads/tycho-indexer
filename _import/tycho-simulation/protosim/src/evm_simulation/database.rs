@@ -58,9 +58,9 @@ pub struct BlockHeader {
     pub timestamp: u64,
 }
 
-impl Into<BlockId> for BlockHeader {
-    fn into(self) -> BlockId {
-        BlockId::from(self.hash)
+impl From<BlockHeader> for BlockId {
+    fn from(value: BlockHeader) -> Self {
+        Self::from(value.hash)
     }
 }
 
