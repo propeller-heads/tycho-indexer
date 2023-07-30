@@ -1,16 +1,7 @@
 name: Release Python Wheel
 
 on:
-  workflow_run:
-    workflows: ["Continuous Integration"]
-    # branches: ["main"]
-    types:
-      - completed
-  release:
-    types: 
-      - prereleased
-      - released
-  workflow_dispatch: {}
+  pull_request
 
 permissions:
   id-token: write
@@ -37,6 +28,8 @@ jobs:
         with:
           image: protosim-py-build:latest
           options: -v ${{ github.workspace }}:/prop-builder
+          run: |
+            /opt/python/cp39-cp39/bin/python -m maturin build --release --compatibility manylinux2014 -i /opt/python/cp39-cp39/bin/python
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
         with:
