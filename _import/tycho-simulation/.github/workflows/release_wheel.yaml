@@ -1,7 +1,16 @@
 name: Release Python Wheel
 
 on:
-  pull_request
+  workflow_run:
+    workflows: ["Continuous Integration"]
+    branches: ["main"]
+    types:
+      - completed
+  release:
+    types: 
+      - prereleased
+      - released
+  workflow_dispatch: {}
 
 permissions:
   id-token: write
