@@ -2,7 +2,6 @@ name: Continuous Integration
 
 on:
   pull_request:
-  push:
 
 permissions:
   id-token: write
@@ -45,57 +44,3 @@ jobs:
         run: cargo test --verbose --no-default-features
       - name: Test protosim
         run: cd protosim && cargo test --no-default-features
-
-  docker_release:
-    name: Docker Release
-    runs-on: ubuntu-latest
-    if: contains(github.ref,  'main')
-
-    steps:
-      - name: Check out Repo
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Set build variables
-        run: |
-          TAG=$(git describe --tags --abbrev=0)-SNAPSHOT.$(git rev-parse --short HEAD)
-          echo "IMAGE=827659017777.dkr.ecr.eu-central-1.amazonaws.com/propeller-searcher:$TAG" >> $GITHUB_ENV
-
-      - name: install-aws-cli
-        uses: unfor19/install-aws-cli-action@v1
-        with:
-          version: 2
-          verbose: false
-          arch: amd64
-          rootdir: ""
-          workdir: ""
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::827659017777:role/github-actions
-          audience: sts.amazonaws.com
-          aws-region: eu-central-1
-
-      - name: Setup BuildX
-        uses: docker/setup-buildx-action@v1
-
-      - name: Login to ECR
-        uses: docker/login-action@v1
-        with:
-          registry: 827659017777.dkr.ecr.eu-central-1.amazonaws.com
-
-      - name: Build
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          # for some reason it can't properly deal with ECR and OpenID
-          push: false
-          load: true
-          tags: ${{ env.IMAGE }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Push
-        run: docker push $IMAGE

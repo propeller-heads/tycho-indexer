@@ -20,11 +20,8 @@ fn get_runtime() -> Option<Arc<Runtime>> {
     Some(Arc::new(runtime))
 }
 
-fn get_client() -> Arc<Provider<Http>> {
-    let client = Provider::<Http>::try_from(
-        "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-    )
-    .unwrap();
+fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
+    let client = Provider::<Http>::try_from(rpc_url).unwrap();
     Arc::new(client)
 }
 
@@ -47,9 +44,9 @@ pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
 #[pymethods]
 impl SimulationEngine {
     #[new]
-    fn new(block: Option<BlockHeader>, trace: Option<bool>) -> Self {
+    fn new(rpc_url: &str, block: Option<BlockHeader>, trace: Option<bool>) -> Self {
         let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
-        let db = SimulationDB::new(get_client(), get_runtime(), block);
+        let db = SimulationDB::new(get_client(rpc_url), get_runtime(), block);
         let engine = simulation::SimulationEngine {
             state: db,
             trace: trace.unwrap_or(false),
