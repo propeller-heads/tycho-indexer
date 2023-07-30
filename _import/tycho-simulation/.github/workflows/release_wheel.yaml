@@ -1,0 +1,45 @@
+name: Release Python Wheel
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration"]
+    # branches: ["main"]
+    types:
+      - completed
+  release:
+    types: 
+      - prereleased
+      - released
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  protosim_py_release:
+    name: Protosim-Py Build Wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: docker/build-push-action@v2
+        with:
+          tags: protosim-py-build:latest
+          file: protosim_py/protosim_py.Dockerfile
+          push: false
+      - uses: addnab/docker-run-action@v3
+        with:
+          image: protosim-py-build:latest
+          options: -v ${{ github.workspace }}:/prop-builder
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: protosim-py
+          path: |
+            ./protosim_py/target/wheels/*.whl
