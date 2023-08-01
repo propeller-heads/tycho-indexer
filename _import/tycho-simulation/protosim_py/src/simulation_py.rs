@@ -57,10 +57,7 @@ impl SimulationEngine {
     /// Simulate transaction.
     ///
     /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
-    fn run_sim(
-        mut self_: PyRefMut<Self>,
-        params: SimulationParameters,
-    ) -> PyResult<SimulationResult> {
+    fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
         let rust_result = self_
             .0
             .simulate(&simulation::SimulationParameters::from(params));

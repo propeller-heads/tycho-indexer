@@ -1,8 +1,8 @@
 use super::{account_storage::StateUpdate, database};
-use crate::evm_simulation::database::{BlockHeader, OverriddenSimulationDB};
+use crate::evm_simulation::database::OverriddenSimulationDB;
 use ethers::{
     providers::Middleware,
-    types::{Address, Bytes, H256, U256}, // Address is an alias of H160
+    types::{Address, Bytes, U256}, // Address is an alias of H160
 };
 use log::debug;
 use revm::{
@@ -53,7 +53,7 @@ impl<M: Middleware> SimulationEngine<M> {
     ///
     /// State's block will be modified to be the last block before the simulation's block.
     pub fn simulate(
-        &mut self,
+        &self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
@@ -63,17 +63,6 @@ impl<M: Middleware> SimulationEngine<M> {
         // db, the db is simply a reference wrapper. To avoid lifetimes leaking we don't let the evm
         // struct outlive this scope.
         let mut vm = EVM::new();
-
-        if params.block_number > 0 {
-            self.state.set_block(Some(BlockHeader {
-                number: params.block_number - 1, // last block before the simulated transaction
-                hash: H256::zero(),              // doesn't matter here
-                timestamp: params.timestamp,     // doesn't matter here
-            }));
-        } else {
-            // block_number=0 indicates the current block
-            self.state.set_block(None);
-        }
 
         // The below call to vm.database consumes its argument. By wrapping state in a new object,
         // we protect the state from being consumed.
@@ -235,7 +224,7 @@ pub struct SimulationParameters {
     pub overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
     /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
-    /// The block number to be used by the transaction. 0 indicates the current block.
+    /// The block number to be used by the transaction. This is independent of the states block.
     pub block_number: u64,
     /// The timestamp to be used by the transaction
     pub timestamp: u64,
@@ -602,7 +591,7 @@ mod tests {
             block_number: 0,
             timestamp: 0,
         };
-        let mut eng = SimulationEngine {
+        let eng = SimulationEngine {
             state,
             trace: false,
         };
@@ -746,7 +735,7 @@ mod tests {
             timestamp: 0,
         };
 
-        let mut eng = SimulationEngine {
+        let eng = SimulationEngine {
             state,
             trace: false,
         };

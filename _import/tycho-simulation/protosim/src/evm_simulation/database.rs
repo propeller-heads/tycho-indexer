@@ -51,15 +51,17 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BlockHeader {
     pub number: u64,
     pub hash: H256,
     pub timestamp: u64,
 }
 
-fn as_block_id(block_header: Option<BlockHeader>) -> Option<BlockId> {
-    block_header.map(|block_header| BlockId::from(block_header.number))
+impl From<BlockHeader> for BlockId {
+    fn from(value: BlockHeader) -> Self {
+        Self::from(value.hash)
+    }
 }
 
 #[derive(Debug)]
@@ -70,9 +72,7 @@ pub struct SimulationDB<M: Middleware> {
     account_storage: RefCell<AccountStorage>,
     /// Current block
     block: Option<BlockHeader>,
-    /// Same thing but as a different type
-    block_id: Option<BlockId>,
-
+    /// Tokio runtime to execute async code
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
@@ -86,15 +86,13 @@ impl<M: Middleware> SimulationDB<M> {
             client,
             account_storage: RefCell::new(AccountStorage::new()),
             block: block.clone(),
-            block_id: as_block_id(block),
             runtime,
         }
     }
 
     /// Set the block that will be used when querying a node
     pub fn set_block(&mut self, block: Option<BlockHeader>) {
-        self.block = block.clone();
-        self.block_id = as_block_id(block);
+        self.block = block;
     }
 
     /// Sets up a single account
@@ -196,14 +194,14 @@ impl<M: Middleware> SimulationDB<M> {
     ) -> Result<AccountInfo, <SimulationDB<M> as DatabaseRef>::Error> {
         debug!(
             "Querying account info of {:x?} at block {:?}",
-            address, self.block_id
+            address, self.block
         );
+        let block_id: Option<BlockId> = self.block.map(|v| v.into());
         let fut = async {
             tokio::join!(
-                self.client.get_balance(H160(address.0), self.block_id),
-                self.client
-                    .get_transaction_count(H160(address.0), self.block_id),
-                self.client.get_code(H160(address.0), self.block_id),
+                self.client.get_balance(H160(address.0), block_id),
+                self.client.get_transaction_count(H160(address.0), block_id),
+                self.client.get_code(H160(address.0), block_id),
             )
         };
 
@@ -246,7 +244,7 @@ impl<M: Middleware> SimulationDB<M> {
             let address = H160::from(address.0);
             let storage = self
                 .client
-                .get_storage_at(address, index_h256, self.block_id)
+                .get_storage_at(address, index_h256, self.block.map(|v| v.into()))
                 .await
                 .unwrap();
             rU256::from_be_bytes(storage.to_fixed_bytes())
@@ -399,14 +397,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
         match &self.block {
             Some(header) => Ok(B256::from(header.hash)),
-            None => {
-                Ok(B256::zero())
-                // let fut = async {
-                //     self.client.as_ref().get_block_number().await
-                // };
-                // let block_number = self.block_on(fut);
-                // block_number.map(|v| B256::from_low_u64_be(v.as_u64()))
-            }
+            None => Ok(B256::zero()),
         }
     }
 }
