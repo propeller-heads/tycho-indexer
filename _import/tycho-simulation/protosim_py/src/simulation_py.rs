@@ -27,13 +27,13 @@ fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
 
 /// This class lets you simulate transactions.
 ///
-/// Data will be queried from an Ethereum node*, if needed. You can also override account balance or
+/// Data will be queried from an Ethereum node, if needed. You can also override account balance or
 /// storage. See the methods.
-///
-/// *Currently the connection to a node is hardcoded. This will be changed in the future.
 ///
 /// Attributes
 /// ----------
+/// rpc_url: str
+///     Ethereum node connection string.
 /// block: Optional[BlockHeader]
 ///     Optional BlockHeader. If None, current block will be used.
 /// trace: Optional[bool]
