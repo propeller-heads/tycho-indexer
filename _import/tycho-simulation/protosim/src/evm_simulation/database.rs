@@ -40,7 +40,11 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
         match self.overrides.get(&address) {
             None => self.inner_db.storage(address, index),
             Some(overrides) => match overrides.get(&index) {
-                Some(value) => Ok(*value),
+                Some(value) => {
+                    debug!("Requested storage of account {:x?} slot {}", address, index);
+                    debug!("Overridden slot. Value: {}", value);
+                    Ok(*value) 
+                },
                 None => self.inner_db.storage(address, index),
             },
         }
