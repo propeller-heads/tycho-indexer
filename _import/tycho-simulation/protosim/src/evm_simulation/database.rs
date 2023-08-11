@@ -43,8 +43,8 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
                 Some(value) => {
                     debug!("Requested storage of account {:x?} slot {}", address, index);
                     debug!("Overridden slot. Value: {}", value);
-                    Ok(*value) 
-                },
+                    Ok(*value)
+                }
                 None => self.inner_db.storage(address, index),
             },
         }
