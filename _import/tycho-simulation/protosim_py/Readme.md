@@ -2,6 +2,14 @@
 
 `protosim_py` - a Python module, implemented as a Rust crate, that allows using Rust EVM simulation module from Python.
 
+## Install
+
+We regularly push wheel to codeartifact. You should be able to install them from there. If there is no wheel for you arch available, please consider building it (see below) and pushing it. 
+```
+aws --region eu-central-1 codeartifact pip --tool twine --domain propeller --domain-owner 827659017777 --repository protosim
+pip install protosim-py
+```
+
 ## Summary
 
 `evm_simulation` module from `protosim` crate implements simulating on-chain transactions. This crate - `protosim_py` - wraps `evm_simulation` in order to allow using it in Python.
@@ -86,6 +94,23 @@ You don't need `maturin` to _use_ this crate in Python; it is only needed to _bu
 - Maturin documentation on building: https://www.maturin.rs/distribution.html
 - Documentation on using this module to implement a `PoolState` in
   defibot: https://github.com/propeller-heads/defibot/blob/master/defibot/swaps/protosim/Readme.md
+
+
+### Publish to code artifacts
+
+If you have a Mac Silicon or old Mac please build the wheels and publish them. This will help your colleagues as sooner or later everyone will have to upgrade.
+
+Usually you should have a protosim-build environment where maturin is already installed.
+
+- Make sure the verison was bumped according to semver.
+- If you don't have twine installed yet add it: 
+   `pip install twine`
+- Build the wheel in release mode: 
+   `maturin build --release`
+- Activate your credentials for aws code-artifact 
+   `aws --region eu-central-1 codeartifact login --tool twine --domain propeller --domain-owner 827659017777 --repository protosim`
+- Upload the wheel:
+   `twine upload --repository codeartifact target/wheels/protosim_py-[VERSION]*.whl`
 
 ### Troubleshooting
 
