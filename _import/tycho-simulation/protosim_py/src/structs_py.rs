@@ -335,17 +335,28 @@ impl From<BlockHeader> for protosim::evm_simulation::database::BlockHeader {
 #[pyclass]
 #[derive(Debug)]
 pub(crate) struct SimulationErrorDetails {
-    data: Vec<u8>,
-    gas_used: Option<u64>,
+    #[pyo3(get)]
+    pub data: String,
+    #[pyo3(get)]
+    pub gas_used: Option<u64>,
+}
+
+#[pymethods]
+impl SimulationErrorDetails {
+    fn __repr__(&self) -> String {
+        match self.gas_used {
+            Some(gas_usage) => format!(
+                "SimulationError(data={}, gas_used={})",
+                self.data, gas_usage
+            ),
+            None => format!("SimulationError(data={})", self.data),
+        }
+    }
 }
 
 impl From<SimulationErrorDetails> for PyErr {
     fn from(err: SimulationErrorDetails) -> PyErr {
-        pyo3::Python::with_gil(|py| {
-            // might not be needed
-            // let details: PyObject = err.into_py(py);
-            PyRuntimeError::new_err(err).into()
-        })
+        PyRuntimeError::new_err(err)
     }
 }
 
@@ -355,7 +366,7 @@ impl From<simulation::SimulationError> for SimulationErrorDetails {
     fn from(err: simulation::SimulationError) -> Self {
         match err {
             simulation::SimulationError::StorageError(reason) => SimulationErrorDetails {
-                data: reason.into(),
+                data: reason,
                 gas_used: None,
             },
             simulation::SimulationError::TransactionError { data, gas_used } => {

@@ -19,6 +19,7 @@ futures = "0.3.25"
 revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
     "ethersdb",
 ] }
+hex = "0.4.3"
 
 [dev-dependencies]
 approx = "0.3.2"
