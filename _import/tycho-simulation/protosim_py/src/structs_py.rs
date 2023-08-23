@@ -30,7 +30,7 @@ use std::fmt::Debug;
 /// timestamp: int
 ///     Timestamp value available to the transaction
 #[pyclass(
-text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
+    text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
 )]
 #[derive(Clone, Debug)]
 pub struct SimulationParameters {
@@ -285,6 +285,7 @@ impl From<AccountInfo> for revm::primitives::AccountInfo {
         revm::primitives::AccountInfo::new(
             rU256::from_str(&py_info.balance.to_string()).unwrap(),
             py_info.nonce,
+            code.hash_slow(),
             code,
         )
     }
@@ -332,16 +333,34 @@ impl From<BlockHeader> for protosim::evm_simulation::database::BlockHeader {
 }
 
 #[pyclass]
-pub(crate) struct SimulationError(simulation::SimulationError);
+#[derive(Debug)]
+pub(crate) struct SimulationErrorDetails {
+    data: Vec<u8>,
+    gas_used: Option<u64>,
+}
 
-impl From<SimulationError> for PyErr {
-    fn from(err: SimulationError) -> PyErr {
-        PyRuntimeError::new_err(format!("{:?}", err.0))
+impl From<SimulationErrorDetails> for PyErr {
+    fn from(err: SimulationErrorDetails) -> PyErr {
+        pyo3::Python::with_gil(|py| {
+            // might not be needed
+            // let details: PyObject = err.into_py(py);
+            PyRuntimeError::new_err(err).into()
+        })
     }
 }
 
-impl From<simulation::SimulationError> for SimulationError {
+// This indirection is needed cause SimulationError
+//  is defined in an external create
+impl From<simulation::SimulationError> for SimulationErrorDetails {
     fn from(err: simulation::SimulationError) -> Self {
-        Self(err)
+        match err {
+            simulation::SimulationError::StorageError(reason) => SimulationErrorDetails {
+                data: reason.into(),
+                gas_used: None,
+            },
+            simulation::SimulationError::TransactionError { data, gas_used } => {
+                SimulationErrorDetails { data, gas_used }
+            }
+        }
     }
 }

@@ -16,7 +16,7 @@ serde_json = "1.0.105"
 serde = "1.0.152"
 tokio = { version = "1.32.0", features = ["full"] }
 futures = "0.3.25"
-revm = { git = "https://github.com/kayibal/revm", branch = "tracer/add-memory", features = [
+revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
     "ethersdb",
 ] }
 
