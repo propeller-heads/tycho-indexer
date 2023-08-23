@@ -3,7 +3,8 @@ use num_bigint::BigUint;
 use revm::primitives::{B160, U256 as rU256};
 
 use crate::structs_py::{
-    AccountInfo, BlockHeader, SimulationError, SimulationParameters, SimulationResult, StateUpdate,
+    AccountInfo, BlockHeader, SimulationErrorDetails, SimulationParameters, SimulationResult,
+    StateUpdate,
 };
 use pyo3::prelude::*;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -63,7 +64,7 @@ impl SimulationEngine {
             .simulate(&simulation::SimulationParameters::from(params));
         match rust_result {
             Ok(sim_res) => Ok(SimulationResult::from(sim_res)),
-            Err(sim_err) => Err(PyErr::from(SimulationError::from(sim_err))),
+            Err(sim_err) => Err(PyErr::from(SimulationErrorDetails::from(sim_err))),
         }
     }
 

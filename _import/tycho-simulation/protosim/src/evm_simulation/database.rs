@@ -210,7 +210,10 @@ impl<M: Middleware> SimulationDB<M> {
         };
 
         let (balance, nonce, code) = self.block_on(fut);
-
+        let code = to_analysed(Bytecode::new_raw(
+            code.unwrap_or_else(|e| panic!("ethers get code error: {e:?}"))
+                .0,
+        ));
         Ok(AccountInfo::new(
             rU256::from_limbs(
                 balance
@@ -220,10 +223,8 @@ impl<M: Middleware> SimulationDB<M> {
             nonce
                 .unwrap_or_else(|e| panic!("ethers get nonce error: {e:?}"))
                 .as_u64(),
-            to_analysed(Bytecode::new_raw(
-                code.unwrap_or_else(|e| panic!("ethers get code error: {e:?}"))
-                    .0,
-            )),
+            code.hash_slow(),
+            code,
         ))
     }
 
