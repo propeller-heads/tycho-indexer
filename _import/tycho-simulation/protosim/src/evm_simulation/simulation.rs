@@ -29,7 +29,10 @@ pub enum SimulationError {
     /// Something went wrong while getting storage; might be caused by network issues
     StorageError(String),
     /// Simulation didn't succeed; likely not related to network, so retrying won't help
-    TransactionError(String),
+    TransactionError {
+        data: Vec<u8>,
+        gas_used: Option<u64>,
+    },
 }
 
 /// A result of a successful transaction simulation
@@ -128,28 +131,25 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                 result_and_state.state,
             )),
             ExecutionResult::Revert { output, gas_used } => {
-                if let Ok(revert_msg) = std::str::from_utf8(output.as_ref()) {
-                    Err(SimulationError::TransactionError(format!(
-                        "Execution reverted after {gas_used} gas: {revert_msg}",
-                    )))
-                } else {
-                    Err(SimulationError::TransactionError(format!(
-                        "Execution reverted after {gas_used} gas (raw output, couldn't decode): {:?}",
-                        output
-                    )))
-                }
+                Err(SimulationError::TransactionError {
+                    data: output.to_vec(),
+                    gas_used: Some(gas_used),
+                })
             }
-            ExecutionResult::Halt { reason, .. } => Err(SimulationError::TransactionError(
-                format!("Execution halted: {reason:?}"),
-            )),
+            ExecutionResult::Halt { reason, gas_used } => Err(SimulationError::TransactionError {
+                data: format!("{:?}", reason).into(),
+                gas_used: Some(gas_used),
+            }),
         },
         Err(evm_error) => match evm_error {
-            EVMError::Transaction(invalid_tx) => Err(SimulationError::TransactionError(format!(
-                "EVM error: {invalid_tx:?}"
-            ))),
-            EVMError::PrevrandaoNotSet => Err(SimulationError::TransactionError(
-                "EVM error: PrevrandaoNotSet".to_string(),
-            )),
+            EVMError::Transaction(invalid_tx) => Err(SimulationError::TransactionError {
+                data: format!("EVM error: {invalid_tx:?}").into(),
+                gas_used: None,
+            }),
+            EVMError::PrevrandaoNotSet => Err(SimulationError::TransactionError {
+                data: "EVM error: PrevrandaoNotSet".to_string().into(),
+                gas_used: None,
+            }),
             EVMError::Database(db_error) => Err(SimulationError::StorageError(format!(
                 "Storage error: {db_error:?}"
             ))),
@@ -483,8 +483,9 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError(msg) => {
-                assert_eq!(msg, "Execution reverted after 100 gas: output")
+            SimulationError::TransactionError { data, gas_used } => {
+                assert_eq!(String::from_utf8(data).expect("valid utf8 msg"), "output");
+                assert_eq!(gas_used, Some(100));
             }
             _ => panic!("Wrong type of SimulationError!"),
         }
@@ -505,8 +506,12 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError(msg) => {
-                assert_eq!(msg, "Execution halted: OutOfGas(BasicOutOfGas)")
+            SimulationError::TransactionError { data, gas_used } => {
+                assert_eq!(
+                    String::from_utf8(data).expect("valid utf8"),
+                    "OutOfGas(BasicOutOfGas)"
+                );
+                assert_eq!(gas_used, Some(100));
             }
             _ => panic!("Wrong type of SimulationError!"),
         }
@@ -523,8 +528,12 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError(msg) => {
-                assert_eq!(msg, "EVM error: GasMaxFeeGreaterThanPriorityFee")
+            SimulationError::TransactionError { data, gas_used } => {
+                assert_eq!(
+                    String::from_utf8(data).expect("valid utf8"),
+                    "EVM error: GasMaxFeeGreaterThanPriorityFee"
+                );
+                assert_eq!(gas_used, None);
             }
             _ => panic!("Wrong type of SimulationError!"),
         }
