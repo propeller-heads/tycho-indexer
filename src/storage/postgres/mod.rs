@@ -366,7 +366,6 @@ mod fixtures {
             .values((
                 schema::account::title.eq(title),
                 schema::account::chain_id.eq(chain_id),
-                schema::account::creation_tx.eq(tx_id),
                 schema::account::address.eq(hex::decode(address).unwrap()),
             ))
             .returning(schema::account::id)

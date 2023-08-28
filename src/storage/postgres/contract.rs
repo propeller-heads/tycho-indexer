@@ -6,8 +6,12 @@ use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use ethers::types::U256;
 
 use crate::storage::{orm, schema, BlockIdentifier, BlockOrTimestamp, ContractId, StorageError};
+use crate::{
+    models::Chain,
+    storage::{BlockIdentifier, BlockOrTimestamp, ContractId, StorageError},
+};
 
-use super::PostgresGateway;
+use super::{orm, schema, PostgresGateway};
 
 impl<B, TX> PostgresGateway<B, TX> {
     async fn get_slots_delta(
@@ -31,47 +35,85 @@ impl<B, TX> PostgresGateway<B, TX> {
             .unwrap();
 
         let changed_values = if start_version_ts <= target_version_ts {
+            // Going forward
+            //                  ]     relevant changes     ]
+            // -----------------|--------------------------|
+            //                start                     target
+            // We query for changes between start and target version. Then sort
+            // these by account and slot by change time in a desending matter
+            // (latest change first). Next we deduplicate by account and slot.
+            // Finally we select the value column to give us the latest value
+            // within the version range.
             schema::contract_storage::table
-                .filter(schema::contract_storage::contract_id.eq(contract_id))
+                .inner_join(schema::account::table.inner_join(schema::chain::table))
+                .filter(schema::chain::id.eq(chain_id))
                 .filter(schema::contract_storage::valid_from.gt(start_version_ts))
                 .filter(schema::contract_storage::valid_from.le(target_version_ts))
                 .order_by((
+                    schema::account::id,
                     schema::contract_storage::slot,
                     schema::contract_storage::valid_from.desc(),
                     schema::contract_storage::ordinal.desc(),
                 ))
                 .select((
+                    schema::account::id,
                     schema::contract_storage::slot,
                     schema::contract_storage::value,
                 ))
-                .distinct_on(schema::contract_storage::slot)
-                .get_results::<(Vec<u8>, Option<Vec<u8>>)>(conn)
+                .distinct_on((schema::account::id, schema::contract_storage::slot))
+                .get_results::<(i64, Vec<u8>, Option<Vec<u8>>)>(conn)
                 .await
                 .unwrap()
         } else {
-            // we are going backwards, so we'll include data to revert from the
-            // current version. Assume the target version changes were applied
-            // previously already
+            // Going backwards
+            //                  ]     relevant changes     ]
+            // -----------------|--------------------------|
+            //                target                     start
+            // We query for changes between target and start version. Then sort
+            // these for each account and slot by change time in an ascending
+            // manner. Next, we deduplicate by taking the first row for each
+            // account and slot. Finally we select the previous_value column to
+            // give us the value before this first change within the version
+            // range.
             schema::contract_storage::table
-                .filter(schema::contract_storage::contract_id.eq(contract_id))
+                .inner_join(schema::account::table.inner_join(schema::chain::table))
+                .filter(schema::chain::id.eq(chain_id))
                 .filter(schema::contract_storage::valid_from.gt(target_version_ts))
                 .filter(schema::contract_storage::valid_from.le(start_version_ts))
                 .order_by((
-                    schema::contract_storage::slot,
+                    schema::account::id.asc(),
+                    schema::contract_storage::slot.asc(),
                     schema::contract_storage::valid_from.asc(),
                     schema::contract_storage::ordinal.asc(),
                 ))
                 .select((
+                    schema::account::id,
                     schema::contract_storage::slot,
                     schema::contract_storage::previous_value,
                 ))
-                .distinct_on(schema::contract_storage::slot)
-                .get_results::<(Vec<u8>, Option<Vec<u8>>)>(conn)
+                .distinct_on((schema::account::id, schema::contract_storage::slot))
+                .get_results::<(i64, Vec<u8>, Option<Vec<u8>>)>(conn)
                 .await
                 .unwrap()
         };
 
-        changed_values
+        // We retrieve account addresses separately because this is more
+        // efficient for the most common cases. In the most common case, only a
+        // handful of accounts that we are interested in will have had changes
+        // that need to be reverted. The previous query only returns duplicated
+        // account ids, which are lighweight (8 byte vs 20 for addresses), once
+        // deduplicated we only fetch the associated addresses. These addresses
+        // are considered immutable, so if necessary we could event cache these
+        // locally.
+        // In the worst case each changed slot is changed on a different
+        // account. On mainnet that would be at max 300 contracts/slots, which
+        // although not ideal is still bearable.
+        let account_addresses = schema::account::table
+            .filter(schema::account::id.eq_any(changed_values.iter().map(|(cid, _, _)| cid)))
+            .select((schema::account::id, schema::account::address))
+            .get_results::<(i64, Vec<u8>)>(conn)
+            .await
+            .map_err(StorageError::from)?
             .iter()
             .map(|(raw_key, raw_val)| {
                 if raw_key.len() != 32 {
@@ -95,7 +137,51 @@ impl<B, TX> PostgresGateway<B, TX> {
 
                 Ok((U256::from_big_endian(raw_key), v))
             })
-            .collect()
+            .collect::<Result<HashMap<i64, H160>, StorageError>>()?;
+
+        let mut result: HashMap<H160, HashMap<U256, U256>> =
+            HashMap::with_capacity(account_addresses.len());
+        for (cid, raw_key, raw_val) in changed_values.into_iter() {
+            // note this can theoretically happen (only if there is some really
+            // bad database inconsistency) because the call above simply filters
+            // for account ids, but won't error or give any inidication of a
+            // missing contract id.
+            let account_address = account_addresses.get(&cid).ok_or_else(|| {
+                StorageError::DecodeError(format!("Failed to find contract address for id {}", cid))
+            })?;
+
+            if raw_key.len() != 32 {
+                return Err(StorageError::DecodeError(format!(
+                    "Invalid byte length for U256 in slot key! Found: 0x{}",
+                    hex::encode(raw_key)
+                )));
+            }
+            let v = if let Some(val) = raw_val {
+                if val.len() != 32 {
+                    return Err(StorageError::DecodeError(format!(
+                        "Invalid byte length for U256 in slot value! Found: 0x{}",
+                        hex::encode(val)
+                    )));
+                }
+                U256::from_big_endian(&val)
+            } else {
+                U256::zero()
+            };
+
+            let k = U256::from_big_endian(&raw_key);
+
+            match result.entry(*account_address) {
+                Entry::Occupied(mut e) => {
+                    e.get_mut().insert(k, v);
+                }
+                Entry::Vacant(e) => {
+                    let mut contract_storage = HashMap::new();
+                    contract_storage.insert(k, v);
+                    e.insert(contract_storage);
+                }
+            }
+        }
+        Ok(result)
     }
 }
 
@@ -167,9 +253,9 @@ mod test {
             ],
         )
         .await;
-        let c0 = fixtures::insert_contract(
+        let c0 = fixtures::insert_account(
             conn,
-            "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "6B175474E89094C44Da98b954EedeAC495271d0F",
             "c0",
             chain_id,
         )
@@ -202,7 +288,7 @@ mod test {
         dbg!(all_slots
             .iter()
             .map(|s| (
-                s.contract_id,
+                s.account_id,
                 U256::from_big_endian(&s.slot),
                 s.previous_value
                     .clone()
