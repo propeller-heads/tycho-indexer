@@ -465,12 +465,13 @@ pub trait ContractStateGateway {
     ///
     /// # Parameters
     /// - `id` The identifier for the contract.
-    /// - `at` Version at which to retrieve state for. None retrieves the latest
+    /// - `version` Version at which to retrieve state for. None retrieves the latest
     ///   state.
     async fn get_contract(
         &mut self,
         id: ContractId,
-        at: Option<Version>,
+        version: Option<BlockOrTimestamp>,
+        db: &mut Self::DB,
     ) -> Result<Self::ContractState, StorageError>;
 
     /// Save contract metadata.

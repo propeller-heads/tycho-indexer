@@ -261,6 +261,7 @@ mod fixtures {
     use diesel_async::{AsyncPgConnection, RunQueryDsl};
     use ethers::types::{H160, H256, U256};
 
+    use super::orm;
     use super::schema;
 
     // Insert a new chain
@@ -362,12 +363,13 @@ mod fixtures {
         chain_id: i64,
         tx_id: Option<i64>,
     ) -> i64 {
-        diesel::insert_into(schema::account::table)
-            .values((
-                schema::account::title.eq(title),
-                schema::account::chain_id.eq(chain_id),
-                schema::account::address.eq(hex::decode(address).unwrap()),
-            ))
+        let query = diesel::insert_into(schema::account::table).values((
+            schema::account::title.eq(title),
+            schema::account::chain_id.eq(chain_id),
+            schema::account::creation_tx.eq(tx_id),
+            schema::account::address.eq(hex::decode(address).unwrap()),
+        ));
+        query
             .returning(schema::account::id)
             .get_result(conn)
             .await
@@ -409,6 +411,81 @@ mod fixtures {
             .values(&data)
             .returning(schema::contract_storage::id)
             .get_results(conn)
+            .await
+            .unwrap()
+    }
+
+    pub async fn insert_account_balances(
+        conn: &mut AsyncPgConnection,
+        tx_id: i64,
+        account_id: i64,
+    ) -> Vec<i64> {
+        let mut b0 = [0; 32];
+        let mut b1 = [0; 32];
+        U256::zero().to_big_endian(&mut b0);
+        U256::from(100).to_big_endian(&mut b1);
+        let data = vec![
+            (
+                b0,
+                None,
+                "2022-11-01T09:00:00"
+                    .parse::<chrono::NaiveDateTime>()
+                    .unwrap(),
+                Some(
+                    "2022-11-01T09:10:00"
+                        .parse::<chrono::NaiveDateTime>()
+                        .unwrap(),
+                ),
+            ),
+            (
+                b1,
+                Some(tx_id),
+                "2022-11-01T09:20:00"
+                    .parse::<chrono::NaiveDateTime>()
+                    .unwrap(),
+                None,
+            ),
+        ];
+        let orm_balances: Vec<orm::NewAccountBalance> = data
+            .iter()
+            .map(|(b, t, valid_from, valid_to)| orm::NewAccountBalance {
+                account_id,
+                balance: b.to_vec(),
+                modify_tx: *t,
+                valid_from: *valid_from,
+                valid_to: *valid_to,
+            })
+            .collect();
+
+        let query = diesel::insert_into(schema::account_balance::table).values(orm_balances);
+        query
+            .returning(schema::account_balance::id)
+            .get_results(conn)
+            .await
+            .unwrap()
+    }
+
+    pub async fn insert_contract_code(
+        conn: &mut AsyncPgConnection,
+        account_id: i64,
+        modify_tx: i64,
+        code: Vec<u8>,
+    ) -> i64 {
+        let code_hash = H256::from_slice(&ethers::utils::keccak256(&code));
+        let data = (
+            schema::contract_code::code.eq(code),
+            schema::contract_code::hash.eq(code_hash.as_bytes()),
+            schema::contract_code::account_id.eq(account_id),
+            schema::contract_code::modify_tx.eq(modify_tx),
+            schema::contract_code::valid_from.eq("2022-11-01T09:10:00"
+                .parse::<chrono::NaiveDateTime>()
+                .unwrap()),
+        );
+
+        diesel::insert_into(schema::contract_code::table)
+            .values(data)
+            .returning(schema::contract_code::id)
+            .get_result(conn)
             .await
             .unwrap()
     }

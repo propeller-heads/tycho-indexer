@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 
 use async_trait::async_trait;
 use chrono::{NaiveDateTime, Utc};
-use ethers::types::{H160, U256};
+use ethers::types::{H160, H256, U256};
 
 use crate::{
     extractor::evm::{Account, AccountUpdate},
@@ -32,12 +32,71 @@ where
     async fn get_contract(
         &mut self,
         id: ContractId,
-        at: Option<Version>,
+        version: Option<BlockOrTimestamp>,
+        db: &mut Self::DB,
     ) -> Result<Self::ContractState, StorageError> {
-        Err(StorageError::NotFound(
-            "ContractState".to_owned(),
-            "id".to_owned(),
-        ))
+        let h160_address = H160::from_slice(&id.1);
+        let account_orm = orm::Account::by_id(id, db).await;
+        let version_ts = version_to_ts(&version, db).await?;
+
+        match account_orm {
+            Ok(account_orm) => {
+                let balance_query = schema::account_balance::table
+                    .filter(schema::account_balance::account_id.eq(account_orm.id))
+                    .select(schema::account_balance::balance)
+                    .filter(schema::account_balance::valid_from.le(version_ts))
+                    .filter(
+                        schema::account_balance::valid_to
+                            .gt(Some(version_ts))
+                            .or(schema::account_balance::valid_to.is_null()),
+                    );
+
+                let balance = balance_query.first::<Vec<u8>>(db).await?;
+                let (code, code_hash) = schema::contract_code::table
+                    .filter(schema::contract_code::account_id.eq(account_orm.id))
+                    .select((schema::contract_code::code, schema::contract_code::hash))
+                    .filter(schema::contract_code::valid_from.le(version_ts))
+                    .filter(
+                        schema::contract_code::valid_to
+                            .gt(Some(version_ts))
+                            .or(schema::contract_code::valid_to.is_null()),
+                    )
+                    .first::<(Vec<u8>, Vec<u8>)>(db)
+                    .await?;
+
+                let code_h256 = H256::from_slice(&code_hash);
+
+                let creation_tx = match account_orm.creation_tx {
+                    Some(tx) => schema::transaction::table
+                        .filter(schema::transaction::id.eq(tx))
+                        .select(schema::transaction::hash)
+                        .first::<Vec<u8>>(db)
+                        .await
+                        .ok()
+                        .map(|hash| H256::from_slice(&hash)),
+                    None => None,
+                };
+
+                let account = Account::new(
+                    Chain::Ethereum,
+                    h160_address,
+                    account_orm.title,
+                    HashMap::new(),
+                    U256::from_big_endian(&balance),
+                    code,
+                    code_h256,
+                    H256::zero(),
+                    creation_tx,
+                );
+                Ok(account)
+            }
+            Err(err) => Err(StorageError::from_diesel(
+                err,
+                "Account",
+                &h160_address.to_string(),
+                None,
+            )),
+        }
     }
 
     async fn add_contract(&mut self, new: Self::ContractState) -> Result<(), StorageError> {
@@ -327,7 +386,7 @@ mod test {
     use ethers::types::H256;
 
     use super::*;
-    use crate::extractor::evm;
+    use crate::extractor::evm::{self, Account};
     use crate::storage::postgres::fixtures;
 
     async fn setup_db() -> AsyncPgConnection {
@@ -338,52 +397,77 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_contract() {
-        let expected = AccountUpdate::new(
-            "setup_extractor".to_owned(),
+    async fn test_get_account() {
+        let mut conn = setup_db().await;
+        let acc_address = setup_account(&mut conn).await;
+        let code = hex::decode("1234").unwrap();
+        let code_hash = H256::from_slice(&ethers::utils::keccak256(&code));
+        let expected = Account::new(
             Chain::Ethereum,
-            H160::zero(),
+            H160::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+            "account0".to_owned(),
             HashMap::new(),
-            Some(U256::zero()),
-            None,
+            U256::from(100),
+            code,
+            code_hash,
+            H256::zero(),
             None,
         );
 
-        let mut conn = setup_db().await;
         let mut gateway =
             PostgresGateway::<evm::Block, evm::Transaction>::from_connection(&mut conn).await;
-        let id = ContractId(Chain::Ethereum, vec![]);
-        let actual = gateway.get_contract(id, None).await.unwrap();
+        let id = ContractId(Chain::Ethereum, hex::decode(acc_address).unwrap());
+        let actual = gateway.get_contract(id, None, &mut conn).await.unwrap();
 
         assert_eq!(expected, actual);
     }
 
     #[tokio::test]
-    async fn test_add_contract() {
-        let mut conn = setup_db().await;
-        let mut gateway =
-            PostgresGateway::<evm::Block, evm::Transaction>::from_connection(&mut conn).await;
-        let new = AccountUpdate::new(
-            "setup_extractor".to_owned(),
-            Chain::Ethereum,
-            H160::random(),
-            HashMap::new(),
-            Some(U256::zero()),
-            None,
-            None,
-        );
+    async fn test_get_missing_account() {}
 
-        let res = gateway
-            .add_contract(new)
-            .await
-            .expect("Succesful insertion");
-    }
+    #[tokio::test]
+    async fn test_add_contract() {}
 
     #[tokio::test]
     async fn test_delete_contract() {}
 
     #[tokio::test]
     async fn test_upsert_contract() {}
+
+    async fn setup_account(conn: &mut AsyncPgConnection) -> String {
+        // Adds fixtures: chain, block, transaction, account, account_balance
+        let acc_address = "6B175474E89094C44Da98b954EedeAC495271d0F";
+        let chain_id = fixtures::insert_chain(conn, "ethereum").await;
+        let blk = fixtures::insert_blocks(conn, chain_id).await;
+        let txn = fixtures::insert_txns(
+            conn,
+            &[
+                (
+                    blk[0],
+                    1i64,
+                    "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945",
+                ),
+                (
+                    blk[1],
+                    1i64,
+                    "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7",
+                ),
+            ],
+        )
+        .await;
+
+        let addr = hex::encode(H256::random().as_bytes());
+        let tx_data = [(blk[1], 1234, addr.as_str())];
+        let tid = fixtures::insert_txns(conn, &tx_data).await;
+
+        // Insert account and balances
+        let acc_id = fixtures::insert_account(conn, acc_address, "account0", chain_id, None).await;
+
+        let acc_balance = fixtures::insert_account_balances(conn, tid[0], acc_id).await;
+        let contract_code = hex::decode("1234").unwrap();
+        fixtures::insert_contract_code(conn, acc_id, tid[0], contract_code).await;
+        acc_address.to_string()
+    }
 
     async fn setup_slots_delta(conn: &mut AsyncPgConnection) {
         let chain_id = fixtures::insert_chain(conn, "ethereum").await;

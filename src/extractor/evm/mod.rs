@@ -41,7 +41,7 @@ pub struct Account {
     pub code: Vec<u8>,
     pub code_hash: H256,
     pub modify_tx: H256,
-    pub creation_tx: H256,
+    pub creation_tx: Option<H256>,
 }
 
 impl Account {
@@ -54,7 +54,7 @@ impl Account {
         code: Vec<u8>,
         code_hash: H256,
         modify_tx: H256,
-        creation_tx: H256,
+        creation_tx: Option<H256>,
     ) -> Self {
         Self {
             chain,
