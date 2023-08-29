@@ -34,7 +34,7 @@ diesel::table! {
         id -> Int8,
         balance -> Bytea,
         account_id -> Int8,
-        modify_tx -> Int8,
+        modify_tx -> Nullable<Int8>,
         valid_from -> Timestamptz,
         valid_to -> Nullable<Timestamptz>,
         inserted_ts -> Timestamptz,

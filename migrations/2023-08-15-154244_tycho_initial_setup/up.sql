@@ -336,7 +336,7 @@ create table account_balance(
 	"account_id" bigint references account(id) on delete cascade not null,
 	
 	-- the transaction that modified the state to this entry.
-	"modify_tx" bigint references "transaction"(id) on delete cascade not null,
+	"modify_tx" bigint references "transaction"(id) on delete cascade,
 	
 	-- The ts at which this state became valid at.
 	"valid_from" timestamptz not null,
