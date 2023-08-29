@@ -271,6 +271,18 @@ pub struct Account {
     pub modified_ts: NaiveDateTime,
 }
 
+#[derive(Insertable)]
+#[diesel(table_name=account)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewAccount {
+    pub title: String,
+    pub address: Vec<u8>,
+    pub chain_id: i64,
+    pub creation_tx: Option<i64>,
+    pub created_at: Option<NaiveDateTime>,
+    pub deleted_at: Option<NaiveDateTime>,
+}
+
 #[derive(Identifiable, Queryable, Associations, Selectable)]
 #[diesel(belongs_to(Account))]
 #[diesel(table_name=token)]
@@ -294,11 +306,22 @@ pub struct AccountBalance {
     pub id: i64,
     pub balance: Vec<u8>,
     pub account_id: i64,
-    pub modify_tx: i64,
+    pub modify_tx: Option<i64>,
     pub valid_from: NaiveDateTime,
     pub valid_to: Option<NaiveDateTime>,
     pub inserted_ts: NaiveDateTime,
     pub modified_ts: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=account_balance)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewAccountBalance {
+    pub balance: Vec<u8>,
+    pub account_id: i64,
+    pub modify_tx: Option<i64>,
+    pub valid_from: NaiveDateTime,
+    pub valid_to: Option<NaiveDateTime>,
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable)]
