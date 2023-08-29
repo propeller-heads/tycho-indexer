@@ -31,7 +31,44 @@ pub struct Transaction {
     pub index: u64,
 }
 
-pub struct Account {}
+#[derive(PartialEq, Debug)]
+pub struct Account {
+    pub chain: Chain,
+    pub address: H160,
+    pub title: String,
+    pub slots: HashMap<U256, U256>,
+    pub balance: U256,
+    pub code: Vec<u8>,
+    pub code_hash: H256,
+    pub modify_tx: H256,
+    pub creation_tx: H256,
+}
+
+impl Account {
+    pub fn new(
+        chain: Chain,
+        address: H160,
+        title: String,
+        slots: HashMap<U256, U256>,
+        balance: U256,
+        code: Vec<u8>,
+        code_hash: H256,
+        modify_tx: H256,
+        creation_tx: H256,
+    ) -> Self {
+        Self {
+            chain,
+            address,
+            title,
+            slots,
+            balance,
+            code,
+            code_hash,
+            modify_tx,
+            creation_tx,
+        }
+    }
+}
 
 #[derive(PartialEq, Debug)]
 pub struct AccountUpdate {
@@ -42,6 +79,7 @@ pub struct AccountUpdate {
     pub balance: Option<U256>,
     pub code: Option<Vec<u8>>,
     pub code_hash: Option<H256>,
+    pub tx_hash: Option<H256>,
 }
 
 impl AccountUpdate {
@@ -53,6 +91,7 @@ impl AccountUpdate {
         balance: Option<U256>,
         code: Option<Vec<u8>>,
         code_hash: Option<H256>,
+        tx_hash: Option<H256>,
     ) -> Self {
         Self {
             extractor,
@@ -62,6 +101,7 @@ impl AccountUpdate {
             balance,
             code,
             code_hash,
+            tx_hash,
         }
     }
 }

@@ -5,7 +5,7 @@ use chrono::{NaiveDateTime, Utc};
 use ethers::types::{H160, U256};
 
 use crate::{
-    extractor::evm::AccountUpdate,
+    extractor::evm::{Account, AccountUpdate},
     storage::{
         BlockIdentifier, BlockOrTimestamp, ContractId, ContractStateGateway, StorableBlock,
         StorableTransaction, Version,
@@ -24,7 +24,7 @@ where
         + 'static,
 {
     type DB = AsyncPgConnection;
-    type ContractState = AccountUpdate;
+    type ContractState = Account;
     type Address = H160;
     type Slot = U256;
     type Value = U256;
