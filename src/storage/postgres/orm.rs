@@ -290,8 +290,8 @@ impl Account {
     ) -> QueryResult<Account> {
         account::table
             .inner_join(chain::table)
-            .filter(account::address.eq(&account_id.address))
-            .filter(chain::name.eq(account_id.chain.to_string()))
+            .filter(account::address.eq(&account_id.1))
+            .filter(chain::name.eq(account_id.0.to_string()))
             .select(Account::as_select())
             .first::<Account>(conn)
             .await

@@ -43,10 +43,8 @@ pub mod postgres;
 
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
-use crate::rpc::deserialization_helpers::{chain_from_str, hex_to_bytes};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use serde::Deserialize;
 use thiserror::Error;
 
 use crate::models::{Chain, ExtractionState, ProtocolSystem, ProtocolType};
@@ -309,23 +307,12 @@ pub enum VersionKind {
     /// It includes the state after executing the transaction at that index.
     Index(i64),
 }
-#[derive(Debug, Deserialize, PartialEq)]
-pub struct ContractId {
-    #[serde(deserialize_with = "hex_to_bytes")]
-    address: Vec<u8>,
-    #[serde(deserialize_with = "chain_from_str")]
-    chain: Chain,
-}
 
-impl ContractId {
-    pub fn new(chain: Chain, address: Vec<u8>) -> Self {
-        Self { address, chain }
-    }
-}
+pub struct ContractId(Chain, Vec<u8>);
 
 impl Display for ContractId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}: 0x{}", self.chain, hex::encode(&self.address))
+        write!(f, "{:?}: 0x{}", self.0, hex::encode(&self.1))
     }
 }
 
@@ -495,7 +482,7 @@ pub trait ContractStateGateway {
     async fn get_contract(
         &self,
         id: &ContractId,
-        version: &Option<&BlockOrTimestamp>,
+        version: Option<BlockOrTimestamp>,
         db: &mut Self::DB,
     ) -> Result<Self::ContractState, StorageError>;
 
@@ -600,7 +587,7 @@ pub trait ContractStateGateway {
     async fn get_slots_delta(
         &self,
         id: Chain,
-        start_version: Option<&BlockOrTimestamp>,
+        start_version: Option<BlockOrTimestamp>,
         end_version: BlockOrTimestamp,
         db: &mut Self::DB,
     ) -> Result<HashMap<Self::Address, HashMap<Self::Slot, Self::Value>>, StorageError>;

@@ -31,16 +31,16 @@ where
     async fn get_contract(
         &self,
         id: &ContractId,
-        version: &Option<&BlockOrTimestamp>,
+        version: Option<BlockOrTimestamp>,
         db: &mut Self::DB,
     ) -> Result<Self::ContractState, StorageError> {
-        let h160_address = H160::from_slice(&id.address);
+        let h160_address = H160::from_slice(&id.1);
         let account_orm: orm::Account = orm::Account::by_id(id, db)
             .await
             .map_err(|err| {
                 StorageError::from_diesel(err, "Account", &h160_address.to_string(), None)
             })?;
-        let version_ts = version_to_ts(version, db).await?;
+        let version_ts = version_to_ts(&version, db).await?;
 
         let balance_query = schema::account_balance::table
             .filter(schema::account_balance::account_id.eq(account_orm.id))
@@ -258,7 +258,7 @@ where
                     kind
                 )))
             }
-            version_to_ts(&Some(&version), conn).await?
+            version_to_ts(&Some(version), conn).await?
         } else {
             Utc::now().naive_utc()
         };
@@ -383,7 +383,7 @@ where
     async fn get_slots_delta(
         &self,
         chain: Chain,
-        start_version: Option<&BlockOrTimestamp>,
+        start_version: Option<BlockOrTimestamp>,
         target_version: BlockOrTimestamp,
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<Self::Address, HashMap<Self::Slot, Self::Value>>, StorageError> {
@@ -391,7 +391,7 @@ where
         // To support blocks as versions, we need to ingest all blocks, else the
         // below method can error for any blocks that are not present.
         let start_version_ts = version_to_ts(&start_version, conn).await?;
-        let target_version_ts = version_to_ts(&Some(&target_version), conn).await?;
+        let target_version_ts = version_to_ts(&Some(target_version), conn).await?;
 
         let changed_values = if start_version_ts <= target_version_ts {
             // Going forward
@@ -660,7 +660,7 @@ fn parse_u256_slot_entry(
 /// schema this means, that there were no changes detected at that block, but
 /// there might have been on previous or in later blocks.
 async fn version_to_ts(
-    start_version: &Option<&BlockOrTimestamp>,
+    start_version: &Option<BlockOrTimestamp>,
     conn: &mut AsyncPgConnection,
 ) -> Result<NaiveDateTime, StorageError> {
     match &start_version {
@@ -690,7 +690,7 @@ mod test {
     use super::*;
     use crate::{
         extractor::evm::{self, Account},
-        storage::postgres::db_fixtures,
+        storage::postgres::fixtures,
     };
 
     type EvmGateway = PostgresGateway<evm::Block, evm::Transaction>;
@@ -725,9 +725,9 @@ mod test {
 
         let gateway =
             PostgresGateway::<evm::Block, evm::Transaction>::from_connection(&mut conn).await;
-        let id = ContractId::new(Chain::Ethereum, hex::decode(acc_address).unwrap());
+        let id = ContractId(Chain::Ethereum, hex::decode(acc_address).unwrap());
         let actual = gateway
-            .get_contract(&id, &None, &mut conn)
+            .get_contract(&id, None, &mut conn)
             .await
             .unwrap();
 
@@ -739,16 +739,16 @@ mod test {
         let mut conn = setup_db().await;
         let gateway =
             PostgresGateway::<evm::Block, evm::Transaction>::from_connection(&mut conn).await;
-        let contract_id = ContractId::new(
+        let contract_id = ContractId(
             Chain::Ethereum,
             hex::decode("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
         );
         let result = gateway
-            .get_contract(&contract_id, &None, &mut conn)
+            .get_contract(&contract_id, None, &mut conn)
             .await;
         if let Err(StorageError::NotFound(entity, id)) = result {
             assert_eq!(entity, "Account");
-            assert_eq!(id, H160::from_slice(&contract_id.address).to_string());
+            assert_eq!(id, H160::from_slice(&contract_id.1).to_string());
         } else {
             panic!("Expected NotFound error");
         }
@@ -757,9 +757,9 @@ mod test {
     #[tokio::test]
     async fn test_add_contract() {
         let mut conn = setup_db().await;
-        let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
-        let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
-        let txn = db_fixtures::insert_txns(
+        let chain_id = fixtures::insert_chain(&mut conn, "ethereum").await;
+        let blk = fixtures::insert_blocks(&mut conn, chain_id).await;
+        let txn = fixtures::insert_txns(
             &mut conn,
             &[
                 (
@@ -800,13 +800,13 @@ mod test {
             .add_contract(&expected, &mut conn)
             .await
             .unwrap();
-        let contract_id = ContractId::new(
+        let contract_id = ContractId(
             Chain::Ethereum,
             hex::decode("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
         );
 
         let actual = gateway
-            .get_contract(&contract_id, &None, &mut conn)
+            .get_contract(&contract_id, None, &mut conn)
             .await
             .unwrap();
 
@@ -836,7 +836,7 @@ mod test {
         let address = setup_account(&mut conn).await;
         let deletion_txhash = "36984d97c02a98614086c0f9e9c4e97f7e0911f6f136b3c8a76d37d6d524d1e5";
         let address_bytes = hex::decode(address).expect("address ok");
-        let id = ContractId::new(Chain::Ethereum, address_bytes.clone());
+        let id = ContractId(Chain::Ethereum, address_bytes.clone());
         let gw = EvmGateway::from_connection(&mut conn).await;
         let tx = evm::Transaction {
             hash: deletion_txhash
@@ -849,7 +849,7 @@ mod test {
             .first::<(i64, NaiveDateTime)>(&mut conn)
             .await
             .expect("blockquery succeeded");
-        db_fixtures::insert_txns(&mut conn, &[(block_id, 12, deletion_txhash)]).await;
+        fixtures::insert_txns(&mut conn, &[(block_id, 12, deletion_txhash)]).await;
 
         gw.delete_contract(id, &tx, &mut conn)
             .await
@@ -972,14 +972,14 @@ mod test {
     #[tokio::test]
     async fn test_upsert_slots() {
         let mut conn = setup_db().await;
-        let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
-        let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
-        let txn = db_fixtures::insert_txns(
+        let chain_id = fixtures::insert_chain(&mut conn, "ethereum").await;
+        let blk = fixtures::insert_blocks(&mut conn, chain_id).await;
+        let txn = fixtures::insert_txns(
             &mut conn,
             &[(blk[0], 1i64, "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945")],
         )
         .await;
-        db_fixtures::insert_account(
+        fixtures::insert_account(
             &mut conn,
             "6B175474E89094C44Da98b954EedeAC495271d0F",
             "Account1",
@@ -1038,9 +1038,9 @@ mod test {
     async fn setup_account(conn: &mut AsyncPgConnection) -> String {
         // Adds fixtures: chain, block, transaction, account, account_balance
         let acc_address = "6B175474E89094C44Da98b954EedeAC495271d0F";
-        let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
-        let blk = db_fixtures::insert_blocks(conn, chain_id).await;
-        db_fixtures::insert_txns(
+        let chain_id = fixtures::insert_chain(conn, "ethereum").await;
+        let blk = fixtures::insert_blocks(conn, chain_id).await;
+        fixtures::insert_txns(
             conn,
             &[
                 (
@@ -1059,22 +1059,21 @@ mod test {
 
         let addr = hex::encode(H256::random().as_bytes());
         let tx_data = [(blk[1], 1234, addr.as_str())];
-        let tid = db_fixtures::insert_txns(conn, &tx_data).await;
+        let tid = fixtures::insert_txns(conn, &tx_data).await;
 
         // Insert account and balances
-        let acc_id =
-            db_fixtures::insert_account(conn, acc_address, "account0", chain_id, None).await;
+        let acc_id = fixtures::insert_account(conn, acc_address, "account0", chain_id, None).await;
 
-        db_fixtures::insert_account_balances(conn, tid[0], acc_id).await;
+        fixtures::insert_account_balances(conn, tid[0], acc_id).await;
         let contract_code = hex::decode("1234").unwrap();
-        db_fixtures::insert_contract_code(conn, acc_id, tid[0], contract_code).await;
+        fixtures::insert_contract_code(conn, acc_id, tid[0], contract_code).await;
         acc_address.to_string()
     }
 
     async fn setup_slots_delta(conn: &mut AsyncPgConnection) {
-        let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
-        let blk = db_fixtures::insert_blocks(conn, chain_id).await;
-        let txn = db_fixtures::insert_txns(
+        let chain_id = fixtures::insert_chain(conn, "ethereum").await;
+        let blk = fixtures::insert_blocks(conn, chain_id).await;
+        let txn = fixtures::insert_txns(
             conn,
             &[
                 (
@@ -1090,7 +1089,7 @@ mod test {
             ],
         )
         .await;
-        let c0 = db_fixtures::insert_account(
+        let c0 = fixtures::insert_account(
             conn,
             "6B175474E89094C44Da98b954EedeAC495271d0F",
             "c0",
@@ -1098,15 +1097,9 @@ mod test {
             Some(txn[0]),
         )
         .await;
-        db_fixtures::insert_slots(
-            conn,
-            c0,
-            txn[0],
-            "2020-01-01T00:00:00",
-            &[(0, 1), (1, 5), (2, 1)],
-        )
-        .await;
-        db_fixtures::insert_slots(
+        fixtures::insert_slots(conn, c0, txn[0], "2020-01-01T00:00:00", &[(0, 1), (1, 5), (2, 1)])
+            .await;
+        fixtures::insert_slots(
             conn,
             c0,
             txn[1],
@@ -1132,7 +1125,7 @@ mod test {
         let res = gw
             .get_slots_delta(
                 Chain::Ethereum,
-                Some(&BlockOrTimestamp::Timestamp(
+                Some(BlockOrTimestamp::Timestamp(
                     "2020-01-01T00:00:00"
                         .parse::<NaiveDateTime>()
                         .unwrap(),
@@ -1166,7 +1159,7 @@ mod test {
         let res = gw
             .get_slots_delta(
                 Chain::Ethereum,
-                Some(&BlockOrTimestamp::Timestamp(
+                Some(BlockOrTimestamp::Timestamp(
                     "2020-01-01T02:00:00"
                         .parse::<NaiveDateTime>()
                         .unwrap(),
@@ -1185,9 +1178,9 @@ mod test {
     }
 
     async fn setup_revert(conn: &mut AsyncPgConnection) {
-        let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
-        let blk = db_fixtures::insert_blocks(conn, chain_id).await;
-        let txn = db_fixtures::insert_txns(
+        let chain_id = fixtures::insert_chain(conn, "ethereum").await;
+        let blk = fixtures::insert_blocks(conn, chain_id).await;
+        let txn = fixtures::insert_txns(
             conn,
             &[
                 (
@@ -1217,7 +1210,7 @@ mod test {
             ],
         )
         .await;
-        let c0 = db_fixtures::insert_account(
+        let c0 = fixtures::insert_account(
             conn,
             "6B175474E89094C44Da98b954EedeAC495271d0F",
             "c0",
@@ -1225,7 +1218,7 @@ mod test {
             Some(txn[0]),
         )
         .await;
-        let c1 = db_fixtures::insert_account(
+        let c1 = fixtures::insert_account(
             conn,
             "73BcE791c239c8010Cd3C857d96580037CCdd0EE",
             "c1",
@@ -1233,7 +1226,7 @@ mod test {
             Some(txn[2]),
         )
         .await;
-        let c2 = db_fixtures::insert_account(
+        let c2 = fixtures::insert_account(
             conn,
             "94a3F312366b8D0a32A00986194053C0ed0CdDb1",
             "c2",
@@ -1241,17 +1234,11 @@ mod test {
             Some(txn[1]),
         )
         .await;
-        db_fixtures::insert_slots(
-            conn,
-            c0,
-            txn[1],
-            "2020-01-01T00:00:00",
-            &[(0, 1), (1, 5), (2, 1)],
-        )
-        .await;
-        db_fixtures::insert_slots(conn, c2, txn[1], "2020-01-01T00:00:00", &[(1, 2), (2, 4)]).await;
-        db_fixtures::delete_account(conn, c2, "2020-01-01T01:00:00").await;
-        db_fixtures::insert_slots(
+        fixtures::insert_slots(conn, c0, txn[1], "2020-01-01T00:00:00", &[(0, 1), (1, 5), (2, 1)])
+            .await;
+        fixtures::insert_slots(conn, c2, txn[1], "2020-01-01T00:00:00", &[(1, 2), (2, 4)]).await;
+        fixtures::delete_account(conn, c2, "2020-01-01T01:00:00").await;
+        fixtures::insert_slots(
             conn,
             c0,
             txn[3],
@@ -1259,7 +1246,7 @@ mod test {
             &[(0, 2), (1, 3), (5, 25), (6, 30)],
         )
         .await;
-        db_fixtures::insert_slots(conn, c1, txn[3], "2020-01-01T01:00:00", &[(0, 128), (1, 256)])
+        fixtures::insert_slots(conn, c1, txn[3], "2020-01-01T01:00:00", &[(0, 128), (1, 256)])
             .await;
     }
 

@@ -259,7 +259,7 @@ impl<B, TX> PostgresGateway<B, TX> {
 
     #[allow(clippy::needless_pass_by_ref_mut)]
     #[cfg(test)]
-    pub async fn from_connection(conn: &mut AsyncPgConnection) -> Self {
+    async fn from_connection(conn: &mut AsyncPgConnection) -> Self {
         let results: Vec<(i64, String)> = async {
             use schema::chain::dsl::*;
             chain
@@ -283,7 +283,7 @@ impl<B, TX> PostgresGateway<B, TX> {
 }
 
 #[cfg(test)]
-pub mod db_fixtures {
+mod fixtures {
     use std::str::FromStr;
 
     use chrono::NaiveDateTime;

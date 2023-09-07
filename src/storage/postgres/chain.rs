@@ -177,7 +177,7 @@ impl StorableTransaction<orm::Transaction, orm::NewTransaction, i64> for evm::Tr
 mod test {
     use std::str::FromStr;
 
-    use crate::storage::postgres::db_fixtures;
+    use crate::storage::postgres::fixtures;
 
     use super::*;
 
@@ -192,9 +192,9 @@ mod test {
             .await
             .unwrap();
 
-        let chain_id: i64 = db_fixtures::insert_chain(&mut conn, "ethereum").await;
-        let block_ids = db_fixtures::insert_blocks(&mut conn, chain_id).await;
-        db_fixtures::insert_txns(
+        let chain_id: i64 = fixtures::insert_chain(&mut conn, "ethereum").await;
+        let block_ids = fixtures::insert_blocks(&mut conn, chain_id).await;
+        fixtures::insert_txns(
             &mut conn,
             &[(
                 block_ids[0],
