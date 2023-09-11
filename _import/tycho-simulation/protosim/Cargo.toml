@@ -20,6 +20,7 @@ revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376b
     "ethersdb",
 ] }
 hex = "0.4.3"
+thiserror = "1"
 
 [dev-dependencies]
 approx = "0.3.2"

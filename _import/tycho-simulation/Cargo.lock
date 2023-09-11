@@ -2724,6 +2724,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
 ]
 
