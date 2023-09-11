@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use simulation_py::SimulationEngine;
-use structs_py::{AccountInfo, BlockHeader, SimulationParameters, StateUpdate};
+use structs_py::{AccountInfo, BlockHeader, SimulationParameters, StateUpdate, SimulationResult};
 
 mod simulation_py;
 mod structs_py;
@@ -11,6 +11,7 @@ fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     env_logger::init();
     m.add_class::<SimulationEngine>()?;
     m.add_class::<SimulationParameters>()?;
+    m.add_class::<SimulationResult>()?;
     m.add_class::<StateUpdate>()?;
     m.add_class::<BlockHeader>()?;
     m.add_class::<AccountInfo>()?;
