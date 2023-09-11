@@ -18,22 +18,6 @@ use tracing::{error, info};
 use tracing_actix_web::TracingLogger;
 use uuid::Uuid;
 
-struct DummyMessage {
-    extractor_id: ExtractorIdentity,
-}
-
-impl DummyMessage {
-    pub fn new(extractor_id: ExtractorIdentity) -> Self {
-        Self { extractor_id }
-    }
-}
-
-impl NormalisedMessage for DummyMessage {
-    fn source(&self) -> ExtractorIdentity {
-        self.extractor_id.clone()
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum WebsocketError {
     #[error("Extractor not found: {0}")]
@@ -230,24 +214,6 @@ where
     }
 }
 
-/// FIXME Define as a standalone binary? Or move the server start to main.rs
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let state = web::Data::new(AppState::<DummyMessage>::new());
-
-    info!("Starting server");
-    HttpServer::new(move || {
-        App::new()
-            .app_data(state.clone())
-            .service(web::resource("/ws/").route(web::get().to(WsActor::<DummyMessage>::ws_index)))
-            .wrap(TracingLogger::default())
-    })
-    .workers(2)
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -262,13 +228,31 @@ mod tests {
         Message,
     };
 
+    struct DummyMessage {
+        extractor_id: ExtractorIdentity,
+    }
+
+    impl DummyMessage {
+        pub fn new(extractor_id: ExtractorIdentity) -> Self {
+            Self { extractor_id }
+        }
+    }
+
+    impl NormalisedMessage for DummyMessage {
+        fn source(&self) -> ExtractorIdentity {
+            self.extractor_id.clone()
+        }
+    }
+
     #[actix_rt::test]
     async fn test_websocket_ping_pong() {
         let state = web::Data::new(AppState::<DummyMessage>::new());
         let srv = start(move || {
             App::new()
                 .app_data(state.clone())
-                .service(web::resource("/ws/").route(web::get().to(WsActor::<DummyMessage>::ws_index)))
+                .service(
+                    web::resource("/ws/").route(web::get().to(WsActor::<DummyMessage>::ws_index)),
+                )
         });
 
         let url = srv
