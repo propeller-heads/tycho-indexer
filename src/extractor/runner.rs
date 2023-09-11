@@ -32,7 +32,7 @@ impl<M> ExtractorHandle<M>
 where
     M: NormalisedMessage + Sync + Send + 'static,
 {
-    async fn subscribe(&self) -> Result<Receiver<Arc<M>>, SendError<ControlMessage<M>>> {
+    pub async fn subscribe(&self) -> Result<Receiver<Arc<M>>, SendError<ControlMessage<M>>> {
         let (tx, rx) = mpsc::channel(1);
         self.control_tx
             .send(ControlMessage::Subscribe(tx))
@@ -40,7 +40,7 @@ where
         Ok(rx)
     }
 
-    async fn stop(self) -> Result<(), Box<dyn Error>> {
+    pub async fn stop(self) -> Result<(), Box<dyn Error>> {
         self.control_tx
             .send(ControlMessage::Stop)
             .await?;

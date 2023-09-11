@@ -9,10 +9,6 @@ edition = "2021"
 name = "tycho-indexer"
 path = "src/main.rs"
 
-[[bin]]
-name = "websocket-server"
-path = "src/services/ws.rs"
-
 [dependencies]
 anyhow = "1"
 async-stream = "0.3"
@@ -53,14 +49,12 @@ actix = "0.13.1"
 actix-web = "4.4.0"
 actix-web-actors = "4.2.0"
 tracing-actix-web = "0.7.6"
-
-[dependencies.uuid]
-version = "1.4.1"
-features = [
-    "v4",                # Lets you generate random UUIDs
-    "fast-rng",          # Use a faster (but still sufficiently random) RNG
-    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
-]
+uuid = { version = "1.4.1", features = [
+    "serde",
+    "v4",
+    "fast-rng",
+    "macro-diagnostics",
+] }
 
 [dev-dependencies]
 actix-rt = "2.9.0"
