@@ -21,6 +21,7 @@ revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376b
 ] }
 hex = "0.4.3"
 thiserror = "1"
+chrono = { version = "0.4.26", features = ["serde"] }
 
 [dev-dependencies]
 approx = "0.3.2"

@@ -10,9 +10,10 @@ use revm::{
 };
 
 use super::{
-    account_storage::{AccountError, AccountStorage, StateUpdate},
-    database::BlockHeader,
+    account_storage::{AccountStorage, StateUpdate},
+    tycho_models::{Block, BlockStateChanges},
 };
+
 #[derive(Error, Debug)]
 pub enum TychoDBError {
     #[error("Account {0} not found")]
@@ -30,11 +31,11 @@ pub struct TychoDB {
     /// Cached data
     account_storage: RefCell<AccountStorage>,
     /// Current block
-    block: Option<BlockHeader>,
+    block: Option<Block>,
 }
 
 impl TychoDB {
-    pub fn new(start_block: Option<BlockHeader>) -> Self {
+    pub fn new(start_block: Option<Block>) -> Self {
         Self {
             account_storage: RefCell::new(AccountStorage::new()),
             block: start_block,
@@ -75,15 +76,18 @@ impl TychoDB {
     ///
     /// # Arguments
     ///
-    /// * `updates`: A map or collection containing the values used for updating accounts.
-    /// * `block`: The specific block in the blockchain that this update corresponds to.
-    pub fn update_state(&mut self, updates: &HashMap<B160, StateUpdate>, block: BlockHeader) {
-        self.block = Some(block);
-        for (address, update_info) in updates.iter() {
-            let result = self
-                .account_storage
+    /// * `new_state`: A struct containing all the state changes for a particular block.
+    pub fn update_state(&mut self, new_state: &BlockStateChanges) {
+        //TODO: initialize new contracts
+        self.block = Some(new_state.block);
+        for (address, update_info) in new_state.account_updates.iter() {
+            let account_update = StateUpdate {
+                storage: update_info.slots.clone(),
+                balance: update_info.balance,
+            };
+            self.account_storage
                 .borrow_mut()
-                .update_account(address, update_info);
+                .update_account(address, &account_update);
         }
     }
 }
@@ -162,7 +166,7 @@ impl DatabaseRef for TychoDB {
     /// If block header is set, returns the hash. Otherwise returns a zero hash.
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
         match &self.block {
-            Some(header) => Ok(B256::from(header.hash)),
+            Some(header) => Ok(header.hash),
             None => Err(TychoDBError::BlockNotSet()),
         }
     }
