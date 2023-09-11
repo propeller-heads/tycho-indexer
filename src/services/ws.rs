@@ -5,7 +5,7 @@ use crate::{
     models::{ExtractorIdentity, NormalisedMessage},
 };
 use actix::{Actor, ActorContext, StreamHandler};
-use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,7 +15,6 @@ use std::{
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tracing::{error, info};
-use tracing_actix_web::TracingLogger;
 use uuid::Uuid;
 
 #[derive(Error, Debug)]
