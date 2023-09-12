@@ -171,3 +171,116 @@ impl DatabaseRef for TychoDB {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::NaiveDateTime;
+    use revm::primitives::U256 as rU256;
+    use rstest::{fixture, rstest};
+    use std::{error::Error, str::FromStr};
+
+    use crate::evm_simulation::tycho_models::{AccountUpdate, Chain, Transaction};
+
+    use super::*;
+    #[fixture]
+    pub fn mock_db() -> TychoDB {
+        TychoDB::new(None)
+    }
+
+    #[rstest]
+    fn test_mock_account_get_acc_info(mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+        // Tests if the provider has not been queried.
+        // Querying the mocked provider would cause a panic, therefore no assert is needed.
+        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        mock_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
+
+        let acc_info = mock_db.basic(mock_acc_address).unwrap().unwrap();
+
+        assert_eq!(
+            mock_db
+                .account_storage
+                .borrow()
+                .get_account_info(&mock_acc_address)
+                .unwrap(),
+            &acc_info
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_mock_account_storage(mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let storage_address = rU256::from(1);
+        let mut permanent_storage: HashMap<rU256, rU256> = HashMap::new();
+        permanent_storage.insert(storage_address, rU256::from(10));
+        mock_db.init_account(
+            mock_acc_address,
+            AccountInfo::default(),
+            Some(permanent_storage),
+            true,
+        );
+
+        let storage = mock_db.storage(mock_acc_address, storage_address).unwrap();
+
+        assert_eq!(storage, rU256::from(10));
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_update_state(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        mock_db.init_account(address, AccountInfo::default(), None, false);
+
+        let mut new_storage = HashMap::default();
+        let new_storage_value_index = rU256::from_limbs_slice(&[123]);
+        new_storage.insert(new_storage_value_index, new_storage_value_index);
+        let new_balance = rU256::from_limbs_slice(&[500]);
+        let update = AccountUpdate::new(
+            "hashflow".to_string(),
+            Chain::Ethereum,
+            B160::default(),
+            Some(new_storage),
+            Some(new_balance),
+            None,
+            Transaction::default(),
+        );
+        let new_block = Block {
+            number: 1,
+            hash: B256::default(),
+            parent_hash: B256::default(),
+            chain: Chain::Ethereum,
+            ts: NaiveDateTime::from_timestamp_millis(123).unwrap(),
+        };
+        let mut updates = HashMap::default();
+        updates.insert(address, update);
+
+        let changes = BlockStateChanges {
+            block: new_block,
+            account_updates: updates,
+            new_pools: HashMap::default(),
+        };
+
+        mock_db.update_state(&changes);
+
+        assert_eq!(
+            mock_db
+                .account_storage
+                .borrow()
+                .get_storage(&address, &new_storage_value_index)
+                .unwrap(),
+            new_storage_value_index
+        );
+        assert_eq!(
+            mock_db
+                .account_storage
+                .borrow()
+                .get_account_info(&address)
+                .unwrap()
+                .balance,
+            new_balance
+        );
+        assert_eq!(mock_db.block.unwrap().number, 1);
+
+        Ok(())
+    }
+}
