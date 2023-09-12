@@ -18,10 +18,6 @@ use super::{
 pub enum TychoDBError {
     #[error("Account {0} not found")]
     MissingAccount(B160),
-    #[error("Account {0} missing slot {1}")]
-    MissingSlot(B160, rU256),
-    #[error("Mocked account {0} missing slot {1}")]
-    MissingMockedSlot(B160, rU256),
     #[error("Block needs to be set")]
     BlockNotSet(),
 }
@@ -52,20 +48,18 @@ impl TychoDB {
     /// * `address` - Address of the account
     /// * `account` - The account information
     /// * `permanent_storage` - Storage to init the account with, this storage can only be updated manually
-    /// * `mocked` - Whether this account should be considered mocked. For mocked accounts, all data must be inserted manually.
     pub fn init_account(
         &mut self,
         address: B160,
         mut account: AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
-        mocked: bool,
     ) {
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
 
         self.account_storage
-            .init_account(address, account, permanent_storage, mocked);
+            .init_account(address, account, permanent_storage, true);
     }
 
     /// Update the simulation state.
@@ -130,29 +124,13 @@ impl DatabaseRef for TychoDB {
     /// Returns an error if the storage value is not found.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
-        let is_mocked = self.account_storage.is_mocked_account(&address);
         if let Some(storage_value) = self.account_storage.get_storage(&address, &index) {
-            debug!(
-                "Got value locally. This is a {} account. Value: {}",
-                (if is_mocked.unwrap_or(false) {
-                    "mocked"
-                } else {
-                    "non-mocked"
-                }),
-                storage_value
-            );
-            return Ok(storage_value);
-        }
-        // At this point we know we don't have data for this storage slot.
-        match is_mocked {
-            Some(true) => {
-                debug!("This is a mocked account for which we don't have data. Returning error.");
-                Err(TychoDBError::MissingMockedSlot(address, index))
-            }
-            _ => {
-                debug!("We don't have this data. Returning error.");
-                Err(TychoDBError::MissingSlot(address, index))
-            }
+            debug!("Got value locally. Value: {}", storage_value);
+            Ok(storage_value)
+        } else {
+            // At this point we know we don't have data for this storage slot.
+            debug!("We don't have data for {}. Returning error.", address);
+            Err(TychoDBError::MissingAccount(address))
         }
     }
 
@@ -181,11 +159,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_mock_account_get_acc_info(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+    fn test_account_get_acc_info(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
         // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
+        mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
 
         let acc_info = mock_db.basic(mock_acc_address).unwrap().unwrap();
 
@@ -200,7 +178,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_mock_account_storage(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+    fn test_account_storage(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::from(1);
         let mut permanent_storage: HashMap<rU256, rU256> = HashMap::new();
@@ -209,7 +187,6 @@ mod tests {
             mock_acc_address,
             AccountInfo::default(),
             Some(permanent_storage),
-            true,
         );
 
         let storage = mock_db.storage(mock_acc_address, storage_address).unwrap();
@@ -221,7 +198,7 @@ mod tests {
     #[rstest]
     fn test_update_state(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(address, AccountInfo::default(), None, false);
+        mock_db.init_account(address, AccountInfo::default(), None);
 
         let mut new_storage = HashMap::default();
         let new_storage_value_index = rU256::from_limbs_slice(&[123]);
