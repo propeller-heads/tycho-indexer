@@ -71,25 +71,3 @@ pub struct AccountUpdate {
     pub code: Option<Vec<u8>>,
     pub tx: Transaction,
 }
-
-impl AccountUpdate {
-    pub fn new(
-        extractor: String,
-        chain: Chain,
-        address: B160,
-        slots: Option<HashMap<rU256, rU256>>,
-        balance: Option<rU256>,
-        code: Option<Vec<u8>>,
-        tx: Transaction,
-    ) -> Self {
-        AccountUpdate {
-            extractor,
-            chain,
-            address,
-            slots,
-            balance,
-            code,
-            tx,
-        }
-    }
-}

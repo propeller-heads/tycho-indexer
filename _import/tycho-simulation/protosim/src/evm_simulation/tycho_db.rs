@@ -11,7 +11,7 @@ use revm::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
-    tycho_models::{Block, BlockStateChanges},
+    tycho_models::Block,
 };
 
 #[derive(Error, Debug)]
@@ -70,16 +70,11 @@ impl TychoDB {
     /// # Arguments
     ///
     /// * `new_state`: A struct containing all the state changes for a particular block.
-    pub fn update_state(&mut self, new_state: &BlockStateChanges) {
+    pub fn update_state(&mut self, new_state: &HashMap<B160, StateUpdate>, block: Block) {
         //TODO: initialize new contracts
-        self.block = Some(new_state.block);
-        for (address, update_info) in new_state.account_updates.iter() {
-            let account_update = StateUpdate {
-                storage: update_info.slots.clone(),
-                balance: update_info.balance,
-            };
-            self.account_storage
-                .update_account(address, &account_update);
+        self.block = Some(block);
+        for (address, state_update) in new_state.iter() {
+            self.account_storage.update_account(address, state_update);
         }
     }
 }
@@ -150,7 +145,7 @@ mod tests {
     use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr};
 
-    use crate::evm_simulation::tycho_models::{AccountUpdate, Chain, Transaction};
+    use crate::evm_simulation::tycho_models::Chain;
 
     use super::*;
     #[fixture]
@@ -204,15 +199,10 @@ mod tests {
         let new_storage_value_index = rU256::from_limbs_slice(&[123]);
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = rU256::from_limbs_slice(&[500]);
-        let update = AccountUpdate::new(
-            "hashflow".to_string(),
-            Chain::Ethereum,
-            B160::default(),
-            Some(new_storage),
-            Some(new_balance),
-            None,
-            Transaction::default(),
-        );
+        let update = StateUpdate {
+            storage: Some(new_storage),
+            balance: Some(new_balance),
+        };
         let new_block = Block {
             number: 1,
             hash: B256::default(),
@@ -223,13 +213,7 @@ mod tests {
         let mut updates = HashMap::default();
         updates.insert(address, update);
 
-        let changes = BlockStateChanges {
-            block: new_block,
-            account_updates: updates,
-            new_pools: HashMap::default(),
-        };
-
-        mock_db.update_state(&changes);
+        mock_db.update_state(&updates, new_block);
 
         assert_eq!(
             mock_db
