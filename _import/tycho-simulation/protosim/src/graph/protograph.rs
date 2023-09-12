@@ -775,7 +775,8 @@ mod tests {
         g.build_routes(
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-        );
+        )
+        .unwrap();
         g
     }
 
@@ -1040,7 +1041,8 @@ mod tests {
         g.build_routes(
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-        );
+        )
+        .unwrap();
 
         let mut routes = Vec::with_capacity(g.routes.len());
         for r in g.routes {
@@ -1176,7 +1178,8 @@ mod tests {
         g.build_routes(
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             H160::from_str("0x0000000000000000000000000000000000000003").unwrap(),
-        );
+        )
+        .unwrap();
 
         let mut routes = Vec::with_capacity(g.routes.len());
         for r in g.routes {
