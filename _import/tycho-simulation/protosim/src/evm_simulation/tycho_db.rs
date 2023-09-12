@@ -1,5 +1,4 @@
 use log::debug;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -123,9 +122,15 @@ impl DatabaseRef for TychoDB {
             debug!("Got value locally. Value: {}", storage_value);
             Ok(storage_value)
         } else {
-            // At this point we know we don't have data for this storage slot.
-            debug!("We don't have data for {}. Returning error.", address);
-            Err(TychoDBError::MissingAccount(address))
+            // At this point we either don't know this address or we don't have anything at this index (memory slot)
+            if self.account_storage.account_present(&address) {
+                // As we only store non-zero values, if the account is present it means this slot is zero.
+                Ok(rU256::ZERO)
+            } else {
+                // At this point we know we don't have data for this address.
+                debug!("We don't have data for {}. Returning error.", address);
+                Err(TychoDBError::MissingAccount(address))
+            }
         }
     }
 
@@ -188,6 +193,31 @@ mod tests {
 
         assert_eq!(storage, rU256::from(10));
         Ok(())
+    }
+
+    #[rstest]
+    fn test_account_storage_zero(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let storage_address = rU256::from(1);
+        mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
+
+        let storage = mock_db.storage(mock_acc_address, storage_address).unwrap();
+
+        assert_eq!(storage, rU256::ZERO);
+        Ok(())
+    }
+
+    #[rstest]
+    #[should_panic(
+        expected = "called `Result::unwrap()` on an `Err` value: MissingAccount(0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc)"
+    )]
+    fn test_account_storage_missing(mock_db: TychoDB) {
+        let mock_acc_address =
+            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let storage_address = rU256::from(1);
+
+        // This will panic because this account isn't initialized
+        mock_db.storage(mock_acc_address, storage_address).unwrap();
     }
 
     #[rstest]
