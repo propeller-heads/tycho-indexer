@@ -1,6 +1,8 @@
+use ethers::types::Bytes;
 use log::debug;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
+use tokio::sync::RwLock;
 
 use revm::{
     db::DatabaseRef,
@@ -14,7 +16,7 @@ use super::{
 };
 
 #[derive(Error, Debug)]
-pub enum TychoDBError {
+pub enum PreCachedDBError {
     #[error("Account {0} not found")]
     MissingAccount(B160),
     #[error("Block needs to be set")]
@@ -22,17 +24,17 @@ pub enum TychoDBError {
 }
 
 #[derive(Debug)]
-pub struct TychoDB {
+pub struct PreCachedDB {
     /// Cached data
-    account_storage: AccountStorage,
+    accounts: AccountStorage,
     /// Current block
     block: Option<Block>,
 }
 
-impl TychoDB {
+impl PreCachedDB {
     pub fn new(start_block: Option<Block>) -> Self {
         Self {
-            account_storage: AccountStorage::new(),
+            accounts: AccountStorage::new(),
             block: start_block,
         }
     }
@@ -57,7 +59,7 @@ impl TychoDB {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
 
-        self.account_storage
+        self.accounts
             .init_account(address, account, permanent_storage, true);
     }
 
@@ -73,13 +75,13 @@ impl TychoDB {
         //TODO: initialize new contracts
         self.block = Some(block);
         for (address, state_update) in new_state.iter() {
-            self.account_storage.update_account(address, state_update);
+            self.accounts.update_account(address, state_update);
         }
     }
 }
 
-impl DatabaseRef for TychoDB {
-    type Error = TychoDBError;
+impl DatabaseRef for PreCachedDB {
+    type Error = PreCachedDBError;
     /// Retrieves basic information about an account.
     ///
     /// This function retrieves the basic account information for the specified address.
@@ -92,10 +94,10 @@ impl DatabaseRef for TychoDB {
     ///
     /// Returns a `Result` containing the account information or an error if the account is not found.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self.account_storage.get_account_info(&address) {
+        if let Some(account) = self.accounts.get_account_info(&address) {
             return Ok(Some(account.clone()));
         };
-        Err(TychoDBError::MissingAccount(address))
+        Err(PreCachedDBError::MissingAccount(address))
     }
 
     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
@@ -118,18 +120,18 @@ impl DatabaseRef for TychoDB {
     /// Returns an error if the storage value is not found.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
-        if let Some(storage_value) = self.account_storage.get_storage(&address, &index) {
+        if let Some(storage_value) = self.accounts.get_storage(&address, &index) {
             debug!("Got value locally. Value: {}", storage_value);
             Ok(storage_value)
         } else {
             // At this point we either don't know this address or we don't have anything at this index (memory slot)
-            if self.account_storage.account_present(&address) {
+            if self.accounts.account_present(&address) {
                 // As we only store non-zero values, if the account is present it means this slot is zero.
                 Ok(rU256::ZERO)
             } else {
                 // At this point we know we don't have data for this address.
                 debug!("We don't have data for {}. Returning error.", address);
-                Err(TychoDBError::MissingAccount(address))
+                Err(PreCachedDBError::MissingAccount(address))
             }
         }
     }
@@ -138,9 +140,100 @@ impl DatabaseRef for TychoDB {
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
         match &self.block {
             Some(header) => Ok(header.hash),
-            None => Err(TychoDBError::BlockNotSet()),
+            None => Err(PreCachedDBError::BlockNotSet()),
         }
     }
+}
+
+// we might consider wrapping this type for a nicer API
+pub type TychoDB = Arc<RwLock<PreCachedDB>>;
+
+// main data update loop, runs in a separate tokio runtime. Be aware that
+// db.write() might lock not async safe. Maybe use RwLock from tokio instead??
+pub async fn update_loop(db: TychoDB, tycho_url: &str) {
+    let client = TychoVmStateClient::new(tycho_url).unwrap();
+    // start buffering messages
+    let mut messages = client.realtime_messages().await;
+
+    // Initialize state with the first message.
+    let first_msg = messages.recv().await.expect("stream ok");
+
+    let state = client
+        .get_state(None, Some(&StateRequestBody::from_block(first_msg.block)))
+        .await
+        .unwrap();
+    for account in state.iter() {
+        db.write().await.init_account(
+            account.address,
+            AccountInfo::new(
+                account.balance,
+                0,
+                account.code_hash,
+                Bytecode::new_raw(Bytes::from(account.code.to_owned()).0), //TODO: do we really need to clone here?
+            ),
+            Some(account.slots.to_owned()), //TODO: do we really need to clone here?
+        );
+    }
+
+    // Continuous loop to handle incoming messages.
+    loop {
+        let msg = messages.recv().await.expect("stream ok");
+
+        // This scope ensures the lock is dropped after processing the message.
+        {
+            let mut db_guard = db.write().await;
+
+            // Update existing accounts.
+            for (address, update) in msg.account_updates.iter() {
+                if db_guard.accounts.account_present(address) {
+                    db_guard.accounts.update_account(
+                        address,
+                        &StateUpdate {
+                            storage: update.slots.to_owned(), //TODO: do we really need to clone here?
+                            balance: update.balance,
+                        },
+                    );
+                } else {
+                    // Initialize new accounts if they don't already exist.
+                    // For this, you might need more information,
+                    // like the complete AccountInfo and its storage.
+                    // This is just a stub assuming you have necessary info in the update itself.
+                    db_guard.init_account(
+                        *address,
+                        AccountInfo::default(),
+                        update.slots.to_owned(), //TODO: do we really need to clone here?
+                    );
+                }
+            }
+
+            // // If there are new accounts in the message, initialize them as well.
+            // if let Some(new_accounts) = &msg.new_accounts {
+            //     for (address, info, storage) in new_accounts.iter() {
+            //         db_guard.init_account(*address, info.clone(), Some(storage.clone()));
+            //     }
+            // }
+        }
+    }
+}
+
+pub fn tycho_db(url: String) -> TychoDB {
+    let inner = PreCachedDB {
+        accounts: AccountStorage::new(),
+        block: None,
+    };
+
+    let db = Arc::new(RwLock::new(inner));
+    let cloned_db = db.clone();
+
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| tokio::runtime::Runtime::new().unwrap())
+            .unwrap();
+        runtime.block_on(update_loop(cloned_db, &url));
+    });
+
+    db
 }
 
 #[cfg(test)]
@@ -153,13 +246,14 @@ mod tests {
     use crate::evm_simulation::tycho_models::Chain;
 
     use super::*;
+
     #[fixture]
-    pub fn mock_db() -> TychoDB {
-        TychoDB::new(None)
+    pub fn mock_db() -> PreCachedDB {
+        PreCachedDB::new(None)
     }
 
     #[rstest]
-    fn test_account_get_acc_info(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+    fn test_account_get_acc_info(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
@@ -169,7 +263,7 @@ mod tests {
 
         assert_eq!(
             mock_db
-                .account_storage
+                .accounts
                 .get_account_info(&mock_acc_address)
                 .unwrap(),
             &acc_info
@@ -178,7 +272,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_account_storage(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+    fn test_account_storage(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::from(1);
         let mut permanent_storage: HashMap<rU256, rU256> = HashMap::new();
@@ -196,7 +290,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_account_storage_zero(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+    fn test_account_storage_zero(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::from(1);
         mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
@@ -211,7 +305,7 @@ mod tests {
     #[should_panic(
         expected = "called `Result::unwrap()` on an `Err` value: MissingAccount(0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc)"
     )]
-    fn test_account_storage_missing(mock_db: TychoDB) {
+    fn test_account_storage_missing(mock_db: PreCachedDB) {
         let mock_acc_address =
             B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let storage_address = rU256::from(1);
@@ -221,7 +315,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_update_state(mut mock_db: TychoDB) -> Result<(), Box<dyn Error>> {
+    fn test_update_state(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_db.init_account(address, AccountInfo::default(), None);
 
@@ -247,17 +341,13 @@ mod tests {
 
         assert_eq!(
             mock_db
-                .account_storage
+                .accounts
                 .get_storage(&address, &new_storage_value_index)
                 .unwrap(),
             new_storage_value_index
         );
         assert_eq!(
-            mock_db
-                .account_storage
-                .get_account_info(&address)
-                .unwrap()
-                .balance,
+            mock_db.accounts.get_account_info(&address).unwrap().balance,
             new_balance
         );
         assert_eq!(mock_db.block.unwrap().number, 1);
