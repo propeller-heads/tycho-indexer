@@ -12,6 +12,7 @@ use revm::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
+    tycho_client::{StateRequestBody, TychoVmStateClient},
     tycho_models::Block,
 };
 
