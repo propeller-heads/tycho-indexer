@@ -24,12 +24,12 @@ pub enum TychoClientError {
     #[error("Failed to parse response: {0}")]
     ParseResponse(String),
 }
+
 #[derive(Serialize, Debug)]
 pub struct StateRequestBody {
     contract_ids: Option<Vec<B160>>,
     version: Option<Version>,
 }
-
 impl StateRequestBody {
     pub fn from_block(block: Block) -> Self {
         Self {
@@ -57,12 +57,12 @@ struct RequestBlock {
     number: u64,
     chain: Chain,
 }
+
 #[derive(Default)]
 pub struct GetStateFilters {
     tvl_gt: Option<u64>,
     intertia_min_gt: Option<u64>,
 }
-
 impl GetStateFilters {
     fn to_query_string(&self) -> String {
         let mut parts = Vec::new();
@@ -80,6 +80,7 @@ impl GetStateFilters {
         parts.join("&")
     }
 }
+
 #[derive(Deserialize)]
 pub struct ResponseAccount {
     pub address: B160,
@@ -93,7 +94,6 @@ pub struct TychoVmStateClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,
 }
-
 impl TychoVmStateClient {
     pub fn new(base_url: &str) -> Result<Self, TychoClientError> {
         let base_uri = base_url
@@ -112,7 +112,11 @@ impl TychoVmStateClient {
         filters: Option<&GetStateFilters>,
         request: Option<&StateRequestBody>,
     ) -> Result<Vec<ResponseAccount>, TychoClientError> {
-        let mut url = format!("{}/{}", self.base_uri, "contract_state");
+        let mut url = if self.base_uri.to_string().ends_with('/') {
+            format!("{}{}", self.base_uri, "contract_state")
+        } else {
+            format!("{}/{}", self.base_uri, "contract_state")
+        };
         let mut body = Body::empty();
 
         if let Some(filters) = filters {
@@ -196,3 +200,45 @@ impl TychoVmStateClient {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use mockito::Server;
+    use std::str::FromStr;
+
+    #[tokio::test]
+    async fn test_simple_route_mock_async() {
+        let mut server = Server::new_async().await;
+        let server_resp = r#"
+        [{
+            "address": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+            "slots": {},
+            "balance": "0x1f4",
+            "code": [],
+            "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e"
+        }]
+        "#;
+        let mocked_server = server
+            .mock("GET", "/contract_state")
+            .expect(1)
+            .with_body(server_resp)
+            .create_async()
+            .await;
+
+        let client = TychoVmStateClient::new(server.url().as_str()).unwrap();
+
+        let response = client.get_state(None, None).await.unwrap();
+
+        mocked_server.assert();
+        assert_eq!(response.len(), 1);
+        assert_eq!(response[0].slots, HashMap::new());
+        assert_eq!(response[0].balance, rU256::from(500));
+        assert_eq!(response[0].code, Vec::<u8>::new());
+        assert_eq!(
+            response[0].code_hash,
+            B256::from_str("0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e")
+                .unwrap()
+        );
+    }
+}
