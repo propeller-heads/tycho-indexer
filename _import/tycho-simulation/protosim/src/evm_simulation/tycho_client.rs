@@ -146,3 +146,53 @@ impl TychoVmStateClient {
 
         Ok(accounts)
     }
+
+    pub async fn realtime_messages(&self) -> Receiver<BlockStateChanges> {
+        // Create a channel to send and receive messages.
+        let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
+
+        // Spawn a task to connect to the WebSocket server and listen for realtime messages.
+        let ws_url = self.base_uri.clone();
+        tokio::spawn(async move {
+            let ws_stream = connect_async(&ws_url)
+                .await
+                .expect("Failed to connect to WebSocket")
+                .0;
+
+            // Use the stream directly to listen for messages.
+            let mut incoming_messages = ws_stream.boxed();
+
+            while let Some(msg) = incoming_messages.next().await {
+                match msg {
+                    Ok(Message::Text(text)) => {
+                        match serde_json::from_str::<BlockStateChanges>(&text) {
+                            Ok(update) => match tx.send(update).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!("Failed to send message to the channel: {}", e);
+                                }
+                            },
+                            Err(e) => {
+                                // Handle the error, perhaps log it.
+                                error!("Failed to deserialize message: {}", e);
+                            }
+                        }
+                    }
+                    Ok(Message::Close(_)) => {
+                        drop(tx);
+                        return;
+                    }
+                    Ok(unknown_msg) => {
+                        info!("Received an unknown message type: {:?}", unknown_msg);
+                    }
+                    Err(e) => {
+                        error!("Failed to get a websocket message: {}", e);
+                    }
+                }
+            }
+        });
+
+        rx
+    }
+}
+

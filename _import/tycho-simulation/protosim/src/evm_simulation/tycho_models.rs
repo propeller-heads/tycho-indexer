@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use revm::primitives::{B160, B256, U256 as rU256};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, Deserialize)]
 pub struct Block {
     pub number: u64,
     pub hash: B256,
@@ -13,9 +14,10 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
+#[derive(Deserialize)]
 pub struct SwapPool {}
 
-#[derive(Debug, PartialEq, Copy, Clone, Default)]
+#[derive(Debug, PartialEq, Copy, Clone, Default, Deserialize)]
 pub struct Transaction {
     pub hash: B256,
     pub block_hash: B256,
@@ -24,6 +26,7 @@ pub struct Transaction {
     pub index: u64,
 }
 
+#[derive(Deserialize)]
 pub struct BlockStateChanges {
     pub block: Block,
     pub account_updates: HashMap<B160, AccountUpdate>,
@@ -36,7 +39,7 @@ pub enum ChainError {
     UnknownChain(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Chain {
     Ethereum,
     Starknet,
@@ -61,7 +64,7 @@ impl ToString for Chain {
         format!("{:?}", self).to_lowercase()
     }
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize)]
 pub struct AccountUpdate {
     extractor: String,
     chain: Chain,
