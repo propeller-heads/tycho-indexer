@@ -113,9 +113,9 @@ impl TychoVmStateClient {
         request: Option<&StateRequestBody>,
     ) -> Result<Vec<ResponseAccount>, TychoClientError> {
         let mut url = if self.base_uri.to_string().ends_with('/') {
-            format!("{}{}", self.base_uri, "contract_state")
+            format!("http://{}{}", self.base_uri, "contract_state")
         } else {
-            format!("{}/{}", self.base_uri, "contract_state")
+            format!("http://{}/{}", self.base_uri, "contract_state")
         };
         let mut body = Body::empty();
 
@@ -156,12 +156,15 @@ impl TychoVmStateClient {
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
-        let ws_url = self.base_uri.clone();
+        let ws_url = format!("ws://{}", self.base_uri);
         tokio::spawn(async move {
-            let ws_stream = connect_async(&ws_url)
-                .await
-                .expect("Failed to connect to WebSocket")
-                .0;
+            let ws_stream = match connect_async(&ws_url).await {
+                Ok((ws, _)) => ws,
+                Err(e) => {
+                    error!("Failed to connect to WebSocket: {:?}", e);
+                    return;
+                }
+            };
 
             // Use the stream directly to listen for messages.
             let mut incoming_messages = ws_stream.boxed();
@@ -202,10 +205,115 @@ impl TychoVmStateClient {
 
 #[cfg(test)]
 mod tests {
+    use crate::evm_simulation::tycho_models::{AccountUpdate, Transaction};
+
     use super::*;
 
     use mockito::Server;
     use std::str::FromStr;
+
+    use futures::SinkExt;
+    use warp::ws::WebSocket;
+    use warp::Filter;
+
+    #[tokio::test]
+    async fn test_realtime_messages() {
+        // Mock WebSocket server using warp
+        async fn handle_connection(ws: WebSocket) {
+            let (mut tx, _) = ws.split();
+            let test_msg = warp::ws::Message::text(
+                r#"
+            {
+                "block": {
+                    "number": 123,
+                    "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "chain": "ethereum",
+                    "ts": "2023-09-14T00:00:00"
+                },
+                "account_updates": {
+                    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D": {
+                        "extractor": "ambient",
+                        "chain": "ethereum",
+                        "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+                        "slots": {},
+                        "balance": "0x1f4",
+                        "code": [],
+                        "tx": {
+                            "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                            "block_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                            "from": "0x000000000000000000000000000000000000007b",
+                            "to": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+                            "index": 1
+                        }
+                    }
+                },
+                "new_pools": {}
+            }
+            "#,
+            );
+            let _ = tx.send(test_msg).await;
+        }
+
+        let ws_route = warp::ws().map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
+        let (addr, server) = warp::serve(ws_route).bind_ephemeral(([127, 0, 0, 1], 0));
+        tokio::task::spawn(server);
+
+        // Now, you can create a client and connect to the mocked WebSocket server
+        let client = TychoVmStateClient::new(&format!("{}", addr)).unwrap();
+
+        // You can listen to the realtime_messages and expect the messages that you send from handle_connection
+        let mut rx = client.realtime_messages().await;
+        let received_msg = rx.recv().await.unwrap();
+
+        let expected_blk = Block {
+            number: 123,
+            hash: B256::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            parent_hash: B256::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            chain: Chain::Ethereum,
+            ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
+        };
+
+        let expected_accnt = AccountUpdate::new(
+            "ambient".to_string(),
+            Chain::Ethereum,
+            B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+            Some(HashMap::new()),
+            Some(rU256::from(500)),
+            Some(Vec::<u8>::new()),
+            Transaction {
+                hash: B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                block_hash: B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                from: B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
+                to: Some(B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
+                index: 1,
+            },
+        );
+        let mut expected_accnt_update = HashMap::new();
+        expected_accnt_update.insert(
+            B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+            expected_accnt,
+        );
+        let expected = BlockStateChanges {
+            block: expected_blk,
+            account_updates: expected_accnt_update,
+            new_pools: HashMap::new(),
+        };
+
+        assert_eq!(received_msg, expected);
+    }
 
     #[tokio::test]
     async fn test_simple_route_mock_async() {
@@ -226,7 +334,7 @@ mod tests {
             .create_async()
             .await;
 
-        let client = TychoVmStateClient::new(server.url().as_str()).unwrap();
+        let client = TychoVmStateClient::new(server.url().replace("http://", "").as_str()).unwrap();
 
         let response = client.get_state(None, None).await.unwrap();
 

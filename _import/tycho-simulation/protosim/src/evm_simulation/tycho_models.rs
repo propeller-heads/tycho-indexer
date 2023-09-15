@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use revm::primitives::{B160, B256, U256 as rU256};
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Copy, Clone, Deserialize)]
@@ -14,7 +14,7 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq, Debug)]
 pub struct SwapPool {}
 
 #[derive(Debug, PartialEq, Copy, Clone, Default, Deserialize)]
@@ -26,7 +26,7 @@ pub struct Transaction {
     pub index: u64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq, Debug)]
 pub struct BlockStateChanges {
     pub block: Block,
     pub account_updates: HashMap<B160, AccountUpdate>,
@@ -39,11 +39,20 @@ pub enum ChainError {
     UnknownChain(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum Chain {
     Ethereum,
     Starknet,
     ZkSync,
+}
+impl<'de> Deserialize<'de> for Chain {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        Chain::try_from(s).map_err(de::Error::custom)
+    }
 }
 
 impl TryFrom<String> for Chain {
@@ -73,4 +82,26 @@ pub struct AccountUpdate {
     pub balance: Option<rU256>,
     pub code: Option<Vec<u8>>,
     pub tx: Transaction,
+}
+
+impl AccountUpdate {
+    pub fn new(
+        extractor: String,
+        chain: Chain,
+        address: B160,
+        slots: Option<HashMap<rU256, rU256>>,
+        balance: Option<rU256>,
+        code: Option<Vec<u8>>,
+        tx: Transaction,
+    ) -> Self {
+        Self {
+            extractor,
+            chain,
+            address,
+            slots,
+            balance,
+            code,
+            tx,
+        }
+    }
 }
