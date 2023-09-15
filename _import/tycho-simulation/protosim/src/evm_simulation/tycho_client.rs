@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use super::tycho_models::Chain;
 use super::tycho_models::{Block, BlockStateChanges};
+use async_trait::async_trait;
 use revm::primitives::{B160, B256, U256 as rU256};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio_tungstenite::connect_async;
@@ -94,6 +95,16 @@ pub struct TychoVmStateClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,
 }
+#[async_trait]
+pub trait TychoVm {
+    async fn get_state(
+        &self,
+        filters: Option<&GetStateFilters>,
+        request: Option<&StateRequestBody>,
+    ) -> Result<Vec<ResponseAccount>, TychoClientError>;
+
+    async fn realtime_messages(&self) -> Receiver<BlockStateChanges>;
+}
 impl TychoVmStateClient {
     pub fn new(base_url: &str) -> Result<Self, TychoClientError> {
         let base_uri = base_url
@@ -106,8 +117,11 @@ impl TychoVmStateClient {
             base_uri,
         })
     }
+}
 
-    pub async fn get_state(
+#[async_trait]
+impl TychoVm for TychoVmStateClient {
+    async fn get_state(
         &self,
         filters: Option<&GetStateFilters>,
         request: Option<&StateRequestBody>,
@@ -151,7 +165,7 @@ impl TychoVmStateClient {
         Ok(accounts)
     }
 
-    pub async fn realtime_messages(&self) -> Receiver<BlockStateChanges> {
+    async fn realtime_messages(&self) -> Receiver<BlockStateChanges> {
         // Create a channel to send and receive messages.
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 

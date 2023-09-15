@@ -12,7 +12,7 @@ use revm::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
-    tycho_client::{StateRequestBody, TychoVmStateClient},
+    tycho_client::{StateRequestBody, TychoVm, TychoVmStateClient},
     tycho_models::Block,
 };
 
@@ -151,8 +151,7 @@ pub type TychoDB = Arc<RwLock<PreCachedDB>>;
 
 // main data update loop, runs in a separate tokio runtime. Be aware that
 // db.write() might lock not async safe. Maybe use RwLock from tokio instead??
-pub async fn update_loop(db: TychoDB, tycho_url: &str) {
-    let client = TychoVmStateClient::new(tycho_url).unwrap();
+pub async fn update_loop(db: TychoDB, client: impl TychoVm) {
     // start buffering messages
     let mut messages = client.realtime_messages().await;
 
@@ -225,13 +224,14 @@ pub fn tycho_db(url: String) -> TychoDB {
 
     let db = Arc::new(RwLock::new(inner));
     let cloned_db = db.clone();
+    let client = TychoVmStateClient::new(&url).unwrap();
 
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        runtime.block_on(update_loop(cloned_db, &url));
+        runtime.block_on(update_loop(cloned_db, client));
     });
 
     db
