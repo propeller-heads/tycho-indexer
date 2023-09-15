@@ -12,7 +12,7 @@ use revm::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
-    tycho_client::{StateRequestBody, TychoVm, TychoVmStateClient},
+    tycho_client::{StateRequestBody, TychoHTTPClient, TychoVMStateClient},
     tycho_models::Block,
 };
 
@@ -150,8 +150,7 @@ impl DatabaseRef for PreCachedDB {
 pub type TychoDB = Arc<RwLock<PreCachedDB>>;
 
 // main data update loop, runs in a separate tokio runtime. Be aware that
-// db.write() might lock not async safe. Maybe use RwLock from tokio instead??
-pub async fn update_loop(db: TychoDB, client: impl TychoVm) {
+pub async fn update_loop(db: TychoDB, client: impl TychoVMStateClient) {
     // start buffering messages
     let mut messages = client.realtime_messages().await;
 
@@ -162,8 +161,10 @@ pub async fn update_loop(db: TychoDB, client: impl TychoVm) {
         .get_state(None, Some(&StateRequestBody::from_block(first_msg.block)))
         .await
         .unwrap();
+
+    let mut db_guard = db.write().await;
     for account in state.iter() {
-        db.write().await.init_account(
+        db_guard.init_account(
             account.address,
             AccountInfo::new(
                 account.balance,
@@ -184,12 +185,12 @@ pub async fn update_loop(db: TychoDB, client: impl TychoVm) {
             let mut db_guard = db.write().await;
 
             // Update existing accounts.
-            for (address, update) in msg.account_updates.iter() {
-                if db_guard.accounts.account_present(address) {
+            for (address, update) in msg.account_updates.into_iter() {
+                if db_guard.accounts.account_present(&address) {
                     db_guard.accounts.update_account(
-                        address,
+                        &address,
                         &StateUpdate {
-                            storage: update.slots.to_owned(), //TODO: do we really need to clone here?
+                            storage: update.slots,
                             balance: update.balance,
                         },
                     );
@@ -224,7 +225,7 @@ pub fn tycho_db(url: String) -> TychoDB {
 
     let db = Arc::new(RwLock::new(inner));
     let cloned_db = db.clone();
-    let client = TychoVmStateClient::new(&url).unwrap();
+    let client = TychoHTTPClient::new(&url).unwrap();
 
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Handle::try_current()

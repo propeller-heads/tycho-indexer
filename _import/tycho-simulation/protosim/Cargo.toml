@@ -18,7 +18,6 @@ tokio = { version = "1.32.0", features = ["full"] }
 tokio-tungstenite = "0.20.0"
 async-trait = "0.1.73"
 hyper = "0.14.27"
-mockito = "1.1.1"
 futures = "0.3.28"
 revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
     "ethersdb",
@@ -29,6 +28,8 @@ thiserror = "1"
 chrono = { version = "0.4.26", features = ["serde"] }
 
 [dev-dependencies]
+mockito = "1.1.1"
+warp = "0.3.5"
 approx = "0.3.2"
 rstest = "0.16.0"
 

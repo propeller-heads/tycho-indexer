@@ -91,12 +91,12 @@ pub struct ResponseAccount {
     pub code_hash: B256,
 }
 
-pub struct TychoVmStateClient {
+pub struct TychoHTTPClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,
 }
 #[async_trait]
-pub trait TychoVm {
+pub trait TychoVMStateClient {
     async fn get_state(
         &self,
         filters: Option<&GetStateFilters>,
@@ -105,7 +105,7 @@ pub trait TychoVm {
 
     async fn realtime_messages(&self) -> Receiver<BlockStateChanges>;
 }
-impl TychoVmStateClient {
+impl TychoHTTPClient {
     pub fn new(base_url: &str) -> Result<Self, TychoClientError> {
         let base_uri = base_url
             .parse::<Uri>()
@@ -120,7 +120,7 @@ impl TychoVmStateClient {
 }
 
 #[async_trait]
-impl TychoVm for TychoVmStateClient {
+impl TychoVMStateClient for TychoHTTPClient {
     async fn get_state(
         &self,
         filters: Option<&GetStateFilters>,
@@ -274,7 +274,7 @@ mod tests {
         tokio::task::spawn(server);
 
         // Now, you can create a client and connect to the mocked WebSocket server
-        let client = TychoVmStateClient::new(&format!("{}", addr)).unwrap();
+        let client = TychoHTTPClient::new(&format!("{}", addr)).unwrap();
 
         // You can listen to the realtime_messages and expect the messages that you send from handle_connection
         let mut rx = client.realtime_messages().await;
@@ -348,7 +348,7 @@ mod tests {
             .create_async()
             .await;
 
-        let client = TychoVmStateClient::new(server.url().replace("http://", "").as_str()).unwrap();
+        let client = TychoHTTPClient::new(server.url().replace("http://", "").as_str()).unwrap();
 
         let response = client.get_state(None, None).await.unwrap();
 
