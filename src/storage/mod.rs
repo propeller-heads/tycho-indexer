@@ -127,7 +127,7 @@ pub type CodeRef<'a> = &'a [u8];
 pub type BalanceRef<'a> = &'a [u8];
 
 /// Identifies a block in storage.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlockIdentifier {
     /// Identifies the block by its position on a specified chain.
     ///
@@ -166,7 +166,7 @@ impl Display for BlockIdentifier {
 /// It defines methods for converting from a storage-specific type to a block,
 /// converting from a block to a storage-specific type, and getting the block's
 /// chain.
-pub trait StorableBlock<S, N, I>: Send + Sync + 'static {
+pub trait StorableBlock<S, N, I>: Sized + Send + Sync + 'static {
     /// Constructs a block from a storage-specific value `val` and a `Chain`.
     ///
     /// # Arguments
@@ -177,7 +177,7 @@ pub trait StorableBlock<S, N, I>: Send + Sync + 'static {
     /// # Returns
     ///
     /// A block constructed from `val` and `chain`
-    fn from_storage(val: S, chain: Chain) -> Self;
+    fn from_storage(val: S, chain: Chain) -> Result<Self, StorageError>;
 
     /// Converts the block to a storage-specific representation.
     ///
@@ -210,11 +210,11 @@ pub trait StorableBlock<S, N, I>: Send + Sync + 'static {
 ///   conversion function. This facilitates the passage of database-specific foreign keys to the
 ///   `to_storage` method, thereby providing a flexible way for different databases to interact with
 ///   the transaction.
-pub trait StorableTransaction<S, N, I>: Send + Sync + 'static {
+pub trait StorableTransaction<S, N, I>: Sized + Send + Sync + 'static {
     /// Converts a transaction from storage representation (`S`) to transaction
     /// form. This function uses the original block hash, where the
     /// transaction resides, for this conversion.
-    fn from_storage(val: S, block_hash: BlockHashRef) -> Self;
+    fn from_storage(val: S, block_hash: BlockHashRef) -> Result<Self, StorageError>;
 
     /// Converts a transaction object to its storable representation (`N`),
     /// while also associating it with a specific block through a database ID
@@ -442,8 +442,8 @@ impl Version {
 ///   conversion function. This facilitates the passage of database-specific foreign keys to the
 ///   `to_storage` method, thereby providing a flexible way for different databases to interact with
 ///   the token.
-pub trait StorableToken<S, N, I>: Send + Sync + 'static {
-    fn from_storage(val: S, contract: ContractId) -> Self;
+pub trait StorableToken<S, N, I>: Sized + Send + Sync + 'static {
+    fn from_storage(val: S, contract: ContractId) -> Result<Self, StorageError>;
 
     fn to_storage(&self, contract_id: I) -> N;
 
@@ -560,7 +560,7 @@ pub trait ProtocolGateway {
 ///   conversion function. This facilitates the passage of database-specific foreign keys to the
 ///   `to_storage` method, thereby providing a flexible way for different databases to interact with
 ///   the contract.
-pub trait StorableContract<S, N, I>: Send + Sync + 'static {
+pub trait StorableContract<S, N, I>: Sized + Send + Sync + 'static {
     /// Creates a transaction from storage.
     ///
     /// # Parameters:
@@ -575,7 +575,7 @@ pub trait StorableContract<S, N, I>: Send + Sync + 'static {
         balance_modify_tx: TxHashRef,
         code_modify_tx: TxHashRef,
         creation_tx: Option<TxHashRef>,
-    ) -> Self;
+    ) -> Result<Self, StorageError>;
 
     /// Transforms the state of the contract into it's storable form.
     ///

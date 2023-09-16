@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use crate::{
     extractor::{
         evm,
-        evm::utils::{parse_id_h160, parse_u256_slot_entry, u256_to_bytes},
+        evm::utils::{parse_u256_slot_entry, TryDecode},
     },
     models::Chain,
     storage::{
-        AddressRef, BalanceRef, CodeRef, ContractDelta, ContractId, ContractStore,
-        StorableContract, StorageError, TxHashRef,
+        AddressRef, BalanceRef, CodeRef, ContractDelta, ContractId, ContractStore, StorableBlock,
+        StorableContract, StorableTransaction, StorageError, TxHashRef,
     },
 };
 
@@ -16,6 +16,8 @@ use chrono::NaiveDateTime;
 use ethers::prelude::*;
 
 pub mod pg {
+    use ethers::abi::AbiEncode;
+
     use crate::storage::{postgres::orm, ChangeType};
 
     use super::*;
@@ -33,6 +35,74 @@ pub mod pg {
         }
     }
 
+    impl StorableBlock<orm::Block, orm::NewBlock, i64> for evm::Block {
+        fn from_storage(val: orm::Block, chain: Chain) -> Result<Self, StorageError> {
+            Ok(evm::Block {
+                number: val.number as u64,
+                hash: H256::try_decode(val.hash.as_slice(), "block hash")
+                    .map_err(StorageError::DecodeError)?,
+                parent_hash: H256::try_decode(val.parent_hash.as_slice(), "parent hash")
+                    .map_err(|err| StorageError::DecodeError(err.to_string()))?,
+                chain,
+                ts: val.ts,
+            })
+        }
+
+        fn to_storage(&self, chain_id: i64) -> orm::NewBlock {
+            orm::NewBlock {
+                hash: Vec::from(self.hash.as_bytes()),
+                parent_hash: Vec::from(self.parent_hash.as_bytes()),
+                chain_id,
+                main: false,
+                number: self.number as i64,
+                ts: self.ts,
+            }
+        }
+
+        fn chain(&self) -> Chain {
+            self.chain
+        }
+    }
+
+    impl StorableTransaction<orm::Transaction, orm::NewTransaction, i64> for evm::Transaction {
+        fn from_storage(val: orm::Transaction, block_hash: &[u8]) -> Result<Self, StorageError> {
+            let to = if !val.to.is_empty() {
+                Some(H160::try_decode(&val.to, "tx receiver").map_err(StorageError::DecodeError)?)
+            } else {
+                None
+            };
+            Ok(Self {
+                hash: H256::try_decode(&val.hash, "tx hash").map_err(StorageError::DecodeError)?,
+                block_hash: H256::try_decode(block_hash, "tx block hash")
+                    .map_err(StorageError::DecodeError)?,
+                from: H160::try_decode(&val.from, "tx sender")
+                    .map_err(StorageError::DecodeError)?,
+                to,
+                index: val.index as u64,
+            })
+        }
+
+        fn to_storage(&self, block_id: i64) -> orm::NewTransaction {
+            let to: Vec<u8> =
+                if let Some(h) = self.to { Vec::from(h.as_bytes()) } else { Vec::new() };
+            orm::NewTransaction {
+                hash: Vec::from(self.hash.as_bytes()),
+                block_id,
+                from: Vec::from(self.from.as_bytes()),
+                to,
+                index: self.index as i64,
+            }
+        }
+
+        fn block_hash(&self) -> &[u8] {
+            self.block_hash.as_bytes()
+        }
+
+        fn hash(&self) -> &[u8] {
+            self.hash.as_bytes()
+        }
+    }
+
     impl StorableContract<orm::Contract, orm::NewContract, i64> for evm::Account {
         fn from_storage(
             val: orm::Contract,
@@ -40,20 +110,27 @@ pub mod pg {
             balance_modify_tx: TxHashRef,
             code_modify_tx: TxHashRef,
             creation_tx: Option<TxHashRef>,
-        ) -> Self {
-            evm::Account::new(
+        ) -> Result<Self, StorageError> {
+            Ok(evm::Account::new(
                 chain,
-                // TODO: from_slice may panic
-                H160::from_slice(&val.account.address),
+                H160::try_decode(&val.account.address, "address")
+                    .map_err(StorageError::DecodeError)?,
                 val.account.title.clone(),
                 HashMap::new(),
-                U256::from_big_endian(&val.balance.balance),
+                U256::try_decode(&val.balance.balance, "balance")
+                    .map_err(StorageError::DecodeError)?,
                 val.code.code,
-                H256::from_slice(&val.code.hash),
-                H256::from_slice(balance_modify_tx),
-                H256::from_slice(code_modify_tx),
-                creation_tx.map(H256::from_slice),
-            )
+                H256::try_decode(&val.code.hash, "code hash").map_err(StorageError::DecodeError)?,
+                H256::try_decode(balance_modify_tx, "tx hash")
+                    .map_err(StorageError::DecodeError)?,
+                H256::try_decode(code_modify_tx, "tx hash").map_err(StorageError::DecodeError)?,
+                match creation_tx {
+                    Some(v) => H256::try_decode(v, "tx hash")
+                        .map(Some)
+                        .map_err(StorageError::DecodeError)?,
+                    _ => None,
+                },
+            ))
         }
 
         fn to_storage(
@@ -69,7 +146,7 @@ pub mod pg {
                 creation_tx: tx_id,
                 created_at: Some(creation_ts),
                 deleted_at: None,
-                balance: u256_to_bytes(&self.balance),
+                balance: self.balance.encode(),
                 code: self.code.clone(),
                 code_hash: self.code_hash.as_bytes().to_vec(),
             }
@@ -92,7 +169,7 @@ pub mod pg {
         fn store(&self) -> ContractStore {
             self.slots
                 .iter()
-                .map(|(s, v)| (u256_to_bytes(s), Some(u256_to_bytes(v))))
+                .map(|(s, v)| (s.encode(), Some(v.encode())))
                 .collect()
         }
 
@@ -113,7 +190,7 @@ pub mod pg {
         }
 
         fn dirty_balance(&self) -> Option<Vec<u8>> {
-            self.balance.map(|b| u256_to_bytes(&b))
+            self.balance.map(|b| b.encode())
         }
 
         fn dirty_code(&self) -> Option<&[u8]> {
@@ -123,7 +200,7 @@ pub mod pg {
         fn dirty_slots(&self) -> ContractStore {
             self.slots
                 .iter()
-                .map(|(s, v)| (u256_to_bytes(s), Some(u256_to_bytes(v))))
+                .map(|(s, v)| (s.encode(), Some(v.encode())))
                 .collect()
         }
 
@@ -147,10 +224,16 @@ pub mod pg {
                 .unwrap_or_else(|| Ok(HashMap::new()))?;
 
             let update = evm::AccountUpdate::new(
-                parse_id_h160(address).map_err(StorageError::DecodeError)?,
+                H160::try_decode(address, "address").map_err(StorageError::DecodeError)?,
                 chain,
                 slots,
-                balance.map(U256::from_big_endian),
+                match balance {
+                    // match expr is required so the error can be raised
+                    Some(v) => U256::try_decode(v, "balance")
+                        .map(Some)
+                        .map_err(|err| StorageError::DecodeError(err.to_string()))?,
+                    _ => None,
+                },
                 code.map(|v| v.to_vec()),
                 change,
             );

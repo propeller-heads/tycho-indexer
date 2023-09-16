@@ -1,9 +1,5 @@
 #![allow(dead_code)] // FIXME: remove after initial development
-
-//! # Substreams Rust Sink Boilerplate
-//!
-//! Currently this module only contains the raw boilerplate code to
-//! connect to a substream from within rust.
+#![doc = include_str!("../Readme.md")]
 use anyhow::Error;
 use diesel_async::{pooled_connection::bb8::Pool, AsyncPgConnection};
 use extractor::{
@@ -52,15 +48,15 @@ struct Args {
     #[clap(long, env)]
     substreams_api_token: String,
 
-    /// DB Connection url
-    #[clap(long, env)]
+    /// DB Connection Url
+    #[clap(long, env, short)]
     db_url: String,
 
-    /// Package file
+    /// Substreams Package file
     #[clap(name = "spkg", short, long)]
     package_file: String,
 
-    /// Module name
+    /// Substreams Module name
     #[clap(name = "module", short, long)]
     module_name: String,
 }

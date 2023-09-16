@@ -1,16 +1,11 @@
 use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
-use ethers::types::{H160, H256};
 
 use super::{orm, schema, PostgresGateway};
-use crate::{
-    extractor::evm,
-    models::Chain,
-    storage::{
-        BlockIdentifier, ChainGateway, ContractDelta, StorableBlock, StorableContract,
-        StorableTransaction, StorageError,
-    },
+use crate::storage::{
+    BlockIdentifier, ChainGateway, ContractDelta, StorableBlock, StorableContract,
+    StorableTransaction, StorageError,
 };
 
 #[async_trait]
@@ -63,7 +58,7 @@ where
         }
         .map_err(|err| StorageError::from_diesel(err, "Block", &block_id.to_string(), None))?;
         let chain = self.get_chain(orm_block.chain_id);
-        Ok(B::from_storage(orm_block, chain))
+        B::from_storage(orm_block, chain)
     }
 
     async fn upsert_tx(
@@ -115,75 +110,18 @@ where
             .first::<(orm::Transaction, Vec<u8>)>(conn)
             .await
             .map(|(orm_tx, block_hash)| TX::from_storage(orm_tx, &block_hash))
-            .map_err(|err| StorageError::from_diesel(err, "Transaction", &hex::encode(&hash), None))
-    }
-}
-
-impl StorableBlock<orm::Block, orm::NewBlock, i64> for evm::Block {
-    fn from_storage(val: orm::Block, chain: Chain) -> Self {
-        evm::Block {
-            number: val.number as u64,
-            hash: H256::from_slice(val.hash.as_slice()),
-            parent_hash: H256::from_slice(val.parent_hash.as_slice()),
-            chain,
-            ts: val.ts,
-        }
-    }
-
-    fn to_storage(&self, chain_id: i64) -> orm::NewBlock {
-        orm::NewBlock {
-            hash: Vec::from(self.hash.as_bytes()),
-            parent_hash: Vec::from(self.parent_hash.as_bytes()),
-            chain_id,
-            main: false,
-            number: self.number as i64,
-            ts: self.ts,
-        }
-    }
-
-    fn chain(&self) -> Chain {
-        self.chain
-    }
-}
-
-impl StorableTransaction<orm::Transaction, orm::NewTransaction, i64> for evm::Transaction {
-    fn from_storage(val: orm::Transaction, block_hash: &[u8]) -> Self {
-        let to = if !val.to.is_empty() { Some(H160::from_slice(&val.to)) } else { None };
-        Self {
-            hash: H256::from_slice(&val.hash),
-            block_hash: H256::from_slice(block_hash),
-            from: H160::from_slice(&val.from),
-            to,
-            index: val.index as u64,
-        }
-    }
-
-    fn to_storage(&self, block_id: i64) -> orm::NewTransaction {
-        let to: Vec<u8> = if let Some(h) = self.to { Vec::from(h.as_bytes()) } else { Vec::new() };
-        orm::NewTransaction {
-            hash: Vec::from(self.hash.as_bytes()),
-            block_id,
-            from: Vec::from(self.from.as_bytes()),
-            to,
-            index: self.index as i64,
-        }
-    }
-
-    fn block_hash(&self) -> &[u8] {
-        self.block_hash.as_bytes()
-    }
-
-    fn hash(&self) -> &[u8] {
-        self.hash.as_bytes()
+            .map_err(|err| {
+                StorageError::from_diesel(err, "Transaction", &hex::encode(&hash), None)
+            })?
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
-    use crate::storage::postgres::db_fixtures;
+    use crate::{extractor::evm, models::Chain, storage::postgres::db_fixtures};
     use diesel_async::AsyncConnection;
+    use ethers::types::{H160, H256};
+    use std::str::FromStr;
 
     use super::*;
 

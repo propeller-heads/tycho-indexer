@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use prost::DecodeError;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum ExtractionError {
     #[error("Extractor setup failed: {0}")]
     Setup(String),

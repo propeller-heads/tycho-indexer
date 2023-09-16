@@ -63,6 +63,8 @@ where
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<i64, Balance>, StorageError> {
         use schema::account_balance::dsl::*;
+        dbg!(&start_version_ts);
+        dbg!(&target_version_ts);
         let res = if start_version_ts <= target_version_ts {
             let changed_account_ids = account_balance
                 .inner_join(schema::account::table.inner_join(schema::chain::table))
@@ -730,7 +732,7 @@ where
             &balance_tx,
             &code_tx,
             creation_tx.as_deref(),
-        );
+        )?;
 
         if include_slots {
             let slots = self
@@ -879,7 +881,7 @@ where
                     balance_tx.as_slice(),
                     code_tx.as_slice(),
                     creation_tx.as_deref(),
-                );
+                )?;
 
                 if let Some(storage) = &slots {
                     if let Some(contract_slots) = storage.get(contract.address()) {

@@ -2,10 +2,13 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use strum_macros::{Display, EnumString};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Chain {
+    #[default]
     Ethereum,
     Starknet,
     ZkSync,

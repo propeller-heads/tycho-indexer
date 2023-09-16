@@ -3,6 +3,7 @@ use diesel_async::{
     AsyncPgConnection,
 };
 use ethers::types::{H160, H256};
+use mockall::automock;
 use prost::Message;
 use serde_json::json;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -54,6 +55,7 @@ pub struct AmbientPgGateway {
     state_gateway: EVMStateGateway<AsyncPgConnection>,
 }
 
+#[automock]
 #[async_trait]
 pub trait AmbientGateway: Send + Sync {
     async fn get_cursor(&self, name: &str, chain: Chain) -> Result<Vec<u8>, StorageError>;
@@ -270,16 +272,18 @@ where
 
         let msg = match evm::BlockStateChanges::try_from_message(raw_msg, &self.name, self.chain) {
             Ok(changes) => changes,
-            Err(ExtractionError::Empty) => return Ok(None),
+            Err(ExtractionError::Empty) => {
+                self.update_cursor(inp.cursor).await;
+                return Ok(None)
+            }
             Err(e) => return Err(e),
         };
-
         self.gateway
             .upsert_contract(&msg, inp.cursor.as_ref())
             .await?;
 
         self.update_cursor(inp.cursor).await;
-        Ok(Some(msg.merge_updates()?))
+        Ok(Some(msg.aggregate_updates()?))
     }
 
     async fn handle_revert(
@@ -310,5 +314,123 @@ where
 
     async fn handle_progress(&self, _inp: ModulesProgress) -> Result<(), ExtractionError> {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::{
+        extractor::evm::{fixtures, BlockAccountChanges},
+        pb::sf::substreams::v1::BlockRef,
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_cursor() {
+        let mut gw = MockAmbientGateway::new();
+        gw.expect_get_cursor()
+            .withf(|name, chain| name == "vm:ambient" && chain == &Chain::Ethereum)
+            .times(1)
+            .returning(|_, _| Ok("cursor".into()));
+        let extractor = AmbientContractExtractor::new("vm:ambient", Chain::Ethereum, gw)
+            .await
+            .expect("extractor init ok");
+
+        let res = extractor.get_cursor().await;
+
+        assert_eq!(res, "cursor");
+    }
+
+    fn block_contract_changes_ok() -> BlockContractChanges {
+        let mut data = fixtures::pb_block_contract_changes();
+        // TODO: make fixtures configurable through parameters so they can be
+        // properly reused. Will need fixture to easily assemble contract
+        // change objects.
+        data.changes[0]
+            .contract_changes
+            .remove(1);
+        data
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data() {
+        let mut gw = MockAmbientGateway::new();
+        gw.expect_get_cursor()
+            .withf(|name, chain| name == "vm:ambient" && chain == &Chain::Ethereum)
+            .times(1)
+            .returning(|_, _| Ok("cursor".into()));
+        gw.expect_upsert_contract()
+            .times(1)
+            .returning(|_, _| Ok(()));
+        let extractor = AmbientContractExtractor::new("vm:ambient", Chain::Ethereum, gw)
+            .await
+            .expect("extractor init ok");
+        let inp = fixtures::pb_block_scoped_data(block_contract_changes_ok());
+        let exp = Ok(Some(()));
+
+        let res = extractor
+            .handle_tick_scoped_data(inp)
+            .await
+            .map(|o| o.map(|_| ()));
+
+        assert_eq!(res, exp);
+        assert_eq!(extractor.get_cursor().await, "cursor@420");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data_skip() {
+        let mut gw = MockAmbientGateway::new();
+        gw.expect_get_cursor()
+            .withf(|name, chain| name == "vm:ambient" && chain == &Chain::Ethereum)
+            .times(1)
+            .returning(|_, _| Ok("cursor".into()));
+        gw.expect_upsert_contract()
+            .times(0)
+            .returning(|_, _| Ok(()));
+        let extractor = AmbientContractExtractor::new("vm:ambient", Chain::Ethereum, gw)
+            .await
+            .expect("extractor init ok");
+        let inp = fixtures::pb_block_scoped_data(());
+
+        let res = extractor
+            .handle_tick_scoped_data(inp)
+            .await;
+
+        assert_eq!(res, Ok(None));
+        assert_eq!(extractor.get_cursor().await, "cursor@420");
+    }
+
+    fn undo_signal() -> BlockUndoSignal {
+        BlockUndoSignal {
+            last_valid_block: Some(BlockRef { id: fixtures::HASH_256_0.into(), number: 400 }),
+            last_valid_cursor: "cursor@400".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_revert() {
+        let mut gw = MockAmbientGateway::new();
+        gw.expect_get_cursor()
+            .withf(|name, chain| name == "vm:ambient" && chain == &Chain::Ethereum)
+            .times(1)
+            .returning(|_, _| Ok("cursor".into()));
+        gw.expect_revert()
+            .withf(|v, cursor| {
+                v == &BlockIdentifier::Hash(hex::decode(&fixtures::HASH_256_0[2..]).unwrap()) &&
+                    cursor == "cursor@400"
+            })
+            .times(1)
+            .returning(|_, _| Ok(BlockAccountChanges::default()));
+        let extractor = AmbientContractExtractor::new("vm:ambient", Chain::Ethereum, gw)
+            .await
+            .expect("extractor init ok");
+        let inp = undo_signal();
+
+        let res = extractor.handle_revert(inp).await;
+
+        assert!(matches!(res, Ok(None)));
+        assert_eq!(extractor.get_cursor().await, "cursor@400");
     }
 }
