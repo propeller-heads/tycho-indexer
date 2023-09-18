@@ -203,7 +203,6 @@ impl UniswapV3State {
                 self.fee as u32,
             )?;
             state.sqrt_price = sqrt_price;
-            let sqrt_price_next = sqrt_price_next;
 
             let step = StepComputation {
                 sqrt_price_start: state.sqrt_price,
