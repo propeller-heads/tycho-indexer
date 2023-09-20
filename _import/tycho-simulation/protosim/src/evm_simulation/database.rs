@@ -85,12 +85,7 @@ impl<M: Middleware> SimulationDB<M> {
         runtime: Option<Arc<tokio::runtime::Runtime>>,
         block: Option<BlockHeader>,
     ) -> Self {
-        Self {
-            client,
-            account_storage: RefCell::new(AccountStorage::new()),
-            block: block.clone(),
-            runtime,
-        }
+        Self { client, account_storage: RefCell::new(AccountStorage::new()), block, runtime }
     }
 
     /// Set the block that will be used when querying a node

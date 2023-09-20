@@ -146,7 +146,7 @@ mod tests {
     #[case(3, vec![vec![0, 1], vec![2], vec![3, 4, 1]])]
     #[case(5, vec![vec![0, 1], vec![2], vec![3, 4, 1]])]
     fn test_all_edge_routes_intermediate_nodes(#[case] l: usize, #[case] routes: Vec<Vec<usize>>) {
-        let g = UnGraph::<(), i32>::from_edges(&[(0, 1), (1, 2), (0, 2), (0, 3), (3, 1)]);
+        let g = UnGraph::<(), i32>::from_edges([(0, 1), (1, 2), (0, 2), (0, 3), (3, 1)]);
         let s = NodeIndexable::from_index(&g, 0);
         let e = NodeIndexable::from_index(&g, 2);
         let exp = routes

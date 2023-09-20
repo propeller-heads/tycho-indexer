@@ -191,7 +191,7 @@ mod tests {
         let state = UniswapV2State::new(r0, r1);
 
         let res = state.get_amount_out(amount_in, &t0, &t1);
-        assert_eq!(res.is_err(), true);
+        assert!(res.is_err());
         assert_eq!(res.err().unwrap().kind, TradeSimulationErrorKind::U256Overflow)
     }
 
