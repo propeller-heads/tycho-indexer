@@ -10,6 +10,7 @@ use extractor::{
     runner::{ExtractorHandle, ExtractorRunnerBuilder},
 };
 use models::Chain;
+use tracing_subscriber::EnvFilter;
 
 use std::sync::Arc;
 use tracing::info;
@@ -76,6 +77,8 @@ async fn main() -> Result<(), Error> {
         .with_thread_ids(true)
         // Don't display the event's target (module path)
         .with_target(false)
+        // Set default log level from RUST_LOG env variable
+        .with_env_filter(EnvFilter::from_default_env())
         // Build the subscriber
         .finish();
 
