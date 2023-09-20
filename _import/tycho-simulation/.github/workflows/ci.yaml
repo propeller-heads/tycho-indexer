@@ -30,7 +30,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Test 
-        run: cargo test
+        run: cargo test --workspace --all-targets --all-features
 
   lint:
     name: Code Lint
