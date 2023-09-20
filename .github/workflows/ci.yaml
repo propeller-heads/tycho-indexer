@@ -52,8 +52,10 @@ jobs:
           features: postgres
       - name: DB Setup
         run: diesel migration run
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
       - name: Test 
-        run: cargo test
+        run: cargo nextest run --workspace --all-targets --all-features
 
   lint:
     name: Code Lint
