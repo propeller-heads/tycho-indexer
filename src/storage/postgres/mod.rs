@@ -295,8 +295,8 @@ where
         }
     }
 
-    #[allow(clippy::needless_pass_by_ref_mut)]
     #[cfg(test)]
+    #[allow(clippy::needless_pass_by_ref_mut)]
     pub async fn from_connection(conn: &mut AsyncPgConnection) -> Self {
         let results: Vec<(i64, String)> = async {
             use schema::chain::dsl::*;

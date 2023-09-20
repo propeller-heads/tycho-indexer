@@ -2224,7 +2224,7 @@ mod test {
             .await
             .unwrap();
         changes.sort_unstable_by_key(|u| u.address);
-        dbg!(&changes);
+        debug!(?changes);
 
         assert_eq!(changes, exp);
     }
@@ -2280,7 +2280,7 @@ mod test {
             .await
             .unwrap();
         changes.sort_unstable_by_key(|u| u.address);
-        dbg!(&changes);
+        debug!(?changes);
 
         assert_eq!(changes, exp);
     }

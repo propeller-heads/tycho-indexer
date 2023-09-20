@@ -339,6 +339,7 @@ mod tests {
         },
         MaybeTlsStream, WebSocketStream,
     };
+    use tracing::debug;
 
     #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
     struct DummyMessage {
@@ -379,14 +380,14 @@ mod tests {
             tokio::spawn(async move {
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    dbg!("Sending DummyMessage");
+                    debug!("Sending DummyMessage");
                     let dummy_message = DummyMessage::new(extractor_id.clone());
                     if tx
                         .send(Arc::new(dummy_message))
                         .await
                         .is_err()
                     {
-                        dbg!("Receiver dropped");
+                        debug!("Receiver dropped");
                         break
                     }
                 }
@@ -411,14 +412,14 @@ mod tests {
             .url("/ws/")
             .to_string()
             .replacen("http://", "ws://", 1);
-        dbg!("Connecting to test server at {}", &url);
+        debug!("Connecting to test server at {}", &url);
 
         // Connect to the server
         let (mut connection, _response) = tokio_tungstenite::connect_async(url)
             .await
             .expect("Failed to connect");
 
-        dbg!("Connected to test server");
+        debug!("Connected to test server");
 
         // Test sending ping message and receiving pong message
         connection
@@ -426,7 +427,7 @@ mod tests {
             .await
             .expect("Failed to send ping message");
 
-        dbg!("Sent ping message");
+        debug!("Sent ping message");
 
         let msg = timeout(Duration::from_secs(1), connection.next())
             .await
@@ -436,7 +437,7 @@ mod tests {
 
         if let Message::Pong(_) = msg {
             // Pong received as expected
-            dbg!("Received pong message");
+            debug!("Received pong message");
         } else {
             panic!("Unexpected message {:?}", msg);
         }
@@ -446,7 +447,7 @@ mod tests {
             .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
             .await
             .expect("Failed to send close message");
-        dbg!("Closed connection");
+        debug!("Closed connection");
     }
 
     async fn wait_for_response<F>(
@@ -466,7 +467,7 @@ mod tests {
             if criteria(&response_msg) {
                 return Ok(response_msg)
             } else {
-                dbg!("Message did not meet criteria, waiting for the correct message");
+                debug!("Message did not meet criteria, waiting for the correct message");
             }
         }
     }
@@ -569,14 +570,14 @@ mod tests {
             .url("/ws/")
             .to_string()
             .replacen("http://", "ws://", 1);
-        dbg!("Connecting to test server at {}", url.clone());
+        debug!("Connecting to test server at {}", url.clone());
 
         // Connect to the server
         let (mut connection, _response) = tokio_tungstenite::connect_async(url)
             .await
             .expect("Failed to connect");
 
-        dbg!("Connected to test server");
+        debug!("Connected to test server");
 
         // Create and send a subscribe message from the client
         let action = Command::Subscribe { extractor: extractor_id.clone() };
@@ -584,7 +585,7 @@ mod tests {
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
             .expect("Failed to send subscribe message");
-        dbg!("Sent subscribe message");
+        debug!("Sent subscribe message");
 
         // Accept the subscription ID
         let response = wait_for_new_subscription(&mut connection)
@@ -594,7 +595,7 @@ mod tests {
             subscription_id: first_subscription_id,
         } = response
         {
-            dbg!("Received first subscription ID: {:?}", first_subscription_id);
+            debug!("Received first subscription ID: {:?}", first_subscription_id);
             first_subscription_id
         } else {
             panic!("Unexpected response: {:?}", response);
@@ -604,7 +605,7 @@ mod tests {
         let _message = wait_for_dummy_message(&mut connection, extractor_id.clone())
             .await
             .expect("Failed to get the expected DummyMessage");
-        dbg!("Received DummyMessage from server");
+        debug!("Received DummyMessage from server");
 
         // Create and send a second subscribe message from the client
         let action = Command::Subscribe { extractor: extractor_id2.clone() };
@@ -612,14 +613,14 @@ mod tests {
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
             .expect("Failed to send subscribe message");
-        dbg!("Sent subscribe message for second extractor");
+        debug!("Sent subscribe message for second extractor");
 
         // Accept the second subscription ID
         let response = wait_for_new_subscription(&mut connection)
             .await
             .expect("Failed to get the expected new subscription message");
         if let Response::NewSubscription { subscription_id: second_subscription_id } = response {
-            dbg!("Received second subscription ID: {:?}", second_subscription_id);
+            debug!("Received second subscription ID: {:?}", second_subscription_id);
         } else {
             panic!("Unexpected response: {:?}", response);
         }
@@ -628,7 +629,7 @@ mod tests {
         let _message = wait_for_dummy_message(&mut connection, extractor_id2.clone())
             .await
             .expect("Failed to get the expected DummyMessage");
-        dbg!("Received DummyMessage2 from server");
+        debug!("Received DummyMessage2 from server");
 
         // Create and send a unsubscribe message from the client
         let action = Command::Unsubscribe { subscription_id: first_subscription_id };
@@ -636,14 +637,14 @@ mod tests {
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
             .expect("Failed to send unsubscribe message");
-        dbg!("Sent unsubscribe message");
+        debug!("Sent unsubscribe message");
 
         // Accept the unsubscription ID
         let response = wait_for_subscription_ended(&mut connection)
             .await
             .expect("Failed to get the expected subscription ended message");
         if let Response::SubscriptionEnded { subscription_id } = response {
-            dbg!("Received unsubscription ID: {:?}", subscription_id);
+            debug!("Received unsubscription ID: {:?}", subscription_id);
         } else {
             panic!("Unexpected response: {:?}", response);
         }
@@ -658,14 +659,14 @@ mod tests {
         let _message = wait_for_dummy_message(&mut connection, extractor_id2)
             .await
             .expect("Failed to get the expected DummyMessage");
-        dbg!("Received DummyMessage2 from server");
+        debug!("Received DummyMessage2 from server");
 
         // Close the connection
         connection
             .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
             .await
             .expect("Failed to send close message");
-        dbg!("Closed connection");
+        debug!("Closed connection");
 
         Ok(())
     }

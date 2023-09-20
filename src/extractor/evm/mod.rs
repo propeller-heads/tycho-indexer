@@ -185,7 +185,7 @@ impl AccountUpdate {
             return Err(ExtractionError::Unknown(format!(
                 "Can't merge AccountUpdates from differing identities; Expected {:#020x}, got {:#020x}",
                 self.address, other.address
-            )))
+            )));
         }
 
         self.slots.extend(other.slots);
