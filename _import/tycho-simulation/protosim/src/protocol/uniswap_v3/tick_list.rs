@@ -15,11 +15,7 @@ impl TickInfo {
         // Note: using this method here returns slightly different values
         //  compared to the Python implementation, likely more correct
         let sqrt_price = tick_math::get_sqrt_ratio_at_tick(index).unwrap();
-        TickInfo {
-            index,
-            net_liquidity,
-            sqrt_price,
-        }
+        TickInfo { index, net_liquidity, sqrt_price }
     }
 }
 
@@ -50,10 +46,7 @@ pub struct TickList {
 
 impl TickList {
     pub fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
-        let tick_list = TickList {
-            tick_spacing: spacing,
-            ticks,
-        };
+        let tick_list = TickList { tick_spacing: spacing, ticks };
         let valid = tick_list.valid_ticks();
         if valid.is_ok() {
             tick_list
@@ -68,7 +61,7 @@ impl TickList {
     // 3. Ticks are ordered by index
     fn valid_ticks(&self) -> Result<bool, String> {
         if self.tick_spacing == 0 {
-            return Err(String::from("Tick spacing is 0"));
+            return Err(String::from("Tick spacing is 0"))
         }
 
         for i in 0..self.ticks.len() {
@@ -77,14 +70,14 @@ impl TickList {
                 return Err(format!(
                     "Tick index {} not aligned with tick spacing {}",
                     t.index, self.tick_spacing,
-                ));
+                ))
             }
         }
         for i in 0..self.ticks.len() - 1 {
             let t = self.ticks.get(i).unwrap();
             if i != self.ticks.len() && t > self.ticks.get(i + 1).unwrap() {
                 let msg = format!("Ticks are not ordered at position {}", t.index);
-                return Err(msg);
+                return Err(msg)
             }
         }
 
@@ -97,7 +90,10 @@ impl TickList {
     }
 
     fn upsert_tick(&mut self, tick: i32, delta: i128) {
-        match self.ticks.binary_search_by(|t| t.index.cmp(&tick)) {
+        match self
+            .ticks
+            .binary_search_by(|t| t.index.cmp(&tick))
+        {
             Ok(existing_idx) => {
                 let tick = &mut self.ticks[existing_idx];
                 tick.net_liquidity += delta;
@@ -106,7 +102,8 @@ impl TickList {
                 }
             }
             Err(insert_idx) => {
-                self.ticks.insert(insert_idx, TickInfo::new(tick, delta));
+                self.ticks
+                    .insert(insert_idx, TickInfo::new(tick, delta));
             }
         }
     }
@@ -132,39 +129,42 @@ impl TickList {
     }
 
     pub fn get_tick(&self, index: i32) -> Result<&TickInfo, TickListError> {
-        match self.ticks.binary_search_by(|el| el.index.cmp(&index)) {
+        match self
+            .ticks
+            .binary_search_by(|el| el.index.cmp(&index))
+        {
             Ok(idx) => Ok(&self.ticks[idx]),
-            Err(_) => Err(TickListError {
-                kind: TickListErrorKind::NotFound,
-            }),
+            Err(_) => Err(TickListError { kind: TickListErrorKind::NotFound }),
         }
     }
 
     pub fn next_initialized_tick(&self, index: i32, lte: bool) -> Result<&TickInfo, TickListError> {
         if lte {
             if self.is_below_smallest(index) {
-                return Err(TickListError {
-                    kind: TickListErrorKind::BelowSmallest,
-                });
+                return Err(TickListError { kind: TickListErrorKind::BelowSmallest })
             }
             if self.is_at_or_above_largest(index) {
-                return Ok(&self.ticks[self.ticks.len() - 1]);
+                return Ok(&self.ticks[self.ticks.len() - 1])
             }
-            let tick = match self.ticks.binary_search_by(|el| el.index.cmp(&index)) {
+            let tick = match self
+                .ticks
+                .binary_search_by(|el| el.index.cmp(&index))
+            {
                 Ok(idx) => &self.ticks[idx],
                 Err(idx) => &self.ticks[idx - 1],
             };
             Ok(tick)
         } else {
             if self.is_at_or_above_largest(index) {
-                return Err(TickListError {
-                    kind: TickListErrorKind::AtOrAboveLargest,
-                });
+                return Err(TickListError { kind: TickListErrorKind::AtOrAboveLargest })
             }
             if self.is_below_smallest(index) {
-                return Ok(&self.ticks[0]);
+                return Ok(&self.ticks[0])
             }
-            let idx = match self.ticks.binary_search_by(|el| el.index.cmp(&index)) {
+            let idx = match self
+                .ticks
+                .binary_search_by(|el| el.index.cmp(&index))
+            {
                 Ok(idx) => idx + 1,
                 Err(idx) => idx,
             };
@@ -185,17 +185,17 @@ impl TickList {
             let min_in_word = (word_pos << 8) * spacing;
 
             if self.is_below_safe_tick(tick) {
-                return Err(TickListError {
-                    kind: TickListErrorKind::TicksExeeded,
-                });
+                return Err(TickListError { kind: TickListErrorKind::TicksExeeded })
             }
 
             if self.is_below_smallest(tick) {
                 let minimum = cmp::max(self.ticks[0].index - spacing, min_in_word);
-                return Ok((minimum, false));
+                return Ok((minimum, false))
             }
 
-            let idx = self.next_initialized_tick(tick, lte)?.index;
+            let idx = self
+                .next_initialized_tick(tick, lte)?
+                .index;
             let next_tick_idx = cmp::max(idx, min_in_word);
             Ok((next_tick_idx, next_tick_idx == idx))
         } else {
@@ -203,19 +203,17 @@ impl TickList {
             let max_in_word = (((word_pos + 1) << 8) - 1) * spacing;
 
             if self.is_at_or_above_safe_tick(tick) {
-                return Err(TickListError {
-                    kind: TickListErrorKind::TicksExeeded,
-                });
+                return Err(TickListError { kind: TickListErrorKind::TicksExeeded })
             }
 
             if self.is_at_or_above_largest(tick) {
-                let maximum = cmp::min(
-                    self.ticks[self.ticks.len() - 1].index + spacing,
-                    max_in_word,
-                );
-                return Ok((maximum, false));
+                let maximum =
+                    cmp::min(self.ticks[self.ticks.len() - 1].index + spacing, max_in_word);
+                return Ok((maximum, false))
             }
-            let idx = self.next_initialized_tick(tick, lte)?.index;
+            let idx = self
+                .next_initialized_tick(tick, lte)?
+                .index;
             let next_tick_idx = cmp::min(max_in_word, idx);
             Ok((next_tick_idx, next_tick_idx == idx))
         }
@@ -242,21 +240,14 @@ mod tests {
     use super::*;
 
     fn create_tick_list() -> TickList {
-        let tick_infos = vec![
-            create_tick_info(10, 10),
-            create_tick_info(20, -5),
-            create_tick_info(40, -5),
-        ];
+        let tick_infos =
+            vec![create_tick_info(10, 10), create_tick_info(20, -5), create_tick_info(40, -5)];
 
         TickList::from(10, tick_infos)
     }
 
     fn create_tick_info(idx: i32, liq: i128) -> TickInfo {
-        TickInfo {
-            index: idx,
-            net_liquidity: liq,
-            sqrt_price: U256::zero(),
-        }
+        TickInfo { index: idx, net_liquidity: liq, sqrt_price: U256::zero() }
     }
 
     #[test]
@@ -329,16 +320,8 @@ mod tests {
                 exp: 1,
                 id: "low: = MIN + 1, lte = false",
             },
-            TestCaseNextInitializedTick {
-                args: (0, true),
-                exp: 1,
-                id: "mid: idx = 0, lte = true",
-            },
-            TestCaseNextInitializedTick {
-                args: (1, true),
-                exp: 1,
-                id: "mid: idx = 1, lte = true",
-            },
+            TestCaseNextInitializedTick { args: (0, true), exp: 1, id: "mid: idx = 0, lte = true" },
+            TestCaseNextInitializedTick { args: (1, true), exp: 1, id: "mid: idx = 1, lte = true" },
             TestCaseNextInitializedTick {
                 args: (-1, false),
                 exp: 1,
@@ -531,11 +514,8 @@ mod tests {
 
     #[test]
     fn test_next_initialized_tick_within_one_word_errors() {
-        let tick_infos = vec![
-            create_tick_info(-5100, 10),
-            create_tick_info(0, -5),
-            create_tick_info(5100, -5),
-        ];
+        let tick_infos =
+            vec![create_tick_info(-5100, 10), create_tick_info(0, -5), create_tick_info(5100, -5)];
         let tick_list = TickList::from(10, tick_infos);
         let cases = vec![
             TestCaseNextTickError {
@@ -619,11 +599,8 @@ mod tests {
     #[case(100)]
     #[case(-100)]
     fn test_apply_liquidity_change(#[case] delta: i128) {
-        let tick_infos = vec![
-            create_tick_info(-5100, 10),
-            create_tick_info(0, -5),
-            create_tick_info(5100, -5),
-        ];
+        let tick_infos =
+            vec![create_tick_info(-5100, 10), create_tick_info(0, -5), create_tick_info(5100, -5)];
         let mut tick_list = TickList::from(10, tick_infos);
 
         tick_list.apply_liquidity_change(-10, 10, delta);
@@ -636,11 +613,8 @@ mod tests {
 
     #[test]
     fn test_apply_liquidity_change_add_remove() {
-        let tick_infos = vec![
-            create_tick_info(-5100, 10),
-            create_tick_info(0, -5),
-            create_tick_info(5100, -5),
-        ];
+        let tick_infos =
+            vec![create_tick_info(-5100, 10), create_tick_info(0, -5), create_tick_info(5100, -5)];
         let mut tick_list = TickList::from(10, tick_infos);
 
         tick_list.apply_liquidity_change(-10, 10, 100);

@@ -9,15 +9,13 @@
 //!
 //! The graphs main methods are:
 //!  - `new`: creates a new ProtoGraph struct with the given maximum number of hops.
-//!  - `insert_pair`: Given a `Pair` struct, it adds missing tokens to the graph
-//!         and creates edges between the tokens. It also records the pair in the states.
-//!  - `build_routes`: this function should be called whenever the graphs topology
-//!         changes such that the `search_opportunities` method can correctly take
-//!         into account newly added edges.
-//! - `transition_states`: This method can be called to transition states based on
-//!         protocol events.
-//! - `with_states_transitioned`: This method should be called to apply a change,
-//!         query the graph and then immediately revert the changes again.
+//!  - `insert_pair`: Given a `Pair` struct, it adds missing tokens to the graph and creates edges
+//!    between the tokens. It also records the pair in the states.
+//!  - `build_routes`: this function should be called whenever the graphs topology changes such that
+//!    the `search_opportunities` method can correctly take into account newly added edges.
+//! - `transition_states`: This method can be called to transition states based on protocol events.
+//! - `with_states_transitioned`: This method should be called to apply a change, query the graph
+//!   and then immediately revert the changes again.
 //!
 //! # Examples
 //! ```
@@ -125,7 +123,8 @@ impl<'a> Route<'a> {
     /// - `amount_in`: A U256 representing the input amount.
     ///
     /// ## Returns
-    /// A `Result` containing a `GetAmountOutResult` on success and a `TradeSimulationError` on failure.
+    /// A `Result` containing a `GetAmountOutResult` on success and a `TradeSimulationError` on
+    /// failure.
     pub fn get_amount_out(
         &self,
         amount_in: U256,
@@ -146,7 +145,8 @@ impl<'a> Route<'a> {
     /// - `amount_in`: A U256 representing the input amount.
     ///
     /// ## Returns
-    /// A `Result` containing a tuple of `(Vec<Swap>, U256)` on success and a `TradeSimulationError` on failure.
+    /// A `Result` containing a tuple of `(Vec<Swap>, U256)` on success and a `TradeSimulationError`
+    /// on failure.
     pub fn get_swaps(&self, amount_in: U256) -> Result<(Vec<Swap>, U256), TradeSimulationError> {
         // if we could replace this one with ArrayVec we could shrink this to a single method.
         let mut swaps = Vec::<_>::new();
@@ -197,20 +197,13 @@ impl<'a> RouteIdSubsetsByMembership<'a> {
     /// repeated route ids if this is relevant for the corresponding use case.
     fn new(addresses: Option<Vec<H160>>, memberships: &'a HashMap<H160, Vec<usize>>) -> Self {
         if let Some(subset) = addresses {
-            RouteIdSubsetsByMembership {
-                keys: subset,
-                data: memberships,
-                key_idx: 0,
-                vec_idx: 0,
-            }
+            RouteIdSubsetsByMembership { keys: subset, data: memberships, key_idx: 0, vec_idx: 0 }
         } else {
-            let subset = memberships.keys().copied().collect::<Vec<_>>();
-            RouteIdSubsetsByMembership {
-                keys: subset,
-                data: memberships,
-                key_idx: 0,
-                vec_idx: 0,
-            }
+            let subset = memberships
+                .keys()
+                .copied()
+                .collect::<Vec<_>>();
+            RouteIdSubsetsByMembership { keys: subset, data: memberships, key_idx: 0, vec_idx: 0 }
         }
     }
 }
@@ -234,11 +227,11 @@ impl Iterator for RouteIdSubsetsByMembership<'_> {
                         *route_indices
                             .get(self.vec_idx)
                             .expect("KeySubsetIterator: data was empty!"),
-                    );
+                    )
                 }
                 None => {
                     self.key_idx += 1;
-                    continue;
+                    continue
                 }
             };
         }
@@ -416,10 +409,7 @@ impl ProtoGraph {
                 let res = state.transition(ev, logmeta);
                 if !ignore_errors {
                     res.unwrap_or_else(|_| {
-                        panic!(
-                            "Error transitioning on event {:?} from address {}",
-                            ev, address
-                        )
+                        panic!("Error transitioning on event {:?} from address {}", ev, address)
                     });
                 } else if let Err(err) = res {
                     warn!(
@@ -429,7 +419,7 @@ impl ProtoGraph {
                 }
             } else {
                 trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
-                continue;
+                continue
             }
         }
     }
@@ -459,7 +449,7 @@ impl ProtoGraph {
                 old_state = state;
             } else {
                 trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
-                continue;
+                continue
             };
             // Only save original state the first time in case there are multiple logs for the
             // same pool else revert would not properly work anymore.
@@ -508,7 +498,8 @@ impl ProtoGraph {
     ///
     /// # Arguments
     ///
-    /// * `Pair(properties, state)` - A `Pair` struct that contains information about the trading pair and its state.
+    /// * `Pair(properties, state)` - A `Pair` struct that contains information about the trading
+    ///   pair and its state.
     ///
     /// # Returns
     ///
@@ -524,10 +515,17 @@ impl ProtoGraph {
 
         // add edges
         for tpair in properties.tokens.iter().combinations(2) {
-            let &TokenEntry(t0, _) = self.tokens.get(&tpair[0].address).expect("token missing");
-            let &TokenEntry(t1, _) = self.tokens.get(&tpair[1].address).expect("token missing");
+            let &TokenEntry(t0, _) = self
+                .tokens
+                .get(&tpair[0].address)
+                .expect("token missing");
+            let &TokenEntry(t1, _) = self
+                .tokens
+                .get(&tpair[1].address)
+                .expect("token missing");
 
-            self.graph.add_edge(t0, t1, properties.address);
+            self.graph
+                .add_edge(t0, t1, properties.address);
         }
 
         // record pair
@@ -547,13 +545,13 @@ impl ProtoGraph {
     ///
     /// # Returns
     ///
-    /// * `Option<()>` - returns `Some(())` if the state was updated, or `
-    ///     None` if the pair with that address could not be found.
+    /// * `Option<()>` - returns `Some(())` if the state was updated, or ` None` if the pair with
+    ///   that address could not be found.
     pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
         // TODO this should work purely on log updates and the transition
         if let Some(pair) = self.states.get_mut(address) {
             pair.1 = state;
-            return Some(());
+            return Some(())
         }
         None
     }
@@ -609,11 +607,15 @@ impl ProtoGraph {
         for pos in 0..self.routes.len() {
             // build membership cache
             for edge_idx in self.routes[pos].edges.iter() {
-                let addr = *self.graph.edge_weight(*edge_idx).unwrap();
+                let addr = *self
+                    .graph
+                    .edge_weight(*edge_idx)
+                    .unwrap();
                 if let Some(route_indices) = self.route_memberships.get_mut(&addr) {
                     route_indices.push(pos);
                 } else {
-                    self.route_memberships.insert(addr, vec![pos]);
+                    self.route_memberships
+                        .insert(addr, vec![pos]);
                 }
             }
         }
@@ -626,8 +628,10 @@ impl ProtoGraph {
     ///
     /// # Arguments
     ///
-    /// * `processor` - The `RouteProcessor` implementation used to identify and store opportunities.
-    /// * `involved_addresses` - Optional list of addresses to filter the routes. If provided, only routes involving
+    /// * `processor` - The `RouteProcessor` implementation used to identify and store
+    ///   opportunities.
+    /// * `involved_addresses` - Optional list of addresses to filter the routes. If provided, only
+    ///   routes involving
     /// the specified addresses will be processed.
     ///
     /// # Returns
@@ -638,14 +642,16 @@ impl ProtoGraph {
         processor: &mut P,
         involved_addresses: Option<Vec<H160>>,
     ) -> Result<(), P::Error> {
-        // PERF: .unique() allocates a hash map in the background, also pairs and token vectors allocate.
-        // This is suboptimal for performance, I decided to leave this here though as it will simplify parallelisation.
-        // To optimize this, each worker needs a preallocated collections that are cleared on each invocation.
+        // PERF: .unique() allocates a hash map in the background, also pairs and token vectors
+        // allocate. This is suboptimal for performance, I decided to leave this here though
+        // as it will simplify parallelisation. To optimize this, each worker needs a
+        // preallocated collections that are cleared on each invocation.
         let mut pairs = Vec::with_capacity(self.n_hops);
         let mut tokens = Vec::with_capacity(self.n_hops + 1);
-        // RouteIdSubsetsByMembership will return a list of route ids we make sure the route ids are unique and yield the
-        // corresponding RouteEntry object. This way we get all routes that contain any of the changed addresses.
-        // In case we didn't see some address on any route (KeyError on route_memberships) it is simply skipped.
+        // RouteIdSubsetsByMembership will return a list of route ids we make sure the route ids are
+        // unique and yield the corresponding RouteEntry object. This way we get all routes
+        // that contain any of the changed addresses. In case we didn't see some address on
+        // any route (KeyError on route_memberships) it is simply skipped.
         let route_iter =
             RouteIdSubsetsByMembership::new(involved_addresses, &self.route_memberships)
                 .unique()
@@ -655,12 +661,21 @@ impl ProtoGraph {
             pairs.clear();
             tokens.clear();
             let mut prev_node_idx = route.start;
-            let TokenEntry(_, start) = &self.tokens[self.graph.node_weight(route.start).unwrap()];
+            let TokenEntry(_, start) = &self.tokens[self
+                .graph
+                .node_weight(route.start)
+                .unwrap()];
             tokens.push(start);
             for edge_idx in route.edges.iter() {
-                let state_addr = self.graph.edge_weight(*edge_idx).unwrap();
+                let state_addr = self
+                    .graph
+                    .edge_weight(*edge_idx)
+                    .unwrap();
                 let state = self.states.get(state_addr).unwrap();
-                let (s_idx, e_idx) = self.graph.edge_endpoints(*edge_idx).unwrap();
+                let (s_idx, e_idx) = self
+                    .graph
+                    .edge_endpoints(*edge_idx)
+                    .unwrap();
                 // we need to correctly infer the edge direction here
                 let next_token = if prev_node_idx == s_idx {
                     prev_node_idx = e_idx;
@@ -700,9 +715,10 @@ impl ProtoGraph {
 mod tests {
     use std::str::FromStr;
 
-    use crate::protocol::models::PairProperties;
-    use crate::protocol::uniswap_v2::events::UniswapV2Sync;
-    use crate::protocol::uniswap_v2::state::UniswapV2State;
+    use crate::protocol::{
+        models::PairProperties,
+        uniswap_v2::{events::UniswapV2Sync, state::UniswapV2State},
+    };
     use ethers::types::H256;
     use rstest::rstest;
 
@@ -849,7 +865,8 @@ mod tests {
             logmeta("0x0000000000000000000000000000000000000002", (0, 1)),
         )];
 
-        g.transition_states_revertibly(&events).unwrap();
+        g.transition_states_revertibly(&events)
+            .unwrap();
         assert_ne!(original_states, g.states);
 
         g.revert_states();
@@ -876,10 +893,7 @@ mod tests {
     fn make_pair(pair: &str, t0: &str, t1: &str, r0: u64, r1: u64) -> Pair {
         let t0 = ERC20Token::new(t0, 3, "T0");
         let t1 = ERC20Token::new(t1, 3, "T1");
-        let props = PairProperties {
-            address: H160::from_str(pair).unwrap(),
-            tokens: vec![t0, t1],
-        };
+        let props = PairProperties { address: H160::from_str(pair).unwrap(), tokens: vec![t0, t1] };
         let state = UniswapV2State::new(U256::from(r0), U256::from(r1)).into();
         Pair(props, state)
     }
@@ -1299,7 +1313,9 @@ mod tests {
         let pairs = vec![&pair_0, &pair_1];
         let route = Route::new(1, &tokens, &pairs);
 
-        let res = route.get_amount_out(U256::from(100_000)).unwrap();
+        let res = route
+            .get_amount_out(U256::from(100_000))
+            .unwrap();
 
         assert_eq!(res.gas, U256::from(240_000));
         assert_eq!(res.amount, U256::from(39_484));

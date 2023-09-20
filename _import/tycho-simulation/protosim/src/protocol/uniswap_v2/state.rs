@@ -1,6 +1,5 @@
 use ethers::types::U256;
 
-use crate::safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256};
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -9,10 +8,10 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
 };
 
-use super::events::UniswapV2Sync;
-use super::reserve_price::spot_price_from_reserves;
+use super::{events::UniswapV2Sync, reserve_price::spot_price_from_reserves};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
@@ -31,11 +30,7 @@ impl UniswapV2State {
     /// * `reserve0` - Reserve of token 0.
     /// * `reserve1` - Reserve of token 1.
     pub fn new(reserve0: U256, reserve1: U256) -> Self {
-        UniswapV2State {
-            reserve0,
-            reserve1,
-            log_index: (0, 0),
-        }
+        UniswapV2State { reserve0, reserve1, log_index: (0, 0) }
     }
 
     pub fn transition(
@@ -99,7 +94,8 @@ impl ProtocolSim for UniswapV2State {
     ///
     /// # Returns
     ///
-    /// * `Result<GetAmountOutResult, TradeSimulationError>` - A `Result` containing the amount of output and the slippage of the trade, or an error.
+    /// * `Result<GetAmountOutResult, TradeSimulationError>` - A `Result` containing the amount of
+    ///   output and the slippage of the trade, or an error.
     fn get_amount_out(
         &self,
         amount_in: U256,
@@ -110,33 +106,23 @@ impl ProtocolSim for UniswapV2State {
             return Result::Err(TradeSimulationError::new(
                 TradeSimulationErrorKind::InsufficientAmount,
                 None,
-            ));
+            ))
         }
         let zero2one = token_in.address < token_out.address;
-        let reserve_sell = if zero2one {
-            self.reserve0
-        } else {
-            self.reserve1
-        };
-        let reserve_buy = if zero2one {
-            self.reserve1
-        } else {
-            self.reserve0
-        };
+        let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
+        let reserve_buy = if zero2one { self.reserve1 } else { self.reserve0 };
 
         if reserve_sell == U256::zero() || reserve_buy == U256::zero() {
             return Result::Err(TradeSimulationError::new(
                 TradeSimulationErrorKind::NoLiquidity,
                 None,
-            ));
+            ))
         }
 
         let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
         let numerator = safe_mul_u256(amount_in_with_fee, reserve_buy)?;
-        let denominator = safe_add_u256(
-            safe_mul_u256(reserve_sell, U256::from(1000))?,
-            amount_in_with_fee,
-        )?;
+        let denominator =
+            safe_add_u256(safe_mul_u256(reserve_sell, U256::from(1000))?, amount_in_with_fee)?;
 
         let amount_out = safe_div_u256(numerator, denominator)?;
 
@@ -186,7 +172,9 @@ mod tests {
         let t1 = ERC20Token::new("0x0000000000000000000000000000000000000001", t1d, "T0");
         let state = UniswapV2State::new(r0, r1);
 
-        let res = state.get_amount_out(amount_in, &t0, &t1).unwrap();
+        let res = state
+            .get_amount_out(amount_in, &t0, &t1)
+            .unwrap();
 
         assert_eq!(res.amount, exp);
     }
@@ -204,10 +192,7 @@ mod tests {
 
         let res = state.get_amount_out(amount_in, &t0, &t1);
         assert_eq!(res.is_err(), true);
-        assert_eq!(
-            res.err().unwrap().kind,
-            TradeSimulationErrorKind::U256Overflow
-        )
+        assert_eq!(res.err().unwrap().kind, TradeSimulationErrorKind::U256Overflow)
     }
 
     #[rstest]
@@ -251,7 +236,9 @@ mod tests {
             1,
         );
 
-        state.transition(&event, &log_meta).unwrap();
+        state
+            .transition(&event, &log_meta)
+            .unwrap();
 
         assert_eq!(state.reserve0, u256("1500"));
         assert_eq!(state.reserve1, u256("2000"));

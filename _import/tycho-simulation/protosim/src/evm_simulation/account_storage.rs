@@ -89,7 +89,8 @@ impl AccountStorage {
     /// in the `storage` collection, it updates the storage information based on the `storage` field
     /// in the `update` parameter.
     ///
-    /// If the `address` is not found in either collection, a warning is logged and no changes are made.
+    /// If the `address` is not found in either collection, a warning is logged and no changes are
+    /// made.
     pub fn update_account(&mut self, address: &B160, update: &StateUpdate) {
         if let Some(account) = self.accounts.get_mut(address) {
             if let Some(new_balance) = update.balance {
@@ -97,20 +98,20 @@ impl AccountStorage {
             }
             if let Some(new_storage) = &update.storage {
                 for (index, value) in new_storage {
-                    account.permanent_storage.insert(*index, *value);
+                    account
+                        .permanent_storage
+                        .insert(*index, *value);
                 }
             }
         } else {
-            warn!(
-                "Tried to update account {:x?} that was not initialized",
-                address
-            );
+            warn!("Tried to update account {:x?} that was not initialized", address);
         }
     }
 
     /// Retrieves the account information for a given address.
     ///
-    /// This function retrieves the account information associated with the specified address from the storage.
+    /// This function retrieves the account information associated with the specified address from
+    /// the storage.
     ///
     /// # Arguments
     ///
@@ -118,9 +119,12 @@ impl AccountStorage {
     ///
     /// # Returns
     ///
-    /// Returns an `Option` that holds a reference to the `AccountInfo`. If the account is not found, `None` is returned.
+    /// Returns an `Option` that holds a reference to the `AccountInfo`. If the account is not
+    /// found, `None` is returned.
     pub fn get_account_info(&self, address: &B160) -> Option<&AccountInfo> {
-        self.accounts.get(address).map(|acc| &acc.info)
+        self.accounts
+            .get(address)
+            .map(|acc| &acc.info)
     }
 
     /// Checks if an account with the given address is present in the storage.
@@ -140,7 +144,8 @@ impl AccountStorage {
     /// Sets the storage value at the specified index for the given account.
     ///
     /// If the account exists in the storage, the storage value at the specified `index` is updated.
-    /// If the account does not exist, a warning message is logged indicating an attempt to set storage on an uninitialized account.
+    /// If the account does not exist, a warning message is logged indicating an attempt to set
+    /// storage on an uninitialized account.
     ///
     /// # Arguments
     ///
@@ -151,17 +156,14 @@ impl AccountStorage {
         if let Some(acc) = self.accounts.get_mut(&address) {
             acc.temp_storage.insert(index, value);
         } else {
-            warn!(
-                "Trying to set storage on unitialized account {:x?}.",
-                address
-            );
+            warn!("Trying to set storage on unitialized account {:x?}.", address);
         }
     }
 
     /// Retrieves the storage value at the specified index for the given account, if it exists.
     ///
-    /// If the account exists in the storage, the storage value at the specified `index` is returned as a reference.
-    /// Temp storage takes priority over permanent storage.
+    /// If the account exists in the storage, the storage value at the specified `index` is returned
+    /// as a reference. Temp storage takes priority over permanent storage.
     /// If the account does not exist, `None` is returned.
     ///
     /// # Arguments
@@ -171,13 +173,16 @@ impl AccountStorage {
     ///
     /// # Returns
     ///
-    /// Returns an `Option` containing a reference to the storage value if it exists, otherwise returns `None`.
+    /// Returns an `Option` containing a reference to the storage value if it exists, otherwise
+    /// returns `None`.
     pub fn get_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
         if let Some(acc) = self.accounts.get(address) {
             if let Some(s) = acc.temp_storage.get(index) {
                 Some(*s)
             } else {
-                acc.permanent_storage.get(index).copied()
+                acc.permanent_storage
+                    .get(index)
+                    .copied()
             }
         } else {
             None
@@ -193,10 +198,11 @@ impl AccountStorage {
     ///
     /// * `address` - The address of the account.
     /// * `index` - The index of the desired storage value.
-    ///
     pub fn get_permanent_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
         if let Some(acc) = self.accounts.get(address) {
-            acc.permanent_storage.get(index).copied()
+            acc.permanent_storage
+                .get(index)
+                .copied()
         } else {
             None
         }
@@ -217,7 +223,9 @@ impl AccountStorage {
     ///
     /// * `address` - A reference to the account address.
     pub fn is_mocked_account(&self, address: &B160) -> Option<bool> {
-        self.accounts.get(address).map(|acc| acc.mocked)
+        self.accounts
+            .get(address)
+            .map(|acc| acc.mocked)
     }
 }
 
@@ -226,8 +234,7 @@ mod tests {
     use super::StateUpdate;
     use crate::evm_simulation::account_storage::{Account, AccountStorage};
     use revm::primitives::{AccountInfo, B160, KECCAK_EMPTY, U256 as rU256};
-    use std::collections::HashMap;
-    use std::{error::Error, str::FromStr};
+    use std::{collections::HashMap, error::Error, str::FromStr};
 
     #[test]
     fn test_insert_account() -> Result<(), Box<dyn Error>> {
@@ -247,22 +254,15 @@ mod tests {
 
         account_storage.init_account(acc_address, info, Some(storage_new), false);
 
-        let acc = account_storage.get_account_info(&acc_address).unwrap();
+        let acc = account_storage
+            .get_account_info(&acc_address)
+            .unwrap();
         let storage_value = account_storage
             .get_storage(&acc_address, &rU256::from_str("1").unwrap())
             .unwrap();
-        assert_eq!(
-            acc.nonce, expected_nonce,
-            "Nonce should match expected value"
-        );
-        assert_eq!(
-            acc.balance, expected_balance,
-            "Balance should match expected value"
-        );
-        assert_eq!(
-            acc.code_hash, KECCAK_EMPTY,
-            "Code hash should match expected value"
-        );
+        assert_eq!(acc.nonce, expected_nonce, "Nonce should match expected value");
+        assert_eq!(acc.balance, expected_balance, "Balance should match expected value");
+        assert_eq!(acc.code_hash, KECCAK_EMPTY, "Code hash should match expected value");
         assert_eq!(
             storage_value, expected_storage_value,
             "Storage value should match expected value"
@@ -296,10 +296,8 @@ mod tests {
         let updated_storage_value = rU256::from_str("999").unwrap();
         let mut updated_storage = HashMap::new();
         updated_storage.insert(storage_index, updated_storage_value);
-        let state_update = StateUpdate {
-            balance: Some(updated_balance),
-            storage: Some(updated_storage),
-        };
+        let state_update =
+            StateUpdate { balance: Some(updated_balance), storage: Some(updated_storage) };
 
         account_storage.update_account(&acc_address, &state_update);
 
@@ -327,10 +325,7 @@ mod tests {
         let address_1 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let account_info_1 = AccountInfo::default();
-        let account_info_2 = AccountInfo {
-            nonce: 500,
-            ..Default::default()
-        };
+        let account_info_2 = AccountInfo { nonce: 500, ..Default::default() };
         account_storage.init_account(address_1, account_info_1, None, false);
         account_storage.init_account(address_2, account_info_2, None, false);
 
@@ -343,10 +338,7 @@ mod tests {
             AccountInfo::default().nonce,
             "Existing account's nonce should match the expected value"
         );
-        assert_eq!(
-            non_existing_account, None,
-            "Non-existing account should return None"
-        );
+        assert_eq!(non_existing_account, None, "Non-existing account should return None");
     }
 
     #[test]
@@ -383,7 +375,9 @@ mod tests {
         let non_existing_address =
             B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let account = Account::default();
-        account_storage.accounts.insert(address, account);
+        account_storage
+            .accounts
+            .insert(address, account);
         let index = rU256::from_str("1").unwrap();
         let value = rU256::from_str("1").unwrap();
         let non_existing_index = rU256::from_str("2").unwrap();
@@ -398,15 +392,8 @@ mod tests {
         let storage = account_storage.get_storage(&address, &index);
         let empty_storage = account_storage.get_storage(&non_existing_address, &non_existing_index);
 
-        assert_eq!(
-            storage,
-            Some(value),
-            "Storage value should match the value that was set"
-        );
-        assert_eq!(
-            empty_storage, None,
-            "Storage value should be None for a non-existing account"
-        );
+        assert_eq!(storage, Some(value), "Storage value should match the value that was set");
+        assert_eq!(empty_storage, None, "Storage value should be None for a non-existing account");
     }
 
     #[test]
@@ -420,8 +407,12 @@ mod tests {
         let value = rU256::from(100);
         let non_existent_index = rU256::from(999);
         let mut account = Account::default();
-        account.temp_storage.insert(index, value);
-        account_storage.accounts.insert(existing_address, account);
+        account
+            .temp_storage
+            .insert(index, value);
+        account_storage
+            .accounts
+            .insert(existing_address, account);
 
         assert_eq!(
             account_storage.get_storage(&existing_address, &index),
@@ -451,9 +442,15 @@ mod tests {
         let temp_value = rU256::from(100);
         let permanent_value = rU256::from(200);
         let mut account = Account::default();
-        account.temp_storage.insert(index, temp_value);
-        account.permanent_storage.insert(index, permanent_value);
-        account_storage.accounts.insert(address, account);
+        account
+            .temp_storage
+            .insert(index, temp_value);
+        account
+            .permanent_storage
+            .insert(index, permanent_value);
+        account_storage
+            .accounts
+            .insert(address, account);
 
         assert_eq!(
             account_storage.get_storage(&address, &index),
@@ -470,14 +467,8 @@ mod tests {
         let not_mocked_account_address =
             B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let unknown_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
-        let mocked_account = Account {
-            mocked: true,
-            ..Default::default()
-        };
-        let not_mocked_account = Account {
-            mocked: false,
-            ..Default::default()
-        };
+        let mocked_account = Account { mocked: true, ..Default::default() };
+        let not_mocked_account = Account { mocked: false, ..Default::default() };
         account_storage
             .accounts
             .insert(mocked_account_address, mocked_account);
@@ -485,14 +476,8 @@ mod tests {
             .accounts
             .insert(not_mocked_account_address, not_mocked_account);
 
-        assert_eq!(
-            account_storage.is_mocked_account(&mocked_account_address),
-            Some(true)
-        );
-        assert_eq!(
-            account_storage.is_mocked_account(&not_mocked_account_address),
-            Some(false)
-        );
+        assert_eq!(account_storage.is_mocked_account(&mocked_account_address), Some(true));
+        assert_eq!(account_storage.is_mocked_account(&not_mocked_account_address), Some(false));
         assert_eq!(account_storage.is_mocked_account(&unknown_address), None);
     }
 
@@ -509,21 +494,23 @@ mod tests {
         account_2
             .temp_storage
             .insert(rU256::from(2), rU256::from(20));
-        account_storage.accounts.insert(address_1, account_1);
-        account_storage.accounts.insert(address_2, account_2);
+        account_storage
+            .accounts
+            .insert(address_1, account_1);
+        account_storage
+            .accounts
+            .insert(address_2, account_2);
 
         account_storage.clean_temp_storage();
 
-        let account_1_temp_storage = account_storage.accounts[&address_1].temp_storage.len();
-        let account_2_temp_storage = account_storage.accounts[&address_2].temp_storage.len();
-        assert_eq!(
-            account_1_temp_storage, 0,
-            "Temporary storage of account 1 should be cleared"
-        );
-        assert_eq!(
-            account_2_temp_storage, 0,
-            "Temporary storage of account 2 should be cleared"
-        );
+        let account_1_temp_storage = account_storage.accounts[&address_1]
+            .temp_storage
+            .len();
+        let account_2_temp_storage = account_storage.accounts[&address_2]
+            .temp_storage
+            .len();
+        assert_eq!(account_1_temp_storage, 0, "Temporary storage of account 1 should be cleared");
+        assert_eq!(account_2_temp_storage, 0, "Temporary storage of account 2 should be cleared");
     }
 
     #[test]
@@ -535,8 +522,12 @@ mod tests {
         let index = rU256::from_str("123").unwrap();
         let value = rU256::from_str("456").unwrap();
         let mut account = Account::default();
-        account.permanent_storage.insert(index, value);
-        account_storage.accounts.insert(address, account);
+        account
+            .permanent_storage
+            .insert(index, value);
+        account_storage
+            .accounts
+            .insert(address, account);
 
         let result = account_storage.get_permanent_storage(&address, &index);
         let not_existing_result =
@@ -549,10 +540,7 @@ mod tests {
             Some(value),
             "Expected value for existing account with permanent storage"
         );
-        assert_eq!(
-            not_existing_result, None,
-            "Expected None for non-existing account"
-        );
+        assert_eq!(not_existing_result, None, "Expected None for non-existing account");
         assert_eq!(
             no_storage, None,
             "Expected None for existing account without permanent storage"

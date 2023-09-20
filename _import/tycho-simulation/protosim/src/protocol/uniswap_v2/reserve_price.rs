@@ -18,7 +18,6 @@ use crate::u256_num::u256_to_f64;
 ///
 /// assert_eq!(res, 2.0f64);
 /// ```
-///
 pub fn spot_price_from_reserves(
     r0: U256,
     r1: U256,

@@ -30,10 +30,7 @@ pub fn safe_sub_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
 
 pub fn _construc_result_u256(res: Option<U256>) -> Result<U256, TradeSimulationError> {
     match res {
-        None => Err(TradeSimulationError::new(
-            TradeSimulationErrorKind::U256Overflow,
-            None,
-        )),
+        None => Err(TradeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
         Some(value) => Ok(value),
     }
 }
@@ -60,10 +57,7 @@ pub fn safe_sub_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
 
 pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, TradeSimulationError> {
     match res {
-        None => Err(TradeSimulationError::new(
-            TradeSimulationErrorKind::U256Overflow,
-            None,
-        )),
+        None => Err(TradeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
         Some(value) => Ok(value),
     }
 }
@@ -90,10 +84,7 @@ pub fn safe_sub_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
 
 pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, TradeSimulationError> {
     match res {
-        None => Err(TradeSimulationError::new(
-            TradeSimulationErrorKind::U256Overflow,
-            None,
-        )),
+        None => Err(TradeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
         Some(value) => Ok(value),
     }
 }
