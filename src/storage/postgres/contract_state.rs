@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use chrono::{NaiveDateTime, Utc};
 use diesel_async::RunQueryDsl;
 use ethers::utils::keccak256;
+use tracing::instrument;
 
 use crate::storage::{
     AccountToContractStore, Address, AddressRef, Balance, BlockIdentifier, BlockOrTimestamp,
@@ -55,6 +56,7 @@ where
     /// This method returns a mapping from each account id to its respective `Balance`. The returned
     /// map indicates the new balance that needs to be applied to reach the desired target
     /// version.
+    #[instrument(skip(self, conn))]
     async fn get_balance_deltas(
         &self,
         chain_id: i64,
@@ -128,6 +130,7 @@ where
     /// This method returns a mapping from each account id to its respective
     /// `Code`. The returned map indicates the new code that needs to be applied
     /// to reach the desired target version.
+    #[instrument(skip(self, conn))]
     async fn get_code_deltas(
         &self,
         chain_id: i64,
@@ -201,6 +204,7 @@ where
     /// This method returns a mapping from each account id to a `ContractStore`.
     /// The returned store entries indicate the updates needed to reach the specified target
     /// version.
+    #[instrument(skip(self, conn))]
     async fn get_slots_delta(
         &self,
         chain_id: i64,
@@ -312,6 +316,7 @@ where
     /// attribute. We can use this attribute to satisfy the first operation. It also contains new
     /// restored / deleted delta structs withing the `restored` attribute with which we can satisfy
     /// the second rule.
+    #[instrument(skip(self, conn))]
     async fn get_created_or_deleted_accounts(
         &self,
         chain: Chain,
@@ -489,6 +494,7 @@ where
     /// An empty `Ok(())` if the operation succeeded. Will raise an error if any
     /// of the related entities can not be found: e.g. one of the referenced
     /// transactions or accounts is not or not yet persisted.
+    #[instrument(skip_all)]
     async fn upsert_slots(
         &self,
         slots: HashMap<i64, AccountToContractStore>,
@@ -566,6 +572,7 @@ where
     /// - `contracts` Optionally allows filtering by contract address.
     /// - `at` The version at which to retrieve slots. None retrieves the latest
     /// - `conn` The database handle or connection. state.
+    #[instrument(skip(self, contracts, conn))]
     async fn get_contract_slots(
         &self,
         chain: Chain,

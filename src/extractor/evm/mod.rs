@@ -218,6 +218,12 @@ pub struct BlockAccountChanges {
     pub new_pools: HashMap<H160, SwapPool>,
 }
 
+impl std::fmt::Display for BlockAccountChanges {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "block_number: {}, extractor: {}", self.block.number, self.extractor)
+    }
+}
+
 impl NormalisedMessage for BlockAccountChanges {
     fn source(&self) -> ExtractorIdentity {
         ExtractorIdentity { chain: self.chain, name: self.extractor.clone() }

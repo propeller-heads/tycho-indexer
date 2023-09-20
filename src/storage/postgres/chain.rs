@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use tracing::instrument;
 
 use super::{orm, schema, PostgresGateway};
 use crate::storage::{
@@ -20,6 +21,7 @@ where
     type Block = B;
     type Transaction = TX;
 
+    #[instrument(skip_all)]
     async fn upsert_block(
         &self,
         new: &Self::Block,
@@ -41,6 +43,7 @@ where
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn get_block(
         &self,
         block_id: &BlockIdentifier,
@@ -61,6 +64,7 @@ where
         B::from_storage(orm_block, chain)
     }
 
+    #[instrument(skip_all)]
     async fn upsert_tx(
         &self,
         new: &Self::Transaction,
@@ -97,6 +101,7 @@ where
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn get_tx(
         &self,
         hash: &[u8],

@@ -10,7 +10,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, trace, warn, Instrument};
 
 use super::Extractor;
 use crate::{
@@ -48,6 +48,7 @@ where
         Self { handle, control_tx }
     }
 
+    #[instrument(skip(self))]
     pub async fn stop(self) -> Result<(), Box<dyn Error>> {
         self.control_tx
             .send(ControlMessage::Stop)
@@ -56,6 +57,7 @@ where
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn wait(self) {
         self.handle.await.unwrap();
     }
@@ -66,6 +68,7 @@ impl<M> MessageSender<M> for ExtractorHandle<M>
 where
     M: NormalisedMessage,
 {
+    #[instrument(skip(self))]
     async fn subscribe(&self) -> Result<Receiver<Arc<M>>, SendError<ControlMessage<M>>> {
         let (tx, rx) = mpsc::channel(1);
         self.control_tx
@@ -113,13 +116,14 @@ where
                                 break;
                             }
                             Some(Ok(BlockResponse::New(data))) => {
+                                debug!("New block data received.");
                                 match self.extractor.handle_tick_scoped_data(data).await {
                                     Ok(Some(msg)) => {
-                                        debug!("Propagating new data message.");
+                                        trace!(msg = %msg, "Propagating new block data message.");
                                         Self::propagate_msg(&self.subscriptions, msg).await
                                     }
                                     Ok(None) => {
-                                        debug!("No message to propagate.");
+                                        trace!("No message to propagate.");
                                     }
                                     Err(err) => {
                                         error!("Error while processing tick: {err}! Retries exhausted.");
@@ -130,40 +134,45 @@ where
                             Some(Ok(BlockResponse::Undo(undo_signal))) => {
                                 match self.extractor.handle_revert(undo_signal).await {
                                     Ok(Some(msg)) => {
-                                        debug!("Propagating undo message.");
+                                        trace!(msg = %msg, "Propagating block undo message.");
                                         Self::propagate_msg(&self.subscriptions, msg).await
                                     }
                                     Ok(None) => {
-                                        debug!("No message to propagate.");
+                                        trace!("No message to propagate.");
                                     }
-                                    Err(_) => {
-                                        error!("Error while processing revert! Retries exhausted.");
+                                    Err(err) => {
+                                        error!(error = %err, "Error while processing revert!");
                                         break;
                                     }
                                 }
                             }
                             Some(Err(err)) => {
-                                error!("Stream terminated with error {:#?}", err);
+                                error!(error = %err, "Error while processing block!");
                                 break;
                             }
                         };
                     }
                 }
             }
-        })
+        }
+        .instrument(tracing::info_span!("extractor_runner::run"))
+    )
     }
 
+    #[instrument(skip_all)]
     async fn subscribe(&mut self, sender: Sender<Arc<M>>) {
-        info!("New subscriber.");
-        let counter = self.subscriptions.lock().await.len() as u64;
+        let subscriber_id = self.subscriptions.lock().await.len() as u64;
+        info!(subscriber_id = %subscriber_id, "New subscription.");
         self.subscriptions
             .lock()
             .await
-            .insert(counter, sender);
+            .insert(subscriber_id, sender);
     }
 
+    // TODO: add message tracing_id to the log
+    #[instrument(skip_all)]
     async fn propagate_msg(subscribers: &Arc<Mutex<SubscriptionsMap<M>>>, message: M) {
-        debug!("Propagating message: {:?}", message);
+        debug!(msg = %message, "Propagating message to subscribers.");
         let arced_message = Arc::new(message);
 
         let mut to_remove = Vec::new();
@@ -175,12 +184,12 @@ where
             match sender.send(arced_message.clone()).await {
                 Ok(_) => {
                     // Message sent successfully
-                    info!("Message sent to subscriber {}", counter);
+                    info!(subscriber_id = %counter, "Message sent successfully.");
                 }
-                Err(_) => {
+                Err(err) => {
                     // Receiver has been dropped, mark for removal
                     to_remove.push(*counter);
-                    error!("Subscriber {} has been dropped", counter);
+                    error!(error = %err, subscriber_id = %counter, "Subscriber {} has been dropped", counter);
                 }
             }
         }

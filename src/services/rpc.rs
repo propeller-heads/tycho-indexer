@@ -159,8 +159,10 @@ struct Block {
 mod tests {
     use crate::storage::postgres::db_fixtures;
     use actix_web::{test, App};
+    use actix_web_opentelemetry::RequestTracing;
     use diesel_async::AsyncConnection;
     use ethers::types::{H160, H256, U256};
+
     use std::{collections::HashMap, str::FromStr};
 
     use super::*;
@@ -397,6 +399,7 @@ mod tests {
     }
 
     #[actix_web::test]
+
     async fn test_contract_state_route() {
         let (mut conn, acc_address) = setup_database().await;
 
@@ -436,6 +439,7 @@ mod tests {
         // Set up the app with the RequestHandler and the contract_state service
         let app = test::init_service(
             App::new()
+                .wrap(RequestTracing::new())
                 .app_data(web::Data::new(req_handler))
                 .service(contract_state),
         )

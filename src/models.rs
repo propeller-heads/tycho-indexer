@@ -80,7 +80,7 @@ impl ExtractionState {
 }
 
 pub trait NormalisedMessage:
-    Serialize + DeserializeOwned + std::fmt::Debug + Send + Sync + Clone + 'static
+    Serialize + DeserializeOwned + std::fmt::Debug + std::fmt::Display + Send + Sync + Clone + 'static
 {
     fn source(&self) -> ExtractorIdentity;
 }

@@ -67,11 +67,7 @@ fn stream_blocks(
 
     try_stream! {
         'retry_loop: loop {
-            info!("Blockstreams disconnected, connecting (endpoint {}, start block {}, cursor {})",
-                &endpoint,
-                start_block_num,
-                &latest_cursor
-            );
+            info!(endpoint = %endpoint, start_block_num, cursor = %latest_cursor, "Blockstreams disconnected, connecting again");
 
             let result = endpoint.clone().substreams(Request {
                 start_block_num,
@@ -120,7 +116,8 @@ fn stream_blocks(
                                     return Err(anyhow::Error::new(status.clone()))?;
                                 }
 
-                                error!("Received tonic error {:#}", status);
+                                // error!("Received tonic error {:#}", status);
+                                error!(status = %status, "Received tonic error");
 
                                 // If we reach this point, we must wait a bit before retrying
                                 if let Some(duration) = backoff.next() {
@@ -143,7 +140,7 @@ fn stream_blocks(
                     // case where we actually _want_ to back off in case we keep
                     // having connection errors.
 
-                    error!("Unable to connect to endpoint: {:#}", e);
+                    error!(error = %e, "Unable to connect to endpoint");
                 }
             }
         }

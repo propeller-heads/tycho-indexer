@@ -386,7 +386,7 @@ pub enum BlockOrTimestamp {
 /// retrieval behaviour that is possible with the storage layout. Please refer
 /// to the individual implementation for information about which version kinds
 /// it supports.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub enum VersionKind {
     /// Represents the final state within a specific block. Essentially, it
     /// retrieves the state subsequent to the execution of the last transaction
@@ -422,6 +422,7 @@ impl Display for ContractId {
 
 /// A version desribes the state of the DB at a exact point in time.
 /// See the module level docs for more information on how versioning works.
+#[derive(Debug, Clone)]
 pub struct Version(pub BlockOrTimestamp, pub VersionKind);
 
 impl Version {
