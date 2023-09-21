@@ -7,7 +7,7 @@ use mockall::automock;
 use prost::Message;
 use serde_json::json;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 use async_trait::async_trait;
 use tokio::sync::Mutex;
@@ -103,18 +103,18 @@ impl AmbientPgGateway {
         new_cursor: &str,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
-        debug!("Upserting block: {:?}", &changes.block);
+        debug!(block = ?changes.block, "Upserting block");
         self.state_gateway
             .upsert_block(&changes.block, conn)
             .await?;
         for update in changes.tx_updates.iter() {
-            debug!("Processing tx: 0x{:x}", &update.tx.hash);
+            debug!(tx_hash = ?update.tx.hash, "Processing transaction");
             self.state_gateway
                 .upsert_tx(&update.tx, conn)
                 .await?;
             if update.is_creation() {
                 let new: evm::Account = update.into();
-                info!("New contract found at {}: 0x{:x}", &changes.block.number, &new.address);
+                info!(block_number = ?changes.block.number, contract_address = ?new.address, "New contract found at {:#020x}", &new.address);
                 self.state_gateway
                     .insert_contract(&new, conn)
                     .await?;
@@ -266,6 +266,7 @@ where
         String::from_utf8(self.inner.lock().await.cursor.clone()).expect("Cursor is utf8")
     }
 
+    #[instrument(skip_all, fields(chain = %self.chain, name = %self.name))]
     async fn handle_tick_scoped_data(
         &self,
         inp: BlockScopedData,
@@ -279,7 +280,9 @@ where
             .unwrap();
 
         let raw_msg = BlockContractChanges::decode(_data.value.as_slice())?;
-        debug!("Received message: {raw_msg:?}");
+        tracing::Span::current().record("block_number", raw_msg.clone().block.unwrap().number);
+
+        debug!(?raw_msg, "Received message");
 
         let msg = match evm::BlockStateChanges::try_from_message(raw_msg, &self.name, self.chain) {
             Ok(changes) => changes,
@@ -297,6 +300,7 @@ where
         Ok(Some(msg.aggregate_updates()?))
     }
 
+    #[instrument(skip_all, fields(chain = %self.chain, name = %self.name, block_number = %inp.last_valid_block.as_ref().unwrap().number))]
     async fn handle_revert(
         &self,
         inp: BlockUndoSignal,
@@ -323,6 +327,7 @@ where
         Ok((!changes.account_updates.is_empty()).then_some(changes))
     }
 
+    #[instrument(skip_all)]
     async fn handle_progress(&self, _inp: ModulesProgress) -> Result<(), ExtractionError> {
         todo!()
     }

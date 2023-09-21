@@ -116,7 +116,6 @@ fn stream_blocks(
                                     return Err(anyhow::Error::new(status.clone()))?;
                                 }
 
-                                // error!("Received tonic error {:#}", status);
                                 error!(status = %status, "Received tonic error");
 
                                 // If we reach this point, we must wait a bit before retrying

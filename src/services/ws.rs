@@ -149,7 +149,7 @@ where
                 // Add the subscription_id to the current tracing span recorded fields
                 tracing::Span::current().record("subscription_id", &subscription_id.to_string());
 
-                info!("Subscribing to extractor");
+                info!(extractor_id = %extractor_id, "Subscribing to extractor");
 
                 match block_on(message_sender.subscribe()) {
                     Ok(mut rx) => {
@@ -169,17 +169,17 @@ where
                         let message = Response::NewSubscription { subscription_id };
                         ctx.text(serde_json::to_string(&message).unwrap());
                     }
-                    Err(e) => {
-                        error!(error = %e, "Failed to subscribe to the extractor");
+                    Err(err) => {
+                        error!(error = %err, "Failed to subscribe to the extractor");
 
                         let error = WebsocketError::SubscribeError(extractor_id.clone());
                         ctx.text(serde_json::to_string(&error).unwrap());
                     }
                 };
             } else {
-                error!("Extractor not found in hashmap");
-
                 let error = WebsocketError::ExtractorNotFound(extractor_id.clone());
+                error!(%error, "Extractor not found in hashmap");
+
                 ctx.text(serde_json::to_string(&error).unwrap());
             }
         }
@@ -187,7 +187,7 @@ where
 
     #[instrument(skip(self, ctx), fields(WsActor.id = %self.id))]
     fn unsubscribe(&mut self, ctx: &mut ws::WebsocketContext<Self>, subscription_id: Uuid) {
-        info!("Unsubscribing from subscription");
+        info!(%subscription_id, "Unsubscribing from subscription");
 
         if let Some(handle) = self
             .subscriptions
@@ -201,7 +201,7 @@ where
             let message = Response::SubscriptionEnded { subscription_id };
             ctx.text(serde_json::to_string(&message).unwrap());
         } else {
-            error!("Subscription ID not found");
+            error!(%subscription_id, "Subscription ID not found");
 
             let error = WebsocketError::SubscriptionNotFound(subscription_id);
             ctx.text(serde_json::to_string(&error).unwrap());
@@ -297,7 +297,7 @@ where
                                 self.subscribe(ctx, &extractor);
                             }
                             Command::Unsubscribe { subscription_id } => {
-                                debug!(subscription_id = %subscription_id, "Unsubscribing from subscription");
+                                debug!(%subscription_id, "Unsubscribing from subscription");
                                 self.unsubscribe(ctx, subscription_id);
                             }
                         }
@@ -319,8 +319,8 @@ where
                 ctx.close(reason);
                 ctx.stop()
             }
-            Err(e) => {
-                error!(error = %e, "Failed to receive message from websocket");
+            Err(err) => {
+                error!(error = %err, "Failed to receive message from websocket");
                 ctx.stop()
             }
             _ => (),

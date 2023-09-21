@@ -126,7 +126,7 @@ where
                                         trace!("No message to propagate.");
                                     }
                                     Err(err) => {
-                                        error!("Error while processing tick: {err}! Retries exhausted.");
+                                        error!(error = %err, "Error while processing tick!");
                                         break;
                                     }
                                 }

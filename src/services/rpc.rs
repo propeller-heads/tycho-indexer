@@ -64,9 +64,9 @@ impl RequestHandler {
             .await
         {
             Ok(accounts) => Ok(StateRequestResponse::new(accounts)),
-            Err(e) => {
-                error!("Error while getting contract states: {}", e);
-                Err(RpcError::StorageError(e))
+            Err(err) => {
+                error!(error = %err, "Error while getting contract states.");
+                Err(RpcError::StorageError(err))
             }
         }
     }
@@ -86,8 +86,8 @@ async fn contract_state(
 
     match response {
         Ok(state) => HttpResponse::Ok().json(state),
-        Err(e) => {
-            error!("Error while getting contract state: request body: {:?}, query parameters: {:?}, error: {}", body, query, e);
+        Err(err) => {
+            error!(error = %err, ?body, ?query, "Error while getting contract state.");
             HttpResponse::InternalServerError().finish()
         }
     }
