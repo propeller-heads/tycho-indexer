@@ -2,10 +2,9 @@ use ethers::{
     providers::Middleware,
     types::{BlockId, H160, H256},
 };
-use log::{debug, info};
-use std::{cell::RefCell, collections::HashMap};
+use tracing::{debug, info};
 
-use std::sync::Arc;
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use revm::{
     db::DatabaseRef,

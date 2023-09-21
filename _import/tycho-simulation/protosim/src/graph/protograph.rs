@@ -45,12 +45,13 @@
 //! ```
 use ethers::types::{H160, U256};
 use itertools::Itertools;
-use log::{debug, info, trace, warn};
+
 use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
 use std::{collections::HashMap, fmt};
+use tracing::{debug, info, trace, warn};
 
 use crate::{
     models::{ERC20Token, Swap},

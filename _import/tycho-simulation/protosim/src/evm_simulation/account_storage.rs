@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use log::{debug, warn};
 use revm::primitives::{AccountInfo, B160, U256 as rU256};
 use std::collections::hash_map::Entry::Vacant;
+use tracing::{debug, warn};
 
 /// Represents an account in the account storage.
 ///

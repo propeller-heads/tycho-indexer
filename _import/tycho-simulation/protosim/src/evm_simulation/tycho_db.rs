@@ -1,4 +1,5 @@
-use log::debug;
+use tracing::debug;
+
 use std::collections::HashMap;
 use thiserror::Error;
 
