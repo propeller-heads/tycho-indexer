@@ -28,10 +28,7 @@ pub struct TradeSimulationError {
 impl TradeSimulationError {
     /// Creates a new trade simulation error with the given kind and partial result.
     pub fn new(kind: TradeSimulationErrorKind, partial_result: Option<GetAmountOutResult>) -> Self {
-        TradeSimulationError {
-            kind,
-            partial_result,
-        }
+        TradeSimulationError { kind, partial_result }
     }
 }
 

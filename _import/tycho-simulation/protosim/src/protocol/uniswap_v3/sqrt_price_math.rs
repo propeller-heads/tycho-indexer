@@ -1,8 +1,10 @@
 use crate::u256_num::u256_to_f64;
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
-use crate::protocol::errors::TradeSimulationError;
-use crate::safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256};
+use crate::{
+    protocol::errors::TradeSimulationError,
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+};
 use ethers::types::U256;
 
 const Q96: U256 = U256([0, 4294967296, 0, 0]);
@@ -41,15 +43,9 @@ pub fn get_amount0_delta(
     assert!(sqrt_ratio_a > U256::zero());
 
     if round_up {
-        div_rounding_up(
-            mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?,
-            sqrt_ratio_a,
-        )
+        div_rounding_up(mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?, sqrt_ratio_a)
     } else {
-        safe_div_u256(
-            mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?,
-            sqrt_ratio_a,
-        )
+        safe_div_u256(mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?, sqrt_ratio_a)
     }
 }
 
@@ -64,10 +60,7 @@ pub fn get_amount1_delta(
         mul_div_rounding_up(U256::from(liquidity), sqrt_ratio_b - sqrt_ratio_a, Q96)
     } else {
         safe_div_u256(
-            safe_mul_u256(
-                U256::from(liquidity),
-                safe_sub_u256(sqrt_ratio_b, sqrt_ratio_a)?,
-            )?,
+            safe_mul_u256(U256::from(liquidity), safe_sub_u256(sqrt_ratio_b, sqrt_ratio_a)?)?,
             Q96,
         )
     }
@@ -82,13 +75,9 @@ pub fn get_next_sqrt_price_from_input(
     assert!(sqrt_price > U256::zero());
 
     if zero_for_one {
-        Ok(get_next_sqrt_price_from_amount0_rounding_up(
-            sqrt_price, liquidity, amount_in, true,
-        )?)
+        Ok(get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, true)?)
     } else {
-        Ok(get_next_sqrt_price_from_amount1_rounding_down(
-            sqrt_price, liquidity, amount_in, true,
-        )?)
+        Ok(get_next_sqrt_price_from_amount1_rounding_down(sqrt_price, liquidity, amount_in, true)?)
     }
 }
 
@@ -102,13 +91,9 @@ pub fn get_next_sqrt_price_from_output(
     assert!(liquidity > 0);
 
     if zero_for_one {
-        Ok(get_next_sqrt_price_from_amount1_rounding_down(
-            sqrt_price, liquidity, amount_in, false,
-        )?)
+        Ok(get_next_sqrt_price_from_amount1_rounding_down(sqrt_price, liquidity, amount_in, false)?)
     } else {
-        Ok(get_next_sqrt_price_from_amount0_rounding_up(
-            sqrt_price, liquidity, amount_in, false,
-        )?)
+        Ok(get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, false)?)
     }
 }
 
@@ -119,7 +104,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
     add: bool,
 ) -> Result<U256, TradeSimulationError> {
     if amount == U256::zero() {
-        return Ok(sqrt_price);
+        return Ok(sqrt_price)
     }
     let numerator1 = U256::from(liquidity) << RESOLUTION;
 
@@ -129,14 +114,11 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
             // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
             let denominator = safe_add_u256(numerator1, product)?;
             if denominator >= numerator1 {
-                return mul_div_rounding_up(numerator1, sqrt_price, denominator);
+                return mul_div_rounding_up(numerator1, sqrt_price, denominator)
             }
         }
         // Overflow: liquidity / (liquidity / sqrtPX96 +- amount)
-        div_rounding_up(
-            numerator1,
-            safe_add_u256(safe_div_u256(numerator1, sqrt_price)?, amount)?,
-        )
+        div_rounding_up(numerator1, safe_add_u256(safe_div_u256(numerator1, sqrt_price)?, amount)?)
     } else {
         let (product, _) = amount.overflowing_mul(sqrt_price);
         assert!(safe_div_u256(product, amount)? == sqrt_price && numerator1 > product);
@@ -339,18 +321,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::usdc_eth(
-        u256("2209221051636112667296733914466103"),
-        6,
-        18,
-        0.0007775336231174711f64
-    )]
-    #[case::wbtc_eth(
-        u256("29654479368916176338227069900580738"),
-        8,
-        18,
-        14.00946143160293f64
-    )]
+    #[case::usdc_eth(u256("2209221051636112667296733914466103"), 6, 18, 0.0007775336231174711f64)]
+    #[case::wbtc_eth(u256("29654479368916176338227069900580738"), 8, 18, 14.00946143160293f64)]
     #[case::wdoge_eth(u256("672045190479078414067608947"), 18, 18, 7.195115788867147e-5)]
     #[case::shib_usdc(u256("231479673319799999440"), 18, 6, 8.536238764169166e-6)]
     #[case::min_price(u256("4295128740"), 18, 18, 2.9389568087743114e-39f64)]

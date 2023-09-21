@@ -39,11 +39,7 @@ impl ERC20Token {
     pub fn new(address: &str, decimals: usize, symbol: &str) -> Self {
         let addr = H160::from_str(address).expect("Failed to parse token address");
         let sym = symbol.to_string();
-        ERC20Token {
-            address: addr,
-            decimals,
-            symbol: sym,
-        }
+        ERC20Token { address: addr, decimals, symbol: sym }
     }
 
     /// One
@@ -95,13 +91,7 @@ impl Swap {
         amount_out: U256,
         address: H160,
     ) -> Self {
-        Swap {
-            token_in,
-            amount_in,
-            token_out,
-            amount_out,
-            address,
-        }
+        Swap { token_in, amount_in, token_out, amount_out, address }
     }
 
     /// Getter for token_out
@@ -148,12 +138,10 @@ pub struct SwapSequence {
 impl SwapSequence {
     /// SwapSequence
     ///
-    /// A struct that represents a sequence of `Swap` transactions and the gas required to execute them.
+    /// A struct that represents a sequence of `Swap` transactions and the gas required to execute
+    /// them.
     pub fn new(swaps: Vec<Swap>, gas: U256) -> Self {
-        SwapSequence {
-            actions: swaps,
-            gas,
-        }
+        SwapSequence { actions: swaps, gas }
     }
 
     /// Returns a vector of `Swap` actions.
@@ -177,10 +165,7 @@ mod tests {
 
         assert_eq!(token.symbol, "USDC");
         assert_eq!(token.decimals, 6);
-        assert_eq!(
-            format!("{:#x}", token.address),
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-        );
+        assert_eq!(format!("{:#x}", token.address), "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
     }
 
     #[test]

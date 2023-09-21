@@ -8,9 +8,6 @@ pub struct UniswapV2Sync {
 
 impl UniswapV2Sync {
     pub fn new(r0: U256, r1: U256) -> Self {
-        UniswapV2Sync {
-            reserve0: r0,
-            reserve1: r1,
-        }
+        UniswapV2Sync { reserve0: r0, reserve1: r1 }
     }
 }

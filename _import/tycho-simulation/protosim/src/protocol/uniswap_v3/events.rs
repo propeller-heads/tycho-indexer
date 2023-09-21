@@ -20,11 +20,7 @@ pub struct MintEvent(LiquidityChangeData);
 
 impl MintEvent {
     pub fn new(lower: i32, upper: i32, amount: u128) -> Self {
-        MintEvent(LiquidityChangeData {
-            tick_lower: lower,
-            tick_upper: upper,
-            amount,
-        })
+        MintEvent(LiquidityChangeData { tick_lower: lower, tick_upper: upper, amount })
     }
 }
 
@@ -33,11 +29,7 @@ pub struct BurnEvent(LiquidityChangeData);
 
 impl BurnEvent {
     pub fn new(lower: i32, upper: i32, amount: u128) -> Self {
-        BurnEvent(LiquidityChangeData {
-            tick_lower: lower,
-            tick_upper: upper,
-            amount,
-        })
+        BurnEvent(LiquidityChangeData { tick_lower: lower, tick_upper: upper, amount })
     }
 }
 
@@ -50,11 +42,7 @@ pub struct SwapEvent {
 
 impl SwapEvent {
     pub fn new(sqrt_price: U256, liquidity: u128, tick: i32) -> Self {
-        SwapEvent {
-            sqrt_price,
-            liquidity,
-            tick,
-        }
+        SwapEvent { sqrt_price, liquidity, tick }
     }
 }
 

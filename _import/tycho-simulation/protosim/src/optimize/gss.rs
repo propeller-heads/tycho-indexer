@@ -1,7 +1,9 @@
 //! Golden Section Search
-use crate::protocol::errors::TradeSimulationError;
-use crate::safe_math::{
-    safe_add_i256, safe_div_i256, safe_div_u512, safe_mul_i256, safe_mul_u512, safe_sub_i256,
+use crate::{
+    protocol::errors::TradeSimulationError,
+    safe_math::{
+        safe_add_i256, safe_div_i256, safe_div_u512, safe_mul_i256, safe_mul_u512, safe_sub_i256,
+    },
 };
 use ethers::types::{Sign, I256, U256, U512};
 use std::mem::swap;
@@ -16,16 +18,22 @@ const DENOM: U512 = U512([4294967296, 0, 0, 0, 0, 0, 0, 0]); // 2 ** 32
 ///
 /// ## Parameters
 ///
-/// - `f`: A function that takes a `I256` value as input and returns a `I256` value. The function to be maximized.
+/// - `f`: A function that takes a `I256` value as input and returns a `I256` value. The function to
+///   be maximized.
 /// - `min_bound`: The lower bound of the search interval, represented as a `U256` value.
 /// - `max_bound`: The upper bound of the search interval, represented as a `U256` value.
-/// - `tol`: The tolerance level, represented as a `I256` value. The search will stop when the difference between the two brackets is less than this tolerance.
-/// - `max_iter`: The maximum number of iterations to perform before stopping the search, represented as a `u64` value.
-/// - `honour_bounds`: A `bool` value indicating whether the algorithm should honour the bounds or not. If true, the algorithm will not search for solutions outside of the `min_bound` and `max_bound` values.
+/// - `tol`: The tolerance level, represented as a `I256` value. The search will stop when the
+///   difference between the two brackets is less than this tolerance.
+/// - `max_iter`: The maximum number of iterations to perform before stopping the search,
+///   represented as a `u64` value.
+/// - `honour_bounds`: A `bool` value indicating whether the algorithm should honour the bounds or
+///   not. If true, the algorithm will not search for solutions outside of the `min_bound` and
+///   `max_bound` values.
 ///
 /// ## Returns
 ///
-/// A tuple of `U256` values representing the left and right brackets of the maximum value of the function.
+/// A tuple of `U256` values representing the left and right brackets of the maximum value of the
+/// function.
 pub fn golden_section_search<F: Fn(I256) -> I256>(
     f: F,
     mut min_bound: U256,
@@ -46,7 +54,7 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
 
     let mut h = max_bound - min_bound;
     if h <= tol {
-        return Ok((i256_to_u256(min_bound), i256_to_u256(max_bound)));
+        return Ok((i256_to_u256(min_bound), i256_to_u256(max_bound)))
     }
 
     let mut yc;
@@ -119,8 +127,8 @@ mod tests {
         let honour_bounds = false;
 
         let func = |x: I256| {
-            ((x - I256::from(2)).pow(6) - (x - I256::from(2)).pow(4) - (x - I256::from(2)).pow(2))
-                + I256::from(1)
+            ((x - I256::from(2)).pow(6) - (x - I256::from(2)).pow(4) - (x - I256::from(2)).pow(2)) +
+                I256::from(1)
         };
 
         let res = golden_section_search(
@@ -176,7 +184,7 @@ mod tests {
 
 fn i256_to_u256(to_convert: I256) -> U256 {
     if to_convert <= I256::zero() {
-        return U256::zero();
+        return U256::zero()
     }
 
     U256::from_dec_str(&to_convert.to_string()).unwrap()
@@ -250,11 +258,11 @@ pub fn bracket<F: Fn(I256) -> I256>(
             if yw > yc {
                 let min_bound = xb;
                 let max_bound = w;
-                return Ok((max_bound, min_bound, xc, yc));
+                return Ok((max_bound, min_bound, xc, yc))
             } else if yw < yb {
                 let xc = w;
                 let yc = yw;
-                return Ok((xa, xb, xc, yc));
+                return Ok((xa, xb, xc, yc))
             }
             w = safe_add_i256(xc, mul_div(_golden_ratio, safe_sub_i256(xc, xb)?, DENOM)?)?;
             yw = f(w);
@@ -330,8 +338,8 @@ mod bracket_tests {
     #[test]
     fn test_bracket_big_distance() {
         let func = |x| {
-            I256::minus_one() * ((I256::pow(I256::from(100) - x, 2)) / I256::from(100))
-                + I256::from(100)
+            I256::minus_one() * ((I256::pow(I256::from(100) - x, 2)) / I256::from(100)) +
+                I256::from(100)
         };
 
         let min_bound = I256::from(0);

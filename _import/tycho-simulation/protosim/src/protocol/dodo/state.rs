@@ -19,11 +19,13 @@ use crate::{
 pub struct DodoPoolState<M: Middleware> {
     pool_address: H160,
     pool_abi: BaseContract,
-    // TODO: Not sure how DODO handles these... so I am adding it here for no to not have to query every time
+    // TODO: Not sure how DODO handles these... so I am adding it here for no to not have to query
+    // every time
     base_token: H160,
     helper_address: H160,
     helper_abi: BaseContract,
-    // TODO: it would be nicer to move all the caching behind a RefCell instead of exposing it to the user
+    // TODO: it would be nicer to move all the caching behind a RefCell instead of exposing it to
+    // the user
     engine: RefCell<SimulationEngine<M>>,
     spot_price_cache: RefCell<Option<(f64, f64)>>,
 }
@@ -34,7 +36,10 @@ impl<M: Middleware> DodoPoolState<M> {
         base: &crate::models::ERC20Token,
         quote: &crate::models::ERC20Token,
     ) -> (f64, f64) {
-        let spot_price_calldata = self.pool_abi.encode("getMidPrice", ()).unwrap();
+        let spot_price_calldata = self
+            .pool_abi
+            .encode("getMidPrice", ())
+            .unwrap();
         let params: SimulationParameters = SimulationParameters {
             caller: H160::zero(),
             to: self.pool_address,
@@ -131,9 +136,6 @@ impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
             .pool_abi
             .decode_output::<U256, _>("querySellBaseToken", simulation_result.result)
             .expect("DODO: Failed decoding get_amount_out result!");
-        Ok(GetAmountOutResult {
-            amount: amount_out,
-            gas: U256::from(simulation_result.gas_used),
-        })
+        Ok(GetAmountOutResult { amount: amount_out, gas: U256::from(simulation_result.gas_used) })
     }
 }

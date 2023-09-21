@@ -31,10 +31,7 @@ pub struct TychoDB {
 
 impl TychoDB {
     pub fn new(start_block: Option<Block>) -> Self {
-        Self {
-            account_storage: AccountStorage::new(),
-            block: start_block,
-        }
+        Self { account_storage: AccountStorage::new(), block: start_block }
     }
 
     /// Sets up a single account
@@ -46,7 +43,8 @@ impl TychoDB {
     ///
     /// * `address` - Address of the account
     /// * `account` - The account information
-    /// * `permanent_storage` - Storage to init the account with, this storage can only be updated manually
+    /// * `permanent_storage` - Storage to init the account with, this storage can only be updated
+    ///   manually
     pub fn init_account(
         &mut self,
         address: B160,
@@ -63,8 +61,9 @@ impl TychoDB {
 
     /// Update the simulation state.
     ///
-    /// This method modifies the current state of the simulation by applying the provided updates to the accounts in the smart contract storage.
-    /// These changes correspond to a particular block in the blockchain.
+    /// This method modifies the current state of the simulation by applying the provided updates to
+    /// the accounts in the smart contract storage. These changes correspond to a particular
+    /// block in the blockchain.
     ///
     /// # Arguments
     ///
@@ -73,7 +72,8 @@ impl TychoDB {
         //TODO: initialize new contracts
         self.block = Some(block);
         for (address, state_update) in new_state.iter() {
-            self.account_storage.update_account(address, state_update);
+            self.account_storage
+                .update_account(address, state_update);
         }
     }
 }
@@ -90,10 +90,14 @@ impl DatabaseRef for TychoDB {
     ///
     /// # Returns
     ///
-    /// Returns a `Result` containing the account information or an error if the account is not found.
+    /// Returns a `Result` containing the account information or an error if the account is not
+    /// found.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self.account_storage.get_account_info(&address) {
-            return Ok(Some(account.clone()));
+        if let Some(account) = self
+            .account_storage
+            .get_account_info(&address)
+        {
+            return Ok(Some(account.clone()))
         };
         Err(TychoDBError::MissingAccount(address))
     }
@@ -118,13 +122,21 @@ impl DatabaseRef for TychoDB {
     /// Returns an error if the storage value is not found.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
-        if let Some(storage_value) = self.account_storage.get_storage(&address, &index) {
+        if let Some(storage_value) = self
+            .account_storage
+            .get_storage(&address, &index)
+        {
             debug!("Got value locally. Value: {}", storage_value);
             Ok(storage_value)
         } else {
-            // At this point we either don't know this address or we don't have anything at this index (memory slot)
-            if self.account_storage.account_present(&address) {
-                // As we only store non-zero values, if the account is present it means this slot is zero.
+            // At this point we either don't know this address or we don't have anything at this
+            // index (memory slot)
+            if self
+                .account_storage
+                .account_present(&address)
+            {
+                // As we only store non-zero values, if the account is present it means this slot is
+                // zero.
                 Ok(rU256::ZERO)
             } else {
                 // At this point we know we don't have data for this address.
@@ -165,7 +177,10 @@ mod tests {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
 
-        let acc_info = mock_db.basic(mock_acc_address).unwrap().unwrap();
+        let acc_info = mock_db
+            .basic(mock_acc_address)
+            .unwrap()
+            .unwrap();
 
         assert_eq!(
             mock_db
@@ -183,13 +198,11 @@ mod tests {
         let storage_address = rU256::from(1);
         let mut permanent_storage: HashMap<rU256, rU256> = HashMap::new();
         permanent_storage.insert(storage_address, rU256::from(10));
-        mock_db.init_account(
-            mock_acc_address,
-            AccountInfo::default(),
-            Some(permanent_storage),
-        );
+        mock_db.init_account(mock_acc_address, AccountInfo::default(), Some(permanent_storage));
 
-        let storage = mock_db.storage(mock_acc_address, storage_address).unwrap();
+        let storage = mock_db
+            .storage(mock_acc_address, storage_address)
+            .unwrap();
 
         assert_eq!(storage, rU256::from(10));
         Ok(())
@@ -201,7 +214,9 @@ mod tests {
         let storage_address = rU256::from(1);
         mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
 
-        let storage = mock_db.storage(mock_acc_address, storage_address).unwrap();
+        let storage = mock_db
+            .storage(mock_acc_address, storage_address)
+            .unwrap();
 
         assert_eq!(storage, rU256::ZERO);
         Ok(())
@@ -217,7 +232,9 @@ mod tests {
         let storage_address = rU256::from(1);
 
         // This will panic because this account isn't initialized
-        mock_db.storage(mock_acc_address, storage_address).unwrap();
+        mock_db
+            .storage(mock_acc_address, storage_address)
+            .unwrap();
     }
 
     #[rstest]
@@ -229,10 +246,7 @@ mod tests {
         let new_storage_value_index = rU256::from_limbs_slice(&[123]);
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = rU256::from_limbs_slice(&[500]);
-        let update = StateUpdate {
-            storage: Some(new_storage),
-            balance: Some(new_balance),
-        };
+        let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
         let new_block = Block {
             number: 1,
             hash: B256::default(),

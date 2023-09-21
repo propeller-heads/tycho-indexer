@@ -1,6 +1,5 @@
 use ethers::types::{Sign, I256, U256};
 
-use crate::safe_math::{safe_add_u256, safe_sub_u256};
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -9,6 +8,7 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
+    safe_math::{safe_add_u256, safe_sub_u256},
 };
 
 use super::{
@@ -71,14 +71,7 @@ impl UniswapV3State {
     ) -> Self {
         let spacing = UniswapV3State::get_spacing(fee);
         let tick_list = TickList::from(spacing, ticks);
-        UniswapV3State {
-            liquidity,
-            sqrt_price,
-            fee,
-            tick,
-            ticks: tick_list,
-            log_index: (0, 0),
-        }
+        UniswapV3State { liquidity, sqrt_price, fee, tick, ticks: tick_list, log_index: (0, 0) }
     }
 
     fn get_spacing(fee: FeeAmount) -> u16 {
@@ -124,7 +117,8 @@ impl UniswapV3State {
                     self.liquidity += amount as u128;
                 }
             }
-            self.ticks.apply_liquidity_change(lower, upper, amount);
+            self.ticks
+                .apply_liquidity_change(lower, upper, amount);
         }
     }
 
@@ -135,10 +129,7 @@ impl UniswapV3State {
         sqrt_price_limit: Option<U256>,
     ) -> Result<SwapResults, TradeSimulationError> {
         if self.liquidity == 0 {
-            return Err(TradeSimulationError::new(
-                TradeSimulationErrorKind::NoLiquidity,
-                None,
-            ));
+            return Err(TradeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None))
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -181,13 +172,13 @@ impl UniswapV3State {
                                 state.amount_calculated.abs().into_raw(),
                                 gas_used,
                             )),
-                        ));
+                        ))
                     }
                     _ => {
                         return Err(TradeSimulationError::new(
                             TradeSimulationErrorKind::Unknown,
                             None,
-                        ));
+                        ))
                     }
                 },
             };
@@ -232,20 +223,16 @@ impl UniswapV3State {
             }
             if state.sqrt_price == step.sqrt_price_next {
                 if step.initialized {
-                    let liquidity_raw = self.ticks.get_tick(step.tick_next).unwrap().net_liquidity;
-                    let liquidity_net = if zero_for_one {
-                        -liquidity_raw
-                    } else {
-                        liquidity_raw
-                    };
+                    let liquidity_raw = self
+                        .ticks
+                        .get_tick(step.tick_next)
+                        .unwrap()
+                        .net_liquidity;
+                    let liquidity_net = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                     state.liquidity =
                         liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net);
                 }
-                state.tick = if zero_for_one {
-                    step.tick_next - 1
-                } else {
-                    step.tick_next
-                };
+                state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
@@ -304,7 +291,10 @@ impl ProtocolSim for UniswapV3State {
         let result = self.swap(zero_for_one, amount_specified, None)?;
 
         Ok(GetAmountOutResult::new(
-            result.amount_calculated.abs().into_raw(),
+            result
+                .amount_calculated
+                .abs()
+                .into_raw(),
             result.gas_used,
         ))
     }
@@ -426,12 +416,11 @@ mod tests {
         ];
 
         for case in cases {
-            let (token_a, token_b) = if case.symbol == "WBTC" {
-                (&wbtc, &weth)
-            } else {
-                (&weth, &wbtc)
-            };
-            let res = pool.get_amount_out(case.sell, token_a, token_b).unwrap();
+            let (token_a, token_b) =
+                if case.symbol == "WBTC" { (&wbtc, &weth) } else { (&weth, &wbtc) };
+            let res = pool
+                .get_amount_out(case.sell, token_a, token_b)
+                .unwrap();
 
             assert_eq!(res.amount, case.exp);
         }
@@ -471,7 +460,9 @@ mod tests {
         let amount_in = U256::from_dec_str("50000000000").unwrap();
         let exp = U256::from_dec_str("6820591625999718100883").unwrap();
 
-        let err = pool.get_amount_out(amount_in, &usdc, &dai).unwrap_err();
+        let err = pool
+            .get_amount_out(amount_in, &usdc, &dai)
+            .unwrap_err();
         let res = err.partial_result.unwrap();
 
         assert_eq!(err.kind, TradeSimulationErrorKind::InsufficientData);
@@ -550,14 +541,27 @@ mod tests {
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
         );
 
-        pool.transition(&event, &logmeta()).unwrap();
+        pool.transition(&event, &logmeta())
+            .unwrap();
 
         if let (tick, Some(liq_lower)) = exp_lower {
-            assert_eq!(pool.ticks.get_tick(tick).unwrap().net_liquidity, liq_lower)
+            assert_eq!(
+                pool.ticks
+                    .get_tick(tick)
+                    .unwrap()
+                    .net_liquidity,
+                liq_lower
+            )
         }
 
         if let (tick, Some(liq_upper)) = exp_upper {
-            assert_eq!(pool.ticks.get_tick(tick).unwrap().net_liquidity, liq_upper)
+            assert_eq!(
+                pool.ticks
+                    .get_tick(tick)
+                    .unwrap()
+                    .net_liquidity,
+                liq_upper
+            )
         }
 
         assert_eq!(pool.liquidity, exp_pool_liq)
@@ -574,7 +578,8 @@ mod tests {
         );
         let event = SwapEvent::new(U256::from(1001), 2000, 120).into();
 
-        pool.transition(&event, &logmeta()).unwrap();
+        pool.transition(&event, &logmeta())
+            .unwrap();
 
         assert_eq!(pool.sqrt_price, U256::from(1001));
         assert_eq!(pool.liquidity, 2000);
