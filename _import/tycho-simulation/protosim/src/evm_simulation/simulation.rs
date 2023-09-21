@@ -21,8 +21,8 @@ use revm::{
     },
     EVM,
 };
-use tracing::debug;
 use std::collections::HashMap;
+use tracing::debug;
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]

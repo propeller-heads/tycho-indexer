@@ -50,8 +50,8 @@ use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use tracing::{info, trace, debug, warn};
 use std::{collections::HashMap, fmt};
+use tracing::{debug, info, trace, warn};
 
 use crate::{
     models::{ERC20Token, Swap},
