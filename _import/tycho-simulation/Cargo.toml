@@ -11,8 +11,6 @@ members = ["protosim"]
 exclude = ["protosim_py"]
 
 [dependencies]
-log = "0.4.17"
-simplelog = "0.12.0"
 time = "0.3.17"
 protosim = { version = "^0.1.0", path = "./protosim" }
 ethers = "^2.0.2"
@@ -25,6 +23,11 @@ serde = "1.0.152"
 clap = { version = "4.2.7", features = ["derive"] }
 reqwest = "0.11.14"
 async-trait = "0.1"
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", default-features = false, features = [
+    "env-filter",
+    "fmt",
+] }
 
 
 [dev-dependencies]

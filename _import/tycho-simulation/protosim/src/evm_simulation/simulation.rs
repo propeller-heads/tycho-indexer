@@ -4,7 +4,7 @@ use ethers::{
     providers::Middleware,
     types::{Address, Bytes, U256}, // Address is an alias of H160
 };
-use log::debug;
+
 use revm::{
     inspectors::CustomPrintTracer,
     primitives::{
@@ -21,6 +21,7 @@ use revm::{
     },
     EVM,
 };
+use tracing::debug;
 use std::collections::HashMap;
 
 /// An error representing any transaction simulation result other than successful execution

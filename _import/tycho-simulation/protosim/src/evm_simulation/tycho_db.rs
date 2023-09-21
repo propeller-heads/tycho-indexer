@@ -1,5 +1,7 @@
-use log::debug;
-use std::collections::HashMap;
+use ethers::types::Bytes;
+use tracing::debug;
+
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use revm::{
