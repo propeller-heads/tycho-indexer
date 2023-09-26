@@ -246,7 +246,7 @@ pub fn create_tycho_db(url: String) -> TychoDB {
     let db = Arc::new(RwLock::new(inner));
     let cloned_db = db.clone();
     let client = TychoHTTPClient::new(&url).unwrap();
-    let (tx, rx) = mpsc::channel::<()>(1);
+    let (_tx, rx) = mpsc::channel::<()>(1);
 
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Handle::try_current()
@@ -487,7 +487,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoVMStateClient) {
         let db = Arc::new(RwLock::new(mock_db));
-        let (tx, rx) = mpsc::channel::<()>(1);
+        let (_tx, rx) = mpsc::channel::<()>(1);
 
         update_loop(db.clone(), mock_client, rx).await;
 
