@@ -82,7 +82,7 @@ impl GetStateFilters {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct ResponseAccount {
     pub address: B160,
     pub slots: HashMap<rU256, rU256>,
@@ -190,6 +190,8 @@ impl TychoVMStateClient for TychoHTTPClient {
                             Ok(update) => match tx.send(update).await {
                                 Ok(_) => {}
                                 Err(e) => {
+                                    //TODO: This might happen if the receiver is dropped (meaning the update_loop received the stop signal).
+                                    //We should catch this error and end this loop.
                                     error!("Failed to send message to the channel: {}", e);
                                 }
                             },

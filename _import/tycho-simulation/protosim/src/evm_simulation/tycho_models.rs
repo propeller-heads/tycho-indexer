@@ -14,7 +14,7 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct SwapPool {}
 
 #[derive(Debug, PartialEq, Copy, Clone, Default, Deserialize)]
@@ -26,7 +26,7 @@ pub struct Transaction {
     pub index: u64,
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct BlockStateChanges {
     pub block: Block,
     pub account_updates: HashMap<B160, AccountUpdate>,
@@ -73,7 +73,7 @@ impl ToString for Chain {
         format!("{:?}", self).to_lowercase()
     }
 }
-#[derive(PartialEq, Debug, Deserialize)]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct AccountUpdate {
     extractor: String,
     chain: Chain,

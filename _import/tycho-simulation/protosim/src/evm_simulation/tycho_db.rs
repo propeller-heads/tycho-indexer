@@ -2,7 +2,10 @@ use ethers::types::Bytes;
 use log::debug;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::sync::{
+    mpsc::{self, Receiver},
+    RwLock,
+};
 
 use revm::{
     db::DatabaseRef,
@@ -149,12 +152,16 @@ impl DatabaseRef for PreCachedDB {
 // we might consider wrapping this type for a nicer API
 pub type TychoDB = Arc<RwLock<PreCachedDB>>;
 
-// main data update loop, runs in a separate tokio runtime. Be aware that
-pub async fn update_loop(db: TychoDB, client: impl TychoVMStateClient) {
-    // start buffering messages
+// main data update loop, runs in a separate tokio runtime
+pub async fn update_loop(
+    db: TychoDB,
+    client: impl TychoVMStateClient,
+    mut stop_signal: Receiver<()>,
+) {
+    // Start buffering messages
     let mut messages = client.realtime_messages().await;
 
-    // Initialize state with the first message.
+    // Initialize state with the first message's block.
     let first_msg = messages.recv().await.expect("stream ok");
 
     let state = client
@@ -162,6 +169,8 @@ pub async fn update_loop(db: TychoDB, client: impl TychoVMStateClient) {
         .await
         .unwrap();
 
+    // This scope ensures the lock is dropped after processing the message.
+    {
     let mut db_guard = db.write().await;
     for account in state.iter() {
         db_guard.init_account(
@@ -175,14 +184,25 @@ pub async fn update_loop(db: TychoDB, client: impl TychoVMStateClient) {
             Some(account.slots.to_owned()), //TODO: do we really need to clone here?
         );
     }
+    }
 
     // Continuous loop to handle incoming messages.
     loop {
-        let msg = messages.recv().await.expect("stream ok");
+        // Check for the stop signal.
+        if stop_signal.try_recv().is_ok() {
+            break;
+        }
 
+        match messages.recv().await {
+            // None means the channel is closed.
+            None => break,
+            Some(msg) => {
         // This scope ensures the lock is dropped after processing the message.
         {
             let mut db_guard = db.write().await;
+
+                    // Update block.
+                    db_guard.block = Some(msg.block);
 
             // Update existing accounts.
             for (address, update) in msg.account_updates.into_iter() {
@@ -200,24 +220,16 @@ pub async fn update_loop(db: TychoDB, client: impl TychoVMStateClient) {
                     // like the complete AccountInfo and its storage.
                     // This is just a stub assuming you have necessary info in the update itself.
                     db_guard.init_account(
-                        *address,
-                        AccountInfo::default(),
-                        update.slots.to_owned(), //TODO: do we really need to clone here?
-                    );
+                        }
+                    }
                 }
             }
-
-            // // If there are new accounts in the message, initialize them as well.
-            // if let Some(new_accounts) = &msg.new_accounts {
-            //     for (address, info, storage) in new_accounts.iter() {
-            //         db_guard.init_account(*address, info.clone(), Some(storage.clone()));
-            //     }
-            // }
         }
     }
 }
 
-pub fn tycho_db(url: String) -> TychoDB {
+// Create a new TychoDB
+pub fn create_tycho_db(url: String) -> TychoDB {
     let inner = PreCachedDB {
         accounts: AccountStorage::new(),
         block: None,
@@ -226,13 +238,14 @@ pub fn tycho_db(url: String) -> TychoDB {
     let db = Arc::new(RwLock::new(inner));
     let cloned_db = db.clone();
     let client = TychoHTTPClient::new(&url).unwrap();
+    let (tx, rx) = mpsc::channel::<()>(1);
 
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        runtime.block_on(update_loop(cloned_db, client));
+        runtime.block_on(update_loop(cloned_db, client, rx));
     });
 
     db
@@ -240,12 +253,18 @@ pub fn tycho_db(url: String) -> TychoDB {
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
     use chrono::NaiveDateTime;
+
     use revm::primitives::U256 as rU256;
     use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr};
+    use tokio::sync::mpsc::{self, Receiver};
 
-    use crate::evm_simulation::tycho_models::Chain;
+    use crate::evm_simulation::{
+        tycho_client::{GetStateFilters, ResponseAccount, TychoClientError},
+        tycho_models::{AccountUpdate, BlockStateChanges, Chain, Transaction},
+    };
 
     use super::*;
 
@@ -355,5 +374,129 @@ mod tests {
         assert_eq!(mock_db.block.unwrap().number, 1);
 
         Ok(())
+    }
+
+    pub struct MockTychoVMStateClient {
+        mock_state: Vec<ResponseAccount>,
+    }
+
+    impl MockTychoVMStateClient {
+        pub fn new(mock_state: Vec<ResponseAccount>) -> Self {
+            MockTychoVMStateClient { mock_state }
+        }
+    }
+
+    #[fixture]
+    pub fn mock_client() -> MockTychoVMStateClient {
+        let mut contract_slots = HashMap::<rU256, rU256>::new();
+        contract_slots.insert(rU256::from(1), rU256::from(987));
+
+        let account = ResponseAccount {
+            address: B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap(),
+            slots: contract_slots,
+            balance: rU256::from(123),
+            code: Vec::<u8>::new(),
+            code_hash: B256::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+        };
+
+        let mock_state = vec![account];
+        MockTychoVMStateClient::new(mock_state)
+    }
+
+    #[async_trait]
+    impl TychoVMStateClient for MockTychoVMStateClient {
+        async fn get_state(
+            &self,
+            _filters: Option<&GetStateFilters>,
+            _request: Option<&StateRequestBody>,
+        ) -> Result<Vec<ResponseAccount>, TychoClientError> {
+            Ok(self.mock_state.clone())
+        }
+
+        async fn realtime_messages(&self) -> Receiver<BlockStateChanges> {
+            let (tx, rx) = mpsc::channel::<BlockStateChanges>(30);
+            let blk = Block {
+                number: 123,
+                hash: B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                parent_hash: B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                chain: Chain::Ethereum,
+                ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
+            };
+
+            let accnt = AccountUpdate::new(
+                "ambient".to_string(),
+                Chain::Ethereum,
+                B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+                Some(HashMap::new()),
+                Some(rU256::from(500)),
+                Some(Vec::<u8>::new()),
+                Transaction {
+                    hash: B256::from_str(
+                        "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    )
+                    .unwrap(),
+                    block_hash: B256::from_str(
+                        "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    )
+                    .unwrap(),
+                    from: B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
+                    to: Some(B160::from_str("0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
+                    index: 1,
+                },
+            );
+            let mut accnt_update = HashMap::new();
+            accnt_update.insert(
+                B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+                accnt,
+            );
+            let message = BlockStateChanges {
+                block: blk,
+                account_updates: accnt_update,
+                new_pools: HashMap::new(),
+            };
+            tx.send(message.clone()).await.unwrap();
+            tx.send(message).await.unwrap();
+            rx
+        }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoVMStateClient) {
+        let db = Arc::new(RwLock::new(mock_db));
+        let (tx, rx) = mpsc::channel::<()>(1);
+
+        update_loop(db.clone(), mock_client, rx).await;
+
+        let read_guard = db.read().await;
+        dbg!(read_guard.accounts.get_account_info(
+            &B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap()
+        ));
+
+        assert_eq!(
+            read_guard.block.expect("Block should be Some"),
+            Block {
+                number: 123,
+                hash: B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                parent_hash: B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                chain: Chain::Ethereum,
+                ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
+            }
+        );
     }
 }
