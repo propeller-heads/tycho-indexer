@@ -94,14 +94,6 @@ impl AccountUpdate {
         code: Option<Vec<u8>>,
         tx: Transaction,
     ) -> Self {
-        Self {
-            extractor,
-            chain,
-            address,
-            slots,
-            balance,
-            code,
-            tx,
-        }
+        Self { extractor, chain, address, slots, balance, code, tx }
     }
 }

@@ -1,18 +1,16 @@
 use chrono::NaiveDateTime;
 use futures::StreamExt;
 use hyper::{client::HttpConnector, Body, Client, Request, Uri};
-use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
+use tracing::{error, info};
 
-use super::tycho_models::Chain;
-use super::tycho_models::{Block, BlockStateChanges};
+use super::tycho_models::{Block, BlockStateChanges, Chain};
 use async_trait::async_trait;
 use revm::primitives::{B160, B256, U256 as rU256};
 use tokio::sync::mpsc::{self, Receiver};
-use tokio_tungstenite::connect_async;
-use tokio_tungstenite::tungstenite::protocol::Message;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 #[derive(Error, Debug)]
 pub enum TychoClientError {
@@ -112,10 +110,7 @@ impl TychoHTTPClient {
             .map_err(|e| TychoClientError::UriParsing(base_url.to_string(), e.to_string()))?;
 
         // No need for references anymore
-        Ok(Self {
-            http_client: Client::new(),
-            base_uri,
-        })
+        Ok(Self { http_client: Client::new(), base_uri })
     }
 }
 
@@ -140,7 +135,12 @@ impl TychoVMStateClient for TychoHTTPClient {
             }
         }
         if let Some(request) = request {
-            if request.to_owned().contract_ids.is_some() || request.to_owned().version.is_some() {
+            if request
+                .to_owned()
+                .contract_ids
+                .is_some() ||
+                request.to_owned().version.is_some()
+            {
                 let serialized = serde_json::to_string(&request).unwrap();
                 body = Body::from(serialized);
             }
@@ -176,7 +176,7 @@ impl TychoVMStateClient for TychoHTTPClient {
                 Ok((ws, _)) => ws,
                 Err(e) => {
                     error!("Failed to connect to WebSocket: {:?}", e);
-                    return;
+                    return
                 }
             };
 
@@ -190,8 +190,9 @@ impl TychoVMStateClient for TychoHTTPClient {
                             Ok(update) => match tx.send(update).await {
                                 Ok(_) => {}
                                 Err(e) => {
-                                    //TODO: This might happen if the receiver is dropped (meaning the update_loop received the stop signal).
-                                    //We should catch this error and end this loop.
+                                    //TODO: This might happen if the receiver is dropped (meaning
+                                    // the update_loop received the stop signal).
+                                    // We should catch this error and end this loop.
                                     error!("Failed to send message to the channel: {}", e);
                                 }
                             },
@@ -203,7 +204,7 @@ impl TychoVMStateClient for TychoHTTPClient {
                     }
                     Ok(Message::Close(_)) => {
                         drop(tx);
-                        return;
+                        return
                     }
                     Ok(unknown_msg) => {
                         info!("Received an unknown message type: {:?}", unknown_msg);
@@ -229,8 +230,7 @@ mod tests {
     use std::str::FromStr;
 
     use futures::SinkExt;
-    use warp::ws::WebSocket;
-    use warp::Filter;
+    use warp::{ws::WebSocket, Filter};
 
     #[tokio::test]
     async fn test_realtime_messages() {
@@ -278,7 +278,8 @@ mod tests {
         // Now, you can create a client and connect to the mocked WebSocket server
         let client = TychoHTTPClient::new(&format!("{}", addr)).unwrap();
 
-        // You can listen to the realtime_messages and expect the messages that you send from handle_connection
+        // You can listen to the realtime_messages and expect the messages that you send from
+        // handle_connection
         let mut rx = client.realtime_messages().await;
         let received_msg = rx.recv().await.unwrap();
 
@@ -350,9 +351,18 @@ mod tests {
             .create_async()
             .await;
 
-        let client = TychoHTTPClient::new(server.url().replace("http://", "").as_str()).unwrap();
+        let client = TychoHTTPClient::new(
+            server
+                .url()
+                .replace("http://", "")
+                .as_str(),
+        )
+        .unwrap();
 
-        let response = client.get_state(None, None).await.unwrap();
+        let response = client
+            .get_state(None, None)
+            .await
+            .unwrap();
 
         mocked_server.assert();
         assert_eq!(response.len(), 1);

@@ -1,12 +1,11 @@
 use ethers::types::Bytes;
-use log::debug;
 use std::{collections::HashMap, sync::Arc};
-use tracing::debug;
 use thiserror::Error;
 use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
+use tracing::debug;
 
 use revm::{
     db::DatabaseRef,
@@ -38,7 +37,7 @@ pub struct PreCachedDB {
 
 impl PreCachedDB {
     pub fn new(start_block: Option<Block>) -> Self {
-        Self { account_storage: AccountStorage::new(), block: start_block }
+        Self { accounts: AccountStorage::new(), block: start_block }
     }
 
     /// Sets up a single account
@@ -79,7 +78,7 @@ impl PreCachedDB {
         //TODO: initialize new contracts
         self.block = Some(block);
         for (address, state_update) in new_state.iter() {
-            self.account_storage
+            self.accounts
                 .update_account(address, state_update);
         }
     }
@@ -100,10 +99,7 @@ impl DatabaseRef for PreCachedDB {
     /// Returns a `Result` containing the account information or an error if the account is not
     /// found.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self
-            .account_storage
-            .get_account_info(&address)
-        {
+        if let Some(account) = self.accounts.get_account_info(&address) {
             return Ok(Some(account.clone()))
         };
         Err(PreCachedDBError::MissingAccount(address))
@@ -130,7 +126,7 @@ impl DatabaseRef for PreCachedDB {
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
         if let Some(storage_value) = self
-            .account_storage
+            .accounts
             .get_storage(&address, &index)
         {
             debug!("Got value locally. Value: {}", storage_value);
@@ -138,10 +134,7 @@ impl DatabaseRef for PreCachedDB {
         } else {
             // At this point we either don't know this address or we don't have anything at this
             // index (memory slot)
-            if self
-                .account_storage
-                .account_present(&address)
-            {
+            if self.accounts.account_present(&address) {
                 // As we only store non-zero values, if the account is present it means this slot is
                 // zero.
                 Ok(rU256::ZERO)
@@ -175,7 +168,10 @@ pub async fn update_loop(
     let mut messages = client.realtime_messages().await;
 
     // Initialize state with the first message's block.
-    let first_msg = messages.recv().await.expect("stream ok");
+    let first_msg = messages
+        .recv()
+        .await
+        .expect("stream ok");
 
     let state = client
         .get_state(None, Some(&StateRequestBody::from_block(first_msg.block)))
@@ -184,55 +180,57 @@ pub async fn update_loop(
 
     // This scope ensures the lock is dropped after processing the message.
     {
-    let mut db_guard = db.write().await;
-    for account in state.iter() {
-        db_guard.init_account(
-            account.address,
-            AccountInfo::new(
-                account.balance,
-                0,
-                account.code_hash,
-                Bytecode::new_raw(Bytes::from(account.code.to_owned()).0), //TODO: do we really need to clone here?
-            ),
-            Some(account.slots.to_owned()), //TODO: do we really need to clone here?
-        );
-    }
+        let mut db_guard = db.write().await;
+        for account in state.iter() {
+            db_guard.init_account(
+                account.address,
+                AccountInfo::new(
+                    account.balance,
+                    0,
+                    account.code_hash,
+                    Bytecode::new_raw(Bytes::from(account.code.to_owned()).0), /* TODO: do we
+                                                                                * really need to
+                                                                                * clone here? */
+                ),
+                Some(account.slots.to_owned()), //TODO: do we really need to clone here?
+            );
+        }
     }
 
     // Continuous loop to handle incoming messages.
     loop {
         // Check for the stop signal.
         if stop_signal.try_recv().is_ok() {
-            break;
+            break
         }
 
         match messages.recv().await {
             // None means the channel is closed.
             None => break,
             Some(msg) => {
-        // This scope ensures the lock is dropped after processing the message.
-        {
-            let mut db_guard = db.write().await;
+                // This scope ensures the lock is dropped after processing the message.
+                {
+                    let mut db_guard = db.write().await;
 
                     // Update block.
                     db_guard.block = Some(msg.block);
 
-            // Update existing accounts.
-            for (address, update) in msg.account_updates.into_iter() {
-                if db_guard.accounts.account_present(&address) {
-                    db_guard.accounts.update_account(
-                        &address,
-                        &StateUpdate {
-                            storage: update.slots,
-                            balance: update.balance,
-                        },
-                    );
-                } else {
-                    // Initialize new accounts if they don't already exist.
-                    // For this, you might need more information,
-                    // like the complete AccountInfo and its storage.
-                    // This is just a stub assuming you have necessary info in the update itself.
-                    db_guard.init_account(
+                    // Update existing accounts.
+                    for (address, update) in msg.account_updates.into_iter() {
+                        if db_guard
+                            .accounts
+                            .account_present(&address)
+                        {
+                            db_guard.accounts.update_account(
+                                &address,
+                                &StateUpdate { storage: update.slots, balance: update.balance },
+                            );
+                        } else {
+                            // Initialize new accounts if they don't already exist.
+                            // For this, you might need more information,
+                            // like the complete AccountInfo and its storage.
+                            // This is just a stub assuming you have necessary info in the update
+                            // itself. db_guard.init_account(
                         }
                     }
                 }
@@ -243,10 +241,7 @@ pub async fn update_loop(
 
 // Create a new TychoDB
 pub fn create_tycho_db(url: String) -> TychoDB {
-    let inner = PreCachedDB {
-        accounts: AccountStorage::new(),
-        block: None,
-    };
+    let inner = PreCachedDB { accounts: AccountStorage::new(), block: None };
 
     let db = Arc::new(RwLock::new(inner));
     let cloned_db = db.clone();
@@ -383,7 +378,11 @@ mod tests {
             new_storage_value_index
         );
         assert_eq!(
-            mock_db.accounts.get_account_info(&address).unwrap().balance,
+            mock_db
+                .accounts
+                .get_account_info(&address)
+                .unwrap()
+                .balance,
             new_balance
         );
         assert_eq!(mock_db.block.unwrap().number, 1);
@@ -498,7 +497,9 @@ mod tests {
         ));
 
         assert_eq!(
-            read_guard.block.expect("Block should be Some"),
+            read_guard
+                .block
+                .expect("Block should be Some"),
             Block {
                 number: 123,
                 hash: B256::from_str(
