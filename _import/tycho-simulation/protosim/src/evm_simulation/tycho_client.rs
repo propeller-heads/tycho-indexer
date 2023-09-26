@@ -93,16 +93,6 @@ pub struct TychoHTTPClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,
 }
-#[async_trait]
-pub trait TychoVMStateClient {
-    async fn get_state(
-        &self,
-        filters: Option<&GetStateFilters>,
-        request: Option<&StateRequestBody>,
-    ) -> Result<Vec<ResponseAccount>, TychoClientError>;
-
-    async fn realtime_messages(&self) -> Receiver<BlockStateChanges>;
-}
 impl TychoHTTPClient {
     pub fn new(base_url: &str) -> Result<Self, TychoClientError> {
         let base_uri = base_url
@@ -114,6 +104,16 @@ impl TychoHTTPClient {
     }
 }
 
+#[async_trait]
+pub trait TychoVMStateClient {
+    async fn get_state(
+        &self,
+        filters: Option<&GetStateFilters>,
+        request: Option<&StateRequestBody>,
+    ) -> Result<Vec<ResponseAccount>, TychoClientError>;
+
+    async fn realtime_messages(&self) -> Receiver<BlockStateChanges>;
+}
 #[async_trait]
 impl TychoVMStateClient for TychoHTTPClient {
     async fn get_state(
