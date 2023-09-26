@@ -9,8 +9,7 @@
 //!
 //!  * `fee` - returns the fee of the protocol as ratio.
 //!  * `spot_price` - returns the protocols current spot price of two tokens.
-//!  * `get_amount_out` - returns the amount out given an amount in and
-//!         input/output tokens.
+//!  * `get_amount_out` - returns the amount out given an amount in and input/output tokens.
 //!
 //! The `ProtocolState` enum has currently two variants:
 //! `UniswapV2` and `UniswapV3`.
@@ -70,10 +69,10 @@ pub trait ProtocolSim {
     ///
     /// # Arguments
     ///
-    /// * `a` - Base Token: refers to the token that is the quantity of a pair.
-    ///     For the pair BTC/USDT, BTC would be the base asset.
-    /// * `b` - Quote Token: refers to the token that is the price of a pair.
-    ///     For the symbol BTC/USDT, USDT would be the quote asset.
+    /// * `a` - Base Token: refers to the token that is the quantity of a pair. For the pair
+    ///   BTC/USDT, BTC would be the base asset.
+    /// * `b` - Quote Token: refers to the token that is the price of a pair. For the symbol
+    ///   BTC/USDT, USDT would be the quote asset.
     fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64;
 
     /// Returns the amount out given an amount in and input/output tokens.

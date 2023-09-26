@@ -5,8 +5,6 @@ edition = "2021"
 
 
 [dependencies]
-log = "0.4.17"
-env_logger = "0.10.0"
 ethers = "^2.0.2"
 indexmap = { version = "1.7", features = ["std"] }
 itertools = "0.10.5"
@@ -26,6 +24,11 @@ revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376b
 hex = "0.4.3"
 thiserror = "1"
 chrono = { version = "0.4.26", features = ["serde"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", default-features = false, features = [
+    "env-filter",
+    "fmt",
+] }
 
 [dev-dependencies]
 mockito = "1.1.1"

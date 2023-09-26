@@ -1,5 +1,7 @@
-use crate::protocol::errors::TradeSimulationError;
-use crate::safe_math::{safe_div_u512, safe_mul_u512};
+use crate::{
+    protocol::errors::TradeSimulationError,
+    safe_math::{safe_div_u512, safe_mul_u512},
+};
 use ethers::types::{U256, U512};
 
 pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> Result<U256, TradeSimulationError> {
@@ -10,7 +12,9 @@ pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> Result<U256, TradeS
     if rest >= U512::zero() {
         result += U512::one();
     }
-    Ok(result.try_into().expect("Mul div overflow!!"))
+    Ok(result
+        .try_into()
+        .expect("Mul div overflow!!"))
 }
 
 pub fn mul_div(a: U256, b: U256, denom: U256) -> Result<U256, TradeSimulationError> {
@@ -18,7 +22,9 @@ pub fn mul_div(a: U256, b: U256, denom: U256) -> Result<U256, TradeSimulationErr
     let b_big = U512::from(b);
     let product = safe_mul_u512(a_big, b_big)?;
     let result = safe_div_u512(product, U512::from(denom))?;
-    Ok(result.try_into().expect("Mul div overflow!!"))
+    Ok(result
+        .try_into()
+        .expect("Mul div overflow!!"))
 }
 
 #[cfg(test)]

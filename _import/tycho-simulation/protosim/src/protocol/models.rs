@@ -65,7 +65,8 @@ impl GetAmountOutResult {
     }
 
     /// Aggregates the given GetAmountOutResult struct to the current one.
-    /// It updates the amount with the other's amount and adds the other's gas to the current one's gas.
+    /// It updates the amount with the other's amount and adds the other's gas to the current one's
+    /// gas.
     pub fn aggregate(&mut self, other: &Self) {
         self.amount = other.amount;
         self.gas += other.gas;

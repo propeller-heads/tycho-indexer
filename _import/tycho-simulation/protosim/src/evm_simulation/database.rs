@@ -2,11 +2,9 @@ use ethers::{
     providers::Middleware,
     types::{BlockId, H160, H256},
 };
-use log::{debug, info};
-use std::cell::RefCell;
-use std::collections::HashMap;
+use tracing::{debug, info};
 
-use std::sync::Arc;
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use revm::{
     db::DatabaseRef,
@@ -86,12 +84,7 @@ impl<M: Middleware> SimulationDB<M> {
         runtime: Option<Arc<tokio::runtime::Runtime>>,
         block: Option<BlockHeader>,
     ) -> Self {
-        Self {
-            client,
-            account_storage: RefCell::new(AccountStorage::new()),
-            block: block.clone(),
-            runtime,
-        }
+        Self { client, account_storage: RefCell::new(AccountStorage::new()), block, runtime }
     }
 
     /// Set the block that will be used when querying a node
@@ -108,7 +101,8 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// * `address` - Address of the account
     /// * `account` - The account information
-    /// * `permanent_storage` - Storage to init the account with this storage can only be updated manually.
+    /// * `permanent_storage` - Storage to init the account with this storage can only be updated
+    ///   manually.
     /// * `mocked` - Whether this account should be considered mocked. For mocked accounts, nothing
     ///   is downloaded from a node; all data must be inserted manually.
     pub fn init_account(
@@ -148,12 +142,21 @@ impl<M: Middleware> SimulationDB<M> {
         self.block = Some(block);
         for (address, update_info) in updates.iter() {
             let mut revert_entry = StateUpdate::default();
-            if let Some(current_account) = self.account_storage.borrow().get_account_info(address) {
+            if let Some(current_account) = self
+                .account_storage
+                .borrow()
+                .get_account_info(address)
+            {
                 revert_entry.balance = Some(current_account.balance);
             }
             if update_info.storage.is_some() {
                 let mut revert_storage = HashMap::default();
-                for index in update_info.storage.as_ref().unwrap().keys() {
+                for index in update_info
+                    .storage
+                    .as_ref()
+                    .unwrap()
+                    .keys()
+                {
                     if let Some(s) = self
                         .account_storage
                         .borrow()
@@ -178,7 +181,9 @@ impl<M: Middleware> SimulationDB<M> {
     /// It is recommended to call this after a new block is received,
     /// to avoid stored state leading to wrong results.
     pub fn clear_temp_storage(&mut self) {
-        self.account_storage.borrow_mut().clean_temp_storage();
+        self.account_storage
+            .borrow_mut()
+            .clean_temp_storage();
     }
 
     /// Query information about an Ethereum account.
@@ -190,22 +195,22 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// # Returns
     ///
-    /// Returns a `Result` containing either an `AccountInfo` object with balance, nonce, and code information,
-    /// or an error of type `SimulationDB<M>::Error` if the query fails.
+    /// Returns a `Result` containing either an `AccountInfo` object with balance, nonce, and code
+    /// information, or an error of type `SimulationDB<M>::Error` if the query fails.
     fn query_account_info(
         &self,
         address: B160,
     ) -> Result<AccountInfo, <SimulationDB<M> as DatabaseRef>::Error> {
-        debug!(
-            "Querying account info of {:x?} at block {:?}",
-            address, self.block
-        );
+        debug!("Querying account info of {:x?} at block {:?}", address, self.block);
         let block_id: Option<BlockId> = self.block.map(|v| v.into());
         let fut = async {
             tokio::join!(
-                self.client.get_balance(H160(address.0), block_id),
-                self.client.get_transaction_count(H160(address.0), block_id),
-                self.client.get_code(H160(address.0), block_id),
+                self.client
+                    .get_balance(H160(address.0), block_id),
+                self.client
+                    .get_transaction_count(H160(address.0), block_id),
+                self.client
+                    .get_code(H160(address.0), block_id),
             )
         };
 
@@ -277,8 +282,9 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     ///
     /// This function retrieves the basic account information for the specified address.
     /// If the account is present in the storage, the stored account information is returned.
-    /// If the account is not present in the storage, the function queries the account information from the contract
-    /// and initializes the account in the storage with the retrieved information.
+    /// If the account is not present in the storage, the function queries the account information
+    /// from the contract and initializes the account in the storage with the retrieved
+    /// information.
     ///
     /// # Arguments
     ///
@@ -286,23 +292,29 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     ///
     /// # Returns
     ///
-    /// Returns a `Result` containing an `Option` that holds the account information if it exists. If the account is not found,
-    /// `None` is returned.
+    /// Returns a `Result` containing an `Option` that holds the account information if it exists.
+    /// If the account is not found, `None` is returned.
     ///
     /// # Errors
     ///
-    /// Returns an error if there was an issue querying the account information from the contract or accessing the storage.
+    /// Returns an error if there was an issue querying the account information from the contract or
+    /// accessing the storage.
     ///
     /// # Notes
     ///
-    /// * If the account is present in the storage, the function returns a clone of the stored account information.
+    /// * If the account is present in the storage, the function returns a clone of the stored
+    ///   account information.
     ///
-    /// * If the account is not present in the storage, the function queries the account
-    ///   information from the contract, initializes the account in the storage with the retrieved information, and returns a clone
-    ///   of the account information.
+    /// * If the account is not present in the storage, the function queries the account information
+    ///   from the contract, initializes the account in the storage with the retrieved information,
+    ///   and returns a clone of the account information.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self.account_storage.borrow().get_account_info(&address) {
-            return Ok(Some(account.clone()));
+        if let Some(account) = self
+            .account_storage
+            .borrow()
+            .get_account_info(&address)
+        {
+            return Ok(Some(account.clone()))
         }
         let account_info = self.query_account_info(address)?;
         self.init_account(address, account_info.clone(), None, false);
@@ -330,20 +342,23 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     ///
     /// # Errors
     ///
-    /// Returns an error if there was an issue querying the storage value from the contract or accessing the storage.
+    /// Returns an error if there was an issue querying the storage value from the contract or
+    /// accessing the storage.
     ///
     /// # Notes
     ///
-    /// * If the contract is present locally and is mocked, the function first checks if
-    ///   the storage value exists locally. If found, it returns the stored value. If not found, it returns an empty slot.
-    ///   Mocked contracts are not expected to have valid storage values, so the function does not query a node in this case.
+    /// * If the contract is present locally and is mocked, the function first checks if the storage
+    ///   value exists locally. If found, it returns the stored value. If not found, it returns an
+    ///   empty slot. Mocked contracts are not expected to have valid storage values, so the
+    ///   function does not query a node in this case.
     ///
-    /// * If the contract is present locally and is not mocked, the function checks if the storage value exists locally.
-    ///   If found, it returns the stored value.
-    ///   If not found, it queries the storage value from a node, stores it locally, and returns it.
+    /// * If the contract is present locally and is not mocked, the function checks if the storage
+    ///   value exists locally. If found, it returns the stored value. If not found, it queries the
+    ///   storage value from a node, stores it locally, and returns it.
     ///
-    /// * If the contract is not present locally, the function queries the account info and storage value from
-    ///   a node, initializes the account locally with the retrieved information, and returns the storage value.
+    /// * If the contract is not present locally, the function queries the account info and storage
+    ///   value from a node, initializes the account locally with the retrieved information, and
+    ///   returns the storage value.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
@@ -354,14 +369,10 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
                 debug!(
                     "Got value locally. This is a {} account. Value: {}",
-                    (if is_mocked.unwrap_or(false) {
-                        "mocked"
-                    } else {
-                        "non-mocked"
-                    }),
+                    (if is_mocked.unwrap_or(false) { "mocked" } else { "non-mocked" }),
                     storage_value
                 );
-                return Ok(storage_value);
+                return Ok(storage_value)
             }
         }
         // At this point we know we don't have data for this storage slot.
@@ -388,10 +399,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                 self.account_storage
                     .borrow_mut()
                     .set_temp_storage(address, index, storage_value);
-                debug!(
-                    "This is non-initialised account. Fetched value: {}",
-                    storage_value
-                );
+                debug!("This is non-initialised account. Fetched value: {}", storage_value);
                 Ok(storage_value)
             }
         }
@@ -471,15 +479,15 @@ mod tests {
             .unwrap();
         let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
-        let acc_info = mock_sim_db.query_account_info(address).unwrap();
+        let acc_info = mock_sim_db
+            .query_account_info(address)
+            .unwrap();
 
         assert_eq!(acc_info.balance, rU256::from_limbs(response_balance.0));
         assert_eq!(acc_info.nonce, response_nonce.as_u64());
         assert_eq!(
             acc_info.code,
-            Some(to_analysed(Bytecode::new_raw(
-                ethers::types::Bytes::from([128; 1]).0
-            )))
+            Some(to_analysed(Bytecode::new_raw(ethers::types::Bytes::from([128; 1]).0)))
         );
     }
 
@@ -491,7 +499,8 @@ mod tests {
         let index = rU256::from_limbs_slice(&[8]);
         db.init_account(address, AccountInfo::default(), None, false);
 
-        db.query_storage(address, index).unwrap();
+        db.query_storage(address, index)
+            .unwrap();
 
         // There is no assertion, but has the querying failed, we would have panicked by now.
         // This test is not deterministic as it depends on the current state of the blockchain.
@@ -514,12 +523,11 @@ mod tests {
             .push(response_storage)
             .unwrap();
 
-        let result = mock_sim_db.query_storage(address, index).unwrap();
+        let result = mock_sim_db
+            .query_storage(address, index)
+            .unwrap();
 
-        assert_eq!(
-            result,
-            rU256::from_be_bytes(response_storage.to_fixed_bytes())
-        );
+        assert_eq!(result, rU256::from_be_bytes(response_storage.to_fixed_bytes()));
         Ok(())
     }
 
@@ -532,7 +540,10 @@ mod tests {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_sim_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
 
-        let acc_info = mock_sim_db.basic(mock_acc_address).unwrap().unwrap();
+        let acc_info = mock_sim_db
+            .basic(mock_acc_address)
+            .unwrap()
+            .unwrap();
 
         assert_eq!(
             mock_sim_db
@@ -549,8 +560,9 @@ mod tests {
     fn test_mock_account_get_storage(
         mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
-        // Tests if mock accounts are not considered temp accounts and if the provider has not been queried.
-        // Querying the mocked provider would cause a panic, therefore no assert is needed.
+        // Tests if mock accounts are not considered temp accounts and if the provider has not been
+        // queried. Querying the mocked provider would cause a panic, therefore no assert is
+        // needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::ZERO;
         mock_sim_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
@@ -574,17 +586,10 @@ mod tests {
         let new_storage_value_index = rU256::from_limbs_slice(&[123]);
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = rU256::from_limbs_slice(&[500]);
-        let update = StateUpdate {
-            storage: Some(new_storage),
-            balance: Some(new_balance),
-        };
+        let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
         let mut updates = HashMap::default();
         updates.insert(address, update);
-        let new_block = BlockHeader {
-            number: 1,
-            hash: H256::default(),
-            timestamp: 234,
-        };
+        let new_block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
 
         let reverse_update = mock_sim_db.update_state(&updates, new_block);
 
@@ -608,11 +613,18 @@ mod tests {
         assert_eq!(mock_sim_db.block.unwrap().number, 1);
 
         assert_eq!(
-            reverse_update.get(&address).unwrap().balance.unwrap(),
+            reverse_update
+                .get(&address)
+                .unwrap()
+                .balance
+                .unwrap(),
             AccountInfo::default().balance
         );
         assert_eq!(
-            reverse_update.get(&address).unwrap().storage,
+            reverse_update
+                .get(&address)
+                .unwrap()
+                .storage,
             Some(HashMap::default())
         );
 
@@ -641,12 +653,7 @@ mod tests {
             false,
         );
         let address2 = B160::from(2);
-        mock_sim_db.init_account(
-            address2,
-            AccountInfo::default(),
-            Some(original_storage),
-            false,
-        );
+        mock_sim_db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
 
         // override slot 1 of address 2
         // and slot 1 of address 3 which doesn't exist in the original DB
@@ -656,18 +663,21 @@ mod tests {
             HashMap::new();
         overrides.insert(
             address2,
-            [(slot1, overridden_value1)].iter().cloned().collect(),
+            [(slot1, overridden_value1)]
+                .iter()
+                .cloned()
+                .collect(),
         );
         overrides.insert(
             address3,
-            [(slot1, overridden_value1)].iter().cloned().collect(),
+            [(slot1, overridden_value1)]
+                .iter()
+                .cloned()
+                .collect(),
         );
 
         // WHEN...
-        let overriden_db = OverriddenSimulationDB {
-            inner_db: &mock_sim_db,
-            overrides: &overrides,
-        };
+        let overriden_db = OverriddenSimulationDB { inner_db: &mock_sim_db, overrides: &overrides };
 
         // THEN...
         assert_eq!(

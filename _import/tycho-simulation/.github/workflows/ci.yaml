@@ -21,26 +21,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
-          components: clippy
-          override: true
       - name: Setup Rust Cache
-        uses: Swatinem/rust-cache@v2.2.0
-      - name: Format Check
-        run: cargo fmt --check
-      - name: Build Crate
-        run: cargo build --verbose
-      - name: Code Lint
-        uses: giraffate/clippy-action@v1
-        if: ${{ matrix.toolchain == 'stable' }}
+        uses: Swatinem/rust-cache@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          reporter: github-pr-check
-          level: warning
-      - name: Test prop-searcher
-        run: cargo test --verbose --no-default-features
-      - name: Test protosim
-        run: cd protosim && cargo test --no-default-features
+          cache-on-failure: true
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
+      - name: Test 
+        run: cargo nextest run --workspace --all-targets --all-features
+
+  lint:
+    name: Code Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - run: cargo +nightly clippy --workspace --all-targets --all-features
+        env:
+          RUSTFLAGS: -Dwarnings
+
+      - run: cargo +nightly fmt --all --check

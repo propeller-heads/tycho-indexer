@@ -12,10 +12,7 @@ pub fn check_log_idx(
     log_meta: &EVMLogMeta,
 ) -> Result<(), TransitionError<LogIndex>> {
     if index >= log_meta.index() {
-        return Err(TransitionError::OutOfOrder {
-            state: index,
-            event: log_meta.index(),
-        });
+        return Err(TransitionError::OutOfOrder { state: index, event: log_meta.index() })
     }
     Ok(())
 }
