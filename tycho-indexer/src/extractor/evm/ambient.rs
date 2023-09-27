@@ -159,13 +159,7 @@ impl AmbientPgGateway {
         self.save_cursor(new_cursor, conn)
             .await?;
 
-        let changes = evm::BlockAccountChanges {
-            chain: self.chain,
-            extractor: self.name.clone(),
-            block,
-            account_updates,
-            new_pools: HashMap::new(),
-        };
+        let changes = evm::BlockAccountChanges::new(&self.name, self.chain, block, account_updates);
         Result::<evm::BlockAccountChanges, StorageError>::Ok(changes)
     }
 

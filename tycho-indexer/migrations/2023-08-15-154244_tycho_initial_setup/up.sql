@@ -80,7 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_transaction_block_id ON TRANSACTION (block_id);
 CREATE TABLE IF NOT EXISTS protocol_system(
     "id" bigserial PRIMARY KEY,
     -- The name of the procotol system, e.g. uniswap-v2, ambient, etc.
-    "name" varchar(255) NOT NULL,
+    "name" varchar(255) NOT NULL UNIQUE,
     -- Timestamp this entry was inserted into this table.
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Timestamp this entry was inserted into this table.
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS protocol_system(
 CREATE TABLE IF NOT EXISTS protocol_type(
     "id" bigserial PRIMARY KEY,
     -- The name of the type e.g. uniswap-v2:pool
-    "name" varchar(255) NOT NULL,
+    "name" varchar(255) NOT NULL UNIQUE,
     -- The actual type of the protocol.
     "financial_type" financial_protocol_type NOT NULL,
     -- The jsonschema to evaluate the attribute json for pools of this type.
@@ -169,11 +169,14 @@ CREATE INDEX IF NOT EXISTS idx_protocol_identity ON protocol_component(external_
 -- Describes the mutable state of a component. Versioned by blocks.
 CREATE TABLE IF NOT EXISTS protocol_state(
     "id" bigserial PRIMARY KEY,
-    -- The total value locked within the protocol. Might not always apply.
-    "tvl" bigint,
-    -- the inertias per token of the protocol (in increasing order sorted
-    --	by token contract address). Might not always apply.
-    "inertias" bigint[],
+    -- Remove balances here, cause we need to multiply the balance by
+    -- price to calculate tvl. we can't really do this because the
+    -- array does not contain the information about the token, directly.
+    -- "balances" double precision[],
+    -- Same for inertias, note that application side we view inertias and
+    -- tvl as part of the state though.
+    -- "inertias" double precision[],
+    -- --------------------------------------------------
     -- The actual state of the protocols attributes. This is only relevant
     --	for fully implemented protocols. For protocols using vm simulation
     --	use the contract tables instead.
@@ -236,10 +239,10 @@ CREATE TABLE IF NOT EXISTS "token"(
     "symbol" varchar(255) NOT NULL,
     -- Decimal precision the token stores balances with.
     "decimals" int NOT NULL,
-    -- The tax this token charges on transfer.
-    "tax" bigint NOT NULL DEFAULT 0,
-    -- The estimated amount of gas used per transfer.
-    "gas" bigint[] NOT NULL,
+    -- Normal tokens have a quality of 0.
+    "quality" int NOT NULL DEFAULT 0,
+    -- Chain specific token attributes
+    "attributes" jsonb,
     -- Timestamp this entry was inserted into this table.
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Timestamp this entry was inserted into this table.
@@ -262,6 +265,36 @@ CREATE TABLE IF NOT EXISTS protocol_holds_token(
     PRIMARY KEY ("protocol_component_id", "token_id")
 );
 
+-- TODO: add a trigger similar to contract storage for this table
+CREATE TABLE IF NOT EXISTS protocol_tvl(
+    "protocol_component_id" bigint REFERENCES protocol_component(id) ON DELETE CASCADE NOT NULL,
+    -- we don't allow a token to be deleted unless the protocol component was removed
+    "token_id" bigint REFERENCES "token"(id) NOT NULL,
+    -- previous balance
+    "previous_balance" double precision NOT NULL,
+    -- current balance
+    "balance" double precision NOT NULL,
+    -- The ts at which this state became valid at.
+    "valid_from" timestamptz NOT NULL,
+    -- The ts at which this state stopped being valid at. Null if this
+    --	state is the currently valid entry.
+    "valid_to" timestamptz,
+    -- transaction that produced this new value
+    "modify_tx" bigint REFERENCES "transaction"(id) ON DELETE CASCADE NOT NULL,
+    -- Timestamp this entry was inserted into this table.
+    "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Timestamp this entry was inserted into this table.
+    "modified_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- not sure if this pk is great, consider introducing a increasing one
+    --  the triplet below should be unique though
+    PRIMARY KEY ("protocol_component_id", "token_id", "valid_to")
+);
+
+CREATE TABLE IF NOT EXISTS token_prices(
+    -- we don't allow a token to be deleted unless the protocol component was removed
+    "token_id" bigint REFERENCES "token"(id) NOT NULL,
+    "price" double precision NOT NULL,
+)
 -- Versioned account balance.
 CREATE TABLE account_balance(
     "id" bigserial PRIMARY KEY,
@@ -429,7 +462,7 @@ BEGIN
     WHERE
         valid_to IS NULL
         AND account_id = NEW.account_id
-        -- running this after inserts allows us to use upserts, 
+        -- running this after inserts allows us to use upserts,
         -- currently the application does not use that though
         AND id != NEW.id;
     RETURN NEW;
@@ -454,7 +487,7 @@ BEGIN
     WHERE
         valid_to IS NULL
         AND account_id = NEW.account_id
-        -- running this after inserts allows us to use upserts, 
+        -- running this after inserts allows us to use upserts,
         -- currently the application does not use that though
         AND id != NEW.id;
     RETURN NEW;

@@ -15,6 +15,7 @@ pub enum Chain {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum ProtocolSystem {
     Ambient,
 }
@@ -89,5 +90,28 @@ pub trait NormalisedMessage:
     fn source(&self) -> ExtractorIdentity;
 }
 
+
+
+// remove this and use chain specific component
 #[allow(dead_code)]
-pub struct ProtocolComponent {}
+pub struct ProtocolComponent {
+    id: Vec<u8>,
+    chain: Chain,
+    protocol_type_name: String,
+    protocol_system: ProtocolSystem,
+    token_ids: Vec<Vec<u8>>,
+    calls_contracts: Vec<Vec<u8>>,
+    attributes: serde_json::Value,
+}
+
+// remove this and use chain specific implementation
+#[allow(dead_code)]
+pub struct ProtocolState {
+    id: Vec<u8>,
+    chain: Chain,
+    protocol_system: ProtocolSystem,
+    tvl: Vec<f64>,
+    inertias: Vec<f64>,
+    attributes: serde_json::Value,
+    modify_tx: Vec<u8>,
+}

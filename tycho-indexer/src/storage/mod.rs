@@ -80,7 +80,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    models::{Chain, ExtractionState, ProtocolComponent, ProtocolSystem},
+    models::{Chain, ExtractionState, ProtocolComponent, ProtocolState, ProtocolSystem},
     serde_helpers::{deserialize_hex, serialize_hex},
 };
 
@@ -453,6 +453,38 @@ pub trait StorableToken<S, N, I>: Sized + Send + Sync + 'static {
     fn contract_id(&self) -> ContractId;
 }
 
+pub struct ProtocolFilter<'a> {
+    ids: Option<&'a [&'a str]>,
+    tvl: Option<FilterPredicate<f64>>,
+    version: Option<Version>,
+}
+
+pub enum FilterPredicate<T> {
+    Lt(T),
+    Gt(T),
+    Beween(T, T),
+}
+
+pub struct ProtocolComponentId {
+    id: Vec<u8>,
+    chain: Chain,
+    protocol_type_name: String,
+}
+
+pub struct BalanceChange {
+    id: ProtocolComponentId,
+    // balances are only approximations only so f64 is ok here
+    //  they need to be float within the db to enable filtering
+    balance: f64,
+}
+
+pub struct ProtocolChanges<T> {
+    deleted_components: Vec<ProtocolComponentId>,
+    added_comoponents: Vec<T>,
+    // feel free to leave this one empty for now
+    balance_changes: Vec<BalanceChange>,
+}
+
 /// Store and retrieve protocol related structs.
 ///
 /// This trait defines how to retrieve protocol components, state as well as
@@ -461,6 +493,7 @@ pub trait StorableToken<S, N, I>: Sized + Send + Sync + 'static {
 pub trait ProtocolGateway {
     type DB;
     type Token;
+    type ProtocolComponent;
     // TODO: at this later type ProtocolState;
 
     /// Retrieve ProtocolComponent from the db
@@ -475,8 +508,8 @@ pub trait ProtocolGateway {
     async fn get_components(
         &self,
         chain: Chain,
-        system: Option<ProtocolSystem>,
-        ids: Option<&[&str]>,
+        filter: ProtocolFilter<'_>,
+        db: &mut Self::DB,
     ) -> Result<Vec<ProtocolComponent>, StorageError>;
 
     /// Stores new found ProtocolComponents.
@@ -492,7 +525,37 @@ pub trait ProtocolGateway {
     /// Ok if stored successfully, may error if:
     /// - related entities are not in store yet.
     /// - component with same is id already present.
-    async fn upsert_components(&self, new: &[&ProtocolComponent]) -> Result<(), StorageError>;
+    async fn insert_components(
+        &self,
+        new: &[&ProtocolComponent],
+        db: &mut Self::DB,
+    ) -> Result<(), StorageError>;
+
+    async fn delete_components(
+        &self,
+        chain: Chain,
+        ids: &[&ProtocolComponentId],
+        db: &mut Self::DB,
+    ) -> Result<(), StorageError>;
+
+    async fn update_balances(
+        &self,
+        chain: Chain,
+        new: &[(TxHashRef, BalanceChange)],
+        db: &mut Self::DB,
+    ) -> Result<(), StorageError>;
+
+    // upon revert or backtesting gets deltas between two version
+    // for simply filter for components that have been created between start and end,
+    // as well as compinents that have deleted_ts set between start and end, then return
+    // that. Bonus: implement the balance changes.
+    async fn get_protocol_deltas(
+        &self,
+        chain: Chain,
+        start_version: Option<&BlockOrTimestamp>,
+        end_version: &BlockOrTimestamp,
+        db: &mut Self::DB,
+    ) -> Result<ProtocolChanges<Self::ProtocolComponent>, StorageError>;
 
     /// Retrieve protocol component states
     ///
@@ -510,17 +573,13 @@ pub trait ProtocolGateway {
     /// - `system` The protocol system this component belongs to
     /// - `id` The external id of the component e.g. address, or the pair
     /// - `at` The version at which the state is valid at.
-    /*
-    // TODO: implement once needed
-    type ProtocolState;
     async fn get_states(
         &self,
         chain: Chain,
         at: Option<Version>,
-        system: Option<ProtocolSystem>,
-        id: Option<&[&str]>,
-    ) -> Result<VersionedResult<Self::ProtocolState>, StorageError>;
-     */
+        filter: ProtocolFilter<'_>,
+        db: &mut Self::DB,
+    ) -> Result<Vec<ProtocolState>, StorageError>;
 
     /// Retrieves a tokens from storage
     ///
@@ -534,12 +593,10 @@ pub trait ProtocolGateway {
         &self,
         chain: Chain,
         address: Option<&[AddressRef]>,
+        db: &mut Self::DB,
     ) -> Result<Vec<Self::Token>, StorageError>;
 
-    /// Saves multiple tokens to storage.
-    ///
-    /// Inserts token into storage. Tokens and their properties are assumed to
-    /// be immutable.
+    /// Upserts multiple tokens to storage.
     ///
     /// # Parameters
     /// - `chain` The chain of the token.
@@ -548,7 +605,12 @@ pub trait ProtocolGateway {
     /// # Return
     /// Ok if all tokens could be inserted, Err if at least one token failed to
     /// insert.
-    async fn add_tokens(&self, chain: Chain, token: &[&Self::Token]) -> Result<(), StorageError>;
+    async fn upsert_tokens(
+        &self,
+        chain: Chain,
+        token: &[&Self::Token],
+        db: &mut Self::DB,
+    ) -> Result<(), StorageError>;
 }
 
 /// Lays out the necessary interface needed to store and retrieve contracts from

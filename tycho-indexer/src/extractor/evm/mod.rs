@@ -3,11 +3,11 @@ pub mod storage;
 mod utils;
 
 use crate::{
-    models::{Chain, ExtractorIdentity, NormalisedMessage},
+    models::{Chain, ExtractorIdentity, NormalisedMessage, ProtocolSystem},
     storage::{ChangeType, StateGatewayType},
 };
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     ops::Deref,
 };
 use tracing::warn;
@@ -24,10 +24,42 @@ use serde::{Deserialize, Serialize};
 use super::ExtractionError;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SwapPool {}
+pub struct ProtocolComponent {
+    id: Vec<u8>,
+    protocol_type_name: String,
+    protocol_system: ProtocolSystem,
+    tokens: Vec<H160>,
+    chain: Chain,
+    contracts: Vec<H160>,
+    attributes: Option<serde_json::Value>,
+    tvl: HashMap<H160, f64>,
+}
 
 #[allow(dead_code)]
-pub struct ERC20Token {}
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ERC20Token {
+    chain: Chain,
+    address: H160,
+    symbol: String,
+    decimals: u8,
+    // evm specific attributes
+    attributes: TokenAttributes,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct TokenAttributes {
+    tax: Option<TransferTax>,
+    transfer_cost: [u32; 4],
+    balance_slot: U256,
+    allowance_slot: U256,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub enum TransferTax {
+    FixedRate(U256),
+    FixedAmount(U256),
+    Unkown,
+}
 
 #[derive(Debug, PartialEq, Copy, Clone, Deserialize, Serialize, Default)]
 pub struct Block {
@@ -217,7 +249,40 @@ pub struct BlockAccountChanges {
     chain: Chain,
     pub block: Block,
     pub account_updates: HashMap<H160, AccountUpdate>,
-    pub new_pools: HashMap<H160, SwapPool>,
+    // any new components are emitted here
+    pub new_components: HashMap<H160, ProtocolComponent>,
+    // tvl changes by protocol component id
+    // Note: components are identifies by chain, system and id
+    //  the keys here only contain id. Chain is available on the struct and system,
+    //  is inferred by the extraction context (1 or more extractors per system -
+    //  never 1 extractor for many systems)
+    pub tvl_change: HashMap<String, TvlChange>,
+}
+
+impl BlockAccountChanges {
+    pub fn new(
+        extractor: &str,
+        chain: Chain,
+        block: Block,
+        account_updates: HashMap<H160, AccountUpdate>,
+    ) -> Self {
+        BlockAccountChanges {
+            extractor: extractor.to_owned(),
+            chain,
+            block,
+            account_updates,
+            new_components: HashMap::new(),
+            tvl_change: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct TvlChange {
+    token: H160,
+    new_balance: U256,
+    // tx where the this balance was observed
+    tx: H256,
 }
 
 impl NormalisedMessage for BlockAccountChanges {
@@ -309,7 +374,8 @@ pub struct BlockStateChanges {
     chain: Chain,
     pub block: Block,
     pub tx_updates: Vec<AccountUpdateWithTx>,
-    pub new_pools: HashMap<H160, SwapPool>,
+    // TODO: we need to correlate the new components with a tx
+    pub new_pools: HashMap<H160, ProtocolComponent>,
 }
 
 pub type EVMStateGateway<DB> = StateGatewayType<DB, Block, Transaction, Account, AccountUpdate>;
@@ -466,16 +532,15 @@ impl BlockStateChanges {
             }
         }
 
-        Ok(BlockAccountChanges {
-            extractor: self.extractor,
-            chain: self.chain,
-            block: self.block,
-            account_updates: account_updates
+        Ok(BlockAccountChanges::new(
+            &self.extractor,
+            self.chain,
+            self.block,
+            account_updates
                 .into_iter()
                 .map(|(k, v)| (k, v.update))
                 .collect(),
-            new_pools: self.new_pools,
-        })
+        ))
     }
 }
 
@@ -790,10 +855,10 @@ mod test {
 
     fn block_account_changes() -> BlockAccountChanges {
         let address = H160::from_low_u64_be(0x0000000000000000000000000000000061626364);
-        BlockAccountChanges {
-            extractor: "test".to_string(),
-            chain: Chain::Ethereum,
-            block: Block {
+        BlockAccountChanges::new(
+            "test",
+            Chain::Ethereum,
+            Block {
                 number: 1,
                 hash: H256::from_low_u64_be(
                     0x0000000000000000000000000000000000000000000000000000000031323334,
@@ -804,7 +869,7 @@ mod test {
                 chain: Chain::Ethereum,
                 ts: NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
             },
-            account_updates: vec![(
+            vec![(
                 address,
                 AccountUpdate {
                     address: H160::from_low_u64_be(0x0000000000000000000000000000000061626364),
@@ -822,8 +887,7 @@ mod test {
             )]
             .into_iter()
             .collect(),
-            new_pools: HashMap::new(),
-        }
+        )
     }
 
     #[rstest]
