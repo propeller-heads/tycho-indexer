@@ -29,6 +29,8 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
+strum = "0.25.0"
+strum_macros = "0.25.2"
 
 [dev-dependencies]
 mockito = "1.1.1"

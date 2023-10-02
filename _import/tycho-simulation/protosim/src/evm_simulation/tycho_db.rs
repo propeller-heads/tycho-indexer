@@ -15,7 +15,7 @@ use revm::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
-    tycho_client::{StateRequestBody, TychoHTTPClient, TychoVMStateClient},
+    tycho_client::{StateRequestBody, TychoHTTPClient, TychoVMStateClient, StateRequestParameters},
     tycho_models::Block,
 };
 
@@ -174,25 +174,26 @@ pub async fn update_loop(
         .expect("stream ok");
 
     let state = client
-        .get_state(None, Some(&StateRequestBody::from_block(first_msg.block)))
+        .get_state(
+            &StateRequestParameters::default(),
+            &StateRequestBody::from_block(first_msg.block),
+        )
         .await
         .unwrap();
 
     // This scope ensures the lock is dropped after processing the message.
     {
         let mut db_guard = db.write().await;
-        for account in state.iter() {
+        for account in state.into_iter() {
             db_guard.init_account(
                 account.address,
                 AccountInfo::new(
                     account.balance,
                     0,
                     account.code_hash,
-                    Bytecode::new_raw(Bytes::from(account.code.to_owned()).0), /* TODO: do we
-                                                                                * really need to
-                                                                                * clone here? */
+                    Bytecode::new_raw(Bytes::from(account.code).0),
                 ),
-                Some(account.slots.to_owned()), //TODO: do we really need to clone here?
+                Some(account.slots),
             );
         }
     }
@@ -208,30 +209,32 @@ pub async fn update_loop(
             // None means the channel is closed.
             None => break,
             Some(msg) => {
-                // This scope ensures the lock is dropped after processing the message.
-                {
-                    let mut db_guard = db.write().await;
+                let mut db_guard = db.write().await;
 
-                    // Update block.
-                    db_guard.block = Some(msg.block);
+                // Update block.
+                db_guard.block = Some(msg.block);
 
-                    // Update existing accounts.
-                    for (address, update) in msg.account_updates.into_iter() {
-                        if db_guard
-                            .accounts
-                            .account_present(&address)
-                        {
-                            db_guard.accounts.update_account(
-                                &address,
-                                &StateUpdate { storage: update.slots, balance: update.balance },
-                            );
-                        } else {
-                            // Initialize new accounts if they don't already exist.
-                            // For this, you might need more information,
-                            // like the complete AccountInfo and its storage.
-                            // This is just a stub assuming you have necessary info in the update
-                            // itself. db_guard.init_account(
-                        }
+                // Update existing accounts.
+                for (address, update) in msg.account_updates.into_iter() {
+                    if db_guard
+                        .accounts
+                        .account_present(&address)
+                    {
+                        db_guard.accounts.update_account(
+                            &address,
+                            &StateUpdate { storage: update.slots, balance: update.balance },
+                        );
+                    } else {
+                        db_guard.init_account(
+                            address,
+                            AccountInfo::new(
+                                update.balance.unwrap_or_default(),
+                                0,
+                                B256::default(),
+                                Bytecode::new_raw(Bytes::from(update.code.unwrap_or_default()).0),
+                            ),
+                            update.slots,
+                        );
                     }
                 }
             }
@@ -248,12 +251,8 @@ pub fn create_tycho_db(url: String) -> TychoDB {
     let client = TychoHTTPClient::new(&url).unwrap();
     let (_tx, rx) = mpsc::channel::<()>(1);
 
-    std::thread::spawn(move || {
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-        runtime.block_on(update_loop(cloned_db, client, rx));
+    tokio::spawn(async move {
+        update_loop(cloned_db, client, rx).await;
     });
 
     db
@@ -270,7 +269,7 @@ mod tests {
     use tokio::sync::mpsc::{self, Receiver};
 
     use crate::evm_simulation::{
-        tycho_client::{GetStateFilters, ResponseAccount, TychoClientError},
+        tycho_client::{ResponseAccount, StateRequestParameters, TychoClientError},
         tycho_models::{AccountUpdate, BlockStateChanges, Chain, Transaction},
     };
 
@@ -424,8 +423,8 @@ mod tests {
     impl TychoVMStateClient for MockTychoVMStateClient {
         async fn get_state(
             &self,
-            _filters: Option<&GetStateFilters>,
-            _request: Option<&StateRequestBody>,
+            _filters: &StateRequestParameters,
+            _request: &StateRequestBody,
         ) -> Result<Vec<ResponseAccount>, TychoClientError> {
             Ok(self.mock_state.clone())
         }

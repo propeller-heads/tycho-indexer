@@ -1,8 +1,8 @@
 use chrono::NaiveDateTime;
 use futures::StreamExt;
-use hyper::{client::HttpConnector, Body, Client, Request, Uri};
+use hyper::{client::HttpConnector, Client, Request, Uri, Body};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, string::ToString};
 use thiserror::Error;
 use tracing::{error, info};
 
@@ -24,7 +24,7 @@ pub enum TychoClientError {
     ParseResponse(String),
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Default)]
 pub struct StateRequestBody {
     contract_ids: Option<Vec<B160>>,
     version: Option<Version>,
@@ -57,30 +57,33 @@ struct RequestBlock {
     chain: Chain,
 }
 
-#[derive(Default)]
-pub struct GetStateFilters {
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct StateRequestParameters {
+    #[serde(default = "Chain::default")]
+    chain: Chain,
     tvl_gt: Option<u64>,
     intertia_min_gt: Option<u64>,
 }
-impl GetStateFilters {
-    fn to_query_string(&self) -> String {
-        let mut parts = Vec::new();
 
-        parts.push(format!("chain={}", Chain::Ethereum.to_string()));
+impl StateRequestParameters {
+    pub fn to_query_string(&self) -> String {
+        let mut parts = vec![];
+
+        parts.push(format!("chain={}", self.chain));
 
         if let Some(tvl_gt) = self.tvl_gt {
             parts.push(format!("tvl_gt={}", tvl_gt));
         }
 
-        if let Some(intertia_min_gt) = self.intertia_min_gt {
-            parts.push(format!("intertia_min_gt={}", intertia_min_gt));
+        if let Some(inertia) = self.intertia_min_gt {
+            parts.push(format!("intertia_min_gt={}", inertia));
         }
 
         parts.join("&")
     }
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct ResponseAccount {
     pub address: B160,
     pub slots: HashMap<rU256, rU256>,
@@ -94,12 +97,11 @@ pub struct TychoHTTPClient {
     base_uri: Uri,
 }
 impl TychoHTTPClient {
-    pub fn new(base_url: &str) -> Result<Self, TychoClientError> {
-        let base_uri = base_url
+    pub fn new(base_uri: &str) -> Result<Self, TychoClientError> {
+        let base_uri = base_uri
             .parse::<Uri>()
-            .map_err(|e| TychoClientError::UriParsing(base_url.to_string(), e.to_string()))?;
+            .map_err(|e| TychoClientError::UriParsing(base_uri.to_string(), e.to_string()))?;
 
-        // No need for references anymore
         Ok(Self { http_client: Client::new(), base_uri })
     }
 }
@@ -108,46 +110,33 @@ impl TychoHTTPClient {
 pub trait TychoVMStateClient {
     async fn get_state(
         &self,
-        filters: Option<&GetStateFilters>,
-        request: Option<&StateRequestBody>,
+        filters: &StateRequestParameters,
+        request: &StateRequestBody,
     ) -> Result<Vec<ResponseAccount>, TychoClientError>;
 
     async fn realtime_messages(&self) -> Receiver<BlockStateChanges>;
 }
+
 #[async_trait]
 impl TychoVMStateClient for TychoHTTPClient {
     async fn get_state(
         &self,
-        filters: Option<&GetStateFilters>,
-        request: Option<&StateRequestBody>,
+        filters: &StateRequestParameters,
+        request: &StateRequestBody,
     ) -> Result<Vec<ResponseAccount>, TychoClientError> {
-        let mut url = if self.base_uri.to_string().ends_with('/') {
-            format!("http://{}{}", self.base_uri, "contract_state")
-        } else {
-            format!("http://{}/{}", self.base_uri, "contract_state")
-        };
-        let mut body = Body::empty();
+        let url = format!(
+            "http://{}/contract_state?{}",
+            self.base_uri
+                .to_string()
+                .trim_end_matches('/'),
+            filters.to_query_string()
+        );
 
-        if let Some(filters) = filters {
-            let query_string = filters.to_query_string();
-            if !query_string.is_empty() {
-                url = format!("{}?{}", url, query_string);
-            }
-        }
-        if let Some(request) = request {
-            if request
-                .to_owned()
-                .contract_ids
-                .is_some() ||
-                request.to_owned().version.is_some()
-            {
-                let serialized = serde_json::to_string(&request).unwrap();
-                body = Body::from(serialized);
-            }
-        }
+        let body = serde_json::to_string(&request)
+            .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
         let req = Request::get(url)
-            .body(body)
+            .body(Body::from(body))
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
         let response = self
@@ -193,12 +182,12 @@ impl TychoVMStateClient for TychoHTTPClient {
                                     //TODO: This might happen if the receiver is dropped (meaning
                                     // the update_loop received the stop signal).
                                     // We should catch this error and end this loop.
-                                    error!("Failed to send message to the channel: {}", e);
+                                    error!(error = %e, "Failed to send message to the channel")
                                 }
                             },
                             Err(e) => {
                                 // Handle the error, perhaps log it.
-                                error!("Failed to deserialize message: {}", e);
+                                error!(error = %e, "Failed to deserialize message")
                             }
                         }
                     }
@@ -345,7 +334,7 @@ mod tests {
         }]
         "#;
         let mocked_server = server
-            .mock("GET", "/contract_state")
+            .mock("GET", "/contract_state?chain=ethereum")
             .expect(1)
             .with_body(server_resp)
             .create_async()
@@ -357,12 +346,12 @@ mod tests {
                 .replace("http://", "")
                 .as_str(),
         )
-        .unwrap();
+        .expect("create client");
 
         let response = client
-            .get_state(None, None)
+            .get_state(&Default::default(), &Default::default())
             .await
-            .unwrap();
+            .expect("get state");
 
         mocked_server.assert();
         assert_eq!(response.len(), 1);

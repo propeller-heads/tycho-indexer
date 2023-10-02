@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use revm::primitives::{B160, B256, U256 as rU256};
-use serde::{de, Deserialize, Deserializer, Serialize};
-use thiserror::Error;
+use serde::{Deserialize, Serialize};
+
+use strum_macros::{Display, EnumString};
 
 #[derive(Debug, PartialEq, Copy, Clone, Deserialize)]
 pub struct Block {
@@ -33,46 +34,18 @@ pub struct BlockStateChanges {
     pub new_pools: HashMap<B160, SwapPool>,
 }
 
-#[derive(Error, Debug)]
-pub enum ChainError {
-    #[error("Unknown blockchain value: {0}")]
-    UnknownChain(String),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum Chain {
+    #[default]
     Ethereum,
     Starknet,
     ZkSync,
 }
-impl<'de> Deserialize<'de> for Chain {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(deserializer)?;
-        Chain::try_from(s).map_err(de::Error::custom)
-    }
-}
 
-impl TryFrom<String> for Chain {
-    type Error = ChainError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "ethereum" => Ok(Chain::Ethereum),
-            "starknet" => Ok(Chain::Starknet),
-            "zksync" => Ok(Chain::ZkSync),
-            _ => Err(ChainError::UnknownChain(value)),
-        }
-    }
-}
-
-impl ToString for Chain {
-    fn to_string(&self) -> String {
-        format!("{:?}", self).to_lowercase()
-    }
-}
 #[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct AccountUpdate {
     extractor: String,
