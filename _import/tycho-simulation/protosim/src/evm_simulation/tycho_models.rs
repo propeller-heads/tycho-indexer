@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref};
+use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use revm::primitives::{B160, B256, U256};
@@ -43,12 +43,12 @@ pub enum Response {
 /// A message sent from the server to the client
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
-pub enum WebSocketMessage{
-    BlockStateChanges(BlockStateChanges),
+pub enum WebSocketMessage {
+    BlockAccountChanges(BlockAccountChanges),
     Response(Response),
 }
 
-#[derive(Debug, PartialEq, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Copy, Clone, Deserialize, Serialize, Default)]
 pub struct Block {
     pub number: u64,
     pub hash: B256,
@@ -76,13 +76,29 @@ impl Transaction {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub struct BlockStateChanges {
-    pub extractor: String,
-    pub chain: Chain,
+/// A container for account updates grouped by account.
+///
+/// Hold a single update per account. This is a condensed form of
+/// [BlockStateChanges].
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct BlockAccountChanges {
+    extractor: String,
+    chain: Chain,
     pub block: Block,
-    pub tx_updates: Vec<AccountUpdateWithTx>,
+    pub account_updates: HashMap<B160, AccountUpdate>,
     pub new_pools: HashMap<B160, SwapPool>,
+}
+
+impl BlockAccountChanges {
+    pub fn new(
+        extractor: String,
+        chain: Chain,
+        block: Block,
+        account_updates: HashMap<B160, AccountUpdate>,
+        new_pools: HashMap<B160, SwapPool>,
+    ) -> Self {
+        Self { extractor, chain, block, account_updates, new_pools }
+    }
 }
 
 #[derive(
@@ -126,34 +142,5 @@ impl AccountUpdate {
         change: ChangeType,
     ) -> Self {
         Self { address, chain, slots, balance, code, change }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct AccountUpdateWithTx {
-    pub update: AccountUpdate,
-    pub tx: Transaction,
-}
-
-impl AccountUpdateWithTx {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        address: B160,
-        chain: Chain,
-        slots: HashMap<U256, U256>,
-        balance: Option<U256>,
-        code: Option<Vec<u8>>,
-        change: ChangeType,
-        tx: Transaction,
-    ) -> Self {
-        Self { update: AccountUpdate { address, chain, slots, balance, code, change }, tx }
-    }
-}
-
-impl Deref for AccountUpdateWithTx {
-    type Target = AccountUpdate;
-
-    fn deref(&self) -> &Self::Target {
-        &self.update
     }
 }

@@ -7,7 +7,7 @@ use thiserror::Error;
 use tracing::{error, info};
 
 use super::tycho_models::{
-    Block, BlockStateChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
+    Block, BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
 };
 use async_trait::async_trait;
 use futures::SinkExt;
@@ -118,7 +118,7 @@ pub trait TychoVMStateClient {
         request: &StateRequestBody,
     ) -> Result<Vec<ResponseAccount>, TychoClientError>;
 
-    async fn realtime_messages(&self) -> Receiver<BlockStateChanges>;
+    async fn realtime_messages(&self) -> Receiver<BlockAccountChanges>;
 }
 
 #[async_trait]
@@ -158,7 +158,7 @@ impl TychoVMStateClient for TychoClient {
         Ok(accounts)
     }
 
-    async fn realtime_messages(&self) -> Receiver<BlockStateChanges> {
+    async fn realtime_messages(&self) -> Receiver<BlockAccountChanges> {
         // Create a channel to send and receive messages.
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 
@@ -191,7 +191,7 @@ impl TychoVMStateClient for TychoClient {
                 match msg {
                     Ok(Message::Text(text)) => {
                         match serde_json::from_str::<WebSocketMessage>(&text) {
-                            Ok(WebSocketMessage::BlockStateChanges(block_state_changes)) => {
+                            Ok(WebSocketMessage::BlockAccountChanges(block_state_changes)) => {
                                 info!(
                                     ?block_state_changes,
                                     "Received a block state change, sending to channel"
@@ -253,7 +253,7 @@ impl TychoVMStateClient for TychoClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::tycho_models::{AccountUpdateWithTx, ChangeType, Transaction};
+    use crate::evm_simulation::tycho_models::{AccountUpdate, ChangeType};
 
     use super::*;
 
@@ -271,7 +271,7 @@ mod tests {
             let test_msg = warp::ws::Message::text(
                 r#"
             {
-                "extractor": "ambient",
+                "extractor": "vm:ambient",
                 "chain": "ethereum",
                 "block": {
                     "number": 123,
@@ -280,25 +280,16 @@ mod tests {
                     "chain": "ethereum",
                     "ts": "2023-09-14T00:00:00"
                 },
-                "tx_updates": [
-                    {
-                        "update": {
-                            "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                            "chain": "ethereum",
-                            "slots": {},
-                            "balance": "0x00000000000000000000000000000000000000000000000000000000000001f4",
-                            "code": [],
-                            "change": "Update"
-                        },
-                        "tx": {
-                            "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                            "block_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                            "from": "0x000000000000000000000000000000000000007b",
-                            "to": "0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc",
-                            "index": 1
-                        }
+                "account_updates": {
+                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                        "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                        "chain": "ethereum",
+                        "slots": {},
+                        "balance": "0x00000000000000000000000000000000000000000000000000000000000001f4",
+                        "code": [],
+                        "change": "Update"
                     }
-                ],
+                },
                 "new_pools": {}
             }
             "#,
@@ -334,36 +325,27 @@ mod tests {
             chain: Chain::Ethereum,
             ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
         };
-
-        let transaction = Transaction {
-            hash: B256::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000000",
-            )
-            .unwrap(),
-            block_hash: B256::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000000",
-            )
-            .unwrap(),
-            from: B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
-            to: Some(B160::from_str("0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
-            index: 1,
-        };
-        let account_update = AccountUpdateWithTx::new(
+        let account_update = AccountUpdate::new(
             B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
             Chain::Ethereum,
             HashMap::new(),
             Some(rU256::from(500)),
             Some(Vec::<u8>::new()),
             ChangeType::Update,
-            transaction,
         );
-        let expected = BlockStateChanges {
-            extractor: "ambient".to_string(),
-            chain: Chain::Ethereum,
-            block: expected_blk,
-            tx_updates: vec![account_update],
-            new_pools: HashMap::new(),
-        };
+        let account_updates: HashMap<B160, AccountUpdate> = vec![(
+            B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+            account_update,
+        )]
+        .into_iter()
+        .collect();
+        let expected = BlockAccountChanges::new(
+            "vm:ambient".to_string(),
+            Chain::Ethereum,
+            expected_blk,
+            account_updates,
+            HashMap::new(),
+        );
 
         assert_eq!(received_msg, expected);
     }

@@ -16,7 +16,7 @@ use revm::{
 use super::{
     account_storage::{AccountStorage, StateUpdate},
     tycho_client::{StateRequestBody, StateRequestParameters, TychoClient, TychoVMStateClient},
-    tycho_models::{AccountUpdate, AccountUpdateWithTx, Block},
+    tycho_models::{AccountUpdate, Block},
 };
 
 #[derive(Error, Debug)]
@@ -75,12 +75,13 @@ impl PreCachedDB {
     ///
     /// * `new_state`: A struct containing all the state changes for a particular block.
     pub fn update_state(&mut self, new_state: &HashMap<B160, StateUpdate>, block: Block) {
-        //TODO: initialize new contracts
         self.block = Some(block);
-        new_state.iter().for_each(|(address, state_update)| {
-            self.accounts
-                .update_account(address, state_update);
-        });
+        new_state
+            .iter()
+            .for_each(|(address, state_update)| {
+                self.accounts
+                    .update_account(address, state_update);
+            });
     }
 }
 
@@ -215,9 +216,11 @@ pub async fn update_loop(
                 db_guard.block = Some(msg.block);
 
                 // Update existing accounts.
-                for AccountUpdateWithTx { update, tx: _ } in msg.tx_updates.into_iter() {
-                    let AccountUpdate { address, chain: _, slots, balance, code, change: _ } =
-                        update;
+                for (
+                    _address,
+                    AccountUpdate { address, chain: _, slots, balance, code, change: _ },
+                ) in msg.account_updates.into_iter()
+                {
                     if db_guard
                         .accounts
                         .account_present(&address)
@@ -272,9 +275,7 @@ mod tests {
 
     use crate::evm_simulation::{
         tycho_client::{ResponseAccount, StateRequestParameters, TychoClientError},
-        tycho_models::{
-            AccountUpdate, AccountUpdateWithTx, BlockStateChanges, Chain, ChangeType, Transaction,
-        },
+        tycho_models::{AccountUpdate, BlockAccountChanges, Chain, ChangeType},
     };
 
     use super::*;
@@ -433,8 +434,8 @@ mod tests {
             Ok(self.mock_state.clone())
         }
 
-        async fn realtime_messages(&self) -> Receiver<BlockStateChanges> {
-            let (tx, rx) = mpsc::channel::<BlockStateChanges>(30);
+        async fn realtime_messages(&self) -> Receiver<BlockAccountChanges> {
+            let (tx, rx) = mpsc::channel::<BlockAccountChanges>(30);
             let blk = Block {
                 number: 123,
                 hash: B256::from_str(
@@ -449,19 +450,6 @@ mod tests {
                 ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
             };
 
-            let transaction = Transaction::new(
-                B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
-                Some(B160::from_str("0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
-                1,
-            );
             let account_update = AccountUpdate::new(
                 B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
                 Chain::Ethereum,
@@ -470,14 +458,19 @@ mod tests {
                 Some(Vec::<u8>::new()),
                 ChangeType::Update,
             );
-            let tx_updates = vec![AccountUpdateWithTx { update: account_update, tx: transaction }];
-            let message = BlockStateChanges {
-                extractor: "vm:ambient".to_owned(),
-                chain: Chain::Ethereum,
-                block: blk,
-                tx_updates,
-                new_pools: HashMap::new(),
-            };
+            let account_updates: HashMap<B160, AccountUpdate> = vec![(
+                B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+                account_update,
+            )]
+            .into_iter()
+            .collect();
+            let message = BlockAccountChanges::new(
+                "vm:ambient".to_owned(),
+                Chain::Ethereum,
+                blk,
+                account_updates,
+                HashMap::new(),
+            );
             tx.send(message.clone()).await.unwrap();
             tx.send(message).await.unwrap();
             rx
