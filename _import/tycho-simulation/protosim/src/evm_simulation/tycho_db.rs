@@ -15,8 +15,8 @@ use revm::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
-    tycho_client::{StateRequestBody, TychoHTTPClient, TychoVMStateClient, StateRequestParameters},
-    tycho_models::Block,
+    tycho_client::{StateRequestBody, StateRequestParameters, TychoClient, TychoVMStateClient},
+    tycho_models::{AccountUpdate, AccountUpdateWithTx, Block},
 };
 
 #[derive(Error, Debug)]
@@ -215,25 +215,27 @@ pub async fn update_loop(
                 db_guard.block = Some(msg.block);
 
                 // Update existing accounts.
-                for (address, update) in msg.account_updates.into_iter() {
+                for AccountUpdateWithTx { update, tx: _ } in msg.tx_updates.into_iter() {
+                    let AccountUpdate { address, chain: _, slots, balance, code, change: _ } =
+                        update;
                     if db_guard
                         .accounts
                         .account_present(&address)
                     {
                         db_guard.accounts.update_account(
                             &address,
-                            &StateUpdate { storage: update.slots, balance: update.balance },
+                            &StateUpdate { storage: Some(slots), balance },
                         );
                     } else {
                         db_guard.init_account(
                             address,
                             AccountInfo::new(
-                                update.balance.unwrap_or_default(),
+                                balance.unwrap_or_default(),
                                 0,
                                 B256::default(),
-                                Bytecode::new_raw(Bytes::from(update.code.unwrap_or_default()).0),
+                                Bytecode::new_raw(Bytes::from(code.unwrap_or_default()).0),
                             ),
-                            update.slots,
+                            Some(slots),
                         );
                     }
                 }
@@ -248,7 +250,7 @@ pub fn create_tycho_db(url: String) -> TychoDB {
 
     let db = Arc::new(RwLock::new(inner));
     let cloned_db = db.clone();
-    let client = TychoHTTPClient::new(&url).unwrap();
+    let client = TychoClient::new(&url).unwrap();
     let (_tx, rx) = mpsc::channel::<()>(1);
 
     tokio::spawn(async move {
@@ -270,7 +272,9 @@ mod tests {
 
     use crate::evm_simulation::{
         tycho_client::{ResponseAccount, StateRequestParameters, TychoClientError},
-        tycho_models::{AccountUpdate, BlockStateChanges, Chain, Transaction},
+        tycho_models::{
+            AccountUpdate, AccountUpdateWithTx, BlockStateChanges, Chain, ChangeType, Transaction,
+        },
     };
 
     use super::*;
@@ -445,35 +449,33 @@ mod tests {
                 ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
             };
 
-            let accnt = AccountUpdate::new(
-                "ambient".to_string(),
-                Chain::Ethereum,
+            let transaction = Transaction::new(
+                B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                B256::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
+                Some(B160::from_str("0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
+                1,
+            );
+            let account_update = AccountUpdate::new(
                 B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-                Some(HashMap::new()),
+                Chain::Ethereum,
+                HashMap::new(),
                 Some(rU256::from(500)),
                 Some(Vec::<u8>::new()),
-                Transaction {
-                    hash: B256::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    )
-                    .unwrap(),
-                    block_hash: B256::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    )
-                    .unwrap(),
-                    from: B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
-                    to: Some(B160::from_str("0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
-                    index: 1,
-                },
+                ChangeType::Update,
             );
-            let mut accnt_update = HashMap::new();
-            accnt_update.insert(
-                B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-                accnt,
-            );
+            let tx_updates = vec![AccountUpdateWithTx { update: account_update, tx: transaction }];
             let message = BlockStateChanges {
+                extractor: "vm:ambient".to_owned(),
+                chain: Chain::Ethereum,
                 block: blk,
-                account_updates: accnt_update,
+                tx_updates,
                 new_pools: HashMap::new(),
             };
             tx.send(message.clone()).await.unwrap();

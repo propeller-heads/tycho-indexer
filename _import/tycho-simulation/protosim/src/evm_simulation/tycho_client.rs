@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 use futures::StreamExt;
-use hyper::{client::HttpConnector, Client, Request, Uri, Body};
+use hyper::{client::HttpConnector, Body, Client, Request, Uri};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, string::ToString};
 use thiserror::Error;
@@ -44,18 +44,6 @@ impl StateRequestBody {
         }
     }
 }
-#[derive(Serialize, Debug)]
-pub struct Version {
-    timestamp: Option<NaiveDateTime>,
-    block: Option<RequestBlock>,
-}
-
-#[derive(Serialize, Debug)]
-struct RequestBlock {
-    hash: B256,
-    number: u64,
-    chain: Chain,
-}
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct StateRequestParameters {
@@ -83,6 +71,19 @@ impl StateRequestParameters {
     }
 }
 
+#[derive(Serialize, Debug)]
+pub struct Version {
+    timestamp: Option<NaiveDateTime>,
+    block: Option<RequestBlock>,
+}
+
+#[derive(Serialize, Debug)]
+struct RequestBlock {
+    hash: B256,
+    number: u64,
+    chain: Chain,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct ResponseAccount {
     pub address: B160,
@@ -92,11 +93,11 @@ pub struct ResponseAccount {
     pub code_hash: B256,
 }
 
-pub struct TychoHTTPClient {
+pub struct TychoClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,
 }
-impl TychoHTTPClient {
+impl TychoClient {
     pub fn new(base_uri: &str) -> Result<Self, TychoClientError> {
         let base_uri = base_uri
             .parse::<Uri>()
@@ -118,7 +119,7 @@ pub trait TychoVMStateClient {
 }
 
 #[async_trait]
-impl TychoVMStateClient for TychoHTTPClient {
+impl TychoVMStateClient for TychoClient {
     async fn get_state(
         &self,
         filters: &StateRequestParameters,
@@ -211,7 +212,7 @@ impl TychoVMStateClient for TychoHTTPClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::tycho_models::{AccountUpdate, Transaction};
+    use crate::evm_simulation::tycho_models::{AccountUpdateWithTx, ChangeType, Transaction};
 
     use super::*;
 
@@ -229,6 +230,8 @@ mod tests {
             let test_msg = warp::ws::Message::text(
                 r#"
             {
+                "extractor": "ambient",
+                "chain": "ethereum",
                 "block": {
                     "number": 123,
                     "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -236,23 +239,25 @@ mod tests {
                     "chain": "ethereum",
                     "ts": "2023-09-14T00:00:00"
                 },
-                "account_updates": {
-                    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D": {
-                        "extractor": "ambient",
-                        "chain": "ethereum",
-                        "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-                        "slots": {},
-                        "balance": "0x1f4",
-                        "code": [],
+                "tx_updates": [
+                    {
+                        "update": {
+                            "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                            "chain": "ethereum",
+                            "slots": {},
+                            "balance": "0x00000000000000000000000000000000000000000000000000000000000001f4",
+                            "code": [],
+                            "change": "Update"
+                        },
                         "tx": {
                             "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                             "block_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                             "from": "0x000000000000000000000000000000000000007b",
-                            "to": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+                            "to": "0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc",
                             "index": 1
                         }
                     }
-                },
+                ],
                 "new_pools": {}
             }
             "#,
@@ -265,12 +270,15 @@ mod tests {
         tokio::task::spawn(server);
 
         // Now, you can create a client and connect to the mocked WebSocket server
-        let client = TychoHTTPClient::new(&format!("{}", addr)).unwrap();
+        let client = TychoClient::new(&format!("{}", addr)).unwrap();
 
         // You can listen to the realtime_messages and expect the messages that you send from
         // handle_connection
         let mut rx = client.realtime_messages().await;
-        let received_msg = rx.recv().await.unwrap();
+        let received_msg = rx
+            .recv()
+            .await
+            .expect("receive message");
 
         let expected_blk = Block {
             number: 123,
@@ -286,35 +294,33 @@ mod tests {
             ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
         };
 
-        let expected_accnt = AccountUpdate::new(
-            "ambient".to_string(),
-            Chain::Ethereum,
+        let transaction = Transaction {
+            hash: B256::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            block_hash: B256::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            from: B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
+            to: Some(B160::from_str("0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
+            index: 1,
+        };
+        let account_update = AccountUpdateWithTx::new(
             B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-            Some(HashMap::new()),
+            Chain::Ethereum,
+            HashMap::new(),
             Some(rU256::from(500)),
             Some(Vec::<u8>::new()),
-            Transaction {
-                hash: B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                block_hash: B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                from: B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
-                to: Some(B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
-                index: 1,
-            },
-        );
-        let mut expected_accnt_update = HashMap::new();
-        expected_accnt_update.insert(
-            B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-            expected_accnt,
+            ChangeType::Update,
+            transaction,
         );
         let expected = BlockStateChanges {
+            extractor: "ambient".to_string(),
+            chain: Chain::Ethereum,
             block: expected_blk,
-            account_updates: expected_accnt_update,
+            tx_updates: vec![account_update],
             new_pools: HashMap::new(),
         };
 
@@ -340,7 +346,7 @@ mod tests {
             .create_async()
             .await;
 
-        let client = TychoHTTPClient::new(
+        let client = TychoClient::new(
             server
                 .url()
                 .replace("http://", "")

@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use chrono::NaiveDateTime;
-use revm::primitives::{B160, B256, U256 as rU256};
+use revm::primitives::{B160, B256, U256};
 use serde::{Deserialize, Serialize};
 
 use strum_macros::{Display, EnumString};
 
-#[derive(Debug, PartialEq, Copy, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Copy, Clone, Deserialize, Serialize)]
 pub struct Block {
     pub number: u64,
     pub hash: B256,
@@ -15,10 +15,10 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
-#[derive(Deserialize, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct SwapPool {}
 
-#[derive(Debug, PartialEq, Copy, Clone, Default, Deserialize)]
+#[derive(Debug, PartialEq, Copy, Clone, Default, Deserialize, Serialize)]
 pub struct Transaction {
     pub hash: B256,
     pub block_hash: B256,
@@ -27,10 +27,25 @@ pub struct Transaction {
     pub index: u64,
 }
 
-#[derive(Deserialize, PartialEq, Debug, Clone)]
+impl Transaction {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        hash: B256,
+        block_hash: B256,
+        from: B160,
+        to: Option<B160>,
+        index: u64,
+    ) -> Self {
+        Self { hash, block_hash, from, to, index }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct BlockStateChanges {
+    pub extractor: String,
+    pub chain: Chain,
     pub block: Block,
-    pub account_updates: HashMap<B160, AccountUpdate>,
+    pub tx_updates: Vec<AccountUpdateWithTx>,
     pub new_pools: HashMap<B160, SwapPool>,
 }
 
@@ -46,27 +61,63 @@ pub enum Chain {
     ZkSync,
 }
 
-#[derive(PartialEq, Debug, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize)]
+pub enum ChangeType {
+    #[default]
+    Update,
+    Deletion,
+    Creation,
+}
+
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct AccountUpdate {
-    extractor: String,
-    chain: Chain,
     pub address: B160,
-    pub slots: Option<HashMap<rU256, rU256>>,
-    pub balance: Option<rU256>,
+    pub chain: Chain,
+    pub slots: HashMap<U256, U256>,
+    pub balance: Option<U256>,
     pub code: Option<Vec<u8>>,
-    pub tx: Transaction,
+    pub change: ChangeType,
 }
 
 impl AccountUpdate {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        extractor: String,
-        chain: Chain,
         address: B160,
-        slots: Option<HashMap<rU256, rU256>>,
-        balance: Option<rU256>,
+        chain: Chain,
+        slots: HashMap<U256, U256>,
+        balance: Option<U256>,
         code: Option<Vec<u8>>,
+        change: ChangeType,
+    ) -> Self {
+        Self { address, chain, slots, balance, code, change }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct AccountUpdateWithTx {
+    pub update: AccountUpdate,
+    pub tx: Transaction,
+}
+
+impl AccountUpdateWithTx {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        address: B160,
+        chain: Chain,
+        slots: HashMap<U256, U256>,
+        balance: Option<U256>,
+        code: Option<Vec<u8>>,
+        change: ChangeType,
         tx: Transaction,
     ) -> Self {
-        Self { extractor, chain, address, slots, balance, code, tx }
+        Self { update: AccountUpdate { address, chain, slots, balance, code, change }, tx }
+    }
+}
+
+impl Deref for AccountUpdateWithTx {
+    type Target = AccountUpdate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.update
     }
 }
