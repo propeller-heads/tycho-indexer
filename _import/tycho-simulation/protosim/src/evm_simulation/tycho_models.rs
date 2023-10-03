@@ -3,8 +3,50 @@ use std::{collections::HashMap, ops::Deref};
 use chrono::NaiveDateTime;
 use revm::primitives::{B160, B256, U256};
 use serde::{Deserialize, Serialize};
-
 use strum_macros::{Display, EnumString};
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct ExtractorIdentity {
+    pub chain: Chain,
+    pub name: String,
+}
+
+impl ExtractorIdentity {
+    pub fn new(chain: Chain, name: &str) -> Self {
+        Self { chain, name: name.to_owned() }
+    }
+}
+
+impl std::fmt::Display for ExtractorIdentity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.chain, self.name)
+    }
+}
+
+/// A command sent from the client to the server
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[serde(tag = "method", rename_all = "lowercase")]
+pub enum Command {
+    Subscribe { extractor_id: ExtractorIdentity },
+    Unsubscribe { subscription_id: Uuid },
+}
+
+/// A response sent from the server to the client
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[serde(tag = "method", rename_all = "lowercase")]
+pub enum Response {
+    NewSubscription { extractor_id: ExtractorIdentity, subscription_id: Uuid },
+    SubscriptionEnded { subscription_id: Uuid },
+}
+
+/// A message sent from the server to the client
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum WebSocketMessage{
+    BlockStateChanges(BlockStateChanges),
+    Response(Response),
+}
 
 #[derive(Debug, PartialEq, Copy, Clone, Deserialize, Serialize)]
 pub struct Block {
@@ -29,13 +71,7 @@ pub struct Transaction {
 
 impl Transaction {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        hash: B256,
-        block_hash: B256,
-        from: B160,
-        to: Option<B160>,
-        index: u64,
-    ) -> Self {
+    pub fn new(hash: B256, block_hash: B256, from: B160, to: Option<B160>, index: u64) -> Self {
         Self { hash, block_hash, from, to, index }
     }
 }

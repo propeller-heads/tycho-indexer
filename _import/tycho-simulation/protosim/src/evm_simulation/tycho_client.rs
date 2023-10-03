@@ -6,8 +6,11 @@ use std::{collections::HashMap, string::ToString};
 use thiserror::Error;
 use tracing::{error, info};
 
-use super::tycho_models::{Block, BlockStateChanges, Chain};
+use super::tycho_models::{
+    Block, BlockStateChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
+};
 use async_trait::async_trait;
+use futures::SinkExt;
 use revm::primitives::{B160, B256, U256 as rU256};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -162,37 +165,75 @@ impl TychoVMStateClient for TychoClient {
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
         let ws_url = format!("ws://{}", self.base_uri);
         tokio::spawn(async move {
-            let ws_stream = match connect_async(&ws_url).await {
-                Ok((ws, _)) => ws,
-                Err(e) => {
-                    error!("Failed to connect to WebSocket: {:?}", e);
-                    return
-                }
+            let mut active_extractors: Vec<ExtractorIdentity> = vec![];
+
+            // Connect to Tycho server
+            let (ws, _) = connect_async(&ws_url)
+                .await
+                .map_err(|e| error!(error = %e, "Failed to connect to WebSocket server"))
+                .expect("connect to websocket");
+            // Split the WebSocket into a sender and receive of messages.
+            let (mut ws_sink, ws_stream) = ws.split();
+
+            // Send a subscribe request to ambient extractor
+            // TODO: Expand this to allow subscribing to other extractors
+            let command = Command::Subscribe {
+                extractor_id: ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
             };
+            let _ = ws_sink
+                .send(Message::Text(serde_json::to_string(&command).unwrap()))
+                .await
+                .map_err(|e| error!(error = %e, "Failed to send subscribe request"));
 
             // Use the stream directly to listen for messages.
             let mut incoming_messages = ws_stream.boxed();
-
             while let Some(msg) = incoming_messages.next().await {
                 match msg {
                     Ok(Message::Text(text)) => {
-                        match serde_json::from_str::<BlockStateChanges>(&text) {
-                            Ok(update) => match tx.send(update).await {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    //TODO: This might happen if the receiver is dropped (meaning
-                                    // the update_loop received the stop signal).
-                                    // We should catch this error and end this loop.
-                                    error!(error = %e, "Failed to send message to the channel")
-                                }
-                            },
+                        match serde_json::from_str::<WebSocketMessage>(&text) {
+                            Ok(WebSocketMessage::BlockStateChanges(block_state_changes)) => {
+                                info!(
+                                    ?block_state_changes,
+                                    "Received a block state change, sending to channel"
+                                );
+                                tx.send(block_state_changes)
+                                    .await
+                                    .map_err(|e| error!(error = %e, "Failed to send message"))
+                                    .expect("send message");
+                            }
+                            Ok(WebSocketMessage::Response(Response::NewSubscription {
+                                extractor_id,
+                                subscription_id,
+                            })) => {
+                                info!(
+                                    ?extractor_id,
+                                    ?subscription_id,
+                                    "Received a new subscription"
+                                );
+                                active_extractors.push(extractor_id);
+                            }
+                            Ok(WebSocketMessage::Response(Response::SubscriptionEnded {
+                                subscription_id,
+                            })) => {
+                                info!(?subscription_id, "Received a subscription ended");
+                            }
                             Err(e) => {
-                                // Handle the error, perhaps log it.
-                                error!(error = %e, "Failed to deserialize message")
+                                error!(error = %e, "Failed to deserialize message");
                             }
                         }
                     }
+                    Ok(Message::Ping(_)) => {
+                        // Respond to pings with pongs.
+                        ws_sink
+                            .send(Message::Pong(Vec::new()))
+                            .await
+                            .unwrap();
+                    }
+                    Ok(Message::Pong(_)) => {
+                        // Do nothing.
+                    }
                     Ok(Message::Close(_)) => {
+                        // Close the connection.
                         drop(tx);
                         return
                     }

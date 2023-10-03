@@ -77,10 +77,10 @@ impl PreCachedDB {
     pub fn update_state(&mut self, new_state: &HashMap<B160, StateUpdate>, block: Block) {
         //TODO: initialize new contracts
         self.block = Some(block);
-        for (address, state_update) in new_state.iter() {
+        new_state.iter().for_each(|(address, state_update)| {
             self.accounts
                 .update_account(address, state_update);
-        }
+        });
     }
 }
 
