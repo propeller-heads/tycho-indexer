@@ -5,7 +5,7 @@ use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
-use tracing::debug;
+use tracing::{debug, error, warn};
 
 use revm::{
     db::DatabaseRef,
@@ -16,7 +16,7 @@ use revm::{
 use super::{
     account_storage::{AccountStorage, StateUpdate},
     tycho_client::{StateRequestBody, StateRequestParameters, TychoClient, TychoVMStateClient},
-    tycho_models::{AccountUpdate, Block},
+    tycho_models::{AccountUpdate, Block, ChangeType},
 };
 
 #[derive(Error, Debug)]
@@ -76,12 +76,10 @@ impl PreCachedDB {
     /// * `new_state`: A struct containing all the state changes for a particular block.
     pub fn update_state(&mut self, new_state: &HashMap<B160, StateUpdate>, block: Block) {
         self.block = Some(block);
-        new_state
-            .iter()
-            .for_each(|(address, state_update)| {
-                self.accounts
-                    .update_account(address, state_update);
-            });
+        for (address, state_update) in new_state.iter() {
+            self.accounts
+                .update_account(address, state_update);
+        }
     }
 }
 
@@ -100,10 +98,10 @@ impl DatabaseRef for PreCachedDB {
     /// Returns a `Result` containing the account information or an error if the account is not
     /// found.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self.accounts.get_account_info(&address) {
-            return Ok(Some(account.clone()))
-        };
-        Err(PreCachedDBError::MissingAccount(address))
+        self.accounts
+            .get_account_info(&address)
+            .map(|account| Some(account.clone()))
+            .ok_or(PreCachedDBError::MissingAccount(address))
     }
 
     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
@@ -125,12 +123,12 @@ impl DatabaseRef for PreCachedDB {
     ///
     /// Returns an error if the storage value is not found.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        debug!("Requested storage of account {:x?} slot {}", address, index);
+        debug!(%address, %index, "Requested storage of account");
         if let Some(storage_value) = self
             .accounts
             .get_storage(&address, &index)
         {
-            debug!("Got value locally. Value: {}", storage_value);
+            debug!(%address, %index, %storage_value, "Got value locally");
             Ok(storage_value)
         } else {
             // At this point we either don't know this address or we don't have anything at this
@@ -138,10 +136,11 @@ impl DatabaseRef for PreCachedDB {
             if self.accounts.account_present(&address) {
                 // As we only store non-zero values, if the account is present it means this slot is
                 // zero.
+                debug!(%address, %index, "Account found, but slot is zero");
                 Ok(rU256::ZERO)
             } else {
                 // At this point we know we don't have data for this address.
-                debug!("We don't have data for {}. Returning error.", address);
+                debug!(%address, %index, "Account not found");
                 Err(PreCachedDBError::MissingAccount(address))
             }
         }
@@ -216,30 +215,32 @@ pub async fn update_loop(
                 db_guard.block = Some(msg.block);
 
                 // Update existing accounts.
-                for (
-                    _address,
-                    AccountUpdate { address, chain: _, slots, balance, code, change: _ },
-                ) in msg.account_updates.into_iter()
+                for (_address, AccountUpdate { address, chain: _, slots, balance, code, change }) in
+                    msg.account_updates.into_iter()
                 {
-                    if db_guard
-                        .accounts
-                        .account_present(&address)
-                    {
-                        db_guard.accounts.update_account(
-                            &address,
-                            &StateUpdate { storage: Some(slots), balance },
-                        );
-                    } else {
-                        db_guard.init_account(
-                            address,
-                            AccountInfo::new(
-                                balance.unwrap_or_default(),
-                                0,
-                                B256::default(),
-                                Bytecode::new_raw(Bytes::from(code.unwrap_or_default()).0),
-                            ),
-                            Some(slots),
-                        );
+                    match change {
+                        ChangeType::Update => {
+                            // If the account is not present, the internal storage will handle
+                            // throwing an exception.
+                            db_guard.accounts.update_account(
+                                &address,
+                                &StateUpdate { storage: Some(slots), balance },
+                            );
+                        }
+                        ChangeType::Deletion => {
+                            warn!(%address, "Deletion not implemented");
+                        }
+                        ChangeType::Creation => {
+                            // We expect the code and balance to be present.
+                            let code =
+                                Bytecode::new_raw(Bytes::from(code.expect("account code")).0);
+                            let balance = balance.expect("account balance");
+                            db_guard.init_account(
+                                address,
+                                AccountInfo::new(balance, 0, code.hash_slow(), code),
+                                Some(slots),
+                            );
+                        }
                     }
                 }
             }
