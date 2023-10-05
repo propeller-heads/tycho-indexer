@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, string::ToString};
 use thiserror::Error;
 use tracing::{error, info};
+use uuid::Uuid;
 
 use super::tycho_models::{
     Block, BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
@@ -165,7 +166,7 @@ impl TychoVMStateClient for TychoClient {
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
         let ws_url = format!("ws://{}", self.base_uri);
         tokio::spawn(async move {
-            let mut active_extractors: Vec<ExtractorIdentity> = vec![];
+            let mut active_extractors: HashMap<Uuid, ExtractorIdentity> = HashMap::new();
 
             // Connect to Tycho server
             let (ws, _) = connect_async(&ws_url)
@@ -210,12 +211,15 @@ impl TychoVMStateClient for TychoClient {
                                     ?subscription_id,
                                     "Received a new subscription"
                                 );
-                                active_extractors.push(extractor_id);
+                                active_extractors.insert(subscription_id, extractor_id);
                             }
                             Ok(WebSocketMessage::Response(Response::SubscriptionEnded {
                                 subscription_id,
                             })) => {
                                 info!(?subscription_id, "Received a subscription ended");
+                                active_extractors
+                                    .remove(&subscription_id)
+                                    .expect("subscription id in active extractors");
                             }
                             Err(e) => {
                                 error!(error = %e, "Failed to deserialize message");
