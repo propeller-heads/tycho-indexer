@@ -1,11 +1,54 @@
 use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
-use revm::primitives::{B160, B256, U256 as rU256};
-use serde::{de, Deserialize, Deserializer, Serialize};
-use thiserror::Error;
+use revm::primitives::{B160, B256, U256};
+use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
+use uuid::Uuid;
 
-#[derive(Debug, PartialEq, Copy, Clone, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct ExtractorIdentity {
+    pub chain: Chain,
+    pub name: String,
+}
+
+impl ExtractorIdentity {
+    pub fn new(chain: Chain, name: &str) -> Self {
+        Self { chain, name: name.to_owned() }
+    }
+}
+
+impl std::fmt::Display for ExtractorIdentity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.chain, self.name)
+    }
+}
+
+/// A command sent from the client to the server
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[serde(tag = "method", rename_all = "lowercase")]
+pub enum Command {
+    Subscribe { extractor_id: ExtractorIdentity },
+    Unsubscribe { subscription_id: Uuid },
+}
+
+/// A response sent from the server to the client
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[serde(tag = "method", rename_all = "lowercase")]
+pub enum Response {
+    NewSubscription { extractor_id: ExtractorIdentity, subscription_id: Uuid },
+    SubscriptionEnded { subscription_id: Uuid },
+}
+
+/// A message sent from the server to the client
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum WebSocketMessage {
+    BlockAccountChanges(BlockAccountChanges),
+    Response(Response),
+}
+
+#[derive(Debug, PartialEq, Copy, Clone, Deserialize, Serialize, Default)]
 pub struct Block {
     pub number: u64,
     pub hash: B256,
@@ -14,10 +57,10 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
-#[derive(Deserialize, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct SwapPool {}
 
-#[derive(Debug, PartialEq, Copy, Clone, Default, Deserialize)]
+#[derive(Debug, PartialEq, Copy, Clone, Default, Deserialize, Serialize)]
 pub struct Transaction {
     pub hash: B256,
     pub block_hash: B256,
@@ -26,74 +69,78 @@ pub struct Transaction {
     pub index: u64,
 }
 
-#[derive(Deserialize, PartialEq, Debug, Clone)]
-pub struct BlockStateChanges {
+impl Transaction {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(hash: B256, block_hash: B256, from: B160, to: Option<B160>, index: u64) -> Self {
+        Self { hash, block_hash, from, to, index }
+    }
+}
+
+/// A container for account updates grouped by account.
+///
+/// Hold a single update per account. This is a condensed form of
+/// [BlockStateChanges].
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct BlockAccountChanges {
+    extractor: String,
+    chain: Chain,
     pub block: Block,
     pub account_updates: HashMap<B160, AccountUpdate>,
     pub new_pools: HashMap<B160, SwapPool>,
 }
 
-#[derive(Error, Debug)]
-pub enum ChainError {
-    #[error("Unknown blockchain value: {0}")]
-    UnknownChain(String),
+impl BlockAccountChanges {
+    pub fn new(
+        extractor: String,
+        chain: Chain,
+        block: Block,
+        account_updates: HashMap<B160, AccountUpdate>,
+        new_pools: HashMap<B160, SwapPool>,
+    ) -> Self {
+        Self { extractor, chain, block, account_updates, new_pools }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum Chain {
+    #[default]
     Ethereum,
     Starknet,
     ZkSync,
 }
-impl<'de> Deserialize<'de> for Chain {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(deserializer)?;
-        Chain::try_from(s).map_err(de::Error::custom)
-    }
+
+#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize)]
+pub enum ChangeType {
+    #[default]
+    Update,
+    Deletion,
+    Creation,
 }
 
-impl TryFrom<String> for Chain {
-    type Error = ChainError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "ethereum" => Ok(Chain::Ethereum),
-            "starknet" => Ok(Chain::Starknet),
-            "zksync" => Ok(Chain::ZkSync),
-            _ => Err(ChainError::UnknownChain(value)),
-        }
-    }
-}
-
-impl ToString for Chain {
-    fn to_string(&self) -> String {
-        format!("{:?}", self).to_lowercase()
-    }
-}
-#[derive(PartialEq, Debug, Deserialize, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct AccountUpdate {
-    extractor: String,
-    chain: Chain,
     pub address: B160,
-    pub slots: Option<HashMap<rU256, rU256>>,
-    pub balance: Option<rU256>,
+    pub chain: Chain,
+    pub slots: HashMap<U256, U256>,
+    pub balance: Option<U256>,
     pub code: Option<Vec<u8>>,
-    pub tx: Transaction,
+    pub change: ChangeType,
 }
 
 impl AccountUpdate {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        extractor: String,
-        chain: Chain,
         address: B160,
-        slots: Option<HashMap<rU256, rU256>>,
-        balance: Option<rU256>,
+        chain: Chain,
+        slots: HashMap<U256, U256>,
+        balance: Option<U256>,
         code: Option<Vec<u8>>,
-        tx: Transaction,
+        change: ChangeType,
     ) -> Self {
-        Self { extractor, chain, address, slots, balance, code, tx }
+        Self { address, chain, slots, balance, code, change }
     }
 }

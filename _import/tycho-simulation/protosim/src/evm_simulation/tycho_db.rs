@@ -5,7 +5,7 @@ use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
-use tracing::debug;
+use tracing::{debug, error, warn};
 
 use revm::{
     db::DatabaseRef,
@@ -15,8 +15,8 @@ use revm::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
-    tycho_client::{StateRequestBody, TychoHTTPClient, TychoVMStateClient},
-    tycho_models::Block,
+    tycho_client::{StateRequestBody, StateRequestParameters, TychoClient, TychoVMStateClient},
+    tycho_models::{AccountUpdate, Block, ChangeType},
 };
 
 #[derive(Error, Debug)]
@@ -75,7 +75,6 @@ impl PreCachedDB {
     ///
     /// * `new_state`: A struct containing all the state changes for a particular block.
     pub fn update_state(&mut self, new_state: &HashMap<B160, StateUpdate>, block: Block) {
-        //TODO: initialize new contracts
         self.block = Some(block);
         for (address, state_update) in new_state.iter() {
             self.accounts
@@ -99,10 +98,10 @@ impl DatabaseRef for PreCachedDB {
     /// Returns a `Result` containing the account information or an error if the account is not
     /// found.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self.accounts.get_account_info(&address) {
-            return Ok(Some(account.clone()))
-        };
-        Err(PreCachedDBError::MissingAccount(address))
+        self.accounts
+            .get_account_info(&address)
+            .map(|account| Some(account.clone()))
+            .ok_or(PreCachedDBError::MissingAccount(address))
     }
 
     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
@@ -124,12 +123,12 @@ impl DatabaseRef for PreCachedDB {
     ///
     /// Returns an error if the storage value is not found.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
-        debug!("Requested storage of account {:x?} slot {}", address, index);
+        debug!(%address, %index, "Requested storage of account");
         if let Some(storage_value) = self
             .accounts
             .get_storage(&address, &index)
         {
-            debug!("Got value locally. Value: {}", storage_value);
+            debug!(%address, %index, %storage_value, "Got value locally");
             Ok(storage_value)
         } else {
             // At this point we either don't know this address or we don't have anything at this
@@ -137,10 +136,11 @@ impl DatabaseRef for PreCachedDB {
             if self.accounts.account_present(&address) {
                 // As we only store non-zero values, if the account is present it means this slot is
                 // zero.
+                debug!(%address, %index, "Account found, but slot is zero");
                 Ok(rU256::ZERO)
             } else {
                 // At this point we know we don't have data for this address.
-                debug!("We don't have data for {}. Returning error.", address);
+                debug!(%address, %index, "Account not found");
                 Err(PreCachedDBError::MissingAccount(address))
             }
         }
@@ -174,25 +174,26 @@ pub async fn update_loop(
         .expect("stream ok");
 
     let state = client
-        .get_state(None, Some(&StateRequestBody::from_block(first_msg.block)))
+        .get_state(
+            &StateRequestParameters::default(),
+            &StateRequestBody::from_block(first_msg.block),
+        )
         .await
         .unwrap();
 
     // This scope ensures the lock is dropped after processing the message.
     {
         let mut db_guard = db.write().await;
-        for account in state.iter() {
+        for account in state.into_iter() {
             db_guard.init_account(
                 account.address,
                 AccountInfo::new(
                     account.balance,
                     0,
                     account.code_hash,
-                    Bytecode::new_raw(Bytes::from(account.code.to_owned()).0), /* TODO: do we
-                                                                                * really need to
-                                                                                * clone here? */
+                    Bytecode::new_raw(Bytes::from(account.code).0),
                 ),
-                Some(account.slots.to_owned()), //TODO: do we really need to clone here?
+                Some(account.slots),
             );
         }
     }
@@ -208,29 +209,37 @@ pub async fn update_loop(
             // None means the channel is closed.
             None => break,
             Some(msg) => {
-                // This scope ensures the lock is dropped after processing the message.
+                let mut db_guard = db.write().await;
+
+                // Update block.
+                db_guard.block = Some(msg.block);
+
+                // Update existing accounts.
+                for (_address, AccountUpdate { address, chain: _, slots, balance, code, change }) in
+                    msg.account_updates.into_iter()
                 {
-                    let mut db_guard = db.write().await;
-
-                    // Update block.
-                    db_guard.block = Some(msg.block);
-
-                    // Update existing accounts.
-                    for (address, update) in msg.account_updates.into_iter() {
-                        if db_guard
-                            .accounts
-                            .account_present(&address)
-                        {
+                    match change {
+                        ChangeType::Update => {
+                            // If the account is not present, the internal storage will handle
+                            // throwing an exception.
                             db_guard.accounts.update_account(
                                 &address,
-                                &StateUpdate { storage: update.slots, balance: update.balance },
+                                &StateUpdate { storage: Some(slots), balance },
                             );
-                        } else {
-                            // Initialize new accounts if they don't already exist.
-                            // For this, you might need more information,
-                            // like the complete AccountInfo and its storage.
-                            // This is just a stub assuming you have necessary info in the update
-                            // itself. db_guard.init_account(
+                        }
+                        ChangeType::Deletion => {
+                            warn!(%address, "Deletion not implemented");
+                        }
+                        ChangeType::Creation => {
+                            // We expect the code and balance to be present.
+                            let code =
+                                Bytecode::new_raw(Bytes::from(code.expect("account code")).0);
+                            let balance = balance.expect("account balance");
+                            db_guard.init_account(
+                                address,
+                                AccountInfo::new(balance, 0, code.hash_slow(), code),
+                                Some(slots),
+                            );
                         }
                     }
                 }
@@ -245,15 +254,11 @@ pub fn create_tycho_db(url: String) -> TychoDB {
 
     let db = Arc::new(RwLock::new(inner));
     let cloned_db = db.clone();
-    let client = TychoHTTPClient::new(&url).unwrap();
+    let client = TychoClient::new(&url).unwrap();
     let (_tx, rx) = mpsc::channel::<()>(1);
 
-    std::thread::spawn(move || {
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-        runtime.block_on(update_loop(cloned_db, client, rx));
+    tokio::spawn(async move {
+        update_loop(cloned_db, client, rx).await;
     });
 
     db
@@ -270,8 +275,8 @@ mod tests {
     use tokio::sync::mpsc::{self, Receiver};
 
     use crate::evm_simulation::{
-        tycho_client::{GetStateFilters, ResponseAccount, TychoClientError},
-        tycho_models::{AccountUpdate, BlockStateChanges, Chain, Transaction},
+        tycho_client::{ResponseAccount, StateRequestParameters, TychoClientError},
+        tycho_models::{AccountUpdate, BlockAccountChanges, Chain, ChangeType},
     };
 
     use super::*;
@@ -424,14 +429,14 @@ mod tests {
     impl TychoVMStateClient for MockTychoVMStateClient {
         async fn get_state(
             &self,
-            _filters: Option<&GetStateFilters>,
-            _request: Option<&StateRequestBody>,
+            _filters: &StateRequestParameters,
+            _request: &StateRequestBody,
         ) -> Result<Vec<ResponseAccount>, TychoClientError> {
             Ok(self.mock_state.clone())
         }
 
-        async fn realtime_messages(&self) -> Receiver<BlockStateChanges> {
-            let (tx, rx) = mpsc::channel::<BlockStateChanges>(30);
+        async fn realtime_messages(&self) -> Receiver<BlockAccountChanges> {
+            let (tx, rx) = mpsc::channel::<BlockAccountChanges>(30);
             let blk = Block {
                 number: 123,
                 hash: B256::from_str(
@@ -446,37 +451,27 @@ mod tests {
                 ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
             };
 
-            let accnt = AccountUpdate::new(
-                "ambient".to_string(),
-                Chain::Ethereum,
+            let account_update = AccountUpdate::new(
                 B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-                Some(HashMap::new()),
+                Chain::Ethereum,
+                HashMap::new(),
                 Some(rU256::from(500)),
                 Some(Vec::<u8>::new()),
-                Transaction {
-                    hash: B256::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    )
-                    .unwrap(),
-                    block_hash: B256::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    )
-                    .unwrap(),
-                    from: B160::from_str("0x000000000000000000000000000000000000007b").unwrap(),
-                    to: Some(B160::from_str("0xb2e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap()),
-                    index: 1,
-                },
+                ChangeType::Update,
             );
-            let mut accnt_update = HashMap::new();
-            accnt_update.insert(
+            let account_updates: HashMap<B160, AccountUpdate> = vec![(
                 B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-                accnt,
+                account_update,
+            )]
+            .into_iter()
+            .collect();
+            let message = BlockAccountChanges::new(
+                "vm:ambient".to_owned(),
+                Chain::Ethereum,
+                blk,
+                account_updates,
+                HashMap::new(),
             );
-            let message = BlockStateChanges {
-                block: blk,
-                account_updates: accnt_update,
-                new_pools: HashMap::new(),
-            };
             tx.send(message.clone()).await.unwrap();
             tx.send(message).await.unwrap();
             rx

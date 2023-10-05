@@ -104,7 +104,7 @@ impl AccountStorage {
                 }
             }
         } else {
-            warn!("Tried to update account {:x?} that was not initialized", address);
+            warn!(?address, "Tried to update account {:x?} that was not initialized", address);
         }
     }
 
