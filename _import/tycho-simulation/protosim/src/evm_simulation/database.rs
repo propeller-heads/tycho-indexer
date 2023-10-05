@@ -37,10 +37,9 @@ impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         match self.overrides.get(&address) {
             None => self.inner_db.storage(address, index),
-            Some(overrides) => match overrides.get(&index) {
+            Some(slot_overrides) => match slot_overrides.get(&index) {
                 Some(value) => {
-                    debug!("Requested storage of account {:x?} slot {}", address, index);
-                    debug!("Overridden slot. Value: {}", value);
+                    debug!(%address, %index, %value, "Requested storage of account {:x?} slot {}", address, index);
                     Ok(*value)
                 }
                 None => self.inner_db.storage(address, index),

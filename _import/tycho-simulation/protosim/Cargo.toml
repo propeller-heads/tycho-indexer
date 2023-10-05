@@ -13,9 +13,13 @@ enum_dispatch = "0.3.8"
 serde_json = "1.0.105"
 serde = "1.0.152"
 tokio = { version = "1.32.0", features = ["full"] }
-futures = "0.3.25"
+tokio-tungstenite = "0.20.1"
+async-trait = "0.1.73"
+hyper = "0.14.27"
+futures = "0.3.28"
 revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
     "ethersdb",
+    "serde",
 ] }
 hex = "0.4.3"
 thiserror = "1"
@@ -25,8 +29,18 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
+strum = "0.25.0"
+strum_macros = "0.25.2"
+uuid = { version = "1.4.1", features = [
+    "serde",
+    "v4",
+    "fast-rng",
+    "macro-diagnostics",
+] }
 
 [dev-dependencies]
+mockito = "1.1.1"
+warp = "0.3.5"
 approx = "0.3.2"
 rstest = "0.16.0"
 
