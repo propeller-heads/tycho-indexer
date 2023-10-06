@@ -211,7 +211,7 @@ impl AccountUpdate {
 
 /// A container for account updates grouped by account.
 ///
-/// Hold a single update per account. This is a condensed from of
+/// Hold a single update per account. This is a condensed form of
 /// [BlockStateChanges].
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub struct BlockAccountChanges {

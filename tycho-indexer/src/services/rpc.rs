@@ -28,7 +28,6 @@ pub struct RpcHandler {
 }
 
 impl RpcHandler {
-    #[allow(dead_code)]
     pub fn new(
         db_gateway: Arc<EvmPostgresGateway>,
         db_connection_pool: Pool<AsyncPgConnection>,
@@ -39,7 +38,7 @@ impl RpcHandler {
     async fn get_state(
         &self,
         request: &StateRequestBody,
-        params: &QueryParameters,
+        params: &StateRequestParameters,
     ) -> Result<StateRequestResponse, RpcError> {
         let mut conn = self.db_connection_pool.get().await?;
         self.get_state_inner(request, params, &mut conn)
@@ -49,7 +48,7 @@ impl RpcHandler {
     async fn get_state_inner(
         &self,
         request: &StateRequestBody,
-        params: &QueryParameters,
+        params: &StateRequestParameters,
         db_connection: &mut AsyncPgConnection,
     ) -> Result<StateRequestResponse, RpcError> {
         //TODO: handle when no contract is specified with filters
@@ -86,7 +85,7 @@ impl RpcHandler {
 }
 
 pub async fn contract_state(
-    query: web::Query<QueryParameters>,
+    query: web::Query<StateRequestParameters>,
     body: web::Json<StateRequestBody>,
     handler: web::Data<RpcHandler>,
 ) -> HttpResponse {
@@ -129,11 +128,11 @@ pub enum RpcError {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub struct QueryParameters {
+pub struct StateRequestParameters {
     #[serde(default = "Chain::default")]
     chain: Chain,
-    tvl_gt: Option<f64>,
-    intertia_min_gt: Option<f64>,
+    tvl_gt: Option<u64>,
+    intertia_min_gt: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -389,7 +388,7 @@ mod tests {
         };
 
         let state = req_handler
-            .get_state_inner(&request, &QueryParameters::default(), &mut conn)
+            .get_state_inner(&request, &StateRequestParameters::default(), &mut conn)
             .await
             .unwrap();
 

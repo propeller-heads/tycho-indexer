@@ -1,5 +1,4 @@
 //! This module contains Tycho Websocket implementation
-
 use crate::{
     extractor::runner::MessageSender,
     models::{ExtractorIdentity, NormalisedMessage},
@@ -166,7 +165,10 @@ where
                             .insert(subscription_id, handle);
                         debug!("Added subscription to hashmap");
 
-                        let message = Response::NewSubscription { subscription_id };
+                        let message = Response::NewSubscription {
+                            extractor_id: extractor_id.clone(),
+                            subscription_id,
+                        };
                         ctx.text(serde_json::to_string(&message).unwrap());
                     }
                     Err(err) => {
@@ -243,14 +245,14 @@ where
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Command {
-    Subscribe { extractor: ExtractorIdentity },
+    Subscribe { extractor_id: ExtractorIdentity },
     Unsubscribe { subscription_id: Uuid },
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Response {
-    NewSubscription { subscription_id: Uuid },
+    NewSubscription { extractor_id: ExtractorIdentity, subscription_id: Uuid },
     SubscriptionEnded { subscription_id: Uuid },
 }
 
@@ -288,6 +290,7 @@ where
                 ctx.pong(&msg);
             }
             Ok(ws::Message::Pong(_)) => {
+                debug!("Websocket pong message received");
                 self.heartbeat = Instant::now();
             }
             Ok(ws::Message::Text(text)) => {
@@ -298,9 +301,9 @@ where
                     Ok(message) => {
                         // Handle the message based on its variant
                         match message {
-                            Command::Subscribe { extractor } => {
-                                debug!(extractor_identity = %extractor, "Subscribing to extractor");
-                                self.subscribe(ctx, &extractor);
+                            Command::Subscribe { extractor_id } => {
+                                debug!(%extractor_id, "Subscribing to extractor");
+                                self.subscribe(ctx, &extractor_id);
                             }
                             Command::Unsubscribe { subscription_id } => {
                                 debug!(%subscription_id, "Unsubscribing from subscription");
@@ -619,7 +622,7 @@ mod tests {
         debug!("Connected to test server");
 
         // Create and send a subscribe message from the client
-        let action = Command::Subscribe { extractor: extractor_id.clone() };
+        let action = Command::Subscribe { extractor_id: extractor_id.clone() };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
@@ -631,6 +634,7 @@ mod tests {
             .await
             .expect("Failed to get the expected new subscription message");
         let first_subscription_id = if let Response::NewSubscription {
+            extractor_id: _extractor_id,
             subscription_id: first_subscription_id,
         } = response
         {
@@ -647,7 +651,7 @@ mod tests {
         debug!("Received DummyMessage from server");
 
         // Create and send a second subscribe message from the client
-        let action = Command::Subscribe { extractor: extractor_id2.clone() };
+        let action = Command::Subscribe { extractor_id: extractor_id2.clone() };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
@@ -658,7 +662,11 @@ mod tests {
         let response = wait_for_new_subscription(&mut connection)
             .await
             .expect("Failed to get the expected new subscription message");
-        if let Response::NewSubscription { subscription_id: second_subscription_id } = response {
+        if let Response::NewSubscription {
+            extractor_id: _extractor_id2,
+            subscription_id: second_subscription_id,
+        } = response
+        {
             debug!(second_subscription_id = ?second_subscription_id, "Received second subscription ID");
         } else {
             panic!("Unexpected response: {:?}", response);
@@ -713,8 +721,9 @@ mod tests {
     #[test]
     fn test_msg() {
         // Create and send a subscribe message from the client
-        let extractor = ExtractorIdentity { chain: Chain::Ethereum, name: "vm:ambient".to_owned() };
-        let action = Command::Subscribe { extractor };
+        let extractor_id =
+            ExtractorIdentity { chain: Chain::Ethereum, name: "vm:ambient".to_owned() };
+        let action = Command::Subscribe { extractor_id };
         let res = serde_json::to_string(&action).unwrap();
         println!("{}", res);
     }

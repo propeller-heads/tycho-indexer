@@ -104,7 +104,7 @@ mod test {
         // Creates a DB connecton
         // Creates a chain entry in the DB
         // Creates a ExtractionState entry in the DB named "setup_extractor"
-        let db_url = std::env::var("DATABASE_URL").unwrap();
+        let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let mut conn = AsyncPgConnection::establish(&db_url)
             .await
             .unwrap();

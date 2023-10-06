@@ -117,6 +117,7 @@ impl AmbientPgGateway {
                     .await?;
             }
         }
+
         let collected_changes: Vec<_> = changes
             .tx_updates
             .iter()
