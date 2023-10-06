@@ -392,6 +392,7 @@ pub enum VersionKind {
     #[allow(dead_code)]
     Index(i64),
 }
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ContractId {
     pub address: Address,

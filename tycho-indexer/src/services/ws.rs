@@ -15,7 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 use thiserror::Error;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, field, info, instrument, warn};
 use uuid::Uuid;
 
 /// How often heartbeat pings are sent
@@ -128,7 +128,7 @@ where
     }
 
     /// Subscribe to an extractor
-    #[instrument(skip(self, ctx), fields(WsActor.id = %self.id, subscription_id))]
+    #[instrument(skip(self, ctx), fields(WsActor.id = %self.id, subscription_id = field::Empty))]
     fn subscribe(
         &mut self,
         ctx: &mut ws::WebsocketContext<Self>,
@@ -200,7 +200,7 @@ where
             .subscriptions
             .remove(&subscription_id)
         {
-            debug!("Subscription ID found");
+            debug!(%subscription_id, "Removed subscription from hashmap");
             // Cancel the future of the subscription stream
             ctx.cancel_future(handle);
             debug!("Cancelled subscription future");

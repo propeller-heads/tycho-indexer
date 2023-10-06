@@ -18,7 +18,7 @@ use diesel_async::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::error;
+use tracing::{debug, error, info, instrument, warn};
 
 use super::EvmPostgresGateway;
 
@@ -35,22 +35,38 @@ impl RpcHandler {
         Self { db_gateway, db_connection_pool }
     }
 
+    #[instrument(skip_all)]
     async fn get_state(
         &self,
         request: &StateRequestBody,
         params: &StateRequestParameters,
     ) -> Result<StateRequestResponse, RpcError> {
+        debug!(?request, ?params, "Getting contract state.");
         let mut conn = self.db_connection_pool.get().await?;
         self.get_state_inner(request, params, &mut conn)
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_state_inner(
         &self,
         request: &StateRequestBody,
         params: &StateRequestParameters,
         db_connection: &mut AsyncPgConnection,
     ) -> Result<StateRequestResponse, RpcError> {
+        debug!(?request, ?params, "Getting contract state inner.");
+
+        // Check if contract ids are specified
+        if request.contract_ids.is_none() ||
+            request
+                .contract_ids
+                .as_ref()
+                .unwrap()
+                .is_empty()
+        {
+            warn!("No contract ids specified in request.");
+        }
+
         //TODO: handle when no contract is specified with filters
         let at = match &request.version.block {
             Some(b) => BlockOrTimestamp::Block(BlockIdentifier::Hash(b.hash.clone())),
@@ -75,7 +91,10 @@ impl RpcHandler {
             .get_contracts(&params.chain, addresses, Some(&version), false, db_connection)
             .await
         {
-            Ok(accounts) => Ok(StateRequestResponse::new(accounts)),
+            Ok(accounts) => {
+                info!(?accounts, "Got contract states.");
+                Ok(StateRequestResponse::new(accounts))
+            }
             Err(err) => {
                 error!(error = %err, "Error while getting contract states.");
                 Err(err.into())
@@ -84,11 +103,14 @@ impl RpcHandler {
     }
 }
 
+#[instrument(skip_all)]
 pub async fn contract_state(
     query: web::Query<StateRequestParameters>,
     body: web::Json<StateRequestBody>,
     handler: web::Data<RpcHandler>,
 ) -> HttpResponse {
+    info!("Received contract state RPC request.");
+
     // Call the handler to get the state
     let response = handler
         .into_inner()

@@ -283,7 +283,10 @@ where
 
         let msg = match evm::BlockStateChanges::try_from_message(raw_msg, &self.name, self.chain) {
             Ok(changes) => {
-                tracing::Span::current().record("block_number", changes.block.number);
+                debug!(
+                    block_number = changes.block.number,
+                    "Successfully decoded BlockStateChanges"
+                );
                 changes
             }
             Err(ExtractionError::Empty) => {

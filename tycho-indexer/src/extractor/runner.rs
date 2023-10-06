@@ -10,7 +10,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, error, field, info, instrument, trace, warn, Instrument};
 
 use super::Extractor;
 use crate::{
@@ -119,15 +119,14 @@ where
                             }
                             Some(Ok(BlockResponse::New(data))) => {
                                 let block_number = data.clock.as_ref().map(|v| v.number).unwrap_or(0);
-                                tracing::Span::current().record("block_number", block_number);
-                                debug!("New block data received.");
+                                debug!(block_number, "New block data received.");
                                 match self.extractor.handle_tick_scoped_data(data).await {
                                     Ok(Some(msg)) => {
-                                        trace!("Propagating new block data message.");
+                                        trace!(block_number, "Propagating new block data message.");
                                         Self::propagate_msg(&self.subscriptions, msg).await
                                     }
                                     Ok(None) => {
-                                        trace!("No message to propagate.");
+                                        trace!(block_number, "No message to propagate.");
                                     }
                                     Err(err) => {
                                         error!(error = %err, "Error while processing tick!");
@@ -161,10 +160,10 @@ where
                 }
             }
         }
-        .instrument(tracing::info_span!("extractor_runner::run", id = %id)))
+        .instrument(tracing::info_span!("extractor_runner::run", id = %id, block_number = field::Empty)))
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(subscriber_id = field::Empty))]
     async fn subscribe(&mut self, sender: Sender<Arc<M>>) {
         let subscriber_id = self.subscriptions.lock().await.len() as u64;
         tracing::Span::current().record("subscriber_id", subscriber_id);
