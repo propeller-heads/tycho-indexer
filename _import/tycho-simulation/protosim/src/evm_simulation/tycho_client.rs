@@ -1,10 +1,10 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 use futures::StreamExt;
 use hyper::{client::HttpConnector, Body, Client, Request, Uri};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, string::ToString};
+use std::{collections::HashMap, fmt::Display, string::ToString};
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use super::tycho_models::{
@@ -15,6 +15,9 @@ use futures::SinkExt;
 use revm::primitives::{B160, B256, U256 as rU256};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+
+pub const AMBIENT_EXTRACTOR_HANDLE: &str = "vm:ambient";
+pub const AMBIENT_ACCOUNT_ADDRESS: &str = "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688";
 
 #[derive(Error, Debug)]
 pub enum TychoClientError {
@@ -29,23 +32,87 @@ pub enum TychoClientError {
 }
 
 #[derive(Serialize, Debug, Default)]
+
 pub struct StateRequestBody {
-    contract_ids: Option<Vec<B160>>,
-    version: Option<Version>,
+    #[serde(rename = "contractIds")]
+    contract_ids: Option<Vec<ContractId>>,
+    #[serde(default = "Version::default")]
+    version: Version,
 }
+
 impl StateRequestBody {
+    pub fn new(contract_ids: Option<Vec<B160>>, version: Version) -> Self {
+        Self {
+            contract_ids: contract_ids.map(|ids| {
+                ids.into_iter()
+                    .map(|id| ContractId::new(Chain::Ethereum, id))
+                    .collect()
+            }),
+            version,
+        }
+    }
+
     pub fn from_block(block: Block) -> Self {
         Self {
             contract_ids: None,
-            version: Some(Version {
-                timestamp: None,
-                block: Some(RequestBlock {
-                    hash: block.hash,
-                    number: block.number,
-                    chain: block.chain,
-                }),
-            }),
+            // version: Some(Version {
+            //     timestamp: Utc::now().naive_utc(),
+            //     block: Some(RequestBlock {
+            //         hash: block.hash,
+            //         number: block.number,
+            //         chain: block.chain,
+            //     }),
+            // }),
+            version: Version { timestamp: block.ts, block: Some(block) },
         }
+    }
+
+    pub fn from_timestamp(timestamp: NaiveDateTime) -> Self {
+        Self { contract_ids: None, version: Version { timestamp, block: None } }
+    }
+}
+
+/// Type alias for a contract address.
+pub type Address = B160;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct ContractId {
+    pub address: Address,
+    pub chain: Chain,
+}
+
+/// Uniquely identifies a contract on a specific chain.
+impl ContractId {
+    pub fn new(chain: Chain, address: Address) -> Self {
+        Self { address, chain }
+    }
+
+    pub fn address(&self) -> &Address {
+        &self.address
+    }
+}
+
+impl Display for ContractId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: 0x{}", self.chain, hex::encode(self.address))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct Version {
+    timestamp: NaiveDateTime,
+    block: Option<Block>,
+}
+
+impl Version {
+    pub fn new(timestamp: NaiveDateTime, block: Option<Block>) -> Self {
+        Self { timestamp, block }
+    }
+}
+
+impl Default for Version {
+    fn default() -> Self {
+        Version { timestamp: Utc::now().naive_utc(), block: None }
     }
 }
 
@@ -75,20 +142,14 @@ impl StateRequestParameters {
     }
 }
 
-#[derive(Serialize, Debug)]
-pub struct Version {
-    timestamp: Option<NaiveDateTime>,
-    block: Option<RequestBlock>,
-}
-
-#[derive(Serialize, Debug)]
-struct RequestBlock {
+#[derive(Serialize, Debug, Default)]
+pub struct RequestBlock {
     hash: B256,
     number: u64,
     chain: Chain,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, Default)]
 pub struct ResponseAccount {
     pub address: B160,
     pub slots: HashMap<rU256, rU256>,
@@ -124,11 +185,23 @@ pub trait TychoVMStateClient {
 
 #[async_trait]
 impl TychoVMStateClient for TychoClient {
+    #[instrument(skip(self, filters, request))]
     async fn get_state(
         &self,
         filters: &StateRequestParameters,
         request: &StateRequestBody,
     ) -> Result<Vec<ResponseAccount>, TychoClientError> {
+        // Check if contract ids are specified
+        if request.contract_ids.is_none() ||
+            request
+                .contract_ids
+                .as_ref()
+                .unwrap()
+                .is_empty()
+        {
+            warn!("No contract ids specified in request.");
+        }
+
         let url = format!(
             "http://{}/contract_state?{}",
             self.base_uri
@@ -137,24 +210,28 @@ impl TychoVMStateClient for TychoClient {
             filters.to_query_string()
         );
 
+        info!(%url, "Sending contract_state request to Tycho server");
         let body = serde_json::to_string(&request)
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
         let req = Request::get(url)
             .body(Body::from(body))
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
+        debug!(?req, "Sending request to Tycho server");
 
         let response = self
             .http_client
             .request(req)
             .await
             .map_err(|e| TychoClientError::HttpClient(e.to_string()))?;
+        debug!(?response, "Received response from Tycho server");
 
         let body = hyper::body::to_bytes(response.into_body())
             .await
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
         let accounts: Vec<ResponseAccount> = serde_json::from_slice(&body)
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
+        info!(?accounts, "Received contract_state response from Tycho server");
 
         Ok(accounts)
     }
@@ -164,11 +241,13 @@ impl TychoVMStateClient for TychoClient {
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
-        let ws_url = format!("ws://{}", self.base_uri);
+        let ws_url = format!("ws://{}/v1/ws", self.base_uri); // TODO: Set path properly
+        info!(?ws_url, "Spawning task to connect to WebSocket server");
         tokio::spawn(async move {
             let mut active_extractors: HashMap<Uuid, ExtractorIdentity> = HashMap::new();
 
             // Connect to Tycho server
+            info!(?ws_url, "Connecting to WebSocket server");
             let (ws, _) = connect_async(&ws_url)
                 .await
                 .map_err(|e| error!(error = %e, "Failed to connect to WebSocket server"))
@@ -177,9 +256,9 @@ impl TychoVMStateClient for TychoClient {
             let (mut ws_sink, ws_stream) = ws.split();
 
             // Send a subscribe request to ambient extractor
-            // TODO: Expand this to allow subscribing to other extractors
+            // TODO: Read from config
             let command = Command::Subscribe {
-                extractor_id: ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
+                extractor_id: ExtractorIdentity::new(Chain::Ethereum, AMBIENT_EXTRACTOR_HANDLE),
             };
             let _ = ws_sink
                 .send(Message::Text(serde_json::to_string(&command).unwrap()))
@@ -212,6 +291,7 @@ impl TychoVMStateClient for TychoClient {
                                     "Received a new subscription"
                                 );
                                 active_extractors.insert(subscription_id, extractor_id);
+                                trace!(?active_extractors, "Active extractors");
                             }
                             Ok(WebSocketMessage::Response(Response::SubscriptionEnded {
                                 subscription_id,
@@ -251,6 +331,7 @@ impl TychoVMStateClient for TychoClient {
             }
         });
 
+        info!("Returning receiver");
         rx
     }
 }
