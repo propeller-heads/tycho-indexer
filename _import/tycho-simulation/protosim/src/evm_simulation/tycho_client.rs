@@ -7,6 +7,8 @@ use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
+use crate::serde_helpers::hex_bytes;
+
 use super::tycho_models::{
     Block, BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
 };
@@ -15,6 +17,9 @@ use futures::SinkExt;
 use revm::primitives::{B160, B256, U256 as rU256};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+
+/// TODO read consts from config
+pub const TYCHO_SERVER_VERSION: &str = "v1";
 
 pub const AMBIENT_EXTRACTOR_HANDLE: &str = "vm:ambient";
 pub const AMBIENT_ACCOUNT_ADDRESS: &str = "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688";
@@ -70,6 +75,33 @@ impl StateRequestBody {
     pub fn from_timestamp(timestamp: NaiveDateTime) -> Self {
         Self { contract_ids: None, version: Version { timestamp, block: None } }
     }
+}
+
+/// Response from Tycho server for a contract state request.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StateRequestResponse {
+    pub accounts: Vec<Account>,
+}
+
+impl StateRequestResponse {
+    pub fn new(accounts: Vec<Account>) -> Self {
+        Self { accounts }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct Account {
+    pub chain: Chain,
+    pub address: B160,
+    pub title: String,
+    pub slots: HashMap<rU256, rU256>,
+    pub balance: rU256,
+    #[serde(with = "hex_bytes")]
+    pub code: Vec<u8>,
+    pub code_hash: B256,
+    pub balance_modify_tx: B256,
+    pub code_modify_tx: B256,
+    pub creation_tx: Option<B256>,
 }
 
 /// Type alias for a contract address.
@@ -149,15 +181,6 @@ pub struct RequestBlock {
     chain: Chain,
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
-pub struct ResponseAccount {
-    pub address: B160,
-    pub slots: HashMap<rU256, rU256>,
-    pub balance: rU256,
-    pub code: Vec<u8>,
-    pub code_hash: B256,
-}
-
 pub struct TychoClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,
@@ -178,7 +201,7 @@ pub trait TychoVMStateClient {
         &self,
         filters: &StateRequestParameters,
         request: &StateRequestBody,
-    ) -> Result<Vec<ResponseAccount>, TychoClientError>;
+    ) -> Result<StateRequestResponse, TychoClientError>;
 
     async fn realtime_messages(&self) -> Receiver<BlockAccountChanges>;
 }
@@ -190,7 +213,7 @@ impl TychoVMStateClient for TychoClient {
         &self,
         filters: &StateRequestParameters,
         request: &StateRequestBody,
-    ) -> Result<Vec<ResponseAccount>, TychoClientError> {
+    ) -> Result<StateRequestResponse, TychoClientError> {
         // Check if contract ids are specified
         if request.contract_ids.is_none() ||
             request
@@ -203,10 +226,11 @@ impl TychoVMStateClient for TychoClient {
         }
 
         let url = format!(
-            "http://{}/contract_state?{}",
+            "http://{}/{}/contract_state?{}",
             self.base_uri
                 .to_string()
                 .trim_end_matches('/'),
+            TYCHO_SERVER_VERSION,
             filters.to_query_string()
         );
 
@@ -214,10 +238,15 @@ impl TychoVMStateClient for TychoClient {
         let body = serde_json::to_string(&request)
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
-        let req = Request::get(url)
+        let header = hyper::header::HeaderValue::from_str("application/json")
+            .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
+
+        let req = Request::post(url)
+            .header(hyper::header::CONTENT_TYPE, header)
             .body(Body::from(body))
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
         debug!(?req, "Sending request to Tycho server");
+        dbg!("{:?}", &req);
 
         let response = self
             .http_client
@@ -229,7 +258,7 @@ impl TychoVMStateClient for TychoClient {
         let body = hyper::body::to_bytes(response.into_body())
             .await
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
-        let accounts: Vec<ResponseAccount> = serde_json::from_slice(&body)
+        let accounts: StateRequestResponse = serde_json::from_slice(&body)
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
         info!(?accounts, "Received contract_state response from Tycho server");
 
@@ -241,7 +270,7 @@ impl TychoVMStateClient for TychoClient {
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
-        let ws_url = format!("ws://{}/v1/ws", self.base_uri); // TODO: Set path properly
+        let ws_url = format!("ws://{}/{}/ws", self.base_uri, TYCHO_SERVER_VERSION); // TODO: Set path properly
         info!(?ws_url, "Spawning task to connect to WebSocket server");
         tokio::spawn(async move {
             let mut active_extractors: HashMap<Uuid, ExtractorIdentity> = HashMap::new();
@@ -466,14 +495,15 @@ mod tests {
             .get_state(&Default::default(), &Default::default())
             .await
             .expect("get state");
+        let accounts = response.accounts;
 
         mocked_server.assert();
-        assert_eq!(response.len(), 1);
-        assert_eq!(response[0].slots, HashMap::new());
-        assert_eq!(response[0].balance, rU256::from(500));
-        assert_eq!(response[0].code, Vec::<u8>::new());
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].slots, HashMap::new());
+        assert_eq!(accounts[0].balance, rU256::from(500));
+        assert_eq!(accounts[0].code, Vec::<u8>::new());
         assert_eq!(
-            response[0].code_hash,
+            accounts[0].code_hash,
             B256::from_str("0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e")
                 .unwrap()
         );

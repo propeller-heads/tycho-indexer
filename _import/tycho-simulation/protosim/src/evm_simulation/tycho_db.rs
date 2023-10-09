@@ -190,7 +190,7 @@ pub async fn update_loop(
     {
         // This scope ensures the lock is dropped after processing the message.
         let mut db_guard = db.write().await;
-        for account in state.into_iter() {
+        for account in state.accounts.into_iter() {
             info!(%account.address, "Initializing account");
             db_guard.init_account(
                 account.address,
@@ -298,7 +298,7 @@ mod tests {
     use tokio::sync::mpsc::{self, Receiver};
 
     use crate::evm_simulation::{
-        tycho_client::{ResponseAccount, StateRequestParameters, TychoClientError},
+        tycho_client::{Account, StateRequestParameters, StateRequestResponse, TychoClientError},
         tycho_models::{AccountUpdate, BlockAccountChanges, Chain, ChangeType},
     };
 
@@ -419,11 +419,11 @@ mod tests {
     }
 
     pub struct MockTychoVMStateClient {
-        mock_state: Vec<ResponseAccount>,
+        mock_state: StateRequestResponse,
     }
 
     impl MockTychoVMStateClient {
-        pub fn new(mock_state: Vec<ResponseAccount>) -> Self {
+        pub fn new(mock_state: StateRequestResponse) -> Self {
             MockTychoVMStateClient { mock_state }
         }
     }
@@ -433,8 +433,14 @@ mod tests {
         let mut contract_slots = HashMap::<rU256, rU256>::new();
         contract_slots.insert(rU256::from(1), rU256::from(987));
 
-        let account = ResponseAccount {
+        let creation_tx =
+            B256::from_str("0x1234000000000000000000000000000000000000000000000000000000000000")
+                .unwrap();
+
+        let account: Account = Account {
+            chain: Chain::Ethereum,
             address: B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap(),
+            title: "mock".to_owned(),
             slots: contract_slots,
             balance: rU256::from(123),
             code: Vec::<u8>::new(),
@@ -442,9 +448,12 @@ mod tests {
                 "0x0000000000000000000000000000000000000000000000000000000000000000",
             )
             .unwrap(),
+            balance_modify_tx: creation_tx,
+            code_modify_tx: creation_tx,
+            creation_tx: Some(creation_tx),
         };
 
-        let mock_state = vec![account];
+        let mock_state = StateRequestResponse::new(vec![account]);
         MockTychoVMStateClient::new(mock_state)
     }
 
@@ -454,7 +463,7 @@ mod tests {
             &self,
             _filters: &StateRequestParameters,
             _request: &StateRequestBody,
-        ) -> Result<Vec<ResponseAccount>, TychoClientError> {
+        ) -> Result<StateRequestResponse, TychoClientError> {
             Ok(self.mock_state.clone())
         }
 
@@ -537,6 +546,7 @@ mod tests {
     #[ignore]
     #[rstest]
     #[tokio::test]
+    /// This test requires a running TychoDB instance.
     async fn test_tycho_db_connection() {
         tracing_subscriber::fmt()
             .with_env_filter("debug")
@@ -549,7 +559,7 @@ mod tests {
         let db = create_tycho_db("127.0.0.1:4242".to_owned());
 
         info!("Waiting for TychoDB to initialize");
-        // Wait 15 seconds for the update loop to finish.
+        // Wait for the get_state call to finish
         tokio::time::sleep(tokio::time::Duration::from_secs(24)).await;
 
         info!("Fetching account info");

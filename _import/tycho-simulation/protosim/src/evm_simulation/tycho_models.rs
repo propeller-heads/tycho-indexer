@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
+use crate::serde_helpers::hex_bytes_option;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct ExtractorIdentity {
     pub chain: Chain,
@@ -127,6 +129,7 @@ pub struct AccountUpdate {
     pub chain: Chain,
     pub slots: HashMap<U256, U256>,
     pub balance: Option<U256>,
+    #[serde(with = "hex_bytes_option")]
     pub code: Option<Vec<u8>>,
     pub change: ChangeType,
 }
