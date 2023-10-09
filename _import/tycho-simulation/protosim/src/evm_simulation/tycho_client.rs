@@ -1,26 +1,23 @@
-use chrono::{NaiveDateTime, Utc};
 use futures::StreamExt;
 use hyper::{client::HttpConnector, Body, Client, Request, Uri};
-use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display, string::ToString};
+use std::{collections::HashMap, string::ToString};
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use crate::serde_helpers::hex_bytes;
-
 use super::tycho_models::{
-    Block, BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
+    BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
+};
+use crate::evm_simulation::tycho_models::{
+    StateRequestBody, StateRequestParameters, StateRequestResponse,
 };
 use async_trait::async_trait;
 use futures::SinkExt;
-use revm::primitives::{B160, B256, U256 as rU256};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 /// TODO read consts from config
 pub const TYCHO_SERVER_VERSION: &str = "v1";
-
 pub const AMBIENT_EXTRACTOR_HANDLE: &str = "vm:ambient";
 pub const AMBIENT_ACCOUNT_ADDRESS: &str = "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688";
 
@@ -34,151 +31,6 @@ pub enum TychoClientError {
     HttpClient(String),
     #[error("Failed to parse response: {0}")]
     ParseResponse(String),
-}
-
-#[derive(Serialize, Debug, Default)]
-
-pub struct StateRequestBody {
-    #[serde(rename = "contractIds")]
-    contract_ids: Option<Vec<ContractId>>,
-    #[serde(default = "Version::default")]
-    version: Version,
-}
-
-impl StateRequestBody {
-    pub fn new(contract_ids: Option<Vec<B160>>, version: Version) -> Self {
-        Self {
-            contract_ids: contract_ids.map(|ids| {
-                ids.into_iter()
-                    .map(|id| ContractId::new(Chain::Ethereum, id))
-                    .collect()
-            }),
-            version,
-        }
-    }
-
-    pub fn from_block(block: Block) -> Self {
-        Self {
-            contract_ids: None,
-            // version: Some(Version {
-            //     timestamp: Utc::now().naive_utc(),
-            //     block: Some(RequestBlock {
-            //         hash: block.hash,
-            //         number: block.number,
-            //         chain: block.chain,
-            //     }),
-            // }),
-            version: Version { timestamp: block.ts, block: Some(block) },
-        }
-    }
-
-    pub fn from_timestamp(timestamp: NaiveDateTime) -> Self {
-        Self { contract_ids: None, version: Version { timestamp, block: None } }
-    }
-}
-
-/// Response from Tycho server for a contract state request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct StateRequestResponse {
-    pub accounts: Vec<Account>,
-}
-
-impl StateRequestResponse {
-    pub fn new(accounts: Vec<Account>) -> Self {
-        Self { accounts }
-    }
-}
-
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct Account {
-    pub chain: Chain,
-    pub address: B160,
-    pub title: String,
-    pub slots: HashMap<rU256, rU256>,
-    pub balance: rU256,
-    #[serde(with = "hex_bytes")]
-    pub code: Vec<u8>,
-    pub code_hash: B256,
-    pub balance_modify_tx: B256,
-    pub code_modify_tx: B256,
-    pub creation_tx: Option<B256>,
-}
-
-/// Type alias for a contract address.
-pub type Address = B160;
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct ContractId {
-    pub address: Address,
-    pub chain: Chain,
-}
-
-/// Uniquely identifies a contract on a specific chain.
-impl ContractId {
-    pub fn new(chain: Chain, address: Address) -> Self {
-        Self { address, chain }
-    }
-
-    pub fn address(&self) -> &Address {
-        &self.address
-    }
-}
-
-impl Display for ContractId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}: 0x{}", self.chain, hex::encode(self.address))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct Version {
-    timestamp: NaiveDateTime,
-    block: Option<Block>,
-}
-
-impl Version {
-    pub fn new(timestamp: NaiveDateTime, block: Option<Block>) -> Self {
-        Self { timestamp, block }
-    }
-}
-
-impl Default for Version {
-    fn default() -> Self {
-        Version { timestamp: Utc::now().naive_utc(), block: None }
-    }
-}
-
-#[derive(Serialize, Deserialize, Default, Debug)]
-pub struct StateRequestParameters {
-    #[serde(default = "Chain::default")]
-    chain: Chain,
-    tvl_gt: Option<u64>,
-    intertia_min_gt: Option<u64>,
-}
-
-impl StateRequestParameters {
-    pub fn to_query_string(&self) -> String {
-        let mut parts = vec![];
-
-        parts.push(format!("chain={}", self.chain));
-
-        if let Some(tvl_gt) = self.tvl_gt {
-            parts.push(format!("tvl_gt={}", tvl_gt));
-        }
-
-        if let Some(inertia) = self.intertia_min_gt {
-            parts.push(format!("intertia_min_gt={}", inertia));
-        }
-
-        parts.join("&")
-    }
-}
-
-#[derive(Serialize, Debug, Default)]
-pub struct RequestBlock {
-    hash: B256,
-    number: u64,
-    chain: Chain,
 }
 
 pub struct TychoClient {
@@ -246,7 +98,6 @@ impl TychoVMStateClient for TychoClient {
             .body(Body::from(body))
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
         debug!(?req, "Sending request to Tycho server");
-        dbg!("{:?}", &req);
 
         let response = self
             .http_client
@@ -367,23 +218,25 @@ impl TychoVMStateClient for TychoClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::tycho_models::{AccountUpdate, ChangeType};
+    use crate::evm_simulation::tycho_models::{AccountUpdate, Block, ChangeType};
+    use chrono::NaiveDateTime;
+    use std::str::FromStr;
 
     use super::*;
 
     use mockito::Server;
-    use std::str::FromStr;
 
     use futures::SinkExt;
+    use revm::primitives::{B160, B256, U256 as rU256};
     use warp::{ws::WebSocket, Filter};
 
+    //noinspection ALL
     #[tokio::test]
     async fn test_realtime_messages() {
         // Mock WebSocket server using warp
         async fn handle_connection(ws: WebSocket) {
             let (mut tx, _) = ws.split();
-            let test_msg = warp::ws::Message::text(
-                r#"
+            let test_msg_content = r#"
             {
                 "extractor": "vm:ambient",
                 "chain": "ethereum",
@@ -400,18 +253,23 @@ mod tests {
                         "chain": "ethereum",
                         "slots": {},
                         "balance": "0x00000000000000000000000000000000000000000000000000000000000001f4",
-                        "code": [],
+                        "code": "",
                         "change": "Update"
                     }
                 },
                 "new_pools": {}
             }
-            "#,
-            );
+            "#;
+            // test that the response is deserialized correctly
+            serde_json::from_str::<BlockAccountChanges>(test_msg_content).expect("deserialize");
+            let test_msg = warp::ws::Message::text(test_msg_content);
             let _ = tx.send(test_msg).await;
         }
 
-        let ws_route = warp::ws().map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
+        // let ws_route = warp::ws().map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
+        let ws_route = warp::path!("v1" / "ws")
+            .and(warp::ws())
+            .map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
         let (addr, server) = warp::serve(ws_route).bind_ephemeral(([127, 0, 0, 1], 0));
         tokio::task::spawn(server);
 
@@ -464,26 +322,39 @@ mod tests {
         assert_eq!(received_msg, expected);
     }
 
+    //noinspection RsTypeCheck
     #[tokio::test]
     async fn test_simple_route_mock_async() {
         let mut server = Server::new_async().await;
         let server_resp = r#"
-        [{
-            "address": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
-            "slots": {},
-            "balance": "0x1f4",
-            "code": [],
-            "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e"
-        }]
+        {
+            "accounts": [
+                {
+                    "chain": "ethereum",
+                    "address": "0x0000000000000000000000000000000000000000",
+                    "title": "",
+                    "slots": {},
+                    "balance": "0x1f4",
+                    "code": "",
+                    "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
+                    "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "code_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "creation_tx": null
+                }
+            ]
+        }
         "#;
+        // test that the response is deserialized correctly
+        serde_json::from_str::<StateRequestResponse>(server_resp).expect("deserialize");
+
         let mocked_server = server
-            .mock("GET", "/contract_state?chain=ethereum")
+            .mock("POST", "/v1/contract_state?chain=ethereum")
             .expect(1)
             .with_body(server_resp)
             .create_async()
             .await;
 
-        let client = TychoClient::new(
+        let client: TychoClient = TychoClient::new(
             server
                 .url()
                 .replace("http://", "")

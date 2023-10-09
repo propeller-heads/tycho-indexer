@@ -54,14 +54,10 @@ pub mod hex_bytes_option {
         T: From<Vec<u8>>,
     {
         let value: Option<String> = Option::deserialize(d)?;
-    
+
         match value {
             Some(val) => {
-                let val = if let Some(stripped) = val.strip_prefix("0x") {
-                    stripped
-                } else {
-                    &val
-                };
+                let val = if let Some(stripped) = val.strip_prefix("0x") { stripped } else { &val };
                 hex::decode(val)
                     .map(Into::into)
                     .map(Some)
@@ -70,13 +66,12 @@ pub mod hex_bytes_option {
             None => Ok(None),
         }
     }
-    
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
     use serde_json;
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -90,14 +85,14 @@ mod tests {
 
     #[test]
     fn hex_bytes_serialize_deserialize() {
-        let test_struct = TestStruct {
-            bytes: vec![0u8; 10],
-            bytes_option: Some(vec![0u8; 10]),
-        };
+        let test_struct = TestStruct { bytes: vec![0u8; 10], bytes_option: Some(vec![0u8; 10]) };
 
         // Serialize to JSON
         let serialized = serde_json::to_string(&test_struct).unwrap();
-        assert_eq!(serialized, "{\"bytes\":\"0x00000000000000000000\",\"bytes_option\":\"0x00000000000000000000\"}");
+        assert_eq!(
+            serialized,
+            "{\"bytes\":\"0x00000000000000000000\",\"bytes_option\":\"0x00000000000000000000\"}"
+        );
 
         // Deserialize from JSON
         let deserialized: TestStruct = serde_json::from_str(&serialized).unwrap();
@@ -107,10 +102,7 @@ mod tests {
 
     #[test]
     fn hex_bytes_option_none() {
-        let test_struct = TestStruct {
-            bytes: vec![0u8; 10],
-            bytes_option: None,
-        };
+        let test_struct = TestStruct { bytes: vec![0u8; 10], bytes_option: None };
 
         // Serialize to JSON
         let serialized = serde_json::to_string(&test_struct).unwrap();
@@ -122,4 +114,3 @@ mod tests {
         assert_eq!(deserialized.bytes_option, None);
     }
 }
-

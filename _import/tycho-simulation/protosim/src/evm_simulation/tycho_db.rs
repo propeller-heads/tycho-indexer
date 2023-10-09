@@ -13,13 +13,14 @@ use revm::{
     primitives::{AccountInfo, Bytecode, B160, B256, U256 as rU256},
 };
 
-use crate::evm_simulation::tycho_client::AMBIENT_ACCOUNT_ADDRESS;
+use crate::evm_simulation::{
+    tycho_client::AMBIENT_ACCOUNT_ADDRESS,
+    tycho_models::{StateRequestBody, StateRequestParameters, Version},
+};
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
-    tycho_client::{
-        StateRequestBody, StateRequestParameters, TychoClient, TychoVMStateClient, Version,
-    },
+    tycho_client::{TychoClient, TychoVMStateClient},
     tycho_models::{AccountUpdate, Block, ChangeType},
 };
 
@@ -298,8 +299,11 @@ mod tests {
     use tokio::sync::mpsc::{self, Receiver};
 
     use crate::evm_simulation::{
-        tycho_client::{Account, StateRequestParameters, StateRequestResponse, TychoClientError},
-        tycho_models::{AccountUpdate, BlockAccountChanges, Chain, ChangeType},
+        tycho_client::TychoClientError,
+        tycho_models::{
+            AccountUpdate, BlockAccountChanges, Chain, ChangeType, ResponseAccount,
+            StateRequestParameters, StateRequestResponse,
+        },
     };
 
     use super::*;
@@ -437,7 +441,7 @@ mod tests {
             B256::from_str("0x1234000000000000000000000000000000000000000000000000000000000000")
                 .unwrap();
 
-        let account: Account = Account {
+        let account: ResponseAccount = ResponseAccount {
             chain: Chain::Ethereum,
             address: B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap(),
             title: "mock".to_owned(),
@@ -519,9 +523,6 @@ mod tests {
         update_loop(db.clone(), mock_client, rx).await;
 
         let read_guard = db.read().await;
-        dbg!(read_guard.accounts.get_account_info(
-            &B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap()
-        ));
 
         assert_eq!(
             read_guard
@@ -570,7 +571,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-            dbg!(&acc_info);
+            debug!(?acc_info, "Account info");
         }
     }
 }
