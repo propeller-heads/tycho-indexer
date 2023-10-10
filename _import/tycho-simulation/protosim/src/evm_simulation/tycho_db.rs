@@ -544,10 +544,24 @@ mod tests {
         );
     }
 
+    /// This test requires a running TychoDB instance.
+    ///
+    /// To run this test, start TychoDB with the following command:
+    /// ```bash
+    /// cargo run --release -- \
+    //     --endpoint https://mainnet.eth.streamingfast.io:443 \
+    //     --module map_changes \
+    //     --spkg substreams/ethereum-ambient/substreams-ethereum-ambient-v0.3.0.spkg
+    /// ```
+    /// 
+    /// Then run the test with:
+    /// ```bash
+    /// cargo test --package protosim --lib -- --ignored --exact --nocapture
+    /// evm_simulation::tycho_db::tests::test_tycho_db_connection
+    /// ```
     #[ignore]
     #[rstest]
     #[tokio::test]
-    /// This test requires a running TychoDB instance.
     async fn test_tycho_db_connection() {
         tracing_subscriber::fmt()
             .with_env_filter("debug")
