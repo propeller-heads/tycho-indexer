@@ -37,6 +37,11 @@ uuid = { version = "1.4.1", features = [
     "fast-rng",
     "macro-diagnostics",
 ] }
+starknet_in_rust = "0.4.0"
+starknet_api = "0.4.1"
+starknet = "0.5.0"
+cairo-vm = { version = "0.8.5", features = ["cairo-1-hints"] }
+ureq = { version = "2.7.1", features = ["json"] }
 
 [dev-dependencies]
 mockito = "1.1.1"
