@@ -102,7 +102,8 @@ impl fmt::Display for BlockTag {
     }
 }
 
-/// [`BlockValue`] is an Enum that represent which block we are going to use to retrieve information.
+/// [`BlockValue`] is an Enum that represent which block we are going to use to retrieve
+/// information.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum BlockValue {
@@ -245,12 +246,7 @@ impl<'de> Deserialize<'de> for RpcCallInfo {
                 .push(serde_json::from_value(call.clone()).map_err(serde::de::Error::custom)?);
         }
 
-        Ok(RpcCallInfo {
-            execution_resources,
-            retdata,
-            calldata,
-            internal_calls,
-        })
+        Ok(RpcCallInfo { execution_resources, retdata, calldata, internal_calls })
     }
 }
 
@@ -263,15 +259,13 @@ pub fn deserialize_transaction_json(
 
     match tx_type.as_str() {
         "INVOKE" => match tx_version.as_str() {
-            "0x0" => Ok(SNTransaction::Invoke(InvokeTransaction::V0(
-                serde_json::from_value(transaction)?,
-            ))),
-            "0x1" => Ok(SNTransaction::Invoke(InvokeTransaction::V1(
-                serde_json::from_value(transaction)?,
-            ))),
-            x => Err(serde::de::Error::custom(format!(
-                "unimplemented invoke version: {x}"
-            ))),
+            "0x0" => Ok(SNTransaction::Invoke(InvokeTransaction::V0(serde_json::from_value(
+                transaction,
+            )?))),
+            "0x1" => Ok(SNTransaction::Invoke(InvokeTransaction::V1(serde_json::from_value(
+                transaction,
+            )?))),
+            x => Err(serde::de::Error::custom(format!("unimplemented invoke version: {x}"))),
         },
         x => Err(serde::de::Error::custom(format!(
             "unimplemented transaction type deserialization: {x}"
@@ -307,7 +301,9 @@ impl RpcState {
         method: &str,
         params: &serde_json::Value,
     ) -> Result<T, RpcError> {
-        Ok(self.rpc_call::<RpcResponse<T>>(method, params)?.result)
+        Ok(self
+            .rpc_call::<RpcResponse<T>>(method, params)?
+            .result)
     }
 
     fn rpc_call<T: for<'a> Deserialize<'a>>(
@@ -321,7 +317,10 @@ impl RpcState {
             "params": params,
             "id": 1
         });
-        let response = self.rpc_call_no_deserialize(&payload)?.into_json().unwrap();
+        let response = self
+            .rpc_call_no_deserialize(&payload)?
+            .into_json()
+            .unwrap();
         Self::deserialize_call(response)
     }
 
@@ -381,7 +380,9 @@ impl RpcState {
             .call()
             .unwrap();
 
-        let res: serde_json::Value = response.into_json().expect("should be json");
+        let res: serde_json::Value = response
+            .into_json()
+            .expect("should be json");
 
         let gas_price_hex = res["gas_price"].as_str().unwrap();
         let gas_price = u128::from_str_radix(gas_price_hex.trim_start_matches("0x"), 16).unwrap();
@@ -394,10 +395,7 @@ impl RpcState {
 
     pub fn get_block_info(&self) -> RpcBlockInfo {
         let block_info: serde_json::Value = self
-            .rpc_call(
-                "starknet_getBlockWithTxs",
-                &json!([self.block.to_value().unwrap()]),
-            )
+            .rpc_call("starknet_getBlockWithTxs", &json!([self.block.to_value().unwrap()]))
             .unwrap();
         let sequencer_address: StarkFelt =
             serde_json::from_value(block_info["result"]["sequencer_address"].clone()).unwrap();
@@ -441,7 +439,11 @@ impl RpcState {
                 "starknet_getClassHashAt",
                 &json!([
                     self.block.to_value().unwrap(),
-                    contract_address.0.key().clone().to_string()
+                    contract_address
+                        .0
+                        .key()
+                        .clone()
+                        .to_string()
                 ]),
             )
             .unwrap();
@@ -454,7 +456,11 @@ impl RpcState {
             "starknet_getNonce",
             &json!([
                 self.block.to_value().unwrap(),
-                contract_address.0.key().clone().to_string()
+                contract_address
+                    .0
+                    .key()
+                    .clone()
+                    .to_string()
             ]),
         )
         .unwrap()
@@ -470,11 +476,7 @@ impl RpcState {
 
         self.rpc_call_result(
             "starknet_getStorageAt",
-            &json!([
-                contract_address.to_string(),
-                key.to_string(),
-                self.block.to_value().unwrap()
-            ]),
+            &json!([contract_address.to_string(), key.to_string(), self.block.to_value().unwrap()]),
         )
         .unwrap()
     }

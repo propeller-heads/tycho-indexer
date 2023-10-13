@@ -30,7 +30,12 @@ impl StateReader for RpcStateReader {
             .unwrap(),
         );
         let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(self.0.get_class_hash_at(&address).0.bytes());
+        bytes.copy_from_slice(
+            self.0
+                .get_class_hash_at(&address)
+                .0
+                .bytes(),
+        );
         Ok(bytes)
     }
 
