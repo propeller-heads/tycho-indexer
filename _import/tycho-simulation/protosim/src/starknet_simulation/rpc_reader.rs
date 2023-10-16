@@ -72,7 +72,6 @@ impl StateReader for RpcStateReader {
 mod tests {
     use crate::starknet_simulation::rpc_state::{BlockTag, RpcChain};
 
-    use super::super::rpc_state::RpcState;
     use super::*;
 
     fn setup_reader() -> RpcStateReader {
@@ -115,7 +114,8 @@ mod tests {
 
         let result = reader.get_contract_class(class_hash);
 
-        // the CompiledClass object is huge, so we just check it is returned and skip the details here
+        // the CompiledClass object is huge, so we just check it is returned and skip the details
+        // here
         assert!(result.is_ok());
     }
 

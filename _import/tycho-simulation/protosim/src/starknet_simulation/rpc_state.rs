@@ -53,8 +53,7 @@ impl From<RpcChain> for ChainId {
 
 /// A [StateReader] that holds all the data in memory.
 ///
-/// This implementation is uses HTTP requests to call the RPC endpoint,
-/// using Infura.
+/// This implementation uses HTTP requests to call the RPC endpoint, using Infura.
 /// In order to use it an Infura API key is necessary.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct RpcState {
@@ -487,7 +486,6 @@ impl RpcState {
             .unwrap()
     }
 }
-
 
 #[cfg(test)]
 mod tests {
