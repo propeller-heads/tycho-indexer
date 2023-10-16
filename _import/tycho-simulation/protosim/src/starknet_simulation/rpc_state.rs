@@ -487,3 +487,18 @@ impl RpcState {
             .unwrap()
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_gas_price() {
+        let block = BlockValue::Number(BlockNumber(169928));
+        let rpc_state = RpcState::new_infura(RpcChain::MainNet, block);
+
+        let price = rpc_state.get_gas_price(169928).unwrap();
+        assert_eq!(price, 22804578690);
+    }
+}

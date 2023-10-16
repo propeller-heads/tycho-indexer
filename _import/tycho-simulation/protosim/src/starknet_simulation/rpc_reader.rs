@@ -70,5 +70,69 @@ impl StateReader for RpcStateReader {
 
 #[cfg(test)]
 mod tests {
-    // TODO: write tests
+    use crate::starknet_simulation::rpc_state::{BlockTag, RpcChain};
+
+    use super::super::rpc_state::RpcState;
+    use super::*;
+
+    fn setup_reader() -> RpcStateReader {
+        let rpc_state = RpcState::new_infura(RpcChain::MainNet, BlockTag::Latest.into());
+        RpcStateReader(rpc_state)
+    }
+
+    #[test]
+    fn test_get_class_hash_at() {
+        let reader = setup_reader();
+
+        let address_bytes =
+            hex::decode("04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a")
+                .expect("Decoding failed");
+        let contract_address: Address = Address(Felt252::from_bytes_be(&address_bytes));
+
+        let result = reader
+            .get_class_hash_at(&contract_address)
+            .unwrap();
+
+        assert_eq!(
+            result,
+            [
+                7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67,
+                30, 166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235
+            ]
+        );
+    }
+
+    #[test]
+    fn test_get_contract_class() {
+        let reader = setup_reader();
+
+        let class_hash: &ClassHash = &[
+            7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67, 30,
+            166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235,
+        ];
+
+        let result = reader.get_contract_class(class_hash);
+
+        assert!(result.is_ok());
+        println!("RESULT: {:?}", result.unwrap());
+    }
+
+    #[test]
+    fn test_get_storage_at() {
+        let reader = setup_reader();
+
+        let address_bytes =
+            hex::decode("04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a")
+                .expect("Decoding failed");
+        let address: Address = Address(Felt252::from_bytes_be(&address_bytes));
+        let entry = [0; 32];
+        let storage_entry: StorageEntry = (address, entry);
+
+        let result = reader
+            .get_storage_at(&storage_entry)
+            .unwrap();
+
+        let zero_as_bytes: [u8; 32] = [0; 32];
+        assert_eq!(result, Felt252::from_bytes_be(&zero_as_bytes))
+    }
 }
