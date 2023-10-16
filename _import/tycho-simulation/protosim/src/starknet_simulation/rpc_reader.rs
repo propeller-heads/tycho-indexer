@@ -81,6 +81,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // needs infura key
     fn test_get_class_hash_at() {
         let reader = setup_reader();
 
@@ -103,6 +104,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // needs infura key
     fn test_get_contract_class() {
         let reader = setup_reader();
 
@@ -113,11 +115,12 @@ mod tests {
 
         let result = reader.get_contract_class(class_hash);
 
+        // the CompiledClass object is huge, so we just check it is returned and skip the details here
         assert!(result.is_ok());
-        println!("RESULT: {:?}", result.unwrap());
     }
 
     #[test]
+    #[ignore] // needs infura key
     fn test_get_storage_at() {
         let reader = setup_reader();
 
