@@ -178,7 +178,6 @@ pub async fn update_loop(
     let state = client
         .get_state(
             &StateRequestParameters::default(),
-            // &StateRequestBody::from_timestamp(Utc::now().naive_utc()),
             &StateRequestBody::new(
                 Some(vec![B160::from_str(AMBIENT_ACCOUNT_ADDRESS).unwrap()]),
                 Version::default(),
@@ -230,7 +229,7 @@ pub async fn update_loop(
                 {
                     match change {
                         ChangeType::Update => {
-                            info!(%address, "Updating account");
+                            debug!(%address, "Updating account");
 
                             // If the account is not present, the internal storage will handle
                             // throwing an exception.

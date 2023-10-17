@@ -86,7 +86,7 @@ impl TychoVMStateClient for TychoClient {
             filters.to_query_string()
         );
 
-        info!(%url, "Sending contract_state request to Tycho server");
+        debug!(%url, "Sending contract_state request to Tycho server");
         let body = serde_json::to_string(&request)
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
