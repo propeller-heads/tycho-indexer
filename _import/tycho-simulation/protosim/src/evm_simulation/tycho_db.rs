@@ -41,28 +41,6 @@ pub struct PreCachedDBInner {
     block: Option<BlockHeader>,
 }
 
-/// Get a new tokio runtime if we are not already in one
-fn get_runtime() -> Option<Arc<Runtime>> {
-    let runtime: Option<Runtime> = match tokio::runtime::Handle::try_current() {
-        Ok(_) => {
-            // We are in a tokio runtime, use the current one
-            None
-        }
-        Err(_) => {
-            // We are not in a tokio runtime, create a new one
-            match Runtime::new() {
-                Ok(runtime) => Some(runtime),
-                Err(e) => {
-                    error!(?e, "Failed to create tokio runtime");
-                    None
-                }
-            }
-        }
-    };
-
-    runtime.map(Arc::new)
-}
-
 #[derive(Clone, Debug)]
 pub struct PreCachedDB {
     /// Cached inner data
@@ -79,7 +57,28 @@ impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
     pub fn new(tycho_url: &str) -> Self {
         info!(?tycho_url, "Creating new PreCachedDB instance");
-        let runtime = get_runtime();
+        let (handle, runtime) = 
+        match tokio::runtime::Handle::try_current() {
+            Ok(current_handle) => {
+                // We are in a tokio runtime, use the current one
+                debug!("Using current tokio runtime");
+                (current_handle, None)
+            }
+            Err(_) => {
+                // We are not in a tokio runtime, create a new one
+                match tokio::runtime::Runtime::new() {
+                    Ok(new_runtime) => {
+                        debug!("Creating new tokio runtime");
+                        (new_runtime.handle().clone(), Some(Arc::new(new_runtime)))
+                    }
+                    Err(e) => {
+                        error!(?e, "Failed to create tokio runtime");
+                        (tokio::runtime::Handle::current(), None)
+                    }
+                }
+            }
+        };
+
         let tycho_db = PreCachedDB {
             inner: Arc::new(RwLock::new(PreCachedDBInner {
                 accounts: AccountStorage::new(),
@@ -91,12 +90,9 @@ impl PreCachedDB {
         let client = TychoClient::new(tycho_url).unwrap();
         let (_tx, rx) = mpsc::channel::<()>(5); // TODO: Make this configurable
 
-        info!("Spawning update loop");
         let tycho_url_clone = tycho_url.to_owned();
-        let handle = match &tycho_db.runtime {
-            Some(runtime) => runtime.handle().clone(),
-            None => tokio::runtime::Handle::current(),
-        };
+
+        info!("Spawning update loop");
         handle.spawn(async move {
             info_span!("update_loop", tycho_url = tycho_url_clone);
             update_loop(tycho_db_clone, client, rx).await;
@@ -110,10 +106,11 @@ impl PreCachedDB {
         // If we get here and have to block the current thread, we really
         // messed up indexing / filling the storage. In that case this will save us
         // at the price of a very high time penalty.
-        match &self.runtime {
-            Some(runtime) => runtime.block_on(f),
-            None => futures::executor::block_on(f),
-        }
+        // match &self.runtime {
+        //     Some(runtime) => runtime.block_on(f),
+            // None => futures::executor::block_on(f),
+        // }
+        futures::executor::block_on(f)
     }
 
     /// Updates the current block.

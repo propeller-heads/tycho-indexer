@@ -34,9 +34,7 @@ use std::fmt::Debug;
 ///     Block number available to the transaction
 /// timestamp: int
 ///     Timestamp value available to the transaction
-#[pyclass(
-    text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
-)]
+#[pyclass]
 #[derive(Clone, Debug)]
 pub struct SimulationParameters {
     #[pyo3(get)]
@@ -60,6 +58,9 @@ pub struct SimulationParameters {
 #[pymethods]
 impl SimulationParameters {
     #[new]
+    #[pyo3(
+        text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
+    )]
     #[allow(clippy::too_many_arguments)]
     fn new(
         caller: String,
