@@ -1,13 +1,7 @@
 use ethers::types::Bytes;
+use tokio::sync::RwLock;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use thiserror::Error;
-use tokio::{
-    runtime::Runtime,
-    sync::{
-        mpsc::{self, Receiver},
-        RwLock,
-    },
-};
 use tracing::{debug, error, info, info_span, instrument, warn};
 
 use revm::{
@@ -49,41 +43,18 @@ pub struct PreCachedDB {
     /// exclusive write access to the data and `Arc` for shared ownership of the lock across
     /// threads.
     pub inner: Arc<RwLock<PreCachedDBInner>>,
-    /// Tokio runtime to execute async code
-    pub runtime: Option<Arc<Runtime>>,
 }
 
 impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
     pub fn new(tycho_url: &str) -> Self {
         info!(?tycho_url, "Creating new PreCachedDB instance");
-        let (handle, runtime) = match tokio::runtime::Handle::try_current() {
-            Ok(current_handle) => {
-                // We are in a tokio runtime, use the current one
-                debug!("Using current tokio runtime");
-                (current_handle, None)
-            }
-            Err(_) => {
-                // We are not in a tokio runtime, create a new one
-                match tokio::runtime::Runtime::new() {
-                    Ok(new_runtime) => {
-                        debug!("Creating new tokio runtime");
-                        (new_runtime.handle().clone(), Some(Arc::new(new_runtime)))
-                    }
-                    Err(e) => {
-                        error!(?e, "Failed to create tokio runtime");
-                        (tokio::runtime::Handle::current(), None)
-                    }
-                }
-            }
-        };
 
         let tycho_db = PreCachedDB {
             inner: Arc::new(RwLock::new(PreCachedDBInner {
                 accounts: AccountStorage::new(),
                 block: None,
             })),
-            runtime,
         };
 
         let client = TychoClient::new(tycho_url).unwrap();
@@ -107,11 +78,11 @@ impl PreCachedDB {
         });
 
         // Block and wait for the result.
-        let _ = rx.recv().unwrap();
+        rx.recv().unwrap();
         info!("Initialization thread finished");
 
         let tycho_db_clone = tycho_db.clone();
-        let (_tx, rx) = mpsc::channel::<()>(5); // TODO: Make this configurable
+        let (_tx, rx) = tokio::sync::mpsc::channel::<()>(5); // TODO: Make this configurable
 
         let tycho_url_clone = tycho_url.to_owned();
 
@@ -162,7 +133,7 @@ impl PreCachedDB {
 
     /// Start the update loop.
     #[instrument(skip_all)]
-    async fn update_loop(&self, client: impl TychoVMStateClient, mut stop_signal: Receiver<()>) {
+    async fn update_loop(&self, client: impl TychoVMStateClient, mut stop_signal: tokio::sync::mpsc::Receiver<()>) {
         // Start buffering messages
         info!("Starting message stream");
         let mut messages = client.realtime_messages().await;
@@ -232,10 +203,6 @@ impl PreCachedDB {
         // If we get here and have to block the current thread, we really
         // messed up indexing / filling the storage. In that case this will save us
         // at the price of a very high time penalty.
-        // match &self.runtime {
-        //     Some(runtime) => runtime.block_on(f),
-        // None => futures::executor::block_on(f),
-        // }
         futures::executor::block_on(f)
     }
 
@@ -522,7 +489,6 @@ mod tests {
                 accounts: AccountStorage::new(),
                 block: None,
             })),
-            runtime: None,
         }
     }
 

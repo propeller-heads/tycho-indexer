@@ -66,18 +66,15 @@ impl SimulationEngineInner {
         }
     }
 
-    fn query_storage(
-        &self,
-        address: B160,
-        slot: rU256,
-    ) -> Option<rU256> {
+    fn query_storage(&self, address: B160, slot: rU256) -> Option<rU256> {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => {
-                engine.state.query_storage(address, slot).ok()
-            }
-            SimulationEngineInner::TychoDB(engine) => {
-                engine.state.get_storage(&address, &slot)
-            }
+            SimulationEngineInner::SimulationDB(engine) => engine
+                .state
+                .query_storage(address, slot)
+                .ok(),
+            SimulationEngineInner::TychoDB(engine) => engine
+                .state
+                .get_storage(&address, &slot),
         }
     }
 
