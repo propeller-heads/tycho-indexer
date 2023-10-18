@@ -77,7 +77,7 @@ pub struct BlockHeader {
 
 impl From<BlockHeader> for BlockId {
     fn from(value: BlockHeader) -> Self {
-        BlockId::Number(value.number.into())
+        Self::from(value.hash)
     }
 }
 
@@ -124,11 +124,10 @@ impl<M: Middleware> SimulationDB<M> {
     pub fn init_account(
         &self,
         address: B160,
-        account: AccountInfo,
+        mut account: AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
     ) {
-        let mut account = account;
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
@@ -380,7 +379,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
-            // This scope is to not make two simultaneous borrows (one occurs inside init_account)
+            // This scope is to not make two simultaneous borrows
             let borrowed_storage = self.account_storage.borrow();
             is_mocked = borrowed_storage.is_mocked_account(&address);
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {

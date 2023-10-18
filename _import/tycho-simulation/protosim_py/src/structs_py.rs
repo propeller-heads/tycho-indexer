@@ -410,18 +410,7 @@ impl TychoDB {
     /// * `block` - Block header to use as a starting point for the database.
     #[new]
     pub fn new(tycho_url: &str) -> Self {
-        let runtime = get_runtime().unwrap();
-        let inner = PreCachedDB::new(None, Some(runtime));
-
-        let db = inner.clone();
-        let tycho_db = db.clone();
-        let client = TychoClient::new(tycho_url).unwrap();
-        let (_tx, rx) = mpsc::channel::<()>(1);
-
-        tokio::spawn(async move {
-            update_loop(tycho_db, client, rx).await;
-        });
-
-        Self { inner }
+        let db = tycho_db::PreCachedDB::new(tycho_url);
+        Self { inner: db }
     }
 }

@@ -1,7 +1,13 @@
 use ethers::types::Bytes;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use thiserror::Error;
-use tokio::sync::{mpsc::Receiver, RwLock};
+use tokio::{
+    runtime::Runtime,
+    sync::{
+        mpsc::{self, Receiver},
+        RwLock,
+    },
+};
 use tracing::{debug, error, info, instrument, warn};
 
 use revm::{
@@ -11,16 +17,13 @@ use revm::{
 };
 
 use crate::evm_simulation::{
-    tycho_client::AMBIENT_ACCOUNT_ADDRESS,
-    tycho_models::{StateRequestBody, StateRequestParameters, Version},
-};
-
-use super::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
-    tycho_client::{StateRequestBody, StateRequestParameters, TychoVMStateClient},
-    tycho_models::{AccountUpdate, ChangeType},
+    tycho_client::{TychoVMStateClient, AMBIENT_ACCOUNT_ADDRESS},
+    tycho_models::{AccountUpdate, ChangeType, StateRequestBody, StateRequestParameters, Version},
 };
+
+use super::tycho_client::TychoClient;
 
 #[derive(Error, Debug)]
 pub enum PreCachedDBError {
@@ -38,6 +41,15 @@ pub struct PreCachedDBInner {
     block: Option<BlockHeader>,
 }
 
+fn get_runtime() -> Option<Arc<Runtime>> {
+    let runtime = tokio::runtime::Handle::try_current()
+        .is_err()
+        .then(|| Runtime::new().unwrap())
+        .unwrap();
+
+    Some(Arc::new(runtime))
+}
+
 #[derive(Clone, Debug)]
 pub struct PreCachedDB {
     /// Cached inner data
@@ -45,15 +57,31 @@ pub struct PreCachedDB {
     /// `inner` encapsulates `PreCachedDBInner` using `RwLock` for safe concurrent read or
     /// exclusive write access to the data and `Arc` for shared ownership of the lock across
     /// threads.
-    inner: Arc<RwLock<PreCachedDBInner>>,
+    pub inner: Arc<RwLock<PreCachedDBInner>>,
     /// Tokio runtime to execute async code
-    pub runtime: Option<Arc<tokio::runtime::Runtime>>,
+    pub runtime: Option<Arc<Runtime>>,
 }
 
 impl PreCachedDB {
-    pub fn new(block: Option<BlockHeader>, runtime: Option<Arc<tokio::runtime::Runtime>>) -> Self {
-        let inner = PreCachedDBInner { accounts: AccountStorage::new(), block };
-        Self { inner: Arc::new(RwLock::new(inner)), runtime }
+    /// Create a new PreCachedDB instance and run the update loop in a separate thread.
+    pub fn new(tycho_url: &str) -> Self {
+        let runtime = get_runtime().unwrap();
+        let tycho_db = PreCachedDB {
+            inner: Arc::new(RwLock::new(PreCachedDBInner {
+                accounts: AccountStorage::new(),
+                block: None,
+            })),
+            runtime: Some(runtime),
+        };
+        let tycho_db_clone = tycho_db.clone();
+        let client = TychoClient::new(tycho_url).unwrap();
+        let (_tx, rx) = mpsc::channel::<()>(5); // TODO: Make this configurable
+
+        tokio::spawn(async move {
+            update_loop(tycho_db_clone, client, rx).await;
+        });
+
+        tycho_db
     }
 
     /// Executes a future, blocking the current thread until the future completes.
@@ -94,10 +122,9 @@ impl PreCachedDB {
     pub fn init_account(
         &self,
         address: B160,
-        account: AccountInfo,
+        mut account: AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
     ) {
-        let mut account = account;
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
@@ -251,18 +278,9 @@ impl PreCachedDB {
         });
     }
 
-    /// Clears temp storage
-    ///
-    /// It is recommended to call this after a new block is received,
-    /// to avoid stored state leading to wrong results.
+    /// Deprecated in TychoDB
     pub fn clear_temp_storage(&mut self) {
-        self.block_on(async {
-            self.inner
-                .write()
-                .await
-                .accounts
-                .clear_temp_storage();
-        });
+        info!("Temp storage in TychoDB is never set, nothing to clear");
     }
 }
 
@@ -450,7 +468,13 @@ mod tests {
 
     #[fixture]
     pub fn mock_db() -> PreCachedDB {
-        PreCachedDB::new(None, None)
+        PreCachedDB {
+            inner: Arc::new(RwLock::new(PreCachedDBInner {
+                accounts: AccountStorage::new(),
+                block: None,
+            })),
+            runtime: None,
+        }
     }
 
     #[rstest]
@@ -712,21 +736,25 @@ mod tests {
             B160::from_str("0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
 
         info!("Creating TychoDB");
-        let db = create_tycho_db("127.0.0.1:4242".to_owned());
+        let db = PreCachedDB {
+            inner: Arc::new(RwLock::new(PreCachedDBInner {
+                accounts: AccountStorage::new(),
+                block: None,
+            })),
+            runtime: None,
+        };
 
         info!("Waiting for TychoDB to initialize");
         // Wait for the get_state call to finish
         tokio::time::sleep(tokio::time::Duration::from_secs(24)).await;
 
         info!("Fetching account info");
-        {
-            let read_guard = db.read().await;
-            let acc_info = read_guard
-                .basic(ambient_contract)
-                .unwrap()
-                .unwrap();
 
-            debug!(?acc_info, "Account info");
-        }
+        let acc_info = db
+            .basic(ambient_contract)
+            .unwrap()
+            .unwrap();
+
+        debug!(?acc_info, "Account info");
     }
 }
