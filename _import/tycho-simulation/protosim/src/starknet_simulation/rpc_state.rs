@@ -1,5 +1,6 @@
 use cairo_vm::vm::runners::cairo_runner::ExecutionResources as VmExecutionResources;
 use core::fmt;
+use dotenv::dotenv;
 use serde::{Deserialize, Deserializer};
 use serde_json::json;
 use starknet::core::types::ContractClass as SNContractClass;
@@ -283,6 +284,7 @@ impl RpcState {
     }
 
     pub fn new_infura(chain: RpcChain, block: BlockValue) -> Self {
+        dotenv().ok();
         let rpc_endpoint = format!(
             "https://{}.infura.io/v3/{}",
             chain,

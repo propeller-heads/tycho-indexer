@@ -42,6 +42,7 @@ starknet_api = "0.4.1"
 starknet = "0.5.0"
 cairo-vm = { version = "0.8.5", features = ["cairo-1-hints"] }
 ureq = { version = "2.7.1", features = ["json"] }
+dotenv = "0.15.0"
 
 [dev-dependencies]
 mockito = "1.1.1"

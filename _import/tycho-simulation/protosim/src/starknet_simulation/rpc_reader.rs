@@ -70,43 +70,50 @@ impl StateReader for RpcStateReader {
 
 #[cfg(test)]
 mod tests {
-    use crate::starknet_simulation::rpc_state::{BlockTag, RpcChain};
+    use starknet_api::block::BlockNumber;
+
+    use crate::starknet_simulation::rpc_state::RpcChain;
 
     use super::*;
 
     fn setup_reader() -> RpcStateReader {
-        let rpc_state = RpcState::new_infura(RpcChain::MainNet, BlockTag::Latest.into());
+        let rpc_state = RpcState::new_infura(RpcChain::MainNet, BlockNumber(333333).into());
         RpcStateReader(rpc_state)
     }
 
     #[test]
-    #[ignore] // needs infura key
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_class_hash_at() {
         let reader = setup_reader();
 
+        // Jedi Swap ETH/USDC pool address
         let address_bytes =
             hex::decode("04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a")
                 .expect("Decoding failed");
         let contract_address: Address = Address(Felt252::from_bytes_be(&address_bytes));
 
+        // expected class hash
+        let hash_bytes =
+            hex::decode("07b5cd6a6949cc1730f89d795f2442f6ab431ea6c9a5be00685d50f97433c5eb")
+                .expect("Decoding failed");
+        let expected_result: [u8; 32] = hash_bytes
+            .as_slice()
+            .try_into()
+            .expect("Conversion Failed");
+
         let result = reader
             .get_class_hash_at(&contract_address)
             .unwrap();
 
-        assert_eq!(
-            result,
-            [
-                7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67,
-                30, 166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235
-            ]
-        );
+        assert_eq!(result, expected_result);
     }
 
     #[test]
-    #[ignore] // needs infura key
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_contract_class() {
         let reader = setup_reader();
 
+        // Jedi Swap ETH/USDC pool class hash
         let class_hash: &ClassHash = &[
             7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67, 30,
             166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235,
@@ -116,11 +123,29 @@ mod tests {
 
         // the CompiledClass object is huge, so we just check it is returned and skip the details
         // here
-        assert!(result.is_ok());
+        assert!(result.is_ok())
     }
 
     #[test]
-    #[ignore] // needs infura key
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_get_nonce_at() {
+        let reader = setup_reader();
+
+        // a test wallet address
+        let address_bytes =
+            hex::decode("03e9dB89D1c040968Cd82c07356E8e93B51825ab3CdAbA3d6dBA7a856729ef71")
+                .expect("Decoding failed");
+        let contract_address: Address = Address(Felt252::from_bytes_be(&address_bytes));
+
+        let result = reader
+            .get_nonce_at(&contract_address)
+            .unwrap();
+
+        assert_eq!(result.to_string(), "22")
+    }
+
+    #[test]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_storage_at() {
         let reader = setup_reader();
 
@@ -137,5 +162,29 @@ mod tests {
 
         let zero_as_bytes: [u8; 32] = [0; 32];
         assert_eq!(result, Felt252::from_bytes_be(&zero_as_bytes))
+    }
+
+    #[test]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_get_compiled_class_hash() {
+        let reader = setup_reader();
+
+        // Jedi Swap ETH/USDC pool class hash
+        let class_hash: &ClassHash = &[
+            7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67, 30,
+            166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235,
+        ];
+
+        //expected class hash
+        let expected_hash: ClassHash = [
+            7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67, 30,
+            166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235,
+        ];
+
+        let result = reader
+            .get_compiled_class_hash(class_hash)
+            .unwrap();
+
+        assert_eq!(result, expected_hash)
     }
 }
