@@ -1,10 +1,7 @@
 use ethers::types::Bytes;
-use std::{collections::HashMap, str::FromStr, ops::Deref, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 use thiserror::Error;
-use tokio::sync::{
-    mpsc::{self, Receiver},
-    RwLock,
-};
+use tokio::sync::{mpsc::Receiver, RwLock};
 use tracing::{debug, error, info, instrument, warn};
 
 use revm::{
@@ -21,8 +18,8 @@ use crate::evm_simulation::{
 use super::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
-    tycho_client::{TychoClient, TychoVMStateClient},
-    tycho_models::{AccountUpdate, Block, ChangeType},
+    tycho_client::{StateRequestBody, StateRequestParameters, TychoVMStateClient},
+    tycho_models::{AccountUpdate, ChangeType},
 };
 
 #[derive(Error, Debug)]
@@ -151,6 +148,15 @@ impl PreCachedDB {
         revert_updates
     }
 
+    pub fn update_account(&self, address: &B160, update: &StateUpdate) {
+        self.block_on(async {
+            self.accounts
+                .write()
+                .await
+                .update_account(address, update);
+        });
+    }
+
     /// Clears temp storage
     ///
     /// It is recommended to call this after a new block is received,
@@ -248,54 +254,10 @@ impl DatabaseRef for PreCachedDB {
     }
 }
 
-// We might consider wrapping this type for a nicer API
-#[derive(Clone, Debug)]
-pub struct TychoDB(pub Arc<RwLock<PreCachedDB>>);
-
-impl TychoDB {
-    /// Creates a new TychoDB and starts the update loop.
-    pub fn new(url: &str) -> Self {
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-        let inner = PreCachedDB {
-            accounts: Arc::new(RwLock::new(AccountStorage::new())),
-            block: None,
-            runtime: Some(Arc::new(runtime)),
-        };
-
-        let db = Self(Arc::new(RwLock::new(inner)));
-        let tycho_db = db.clone();
-        let client = TychoClient::new(url).unwrap();
-        let (_tx, rx) = mpsc::channel::<()>(1);
-
-        tokio::spawn(async move {
-            update_loop(tycho_db, client, rx).await;
-        });
-
-        db
-    }
-}
-
-impl Deref for TychoDB {
-    type Target = Arc<RwLock<PreCachedDB>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<Arc<RwLock<PreCachedDB>>> for TychoDB {
-    fn from(db: Arc<RwLock<PreCachedDB>>) -> Self {
-        Self(db)
-    }
-}
-
 // main data update loop, runs in a separate tokio runtime
 #[instrument(skip_all)]
 pub async fn update_loop(
-    db: TychoDB,
+    &mut db: PreCachedDB,
     client: impl TychoVMStateClient,
     mut stop_signal: Receiver<()>,
 ) {
@@ -315,23 +277,18 @@ pub async fn update_loop(
         .await
         .expect("current state");
 
-    // Inserting the state into local cache database.
-    {
-        // This scope ensures the lock is dropped after processing the message.
-        let mut db_guard = db.write().await;
-        for account in state.accounts.into_iter() {
-            info!(%account.address, "Initializing account");
-            db_guard.init_account(
-                account.address,
-                AccountInfo::new(
-                    account.balance,
-                    0,
-                    account.code_hash,
-                    Bytecode::new_raw(Bytes::from(account.code).0),
-                ),
-                Some(account.slots),
-            );
-        }
+    for account in state.accounts.into_iter() {
+        info!(%account.address, "Initializing account");
+        db.init_account(
+            account.address,
+            AccountInfo::new(
+                account.balance,
+                0,
+                account.code_hash,
+                Bytecode::new_raw(Bytes::from(account.code).0),
+            ),
+            Some(account.slots),
+        );
     }
 
     info!("Starting state update loop");
@@ -347,10 +304,9 @@ pub async fn update_loop(
             None => break,
             Some(msg) => {
                 info!(%msg.block.number, "Received new block");
-                let mut db_guard = db.write().await;
 
                 // Update block.
-                db_guard.block = Some(msg.block.into());
+                db.block = Some(msg.block.into());
 
                 // Update existing accounts.
                 for (_address, AccountUpdate { address, chain: _, slots, balance, code, change }) in
@@ -362,14 +318,10 @@ pub async fn update_loop(
 
                             // If the account is not present, the internal storage will handle
                             // throwing an exception.
-                            db_guard
-                                .accounts
-                                .write()
-                                .await
-                                .update_account(
-                                    &address,
-                                    &StateUpdate { storage: Some(slots), balance },
-                                );
+                            db.update_account(
+                                &address,
+                                &StateUpdate { storage: Some(slots), balance },
+                            );
                         }
                         ChangeType::Deletion => {
                             info!(%address, "Deleting account");
@@ -384,7 +336,7 @@ pub async fn update_loop(
                             let code =
                                 Bytecode::new_raw(Bytes::from(code.expect("account code")).0);
                             let balance = balance.expect("account balance");
-                            db_guard.init_account(
+                            db.init_account(
                                 address,
                                 AccountInfo::new(balance, 0, code.hash_slow(), code),
                                 Some(slots),
@@ -410,7 +362,7 @@ mod tests {
     use crate::evm_simulation::{
         tycho_client::TychoClientError,
         tycho_models::{
-            AccountUpdate, BlockAccountChanges, Chain, ChangeType, ResponseAccount,
+            AccountUpdate, Block, BlockAccountChanges, Chain, ChangeType, ResponseAccount,
             StateRequestParameters, StateRequestResponse,
         },
     };
@@ -448,7 +400,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_account_storage(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
+    fn test_account_storage(mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::from(1);
         let mut permanent_storage: HashMap<rU256, rU256> = HashMap::new();
@@ -464,7 +416,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_account_storage_zero(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
+    fn test_account_storage_zero(mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::from(1);
         mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
@@ -634,13 +586,11 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoVMStateClient) {
-        let db = Arc::new(RwLock::new(mock_db));
         let (_tx, rx) = mpsc::channel::<()>(1);
 
-        update_loop(db.clone().into(), mock_client, rx).await;
+        update_loop(mock_db.clone(), mock_client, rx).await;
 
-        let read_guard = db.read().await;
-        dbg!(read_guard
+        dbg!(&mock_db
             .accounts
             .read()
             .await
@@ -649,9 +599,9 @@ mod tests {
             ));
 
         assert_eq!(
-            read_guard
+            mock_db
                 .block
-                .expect("Block should be Some"),
+                .expect("block should be Some"),
             Block {
                 number: 123,
                 hash: B256::from_str(

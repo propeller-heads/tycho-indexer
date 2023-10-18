@@ -1,14 +1,13 @@
 use ethers::providers::{Http, Provider};
 use num_bigint::BigUint;
 use revm::primitives::{B160, U256 as rU256};
-use tokio::runtime::Runtime;
 
 use crate::structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
     SimulationResult, StateUpdate, TychoDB,
 };
 use pyo3::{prelude::*, types::PyType};
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr};
 
 use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
 
@@ -28,6 +27,49 @@ impl SimulationEngineInner {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine.simulate(params),
             SimulationEngineInner::TychoDB(engine) => engine.simulate(params),
+        }
+    }
+
+    fn init_account(
+        &self,
+        address: B160,
+        account: revm::primitives::AccountInfo,
+        permanent_storage: Option<HashMap<rU256, rU256>>,
+        mocked: bool,
+    ) {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => {
+                engine
+                    .state
+                    .init_account(address, account, permanent_storage, mocked)
+            }
+            SimulationEngineInner::TychoDB(engine) => {
+                engine
+                    .state
+                    .init_account(address, account, permanent_storage)
+            }
+        }
+    }
+
+    fn update_state(
+        &mut self,
+        updates: &HashMap<B160, account_storage::StateUpdate>,
+        block: database::BlockHeader,
+    ) -> HashMap<B160, account_storage::StateUpdate> {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => {
+                engine.state.update_state(updates, block)
+            }
+            SimulationEngineInner::TychoDB(engine) => {
+                engine.state.update_state(updates, block)
+            }
+        }
+    }
+
+    fn clear_temp_storage(&mut self) {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
+            SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
         }
     }
 }
@@ -66,15 +108,7 @@ impl SimulationEngine {
     ///
     /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
     fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
-        let rust_result = match &self_.0 {
-            SimulationEngineInner::SimulationDB(engine) => {
-                engine.simulate(&simulation::SimulationParameters::from(params))
-            }
-            SimulationEngineInner::TychoDB(engine) => {
-                engine.simulate(&simulation::SimulationParameters::from(params))
-            }
-        };
-        match rust_result {
+        match self_.0.simulate(&params.into()) {
             Ok(sim_res) => Ok(SimulationResult::from(sim_res)),
             Err(sim_err) => Err(PyErr::from(SimulationErrorDetails::from(sim_err))),
         }
@@ -100,18 +134,7 @@ impl SimulationEngine {
             }
         }
 
-        match &self_.0 {
-            SimulationEngineInner::SimulationDB(engine) => {
-                engine
-                    .state
-                    .init_account(address, account, Some(rust_slots), mocked)
-            }
-            SimulationEngineInner::TychoDB(engine) => {
-                engine
-                    .state
-                    .init_account(address, account, Some(rust_slots))
-            }
-        }
+        self_.0.init_account(address, account,  Some(rust_slots), mocked)
     }
 
     fn update_state(
@@ -126,14 +149,7 @@ impl SimulationEngine {
                 .insert(B160::from_str(&key).unwrap(), account_storage::StateUpdate::from(value));
         }
 
-        let reverse_updates = match &mut self_.0 {
-            SimulationEngineInner::SimulationDB(engine) => engine
-                .state
-                .update_state(&rust_updates, block),
-            SimulationEngineInner::TychoDB(engine) => engine
-                .state
-                .update_state(&rust_updates, block),
-        };
+        let reverse_updates = self_.0.update_state(&rust_updates, block);
 
         let mut py_reverse_updates: HashMap<String, StateUpdate> = HashMap::new();
         for (key, value) in reverse_updates {
@@ -143,9 +159,6 @@ impl SimulationEngine {
     }
 
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {
-        match &mut self_.0 {
-            SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
-            SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
-        }
+        self_.0.clear_temp_storage()
     }
 }
