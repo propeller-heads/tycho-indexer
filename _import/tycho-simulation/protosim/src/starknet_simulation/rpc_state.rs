@@ -246,21 +246,26 @@ impl<'de> Deserialize<'de> for RpcCallInfo {
 pub fn deserialize_transaction_json(
     transaction: serde_json::Value,
 ) -> serde_json::Result<SNTransaction> {
-    let tx_type: String = serde_json::from_value(transaction["type"].clone())?;
-    let tx_version: String = serde_json::from_value(transaction["version"].clone())?;
+    let tx_type = transaction["type"]
+        .as_str()
+        .ok_or_else(|| serde::de::Error::custom("type field missing or not a string"))?;
+    let tx_version = transaction["version"]
+        .as_str()
+        .ok_or_else(|| serde::de::Error::custom("version field missing or not a string"))?;
 
-    match tx_type.as_str() {
-        "INVOKE" => match tx_version.as_str() {
+    match tx_type {
+        "INVOKE" => match tx_version {
             "0x0" => Ok(SNTransaction::Invoke(InvokeTransaction::V0(serde_json::from_value(
                 transaction,
             )?))),
             "0x1" => Ok(SNTransaction::Invoke(InvokeTransaction::V1(serde_json::from_value(
                 transaction,
             )?))),
-            x => Err(serde::de::Error::custom(format!("unimplemented invoke version: {x}"))),
+            x => Err(serde::de::Error::custom(format!("unimplemented invoke version: {}", x))),
         },
         x => Err(serde::de::Error::custom(format!(
-            "unimplemented transaction type deserialization: {x}"
+            "unimplemented transaction type deserialization: {}",
+            x
         ))),
     }
 }
