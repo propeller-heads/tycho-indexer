@@ -74,7 +74,7 @@ enum RpcError {
     #[error("Parsing failed with error: {0}")]
     Parse(#[from] serde_json::Error),
     #[error("Request failed with error: {0}")]
-    Request(Box<ureq::Error>),
+    Request(Box<reqwest::Error>),
 }
 
 /// Represents the tag of a block value.
@@ -317,7 +317,7 @@ impl RpcState {
         });
         let response = self
             .rpc_call_no_deserialize(&payload)?
-            .into_json()
+            .json()
             .unwrap();
         Self::deserialize_call(response)
     }
@@ -325,11 +325,12 @@ impl RpcState {
     fn rpc_call_no_deserialize(
         &self,
         params: &serde_json::Value,
-    ) -> Result<ureq::Response, RpcError> {
-        ureq::post(&self.rpc_endpoint)
-            .set("Content-Type", "application/json")
-            .set("accept", "application/json")
-            .send_json(params)
+    ) -> Result<reqwest::blocking::Response, RpcError> {
+        let client = reqwest::blocking::Client::new();
+        client
+            .post(&self.rpc_endpoint)
+            .json(params)
+            .send()
             .map_err(|err| RpcError::Request(Box::new(err)))
     }
 
@@ -351,12 +352,14 @@ impl RpcState {
     /// - events
     /// - return data
     pub fn get_transaction_trace(&self, hash: &TransactionHash) -> TransactionTrace {
-        let response = ureq::get(&self.get_feeder_endpoint("get_transaction_trace"))
-            .query("transactionHash", &hash.0.to_string())
-            .call()
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .get(&self.get_feeder_endpoint("get_transaction_trace"))
+            .query(&[("transactionHash", &hash.0.to_string())])
+            .send()
             .unwrap();
 
-        serde_json::from_value(response.into_json().unwrap()).unwrap()
+        serde_json::from_value(response.json().unwrap()).unwrap()
     }
 
     /// Requests the given transaction to the Feeder Gateway API.
@@ -373,14 +376,14 @@ impl RpcState {
 
     /// Gets the gas price of a given block.
     pub fn get_gas_price(&self, block_number: u64) -> serde_json::Result<u128> {
-        let response = ureq::get(&self.get_feeder_endpoint("get_block"))
-            .query("blockNumber", &block_number.to_string())
-            .call()
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .get(&self.get_feeder_endpoint("get_block"))
+            .query(&["blockNumber", &block_number.to_string()])
+            .send()
             .unwrap();
 
-        let res: serde_json::Value = response
-            .into_json()
-            .expect("should be json");
+        let res: serde_json::Value = response.json().expect("should be json");
 
         let gas_price_hex = res["gas_price"].as_str().unwrap();
         let gas_price = u128::from_str_radix(gas_price_hex.trim_start_matches("0x"), 16).unwrap();
@@ -491,6 +494,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_gas_price() {
         let block = BlockValue::Number(BlockNumber(169928));
         let rpc_state = RpcState::new_infura(RpcChain::MainNet, block);
