@@ -1,7 +1,7 @@
 use cairo_vm::vm::runners::cairo_runner::ExecutionResources as VmExecutionResources;
 use core::fmt;
 use dotenv::dotenv;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use starknet::core::types::ContractClass as SNContractClass;
 use starknet_api::{
@@ -78,32 +78,27 @@ enum RpcError {
 }
 
 /// Represents the tag of a block value.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "lowercase")]
 pub enum BlockTag {
     Latest,
     Pending,
 }
 
-impl fmt::Display for BlockTag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let string = match self {
-            BlockTag::Latest => "latest",
-            BlockTag::Pending => "pending",
-        };
-        write!(f, "{}", string)
-    }
-}
-
 /// [`BlockValue`] is an Enum that represent which block we are going to use to retrieve
 /// information.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "lowercase")]
 pub enum BlockValue {
     /// String one of: ["latest", "pending"]
+    #[serde(rename = "block_tag")]
     Tag(BlockTag),
     /// Integer
+    #[serde(rename = "block_number")]
     Number(BlockNumber),
     /// String with format: 0x{felt252}
+    #[serde(rename = "block_hash")]
     Hash(StarkHash),
 }
 
@@ -122,16 +117,6 @@ impl From<BlockNumber> for BlockValue {
 impl From<StarkHash> for BlockValue {
     fn from(value: StarkHash) -> Self {
         BlockValue::Hash(value)
-    }
-}
-
-impl BlockValue {
-    fn to_value(self) -> Result<serde_json::Value, serde_json::Error> {
-        serde_json::to_value(match self {
-            BlockValue::Tag(block_tag) => block_tag.to_string().into(),
-            BlockValue::Number(block_number) => json!({ "block_number": block_number }),
-            BlockValue::Hash(block_hash) => json!({ "block_hash": block_hash }),
-        })
     }
 }
 
@@ -354,7 +339,7 @@ impl RpcState {
     pub fn get_transaction_trace(&self, hash: &TransactionHash) -> TransactionTrace {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .get(&self.get_feeder_endpoint("get_transaction_trace"))
+            .get(self.get_feeder_endpoint("get_transaction_trace"))
             .query(&[("transactionHash", &hash.0.to_string())])
             .send()
             .unwrap();
@@ -378,7 +363,7 @@ impl RpcState {
     pub fn get_gas_price(&self, block_number: u64) -> serde_json::Result<u128> {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .get(&self.get_feeder_endpoint("get_block"))
+            .get(self.get_feeder_endpoint("get_block"))
             .query(&["blockNumber", &block_number.to_string()])
             .send()
             .unwrap();
@@ -396,7 +381,10 @@ impl RpcState {
 
     pub fn get_block_info(&self) -> RpcBlockInfo {
         let block_info: serde_json::Value = self
-            .rpc_call("starknet_getBlockWithTxs", &json!([self.block.to_value().unwrap()]))
+            .rpc_call(
+                "starknet_getBlockWithTxs",
+                &json!([serde_json::to_value(self.block).unwrap()]),
+            )
             .unwrap();
         let sequencer_address: StarkFelt =
             serde_json::from_value(block_info["result"]["sequencer_address"].clone()).unwrap();
@@ -429,7 +417,7 @@ impl RpcState {
     pub fn get_contract_class(&self, class_hash: &ClassHash) -> SNContractClass {
         self.rpc_call_result(
             "starknet_getClass",
-            &json!([self.block.to_value().unwrap(), class_hash.0.to_string()]),
+            &json!([serde_json::to_value(self.block).unwrap(), class_hash.0.to_string()]),
         )
         .unwrap()
     }
@@ -439,7 +427,7 @@ impl RpcState {
             .rpc_call_result(
                 "starknet_getClassHashAt",
                 &json!([
-                    self.block.to_value().unwrap(),
+                    serde_json::to_value(self.block).unwrap(),
                     contract_address
                         .0
                         .key()
@@ -456,7 +444,7 @@ impl RpcState {
         self.rpc_call_result(
             "starknet_getNonce",
             &json!([
-                self.block.to_value().unwrap(),
+                serde_json::to_value(self.block).unwrap(),
                 contract_address
                     .0
                     .key()
@@ -477,7 +465,11 @@ impl RpcState {
 
         self.rpc_call_result(
             "starknet_getStorageAt",
-            &json!([contract_address.to_string(), key.to_string(), self.block.to_value().unwrap()]),
+            &json!([
+                contract_address.to_string(),
+                key.to_string(),
+                serde_json::to_value(self.block).unwrap()
+            ]),
         )
         .unwrap()
     }
