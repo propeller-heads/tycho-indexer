@@ -57,8 +57,7 @@ impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
     pub fn new(tycho_url: &str) -> Self {
         info!(?tycho_url, "Creating new PreCachedDB instance");
-        let (handle, runtime) = 
-        match tokio::runtime::Handle::try_current() {
+        let (handle, runtime) = match tokio::runtime::Handle::try_current() {
             Ok(current_handle) => {
                 // We are in a tokio runtime, use the current one
                 debug!("Using current tokio runtime");
@@ -86,19 +85,146 @@ impl PreCachedDB {
             })),
             runtime,
         };
-        let tycho_db_clone = tycho_db.clone();
+
         let client = TychoClient::new(tycho_url).unwrap();
+        // Run the async get state initialization
+        // Create a channel to send the result of the async block.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let tycho_db_clone = tycho_db.clone();
+        let client_clone = client.clone();
+
+        info!("Spawning initialization thread");
+        // We need to spawn a new thread to run the async block in a sync context.
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(async move {
+                    tycho_db_clone
+                        .initialize_state(&client_clone)
+                        .await
+                });
+            tx.send(()).unwrap();
+        });
+
+        // Block and wait for the result.
+        let _ = rx.recv().unwrap();
+        info!("Initialization thread finished");
+
+        let tycho_db_clone = tycho_db.clone();
         let (_tx, rx) = mpsc::channel::<()>(5); // TODO: Make this configurable
 
         let tycho_url_clone = tycho_url.to_owned();
 
         info!("Spawning update loop");
-        handle.spawn(async move {
-            info_span!("update_loop", tycho_url = tycho_url_clone);
-            update_loop(tycho_db_clone, client, rx).await;
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(async move {
+                    info_span!("update_loop", tycho_url = tycho_url_clone);
+                    tycho_db_clone
+                        .update_loop(client, rx)
+                        .await
+                });
         });
 
         tycho_db
+    }
+
+    /// Initialize the state of the database.
+    #[instrument(skip_all)]
+    async fn initialize_state(&self, client: &TychoClient) {
+        info!("Getting current state");
+        let state = client
+            .get_state(
+                &StateRequestParameters::default(),
+                &StateRequestBody::new(
+                    Some(vec![B160::from_str(AMBIENT_ACCOUNT_ADDRESS).unwrap()]),
+                    Version::default(),
+                ),
+            )
+            .await
+            .expect("current state");
+
+        for account in state.accounts.into_iter() {
+            info!(%account.address, "Initializing account");
+            self.init_account(
+                account.address,
+                AccountInfo::new(
+                    account.balance,
+                    0,
+                    account.code_hash,
+                    Bytecode::new_raw(Bytes::from(account.code).0),
+                ),
+                Some(account.slots),
+            );
+        }
+    }
+
+    /// Start the update loop.
+    #[instrument(skip_all)]
+    async fn update_loop(&self, client: impl TychoVMStateClient, mut stop_signal: Receiver<()>) {
+        // Start buffering messages
+        info!("Starting message stream");
+        let mut messages = client.realtime_messages().await;
+
+        info!("Starting state update loop");
+        // Continuous loop to handle incoming messages.
+        loop {
+            // Check for the stop signal.
+            if stop_signal.try_recv().is_ok() {
+                break
+            }
+
+            match messages.recv().await {
+                // None means the channel is closed.
+                None => break,
+                Some(msg) => {
+                    info!(%msg.block.number, "Received new block");
+
+                    // Update block.
+                    self.update_block(msg.block.into());
+
+                    // Update existing accounts.
+                    for (
+                        _address,
+                        AccountUpdate { address, chain: _, slots, balance, code, change },
+                    ) in msg.account_updates.into_iter()
+                    {
+                        match change {
+                            ChangeType::Update => {
+                                info!(%address, "Updating account");
+
+                                // If the account is not present, the internal storage will handle
+                                // throwing an exception.
+                                self.update_account(
+                                    &address,
+                                    &StateUpdate { storage: Some(slots), balance },
+                                );
+                            }
+                            ChangeType::Deletion => {
+                                info!(%address, "Deleting account");
+
+                                // TODO: Implement deletion.
+                                warn!(%address, "Deletion not implemented");
+                            }
+                            ChangeType::Creation => {
+                                info!(%address, "Creating account");
+
+                                // We expect the code and balance to be present.
+                                let code =
+                                    Bytecode::new_raw(Bytes::from(code.expect("account code")).0);
+                                let balance = balance.expect("account balance");
+                                self.init_account(
+                                    address,
+                                    AccountInfo::new(balance, 0, code.hash_slow(), code),
+                                    Some(slots),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Executes a future, blocking the current thread until the future completes.
@@ -108,7 +234,7 @@ impl PreCachedDB {
         // at the price of a very high time penalty.
         // match &self.runtime {
         //     Some(runtime) => runtime.block_on(f),
-            // None => futures::executor::block_on(f),
+        // None => futures::executor::block_on(f),
         // }
         futures::executor::block_on(f)
     }
@@ -369,102 +495,6 @@ impl DatabaseRef for PreCachedDB {
     }
 }
 
-// main data update loop, runs in a separate tokio runtime
-#[instrument(skip_all)]
-pub async fn update_loop(
-    db: PreCachedDB,
-    client: impl TychoVMStateClient,
-    mut stop_signal: Receiver<()>,
-) {
-    // Start buffering messages
-    info!("Starting message stream");
-    let mut messages = client.realtime_messages().await;
-
-    info!("Getting current state");
-    // Getting the state from Tycho indexer.
-    let state = client
-        .get_state(
-            &StateRequestParameters::default(),
-            &StateRequestBody::new(
-                Some(vec![B160::from_str(AMBIENT_ACCOUNT_ADDRESS).unwrap()]),
-                Version::default(),
-            ),
-        )
-        .await
-        .expect("current state");
-
-    for account in state.accounts.into_iter() {
-        info!(%account.address, "Initializing account");
-        db.init_account(
-            account.address,
-            AccountInfo::new(
-                account.balance,
-                0,
-                account.code_hash,
-                Bytecode::new_raw(Bytes::from(account.code).0),
-            ),
-            Some(account.slots),
-        );
-    }
-
-    info!("Starting state update loop");
-    // Continuous loop to handle incoming messages.
-    loop {
-        // Check for the stop signal.
-        if stop_signal.try_recv().is_ok() {
-            break
-        }
-
-        match messages.recv().await {
-            // None means the channel is closed.
-            None => break,
-            Some(msg) => {
-                info!(%msg.block.number, "Received new block");
-
-                // Update block.
-                db.update_block(msg.block.into());
-
-                // Update existing accounts.
-                for (_address, AccountUpdate { address, chain: _, slots, balance, code, change }) in
-                    msg.account_updates.into_iter()
-                {
-                    match change {
-                        ChangeType::Update => {
-                            debug!(%address, "Updating account");
-
-                            // If the account is not present, the internal storage will handle
-                            // throwing an exception.
-                            db.update_account(
-                                &address,
-                                &StateUpdate { storage: Some(slots), balance },
-                            );
-                        }
-                        ChangeType::Deletion => {
-                            info!(%address, "Deleting account");
-
-                            // TODO: Implement deletion.
-                            warn!(%address, "Deletion not implemented");
-                        }
-                        ChangeType::Creation => {
-                            info!(%address, "Creating account");
-
-                            // We expect the code and balance to be present.
-                            let code =
-                                Bytecode::new_raw(Bytes::from(code.expect("account code")).0);
-                            let balance = balance.expect("account balance");
-                            db.init_account(
-                                address,
-                                AccountInfo::new(balance, 0, code.hash_slow(), code),
-                                Some(slots),
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
@@ -701,7 +731,10 @@ mod tests {
     async fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoVMStateClient) {
         let (_tx, rx) = mpsc::channel::<()>(1);
 
-        update_loop(mock_db.clone(), mock_client, rx).await;
+        mock_db
+            .clone()
+            .update_loop(mock_client, rx)
+            .await;
 
         dbg!(&mock_db.get_account_info(
             &B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap()
@@ -745,8 +778,7 @@ mod tests {
     /// ```
     #[ignore]
     #[rstest]
-    #[tokio::test]
-    async fn test_tycho_db_connection() {
+    fn test_tycho_db_connection() {
         tracing_subscriber::fmt()
             .with_env_filter("debug")
             .init();
@@ -757,10 +789,6 @@ mod tests {
         let tycho_url = "127.0.0.1:4242";
         info!(tycho_url, "Creating PreCachedDB");
         let db = PreCachedDB::new(tycho_url);
-
-        info!("Waiting for TychoDB to initialize");
-        // Wait for the get_state call to finish
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         info!("Fetching account info");
 
