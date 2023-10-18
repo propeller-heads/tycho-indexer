@@ -155,7 +155,7 @@ pub struct RpcExecutionResources {
     pub builtin_instance_counter: HashMap<String, usize>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct RpcCallInfo {
     pub execution_resources: VmExecutionResources,
     pub retdata: Option<Vec<StarkFelt>>,
@@ -181,50 +181,6 @@ where
 {
     let hex: String = Deserialize::deserialize(deserializer)?;
     Ok(u128::from_str_radix(&hex[2..], 16).unwrap())
-}
-
-impl<'de> Deserialize<'de> for RpcCallInfo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value: serde_json::Value = Deserialize::deserialize(deserializer)?;
-
-        // Parse execution_resources
-        let execution_resources_value = value["execution_resources"].clone();
-
-        let execution_resources = VmExecutionResources {
-            n_steps: serde_json::from_value(execution_resources_value["n_steps"].clone())
-                .map_err(serde::de::Error::custom)?,
-            n_memory_holes: serde_json::from_value(
-                execution_resources_value["n_memory_holes"].clone(),
-            )
-            .map_err(serde::de::Error::custom)?,
-            builtin_instance_counter: serde_json::from_value(
-                execution_resources_value["builtin_instance_counter"].clone(),
-            )
-            .map_err(serde::de::Error::custom)?,
-        };
-
-        // Parse retdata
-        let retdata_value = value["result"].clone();
-        let retdata = serde_json::from_value(retdata_value).unwrap();
-
-        // Parse calldata
-        let calldata_value = value["calldata"].clone();
-        let calldata = serde_json::from_value(calldata_value).unwrap();
-
-        // Parse internal calls
-        let internal_calls_value = value["internal_calls"].clone();
-        let mut internal_calls = vec![];
-
-        for call in internal_calls_value.as_array().unwrap() {
-            internal_calls
-                .push(serde_json::from_value(call.clone()).map_err(serde::de::Error::custom)?);
-        }
-
-        Ok(RpcCallInfo { execution_resources, retdata, calldata, internal_calls })
-    }
 }
 
 /// Freestanding deserialize method to avoid a new type.
