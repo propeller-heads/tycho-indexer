@@ -77,12 +77,12 @@ pub struct BlockHeader {
 
 impl From<BlockHeader> for BlockId {
     fn from(value: BlockHeader) -> Self {
-        Self::from(value.hash)
+        BlockId::Number(value.number.into())
     }
 }
 
-/// A wrapper over an ethers Client with local storage cache.
-#[derive(Debug)]
+/// A wrapper over an ethers Middleware with local storage cache and overrides.
+#[derive(Clone, Debug)]
 pub struct SimulationDB<M: Middleware> {
     /// Client to connect to the RPC
     client: Arc<M>,
@@ -124,10 +124,11 @@ impl<M: Middleware> SimulationDB<M> {
     pub fn init_account(
         &self,
         address: B160,
-        mut account: AccountInfo,
+        account: AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
     ) {
+        let mut account = account;
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }

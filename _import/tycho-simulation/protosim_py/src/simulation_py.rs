@@ -1,42 +1,35 @@
 use ethers::providers::{Http, Provider};
 use num_bigint::BigUint;
-use revm::{
-    db::DatabaseRef,
-    primitives::{B160, U256 as rU256},
-};
+use revm::primitives::{B160, U256 as rU256};
+use tokio::runtime::Runtime;
 
 use crate::structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
     SimulationResult, StateUpdate, TychoDB,
 };
-use pyo3::prelude::*;
-use std::{collections::HashMap, str::FromStr};
+use pyo3::{prelude::*, types::PyType};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use protosim::evm_simulation::{
-    account_storage, database, simulation,
-    tycho_db::{create_tycho_db, PreCachedDB, TychoDB},
-};
-
-fn get_runtime() -> Option<Arc<Runtime>> {
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| Runtime::new().unwrap())
-        .unwrap();
-
-    Some(Arc::new(runtime))
-}
-
-fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
-    let client = Provider::<Http>::try_from(rpc_url).unwrap();
-    Arc::new(client)
-}
+use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
 
 /// It is very hard and messy to implement polymorphism with PyO3.
 /// Instead we use an enum to store the all possible simulation engines.
 /// and we keep them invisible to the Python user.
 enum SimulationEngineInner {
-    SimulationDB(simulation::SimulationEngine<Provider<Http>>),
-    TychoDB(simulation::SimulationEngine<PreCachedDB>),
+    SimulationDB(simulation::SimulationEngine<database::SimulationDB<Provider<Http>>>),
+    TychoDB(simulation::SimulationEngine<tycho_db::PreCachedDB>),
+}
+
+impl SimulationEngineInner {
+    fn simulate(
+        &self,
+        params: &simulation::SimulationParameters,
+    ) -> Result<simulation::SimulationResult, simulation::SimulationError> {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => engine.simulate(params),
+            SimulationEngineInner::TychoDB(engine) => engine.simulate(params),
+        }
+    }
 }
 
 /// This class lets you simulate transactions.
@@ -58,21 +51,13 @@ pub struct SimulationEngine(SimulationEngineInner);
 #[pymethods]
 impl SimulationEngine {
     #[classmethod]
-    fn new_with_simulation_db(
-        rpc_url: &str,
-        block: Option<BlockHeader>,
-        trace: Option<bool>,
-    ) -> Self {
-        let db = database::SimulationDB::new(get_client(rpc_url), get_runtime(), block);
-        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
-        let engine = simulation::SimulationEngine::new(db, trace.unwrap_or(false));
+    fn new_with_simulation_db(_cls: &PyType, db: SimulationDB, trace: Option<bool>) -> Self {
+        let engine = simulation::SimulationEngine::new(db.inner, trace.unwrap_or(false));
         Self(SimulationEngineInner::SimulationDB(engine))
     }
 
     #[classmethod]
-    fn new_with_tycho_db(tycho_url: &str, block: Option<BlockHeader>, trace: Option<bool>) -> Self {
-        let db = TychoDB::new(tycho_url);
-        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
+    fn new_with_tycho_db(_cls: &PyType, db: TychoDB, trace: Option<bool>) -> Self {
         let engine = simulation::SimulationEngine::new(db.inner, trace.unwrap_or(false));
         Self(SimulationEngineInner::TychoDB(engine))
     }
@@ -141,7 +126,7 @@ impl SimulationEngine {
                 .insert(B160::from_str(&key).unwrap(), account_storage::StateUpdate::from(value));
         }
 
-        let reverse_updates = match &self_.0 {
+        let reverse_updates = match &mut self_.0 {
             SimulationEngineInner::SimulationDB(engine) => engine
                 .state
                 .update_state(&rust_updates, block),
@@ -158,7 +143,7 @@ impl SimulationEngine {
     }
 
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {
-        match &self_.0 {
+        match &mut self_.0 {
             SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
             SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
         }

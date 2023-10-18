@@ -15,10 +15,32 @@ from protosim_py import (
 
 U256MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935
 
+class DB(Enum):
+    SIMULATION_DB
+    TYCHO_DB
 
-def test():
+def test(db: DB):
     print("Run test function")
-    engine = SimulationEngine()
+
+    # Select the simulation database based on the input
+#     engine = SimulationEngine.new_with_simulation_db(
+#         rpc_url="https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
+#         block=None,
+#         trace=True
+#     )
+    engine = if db == DB.SIMULATION_DB:
+        SimulationEngine.new_with_simulation_db(
+            rpc_url="https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
+            block=None,
+            trace=True
+        )
+    else:
+        SimulationEngine.new_with_tycho_db(
+            tycho_rpc="ws://127.0.0.1:4242/v1/ws",
+            block=None,
+            trace=True
+        )
+
     params = SimulationParameters(
         caller="0x0000000000000000000000000000000000000000",
         to="0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",

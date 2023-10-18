@@ -8,14 +8,14 @@ use revm::{
     db::DatabaseRef,
     primitives::{Bytecode, U256 as rU256},
 };
-use tokio::{runtime::Runtime, sync::mpsc};
+use tokio::{runtime::Runtime, sync::{mpsc, RwLock}};
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use protosim::evm_simulation::{
     account_storage, database, simulation,
     tycho_client::TychoClient,
-    tycho_db::{update_loop, PreCachedDB},
+    tycho_db::{update_loop, PreCachedDB, self},
 };
 use std::fmt::Debug;
 
@@ -359,5 +359,71 @@ impl From<simulation::SimulationError> for SimulationErrorDetails {
                 SimulationErrorDetails { data, gas_used }
             }
         }
+    }
+}
+
+fn get_runtime() -> Option<Arc<Runtime>> {
+    let runtime = tokio::runtime::Handle::try_current()
+        .is_err()
+        .then(|| Runtime::new().unwrap())
+        .unwrap();
+
+    Some(Arc::new(runtime))
+}
+
+fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
+    let client = Provider::<Http>::try_from(rpc_url).unwrap();
+    Arc::new(client)
+}
+
+
+/// A database using a real Ethereum node as a backend.
+///
+/// Uses a local cache to speed up queries.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct SimulationDB {
+    pub inner: database::SimulationDB<Provider<Http>>,
+}
+
+#[pymethods]
+impl SimulationDB {
+    #[new]
+    #[pyo3(signature = (rpc_url, block))]
+    pub fn new(rpc_url: String, block: BlockHeader) -> Self {
+        let db = database::SimulationDB::new(get_client(&rpc_url), get_runtime(), Some(block.into()));
+        Self { inner: db }
+    }
+}
+
+/// A database that prechaches all data from a Tycho Indexer instance.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct TychoDB {
+    pub inner: tycho_db::PreCachedDB,
+}
+
+#[pymethods]
+impl TychoDB {
+    /// Create a new TychoDB instance.
+    ///
+    /// Arguments
+    /// * `tycho_url` - URL of the Tycho Indexer instance.
+    /// * `block` - Block header to use as a starting point for the database.
+    #[new]
+    pub fn new(tycho_url: &str) -> Self {
+        let runtime = get_runtime().unwrap();
+        let inner = PreCachedDB::new(None, Some(runtime));
+
+        let db = tycho_db::TychoDB(Arc::new(RwLock::new(inner.clone())));
+        let tycho_db = db.clone();
+        let client = TychoClient::new(tycho_url).unwrap();
+        let (_tx, rx) = mpsc::channel::<()>(1);
+
+        tokio::spawn(async move {
+            update_loop(tycho_db, client, rx).await;
+        });
+
+        Self { inner }
     }
 }

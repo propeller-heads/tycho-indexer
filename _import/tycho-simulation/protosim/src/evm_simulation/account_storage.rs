@@ -25,7 +25,7 @@ pub struct StateUpdate {
     pub storage: Option<HashMap<rU256, rU256>>,
     pub balance: Option<rU256>,
 }
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.
 pub struct AccountStorage {
     accounts: HashMap<B160, Account>,

@@ -20,6 +20,7 @@ use crate::evm_simulation::{
 
 use super::{
     account_storage::{AccountStorage, StateUpdate},
+    database::BlockHeader,
     tycho_client::{TychoClient, TychoVMStateClient},
     tycho_models::{AccountUpdate, Block, ChangeType},
 };
@@ -32,17 +33,29 @@ pub enum PreCachedDBError {
     BlockNotSet(),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PreCachedDB {
     /// Cached data
-    accounts: AccountStorage,
+    accounts: Arc<RwLock<AccountStorage>>,
     /// Current block
-    block: Option<Block>,
+    block: Option<BlockHeader>,
+    /// Tokio runtime to execute async code
+    pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
 impl PreCachedDB {
-    pub fn new(start_block: Option<Block>) -> Self {
-        Self { accounts: AccountStorage::new(), block: start_block }
+    pub fn new(block: Option<BlockHeader>, runtime: Option<Arc<tokio::runtime::Runtime>>) -> Self {
+        Self { accounts: Arc::new(RwLock::new(AccountStorage::new())), block, runtime }
+    }
+
+    fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
+        // If we get here and have to block the current thread, we really
+        // messed up indexing / filling the storage. In that case this will save us
+        // at the price of a very high time penalty.
+        match &self.runtime {
+            Some(runtime) => runtime.block_on(f),
+            None => futures::executor::block_on(f),
+        }
     }
 
     /// Sets up a single account
@@ -57,17 +70,22 @@ impl PreCachedDB {
     /// * `permanent_storage` - Storage to init the account with, this storage can only be updated
     ///   manually
     pub fn init_account(
-        &mut self,
+        &self,
         address: B160,
-        mut account: AccountInfo,
+        account: AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
     ) {
+        let mut account = account;
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
 
-        self.accounts
-            .init_account(address, account, permanent_storage, true);
+        self.block_on(async {
+            self.accounts
+                .write()
+                .await
+                .init_account(address, account, permanent_storage, true)
+        });
     }
 
     /// Update the simulation state.
@@ -79,12 +97,71 @@ impl PreCachedDB {
     /// # Arguments
     ///
     /// * `new_state`: A struct containing all the state changes for a particular block.
-    pub fn update_state(&mut self, new_state: &HashMap<B160, StateUpdate>, block: Block) {
+    pub fn update_state(
+        &mut self,
+        updates: &HashMap<B160, StateUpdate>,
+        block: BlockHeader,
+    ) -> HashMap<B160, StateUpdate> {
+        let mut revert_updates = HashMap::new();
         self.block = Some(block);
-        for (address, state_update) in new_state.iter() {
-            self.accounts
-                .update_account(address, state_update);
+        for (address, update_info) in updates.iter() {
+            let mut revert_entry = StateUpdate::default();
+
+            self.block_on(async {
+                if let Some(current_account) = self
+                    .accounts
+                    .read()
+                    .await
+                    .get_account_info(address)
+                {
+                    revert_entry.balance = Some(current_account.balance);
+                }
+            });
+
+            if update_info.storage.is_some() {
+                let mut revert_storage = HashMap::default();
+                for index in update_info
+                    .storage
+                    .as_ref()
+                    .unwrap()
+                    .keys()
+                {
+                    self.block_on(async {
+                        if let Some(s) = self
+                            .accounts
+                            .read()
+                            .await
+                            .get_storage(address, index)
+                        {
+                            revert_storage.insert(*index, s);
+                        }
+                    });
+                }
+                revert_entry.storage = Some(revert_storage);
+            }
+            revert_updates.insert(*address, revert_entry);
+            self.block_on(async {
+                self.accounts
+                    .write()
+                    .await
+                    .update_account(address, update_info);
+            });
         }
+
+        revert_updates
+    }
+
+    /// Clears temp storage
+    ///
+    /// It is recommended to call this after a new block is received,
+    /// to avoid stored state leading to wrong results.
+    pub fn clear_temp_storage(&mut self) {
+        self.block_on(async {
+            self.accounts
+                .write()
+                .await
+                .clean_temp_storage();
+        });
     }
 }
 
@@ -103,10 +180,14 @@ impl DatabaseRef for PreCachedDB {
     /// Returns a `Result` containing the account information or an error if the account is not
     /// found.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        self.accounts
-            .get_account_info(&address)
-            .map(|account| Some(account.clone()))
-            .ok_or(PreCachedDBError::MissingAccount(address))
+        self.block_on(async {
+            self.accounts
+                .read()
+                .await
+                .get_account_info(&address)
+                .map(|account| Some(account.clone()))
+                .ok_or(PreCachedDBError::MissingAccount(address))
+        })
     }
 
     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
@@ -129,16 +210,23 @@ impl DatabaseRef for PreCachedDB {
     /// Returns an error if the storage value is not found.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         debug!(%address, %index, "Requested storage of account");
-        if let Some(storage_value) = self
-            .accounts
-            .get_storage(&address, &index)
-        {
+        if let Some(storage_value) = self.block_on(async {
+            self.accounts
+                .read()
+                .await
+                .get_storage(&address, &index)
+        }) {
             debug!(%address, %index, %storage_value, "Got value locally");
             Ok(storage_value)
         } else {
             // At this point we either don't know this address or we don't have anything at this
             // index (memory slot)
-            if self.accounts.account_present(&address) {
+            if self.block_on(async {
+                self.accounts
+                    .read()
+                    .await
+                    .account_present(&address)
+            }) {
                 // As we only store non-zero values, if the account is present it means this slot is
                 // zero.
                 debug!(%address, %index, "Account found, but slot is zero");
@@ -154,7 +242,7 @@ impl DatabaseRef for PreCachedDB {
     /// If block header is set, returns the hash. Otherwise returns a zero hash.
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
         match &self.block {
-            Some(header) => Ok(header.hash),
+            Some(header) => Ok(header.hash.into()),
             None => Err(PreCachedDBError::BlockNotSet()),
         }
     }
@@ -162,12 +250,20 @@ impl DatabaseRef for PreCachedDB {
 
 // We might consider wrapping this type for a nicer API
 #[derive(Clone, Debug)]
-pub struct TychoDB(Arc<RwLock<PreCachedDB>>);
+pub struct TychoDB(pub Arc<RwLock<PreCachedDB>>);
 
 impl TychoDB {
     /// Creates a new TychoDB and starts the update loop.
     pub fn new(url: &str) -> Self {
-        let inner = PreCachedDB { accounts: AccountStorage::new(), block: None };
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| tokio::runtime::Runtime::new().unwrap())
+            .unwrap();
+        let inner = PreCachedDB {
+            accounts: Arc::new(RwLock::new(AccountStorage::new())),
+            block: None,
+            runtime: Some(Arc::new(runtime)),
+        };
 
         let db = Self(Arc::new(RwLock::new(inner)));
         let tycho_db = db.clone();
@@ -254,7 +350,7 @@ pub async fn update_loop(
                 let mut db_guard = db.write().await;
 
                 // Update block.
-                db_guard.block = Some(msg.block);
+                db_guard.block = Some(msg.block.into());
 
                 // Update existing accounts.
                 for (_address, AccountUpdate { address, chain: _, slots, balance, code, change }) in
@@ -266,10 +362,14 @@ pub async fn update_loop(
 
                             // If the account is not present, the internal storage will handle
                             // throwing an exception.
-                            db_guard.accounts.update_account(
-                                &address,
-                                &StateUpdate { storage: Some(slots), balance },
-                            );
+                            db_guard
+                                .accounts
+                                .write()
+                                .await
+                                .update_account(
+                                    &address,
+                                    &StateUpdate { storage: Some(slots), balance },
+                                );
                         }
                         ChangeType::Deletion => {
                             info!(%address, "Deleting account");
@@ -319,11 +419,12 @@ mod tests {
 
     #[fixture]
     pub fn mock_db() -> PreCachedDB {
-        PreCachedDB::new(None)
+        PreCachedDB::new(None, None)
     }
 
     #[rstest]
-    fn test_account_get_acc_info(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
+    #[tokio::test]
+    async fn test_account_get_acc_info(mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
@@ -337,6 +438,8 @@ mod tests {
         assert_eq!(
             mock_db
                 .accounts
+                .read()
+                .await
                 .get_account_info(&mock_acc_address)
                 .unwrap(),
             &acc_info
@@ -390,7 +493,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_update_state(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
+    #[tokio::test]
+    async fn test_update_state(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_db.init_account(address, AccountInfo::default(), None);
 
@@ -409,11 +513,13 @@ mod tests {
         let mut updates = HashMap::default();
         updates.insert(address, update);
 
-        mock_db.update_state(&updates, new_block);
+        mock_db.update_state(&updates, new_block.into());
 
         assert_eq!(
             mock_db
                 .accounts
+                .read()
+                .await
                 .get_storage(&address, &new_storage_value_index)
                 .unwrap(),
             new_storage_value_index
@@ -421,6 +527,8 @@ mod tests {
         assert_eq!(
             mock_db
                 .accounts
+                .read()
+                .await
                 .get_account_info(&address)
                 .unwrap()
                 .balance,
@@ -532,6 +640,13 @@ mod tests {
         update_loop(db.clone().into(), mock_client, rx).await;
 
         let read_guard = db.read().await;
+        dbg!(read_guard
+            .accounts
+            .read()
+            .await
+            .get_account_info(
+                &B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap()
+            ));
 
         assert_eq!(
             read_guard
@@ -550,6 +665,7 @@ mod tests {
                 chain: Chain::Ethereum,
                 ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
             }
+            .into()
         );
     }
 

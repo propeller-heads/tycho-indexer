@@ -7,6 +7,8 @@ use std::fmt::Display;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
+use super::database::BlockHeader;
+
 use crate::serde_helpers::{hex_bytes, hex_bytes_option};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -58,6 +60,16 @@ pub struct Block {
     pub parent_hash: B256,
     pub chain: Chain,
     pub ts: NaiveDateTime,
+}
+
+impl From<Block> for BlockHeader {
+    fn from(value: Block) -> Self {
+        Self {
+            number: value.number,
+            hash: value.hash.into(),
+            timestamp: value.ts.timestamp() as u64,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
