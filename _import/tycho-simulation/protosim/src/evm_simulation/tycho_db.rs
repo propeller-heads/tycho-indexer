@@ -1,7 +1,7 @@
 use ethers::types::Bytes;
-use tokio::sync::RwLock;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use thiserror::Error;
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, info_span, instrument, warn};
 
 use revm::{
@@ -103,7 +103,7 @@ impl PreCachedDB {
 
     /// Initialize the state of the database.
     #[instrument(skip_all)]
-    async fn initialize_state(&self, client: &TychoClient) {
+    async fn initialize_state(&self, client: &impl TychoVMStateClient) {
         info!("Getting current state");
         let state = client
             .get_state(
@@ -133,7 +133,11 @@ impl PreCachedDB {
 
     /// Start the update loop.
     #[instrument(skip_all)]
-    async fn update_loop(&self, client: impl TychoVMStateClient, mut stop_signal: tokio::sync::mpsc::Receiver<()>) {
+    async fn update_loop(
+        &self,
+        client: impl TychoVMStateClient,
+        mut stop_signal: tokio::sync::mpsc::Receiver<()>,
+    ) {
         // Start buffering messages
         info!("Starting message stream");
         let mut messages = client.realtime_messages().await;
@@ -152,47 +156,54 @@ impl PreCachedDB {
                 Some(msg) => {
                     info!(%msg.block.number, "Received new block");
 
-                    // Update block.
-                    self.update_block(msg.block.into());
+                    self.block_on(async {
+                        // Update block.
+                        self.update_block_async(msg.block.into())
+                            .await;
 
-                    // Update existing accounts.
-                    for (
-                        _address,
-                        AccountUpdate { address, chain: _, slots, balance, code, change },
-                    ) in msg.account_updates.into_iter()
-                    {
-                        match change {
-                            ChangeType::Update => {
-                                info!(%address, "Updating account");
+                        // Update existing accounts.
+                        for (
+                            _address,
+                            AccountUpdate { address, chain: _, slots, balance, code, change },
+                        ) in msg.account_updates.into_iter()
+                        {
+                            match change {
+                                ChangeType::Update => {
+                                    info!(%address, "Updating account");
 
-                                // If the account is not present, the internal storage will handle
-                                // throwing an exception.
-                                self.update_account(
-                                    &address,
-                                    &StateUpdate { storage: Some(slots), balance },
-                                );
-                            }
-                            ChangeType::Deletion => {
-                                info!(%address, "Deleting account");
+                                    // If the account is not present, the internal storage will
+                                    // handle throwing an
+                                    // exception.
+                                    self.update_account_async(
+                                        &address,
+                                        &StateUpdate { storage: Some(slots), balance },
+                                    )
+                                    .await;
+                                }
+                                ChangeType::Deletion => {
+                                    info!(%address, "Deleting account");
 
-                                // TODO: Implement deletion.
-                                warn!(%address, "Deletion not implemented");
-                            }
-                            ChangeType::Creation => {
-                                info!(%address, "Creating account");
+                                    // TODO: Implement deletion.
+                                    warn!(%address, "Deletion not implemented");
+                                }
+                                ChangeType::Creation => {
+                                    info!(%address, "Creating account");
 
-                                // We expect the code and balance to be present.
-                                let code =
-                                    Bytecode::new_raw(Bytes::from(code.expect("account code")).0);
-                                let balance = balance.expect("account balance");
-                                self.init_account(
-                                    address,
-                                    AccountInfo::new(balance, 0, code.hash_slow(), code),
-                                    Some(slots),
-                                );
+                                    // We expect the code and balance to be present.
+                                    let code = Bytecode::new_raw(
+                                        Bytes::from(code.expect("account code")).0,
+                                    );
+                                    let balance = balance.expect("account balance");
+                                    self.init_account_async(
+                                        address,
+                                        AccountInfo::new(balance, 0, code.hash_slow(), code),
+                                        Some(slots),
+                                    )
+                                    .await;
+                                }
                             }
                         }
-                    }
+                    })
                 }
             }
         }
@@ -207,16 +218,12 @@ impl PreCachedDB {
     }
 
     /// Updates the current block.
-    fn update_block(&self, block: BlockHeader) {
-        self.block_on(async {
-            self.inner.write().await.block = Some(block);
-        });
-    }
-
-    /// Retrieve a clone
-    #[cfg(test)]
-    fn get_block(&self) -> Option<BlockHeader> {
-        self.block_on(async { self.inner.read().await.block })
+    ///
+    /// # Arguments
+    ///
+    /// * `block` - The new block header.
+    async fn update_block_async(&self, block: BlockHeader) {
+        self.inner.write().await.block = Some(block);
     }
 
     /// Sets up a single account
@@ -230,7 +237,7 @@ impl PreCachedDB {
     /// * `account` - The account information
     /// * `permanent_storage` - Storage to init the account with, this storage can only be updated
     ///   manually
-    pub fn init_account(
+    async fn init_account_async(
         &self,
         address: B160,
         mut account: AccountInfo,
@@ -239,14 +246,11 @@ impl PreCachedDB {
         if account.code.is_some() {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
-
-        self.block_on(async {
-            self.inner
-                .write()
-                .await
-                .accounts
-                .init_account(address, account, permanent_storage, true)
-        });
+        self.inner
+            .write()
+            .await
+            .accounts
+            .init_account(address, account, permanent_storage, true);
     }
 
     /// Retrieves the storage value at the specified index for the given account, if it exists.
@@ -264,14 +268,12 @@ impl PreCachedDB {
     ///
     /// Returns an `Option` containing a reference to the storage value if it exists, otherwise
     /// returns `None`.
-    pub fn get_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
-        self.block_on(async {
-            self.inner
-                .read()
-                .await
-                .accounts
-                .get_storage(address, index)
-        })
+    async fn get_storage_async(&self, address: &B160, index: &rU256) -> Option<rU256> {
+        self.inner
+            .read()
+            .await
+            .accounts
+            .get_storage(address, index)
     }
 
     /// Retrieves the account information for a given address.
@@ -287,15 +289,13 @@ impl PreCachedDB {
     ///
     /// Returns an `Option` that holds a reference to the `AccountInfo`. If the account is not
     /// found, `None` is returned.
-    fn get_account_info(&self, address: &B160) -> Option<AccountInfo> {
-        self.block_on(async {
-            self.inner
-                .read()
-                .await
-                .accounts
-                .get_account_info(address)
-                .cloned()
-        })
+    async fn get_account_info_async(&self, address: &B160) -> Option<AccountInfo> {
+        self.inner
+            .read()
+            .await
+            .accounts
+            .get_account_info(address)
+            .cloned()
     }
 
     /// Checks if an account with the given address is present in the storage.
@@ -308,58 +308,12 @@ impl PreCachedDB {
     ///
     /// Returns `true` if an account with the specified address is present in the storage,
     /// otherwise returns `false`.
-    fn account_present(&self, address: &B160) -> bool {
-        self.block_on(async {
-            self.inner
-                .read()
-                .await
-                .accounts
-                .account_present(address)
-        })
-    }
-
-    /// Update the simulation state.
-    ///
-    /// This method modifies the current state of the simulation by applying the provided updates to
-    /// the accounts in the smart contract storage. These changes correspond to a particular
-    /// block in the blockchain.
-    ///
-    /// # Arguments
-    ///
-    /// * `new_state`: A struct containing all the state changes for a particular block.
-    pub fn update_state(
-        &mut self,
-        updates: &HashMap<B160, StateUpdate>,
-        block: BlockHeader,
-    ) -> HashMap<B160, StateUpdate> {
-        let mut revert_updates = HashMap::new();
-        self.update_block(block);
-        for (address, update_info) in updates.iter() {
-            let mut revert_entry = StateUpdate::default();
-
-            if let Some(current_account) = self.get_account_info(address) {
-                revert_entry.balance = Some(current_account.balance);
-            }
-
-            if update_info.storage.is_some() {
-                let mut revert_storage = HashMap::default();
-                for index in update_info
-                    .storage
-                    .as_ref()
-                    .unwrap()
-                    .keys()
-                {
-                    if let Some(s) = self.get_storage(address, index) {
-                        revert_storage.insert(*index, s);
-                    }
-                }
-                revert_entry.storage = Some(revert_storage);
-            }
-            revert_updates.insert(*address, revert_entry);
-            self.update_account(address, update_info);
-        }
-
-        revert_updates
+    async fn account_present_async(&self, address: &B160) -> bool {
+        self.inner
+            .read()
+            .await
+            .accounts
+            .account_present(address)
     }
 
     /// Updates the account information and storage associated with the given address.
@@ -379,14 +333,80 @@ impl PreCachedDB {
     ///
     /// If the `address` is not found in either collection, a warning is logged and no changes are
     /// made.
-    pub fn update_account(&self, address: &B160, update: &StateUpdate) {
+    async fn update_account_async(&self, address: &B160, update: &StateUpdate) {
+        self.inner
+            .write()
+            .await
+            .accounts
+            .update_account(address, update);
+    }
+
+    /// Blocking version of [init_account_async]
+    pub fn init_account(
+        &self,
+        address: B160,
+        account: AccountInfo,
+        permanent_storage: Option<HashMap<rU256, rU256>>,
+    ) {
+        self.block_on(self.init_account_async(address, account, permanent_storage));
+    }
+
+    /// Blocking version of [get_storage_async]
+    pub fn get_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
+        self.block_on(self.get_storage_async(address, index))
+    }
+
+    /// Update the simulation state.
+    ///
+    /// This method modifies the current state of the simulation by applying the provided updates to
+    /// the accounts in the smart contract storage. These changes correspond to a particular
+    /// block in the blockchain.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_state`: A struct containing all the state changes for a particular block.
+    pub fn update_state(
+        &mut self,
+        updates: &HashMap<B160, StateUpdate>,
+        block: BlockHeader,
+    ) -> HashMap<B160, StateUpdate> {
         self.block_on(async {
-            self.inner
-                .write()
-                .await
-                .accounts
-                .update_account(address, update);
-        });
+            let mut revert_updates = HashMap::new();
+            self.update_block_async(block).await;
+            for (address, update_info) in updates.iter() {
+                let mut revert_entry = StateUpdate::default();
+
+                if let Some(current_account) = self
+                    .get_account_info_async(address)
+                    .await
+                {
+                    revert_entry.balance = Some(current_account.balance);
+                }
+
+                if update_info.storage.is_some() {
+                    let mut revert_storage = HashMap::default();
+                    for index in update_info
+                        .storage
+                        .as_ref()
+                        .unwrap()
+                        .keys()
+                    {
+                        if let Some(s) = self
+                            .get_storage_async(address, index)
+                            .await
+                        {
+                            revert_storage.insert(*index, s);
+                        }
+                    }
+                    revert_entry.storage = Some(revert_storage);
+                }
+                revert_updates.insert(*address, revert_entry);
+                self.update_account_async(address, update_info)
+                    .await;
+            }
+
+            revert_updates
+        })
     }
 
     /// Deprecated in TychoDB
@@ -410,9 +430,12 @@ impl DatabaseRef for PreCachedDB {
     /// Returns a `Result` containing the account information or an error if the account is not
     /// found.
     fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        self.get_account_info(&address)
-            .map(|account| Some(account.clone()))
-            .ok_or(PreCachedDBError::MissingAccount(address))
+        self.block_on(async {
+            self.get_account_info_async(&address)
+                .await
+                .map(|account| Some(account.clone()))
+                .ok_or(PreCachedDBError::MissingAccount(address))
+        })
     }
 
     fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
@@ -435,22 +458,30 @@ impl DatabaseRef for PreCachedDB {
     /// Returns an error if the storage value is not found.
     fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
         debug!(%address, %index, "Requested storage of account");
-        if let Some(storage_value) = self.get_storage(&address, &index) {
-            debug!(%address, %index, %storage_value, "Got value locally");
-            Ok(storage_value)
-        } else {
-            // At this point we either don't know this address or we don't have anything at this
-            if self.account_present(&address) {
-                // As we only store non-zero values, if the account is present it means this slot is
-                // zero.
-                debug!(%address, %index, "Account found, but slot is zero");
-                Ok(rU256::ZERO)
+        self.block_on(async {
+            if let Some(storage_value) = self
+                .get_storage_async(&address, &index)
+                .await
+            {
+                debug!(%address, %index, %storage_value, "Got value locally");
+                Ok(storage_value)
             } else {
-                // At this point we know we don't have data for this address.
-                debug!(%address, %index, "Account not found");
-                Err(PreCachedDBError::MissingAccount(address))
+                // At this point we either don't know this address or we don't have anything at this
+                if self
+                    .account_present_async(&address)
+                    .await
+                {
+                    // As we only store non-zero values, if the account is present it means this
+                    // slot is zero.
+                    debug!(%address, %index, "Account found, but slot is zero");
+                    Ok(rU256::ZERO)
+                } else {
+                    // At this point we know we don't have data for this address.
+                    debug!(%address, %index, "Account not found");
+                    Err(PreCachedDBError::MissingAccount(address))
+                }
             }
-        }
+        })
     }
 
     /// If block header is set, returns the hash. Otherwise returns a zero hash.
@@ -506,9 +537,12 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            mock_db
-                .get_account_info(&mock_acc_address)
-                .unwrap(),
+            mock_db.block_on(async {
+                mock_db
+                    .get_account_info_async(&mock_acc_address)
+                    .await
+                    .unwrap()
+            }),
             acc_info
         );
         Ok(())
@@ -588,14 +622,12 @@ mod tests {
                 .unwrap(),
             new_storage_value_index
         );
-        assert_eq!(
-            mock_db
-                .get_account_info(&address)
-                .unwrap()
-                .balance,
-            new_balance
-        );
-        assert_eq!(mock_db.get_block().unwrap().number, 1);
+        let account_info = mock_db.basic(address).unwrap().unwrap();
+        assert_eq!(account_info.balance, new_balance);
+        let block = mock_db
+            .block_on(async { mock_db.inner.read().await.block })
+            .expect("block is Some");
+        assert_eq!(block.number, 1);
 
         Ok(())
     }
@@ -698,18 +730,27 @@ mod tests {
         let (_tx, rx) = mpsc::channel::<()>(1);
 
         mock_db
+            .initialize_state(&mock_client)
+            .await;
+
+        mock_db
             .clone()
             .update_loop(mock_client, rx)
             .await;
 
-        dbg!(&mock_db.get_account_info(
-            &B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap()
-        ));
+        let account_info = mock_db
+            .get_account_info_async(
+                &B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap(),
+            )
+            .await
+            .unwrap();
+        dbg!(account_info);
 
+        let block = mock_db
+            .block_on(async { mock_db.inner.read().await.block })
+            .expect("block is Some");
         assert_eq!(
-            mock_db
-                .get_block()
-                .expect("block should be Some"),
+            block,
             Block {
                 number: 123,
                 hash: B256::from_str(
