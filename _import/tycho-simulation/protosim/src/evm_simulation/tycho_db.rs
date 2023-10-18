@@ -8,7 +8,7 @@ use tokio::{
         RwLock,
     },
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, info_span, instrument, warn};
 
 use revm::{
     db::DatabaseRef,
@@ -41,13 +41,26 @@ pub struct PreCachedDBInner {
     block: Option<BlockHeader>,
 }
 
+/// Get a new tokio runtime if we are not already in one
 fn get_runtime() -> Option<Arc<Runtime>> {
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| Runtime::new().unwrap())
-        .unwrap();
+    let runtime: Option<Runtime> = match tokio::runtime::Handle::try_current() {
+        Ok(_) => {
+            // We are in a tokio runtime, use the current one
+            None
+        }
+        Err(_) => {
+            // We are not in a tokio runtime, create a new one
+            match Runtime::new() {
+                Ok(runtime) => Some(runtime),
+                Err(e) => {
+                    error!(?e, "Failed to create tokio runtime");
+                    None
+                }
+            }
+        }
+    };
 
-    Some(Arc::new(runtime))
+    runtime.map(Arc::new)
 }
 
 #[derive(Clone, Debug)]
@@ -65,19 +78,27 @@ pub struct PreCachedDB {
 impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
     pub fn new(tycho_url: &str) -> Self {
-        let runtime = get_runtime().unwrap();
+        info!(?tycho_url, "Creating new PreCachedDB instance");
+        let runtime = get_runtime();
         let tycho_db = PreCachedDB {
             inner: Arc::new(RwLock::new(PreCachedDBInner {
                 accounts: AccountStorage::new(),
                 block: None,
             })),
-            runtime: Some(runtime),
+            runtime,
         };
         let tycho_db_clone = tycho_db.clone();
         let client = TychoClient::new(tycho_url).unwrap();
         let (_tx, rx) = mpsc::channel::<()>(5); // TODO: Make this configurable
 
-        tokio::spawn(async move {
+        info!("Spawning update loop");
+        let tycho_url_clone = tycho_url.to_owned();
+        let handle = match &tycho_db.runtime {
+            Some(runtime) => runtime.handle().clone(),
+            None => tokio::runtime::Handle::current(),
+        };
+        handle.spawn(async move {
+            info_span!("update_loop", tycho_url = tycho_url_clone);
             update_loop(tycho_db_clone, client, rx).await;
         });
 
@@ -735,18 +756,13 @@ mod tests {
         let ambient_contract =
             B160::from_str("0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
 
-        info!("Creating TychoDB");
-        let db = PreCachedDB {
-            inner: Arc::new(RwLock::new(PreCachedDBInner {
-                accounts: AccountStorage::new(),
-                block: None,
-            })),
-            runtime: None,
-        };
+        let tycho_url = "127.0.0.1:4242";
+        info!(tycho_url, "Creating PreCachedDB");
+        let db = PreCachedDB::new(tycho_url);
 
         info!("Waiting for TychoDB to initialize");
         // Wait for the get_state call to finish
-        tokio::time::sleep(tokio::time::Duration::from_secs(24)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         info!("Fetching account info");
 
