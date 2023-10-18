@@ -1,21 +1,18 @@
 use ethers::{
-    providers::{Http, Middleware, Provider},
+    providers::{Http, Provider},
     types::{Address, Bytes, H256, U256},
 };
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::{
-    db::DatabaseRef,
-    primitives::{Bytecode, U256 as rU256},
-};
-use tokio::{runtime::Runtime, sync::{mpsc, RwLock}};
+use revm::primitives::{Bytecode, U256 as rU256};
+use tokio::{runtime::Runtime, sync::mpsc};
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use protosim::evm_simulation::{
     account_storage, database, simulation,
     tycho_client::TychoClient,
-    tycho_db::{update_loop, PreCachedDB, self},
+    tycho_db::{self, update_loop, PreCachedDB},
 };
 use std::fmt::Debug;
 
@@ -66,6 +63,7 @@ pub struct SimulationParameters {
 #[pymethods]
 impl SimulationParameters {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         caller: String,
         to: String,
@@ -376,7 +374,6 @@ fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
     Arc::new(client)
 }
 
-
 /// A database using a real Ethereum node as a backend.
 ///
 /// Uses a local cache to speed up queries.
@@ -391,7 +388,8 @@ impl SimulationDB {
     #[new]
     #[pyo3(signature = (rpc_url, block))]
     pub fn new(rpc_url: String, block: BlockHeader) -> Self {
-        let db = database::SimulationDB::new(get_client(&rpc_url), get_runtime(), Some(block.into()));
+        let db =
+            database::SimulationDB::new(get_client(&rpc_url), get_runtime(), Some(block.into()));
         Self { inner: db }
     }
 }
@@ -415,7 +413,7 @@ impl TychoDB {
         let runtime = get_runtime().unwrap();
         let inner = PreCachedDB::new(None, Some(runtime));
 
-        let db = tycho_db::TychoDB(Arc::new(RwLock::new(inner.clone())));
+        let db = inner.clone();
         let tycho_db = db.clone();
         let client = TychoClient::new(tycho_url).unwrap();
         let (_tx, rx) = mpsc::channel::<()>(1);

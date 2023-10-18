@@ -200,7 +200,7 @@ impl<M: Middleware> SimulationDB<M> {
     pub fn clear_temp_storage(&mut self) {
         self.account_storage
             .borrow_mut()
-            .clean_temp_storage();
+            .clear_temp_storage();
     }
 
     /// Query information about an Ethereum account.

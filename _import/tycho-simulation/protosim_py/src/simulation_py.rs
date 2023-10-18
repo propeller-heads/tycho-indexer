@@ -57,12 +57,12 @@ impl SimulationEngineInner {
         block: database::BlockHeader,
     ) -> HashMap<B160, account_storage::StateUpdate> {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => {
-                engine.state.update_state(updates, block)
-            }
-            SimulationEngineInner::TychoDB(engine) => {
-                engine.state.update_state(updates, block)
-            }
+            SimulationEngineInner::SimulationDB(engine) => engine
+                .state
+                .update_state(updates, block),
+            SimulationEngineInner::TychoDB(engine) => engine
+                .state
+                .update_state(updates, block),
         }
     }
 
@@ -134,7 +134,9 @@ impl SimulationEngine {
             }
         }
 
-        self_.0.init_account(address, account,  Some(rust_slots), mocked)
+        self_
+            .0
+            .init_account(address, account, Some(rust_slots), mocked)
     }
 
     fn update_state(
@@ -149,7 +151,9 @@ impl SimulationEngine {
                 .insert(B160::from_str(&key).unwrap(), account_storage::StateUpdate::from(value));
         }
 
-        let reverse_updates = self_.0.update_state(&rust_updates, block);
+        let reverse_updates = self_
+            .0
+            .update_state(&rust_updates, block);
 
         let mut py_reverse_updates: HashMap<String, StateUpdate> = HashMap::new();
         for (key, value) in reverse_updates {
