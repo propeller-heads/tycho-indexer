@@ -1,11 +1,22 @@
-use ethers::types::{Address, Bytes, H256, U256};
+use ethers::{
+    providers::{Http, Middleware, Provider},
+    types::{Address, Bytes, H256, U256},
+};
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Bytecode, U256 as rU256};
+use revm::{
+    db::DatabaseRef,
+    primitives::{Bytecode, U256 as rU256},
+};
+use tokio::{runtime::Runtime, sync::mpsc};
 
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use protosim::evm_simulation::{account_storage, simulation};
+use protosim::evm_simulation::{
+    account_storage, database, simulation,
+    tycho_client::TychoClient,
+    tycho_db::{update_loop, PreCachedDB},
+};
 use std::fmt::Debug;
 
 /// Data needed to invoke a transaction simulation
@@ -65,16 +76,7 @@ impl SimulationParameters {
         block_number: Option<u64>,
         timestamp: Option<u64>,
     ) -> Self {
-        Self {
-            caller,
-            to,
-            data,
-            value,
-            overrides,
-            gas_limit,
-            block_number,
-            timestamp,
-        }
+        Self { caller, to, data, value, overrides, gas_limit, block_number, timestamp }
     }
 
     fn __repr__(&self) -> String {
@@ -160,10 +162,7 @@ impl From<account_storage::StateUpdate> for StateUpdate {
             py_balances = Some(BigUint::from_bytes_le(rust_balances.as_le_slice()))
         }
 
-        StateUpdate {
-            storage: Some(py_storage),
-            balance: py_balances,
-        }
+        StateUpdate { storage: Some(py_storage), balance: py_balances }
     }
 }
 
@@ -184,10 +183,7 @@ impl From<StateUpdate> for account_storage::StateUpdate {
             rust_balance = Some(rU256::from_str(&py_balance.to_string()).unwrap());
         }
 
-        account_storage::StateUpdate {
-            storage: Some(rust_storage),
-            balance: rust_balance,
-        }
+        account_storage::StateUpdate { storage: Some(rust_storage), balance: rust_balance }
     }
 }
 
@@ -265,11 +261,7 @@ impl AccountInfo {
     #[new]
     #[pyo3(signature = (balance, nonce, code=None))]
     fn new(balance: BigUint, nonce: u64, code: Option<Vec<u8>>) -> Self {
-        Self {
-            balance,
-            nonce,
-            code,
-        }
+        Self { balance, nonce, code }
     }
 }
 
@@ -314,11 +306,7 @@ impl BlockHeader {
     #[new]
     #[pyo3(signature = (number, hash, timestamp))]
     fn new(number: u64, hash: String, timestamp: u64) -> Self {
-        Self {
-            number,
-            hash,
-            timestamp,
-        }
+        Self { number, hash, timestamp }
     }
 }
 
@@ -345,10 +333,9 @@ pub(crate) struct SimulationErrorDetails {
 impl SimulationErrorDetails {
     fn __repr__(&self) -> String {
         match self.gas_used {
-            Some(gas_usage) => format!(
-                "SimulationError(data={}, gas_used={})",
-                self.data, gas_usage
-            ),
+            Some(gas_usage) => {
+                format!("SimulationError(data={}, gas_used={})", self.data, gas_usage)
+            }
             None => format!("SimulationError(data={})", self.data),
         }
     }
@@ -365,10 +352,9 @@ impl From<SimulationErrorDetails> for PyErr {
 impl From<simulation::SimulationError> for SimulationErrorDetails {
     fn from(err: simulation::SimulationError) -> Self {
         match err {
-            simulation::SimulationError::StorageError(reason) => SimulationErrorDetails {
-                data: reason,
-                gas_used: None,
-            },
+            simulation::SimulationError::StorageError(reason) => {
+                SimulationErrorDetails { data: reason, gas_used: None }
+            }
             simulation::SimulationError::TransactionError { data, gas_used } => {
                 SimulationErrorDetails { data, gas_used }
             }

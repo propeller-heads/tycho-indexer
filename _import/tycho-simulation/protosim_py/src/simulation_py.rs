@@ -1,16 +1,21 @@
 use ethers::providers::{Http, Provider};
 use num_bigint::BigUint;
-use revm::primitives::{B160, U256 as rU256};
+use revm::{
+    db::DatabaseRef,
+    primitives::{B160, U256 as rU256},
+};
 
 use crate::structs_py::{
-    AccountInfo, BlockHeader, SimulationErrorDetails, SimulationParameters, SimulationResult,
-    StateUpdate,
+    AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
+    SimulationResult, StateUpdate, TychoDB,
 };
 use pyo3::prelude::*;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
-use tokio::runtime::Runtime;
+use std::{collections::HashMap, str::FromStr};
 
-use protosim::evm_simulation::{account_storage, database::SimulationDB, simulation};
+use protosim::evm_simulation::{
+    account_storage, database, simulation,
+    tycho_db::{create_tycho_db, PreCachedDB, TychoDB},
+};
 
 fn get_runtime() -> Option<Arc<Runtime>> {
     let runtime = tokio::runtime::Handle::try_current()
@@ -24,6 +29,14 @@ fn get_runtime() -> Option<Arc<Runtime>> {
 fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
     let client = Provider::<Http>::try_from(rpc_url).unwrap();
     Arc::new(client)
+}
+
+/// It is very hard and messy to implement polymorphism with PyO3.
+/// Instead we use an enum to store the all possible simulation engines.
+/// and we keep them invisible to the Python user.
+enum SimulationEngineInner {
+    SimulationDB(simulation::SimulationEngine<Provider<Http>>),
+    TychoDB(simulation::SimulationEngine<PreCachedDB>),
 }
 
 /// This class lets you simulate transactions.
@@ -40,28 +53,42 @@ fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
 /// trace: Optional[bool]
 ///     If set to true, simulations will print the entire execution trace.
 #[pyclass]
-pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
+pub struct SimulationEngine(SimulationEngineInner);
 
 #[pymethods]
 impl SimulationEngine {
-    #[new]
-    fn new(rpc_url: &str, block: Option<BlockHeader>, trace: Option<bool>) -> Self {
+    #[classmethod]
+    fn new_with_simulation_db(
+        rpc_url: &str,
+        block: Option<BlockHeader>,
+        trace: Option<bool>,
+    ) -> Self {
+        let db = database::SimulationDB::new(get_client(rpc_url), get_runtime(), block);
         let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
-        let db = SimulationDB::new(get_client(rpc_url), get_runtime(), block);
-        let engine = simulation::SimulationEngine {
-            state: db,
-            trace: trace.unwrap_or(false),
-        };
-        Self(engine)
+        let engine = simulation::SimulationEngine::new(db, trace.unwrap_or(false));
+        Self(SimulationEngineInner::SimulationDB(engine))
+    }
+
+    #[classmethod]
+    fn new_with_tycho_db(tycho_url: &str, block: Option<BlockHeader>, trace: Option<bool>) -> Self {
+        let db = TychoDB::new(tycho_url);
+        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
+        let engine = simulation::SimulationEngine::new(db.inner, trace.unwrap_or(false));
+        Self(SimulationEngineInner::TychoDB(engine))
     }
 
     /// Simulate transaction.
     ///
     /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
     fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
-        let rust_result = self_
-            .0
-            .simulate(&simulation::SimulationParameters::from(params));
+        let rust_result = match &self_.0 {
+            SimulationEngineInner::SimulationDB(engine) => {
+                engine.simulate(&simulation::SimulationParameters::from(params))
+            }
+            SimulationEngineInner::TychoDB(engine) => {
+                engine.simulate(&simulation::SimulationParameters::from(params))
+            }
+        };
         match rust_result {
             Ok(sim_res) => Ok(SimulationResult::from(sim_res)),
             Err(sim_err) => Err(PyErr::from(SimulationErrorDetails::from(sim_err))),
@@ -88,10 +115,18 @@ impl SimulationEngine {
             }
         }
 
-        self_
-            .0
-            .state
-            .init_account(address, account, Some(rust_slots), mocked);
+        match &self_.0 {
+            SimulationEngineInner::SimulationDB(engine) => {
+                engine
+                    .state
+                    .init_account(address, account, Some(rust_slots), mocked)
+            }
+            SimulationEngineInner::TychoDB(engine) => {
+                engine
+                    .state
+                    .init_account(address, account, Some(rust_slots))
+            }
+        }
     }
 
     fn update_state(
@@ -102,13 +137,18 @@ impl SimulationEngine {
         let block = protosim::evm_simulation::database::BlockHeader::from(block);
         let mut rust_updates: HashMap<B160, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
-            rust_updates.insert(
-                B160::from_str(&key).unwrap(),
-                account_storage::StateUpdate::from(value),
-            );
+            rust_updates
+                .insert(B160::from_str(&key).unwrap(), account_storage::StateUpdate::from(value));
         }
 
-        let reverse_updates = self_.0.state.update_state(&rust_updates, block);
+        let reverse_updates = match &self_.0 {
+            SimulationEngineInner::SimulationDB(engine) => engine
+                .state
+                .update_state(&rust_updates, block),
+            SimulationEngineInner::TychoDB(engine) => engine
+                .state
+                .update_state(&rust_updates, block),
+        };
 
         let mut py_reverse_updates: HashMap<String, StateUpdate> = HashMap::new();
         for (key, value) in reverse_updates {
@@ -118,6 +158,9 @@ impl SimulationEngine {
     }
 
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {
-        self_.0.state.clear_temp_storage();
+        match &self_.0 {
+            SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
+            SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
+        }
     }
 }

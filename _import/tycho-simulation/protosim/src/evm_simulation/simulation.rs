@@ -1,11 +1,8 @@
-use super::{account_storage::StateUpdate, database};
-use crate::evm_simulation::database::OverriddenSimulationDB;
-use ethers::{
-    providers::Middleware,
-    types::{Address, Bytes, U256}, // Address is an alias of H160
-};
+use super::account_storage::StateUpdate;
+use ethers::types::{Address, Bytes, U256};
 
 use revm::{
+    db::DatabaseRef,
     inspectors::CustomPrintTracer,
     primitives::{
         bytes, // `bytes` is an external crate
@@ -43,13 +40,27 @@ pub struct SimulationResult {
     pub gas_used: u64,
 }
 
-#[derive(Debug)]
-pub struct SimulationEngine<M: Middleware> {
-    pub state: database::SimulationDB<M>,
+/// Simulation engine
+#[derive(Debug, Clone)]
+pub struct SimulationEngine<D: DatabaseRef> {
+    pub state: D,
     pub trace: bool,
 }
 
-impl<M: Middleware> SimulationEngine<M> {
+impl<D: DatabaseRef> SimulationEngine<D>
+where
+    D::Error: std::fmt::Debug,
+{
+    /// Create a new simulation engine
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - Database reference to be used for simulation
+    /// * `trace` - Whether to print the entire execution trace
+    pub fn new(state: D, trace: bool) -> Self {
+        Self { state, trace }
+    }
+
     /// Simulate a transaction
     ///
     /// State's block will be modified to be the last block before the simulation's block.
@@ -65,16 +76,7 @@ impl<M: Middleware> SimulationEngine<M> {
         // struct outlive this scope.
         let mut vm = EVM::new();
 
-        // The below call to vm.database consumes its argument. By wrapping state in a new object,
-        // we protect the state from being consumed.
-        let db_ref = OverriddenSimulationDB {
-            inner_db: &self.state,
-            overrides: &params
-                .revm_overrides()
-                .unwrap_or_default(),
-        };
-
-        vm.database(db_ref);
+        vm.database(&self.state);
         vm.env.block.number = params.revm_block_number();
         vm.env.block.timestamp = params.revm_timestamp();
         vm.env.tx.caller = params.revm_caller();
@@ -141,7 +143,7 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                 gas_used: None,
             }),
             EVMError::Database(db_error) => {
-                Err(SimulationError::StorageError(format!("Storage error: {db_error:?}")))
+                Err(SimulationError::StorageError(format!("Storage error: {:?}", db_error)))
             }
         },
     }
@@ -242,13 +244,13 @@ impl SimulationParameters {
         rU256::from_limbs(self.value.0)
     }
 
-    fn revm_overrides(
-        &self,
-    ) -> Option<std::collections::HashMap<rB160, std::collections::HashMap<rU256, rU256>>> {
+    // TODO: Check this is currently being used only in tests
+    #[cfg(test)]
+    fn revm_overrides(&self) -> Option<HashMap<rB160, HashMap<rU256, rU256>>> {
         self.overrides.clone().map(|original| {
-            let mut result = std::collections::HashMap::new();
+            let mut result = HashMap::new();
             for (address, storage) in original {
-                let mut account_storage = std::collections::HashMap::new();
+                let mut account_storage = HashMap::new();
                 for (key, value) in storage {
                     account_storage.insert(rU256::from_limbs(key.0), rU256::from_limbs(value.0));
                 }
@@ -274,6 +276,8 @@ impl SimulationParameters {
 
 #[cfg(test)]
 mod tests {
+    use crate::evm_simulation::database;
+
     use super::*;
     use ethers::{
         abi::parse_abi,
@@ -281,13 +285,10 @@ mod tests {
         providers::{Http, Provider, ProviderError},
         types::{Address, U256},
     };
-    use revm::{
-        db::DatabaseRef,
-        primitives::{
-            bytes, hex, Account, AccountInfo, AccountStatus, Bytecode, Eval, ExecutionResult, Halt,
-            InvalidTransaction, OutOfGasError, Output, ResultAndState, State as rState,
-            StorageSlot, B160, B256,
-        },
+    use revm::primitives::{
+        bytes, hex, Account, AccountInfo, AccountStatus, Bytecode, Eval, ExecutionResult, Halt,
+        InvalidTransaction, OutOfGasError, Output, ResultAndState, State as rState, StorageSlot,
+        B160, B256,
     };
     use std::{error::Error, str::FromStr, sync::Arc, time::Instant};
 
@@ -554,7 +555,7 @@ mod tests {
             block_number: 0,
             timestamp: 0,
         };
-        let eng = SimulationEngine { state, trace: false };
+        let eng = SimulationEngine::new(state, false);
 
         let result = eng.simulate(&sim_params);
 
@@ -588,36 +589,21 @@ mod tests {
 
     #[test]
     fn test_contract_deployment() -> Result<(), Box<dyn Error>> {
-        let readonly_state = database::SimulationDB::new(
-            Arc::new(
-                Provider::<Http>::try_from(
-                    "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-                )
-                .unwrap(),
-            ),
-            Some(Arc::new(
-                tokio::runtime::Handle::try_current()
-                    .is_err()
-                    .then(|| tokio::runtime::Runtime::new().unwrap())
-                    .unwrap(),
-            )),
-            None,
-        );
-        let state = database::SimulationDB::new(
-            Arc::new(
-                Provider::<Http>::try_from(
-                    "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-                )
-                .unwrap(),
-            ),
-            Some(Arc::new(
-                tokio::runtime::Handle::try_current()
-                    .is_err()
-                    .then(|| tokio::runtime::Runtime::new().unwrap())
-                    .unwrap(),
-            )),
-            None,
-        );
+        fn new_state() -> database::SimulationDB<Provider<Http>> {
+            let client = Provider::<Http>::try_from(
+                "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
+            )
+            .unwrap();
+            let client = Arc::new(client);
+            let runtime = tokio::runtime::Handle::try_current()
+                .is_err()
+                .then(|| tokio::runtime::Runtime::new().unwrap())
+                .unwrap();
+            database::SimulationDB::new(client, Some(Arc::new(runtime)), None)
+        }
+
+        let readonly_state = new_state();
+        let state = new_state();
 
         let erc20_abi = BaseContract::from(parse_abi(&[
             "function balanceOf(address account) public view virtual returns (uint256)",
@@ -705,7 +691,7 @@ mod tests {
             timestamp: 0,
         };
 
-        let eng = SimulationEngine { state, trace: false };
+        let eng = SimulationEngine::new(state, false);
 
         // println!("Deploying a mocked contract!");
         // let deployment_result = eng.simulate(&deployment_params);

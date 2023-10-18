@@ -1,5 +1,5 @@
 use ethers::types::Bytes;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, ops::Deref, sync::Arc};
 use thiserror::Error;
 use tokio::sync::{
     mpsc::{self, Receiver},
@@ -160,8 +160,41 @@ impl DatabaseRef for PreCachedDB {
     }
 }
 
-// we might consider wrapping this type for a nicer API
-pub type TychoDB = Arc<RwLock<PreCachedDB>>;
+// We might consider wrapping this type for a nicer API
+#[derive(Clone, Debug)]
+pub struct TychoDB(Arc<RwLock<PreCachedDB>>);
+
+impl TychoDB {
+    /// Creates a new TychoDB and starts the update loop.
+    pub fn new(url: &str) -> Self {
+        let inner = PreCachedDB { accounts: AccountStorage::new(), block: None };
+
+        let db = Self(Arc::new(RwLock::new(inner)));
+        let tycho_db = db.clone();
+        let client = TychoClient::new(url).unwrap();
+        let (_tx, rx) = mpsc::channel::<()>(1);
+
+        tokio::spawn(async move {
+            update_loop(tycho_db, client, rx).await;
+        });
+
+        db
+    }
+}
+
+impl Deref for TychoDB {
+    type Target = Arc<RwLock<PreCachedDB>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Arc<RwLock<PreCachedDB>>> for TychoDB {
+    fn from(db: Arc<RwLock<PreCachedDB>>) -> Self {
+        Self(db)
+    }
+}
 
 // main data update loop, runs in a separate tokio runtime
 #[instrument(skip_all)]
@@ -262,29 +295,6 @@ pub async fn update_loop(
             }
         }
     }
-}
-
-// Create a new TychoDB
-pub fn create_tycho_db(url: String) -> TychoDB {
-    // Strip html prefixes
-    let url = url
-        .trim_start_matches("http://")
-        .trim_start_matches("https://")
-        .trim_end_matches('/');
-
-    let inner = PreCachedDB { accounts: AccountStorage::new(), block: None };
-
-    let db = Arc::new(RwLock::new(inner));
-    let cloned_db = db.clone();
-    let client = TychoClient::new(url).unwrap();
-    let (_tx, rx) = mpsc::channel::<()>(1);
-
-    // Spawn the update loop
-    tokio::spawn(async move {
-        update_loop(cloned_db, client, rx).await;
-    });
-
-    db
 }
 
 #[cfg(test)]
@@ -519,7 +529,7 @@ mod tests {
         let db = Arc::new(RwLock::new(mock_db));
         let (_tx, rx) = mpsc::channel::<()>(1);
 
-        update_loop(db.clone(), mock_client, rx).await;
+        update_loop(db.clone().into(), mock_client, rx).await;
 
         let read_guard = db.read().await;
 

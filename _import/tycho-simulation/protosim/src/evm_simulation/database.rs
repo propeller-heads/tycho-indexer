@@ -23,6 +23,22 @@ pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
     pub overrides: &'a HashMap<B160, HashMap<rU256, rU256>>,
 }
 
+impl<'a, DB: DatabaseRef> OverriddenSimulationDB<'a, DB> {
+    /// Creates a new OverriddenSimulationDB
+    ///
+    /// # Arguments
+    ///
+    /// * `inner_db` - Reference to the inner database.
+    /// * `overrides` - Reference to a HashMap containing the storage overrides.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of OverriddenSimulationDB.
+    pub fn new(inner_db: &'a DB, overrides: &'a HashMap<B160, HashMap<rU256, rU256>>) -> Self {
+        OverriddenSimulationDB { inner_db, overrides }
+    }
+}
+
 impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     type Error = DB::Error;
 
@@ -65,6 +81,7 @@ impl From<BlockHeader> for BlockId {
     }
 }
 
+/// A wrapper over an ethers Client with local storage cache.
 #[derive(Debug)]
 pub struct SimulationDB<M: Middleware> {
     /// Client to connect to the RPC
@@ -676,7 +693,7 @@ mod tests {
         );
 
         // WHEN...
-        let overriden_db = OverriddenSimulationDB { inner_db: &mock_sim_db, overrides: &overrides };
+        let overriden_db = OverriddenSimulationDB::new(&mock_sim_db, &overrides);
 
         // THEN...
         assert_eq!(
