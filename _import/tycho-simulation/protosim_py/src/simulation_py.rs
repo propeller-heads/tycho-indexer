@@ -66,6 +66,21 @@ impl SimulationEngineInner {
         }
     }
 
+    fn query_storage(
+        &self,
+        address: B160,
+        slot: rU256,
+    ) -> Option<rU256> {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => {
+                engine.state.query_storage(address, slot).ok()
+            }
+            SimulationEngineInner::TychoDB(engine) => {
+                engine.state.get_storage(&address, &slot)
+            }
+        }
+    }
+
     fn clear_temp_storage(&mut self) {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
@@ -160,6 +175,19 @@ impl SimulationEngine {
             py_reverse_updates.insert(key.to_string(), StateUpdate::from(value));
         }
         Ok(py_reverse_updates)
+    }
+
+    fn query_storage(
+        self_: PyRef<Self>,
+        address: String,
+        slot: String,
+    ) -> PyResult<Option<String>> {
+        let address = B160::from_str(&address).unwrap();
+        let slot = rU256::from_str(&slot).unwrap();
+        match self_.0.query_storage(address, slot) {
+            Some(state_update) => Ok(Some(state_update.to_string())),
+            None => Ok(None),
+        }
     }
 
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {

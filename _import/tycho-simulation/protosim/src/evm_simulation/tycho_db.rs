@@ -174,7 +174,7 @@ impl PreCachedDB {
     ///
     /// Returns an `Option` containing a reference to the storage value if it exists, otherwise
     /// returns `None`.
-    fn get_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
+    pub fn get_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
         self.block_on(async {
             self.inner
                 .read()
@@ -383,6 +383,7 @@ pub async fn update_loop(
     info!("Starting message stream");
     let mut messages = client.realtime_messages().await;
 
+    info!("Getting current state");
     // Getting the state from Tycho indexer.
     let state = client
         .get_state(

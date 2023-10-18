@@ -384,10 +384,10 @@ pub struct SimulationDB {
 impl SimulationDB {
     #[new]
     #[pyo3(signature = (rpc_url, block))]
-    pub fn new(rpc_url: String, block: BlockHeader) -> Self {
+    pub fn new(rpc_url: String, block: Option<BlockHeader>) -> Self {
         info!(?rpc_url, ?block, "Creating python SimulationDB wrapper instance");
         let db =
-            database::SimulationDB::new(get_client(&rpc_url), get_runtime(), Some(block.into()));
+            database::SimulationDB::new(get_client(&rpc_url), get_runtime(), block.map(Into::into));
         Self { inner: db }
     }
 }

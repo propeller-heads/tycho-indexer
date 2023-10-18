@@ -12,6 +12,8 @@ mod structs_py;
 /// Transaction simulation using EVM implemented in Rust
 #[pymodule]
 fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
+    pyo3_log::init();
+
     // Start configuring a `fmt` subscriber
     tracing_subscriber::fmt()
         // Set default log level from RUST_LOG env variable

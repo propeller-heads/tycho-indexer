@@ -25,3 +25,4 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "fmt",
 ] }
 uuid = "1.4.1"
+pyo3-log = "0.8.4"

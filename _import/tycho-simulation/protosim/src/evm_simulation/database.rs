@@ -260,7 +260,7 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// Returns a `Result` containing the value from storage at the specified index as an `rU256`,
     /// or an error of type `SimulationDB<M>::Error` if the query fails.
-    fn query_storage(
+    pub fn query_storage(
         &self,
         address: B160,
         index: rU256,
