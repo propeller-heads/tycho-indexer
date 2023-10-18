@@ -12,7 +12,8 @@ use starknet_api::{
     transaction::{InvokeTransaction, Transaction as SNTransaction, TransactionHash},
 };
 use starknet_in_rust::definitions::block_context::StarknetChainId;
-use std::{collections::HashMap, env, error::Error};
+use std::{collections::HashMap, env};
+use thiserror::Error;
 
 /// Starknet chains supported in Infura.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -68,22 +69,13 @@ pub struct RpcState {
     pub block: BlockValue,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[derive(Error, Debug)]
 enum RpcError {
-    RpcCall(String),
-    Request(String),
+    #[error("Parsing failed with error: {0}")]
+    Parse(#[from] serde_json::Error),
+    #[error("Request failed with error: {0}")]
+    Request(Box<ureq::Error>),
 }
-
-impl fmt::Display for RpcError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            RpcError::RpcCall(ref e) => write!(f, "RPC call failed with error: {}", e),
-            RpcError::Request(ref e) => write!(f, "Request failed with error: {}", e),
-        }
-    }
-}
-
-impl Error for RpcError {}
 
 /// Represents the tag of a block value.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -333,13 +325,13 @@ impl RpcState {
             .set("Content-Type", "application/json")
             .set("accept", "application/json")
             .send_json(params)
-            .map_err(|err| RpcError::Request(err.to_string()))
+            .map_err(|err| RpcError::Request(Box::new(err)))
     }
 
     fn deserialize_call<T: for<'a> Deserialize<'a>>(
         response: serde_json::Value,
     ) -> Result<T, RpcError> {
-        serde_json::from_value(response).map_err(|err| RpcError::RpcCall(err.to_string()))
+        serde_json::from_value(response).map_err(RpcError::Parse)
     }
 
     /// Gets the url of the feeder endpoint
