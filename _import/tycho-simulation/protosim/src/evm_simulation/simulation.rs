@@ -1,3 +1,5 @@
+use crate::evm_simulation::database::OverriddenSimulationDB;
+
 use super::account_storage::StateUpdate;
 use ethers::types::{Address, Bytes, U256};
 
@@ -76,7 +78,17 @@ where
         // struct outlive this scope.
         let mut vm = EVM::new();
 
-        vm.database(&self.state);
+        // We protect the state from being consumed.
+        let db_ref = OverriddenSimulationDB {
+            inner_db: &self.state,
+            overrides: &params
+                .revm_overrides()
+                .unwrap_or_default(),
+        };
+
+        vm.database(db_ref);
+
+        // vm.database(&self.state);
         vm.env.block.number = params.revm_block_number();
         vm.env.block.timestamp = params.revm_timestamp();
         vm.env.tx.caller = params.revm_caller();
@@ -244,8 +256,6 @@ impl SimulationParameters {
         rU256::from_limbs(self.value.0)
     }
 
-    // TODO: Check this is currently being used only in tests
-    #[cfg(test)]
     fn revm_overrides(&self) -> Option<HashMap<rB160, HashMap<rU256, rU256>>> {
         self.overrides.clone().map(|original| {
             let mut result = HashMap::new();
