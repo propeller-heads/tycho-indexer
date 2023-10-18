@@ -5,16 +5,12 @@ use ethers::{
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use revm::primitives::{Bytecode, U256 as rU256};
-use tokio::{runtime::Runtime, sync::mpsc};
+use tokio::runtime::Runtime;
 use tracing::info;
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use protosim::evm_simulation::{
-    account_storage, database, simulation,
-    tycho_client::TychoClient,
-    tycho_db::{self, update_loop, PreCachedDB},
-};
+use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
 use std::fmt::Debug;
 
 /// Data needed to invoke a transaction simulation
