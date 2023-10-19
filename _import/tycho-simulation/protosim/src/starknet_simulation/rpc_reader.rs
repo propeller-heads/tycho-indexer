@@ -1,4 +1,5 @@
 use cairo_vm::felt::Felt252;
+use rpc_state_reader::rpc_state::RpcState;
 use starknet_api::{
     core::{ClassHash as SNClassHash, ContractAddress, PatriciaKey},
     hash::StarkHash,
@@ -10,8 +11,6 @@ use starknet_in_rust::{
     state::{state_api::StateReader, state_cache::StorageEntry},
     utils::{Address, ClassHash},
 };
-
-use super::rpc_state::RpcState;
 
 #[derive(Debug)]
 pub struct RpcStateReader(RpcState);
@@ -70,9 +69,8 @@ impl StateReader for RpcStateReader {
 
 #[cfg(test)]
 mod tests {
+    use rpc_state_reader::rpc_state::RpcChain;
     use starknet_api::block::BlockNumber;
-
-    use crate::starknet_simulation::rpc_state::RpcChain;
 
     use super::*;
 
@@ -82,7 +80,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_class_hash_at() {
         let reader = setup_reader();
 
@@ -109,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_contract_class() {
         let reader = setup_reader();
 
@@ -127,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_nonce_at() {
         let reader = setup_reader();
 
@@ -145,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_storage_at() {
         let reader = setup_reader();
 
@@ -165,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_compiled_class_hash() {
         let reader = setup_reader();
 
