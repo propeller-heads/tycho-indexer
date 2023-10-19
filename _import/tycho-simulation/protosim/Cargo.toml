@@ -37,6 +37,13 @@ uuid = { version = "1.4.1", features = [
     "fast-rng",
     "macro-diagnostics",
 ] }
+starknet_in_rust = "0.4.0"
+starknet_api = "0.4.1"
+starknet = "0.5.0"
+cairo-vm = { version = "0.8.5", features = ["cairo-1-hints"] }
+dotenv = "0.15.0"
+reqwest = "0.11.14"
+rpc_state_reader = { git = "https://github.com/lambdaclass/starknet_in_rust.git", package = "rpc_state_reader", tag = "v0.4.0" }
 
 [dev-dependencies]
 mockito = "1.1.1"

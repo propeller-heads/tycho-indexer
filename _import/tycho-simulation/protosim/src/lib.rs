@@ -21,4 +21,5 @@ pub mod models;
 pub mod optimize;
 pub mod protocol;
 pub mod safe_math;
+pub mod starknet_simulation;
 mod u256_num;
