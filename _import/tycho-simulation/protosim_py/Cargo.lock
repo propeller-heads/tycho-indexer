@@ -4017,7 +4017,7 @@ dependencies = [
 [[package]]
 name = "rpc_state_reader"
 version = "0.4.0"
-source = "git+https://github.com/lambdaclass/starknet_in_rust.git?rev=3febaf633bfa92caa26d2e1159a503d332b95088#3febaf633bfa92caa26d2e1159a503d332b95088"
+source = "git+https://github.com/lambdaclass/starknet_in_rust.git?tag=v0.4.0#3febaf633bfa92caa26d2e1159a503d332b95088"
 dependencies = [
  "blockifier",
  "cairo-lang-starknet",
@@ -4030,7 +4030,7 @@ dependencies = [
  "serde_with 3.4.0",
  "starknet",
  "starknet_api",
- "starknet_in_rust 0.4.0 (git+https://github.com/lambdaclass/starknet_in_rust.git?rev=3febaf633bfa92caa26d2e1159a503d332b95088)",
+ "starknet_in_rust 0.4.0 (git+https://github.com/lambdaclass/starknet_in_rust.git?tag=v0.4.0)",
  "thiserror",
  "ureq",
 ]
@@ -4920,7 +4920,7 @@ dependencies = [
 [[package]]
 name = "starknet_in_rust"
 version = "0.4.0"
-source = "git+https://github.com/lambdaclass/starknet_in_rust.git?rev=3febaf633bfa92caa26d2e1159a503d332b95088#3febaf633bfa92caa26d2e1159a503d332b95088"
+source = "git+https://github.com/lambdaclass/starknet_in_rust.git?tag=v0.4.0#3febaf633bfa92caa26d2e1159a503d332b95088"
 dependencies = [
  "anyhow",
  "base64 0.21.2",

@@ -12,22 +12,32 @@ use starknet_in_rust::{
     utils::{Address, ClassHash},
 };
 
+trait ToContractAddress {
+    fn to_contract_address(&self) -> ContractAddress;
+}
+
+impl ToContractAddress for Address {
+    fn to_contract_address(&self) -> ContractAddress {
+        ContractAddress(
+            PatriciaKey::try_from(StarkHash::new(self.0.to_be_bytes()).unwrap()).unwrap(),
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct RpcStateReader(RpcState);
 
 impl StateReader for RpcStateReader {
     fn get_contract_class(&self, class_hash: &ClassHash) -> Result<CompiledClass, StateError> {
-        let hash = SNClassHash(StarkHash::new(*class_hash).unwrap());
+        let hash = match StarkHash::new(*class_hash) {
+            Ok(val) => SNClassHash(val),
+            Err(err) => return Err(StateError::CustomError(err.to_string())),
+        };
         Ok(CompiledClass::from(self.0.get_contract_class(&hash)))
     }
 
     fn get_class_hash_at(&self, contract_address: &Address) -> Result<ClassHash, StateError> {
-        let address = ContractAddress(
-            PatriciaKey::try_from(
-                StarkHash::new(contract_address.clone().0.to_be_bytes()).unwrap(),
-            )
-            .unwrap(),
-        );
+        let address = contract_address.to_contract_address();
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(
             self.0
@@ -39,25 +49,20 @@ impl StateReader for RpcStateReader {
     }
 
     fn get_nonce_at(&self, contract_address: &Address) -> Result<Felt252, StateError> {
-        let address = ContractAddress(
-            PatriciaKey::try_from(
-                StarkHash::new(contract_address.clone().0.to_be_bytes()).unwrap(),
-            )
-            .unwrap(),
-        );
+        let address = contract_address.to_contract_address();
         let nonce = self.0.get_nonce_at(&address);
         Ok(Felt252::from_bytes_be(nonce.bytes()))
     }
 
     fn get_storage_at(&self, storage_entry: &StorageEntry) -> Result<Felt252, StateError> {
         let (contract_address, key) = storage_entry;
-        let address = ContractAddress(
-            PatriciaKey::try_from(
-                StarkHash::new(contract_address.clone().0.to_be_bytes()).unwrap(),
-            )
-            .unwrap(),
-        );
-        let key = StorageKey(PatriciaKey::try_from(StarkHash::new(*key).unwrap()).unwrap());
+        let address = contract_address.to_contract_address();
+        let key_hash =
+            StarkHash::new(*key).map_err(|err| StateError::CustomError(err.to_string()))?;
+        let key = match PatriciaKey::try_from(key_hash) {
+            Ok(val) => StorageKey(val),
+            Err(err) => return Err(StateError::CustomError(err.to_string())),
+        };
         let value = self.0.get_storage_at(&address, &key);
         Ok(Felt252::from_bytes_be(value.bytes()))
     }
@@ -87,17 +92,17 @@ mod tests {
         // Jedi Swap ETH/USDC pool address
         let address_bytes =
             hex::decode("04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a")
-                .expect("Decoding failed");
+                .unwrap();
         let contract_address: Address = Address(Felt252::from_bytes_be(&address_bytes));
 
         // expected class hash
         let hash_bytes =
             hex::decode("07b5cd6a6949cc1730f89d795f2442f6ab431ea6c9a5be00685d50f97433c5eb")
-                .expect("Decoding failed");
+                .unwrap();
         let expected_result: [u8; 32] = hash_bytes
             .as_slice()
             .try_into()
-            .expect("Conversion Failed");
+            .unwrap();
 
         let result = reader
             .get_class_hash_at(&contract_address)
@@ -112,12 +117,14 @@ mod tests {
         let reader = setup_reader();
 
         // Jedi Swap ETH/USDC pool class hash
-        let class_hash: &ClassHash = &[
-            7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67, 30,
-            166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235,
-        ];
+        let class_hash: [u8; 32] =
+            hex::decode("07b5cd6a6949cc1730f89d795f2442f6ab431ea6c9a5be00685d50f97433c5eb")
+                .unwrap()
+                .as_slice()
+                .try_into()
+                .unwrap();
 
-        let result = reader.get_contract_class(class_hash);
+        let result = reader.get_contract_class(&class_hash);
 
         // the CompiledClass object is huge, so we just check it is returned and skip the details
         // here
@@ -132,7 +139,7 @@ mod tests {
         // a test wallet address
         let address_bytes =
             hex::decode("03e9dB89D1c040968Cd82c07356E8e93B51825ab3CdAbA3d6dBA7a856729ef71")
-                .expect("Decoding failed");
+                .unwrap();
         let contract_address: Address = Address(Felt252::from_bytes_be(&address_bytes));
 
         let result = reader
@@ -149,7 +156,7 @@ mod tests {
 
         let address_bytes =
             hex::decode("04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a")
-                .expect("Decoding failed");
+                .unwrap();
         let address: Address = Address(Felt252::from_bytes_be(&address_bytes));
         let entry = [0; 32];
         let storage_entry: StorageEntry = (address, entry);
