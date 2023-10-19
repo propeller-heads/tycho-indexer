@@ -80,7 +80,7 @@ mod tests {
     }
 
     #[test]
-    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_class_hash_at() {
         let reader = setup_reader();
 
@@ -107,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_contract_class() {
         let reader = setup_reader();
 
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_nonce_at() {
         let reader = setup_reader();
 
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_storage_at() {
         let reader = setup_reader();
 
@@ -163,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    // #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
     fn test_get_compiled_class_hash() {
         let reader = setup_reader();
 
