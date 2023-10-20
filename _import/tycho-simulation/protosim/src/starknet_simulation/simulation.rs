@@ -20,7 +20,6 @@ pub struct StarknetSimulationEngine<SR: StateReader> {
     pub state: CachedState<SR>,
 }
 
-pub struct StarknetSimulationResult;
 /// The override map associates a tuple of a variable name and its arguments to its new value.
 pub type Overrides = HashMap<(String, Vec<Felt252>), Felt252>;
 #[derive(Debug)]
@@ -43,6 +42,15 @@ pub struct SimulationParameters {
     pub block_number: u64,
 }
 
+pub struct SimulationResult {
+    /// Output of transaction execution
+    pub result: Vec<Felt252>,
+    /// State changes caused by the transaction
+    pub state_updates: HashMap<Address, Overrides>,
+    /// Gas used by the transaction (already reduced by the refunded gas)
+    pub gas_used: u64,
+}
+
 trait SimulationEngine {
     // Inserts a contract with set storage into state
     fn init_contract(
@@ -58,15 +66,12 @@ trait SimulationEngine {
         value: Felt252,
     ) -> Result<(), SimulationError>;
     // Run Simulation
-    fn simulate(
-        &self,
-        params: &SimulationParameters,
-    ) -> Result<StarknetSimulationResult, SimulationError>;
+    fn simulate(&self, params: &SimulationParameters) -> Result<SimulationResult, SimulationError>;
     // Interpret simulation result
     fn interpret_evm_result(
         &self,
         starknet_result: Result<(), SimulationError>,
-    ) -> Result<StarknetSimulationResult, SimulationError>;
+    ) -> Result<SimulationResult, SimulationError>;
 }
 
 impl<SR: StateReader> SimulationEngine for StarknetSimulationEngine<SR> {
@@ -87,17 +92,14 @@ impl<SR: StateReader> SimulationEngine for StarknetSimulationEngine<SR> {
         todo!()
     }
 
-    fn simulate(
-        &self,
-        params: &SimulationParameters,
-    ) -> Result<StarknetSimulationResult, SimulationError> {
+    fn simulate(&self, params: &SimulationParameters) -> Result<SimulationResult, SimulationError> {
         todo!()
     }
 
     fn interpret_evm_result(
         &self,
         starknet_result: Result<(), SimulationError>,
-    ) -> Result<StarknetSimulationResult, SimulationError> {
+    ) -> Result<SimulationResult, SimulationError> {
         todo!()
     }
 }
