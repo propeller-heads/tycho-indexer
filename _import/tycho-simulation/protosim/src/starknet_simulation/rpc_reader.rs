@@ -9,7 +9,7 @@ use starknet_in_rust::{
     core::errors::state_errors::StateError,
     services::api::contract_classes::compiled_class::CompiledClass,
     state::{state_api::StateReader, state_cache::StorageEntry},
-    utils::{Address, ClassHash},
+    utils::{Address, ClassHash, CompiledClassHash},
 };
 
 trait ToContractAddress {
@@ -67,7 +67,10 @@ impl StateReader for RpcStateReader {
         Ok(Felt252::from_bytes_be(value.bytes()))
     }
 
-    fn get_compiled_class_hash(&self, class_hash: &ClassHash) -> Result<[u8; 32], StateError> {
+    fn get_compiled_class_hash(
+        &self,
+        class_hash: &ClassHash,
+    ) -> Result<CompiledClassHash, StateError> {
         Ok(*class_hash)
     }
 }
@@ -99,7 +102,7 @@ mod tests {
         let hash_bytes =
             hex::decode("07b5cd6a6949cc1730f89d795f2442f6ab431ea6c9a5be00685d50f97433c5eb")
                 .unwrap();
-        let expected_result: [u8; 32] = hash_bytes
+        let expected_result: ClassHash = hash_bytes
             .as_slice()
             .try_into()
             .unwrap();
@@ -117,7 +120,7 @@ mod tests {
         let reader = setup_reader();
 
         // Jedi Swap ETH/USDC pool class hash
-        let class_hash: [u8; 32] =
+        let class_hash: ClassHash =
             hex::decode("07b5cd6a6949cc1730f89d795f2442f6ab431ea6c9a5be00685d50f97433c5eb")
                 .unwrap()
                 .as_slice()
@@ -165,7 +168,7 @@ mod tests {
             .get_storage_at(&storage_entry)
             .unwrap();
 
-        let zero_as_bytes: [u8; 32] = [0; 32];
+        let zero_as_bytes: ClassHash = [0; 32];
         assert_eq!(result, Felt252::from_bytes_be(&zero_as_bytes))
     }
 
@@ -180,8 +183,8 @@ mod tests {
             166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235,
         ];
 
-        //expected class hash
-        let expected_hash: ClassHash = [
+        //expected compiled class hash
+        let expected_hash: CompiledClassHash = [
             7, 181, 205, 106, 105, 73, 204, 23, 48, 248, 157, 121, 95, 36, 66, 246, 171, 67, 30,
             166, 201, 165, 190, 0, 104, 93, 80, 249, 116, 51, 197, 235,
         ];
