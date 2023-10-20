@@ -41,7 +41,14 @@ pub struct SimulationParameters {
     /// The block number to be used by the transaction. This is independent of the states block.
     pub block_number: u64,
 }
-pub struct SimulationResult;
+pub struct SimulationResult {
+    /// Output of transaction execution
+    pub result: Vec<Felt252>,
+    /// State changes caused by the transaction
+    pub state_updates: HashMap<Address, Overrides>,
+    /// Gas used by the transaction (already reduced by the refunded gas)
+    pub gas_used: u64,
+}
 
 #[allow(unused_variables)]
 #[allow(dead_code)]
