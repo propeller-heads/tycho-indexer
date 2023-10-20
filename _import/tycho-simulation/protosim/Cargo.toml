@@ -6,8 +6,8 @@ edition = "2021"
 
 [dependencies]
 ethers = "^2.0.2"
-indexmap = { version = "1.7", features = ["std"] }
-itertools = "0.10.5"
+indexmap = { version = "2.0.2", features = ["std"] }
+itertools = "0.11.0"
 petgraph = "0.6.2"
 enum_dispatch = "0.3.8"
 serde_json = "1.0.105"
@@ -37,6 +37,13 @@ uuid = { version = "1.4.1", features = [
     "fast-rng",
     "macro-diagnostics",
 ] }
+starknet_in_rust = "0.4.0"
+starknet_api = "0.4.1"
+starknet = "0.5.0"
+cairo-vm = { version = "0.8.5", features = ["cairo-1-hints"] }
+dotenv = "0.15.0"
+reqwest = "0.11.14"
+rpc_state_reader = { git = "https://github.com/lambdaclass/starknet_in_rust.git", package = "rpc_state_reader", tag = "v0.4.0" }
 
 [dev-dependencies]
 mockito = "1.1.1"
