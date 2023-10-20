@@ -15,11 +15,6 @@ pub enum SimulationError {
     OverrideError(String),
 }
 
-#[derive(Debug)]
-pub struct SimulationEngine<SR: StateReader> {
-    pub state: CachedState<SR>,
-}
-
 pub type StorageHash = [u8; 32];
 pub type Overrides = HashMap<StorageHash, Felt252>;
 
@@ -49,6 +44,11 @@ pub struct SimulationResult {
     pub state_updates: HashMap<Address, Overrides>,
     /// Gas used by the transaction (already reduced by the refunded gas)
     pub gas_used: u128,
+}
+
+#[derive(Debug)]
+pub struct SimulationEngine<SR: StateReader> {
+    pub state: CachedState<SR>,
 }
 
 #[allow(unused_variables)]
