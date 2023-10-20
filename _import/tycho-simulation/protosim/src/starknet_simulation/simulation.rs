@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use cairo_vm::felt::Felt252;
 use starknet_in_rust::{
     state::{cached_state::CachedState, state_api::StateReader, state_cache::StorageEntry},
@@ -18,8 +20,28 @@ pub struct StarknetSimulationEngine<SR: StateReader> {
     pub state: CachedState<SR>,
 }
 
-pub struct SimulationParameters;
 pub struct StarknetSimulationResult;
+/// The override map associates a tuple of a variable name and its arguments to its new value.
+pub type Overrides = HashMap<(String, Vec<Felt252>), Felt252>;
+#[derive(Debug)]
+pub struct SimulationParameters {
+    /// Address of the sending account
+    pub caller: Address,
+    /// Address of the receiving account/contract
+    pub to: Address,
+    /// Calldata
+    pub data: Vec<Felt252>,
+    /// The contract function/entry point to call e.g. "transfer"
+    pub entry_point: String,
+    /// Starknet state overrides.
+    /// Will be merged with the existing state. Will take effect only for current simulation.
+    /// Must be given as a contract address to its variable override map.
+    pub overrides: Option<HashMap<Address, Overrides>>,
+    /// Limit of gas to be used by the transaction
+    pub gas_limit: Option<u128>,
+    /// The block number to be used by the transaction. This is independent of the states block.
+    pub block_number: u64,
+}
 
 trait SimulationEngine {
     // Inserts a contract with set storage into state
