@@ -20,8 +20,9 @@ pub struct StarknetSimulationEngine<SR: StateReader> {
     pub state: CachedState<SR>,
 }
 
-/// The override map associates a tuple of a variable name and its arguments to its new value.
-pub type Overrides = HashMap<(String, Vec<Felt252>), Felt252>;
+pub type StorageHash = [u8; 32];
+pub type Overrides = HashMap<StorageHash, Felt252>;
+
 #[derive(Debug)]
 pub struct SimulationParameters {
     /// Address of the sending account
@@ -48,7 +49,7 @@ pub struct SimulationResult {
     /// State changes caused by the transaction
     pub state_updates: HashMap<Address, Overrides>,
     /// Gas used by the transaction (already reduced by the refunded gas)
-    pub gas_used: u64,
+    pub gas_used: u128,
 }
 
 trait SimulationEngine {
