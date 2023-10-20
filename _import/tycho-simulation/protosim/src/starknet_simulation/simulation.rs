@@ -14,16 +14,16 @@ pub enum SimulationError {
 }
 
 #[derive(Debug)]
-pub struct StarknetSimulationEngine<SR: StateReader> {
+pub struct SimulationEngine<SR: StateReader> {
     pub state: CachedState<SR>,
 }
 
 pub struct SimulationParameters;
-pub struct StarknetSimulationResult;
+pub struct SimulationResult;
 
 #[allow(unused_variables)]
 #[allow(dead_code)]
-impl<SR: StateReader> StarknetSimulationEngine<SR> {
+impl<SR: StateReader> SimulationEngine<SR> {
     fn init_contract(
         &self,
         contract_address: Address,
@@ -41,17 +41,14 @@ impl<SR: StateReader> StarknetSimulationEngine<SR> {
         todo!()
     }
 
-    fn simulate(
-        &self,
-        params: &SimulationParameters,
-    ) -> Result<StarknetSimulationResult, SimulationError> {
+    fn simulate(&self, params: &SimulationParameters) -> Result<SimulationResult, SimulationError> {
         todo!()
     }
 
-    fn interpret_evm_result(
+    fn interpret_result(
         &self,
-        starknet_result: Result<(), SimulationError>,
-    ) -> Result<StarknetSimulationResult, SimulationError> {
+        result: Result<(), SimulationError>,
+    ) -> Result<SimulationResult, SimulationError> {
         todo!()
     }
 }
