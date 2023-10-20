@@ -48,8 +48,9 @@ pub struct SimulationResult {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct SimulationEngine<SR: StateReader> {
-    pub state: CachedState<SR>,
+    state: CachedState<SR>,
 }
 
 #[allow(unused_variables)]
@@ -82,3 +83,6 @@ impl<SR: StateReader> SimulationEngine<SR> {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod tests {}
