@@ -24,7 +24,7 @@ pub struct SimulationResult;
 #[allow(unused_variables)]
 #[allow(dead_code)]
 impl<SR: StateReader> SimulationEngine<SR> {
-    fn init_contract(
+    pub fn init_contract(
         &self,
         contract_address: Address,
         class_hash: ClassHash,
@@ -33,7 +33,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         todo!()
     }
 
-    fn set_state(
+    pub fn set_state(
         &self,
         storage_entry: &StorageEntry,
         value: Felt252,
@@ -41,7 +41,10 @@ impl<SR: StateReader> SimulationEngine<SR> {
         todo!()
     }
 
-    fn simulate(&self, params: &SimulationParameters) -> Result<SimulationResult, SimulationError> {
+    pub fn simulate(
+        &self,
+        params: &SimulationParameters,
+    ) -> Result<SimulationResult, SimulationError> {
         todo!()
     }
 
