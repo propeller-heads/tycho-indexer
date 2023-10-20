@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use cairo_vm::felt::Felt252;
 use starknet_in_rust::{
-    state::{cached_state::CachedState, state_api::StateReader, state_cache::StorageEntry},
+    execution::execution_entry_point::ExecutionResult,
+    state::{cached_state::CachedState, state_api::StateReader},
     utils::{Address, ClassHash},
 };
 use thiserror::Error;
@@ -63,11 +64,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         todo!()
     }
 
-    pub fn set_state(
-        &self,
-        storage_entry: &StorageEntry,
-        value: Felt252,
-    ) -> Result<(), SimulationError> {
+    fn set_state(&self, state: HashMap<Address, Overrides>) {
         todo!()
     }
 
@@ -80,7 +77,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
 
     fn interpret_result(
         &self,
-        result: Result<(), SimulationError>,
+        result: ExecutionResult,
     ) -> Result<SimulationResult, SimulationError> {
         todo!()
     }
