@@ -1,11 +1,16 @@
-use ethers::types::{Address, Bytes, H256, U256};
+use ethers::{
+    providers::{Http, Provider},
+    types::{Address, Bytes, H256, U256},
+};
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use revm::primitives::{Bytecode, U256 as rU256};
+use tokio::runtime::Runtime;
+use tracing::info;
 
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use protosim::evm_simulation::{account_storage, simulation};
+use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
 use std::fmt::Debug;
 
 /// Data needed to invoke a transaction simulation
@@ -29,9 +34,7 @@ use std::fmt::Debug;
 ///     Block number available to the transaction
 /// timestamp: int
 ///     Timestamp value available to the transaction
-#[pyclass(
-    text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
-)]
+#[pyclass]
 #[derive(Clone, Debug)]
 pub struct SimulationParameters {
     #[pyo3(get)]
@@ -55,6 +58,10 @@ pub struct SimulationParameters {
 #[pymethods]
 impl SimulationParameters {
     #[new]
+    #[pyo3(
+        text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
+    )]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         caller: String,
         to: String,
@@ -65,16 +72,7 @@ impl SimulationParameters {
         block_number: Option<u64>,
         timestamp: Option<u64>,
     ) -> Self {
-        Self {
-            caller,
-            to,
-            data,
-            value,
-            overrides,
-            gas_limit,
-            block_number,
-            timestamp,
-        }
+        Self { caller, to, data, value, overrides, gas_limit, block_number, timestamp }
     }
 
     fn __repr__(&self) -> String {
@@ -160,10 +158,7 @@ impl From<account_storage::StateUpdate> for StateUpdate {
             py_balances = Some(BigUint::from_bytes_le(rust_balances.as_le_slice()))
         }
 
-        StateUpdate {
-            storage: Some(py_storage),
-            balance: py_balances,
-        }
+        StateUpdate { storage: Some(py_storage), balance: py_balances }
     }
 }
 
@@ -184,10 +179,7 @@ impl From<StateUpdate> for account_storage::StateUpdate {
             rust_balance = Some(rU256::from_str(&py_balance.to_string()).unwrap());
         }
 
-        account_storage::StateUpdate {
-            storage: Some(rust_storage),
-            balance: rust_balance,
-        }
+        account_storage::StateUpdate { storage: Some(rust_storage), balance: rust_balance }
     }
 }
 
@@ -265,11 +257,7 @@ impl AccountInfo {
     #[new]
     #[pyo3(signature = (balance, nonce, code=None))]
     fn new(balance: BigUint, nonce: u64, code: Option<Vec<u8>>) -> Self {
-        Self {
-            balance,
-            nonce,
-            code,
-        }
+        Self { balance, nonce, code }
     }
 }
 
@@ -302,7 +290,7 @@ impl From<AccountInfo> for revm::primitives::AccountInfo {
 /// timestamp: int
 ///     block timestamp
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BlockHeader {
     number: u64,
     hash: String,
@@ -314,11 +302,7 @@ impl BlockHeader {
     #[new]
     #[pyo3(signature = (number, hash, timestamp))]
     fn new(number: u64, hash: String, timestamp: u64) -> Self {
-        Self {
-            number,
-            hash,
-            timestamp,
-        }
+        Self { number, hash, timestamp }
     }
 }
 
@@ -345,10 +329,9 @@ pub(crate) struct SimulationErrorDetails {
 impl SimulationErrorDetails {
     fn __repr__(&self) -> String {
         match self.gas_used {
-            Some(gas_usage) => format!(
-                "SimulationError(data={}, gas_used={})",
-                self.data, gas_usage
-            ),
+            Some(gas_usage) => {
+                format!("SimulationError(data={}, gas_used={})", self.data, gas_usage)
+            }
             None => format!("SimulationError(data={})", self.data),
         }
     }
@@ -365,13 +348,69 @@ impl From<SimulationErrorDetails> for PyErr {
 impl From<simulation::SimulationError> for SimulationErrorDetails {
     fn from(err: simulation::SimulationError) -> Self {
         match err {
-            simulation::SimulationError::StorageError(reason) => SimulationErrorDetails {
-                data: reason,
-                gas_used: None,
-            },
+            simulation::SimulationError::StorageError(reason) => {
+                SimulationErrorDetails { data: reason, gas_used: None }
+            }
             simulation::SimulationError::TransactionError { data, gas_used } => {
                 SimulationErrorDetails { data, gas_used }
             }
         }
+    }
+}
+
+fn get_runtime() -> Option<Arc<Runtime>> {
+    let runtime = tokio::runtime::Handle::try_current()
+        .is_err()
+        .then(|| Runtime::new().unwrap())
+        .unwrap();
+
+    Some(Arc::new(runtime))
+}
+
+fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
+    let client = Provider::<Http>::try_from(rpc_url).unwrap();
+    Arc::new(client)
+}
+
+/// A database using a real Ethereum node as a backend.
+///
+/// Uses a local cache to speed up queries.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct SimulationDB {
+    pub inner: database::SimulationDB<Provider<Http>>,
+}
+
+#[pymethods]
+impl SimulationDB {
+    #[new]
+    #[pyo3(signature = (rpc_url, block))]
+    pub fn new(rpc_url: String, block: Option<BlockHeader>) -> Self {
+        info!(?rpc_url, ?block, "Creating python SimulationDB wrapper instance");
+        let db =
+            database::SimulationDB::new(get_client(&rpc_url), get_runtime(), block.map(Into::into));
+        Self { inner: db }
+    }
+}
+
+/// A database that prechaches all data from a Tycho Indexer instance.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct TychoDB {
+    pub inner: tycho_db::PreCachedDB,
+}
+
+#[pymethods]
+impl TychoDB {
+    /// Create a new TychoDB instance.
+    ///
+    /// Arguments
+    /// * `tycho_url` - URL of the Tycho Indexer instance.
+    /// * `block` - Block header to use as a starting point for the database.
+    #[new]
+    pub fn new(tycho_url: &str) -> Self {
+        info!(?tycho_url, "Creating python TychoDB wrapper instance");
+        let db = tycho_db::PreCachedDB::new(tycho_url);
+        Self { inner: db }
     }
 }

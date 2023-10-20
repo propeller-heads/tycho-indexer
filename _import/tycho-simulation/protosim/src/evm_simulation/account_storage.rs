@@ -25,7 +25,7 @@ pub struct StateUpdate {
     pub storage: Option<HashMap<rU256, rU256>>,
     pub balance: Option<rU256>,
 }
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.
 pub struct AccountStorage {
     accounts: HashMap<B160, Account>,
@@ -211,7 +211,7 @@ impl AccountStorage {
     /// Removes all temp storage values.
     ///
     /// Iterates over the accounts in the storage and removes all temp storage values
-    pub fn clean_temp_storage(&mut self) {
+    pub fn clear_temp_storage(&mut self) {
         self.accounts
             .values_mut()
             .for_each(|acc| acc.temp_storage.clear());
@@ -482,7 +482,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_temp_storage() {
+    fn test_clear_temp_storage() {
         let mut account_storage = AccountStorage::default();
         let address_1 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
@@ -501,7 +501,7 @@ mod tests {
             .accounts
             .insert(address_2, account_2);
 
-        account_storage.clean_temp_storage();
+        account_storage.clear_temp_storage();
 
         let account_1_temp_storage = account_storage.accounts[&address_1]
             .temp_storage

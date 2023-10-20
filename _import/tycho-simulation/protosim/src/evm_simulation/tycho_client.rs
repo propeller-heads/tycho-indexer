@@ -33,6 +33,7 @@ pub enum TychoClientError {
     ParseResponse(String),
 }
 
+#[derive(Debug, Clone)]
 pub struct TychoClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,

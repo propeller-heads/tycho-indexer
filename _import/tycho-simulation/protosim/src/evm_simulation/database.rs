@@ -23,6 +23,22 @@ pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
     pub overrides: &'a HashMap<B160, HashMap<rU256, rU256>>,
 }
 
+impl<'a, DB: DatabaseRef> OverriddenSimulationDB<'a, DB> {
+    /// Creates a new OverriddenSimulationDB
+    ///
+    /// # Arguments
+    ///
+    /// * `inner_db` - Reference to the inner database.
+    /// * `overrides` - Reference to a HashMap containing the storage overrides.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of OverriddenSimulationDB.
+    pub fn new(inner_db: &'a DB, overrides: &'a HashMap<B160, HashMap<rU256, rU256>>) -> Self {
+        OverriddenSimulationDB { inner_db, overrides }
+    }
+}
+
 impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     type Error = DB::Error;
 
@@ -65,7 +81,8 @@ impl From<BlockHeader> for BlockId {
     }
 }
 
-#[derive(Debug)]
+/// A wrapper over an ethers Middleware with local storage cache and overrides.
+#[derive(Clone, Debug)]
 pub struct SimulationDB<M: Middleware> {
     /// Client to connect to the RPC
     client: Arc<M>,
@@ -182,7 +199,7 @@ impl<M: Middleware> SimulationDB<M> {
     pub fn clear_temp_storage(&mut self) {
         self.account_storage
             .borrow_mut()
-            .clean_temp_storage();
+            .clear_temp_storage();
     }
 
     /// Query information about an Ethereum account.
@@ -243,7 +260,7 @@ impl<M: Middleware> SimulationDB<M> {
     ///
     /// Returns a `Result` containing the value from storage at the specified index as an `rU256`,
     /// or an error of type `SimulationDB<M>::Error` if the query fails.
-    fn query_storage(
+    pub fn query_storage(
         &self,
         address: B160,
         index: rU256,
@@ -362,7 +379,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
-            // This scope is to not make two simultaneous borrows (one occurs inside init_account)
+            // This scope is to not make two simultaneous borrows
             let borrowed_storage = self.account_storage.borrow();
             is_mocked = borrowed_storage.is_mocked_account(&address);
             if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
@@ -676,7 +693,7 @@ mod tests {
         );
 
         // WHEN...
-        let overriden_db = OverriddenSimulationDB { inner_db: &mock_sim_db, overrides: &overrides };
+        let overriden_db = OverriddenSimulationDB::new(&mock_sim_db, &overrides);
 
         // THEN...
         assert_eq!(
