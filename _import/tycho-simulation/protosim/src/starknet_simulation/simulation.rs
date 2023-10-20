@@ -47,6 +47,7 @@ trait SimulationEngine {
     ) -> Result<StarknetSimulationResult, SimulationError>;
 }
 
+#[allow(unused_variables)]
 impl<SR: StateReader> SimulationEngine for StarknetSimulationEngine<SR> {
     fn init_contract(
         &self,
