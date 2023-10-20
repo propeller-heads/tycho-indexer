@@ -21,34 +21,9 @@ pub struct StarknetSimulationEngine<SR: StateReader> {
 pub struct SimulationParameters;
 pub struct StarknetSimulationResult;
 
-trait SimulationEngine {
-    // Inserts a contract with set storage into state
-    fn init_contract(
-        &self,
-        contract_address: Address,
-        class_hash: ClassHash,
-        path: String,
-    ) -> Result<(), SimulationError>;
-    // Overrides storage
-    fn set_state(
-        &self,
-        storage_entry: &StorageEntry,
-        value: Felt252,
-    ) -> Result<(), SimulationError>;
-    // Run Simulation
-    fn simulate(
-        &self,
-        params: &SimulationParameters,
-    ) -> Result<StarknetSimulationResult, SimulationError>;
-    // Interpret simulation result
-    fn interpret_evm_result(
-        &self,
-        starknet_result: Result<(), SimulationError>,
-    ) -> Result<StarknetSimulationResult, SimulationError>;
-}
-
 #[allow(unused_variables)]
-impl<SR: StateReader> SimulationEngine for StarknetSimulationEngine<SR> {
+#[allow(dead_code)]
+impl<SR: StateReader> StarknetSimulationEngine<SR> {
     fn init_contract(
         &self,
         contract_address: Address,
