@@ -316,12 +316,7 @@ mod tests {
         let path_str: String = path.to_str().unwrap().to_owned();
 
         let address: Address = Address(Felt252::from(0u8));
-        let input_contract = ContractInitialization::new(
-            address,
-            [0u8; 32],
-            Some(path_str),
-            None,
-        );
+        let input_contract = ContractInitialization::new(address, [0u8; 32], Some(path_str), None);
         let rpc_state_reader = Arc::new(StateReaderMock::new());
         let engine_result = SimulationEngine::new(rpc_state_reader, vec![input_contract]);
         if let Err(err) = engine_result {
