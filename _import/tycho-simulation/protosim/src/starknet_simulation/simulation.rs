@@ -92,4 +92,80 @@ impl<SR: StateReader> SimulationEngine<SR> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use starknet_in_rust::state::cached_state::ContractClassCache;
+
+    use super::*;
+    use std::{collections::HashMap, sync::Arc};
+
+    struct MockStateReader;
+    #[allow(unused_variables)]
+    impl StateReader for MockStateReader {
+        fn get_contract_class(
+            &self,
+            class_hash: &ClassHash,
+        ) -> Result<
+            starknet_in_rust::services::api::contract_classes::compiled_class::CompiledClass,
+            starknet_in_rust::core::errors::state_errors::StateError,
+        > {
+            todo!()
+        }
+
+        fn get_class_hash_at(
+            &self,
+            contract_address: &Address,
+        ) -> Result<ClassHash, starknet_in_rust::core::errors::state_errors::StateError> {
+            todo!()
+        }
+
+        fn get_nonce_at(
+            &self,
+            contract_address: &Address,
+        ) -> Result<Felt252, starknet_in_rust::core::errors::state_errors::StateError> {
+            todo!()
+        }
+
+        fn get_storage_at(
+            &self,
+            storage_entry: &(starknet_in_rust::utils::Address, [u8; 32]),
+        ) -> Result<Felt252, starknet_in_rust::core::errors::state_errors::StateError> {
+            todo!()
+        }
+
+        fn get_compiled_class_hash(
+            &self,
+            class_hash: &ClassHash,
+        ) -> Result<
+            starknet_in_rust::utils::CompiledClassHash,
+            starknet_in_rust::core::errors::state_errors::StateError,
+        > {
+            todo!()
+        }
+    }
+
+    #[test]
+    fn test_set_state() {
+        let mut engine = SimulationEngine {
+            state: CachedState::new(Arc::new(MockStateReader), ContractClassCache::default()),
+        };
+
+        let mut state = HashMap::new();
+        let mut overrides = HashMap::new();
+
+        let address = Address(123.into());
+        let slot = [0; 32];
+        let value = Felt252::from(1);
+
+        overrides.insert(slot, value.clone());
+        state.insert(address.clone(), overrides);
+
+        engine.set_state(state.clone());
+
+        let storage_entry = (address, slot);
+        let retrieved_value = engine
+            .state
+            .get_storage_at(&storage_entry)
+            .unwrap();
+        assert_eq!(retrieved_value, value, "State was not set correctly");
+    }
+}
