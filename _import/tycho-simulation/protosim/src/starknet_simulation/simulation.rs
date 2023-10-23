@@ -81,7 +81,7 @@ pub struct SimulationEngine<SR: StateReader> {
  * Starknet contracts can be represented in two main formats: `.casm` and `.json`.
  * You can read more about these formats in the [Starknet documentation](https://docs.starknet.io/documentation/architecture_and_concepts/Smart_Contracts/cairo-and-sierra/).
  *
- * ## .json or .sierra Format (Cairo 0)
+ * ## .json Format (Cairo 0)
  *
  * * This format is older and represents Cairo 0 contracts. It is in JSON format, but sometimes
  *   for clarity it is given the `.sierra` extension.
@@ -108,8 +108,8 @@ fn load_compiled_class_from_path(
             let casm_contract_class: CasmContractClass = serde_json::from_str(&contents)?;
             Ok(CompiledClass::Casm(Arc::new(casm_contract_class)))
         }
-        Some("json") | Some("sierra") => {
-            // Deserialize the JSON file
+        Some("json") => {
+            // Deserialize the .json file
             let contract_class: ContractClass = ContractClass::from_path(&path)?;
             Ok(CompiledClass::Deprecated(Arc::new(contract_class)))
         }
@@ -263,4 +263,70 @@ impl<SR: StateReader> SimulationEngine<SR> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use rstest::rstest;
+    use starknet_in_rust::core::errors::state_errors::StateError;
+
+    // Mock empty StateReader
+    struct StateReaderMock {}
+
+    impl StateReaderMock {
+        fn new() -> Self {
+            Self {}
+        }
+    }
+
+    #[allow(unused_variables)]
+    #[allow(dead_code)]
+    impl StateReader for StateReaderMock {
+        fn get_contract_class(&self, class_hash: &ClassHash) -> Result<CompiledClass, StateError> {
+            todo!()
+        }
+
+        fn get_class_hash_at(&self, contract_address: &Address) -> Result<ClassHash, StateError> {
+            todo!()
+        }
+
+        fn get_nonce_at(&self, contract_address: &Address) -> Result<Felt252, StateError> {
+            todo!()
+        }
+
+        fn get_storage_at(&self, storage_entry: &StorageEntry) -> Result<Felt252, StateError> {
+            todo!()
+        }
+
+        fn get_compiled_class_hash(
+            &self,
+            class_hash: &ClassHash,
+        ) -> Result<CompiledClassHash, StateError> {
+            todo!()
+        }
+    }
+
+    #[rstest]
+    #[case::cairo_0("tests/resources/fibonacci.json")]
+    #[case::cairo_1("tests/resources/fibonacci.casm")]
+    fn test_create_engine_with_contract_from_path(#[case] path: &str) {
+        let cargo_manifest_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+        dbg!("Cargo manifest path is: {:?}", cargo_manifest_path);
+
+        let path = cargo_manifest_path.join(path);
+        dbg!("Contract path is: {:?}", &path);
+        let path_str: String = path.to_str().unwrap().to_owned();
+
+        let address: Address = Address(Felt252::from(0u8));
+        let input_contract = ContractInitialization::new(
+            address,
+            [0u8; 32],
+            Some(path_str),
+            None,
+        );
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine_result = SimulationEngine::new(rpc_state_reader, vec![input_contract]);
+        if let Err(err) = engine_result {
+            panic!("Failed to create engine with error: {:?}", err);
+        }
+        assert!(engine_result.is_ok());
+    }
+}
