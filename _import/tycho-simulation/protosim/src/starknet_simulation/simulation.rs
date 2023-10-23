@@ -1,3 +1,4 @@
+use starknet_in_rust::state::state_api::State;
 use std::collections::HashMap;
 
 use cairo_vm::felt::Felt252;
@@ -65,8 +66,14 @@ impl<SR: StateReader> SimulationEngine<SR> {
         todo!()
     }
 
-    fn set_state(&self, state: HashMap<Address, Overrides>) {
-        todo!()
+    fn set_state(&mut self, state: HashMap<Address, Overrides>) {
+        for (address, slot_update) in state {
+            for (slot, value) in slot_update {
+                let storage_entry = (address.clone(), slot);
+                self.state
+                    .set_storage_at(&storage_entry, value);
+            }
+        }
     }
 
     pub fn simulate(
