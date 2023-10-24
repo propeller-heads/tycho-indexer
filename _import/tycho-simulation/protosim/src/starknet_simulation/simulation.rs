@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::{collections::HashMap, sync::Arc};
 
 use cairo_vm::felt::Felt252;
@@ -15,6 +14,12 @@ pub enum SimulationError {
     InitError(String),
     #[error("Override Starknet state failed: {0}")]
     OverrideError(String),
+    /// Simulation didn't succeed; likely not related to network, so retrying won't help
+    #[error("Simulated transaction failed: {0}")]
+    TransactionError(String),
+    /// Error reading state
+    #[error("Accessing contract state failed: {0}")]
+    StateError(String),
 }
 
 pub type StorageHash = [u8; 32];
@@ -64,7 +69,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         // Create state
         let state = CachedState::new(rpc_state_reader, class_cache);
 
-        // instantiate and return selfs
+        // instantiate and return self
         Self { state }
     }
 
