@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use cairo_vm::felt::Felt252;
 use starknet_in_rust::{
@@ -56,6 +57,17 @@ pub struct SimulationEngine<SR: StateReader> {
 #[allow(unused_variables)]
 #[allow(dead_code)]
 impl<SR: StateReader> SimulationEngine<SR> {
+    pub fn new(rpc_state_reader: Arc<SR>) -> Self {
+        // Create default class cache
+        let class_cache = ContractClassCache::default();
+
+        // Create state
+        let state = CachedState::new(rpc_state_reader, class_cache);
+
+        // instantiate and return selfs
+        Self { state }
+    }
+
     pub fn init_contract(
         &self,
         contract_address: Address,
