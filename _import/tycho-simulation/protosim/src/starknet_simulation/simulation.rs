@@ -2,9 +2,18 @@ use std::{collections::HashMap, sync::Arc};
 
 use cairo_vm::felt::Felt252;
 use starknet_in_rust::{
-    execution::execution_entry_point::ExecutionResult,
-    state::{cached_state::CachedState, state_api::StateReader},
-    utils::{Address, ClassHash},
+    definitions::block_context::BlockContext,
+    execution::{
+        execution_entry_point::{ExecutionEntryPoint, ExecutionResult},
+        CallType, TransactionExecutionContext,
+    },
+    state::{
+        cached_state::{CachedState, ContractClassCache},
+        state_api::StateReader,
+        ExecutionResourcesManager,
+    },
+    utils::{calculate_sn_keccak, Address, ClassHash},
+    EntryPointType,
 };
 use thiserror::Error;
 
@@ -86,11 +95,55 @@ impl<SR: StateReader> SimulationEngine<SR> {
         todo!()
     }
 
+    /// Simulate a transaction
+    ///
+    /// State's block will be modified to be the last block before the simulation's block.
     pub fn simulate(
         &self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
-        todo!()
+        // Create a transactional state copy - to be used for simulations and not alter the original state cache
+        let mut test_state = self.state.create_transactional();
+
+        // Create the simulated call
+        let entry_point = params.entry_point.as_bytes();
+        let entrypoint_selector = Felt252::from_bytes_be(&calculate_sn_keccak(entry_point));
+
+        let class_hash = self
+            .state
+            .get_class_hash_at(&params.to)
+            .map_err(|err| SimulationError::StateError(err.to_string()))?;
+
+        let call = ExecutionEntryPoint::new(
+            params.to.clone(),
+            params.data.clone(),
+            entrypoint_selector,
+            params.caller.clone(),
+            EntryPointType::External,
+            Some(CallType::Delegate),
+            Some(class_hash),
+            params.gas_limit.unwrap_or(0),
+        );
+
+        // Set up the call context
+        let block_context = BlockContext::default();
+        let mut resources_manager = ExecutionResourcesManager::default();
+        let mut tx_execution_context = TransactionExecutionContext::default();
+
+        // Execute the simulated call
+        let result = call
+            .execute(
+                &mut test_state,
+                &block_context,
+                &mut resources_manager,
+                &mut tx_execution_context,
+                false,
+                block_context.invoke_tx_max_n_steps(),
+            )
+            .map_err(|err| SimulationError::TransactionError(err.to_string()))?;
+
+        // Interpret and return the results
+        self.interpret_result(result)
     }
 
     fn interpret_result(
