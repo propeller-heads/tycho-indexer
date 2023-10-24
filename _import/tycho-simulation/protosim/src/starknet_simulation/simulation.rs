@@ -12,7 +12,7 @@ use starknet_in_rust::{
         compiled_class::CompiledClass, deprecated_contract_class::ContractClass,
     },
     state::{
-        cached_state::{CachedState, ContractClassCache},
+        cached_state::CachedState,
         state_api::StateReader,
         state_cache::{StateCache, StorageEntry},
         ExecutionResourcesManager,
