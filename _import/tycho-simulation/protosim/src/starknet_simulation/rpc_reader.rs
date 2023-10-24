@@ -27,6 +27,12 @@ impl ToContractAddress for Address {
 #[derive(Debug)]
 pub struct RpcStateReader(RpcState);
 
+impl RpcStateReader {
+    pub fn new(state: RpcState) -> Self {
+        Self(state)
+    }
+}
+
 impl StateReader for RpcStateReader {
     fn get_contract_class(&self, class_hash: &ClassHash) -> Result<CompiledClass, StateError> {
         let hash = match StarkHash::new(*class_hash) {
