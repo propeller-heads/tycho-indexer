@@ -102,7 +102,8 @@ impl<SR: StateReader> SimulationEngine<SR> {
         &self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
-        // Create a transactional state copy - to be used for simulations and not alter the original state cache
+        // Create a transactional state copy - to be used for simulations and not alter the original
+        // state cache
         let mut test_state = self.state.create_transactional();
 
         // Create the simulated call
