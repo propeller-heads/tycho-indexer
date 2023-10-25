@@ -213,10 +213,6 @@ impl From<StarknetSimulationErrorDetails> for PyErr {
 //  is defined in an external create
 impl From<SimulationError> for StarknetSimulationErrorDetails {
     fn from(err: SimulationError) -> Self {
-        match err {
-            SimulationError::InitError(reason) |
-            SimulationError::AlreadyInitialized(reason) |
-            SimulationError::OverrideError(reason) => StarknetSimulationErrorDetails { reason },
-        }
+        StarknetSimulationErrorDetails { reason: err.to_string() }
     }
 }
