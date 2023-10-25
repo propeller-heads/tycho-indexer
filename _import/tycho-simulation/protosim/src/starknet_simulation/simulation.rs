@@ -156,14 +156,14 @@ fn compute_class_hash(
 /// * `storage_overrides: Option<HashMap<StorageEntry, Felt252>>` - The storage overrides for the
 ///   contract.
 #[derive(Debug, Clone)]
-pub struct ContractInitialization {
+pub struct ContractOverride {
     pub contract_address: Address,
     pub class_hash: ClassHash,
     pub path: Option<String>,
     pub storage_overrides: Option<HashMap<StorageEntry, Felt252>>,
 }
 
-impl ContractInitialization {
+impl ContractOverride {
     pub fn new(
         contract_address: Address,
         class_hash: ClassHash,
@@ -179,7 +179,7 @@ impl ContractInitialization {
 impl<SR: StateReader> SimulationEngine<SR> {
     pub fn new(
         rpc_state_reader: Arc<SR>,
-        input_contracts: impl IntoIterator<Item = ContractInitialization>,
+        contract_overrides: impl IntoIterator<Item = ContractOverride>,
     ) -> Result<Self, SimulationError> {
         // Prepare initial values
         let mut address_to_class_hash: HashMap<Address, ClassHash> = HashMap::new();
@@ -191,7 +191,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
             HashMap::new();
 
         // Load contracts
-        for input_contract in input_contracts {
+        for input_contract in contract_overrides {
             if let Some(path) = input_contract.path {
                 let compiled_class = load_compiled_class_from_path(&path).map_err(|e| {
                     SimulationError::InitError(format!(
@@ -325,7 +325,7 @@ mod tests {
         let path_str: String = path.to_str().unwrap().to_owned();
 
         let address: Address = Address(Felt252::from(0u8));
-        let input_contract = ContractInitialization::new(address, [0u8; 32], Some(path_str), None);
+        let input_contract = ContractOverride::new(address, [0u8; 32], Some(path_str), None);
         let rpc_state_reader = Arc::new(StateReaderMock::new());
         let engine_result = SimulationEngine::new(rpc_state_reader, vec![input_contract]);
         if let Err(err) = engine_result {
