@@ -85,13 +85,4 @@ impl StarknetSimulationEngine {
             Err(sim_err) => Err(PyErr::from(StarknetSimulationErrorDetails::from(sim_err))),
         }
     }
-
-    /// Update the state of the simulation engine.
-    #[allow(unused_variables)]
-    fn update_state(
-        #[allow(unused_mut)] mut self_: PyRefMut<Self>,
-        updates: HashMap<String, HashMap<BigUint, BigUint>>,
-    ) -> PyResult<HashMap<String, HashMap<BigUint, BigUint>>> {
-        todo!()
-    }
 }
