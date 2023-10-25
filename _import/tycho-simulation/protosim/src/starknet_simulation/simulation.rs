@@ -1,3 +1,4 @@
+use ethers::providers::Middleware;
 use starknet_in_rust::state::state_api::State;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
@@ -313,17 +314,21 @@ impl<SR: StateReader> SimulationEngine<SR> {
             return Err(SimulationError::ResultError("Execution failed".to_owned()));
         }
         let gas_used = call_info.gas_consumed;
-        let result = call_info.retdata;
+        let result = call_info.retdata.clone();
 
         // Collect state changes
-        let writes = state.cache().storage_writes();
-        let mut state_updates = HashMap::new();
-        for ((addr, hash), value) in writes {
-            state_updates
-                .entry(addr.clone())
-                .or_insert_with(HashMap::new)
-                .insert(*hash, value.clone());
-        }
+        let all_writes = state.cache().storage_writes();
+        let simultation_write_keys = call_info.get_visited_storage_entries();
+        let state_updates: HashMap<Address, HashMap<[u8; 32], Felt252>> = all_writes
+            .iter()
+            .filter(|(key, _)| simultation_write_keys.contains(key)) // filter for those applied during simulation
+            .map(|((addr, hash), value)| (addr.clone(), (*hash, value.clone()))) // map to our Override struct format
+            .fold(HashMap::new(), |mut acc, (addr, (hash, value))| {
+                acc.entry(addr)
+                    .or_default()
+                    .insert(hash, value);
+                acc
+            });
 
         Ok(SimulationResult { result, state_updates, gas_used })
     }
@@ -331,6 +336,8 @@ impl<SR: StateReader> SimulationEngine<SR> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use rstest::rstest;
     use starknet_in_rust::{
@@ -443,18 +450,27 @@ mod tests {
         storage_write.insert(hash, value.clone());
         state_updates.insert(address.clone(), storage_write);
 
-        // Set up execution result
+        // Construct state
+        let mut state = CachedState::new(rpc_state_reader, HashMap::new());
+        // Apply overrides
+        let override_hash = [1u8; 32];
+        state.set_storage_at(&(address.clone(), override_hash), value.clone());
+        // Get result state
+        let mut result_state = state.create_transactional();
+        result_state.set_storage_at(&(address.clone(), hash), value);
+
+        // Construct execution result
         let mut call_info =
             CallInfo::empty_constructor_call(address.clone(), address.clone(), None);
         call_info.gas_consumed = gas_consumed;
         call_info.retdata = retdata.clone();
+        // Flag relevant storage slots as updated during simulation
+        call_info.accessed_storage_keys = HashSet::new();
+        call_info
+            .accessed_storage_keys
+            .insert(hash);
         let execution_result =
             ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
-
-        // Set up state
-        let state = CachedState::new(rpc_state_reader, HashMap::new());
-        let mut result_state = state.create_transactional();
-        result_state.set_storage_at(&(address, hash), value);
 
         // Call interpret_result
         let result = engine
