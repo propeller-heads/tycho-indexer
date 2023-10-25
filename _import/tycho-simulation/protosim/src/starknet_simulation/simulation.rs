@@ -255,16 +255,6 @@ impl<SR: StateReader> SimulationEngine<SR> {
         Ok(Self { state })
     }
 
-    fn set_state(&mut self, state: HashMap<Address, Overrides>) {
-        for (address, slot_update) in state {
-            for (slot, value) in slot_update {
-                let storage_entry = (address.clone(), slot);
-                self.state
-                    .set_storage_at(&storage_entry, value);
-            }
-        }
-    }
-
     /// Simulate a transaction
     ///
     /// State's block will be modified to be the last block before the simulation's block.
@@ -276,12 +266,21 @@ impl<SR: StateReader> SimulationEngine<SR> {
         // state cache
         let mut test_state = self.state.create_transactional();
 
+        // Apply overrides
+        if let Some(overrides) = &params.overrides {
+            for (address, storage_update) in overrides {
+                for (slot, value) in storage_update {
+                    let storage_entry = ((*address).clone(), *slot);
+                    test_state.set_storage_at(&storage_entry, (*value).clone());
+                }
+            }
+        }
+
         // Create the simulated call
         let entry_point = params.entry_point.as_bytes();
         let entrypoint_selector = Felt252::from_bytes_be(&calculate_sn_keccak(entry_point));
 
-        let class_hash = self
-            .state
+        let class_hash = test_state
             .get_class_hash_at(&params.to)
             .map_err(|err| SimulationError::StateError(err.to_string()))?;
 
@@ -329,9 +328,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
 mod tests {
     use super::*;
     use rstest::rstest;
-    use starknet_in_rust::{
-        core::errors::state_errors::StateError, state::cached_state::ContractClassCache,
-    };
+    use starknet_in_rust::core::errors::state_errors::StateError;
 
     // Mock empty StateReader
     struct StateReaderMock {}
@@ -388,34 +385,5 @@ mod tests {
             panic!("Failed to create engine with error: {:?}", err);
         }
         assert!(engine_result.is_ok());
-    }
-
-    #[test]
-    fn test_set_state() {
-        let mut engine = SimulationEngine {
-            state: CachedState::new(
-                Arc::new(StateReaderMock::new()),
-                ContractClassCache::default(),
-            ),
-        };
-
-        let mut state = HashMap::new();
-        let mut overrides = HashMap::new();
-
-        let address = Address(123.into());
-        let slot = [0; 32];
-        let value = Felt252::from(1);
-
-        overrides.insert(slot, value.clone());
-        state.insert(address.clone(), overrides);
-
-        engine.set_state(state.clone());
-
-        let storage_entry = (address, slot);
-        let retrieved_value = engine
-            .state
-            .get_storage_at(&storage_entry)
-            .unwrap();
-        assert_eq!(retrieved_value, value, "State was not set correctly");
     }
 }
