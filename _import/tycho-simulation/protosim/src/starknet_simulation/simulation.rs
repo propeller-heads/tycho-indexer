@@ -1,4 +1,3 @@
-use ethers::providers::Middleware;
 use starknet_in_rust::state::state_api::State;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
@@ -10,7 +9,7 @@ use starknet_in_rust::{
         compiled_class::CompiledClass, deprecated_contract_class::ContractClass,
     },
     state::{
-        cached_state::{CachedState, TransactionalCachedStateReader},
+        cached_state::CachedState,
         state_api::StateReader,
         state_cache::{StateCache, StorageEntry},
     },
@@ -275,8 +274,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
     ///
     /// * `result` - An instance of the `ExecutionResult` struct, containing the result data from a
     ///   simulated execution.
-    /// * `result_state` - A `CachedState` wrapped in a `TransactionalCachedStateReader`,
-    ///   representing the state after simulation.
+    /// * `state_cache` - A `StateCache` giving the state's cache after simulation.
     ///
     /// # Return Value
     ///
@@ -295,7 +293,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
     fn interpret_result(
         &self,
         result: ExecutionResult,
-        state: CachedState<TransactionalCachedStateReader<SR>>,
+        state_cache: &StateCache,
     ) -> Result<SimulationResult, SimulationError> {
         // Check if revertError is not None
         if let Some(revert_error) = result.revert_error {
@@ -317,7 +315,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         let result = call_info.retdata.clone();
 
         // Collect state changes
-        let all_writes = state.cache().storage_writes();
+        let all_writes = state_cache.storage_writes();
         let simultation_write_keys = call_info.get_visited_storage_entries();
         let state_updates: HashMap<Address, HashMap<[u8; 32], Felt252>> = all_writes
             .iter()
@@ -474,7 +472,7 @@ mod tests {
 
         // Call interpret_result
         let result = engine
-            .interpret_result(execution_result, result_state)
+            .interpret_result(execution_result, &result_state.cache())
             .unwrap();
 
         assert_eq!(result.gas_used, gas_consumed);
@@ -497,7 +495,7 @@ mod tests {
             n_reverted_steps: 0,
         };
 
-        match engine.interpret_result(execution_result_with_revert, result_state) {
+        match engine.interpret_result(execution_result_with_revert, &result_state.cache()) {
             Err(SimulationError::TransactionError(message)) => {
                 assert!(message.contains("Execution reverted with error: Test Revert"));
             }
@@ -517,7 +515,7 @@ mod tests {
         let execution_result_no_call_info =
             ExecutionResult { call_info: None, revert_error: None, n_reverted_steps: 0 };
 
-        match engine.interpret_result(execution_result_no_call_info, result_state) {
+        match engine.interpret_result(execution_result_no_call_info, &result_state.cache()) {
             Err(SimulationError::ResultError(message)) => {
                 assert_eq!(message, "Call info is empty");
             }
@@ -541,7 +539,7 @@ mod tests {
         let execution_result_fail_flag =
             ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
 
-        match engine.interpret_result(execution_result_fail_flag, result_state) {
+        match engine.interpret_result(execution_result_fail_flag, &result_state.cache()) {
             Err(SimulationError::ResultError(message)) => {
                 assert_eq!(message, "Execution failed");
             }
