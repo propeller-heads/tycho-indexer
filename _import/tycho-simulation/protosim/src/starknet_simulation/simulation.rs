@@ -334,8 +334,8 @@ mod tests {
     use super::*;
     use rstest::rstest;
     use starknet_in_rust::{
-        execution::CallInfo,
-        {core::errors::state_errors::StateError, state::cached_state::ContractClassCache},
+        core::errors::state_errors::StateError, execution::CallInfo,
+        state::cached_state::ContractClassCache,
     };
 
     // Mock empty StateReader
