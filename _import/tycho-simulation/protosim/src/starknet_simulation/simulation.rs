@@ -8,7 +8,7 @@ use starknet_in_rust::{
         compiled_class::CompiledClass, deprecated_contract_class::ContractClass,
     },
     state::{
-        cached_state::CachedState,
+        cached_state::{CachedState, TransactionalCachedStateReader},
         state_api::StateReader,
         state_cache::{StateCache, StorageEntry},
     },
@@ -25,6 +25,11 @@ pub enum SimulationError {
     AlreadyInitialized(String),
     #[error("Override Starknet state failed: {0}")]
     OverrideError(String),
+    /// Simulation didn't succeed; likely not related to network, so retrying won't help
+    #[error("Simulated transaction failed: {0}")]
+    TransactionError(String),
+    #[error("Failed to decode result: {0}")]
+    ResultError(String),
 }
 
 pub type StorageHash = [u8; 32];
@@ -254,11 +259,66 @@ impl<SR: StateReader> SimulationEngine<SR> {
         todo!()
     }
 
+    /// Interpret the result of a simulated execution.
+    ///
+    /// Transforms the raw outcome of a simulated execution into a `SimulationResult`.
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - An instance of the `ExecutionResult` struct, containing the result data from a
+    ///   simulated execution.
+    /// * `result_state` - A `CachedState` wrapped in a `TransactionalCachedStateReader`,
+    ///   representing the state after simulation.
+    ///
+    /// # Return Value
+    ///
+    /// On successful simulation, this function returns `SimulationResult` containing the return
+    /// data, state updates, and gas consumed. If an error occurs during the simulation, it
+    /// returns a `SimulationError`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations:
+    ///
+    /// * If the execution reverts with an error (there exists a `revert_error` in the
+    ///   `ExecutionResult`)
+    /// * If the `call_info` field of the `ExecutionResult` is empty (None)
+    /// * If the simulated execution fails (as indicated by the `failure_flag` in `call_info`)
     fn interpret_result(
         &self,
         result: ExecutionResult,
+        state: CachedState<TransactionalCachedStateReader<SR>>,
     ) -> Result<SimulationResult, SimulationError> {
-        todo!()
+        // Check if revertError is not None
+        if let Some(revert_error) = result.revert_error {
+            return Err(SimulationError::TransactionError(format!(
+                "Execution reverted with error: {}",
+                revert_error
+            )));
+        }
+
+        // Extract call info
+        let call_info = result
+            .call_info
+            .ok_or(SimulationError::ResultError("Call info is empty".to_owned()))?;
+        // Check if call failed
+        if call_info.failure_flag {
+            return Err(SimulationError::ResultError("Execution failed".to_owned()));
+        }
+        let gas_used = call_info.gas_consumed;
+        let result = call_info.retdata;
+
+        // Collect state changes
+        let writes = state.cache().storage_writes();
+        let mut state_updates = HashMap::new();
+        for ((addr, hash), value) in writes {
+            state_updates
+                .entry(addr.clone())
+                .or_insert_with(HashMap::new)
+                .insert(*hash, value.clone());
+        }
+
+        Ok(SimulationResult { result, state_updates, gas_used })
     }
 }
 
@@ -266,7 +326,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
 mod tests {
     use super::*;
     use rstest::rstest;
-    use starknet_in_rust::core::errors::state_errors::StateError;
+    use starknet_in_rust::{core::errors::state_errors::StateError, execution::CallInfo};
 
     // Mock empty StateReader
     struct StateReaderMock {}
@@ -323,5 +383,50 @@ mod tests {
             panic!("Failed to create engine with error: {:?}", err);
         }
         assert!(engine_result.is_ok());
+    }
+
+    #[rstest]
+    fn test_interpret_results() {
+        let address = Address(Felt252::from(0u8));
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+
+        // Construct expected values
+        let gas_consumed = 10;
+        let retdata: Vec<Felt252> = vec![1, 2, 3]
+            .into_iter()
+            .map(Felt252::from)
+            .collect();
+        let mut state_updates = HashMap::new();
+        let mut storage_write: HashMap<[u8; 32], Felt252> = HashMap::new();
+        let hash = [0u8; 32];
+        let value: Felt252 = 0.into();
+        storage_write.insert(hash, value.clone());
+        state_updates.insert(address.clone(), storage_write);
+
+        // Set up execution result
+        let mut call_info =
+            CallInfo::empty_constructor_call(address.clone(), address.clone(), None);
+        call_info.gas_consumed = gas_consumed;
+        call_info.retdata = retdata.clone();
+        let execution_result =
+            ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
+
+        // Set up state
+        let state = CachedState::new(rpc_state_reader, HashMap::new());
+        let mut result_state = state.create_transactional();
+        result_state
+            .cache_mut()
+            .storage_writes_mut()
+            .insert((address, hash), value);
+
+        // Call interpret_result
+        let result = engine
+            .interpret_result(execution_result, result_state)
+            .unwrap();
+
+        assert_eq!(result.gas_used, gas_consumed);
+        assert_eq!(result.result, retdata);
+        assert_eq!(result.state_updates, state_updates);
     }
 }
