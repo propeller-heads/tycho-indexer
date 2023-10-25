@@ -428,7 +428,7 @@ impl DatabaseRef for PreCachedDB {
     fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
         match &self.block_on(async { self.inner.read().await.block }) {
             Some(header) => Ok(header.hash.into()),
-            None => Err(PreCachedDBError::BlockNotSet()),
+            None => Ok(B256::default()),
         }
     }
 }
