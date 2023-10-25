@@ -24,3 +24,9 @@ pub mod safe_math;
 pub mod serde_helpers;
 pub mod starknet_simulation;
 mod u256_num;
+
+// Reexports
+pub use num_traits;
+pub use rpc_state_reader;
+pub use starknet_api;
+pub use starknet_in_rust;

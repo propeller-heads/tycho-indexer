@@ -1,5 +1,5 @@
 use cairo_vm::felt::Felt252;
-use rpc_state_reader::rpc_state::RpcState;
+use rpc_state_reader::rpc_state::{BlockValue, RpcChain, RpcState};
 use starknet_api::{
     core::{ClassHash as SNClassHash, ContractAddress, PatriciaKey},
     hash::StarkHash,
@@ -26,6 +26,13 @@ impl ToContractAddress for Address {
 
 #[derive(Debug)]
 pub struct RpcStateReader(RpcState);
+
+impl RpcStateReader {
+    pub fn new(chain: RpcChain, block: BlockValue, rpc_endpoint: &str, feeder_url: &str) -> Self {
+        let rpc_state = RpcState::new(chain, block, rpc_endpoint, feeder_url);
+        RpcStateReader(rpc_state)
+    }
+}
 
 impl StateReader for RpcStateReader {
     fn get_contract_class(&self, class_hash: &ClassHash) -> Result<CompiledClass, StateError> {

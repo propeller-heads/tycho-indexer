@@ -1,10 +1,15 @@
 use num_bigint::BigUint;
-use protosim::starknet_simulation::{rpc_reader::RpcStateReader, simulation::SimulationEngine};
+use protosim::{
+    rpc_state_reader::rpc_state::{BlockTag, BlockValue, RpcChain},
+    starknet_api::block::BlockNumber,
+    starknet_simulation::{rpc_reader::RpcStateReader, simulation::SimulationEngine},
+};
 use pyo3::prelude::*;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::starknet_structs_py::{
-    ContractOverride, StarknetSimulationParameters, StarknetSimulationResult,
+    ContractOverride, StarknetSimulationErrorDetails, StarknetSimulationParameters,
+    StarknetSimulationResult,
 };
 
 /// Starknet transaction simulation engine.
@@ -37,7 +42,32 @@ impl StarknetSimulationEngine {
         block_tag: Option<String>,
         block_number: Option<u64>,
     ) -> Self {
-        todo!()
+        let block = match block_number {
+            Some(val) => BlockValue::Number(BlockNumber(val)),
+            None => match block_tag {
+                Some(val) => match val.as_str() {
+                    "latest" => BlockValue::Tag(BlockTag::Latest),
+                    "pending" => BlockValue::Tag(BlockTag::Pending),
+                    _ => panic!("Invalid block tag {}", val),
+                },
+                None => BlockValue::Tag(BlockTag::Latest),
+            },
+        };
+        let chain = match chain.as_str() {
+            "starknet-mainnet" => RpcChain::MainNet,
+            "starknet-goerli" => RpcChain::TestNet,
+            "starknet-goerli2" => RpcChain::TestNet2,
+            _ => panic!("Invalid chain {}", chain),
+        };
+        let state_reader = RpcStateReader::new(chain, block, &rpc_endpoint, &feeder_url);
+        let engine = SimulationEngine::new(
+            Arc::new(state_reader),
+            contract_overrides
+                .into_iter()
+                .map(Into::into),
+        )
+        .expect("Failed to create simulation engine");
+        Self(engine)
     }
 
     /// Simulate a Starknet transaction.
@@ -50,7 +80,10 @@ impl StarknetSimulationEngine {
         self_: PyRef<Self>,
         params: StarknetSimulationParameters,
     ) -> PyResult<StarknetSimulationResult> {
-        todo!()
+        match self_.0.simulate(&params.into()) {
+            Ok(sim_res) => Ok(sim_res.into()),
+            Err(sim_err) => Err(PyErr::from(StarknetSimulationErrorDetails::from(sim_err))),
+        }
     }
 
     /// Update the state of the simulation engine.
