@@ -7,6 +7,8 @@ use structs_py::{
 use tracing_subscriber::EnvFilter;
 
 mod simulation_py;
+mod starknet_simulation_py;
+mod starknet_structs_py;
 mod structs_py;
 
 /// Transaction simulation using EVM implemented in Rust

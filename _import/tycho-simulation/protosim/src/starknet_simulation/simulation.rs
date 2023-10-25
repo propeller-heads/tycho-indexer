@@ -1,3 +1,4 @@
+use starknet_in_rust::state::state_api::State;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use cairo_vm::felt::Felt252;
@@ -160,14 +161,14 @@ fn compute_class_hash(
 /// * `storage_overrides: Option<HashMap<StorageEntry, Felt252>>` - The storage overrides for the
 ///   contract.
 #[derive(Debug, Clone)]
-pub struct ContractInitialization {
+pub struct ContractOverride {
     pub contract_address: Address,
     pub class_hash: ClassHash,
     pub path: Option<String>,
     pub storage_overrides: Option<HashMap<StorageEntry, Felt252>>,
 }
 
-impl ContractInitialization {
+impl ContractOverride {
     pub fn new(
         contract_address: Address,
         class_hash: ClassHash,
@@ -183,7 +184,7 @@ impl ContractInitialization {
 impl<SR: StateReader> SimulationEngine<SR> {
     pub fn new(
         rpc_state_reader: Arc<SR>,
-        input_contracts: impl IntoIterator<Item = ContractInitialization>,
+        contract_overrides: impl IntoIterator<Item = ContractOverride>,
     ) -> Result<Self, SimulationError> {
         // Prepare initial values
         let mut address_to_class_hash: HashMap<Address, ClassHash> = HashMap::new();
@@ -195,7 +196,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
             HashMap::new();
 
         // Load contracts
-        for input_contract in input_contracts {
+        for input_contract in contract_overrides {
             if let Some(path) = input_contract.path {
                 let compiled_class = load_compiled_class_from_path(&path).map_err(|e| {
                     SimulationError::InitError(format!(
@@ -248,8 +249,14 @@ impl<SR: StateReader> SimulationEngine<SR> {
         Ok(Self { state })
     }
 
-    fn set_state(&self, state: HashMap<Address, Overrides>) {
-        todo!()
+    fn set_state(&mut self, state: HashMap<Address, Overrides>) {
+        for (address, slot_update) in state {
+            for (slot, value) in slot_update {
+                let storage_entry = (address.clone(), slot);
+                self.state
+                    .set_storage_at(&storage_entry, value);
+            }
+        }
     }
 
     pub fn simulate(
@@ -326,7 +333,10 @@ impl<SR: StateReader> SimulationEngine<SR> {
 mod tests {
     use super::*;
     use rstest::rstest;
-    use starknet_in_rust::{core::errors::state_errors::StateError, execution::CallInfo};
+    use starknet_in_rust::{
+        execution::CallInfo,
+        {core::errors::state_errors::StateError, state::cached_state::ContractClassCache},
+    };
 
     // Mock empty StateReader
     struct StateReaderMock {}
@@ -376,13 +386,42 @@ mod tests {
         let path_str: String = path.to_str().unwrap().to_owned();
 
         let address: Address = Address(Felt252::from(0u8));
-        let input_contract = ContractInitialization::new(address, [0u8; 32], Some(path_str), None);
+        let input_contract = ContractOverride::new(address, [0u8; 32], Some(path_str), None);
         let rpc_state_reader = Arc::new(StateReaderMock::new());
         let engine_result = SimulationEngine::new(rpc_state_reader, vec![input_contract]);
         if let Err(err) = engine_result {
             panic!("Failed to create engine with error: {:?}", err);
         }
         assert!(engine_result.is_ok());
+    }
+
+    #[test]
+    fn test_set_state() {
+        let mut engine = SimulationEngine {
+            state: CachedState::new(
+                Arc::new(StateReaderMock::new()),
+                ContractClassCache::default(),
+            ),
+        };
+
+        let mut state = HashMap::new();
+        let mut overrides = HashMap::new();
+
+        let address = Address(123.into());
+        let slot = [0; 32];
+        let value = Felt252::from(1);
+
+        overrides.insert(slot, value.clone());
+        state.insert(address.clone(), overrides);
+
+        engine.set_state(state.clone());
+
+        let storage_entry = (address, slot);
+        let retrieved_value = engine
+            .state
+            .get_storage_at(&storage_entry)
+            .unwrap();
+        assert_eq!(retrieved_value, value, "State was not set correctly");
     }
 
     #[rstest]
