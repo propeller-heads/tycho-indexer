@@ -472,7 +472,7 @@ mod tests {
 
         // Call interpret_result
         let result = engine
-            .interpret_result(execution_result, &result_state.cache())
+            .interpret_result(execution_result, result_state.cache())
             .unwrap();
 
         assert_eq!(result.gas_used, gas_consumed);
@@ -495,7 +495,7 @@ mod tests {
             n_reverted_steps: 0,
         };
 
-        match engine.interpret_result(execution_result_with_revert, &result_state.cache()) {
+        match engine.interpret_result(execution_result_with_revert, result_state.cache()) {
             Err(SimulationError::TransactionError(message)) => {
                 assert!(message.contains("Execution reverted with error: Test Revert"));
             }
@@ -515,7 +515,7 @@ mod tests {
         let execution_result_no_call_info =
             ExecutionResult { call_info: None, revert_error: None, n_reverted_steps: 0 };
 
-        match engine.interpret_result(execution_result_no_call_info, &result_state.cache()) {
+        match engine.interpret_result(execution_result_no_call_info, result_state.cache()) {
             Err(SimulationError::ResultError(message)) => {
                 assert_eq!(message, "Call info is empty");
             }
@@ -539,7 +539,7 @@ mod tests {
         let execution_result_fail_flag =
             ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
 
-        match engine.interpret_result(execution_result_fail_flag, &result_state.cache()) {
+        match engine.interpret_result(execution_result_fail_flag, result_state.cache()) {
             Err(SimulationError::ResultError(message)) => {
                 assert_eq!(message, "Execution failed");
             }
