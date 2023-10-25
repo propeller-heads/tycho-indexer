@@ -1,20 +1,25 @@
-use chrono::NaiveDateTime;
 use futures::StreamExt;
 use hyper::{client::HttpConnector, Body, Client, Request, Uri};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, string::ToString};
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use super::tycho_models::{
-    Block, BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
+    BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
+};
+use crate::evm_simulation::tycho_models::{
+    StateRequestBody, StateRequestParameters, StateRequestResponse,
 };
 use async_trait::async_trait;
 use futures::SinkExt;
-use revm::primitives::{B160, B256, U256 as rU256};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+
+/// TODO read consts from config
+pub const TYCHO_SERVER_VERSION: &str = "v1";
+pub const AMBIENT_EXTRACTOR_HANDLE: &str = "vm:ambient";
+pub const AMBIENT_ACCOUNT_ADDRESS: &str = "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688";
 
 #[derive(Error, Debug)]
 pub enum TychoClientError {
@@ -28,75 +33,7 @@ pub enum TychoClientError {
     ParseResponse(String),
 }
 
-#[derive(Serialize, Debug, Default)]
-pub struct StateRequestBody {
-    contract_ids: Option<Vec<B160>>,
-    version: Option<Version>,
-}
-impl StateRequestBody {
-    pub fn from_block(block: Block) -> Self {
-        Self {
-            contract_ids: None,
-            version: Some(Version {
-                timestamp: None,
-                block: Some(RequestBlock {
-                    hash: block.hash,
-                    number: block.number,
-                    chain: block.chain,
-                }),
-            }),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Default, Debug)]
-pub struct StateRequestParameters {
-    #[serde(default = "Chain::default")]
-    chain: Chain,
-    tvl_gt: Option<u64>,
-    intertia_min_gt: Option<u64>,
-}
-
-impl StateRequestParameters {
-    pub fn to_query_string(&self) -> String {
-        let mut parts = vec![];
-
-        parts.push(format!("chain={}", self.chain));
-
-        if let Some(tvl_gt) = self.tvl_gt {
-            parts.push(format!("tvl_gt={}", tvl_gt));
-        }
-
-        if let Some(inertia) = self.intertia_min_gt {
-            parts.push(format!("intertia_min_gt={}", inertia));
-        }
-
-        parts.join("&")
-    }
-}
-
-#[derive(Serialize, Debug)]
-pub struct Version {
-    timestamp: Option<NaiveDateTime>,
-    block: Option<RequestBlock>,
-}
-
-#[derive(Serialize, Debug)]
-struct RequestBlock {
-    hash: B256,
-    number: u64,
-    chain: Chain,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct ResponseAccount {
-    pub address: B160,
-    pub slots: HashMap<rU256, rU256>,
-    pub balance: rU256,
-    pub code: Vec<u8>,
-    pub code_hash: B256,
-}
-
+#[derive(Debug, Clone)]
 pub struct TychoClient {
     http_client: Client<HttpConnector>,
     base_uri: Uri,
@@ -117,44 +54,65 @@ pub trait TychoVMStateClient {
         &self,
         filters: &StateRequestParameters,
         request: &StateRequestBody,
-    ) -> Result<Vec<ResponseAccount>, TychoClientError>;
+    ) -> Result<StateRequestResponse, TychoClientError>;
 
     async fn realtime_messages(&self) -> Receiver<BlockAccountChanges>;
 }
 
 #[async_trait]
 impl TychoVMStateClient for TychoClient {
+    #[instrument(skip(self, filters, request))]
     async fn get_state(
         &self,
         filters: &StateRequestParameters,
         request: &StateRequestBody,
-    ) -> Result<Vec<ResponseAccount>, TychoClientError> {
+    ) -> Result<StateRequestResponse, TychoClientError> {
+        // Check if contract ids are specified
+        if request.contract_ids.is_none() ||
+            request
+                .contract_ids
+                .as_ref()
+                .unwrap()
+                .is_empty()
+        {
+            warn!("No contract ids specified in request.");
+        }
+
         let url = format!(
-            "http://{}/contract_state?{}",
+            "http://{}/{}/contract_state?{}",
             self.base_uri
                 .to_string()
                 .trim_end_matches('/'),
+            TYCHO_SERVER_VERSION,
             filters.to_query_string()
         );
 
+        debug!(%url, "Sending contract_state request to Tycho server");
         let body = serde_json::to_string(&request)
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
-        let req = Request::get(url)
+        let header = hyper::header::HeaderValue::from_str("application/json")
+            .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
+
+        let req = Request::post(url)
+            .header(hyper::header::CONTENT_TYPE, header)
             .body(Body::from(body))
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
+        debug!(?req, "Sending request to Tycho server");
 
         let response = self
             .http_client
             .request(req)
             .await
             .map_err(|e| TychoClientError::HttpClient(e.to_string()))?;
+        debug!(?response, "Received response from Tycho server");
 
         let body = hyper::body::to_bytes(response.into_body())
             .await
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
-        let accounts: Vec<ResponseAccount> = serde_json::from_slice(&body)
+        let accounts: StateRequestResponse = serde_json::from_slice(&body)
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
+        info!(?accounts, "Received contract_state response from Tycho server");
 
         Ok(accounts)
     }
@@ -164,11 +122,13 @@ impl TychoVMStateClient for TychoClient {
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
-        let ws_url = format!("ws://{}", self.base_uri);
+        let ws_url = format!("ws://{}/{}/ws", self.base_uri, TYCHO_SERVER_VERSION); // TODO: Set path properly
+        info!(?ws_url, "Spawning task to connect to WebSocket server");
         tokio::spawn(async move {
             let mut active_extractors: HashMap<Uuid, ExtractorIdentity> = HashMap::new();
 
             // Connect to Tycho server
+            info!(?ws_url, "Connecting to WebSocket server");
             let (ws, _) = connect_async(&ws_url)
                 .await
                 .map_err(|e| error!(error = %e, "Failed to connect to WebSocket server"))
@@ -177,9 +137,9 @@ impl TychoVMStateClient for TychoClient {
             let (mut ws_sink, ws_stream) = ws.split();
 
             // Send a subscribe request to ambient extractor
-            // TODO: Expand this to allow subscribing to other extractors
+            // TODO: Read from config
             let command = Command::Subscribe {
-                extractor_id: ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
+                extractor_id: ExtractorIdentity::new(Chain::Ethereum, AMBIENT_EXTRACTOR_HANDLE),
             };
             let _ = ws_sink
                 .send(Message::Text(serde_json::to_string(&command).unwrap()))
@@ -212,6 +172,7 @@ impl TychoVMStateClient for TychoClient {
                                     "Received a new subscription"
                                 );
                                 active_extractors.insert(subscription_id, extractor_id);
+                                trace!(?active_extractors, "Active extractors");
                             }
                             Ok(WebSocketMessage::Response(Response::SubscriptionEnded {
                                 subscription_id,
@@ -251,29 +212,32 @@ impl TychoVMStateClient for TychoClient {
             }
         });
 
+        info!("Returning receiver");
         rx
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::tycho_models::{AccountUpdate, ChangeType};
+    use crate::evm_simulation::tycho_models::{AccountUpdate, Block, ChangeType};
+    use chrono::NaiveDateTime;
+    use std::str::FromStr;
 
     use super::*;
 
     use mockito::Server;
-    use std::str::FromStr;
 
     use futures::SinkExt;
+    use revm::primitives::{B160, B256, U256 as rU256};
     use warp::{ws::WebSocket, Filter};
 
+    //noinspection ALL
     #[tokio::test]
     async fn test_realtime_messages() {
         // Mock WebSocket server using warp
         async fn handle_connection(ws: WebSocket) {
             let (mut tx, _) = ws.split();
-            let test_msg = warp::ws::Message::text(
-                r#"
+            let test_msg_content = r#"
             {
                 "extractor": "vm:ambient",
                 "chain": "ethereum",
@@ -290,18 +254,23 @@ mod tests {
                         "chain": "ethereum",
                         "slots": {},
                         "balance": "0x00000000000000000000000000000000000000000000000000000000000001f4",
-                        "code": [],
+                        "code": "",
                         "change": "Update"
                     }
                 },
                 "new_pools": {}
             }
-            "#,
-            );
+            "#;
+            // test that the response is deserialized correctly
+            serde_json::from_str::<BlockAccountChanges>(test_msg_content).expect("deserialize");
+            let test_msg = warp::ws::Message::text(test_msg_content);
             let _ = tx.send(test_msg).await;
         }
 
-        let ws_route = warp::ws().map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
+        // let ws_route = warp::ws().map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
+        let ws_route = warp::path!("v1" / "ws")
+            .and(warp::ws())
+            .map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
         let (addr, server) = warp::serve(ws_route).bind_ephemeral(([127, 0, 0, 1], 0));
         tokio::task::spawn(server);
 
@@ -354,26 +323,39 @@ mod tests {
         assert_eq!(received_msg, expected);
     }
 
+    //noinspection RsTypeCheck
     #[tokio::test]
     async fn test_simple_route_mock_async() {
         let mut server = Server::new_async().await;
         let server_resp = r#"
-        [{
-            "address": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
-            "slots": {},
-            "balance": "0x1f4",
-            "code": [],
-            "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e"
-        }]
+        {
+            "accounts": [
+                {
+                    "chain": "ethereum",
+                    "address": "0x0000000000000000000000000000000000000000",
+                    "title": "",
+                    "slots": {},
+                    "balance": "0x1f4",
+                    "code": "",
+                    "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
+                    "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "code_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "creation_tx": null
+                }
+            ]
+        }
         "#;
+        // test that the response is deserialized correctly
+        serde_json::from_str::<StateRequestResponse>(server_resp).expect("deserialize");
+
         let mocked_server = server
-            .mock("GET", "/contract_state?chain=ethereum")
+            .mock("POST", "/v1/contract_state?chain=ethereum")
             .expect(1)
             .with_body(server_resp)
             .create_async()
             .await;
 
-        let client = TychoClient::new(
+        let client: TychoClient = TychoClient::new(
             server
                 .url()
                 .replace("http://", "")
@@ -385,14 +367,15 @@ mod tests {
             .get_state(&Default::default(), &Default::default())
             .await
             .expect("get state");
+        let accounts = response.accounts;
 
         mocked_server.assert();
-        assert_eq!(response.len(), 1);
-        assert_eq!(response[0].slots, HashMap::new());
-        assert_eq!(response[0].balance, rU256::from(500));
-        assert_eq!(response[0].code, Vec::<u8>::new());
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].slots, HashMap::new());
+        assert_eq!(accounts[0].balance, rU256::from(500));
+        assert_eq!(accounts[0].code, Vec::<u8>::new());
         assert_eq!(
-            response[0].code_hash,
+            accounts[0].code_hash,
             B256::from_str("0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e")
                 .unwrap()
         );

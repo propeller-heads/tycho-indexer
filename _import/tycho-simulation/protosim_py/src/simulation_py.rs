@@ -3,27 +3,87 @@ use num_bigint::BigUint;
 use revm::primitives::{B160, U256 as rU256};
 
 use crate::structs_py::{
-    AccountInfo, BlockHeader, SimulationErrorDetails, SimulationParameters, SimulationResult,
-    StateUpdate,
+    AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
+    SimulationResult, StateUpdate, TychoDB,
 };
-use pyo3::prelude::*;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
-use tokio::runtime::Runtime;
+use pyo3::{prelude::*, types::PyType};
+use std::{collections::HashMap, str::FromStr};
 
-use protosim::evm_simulation::{account_storage, database::SimulationDB, simulation};
+use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
 
-fn get_runtime() -> Option<Arc<Runtime>> {
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| Runtime::new().unwrap())
-        .unwrap();
-
-    Some(Arc::new(runtime))
+/// It is very hard and messy to implement polymorphism with PyO3.
+/// Instead we use an enum to store the all possible simulation engines.
+/// and we keep them invisible to the Python user.
+enum SimulationEngineInner {
+    SimulationDB(simulation::SimulationEngine<database::SimulationDB<Provider<Http>>>),
+    TychoDB(simulation::SimulationEngine<tycho_db::PreCachedDB>),
 }
 
-fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
-    let client = Provider::<Http>::try_from(rpc_url).unwrap();
-    Arc::new(client)
+impl SimulationEngineInner {
+    fn simulate(
+        &self,
+        params: &simulation::SimulationParameters,
+    ) -> Result<simulation::SimulationResult, simulation::SimulationError> {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => engine.simulate(params),
+            SimulationEngineInner::TychoDB(engine) => engine.simulate(params),
+        }
+    }
+
+    fn init_account(
+        &self,
+        address: B160,
+        account: revm::primitives::AccountInfo,
+        permanent_storage: Option<HashMap<rU256, rU256>>,
+        mocked: bool,
+    ) {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => {
+                engine
+                    .state
+                    .init_account(address, account, permanent_storage, mocked)
+            }
+            SimulationEngineInner::TychoDB(engine) => {
+                engine
+                    .state
+                    .init_account(address, account, permanent_storage)
+            }
+        }
+    }
+
+    fn update_state(
+        &mut self,
+        updates: &HashMap<B160, account_storage::StateUpdate>,
+        block: database::BlockHeader,
+    ) -> HashMap<B160, account_storage::StateUpdate> {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => engine
+                .state
+                .update_state(updates, block),
+            SimulationEngineInner::TychoDB(engine) => engine
+                .state
+                .update_state(updates, block),
+        }
+    }
+
+    fn query_storage(&self, address: B160, slot: rU256) -> Option<rU256> {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => engine
+                .state
+                .query_storage(address, slot)
+                .ok(),
+            SimulationEngineInner::TychoDB(engine) => engine
+                .state
+                .get_storage(&address, &slot),
+        }
+    }
+
+    fn clear_temp_storage(&mut self) {
+        match self {
+            SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
+            SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
+        }
+    }
 }
 
 /// This class lets you simulate transactions.
@@ -40,29 +100,27 @@ fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
 /// trace: Optional[bool]
 ///     If set to true, simulations will print the entire execution trace.
 #[pyclass]
-pub struct SimulationEngine(simulation::SimulationEngine<Provider<Http>>);
+pub struct SimulationEngine(SimulationEngineInner);
 
 #[pymethods]
 impl SimulationEngine {
-    #[new]
-    fn new(rpc_url: &str, block: Option<BlockHeader>, trace: Option<bool>) -> Self {
-        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
-        let db = SimulationDB::new(get_client(rpc_url), get_runtime(), block);
-        let engine = simulation::SimulationEngine {
-            state: db,
-            trace: trace.unwrap_or(false),
-        };
-        Self(engine)
+    #[classmethod]
+    fn new_with_simulation_db(_cls: &PyType, db: SimulationDB, trace: Option<bool>) -> Self {
+        let engine = simulation::SimulationEngine::new(db.inner, trace.unwrap_or(false));
+        Self(SimulationEngineInner::SimulationDB(engine))
+    }
+
+    #[classmethod]
+    fn new_with_tycho_db(_cls: &PyType, db: TychoDB, trace: Option<bool>) -> Self {
+        let engine = simulation::SimulationEngine::new(db.inner, trace.unwrap_or(false));
+        Self(SimulationEngineInner::TychoDB(engine))
     }
 
     /// Simulate transaction.
     ///
     /// Pass all details as an instance of `SimulationParameters`. See that class' docs for details.
     fn run_sim(self_: PyRef<Self>, params: SimulationParameters) -> PyResult<SimulationResult> {
-        let rust_result = self_
-            .0
-            .simulate(&simulation::SimulationParameters::from(params));
-        match rust_result {
+        match self_.0.simulate(&params.into()) {
             Ok(sim_res) => Ok(SimulationResult::from(sim_res)),
             Err(sim_err) => Err(PyErr::from(SimulationErrorDetails::from(sim_err))),
         }
@@ -90,8 +148,7 @@ impl SimulationEngine {
 
         self_
             .0
-            .state
-            .init_account(address, account, Some(rust_slots), mocked);
+            .init_account(address, account, Some(rust_slots), mocked)
     }
 
     fn update_state(
@@ -102,13 +159,13 @@ impl SimulationEngine {
         let block = protosim::evm_simulation::database::BlockHeader::from(block);
         let mut rust_updates: HashMap<B160, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
-            rust_updates.insert(
-                B160::from_str(&key).unwrap(),
-                account_storage::StateUpdate::from(value),
-            );
+            rust_updates
+                .insert(B160::from_str(&key).unwrap(), account_storage::StateUpdate::from(value));
         }
 
-        let reverse_updates = self_.0.state.update_state(&rust_updates, block);
+        let reverse_updates = self_
+            .0
+            .update_state(&rust_updates, block);
 
         let mut py_reverse_updates: HashMap<String, StateUpdate> = HashMap::new();
         for (key, value) in reverse_updates {
@@ -117,7 +174,20 @@ impl SimulationEngine {
         Ok(py_reverse_updates)
     }
 
+    fn query_storage(
+        self_: PyRef<Self>,
+        address: String,
+        slot: String,
+    ) -> PyResult<Option<String>> {
+        let address = B160::from_str(&address).unwrap();
+        let slot = rU256::from_str(&slot).unwrap();
+        match self_.0.query_storage(address, slot) {
+            Some(state_update) => Ok(Some(state_update.to_string())),
+            None => Ok(None),
+        }
+    }
+
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {
-        self_.0.state.clear_temp_storage();
+        self_.0.clear_temp_storage()
     }
 }

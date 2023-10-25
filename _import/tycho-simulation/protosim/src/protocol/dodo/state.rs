@@ -2,7 +2,6 @@ use std::cell::RefCell;
 
 use ethers::{
     prelude::BaseContract,
-    providers::Middleware,
     types::{H160, U256},
 };
 use revm::{
@@ -16,7 +15,10 @@ use crate::{
     u256_num::u256_to_f64,
 };
 
-pub struct DodoPoolState<M: Middleware> {
+pub struct DodoPoolState<D: DatabaseRef>
+where
+    D::Error: std::fmt::Debug,
+{
     pool_address: H160,
     pool_abi: BaseContract,
     // TODO: Not sure how DODO handles these... so I am adding it here for no to not have to query
@@ -26,11 +28,14 @@ pub struct DodoPoolState<M: Middleware> {
     helper_abi: BaseContract,
     // TODO: it would be nicer to move all the caching behind a RefCell instead of exposing it to
     // the user
-    engine: RefCell<SimulationEngine<M>>,
+    engine: RefCell<SimulationEngine<D>>,
     spot_price_cache: RefCell<Option<(f64, f64)>>,
 }
 
-impl<M: Middleware> DodoPoolState<M> {
+impl<D: DatabaseRef> DodoPoolState<D>
+where
+    D::Error: std::fmt::Debug,
+{
     fn simulate_spot_prices(
         &self,
         base: &crate::models::ERC20Token,
@@ -63,7 +68,10 @@ impl<M: Middleware> DodoPoolState<M> {
     }
 }
 
-impl<M: Middleware> ProtocolSim for DodoPoolState<M> {
+impl<D: DatabaseRef> ProtocolSim for DodoPoolState<D>
+where
+    D::Error: std::fmt::Debug,
+{
     /// Dodo fees
     ///
     ///  Fee rates are in slot 8 and 9 they are accessed directly.
