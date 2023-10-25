@@ -454,10 +454,7 @@ mod tests {
         // Set up state
         let state = CachedState::new(rpc_state_reader, HashMap::new());
         let mut result_state = state.create_transactional();
-        result_state
-            .cache_mut()
-            .storage_writes_mut()
-            .insert((address, hash), value);
+        result_state.set_storage_at(&(address, hash), value);
 
         // Call interpret_result
         let result = engine
