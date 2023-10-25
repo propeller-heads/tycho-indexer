@@ -1,3 +1,4 @@
+use starknet_in_rust::state::state_api::State;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use cairo_vm::felt::Felt252;
@@ -243,8 +244,14 @@ impl<SR: StateReader> SimulationEngine<SR> {
         Ok(Self { state })
     }
 
-    fn set_state(&self, state: HashMap<Address, Overrides>) {
-        todo!()
+    fn set_state(&mut self, state: HashMap<Address, Overrides>) {
+        for (address, slot_update) in state {
+            for (slot, value) in slot_update {
+                let storage_entry = (address.clone(), slot);
+                self.state
+                    .set_storage_at(&storage_entry, value);
+            }
+        }
     }
 
     pub fn simulate(
@@ -266,7 +273,9 @@ impl<SR: StateReader> SimulationEngine<SR> {
 mod tests {
     use super::*;
     use rstest::rstest;
-    use starknet_in_rust::core::errors::state_errors::StateError;
+    use starknet_in_rust::{
+        core::errors::state_errors::StateError, state::cached_state::ContractClassCache,
+    };
 
     // Mock empty StateReader
     struct StateReaderMock {}
@@ -323,5 +332,34 @@ mod tests {
             panic!("Failed to create engine with error: {:?}", err);
         }
         assert!(engine_result.is_ok());
+    }
+
+    #[test]
+    fn test_set_state() {
+        let mut engine = SimulationEngine {
+            state: CachedState::new(
+                Arc::new(StateReaderMock::new()),
+                ContractClassCache::default(),
+            ),
+        };
+
+        let mut state = HashMap::new();
+        let mut overrides = HashMap::new();
+
+        let address = Address(123.into());
+        let slot = [0; 32];
+        let value = Felt252::from(1);
+
+        overrides.insert(slot, value.clone());
+        state.insert(address.clone(), overrides);
+
+        engine.set_state(state.clone());
+
+        let storage_entry = (address, slot);
+        let retrieved_value = engine
+            .state
+            .get_storage_at(&storage_entry)
+            .unwrap();
+        assert_eq!(retrieved_value, value, "State was not set correctly");
     }
 }
