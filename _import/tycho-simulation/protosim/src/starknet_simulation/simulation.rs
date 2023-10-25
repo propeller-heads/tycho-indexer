@@ -429,4 +429,71 @@ mod tests {
         assert_eq!(result.result, retdata);
         assert_eq!(result.state_updates, state_updates);
     }
+
+    #[rstest]
+    fn test_interpret_results_with_revert_error() {
+        // Construct state and engine
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let state = CachedState::new(rpc_state_reader, HashMap::new());
+        let result_state = state.create_transactional();
+
+        // Construct reverted execution result
+        let execution_result_with_revert = ExecutionResult {
+            call_info: None,
+            revert_error: Some("Test Revert".to_string()),
+            n_reverted_steps: 0,
+        };
+
+        match engine.interpret_result(execution_result_with_revert, result_state) {
+            Err(SimulationError::TransactionError(message)) => {
+                assert!(message.contains("Execution reverted with error: Test Revert"));
+            }
+            _ => panic!("Expected TransactionError for revert"),
+        }
+    }
+
+    #[rstest]
+    fn test_interpret_results_with_empty_call_info() {
+        // Construct state and engine
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let state = CachedState::new(rpc_state_reader, HashMap::new());
+        let result_state = state.create_transactional();
+
+        // Construct execution result with no call info
+        let execution_result_no_call_info =
+            ExecutionResult { call_info: None, revert_error: None, n_reverted_steps: 0 };
+
+        match engine.interpret_result(execution_result_no_call_info, result_state) {
+            Err(SimulationError::ResultError(message)) => {
+                assert_eq!(message, "Call info is empty");
+            }
+            _ => panic!("Expected ResultError for empty call_info"),
+        }
+    }
+
+    #[rstest]
+    fn test_interpret_results_with_failure_flag() {
+        // Construct state and engine
+        let address = Address(Felt252::from(0u8));
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let state = CachedState::new(rpc_state_reader, HashMap::new());
+        let result_state = state.create_transactional();
+
+        // Construct execution result with failed call
+        let mut call_info =
+            CallInfo::empty_constructor_call(address.clone(), address.clone(), None);
+        call_info.failure_flag = true;
+        let execution_result_fail_flag =
+            ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
+
+        match engine.interpret_result(execution_result_fail_flag, result_state) {
+            Err(SimulationError::ResultError(message)) => {
+                assert_eq!(message, "Execution failed");
+            }
+            _ => panic!("Expected ResultError for failed call"),
+        }
+    }
 }
