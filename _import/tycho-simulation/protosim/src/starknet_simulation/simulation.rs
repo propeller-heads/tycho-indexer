@@ -46,7 +46,7 @@ pub enum SimulationError {
 pub type StorageHash = [u8; 32];
 pub type Overrides = HashMap<StorageHash, Felt252>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimulationParameters {
     /// Address of the sending account
     pub caller: Address,
@@ -65,6 +65,22 @@ pub struct SimulationParameters {
     /// The block number to be used by the transaction. This is independent of the states block.
     pub block_number: u64,
 }
+
+impl SimulationParameters {
+    pub fn new(
+        caller: Address,
+        to: Address,
+        data: Vec<Felt252>,
+        entry_point: String,
+        overrides: Option<HashMap<Address, Overrides>>,
+        gas_limit: Option<u128>,
+        block_number: u64,
+    ) -> Self {
+        Self { caller, to, data, entry_point, overrides, gas_limit, block_number }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct SimulationResult {
     /// Output of transaction execution
     pub result: Vec<Felt252>,
@@ -343,9 +359,18 @@ impl SimulationEngine<RpcStateReader> {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use super::*;
+    use dotenv::dotenv;
+    use num_traits::Num;
+    use rpc_state_reader::rpc_state::{BlockTag, RpcChain, RpcState};
     use rstest::rstest;
     use starknet_in_rust::core::errors::state_errors::StateError;
+
+    pub fn string_to_address(address: &str) -> Address {
+        Address(Felt252::from_str_radix(address, 16).expect("hex address"))
+    }
 
     // Mock empty StateReader
     struct StateReaderMock {}
@@ -402,5 +427,130 @@ mod tests {
             panic!("Failed to create engine with error: {:?}", err);
         }
         assert!(engine_result.is_ok());
+    }
+
+    // TODO: run after interpret_result is implemented
+    #[ignore]
+    #[test]
+    fn test_simulate() {
+        // Ensure the env is set
+        if env::var("INFURA_API_KEY").is_err() {
+            dotenv().expect("Missing .env file");
+        }
+
+        // Initialize the engine
+        let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
+            RpcChain::MainNet,
+            BlockTag::Latest.into(),
+        )));
+        let engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
+
+        // Prepare the simulation parameters
+        // https://voyager.online/tx/0x33c71da501179ec033b22a8dbf6a30fdcb892609a6a6d48d7577dacdf8af9af
+        let params = SimulationParameters::new(
+            string_to_address("073317cbd895225d657d08b3bc4791ba7cbc0ca8b84ba554abd2b0db8aff8ed8"), /* Argent */
+            string_to_address("073317cbd895225d657d08b3bc4791ba7cbc0ca8b84ba554abd2b0db8aff8ed8"), /* Argent -- smart contract wallet */
+            vec![
+                Felt252::from_str_radix("2", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix(
+                    "219209e083275171774dab1df80982e9df2096516f06319c5c6d71ae0a8480c",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("3", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "4270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("1925db6c672d35d03", 16).unwrap(),
+                Felt252::from_str_radix("0", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "4270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix(
+                    "1171593aa5bdadda4d6b0efde6cc94ee7649c3163d5efeb19da6c16d63a2a63",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("17", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("1925db6c672d35d03", 16).unwrap(),
+                Felt252::from_str_radix("0", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "49d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("38ce1956f23180", 16).unwrap(),
+                Felt252::from_str_radix("0", 16).unwrap(),
+                Felt252::from_str_radix("383cad90f4e434", 16).unwrap(),
+                Felt252::from_str_radix("0", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "73317cbd895225d657d08b3bc4791ba7cbc0ca8b84ba554abd2b0db8aff8ed8",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("0", 16).unwrap(),
+                Felt252::from_str_radix("0", 16).unwrap(),
+                Felt252::from_str_radix("1", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix(
+                    "49d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix(
+                    "5dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("64", 16).unwrap(),
+                Felt252::from_str_radix("6", 16).unwrap(),
+                Felt252::from_str_radix(
+                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix(
+                    "49d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix("20c49ba5e353f80000000000000000", 16).unwrap(),
+                Felt252::from_str_radix("3e8", 16).unwrap(),
+                Felt252::from_str_radix("0", 16).unwrap(),
+                Felt252::from_str_radix("854bfd1880e80fb8d1eb979bc2390", 16).unwrap(),
+            ],
+            "__execute__".to_owned(),
+            None,
+            Some(100000),
+            352399,
+        );
+
+        // Simulate the transaction
+        let result = engine.simulate(&params);
+
+        // Check the result
+        if let Err(err) = result {
+            panic!("Failed to simulate transaction with error: {:?}", err);
+        }
+        assert!(result.is_ok());
+        dbg!("Simulation result is: {:?}", result.unwrap());
     }
 }
