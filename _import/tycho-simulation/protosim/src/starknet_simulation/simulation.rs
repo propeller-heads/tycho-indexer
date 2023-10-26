@@ -651,9 +651,7 @@ mod tests {
         }
     }
 
-    // TODO: run after interpret_result is implemented
-    #[ignore]
-    #[test]
+    #[rstest]
     fn test_simulate() {
         // Ensure the env is set
         if env::var("INFURA_API_KEY").is_err() {
