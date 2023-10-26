@@ -38,6 +38,8 @@ pub enum SimulationError {
     /// Simulation didn't succeed; likely not related to network, so retrying won't help
     #[error("Simulated transaction failed: {0}")]
     TransactionError(String),
+    #[error("Failed to decode result: {0}")]
+    ResultError(String),
     /// Error reading state
     #[error("Accessing contract state failed: {0}")]
     StateError(String),
@@ -275,11 +277,79 @@ impl<SR: StateReader> SimulationEngine<SR> {
         Ok(Self { state })
     }
 
+    fn set_state(&mut self, state: HashMap<Address, Overrides>) {
+        for (address, slot_update) in state {
+            for (slot, value) in slot_update {
+                let storage_entry = (address.clone(), slot);
+                self.state
+                    .set_storage_at(&storage_entry, value);
+            }
+        }
+    }
+
+    /// Interpret the result of a simulated execution.
+    ///
+    /// Transforms the raw outcome of a simulated execution into a `SimulationResult`.
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - An instance of the `ExecutionResult` struct, containing the result data from a
+    ///   simulated execution.
+    /// * `state_cache` - A `StateCache` giving the state's cache after simulation.
+    ///
+    /// # Return Value
+    ///
+    /// On successful simulation, this function returns `SimulationResult` containing the return
+    /// data, state updates, and gas consumed. If an error occurs during the simulation, it
+    /// returns a `SimulationError`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations:
+    ///
+    /// * If the execution reverts with an error (there exists a `revert_error` in the
+    ///   `ExecutionResult`)
+    /// * If the `call_info` field of the `ExecutionResult` is empty (None)
+    /// * If the simulated execution fails (as indicated by the `failure_flag` in `call_info`)
     fn interpret_result(
         &self,
         result: ExecutionResult,
+        state_cache: &StateCache,
     ) -> Result<SimulationResult, SimulationError> {
-        todo!()
+        // Check if revertError is not None
+        if let Some(revert_error) = result.revert_error {
+            return Err(SimulationError::TransactionError(format!(
+                "Execution reverted with error: {}",
+                revert_error
+            )));
+        }
+
+        // Extract call info
+        let call_info = result
+            .call_info
+            .ok_or(SimulationError::ResultError("Call info is empty".to_owned()))?;
+        // Check if call failed
+        if call_info.failure_flag {
+            return Err(SimulationError::ResultError("Execution failed".to_owned()));
+        }
+        let gas_used = call_info.gas_consumed;
+        let result = call_info.retdata.clone();
+
+        // Collect state changes
+        let all_writes = state_cache.storage_writes();
+        let simultation_write_keys = call_info.get_visited_storage_entries();
+        let state_updates: HashMap<Address, HashMap<[u8; 32], Felt252>> = all_writes
+            .iter()
+            .filter(|(key, _)| simultation_write_keys.contains(key)) // filter for those applied during simulation
+            .map(|((addr, hash), value)| (addr.clone(), (*hash, value.clone()))) // map to our Override struct format
+            .fold(HashMap::new(), |mut acc, (addr, (hash, value))| {
+                acc.entry(addr)
+                    .or_default()
+                    .insert(hash, value);
+                acc
+            });
+
+        Ok(SimulationResult { result, state_updates, gas_used })
     }
 }
 
@@ -353,12 +423,14 @@ impl SimulationEngine<RpcStateReader> {
             .map_err(|err| SimulationError::TransactionError(err.to_string()))?;
 
         // Interpret and return the results
-        self.interpret_result(result)
+        self.interpret_result(result, test_state.cache())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use std::env;
 
     use super::*;
@@ -366,7 +438,10 @@ mod tests {
     use num_traits::Num;
     use rpc_state_reader::rpc_state::{BlockTag, RpcChain, RpcState};
     use rstest::rstest;
-    use starknet_in_rust::core::errors::state_errors::StateError;
+    use starknet_in_rust::{
+        core::errors::state_errors::StateError, execution::CallInfo,
+        state::cached_state::ContractClassCache,
+    };
 
     pub fn string_to_address(address: &str) -> Address {
         Address(Felt252::from_str_radix(address, 16).expect("hex address"))
@@ -427,6 +502,153 @@ mod tests {
             panic!("Failed to create engine with error: {:?}", err);
         }
         assert!(engine_result.is_ok());
+    }
+
+    #[test]
+    fn test_set_state() {
+        let mut engine = SimulationEngine {
+            state: CachedState::new(
+                Arc::new(StateReaderMock::new()),
+                ContractClassCache::default(),
+            ),
+        };
+
+        let mut state = HashMap::new();
+        let mut overrides = HashMap::new();
+
+        let address = Address(123.into());
+        let slot = [0; 32];
+        let value = Felt252::from(1);
+
+        overrides.insert(slot, value.clone());
+        state.insert(address.clone(), overrides);
+
+        engine.set_state(state.clone());
+
+        let storage_entry = (address, slot);
+        let retrieved_value = engine
+            .state
+            .get_storage_at(&storage_entry)
+            .unwrap();
+        assert_eq!(retrieved_value, value, "State was not set correctly");
+    }
+
+    #[rstest]
+    fn test_interpret_results() {
+        let address = Address(Felt252::from(0u8));
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+
+        // Construct expected values
+        let gas_consumed = 10;
+        let retdata: Vec<Felt252> = vec![1, 2, 3]
+            .into_iter()
+            .map(Felt252::from)
+            .collect();
+        let mut state_updates = HashMap::new();
+        let mut storage_write: HashMap<[u8; 32], Felt252> = HashMap::new();
+        let hash = [0u8; 32];
+        let value: Felt252 = 0.into();
+        storage_write.insert(hash, value.clone());
+        state_updates.insert(address.clone(), storage_write);
+
+        // Construct state
+        let mut state = CachedState::new(rpc_state_reader, HashMap::new());
+        // Apply overrides
+        let override_hash = [1u8; 32];
+        state.set_storage_at(&(address.clone(), override_hash), value.clone());
+        // Get result state
+        let mut result_state = state.create_transactional();
+        result_state.set_storage_at(&(address.clone(), hash), value);
+
+        // Construct execution result
+        let mut call_info =
+            CallInfo::empty_constructor_call(address.clone(), address.clone(), None);
+        call_info.gas_consumed = gas_consumed;
+        call_info.retdata = retdata.clone();
+        // Flag relevant storage slots as updated during simulation
+        call_info.accessed_storage_keys = HashSet::new();
+        call_info
+            .accessed_storage_keys
+            .insert(hash);
+        let execution_result =
+            ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
+
+        // Call interpret_result
+        let result = engine
+            .interpret_result(execution_result, result_state.cache())
+            .unwrap();
+
+        assert_eq!(result.gas_used, gas_consumed);
+        assert_eq!(result.result, retdata);
+        assert_eq!(result.state_updates, state_updates);
+    }
+
+    #[rstest]
+    fn test_interpret_results_with_revert_error() {
+        // Construct state and engine
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let state = CachedState::new(rpc_state_reader, HashMap::new());
+        let result_state = state.create_transactional();
+
+        // Construct reverted execution result
+        let execution_result_with_revert = ExecutionResult {
+            call_info: None,
+            revert_error: Some("Test Revert".to_string()),
+            n_reverted_steps: 0,
+        };
+
+        match engine.interpret_result(execution_result_with_revert, result_state.cache()) {
+            Err(SimulationError::TransactionError(message)) => {
+                assert!(message.contains("Execution reverted with error: Test Revert"));
+            }
+            _ => panic!("Expected TransactionError for revert"),
+        }
+    }
+
+    #[rstest]
+    fn test_interpret_results_with_empty_call_info() {
+        // Construct state and engine
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let state = CachedState::new(rpc_state_reader, HashMap::new());
+        let result_state = state.create_transactional();
+
+        // Construct execution result with no call info
+        let execution_result_no_call_info =
+            ExecutionResult { call_info: None, revert_error: None, n_reverted_steps: 0 };
+
+        match engine.interpret_result(execution_result_no_call_info, result_state.cache()) {
+            Err(SimulationError::ResultError(message)) => {
+                assert_eq!(message, "Call info is empty");
+            }
+            _ => panic!("Expected ResultError for empty call_info"),
+        }
+    }
+
+    #[rstest]
+    fn test_interpret_results_with_failure_flag() {
+        // Construct state and engine
+        let address = Address(Felt252::from(0u8));
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let state = CachedState::new(rpc_state_reader, HashMap::new());
+        let result_state = state.create_transactional();
+
+        // Construct execution result with failed call
+        let mut call_info =
+            CallInfo::empty_constructor_call(address.clone(), address.clone(), None);
+        call_info.failure_flag = true;
+        let execution_result_fail_flag =
+            ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
+
+        match engine.interpret_result(execution_result_fail_flag, result_state.cache()) {
+            Err(SimulationError::ResultError(message)) => {
+                assert_eq!(message, "Execution failed");
+            }
+            _ => panic!("Expected ResultError for failed call"),
+        }
     }
 
     // TODO: run after interpret_result is implemented

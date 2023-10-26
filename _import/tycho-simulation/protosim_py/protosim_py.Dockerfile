@@ -1,5 +1,9 @@
 FROM quay.io/pypa/manylinux2014_x86_64
 
+# openssl-sys crate requires this.
+# See https://docs.rs/openssl/latest/openssl/#automatic
+RUN yum install -y pkgconfig openssl-devel && yum clean all
+
 RUN curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:$PATH" 
 RUN /opt/python/cp39-cp39/bin/python -m pip install maturin

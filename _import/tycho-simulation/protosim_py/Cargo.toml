@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 num-bigint = "0.4.3"
-pyo3 = { version = "0.19", features = ["num-bigint", "auto-initialize", "extension-module"] }
+pyo3 = { version = "0.19", features = ["num-bigint", "extension-module"] }
 pyo3-asyncio = { version = "0.19", features = ["tokio-runtime"] }
 protosim = { path = "../protosim" }
 tokio = { version = "1.23.0", features = ["full"] }

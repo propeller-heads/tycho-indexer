@@ -4020,7 +4020,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "clap 4.3.0",
- "dotenv",
  "ethers",
  "futures",
  "http",
@@ -4028,7 +4027,7 @@ dependencies = [
  "rdkafka",
  "redis",
  "reqwest",
- "rstest 0.18.2",
+ "rstest",
  "serde",
  "serde_json",
  "time",
@@ -4059,7 +4058,7 @@ dependencies = [
  "reqwest",
  "revm",
  "rpc_state_reader",
- "rstest 0.16.0",
+ "rstest",
  "serde",
  "serde_json",
  "starknet",
@@ -4572,19 +4571,7 @@ checksum = "b07f2d176c472198ec1e6551dc7da28f1c089652f66a7b722676c2238ebc0edf"
 dependencies = [
  "futures",
  "futures-timer",
- "rstest_macros 0.16.0",
- "rustc_version",
-]
-
-[[package]]
-name = "rstest"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97eeab2f3c0a199bc4be135c36c924b6590b88c377d416494288c14f2db30199"
-dependencies = [
- "futures",
- "futures-timer",
- "rstest_macros 0.18.2",
+ "rstest_macros",
  "rustc_version",
 ]
 
@@ -4599,23 +4586,6 @@ dependencies = [
  "quote",
  "rustc_version",
  "syn 1.0.109",
- "unicode-ident",
-]
-
-[[package]]
-name = "rstest_macros"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d428f8247852f894ee1be110b375111b586d4fa431f6c46e64ba5a0dcccbe605"
-dependencies = [
- "cfg-if",
- "glob",
- "proc-macro2",
- "quote",
- "regex",
- "relative-path",
- "rustc_version",
- "syn 2.0.29",
  "unicode-ident",
 ]
 
