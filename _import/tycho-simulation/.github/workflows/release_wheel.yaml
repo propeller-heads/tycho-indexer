@@ -73,7 +73,7 @@ jobs:
         run: |
           aws codeartifact login --tool twine --domain propeller --domain-owner 827659017777 --repository protosim
 
-          twine upload --repository codeartifact ./protosim_py/target/wheels/protosim_py*.whl
+          twine upload --repository codeartifact ./target/wheels/protosim_py*.whl
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
