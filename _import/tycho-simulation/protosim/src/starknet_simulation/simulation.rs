@@ -1,3 +1,5 @@
+use rpc_state_reader::rpc_state::BlockValue;
+use starknet_api::block::BlockNumber;
 use starknet_in_rust::state::state_api::State;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
@@ -22,6 +24,8 @@ use starknet_in_rust::{
     CasmContractClass, EntryPointType,
 };
 use thiserror::Error;
+
+use super::rpc_reader::RpcStateReader;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum SimulationError {
@@ -255,6 +259,15 @@ impl<SR: StateReader> SimulationEngine<SR> {
         Ok(Self { state })
     }
 
+    fn interpret_result(
+        &self,
+        result: ExecutionResult,
+    ) -> Result<SimulationResult, SimulationError> {
+        todo!()
+    }
+}
+
+impl SimulationEngine<RpcStateReader> {
     /// Simulate a transaction
     ///
     /// State's block will be modified to be the last block before the simulation's block.
@@ -262,9 +275,20 @@ impl<SR: StateReader> SimulationEngine<SR> {
         &self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
-        // Create a transactional state copy - to be used for simulations and not alter the original
-        // state cache
-        let mut test_state = self.state.create_transactional();
+        // Hacky way to set the block number on the cached state
+        // Note that because we clone the cache, all RPC calls are thrown away after the simulation
+        // TODO: update this after new starknet_in_rust release
+        let block_value = BlockValue::Number(BlockNumber(params.block_number));
+        let state_reader = self
+            .state
+            .state_reader
+            .with_updated_block(block_value);
+        let new_state = CachedState::new_for_testing(
+            Arc::new(state_reader),
+            self.state.cache().clone(),
+            self.state.contract_classes().clone(),
+        );
+        let mut test_state = new_state.create_transactional();
 
         // Apply overrides
         if let Some(overrides) = &params.overrides {
@@ -314,13 +338,6 @@ impl<SR: StateReader> SimulationEngine<SR> {
 
         // Interpret and return the results
         self.interpret_result(result)
-    }
-
-    fn interpret_result(
-        &self,
-        result: ExecutionResult,
-    ) -> Result<SimulationResult, SimulationError> {
-        todo!()
     }
 }
 

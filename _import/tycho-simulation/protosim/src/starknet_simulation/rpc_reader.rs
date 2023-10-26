@@ -1,5 +1,5 @@
 use cairo_vm::felt::Felt252;
-use rpc_state_reader::rpc_state::RpcState;
+use rpc_state_reader::rpc_state::{BlockValue, RpcState};
 use starknet_api::{
     core::{ClassHash as SNClassHash, ContractAddress, PatriciaKey},
     hash::StarkHash,
@@ -30,6 +30,12 @@ pub struct RpcStateReader(RpcState);
 impl RpcStateReader {
     pub fn new(state: RpcState) -> Self {
         Self(state)
+    }
+
+    pub fn with_updated_block(&self, new_block: BlockValue) -> Self {
+        let mut cloned_state = self.0.clone();
+        cloned_state.block = new_block;
+        RpcStateReader(cloned_state)
     }
 }
 
