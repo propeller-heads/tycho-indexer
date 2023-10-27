@@ -698,9 +698,16 @@ mod tests {
             string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"),
             string_to_address("0454f0bd015e730e5adbb4f080b075fdbf55654ff41ee336203aa2e1ac4d4309"),
             vec![
-                Felt252::from_str_radix("38653331383037353264346139656338643063386366353938363866643766", 16).unwrap(),
-                Felt252::from_str_radix("36376163346134333537613564376166313734646537313537653931376438", 16).unwrap(),
-                
+                Felt252::from_str_radix(
+                    "38653331383037353264346139656338643063386366353938363866643766",
+                    16,
+                )
+                .unwrap(),
+                Felt252::from_str_radix(
+                    "36376163346134333537613564376166313734646537313537653931376438",
+                    16,
+                )
+                .unwrap(),
             ],
             "transaction".to_owned(),
             None,
