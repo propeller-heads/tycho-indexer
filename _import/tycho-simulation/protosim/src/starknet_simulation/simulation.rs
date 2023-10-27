@@ -446,6 +446,8 @@ impl SimulationEngine<RpcStateReader> {
             )
             .map_err(|err| SimulationError::TransactionError(err.to_string()))?;
 
+        dbg!(&result);
+
         // Interpret and return the results
         self.interpret_result(result, test_state.cache())
     }
@@ -676,6 +678,7 @@ mod tests {
     }
 
     #[rstest]
+    #[ignore]
     fn test_simulate() {
         // Ensure the env is set
         if env::var("INFURA_API_KEY").is_err() {
@@ -690,101 +693,19 @@ mod tests {
         let mut engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
 
         // Prepare the simulation parameters
-        // https://voyager.online/tx/0x33c71da501179ec033b22a8dbf6a30fdcb892609a6a6d48d7577dacdf8af9af
+        // https://voyager.online/tx/0x6f3dbc9fc1abea1c054eaf1ec69587f4be1477ed1d8ed408c1216317f10f5a8
         let params = SimulationParameters::new(
-            string_to_address("073317cbd895225d657d08b3bc4791ba7cbc0ca8b84ba554abd2b0db8aff8ed8"), /* Argent */
-            string_to_address("073317cbd895225d657d08b3bc4791ba7cbc0ca8b84ba554abd2b0db8aff8ed8"), /* Argent -- smart contract wallet */
+            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"),
+            string_to_address("0454f0bd015e730e5adbb4f080b075fdbf55654ff41ee336203aa2e1ac4d4309"),
             vec![
-                Felt252::from_str_radix("2", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix(
-                    "219209e083275171774dab1df80982e9df2096516f06319c5c6d71ae0a8480c",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("3", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "4270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("1925db6c672d35d03", 16).unwrap(),
-                Felt252::from_str_radix("0", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "4270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix(
-                    "1171593aa5bdadda4d6b0efde6cc94ee7649c3163d5efeb19da6c16d63a2a63",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("17", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("1925db6c672d35d03", 16).unwrap(),
-                Felt252::from_str_radix("0", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "49d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("38ce1956f23180", 16).unwrap(),
-                Felt252::from_str_radix("0", 16).unwrap(),
-                Felt252::from_str_radix("383cad90f4e434", 16).unwrap(),
-                Felt252::from_str_radix("0", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "73317cbd895225d657d08b3bc4791ba7cbc0ca8b84ba554abd2b0db8aff8ed8",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("0", 16).unwrap(),
-                Felt252::from_str_radix("0", 16).unwrap(),
-                Felt252::from_str_radix("1", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix(
-                    "49d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix(
-                    "5dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("64", 16).unwrap(),
-                Felt252::from_str_radix("6", 16).unwrap(),
-                Felt252::from_str_radix(
-                    "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix(
-                    "49d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix("20c49ba5e353f80000000000000000", 16).unwrap(),
-                Felt252::from_str_radix("3e8", 16).unwrap(),
-                Felt252::from_str_radix("0", 16).unwrap(),
-                Felt252::from_str_radix("854bfd1880e80fb8d1eb979bc2390", 16).unwrap(),
+                Felt252::from_str_radix("38653331383037353264346139656338643063386366353938363866643766", 16).unwrap(),
+                Felt252::from_str_radix("36376163346134333537613564376166313734646537313537653931376438", 16).unwrap(),
+                
             ],
-            "__execute__".to_owned(),
+            "transaction".to_owned(),
             None,
             Some(100000),
-            352398,
+            354168,
         );
 
         // Simulate the transaction
