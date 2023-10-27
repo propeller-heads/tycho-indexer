@@ -679,7 +679,7 @@ mod tests {
 
     #[rstest]
     #[ignore]
-    fn test_simulate() {
+    fn test_simulate_cairo0_call() {
         // Ensure the env is set
         if env::var("INFURA_API_KEY").is_err() {
             dotenv().expect("Missing .env file");
@@ -713,6 +713,44 @@ mod tests {
             None,
             Some(100000),
             354168,
+        );
+
+        // Simulate the transaction
+        let result = engine.simulate(&params);
+
+        // Check the result
+        if let Err(err) = result {
+            panic!("Failed to simulate transaction with error: {:?}", err);
+        }
+        assert!(result.is_ok());
+        dbg!("Simulation result is: {:?}", result.unwrap());
+    }
+
+    #[rstest]
+    #[ignore]
+    fn test_simulate_cairo1_call() {
+        // Ensure the env is set
+        if env::var("INFURA_API_KEY").is_err() {
+            dotenv().expect("Missing .env file");
+        }
+
+        // Initialize the engine
+        let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
+            RpcChain::MainNet,
+            BlockTag::Latest.into(),
+        )));
+        let mut engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
+
+        // Prepare the simulation parameters
+        // https://voyager.online/tx/0x02b0c258bface27f454bb1abafe2dca9ece3122dba3e4eebb447fe7fa73662e1
+        let params = SimulationParameters::new(
+            string_to_address("074fd232c2f114c7b191dab04f56e316c4ecabef2c5b88f68e602b5fc550cc14"),
+            string_to_address("0759ce49cd527815a02e235dbf43581229bcef6415f439dbce96186a388a7c6c"),
+            vec![Felt252::from_str_radix("01", 16).unwrap()],
+            "increase_balance".to_owned(),
+            None,
+            Some(100000),
+            354498,
         );
 
         // Simulate the transaction
