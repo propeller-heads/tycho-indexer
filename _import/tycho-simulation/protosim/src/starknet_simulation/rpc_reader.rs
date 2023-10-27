@@ -24,7 +24,7 @@ impl ToContractAddress for Address {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RpcStateReader(RpcState);
 
 impl RpcStateReader {
@@ -36,6 +36,10 @@ impl RpcStateReader {
         let mut cloned_state = self.0.clone();
         cloned_state.block = new_block;
         RpcStateReader(cloned_state)
+    }
+
+    pub fn block(&self) -> &BlockValue {
+        &self.0.block
     }
 }
 

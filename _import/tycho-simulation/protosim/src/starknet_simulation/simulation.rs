@@ -92,12 +92,6 @@ pub struct SimulationResult {
     pub gas_used: u128,
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct SimulationEngine<SR: StateReader> {
-    state: CachedState<SR>,
-}
-
 /**
  * Loads a Starknet contract from a given file path and returns it as a `CompiledClass` enum.
  *
@@ -205,6 +199,21 @@ impl ContractOverride {
     ) -> Self {
         Self { contract_address, class_hash, path, storage_overrides }
     }
+}
+
+/// Simulation engine for Starknet transactions.
+///
+/// Warning: Given that the used libraries are in development,
+/// this code is also considered to not be very stable and production ready.
+///
+/// One of the issues in current state is that the trait [StateReader] does not operate in a context
+/// of a given block and the simulation engine expects the data to be correct for the given block.
+/// This is unforunately not enforcable by the trait and thus the simulation `simulate()` function
+/// is implemented over a concrete type (more info on [SimulationEngine<RpcStateReader>]).
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct SimulationEngine<SR: StateReader> {
+    state: CachedState<SR>,
 }
 
 #[allow(unused_variables)]
@@ -351,30 +360,45 @@ impl<SR: StateReader> SimulationEngine<SR> {
 
         Ok(SimulationResult { result, state_updates, gas_used })
     }
+
+    /// Clear the cache of the simulation engine.
+    ///
+    /// This is useful when the state of the RPC reader has changed and the cache is no longer
+    /// valid. For example if the StateReader was set to a concrete block and a new block was
+    /// added to the chain.
+    pub fn clear_cache(&mut self, rpc_state_reader: Arc<SR>) {
+        self.state = CachedState::new(rpc_state_reader, HashMap::new());
+    }
 }
 
+/// The rest of the functions are implemented over the concrete [RpcStateReader],
+/// because we need to have info about the block the StateReader is reading, which means what block
+/// the data in the CachedState is valid for.
 impl SimulationEngine<RpcStateReader> {
+    /// Clear the cache and create a new RpcStateReader with the given block if and only if the
+    /// given block is different from the block in the RpcStateReader.
+    fn set_block_and_reset_cache(&mut self, new_block: BlockValue) {
+        if self.state.state_reader.block() != &new_block {
+            let new_state_reader = self
+                .state
+                .state_reader
+                .with_updated_block(new_block);
+            self.state = CachedState::new(Arc::new(new_state_reader), HashMap::new());
+        }
+    }
+
     /// Simulate a transaction
     ///
     /// State's block will be modified to be the last block before the simulation's block.
     pub fn simulate(
-        &self,
+        &mut self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
-        // Hacky way to set the block number on the cached state
-        // Note that because we clone the cache, all RPC calls are thrown away after the simulation
-        // TODO: update this after new starknet_in_rust release
+        // Reset cache if the internal block is different from the block in params
         let block_value = BlockValue::Number(BlockNumber(params.block_number));
-        let state_reader = self
-            .state
-            .state_reader
-            .with_updated_block(block_value);
-        let new_state = CachedState::new_for_testing(
-            Arc::new(state_reader),
-            self.state.cache().clone(),
-            self.state.contract_classes().clone(),
-        );
-        let mut test_state = new_state.create_transactional();
+        self.set_block_and_reset_cache(block_value);
+
+        let mut test_state = self.state.create_transactional();
 
         // Apply overrides
         if let Some(overrides) = &params.overrides {
@@ -663,7 +687,7 @@ mod tests {
             RpcChain::MainNet,
             BlockTag::Latest.into(),
         )));
-        let engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
+        let mut engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
 
         // Prepare the simulation parameters
         // https://voyager.online/tx/0x33c71da501179ec033b22a8dbf6a30fdcb892609a6a6d48d7577dacdf8af9af
@@ -760,7 +784,7 @@ mod tests {
             "__execute__".to_owned(),
             None,
             Some(100000),
-            352399,
+            352398,
         );
 
         // Simulate the transaction
