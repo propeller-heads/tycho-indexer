@@ -81,7 +81,7 @@ You don't need `maturin` to _use_ this crate in Python; it is only needed to _bu
    **IMPORTANT:** build environment must use the same Python version as the target environment.
 2. Run `maturin build --release` in the crate root folder (`--release` flag is optional; it turns on optimizations).
 
-   This will create a wheel (`.whl`) file in `protosim_py/target/wheels/` folder, named accordingly to the architecture
+   This will create a wheel (`.whl`) file in `protosim/target/wheels/` folder, named accordingly to the architecture
    it supports, e.g. `protosim_py-0.1.0-cp39-cp39-manylinux_2_34_x86_64.whl`.
 
 3. Deactivate your build Python environment. Activate your target environment.
