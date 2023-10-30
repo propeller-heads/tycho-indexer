@@ -457,9 +457,11 @@ impl SimulationEngine<RpcStateReader> {
 mod tests {
     use std::{collections::HashSet, env};
 
+    use crate::starknet_simulation::rpc_reader::tests::setup_reader;
+
     use super::*;
     use num_traits::Num;
-    use rpc_state_reader::rpc_state::{RpcChain, RpcState};
+    use rpc_state_reader::rpc_state::RpcChain;
     use rstest::rstest;
     use starknet_in_rust::{
         core::errors::state_errors::StateError, execution::CallInfo,
@@ -475,16 +477,9 @@ mod tests {
         rpc_chain: RpcChain,
         contract_overrides: Option<Vec<ContractOverride>>,
     ) -> SimulationEngine<RpcStateReader> {
-        // Ensure the env is set
-        if std::env::var("INFURA_API_KEY").is_err() {
-            dotenv::dotenv().expect("Missing .env file");
-        }
+        let rpc_state_reader = Arc::new(setup_reader(block_number, rpc_chain));
 
         // Initialize the engine
-        let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
-            rpc_chain,
-            BlockNumber(block_number).into(),
-        )));
         SimulationEngine::new(rpc_state_reader, contract_overrides.unwrap_or_default())
             .expect("should initialize engine")
     }
