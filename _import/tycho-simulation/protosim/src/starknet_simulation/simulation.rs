@@ -383,7 +383,7 @@ impl SimulationEngine<RpcStateReader> {
                 .state
                 .state_reader
                 .with_updated_block(new_block);
-            self.state = CachedState::new(Arc::new(new_state_reader), HashMap::new());
+            self.clear_cache(new_state_reader.into());
         }
     }
 
@@ -757,5 +757,27 @@ mod tests {
         }
         assert!(result.is_ok());
         dbg!("Simulation result is: {:?}", result.unwrap());
+    }
+
+    #[rstest]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_set_block_and_reset_cache() {
+        // Set up the engine
+        let block_number = 354498; // actual block is 354499
+        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+
+        assert_eq!(
+            engine.state.state_reader.block(),
+            &BlockNumber(block_number).into()
+        );
+
+        // Set the block to a different block
+        let new_block_number = 354499;
+        engine.set_block_and_reset_cache(BlockNumber(new_block_number).into());
+
+        assert_eq!(
+            engine.state.state_reader.block(),
+            &BlockNumber(new_block_number).into()
+        );
     }
 }
