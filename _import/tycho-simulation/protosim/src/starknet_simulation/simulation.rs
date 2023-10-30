@@ -678,7 +678,7 @@ mod tests {
     }
 
     #[rstest]
-    #[ignore]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo0_call() {
         // Ensure the env is set
         if env::var("INFURA_API_KEY").is_err() {
@@ -686,9 +686,10 @@ mod tests {
         }
 
         // Initialize the engine
+        let block_number = 354169;
         let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
             RpcChain::MainNet,
-            BlockTag::Latest.into(),
+            BlockNumber(block_number).into(),
         )));
         let mut engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
 
@@ -727,7 +728,7 @@ mod tests {
     }
 
     #[rstest]
-    #[ignore]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo1_call() {
         // Ensure the env is set
         if env::var("INFURA_API_KEY").is_err() {
