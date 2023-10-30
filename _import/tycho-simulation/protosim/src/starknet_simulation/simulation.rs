@@ -455,14 +455,11 @@ impl SimulationEngine<RpcStateReader> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
-    use std::env;
+    use std::{collections::HashSet, env};
 
     use super::*;
-    use dotenv::dotenv;
     use num_traits::Num;
-    use rpc_state_reader::rpc_state::{BlockTag, RpcChain, RpcState};
+    use rpc_state_reader::rpc_state::{RpcChain, RpcState};
     use rstest::rstest;
     use starknet_in_rust::{
         core::errors::state_errors::StateError, execution::CallInfo,
@@ -471,6 +468,25 @@ mod tests {
 
     pub fn string_to_address(address: &str) -> Address {
         Address(Felt252::from_str_radix(address, 16).expect("hex address"))
+    }
+
+    fn setup_engine(
+        block_number: u64,
+        rpc_chain: RpcChain,
+        contract_overrides: Option<Vec<ContractOverride>>,
+    ) -> SimulationEngine<RpcStateReader> {
+        // Ensure the env is set
+        if std::env::var("INFURA_API_KEY").is_err() {
+            dotenv::dotenv().expect("Missing .env file");
+        }
+
+        // Initialize the engine
+        let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
+            rpc_chain,
+            BlockNumber(block_number).into(),
+        )));
+        SimulationEngine::new(rpc_state_reader, contract_overrides.unwrap_or_default())
+            .expect("should initialize engine")
     }
 
     // Mock empty StateReader
@@ -680,18 +696,9 @@ mod tests {
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo0_call() {
-        // Ensure the env is set
-        if env::var("INFURA_API_KEY").is_err() {
-            dotenv().expect("Missing .env file");
-        }
-
-        // Initialize the engine
-        let block_number = 354169;
-        let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
-            RpcChain::MainNet,
-            BlockNumber(block_number).into(),
-        )));
-        let mut engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
+        // Set up the engine
+        let block_number = 354168; // actual block is 354169
+        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
         // https://voyager.online/tx/0x6f3dbc9fc1abea1c054eaf1ec69587f4be1477ed1d8ed408c1216317f10f5a8
@@ -730,17 +737,9 @@ mod tests {
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo1_call() {
-        // Ensure the env is set
-        if env::var("INFURA_API_KEY").is_err() {
-            dotenv().expect("Missing .env file");
-        }
-
-        // Initialize the engine
-        let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
-            RpcChain::MainNet,
-            BlockTag::Latest.into(),
-        )));
-        let mut engine = SimulationEngine::new(rpc_state_reader, vec![]).unwrap();
+        // Set up the engine
+        let block_number = 354498; // actual block is 354499
+        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
         // https://voyager.online/tx/0x02b0c258bface27f454bb1abafe2dca9ece3122dba3e4eebb447fe7fa73662e1

@@ -433,10 +433,10 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
 
 #[cfg(test)]
 mod tests {
+    use dotenv::dotenv;
     use revm::primitives::U256 as rU256;
     use rstest::{fixture, rstest};
-    use std::{error::Error, str::FromStr, sync::Arc, env};
-    use dotenv::dotenv;
+    use std::{env, error::Error, str::FromStr, sync::Arc};
 
     use super::*;
     use ethers::{
