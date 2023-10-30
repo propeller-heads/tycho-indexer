@@ -53,5 +53,5 @@ rstest = "0.16.0"
 num-traits = "0.2.17"
 
 [features]
-default = ["network_tests"]
+default = []
 network_tests = []
