@@ -93,20 +93,25 @@ impl StateReader for RpcStateReader {
 
 #[cfg(test)]
 mod tests {
-    use rpc_state_reader::rpc_state::RpcChain;
+    use rpc_state_reader::rpc_state::{RpcBlockInfo, RpcChain};
     use starknet_api::block::BlockNumber;
 
     use super::*;
 
-    fn setup_reader() -> RpcStateReader {
-        let rpc_state = RpcState::new_infura(RpcChain::MainNet, BlockNumber(333333).into());
+    pub fn setup_reader(block_number: u64) -> RpcStateReader {
+        // Ensure the env is set
+        if std::env::var("INFURA_API_KEY").is_err() {
+            dotenv::dotenv().expect("Missing .env file");
+        }
+
+        let rpc_state = RpcState::new_infura(RpcChain::MainNet, BlockNumber(block_number).into());
         RpcStateReader(rpc_state)
     }
 
     #[test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_class_hash_at() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333);
 
         // Jedi Swap ETH/USDC pool address
         let address_bytes =
@@ -133,7 +138,7 @@ mod tests {
     #[test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_contract_class() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333);
 
         // Jedi Swap ETH/USDC pool class hash
         let class_hash: ClassHash =
@@ -153,7 +158,7 @@ mod tests {
     #[test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_nonce_at() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333);
 
         // a test wallet address
         let address_bytes =
@@ -171,7 +176,7 @@ mod tests {
     #[test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_storage_at() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333);
 
         let address_bytes =
             hex::decode("04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a")
@@ -191,7 +196,7 @@ mod tests {
     #[test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_compiled_class_hash() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333);
 
         // Jedi Swap ETH/USDC pool class hash
         let class_hash: &ClassHash = &[
@@ -210,5 +215,20 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, expected_hash)
+    }
+
+    #[test]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_with_updated_block() {
+        let reader = setup_reader(333333);
+        let RpcBlockInfo { block_number: initial_block_number, .. } = reader.0.get_block_info();
+        let new_block = BlockNumber(333334).into();
+
+        let updated_reader = reader.with_updated_block(new_block);
+        let RpcBlockInfo { block_number: updated_block_number, .. } =
+            updated_reader.0.get_block_info();
+        assert_eq!(initial_block_number, BlockNumber(333333));
+        assert_eq!(updated_block_number, BlockNumber(333334));
+        assert_ne!(initial_block_number, updated_block_number);
     }
 }
