@@ -24,6 +24,7 @@ use starknet_in_rust::{
     CasmContractClass, EntryPointType,
 };
 use thiserror::Error;
+use tracing::{debug, info};
 
 use super::rpc_reader::RpcStateReader;
 
@@ -266,6 +267,11 @@ impl<SR: StateReader> SimulationEngine<SR> {
             }
         }
 
+        info!(
+            "Initialising SimulationEngine with {} contracts",
+            class_hash_to_compiled_class_hash.len()
+        );
+
         // Set StateCache initial values
         let cache: StateCache = StateCache::new(
             address_to_class_hash,
@@ -343,6 +349,8 @@ impl<SR: StateReader> SimulationEngine<SR> {
         }
         let gas_used = call_info.gas_consumed;
         let result = call_info.retdata.clone();
+
+        debug!("Simulation successful: {:#?} {:#?}", result, gas_used);
 
         // Collect state changes
         let all_writes = state_cache.storage_writes();
@@ -428,6 +436,8 @@ impl SimulationEngine<RpcStateReader> {
             Some(class_hash),
             params.gas_limit.unwrap_or(0),
         );
+
+        debug!("Starting simulation with tx parameters: {:#?} {:#?}", call, block_value);
 
         // Set up the call context
         let block_context = BlockContext::default();
