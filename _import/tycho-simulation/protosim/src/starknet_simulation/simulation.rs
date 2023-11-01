@@ -234,36 +234,55 @@ impl<SR: StateReader> SimulationEngine<SR> {
 
         // Load contracts
         for input_contract in contract_overrides {
+            let class_hash = input_contract.class_hash;
+            let compiled_class_hash;
+            let compiled_class;
             if let Some(path) = input_contract.path {
-                let compiled_class = load_compiled_class_from_path(&path).map_err(|e| {
+                // Load contract from path
+                compiled_class = load_compiled_class_from_path(&path).map_err(|e| {
                     SimulationError::InitError(format!(
                         "Failed to load contract from path: {:?} with error: {:?}",
                         path, e
                     ))
                 })?;
-                let class_hash = input_contract.class_hash;
                 // Compute compiled class hash
-                let compiled_class_hash = compute_class_hash(&compiled_class).map_err(|e| {
-                    SimulationError::InitError(format!(
-                        "Failed to compute class hash for contract: {:?} with error: {:?}",
-                        path, e
-                    ))
-                })?;
-                // Convert Felt252 to ClassHash
-                let compiled_class_hash = felt_to_hash(&compiled_class_hash);
-
-                // Update caches
-                address_to_class_hash.insert(input_contract.contract_address.clone(), class_hash);
-                class_hash_to_compiled_class.insert(compiled_class_hash, compiled_class.clone());
-                address_to_nonce.insert(input_contract.contract_address, Felt252::from(0u8));
-                storage_updates.extend(
-                    input_contract
-                        .storage_overrides
-                        .unwrap_or_default(),
-                );
-
-                class_hash_to_compiled_class_hash.insert(class_hash, compiled_class_hash);
+                compiled_class_hash =
+                    felt_to_hash(&compute_class_hash(&compiled_class).map_err(|e| {
+                        SimulationError::InitError(format!(
+                            "Failed to compute class hash for contract: {:?} with error: {:?}",
+                            path, e
+                        ))
+                    })?);
+            } else {
+                // Load contract from rpc
+                compiled_class = rpc_state_reader
+                    .get_contract_class(&class_hash)
+                    .map_err(|err| {
+                        SimulationError::InitError(format!(
+                            "Could not fetch compiled class: {}",
+                            err
+                        ))
+                    })?;
+                compiled_class_hash = rpc_state_reader
+                    .get_compiled_class_hash(&class_hash)
+                    .map_err(|err| {
+                        SimulationError::InitError(format!(
+                            "Could not fetch compiled class hash: {}",
+                            err
+                        ))
+                    })?;
             }
+            // Update caches
+            address_to_class_hash.insert(input_contract.contract_address.clone(), class_hash);
+            class_hash_to_compiled_class.insert(compiled_class_hash, compiled_class.clone());
+            address_to_nonce.insert(input_contract.contract_address, Felt252::from(0u8));
+            storage_updates.extend(
+                input_contract
+                    .storage_overrides
+                    .unwrap_or_default(),
+            );
+
+            class_hash_to_compiled_class_hash.insert(class_hash, compiled_class_hash);
         }
 
         // Set StateCache initial values
@@ -538,6 +557,30 @@ mod tests {
         if let Err(err) = engine_result {
             panic!("Failed to create engine with error: {:?}", err);
         }
+        assert!(engine_result.is_ok());
+    }
+
+    #[rstest]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_create_engine_with_contract_without_path() {
+        // USDC token contract
+        let address =
+            string_to_address("053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8");
+        let class_hash: ClassHash =
+            hex::decode("052c7ba99c77fc38dd3346beea6c0753c3471f2e3135af5bb837d6c9523fff62")
+                .unwrap()
+                .as_slice()
+                .try_into()
+                .unwrap();
+        let input_contract = ContractOverride::new(address, class_hash, None, None);
+
+        // Create engine
+        let rpc_state_reader = setup_reader(333333, RpcChain::MainNet);
+        let engine_result = SimulationEngine::new(Arc::new(rpc_state_reader), vec![input_contract]);
+        if let Err(err) = engine_result {
+            panic!("Failed to create engine with error: {:?}", err);
+        }
+
         assert!(engine_result.is_ok());
     }
 

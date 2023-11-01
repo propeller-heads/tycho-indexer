@@ -93,6 +93,7 @@ impl StateReader for RpcStateReader {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use dotenv::dotenv;
     use std::env;
 
     use rpc_state_reader::rpc_state::{RpcBlockInfo, RpcChain};
@@ -101,6 +102,7 @@ pub(crate) mod tests {
     use super::*;
 
     pub fn setup_reader(block_number: u64, rpc_chain: RpcChain) -> RpcStateReader {
+        dotenv().expect("Missing .env file");
         let rpc_endpoint = format!(
             "https://{}.infura.io/v3/{}",
             rpc_chain,
