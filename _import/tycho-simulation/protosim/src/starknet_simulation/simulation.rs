@@ -188,7 +188,8 @@ fn compute_class_hash(
 /// # Fields
 ///
 /// * `contract_address: Address` - The address of the contract.
-/// * `class_hash: ClassHash` - The class hash of the contract.
+/// * `class_hash: ClassHash` - The class hash of the contract (can differ from that of the contract
+///   onchain if you wish to mock the contract)
 /// * `path: Option<String>` - The path to the contract file. If `None`, the contract is going to be
 ///   fetched from the state reader.
 /// * `storage_overrides: Option<HashMap<StorageEntry, Felt252>>` - The storage overrides for the
