@@ -412,18 +412,18 @@ impl SimulationEngine<RpcStateReader> {
         &mut self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
+        dbg!(&params);
         // Reset cache if the internal block is different from the block in params
         let block_value = BlockValue::Number(BlockNumber(params.block_number));
         self.set_block_and_reset_cache(block_value);
-
-        let mut test_state = self.state.create_transactional();
 
         // Apply overrides
         if let Some(overrides) = &params.overrides {
             for (address, storage_update) in overrides {
                 for (slot, value) in storage_update {
                     let storage_entry = ((*address).clone(), *slot);
-                    test_state.set_storage_at(&storage_entry, (*value).clone());
+                    self.state
+                        .set_storage_at(&storage_entry, (*value).clone());
                 }
             }
         }
@@ -432,7 +432,10 @@ impl SimulationEngine<RpcStateReader> {
         let entry_point = params.entry_point.as_bytes();
         let entrypoint_selector = Felt252::from_bytes_be(&calculate_sn_keccak(entry_point));
 
-        let class_hash = test_state
+        dbg!(&params.to);
+
+        let class_hash = self
+            .state
             .get_class_hash_at(&params.to)
             .map_err(|err| SimulationError::StateError(err.to_string()))?;
 
@@ -457,7 +460,7 @@ impl SimulationEngine<RpcStateReader> {
         // Execute the simulated call
         let result = call
             .execute(
-                &mut test_state,
+                &mut self.state,
                 &block_context,
                 &mut resources_manager,
                 &mut tx_execution_context,
@@ -467,7 +470,7 @@ impl SimulationEngine<RpcStateReader> {
             .map_err(|err| SimulationError::TransactionError(err.to_string()))?;
 
         // Interpret and return the results
-        self.interpret_result(result, test_state.cache())
+        self.interpret_result(result, self.state.cache())
     }
 }
 
@@ -478,13 +481,36 @@ pub mod tests {
     use crate::starknet_simulation::rpc_reader::tests::setup_reader;
 
     use super::*;
-    use cairo_vm::felt::felt_str;
     use rpc_state_reader::rpc_state::RpcChain;
     use rstest::rstest;
     use starknet_in_rust::{
         core::errors::state_errors::StateError, execution::CallInfo,
         state::cached_state::ContractClassCache,
     };
+
+    pub fn felt_str(val: &str) -> Felt252 {
+        let base = if val.starts_with("0x") { 16_u32 } else { 10_u32 };
+        let stripped_val = val.strip_prefix("0x").unwrap_or(val);
+
+        Felt252::parse_bytes(stripped_val.as_bytes(), base).expect("Failed to parse input")
+    }
+
+    pub fn address_str(val: &str) -> Address {
+        Address(felt_str(val))
+    }
+
+    pub fn class_hash_str(val: &str) -> ClassHash {
+        felt_str(val).to_be_bytes()
+    }
+    
+    #[test]
+    fn test_address_str_with_prefix() {
+        let input = "3658190653781265738165783961758321";
+        let expected_felt = Felt252::from(3658190653781265738165783961758321u128);
+        let expected = Address(expected_felt);
+        let result = address_str(input);
+        assert_eq!(result, expected);
+    }
 
     fn setup_engine(
         block_number: u64,
@@ -712,26 +738,19 @@ pub mod tests {
         let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
-        let params =
-            SimulationParameters::new(
-                Address(felt_str!(
-                    "035fc5a31b2cf06af3a7e9b9b00a508b72dea342277c7415b770fbd69a6c5933",
-                    16
-                )),
-                Address(felt_str!(
-                    "022b05f9396d2c48183f6deaf138a57522bcc8b35b67dee919f76403d1783136",
-                    16
-                )),
-                vec![
-                felt_str!("467359278613506166151492726487752216059557962335532790304583050955123345960", 10), // Felt252
-                felt_str!("62399604864", 10), // The lower bits of Uint256
-                felt_str!("0", 10), // The upper bits of Uint256
+        let params = SimulationParameters::new(
+            address_str("0x035fc5a31b2cf06af3a7e9b9b00a508b72dea342277c7415b770fbd69a6c5933"),
+            address_str("0x022b05f9396d2c48183f6deaf138a57522bcc8b35b67dee919f76403d1783136"),
+            vec![
+                felt_str("0x10884171baf1914edc28d7afb619b40a4051cfae78a094a55d230f19e944a28"), /* Felt252 */
+                felt_str("62399604864"), // The lower bits of Uint256
+                felt_str("0"),           // The upper bits of Uint256
             ],
-                "approve".to_owned(),
-                None,
-                Some(u128::MAX),
-                block_number,
-            );
+            "approve".to_owned(),
+            None,
+            Some(u128::MAX),
+            block_number,
+        );
 
         // Simulate the transaction
         let result = engine
@@ -739,32 +758,23 @@ pub mod tests {
             .expect("should simulate");
 
         let expected_result = SimulationResult::new(
-            vec![felt_str!("1", 10)],
+            vec![felt_str("1")],
             vec![(
-                Address(felt_str!(
+                address_str(
                     "980641348758169158361564622616439166824113829417782360965256920656439161142",
-                    10
-                )),
+                ),
                 vec![
                     (
-                        hex::decode(
-                            "04ec12998482b49cff9925cf695c114762a27c32bcd1afe898073bdab6f0d307",
-                        )
-                        .unwrap()
-                        .as_slice()
-                        .try_into()
-                        .unwrap(),
-                        felt_str!("0", 10),
+                        class_hash_str(
+                            "0x04ec12998482b49cff9925cf695c114762a27c32bcd1afe898073bdab6f0d307",
+                        ),
+                        felt_str("0"),
                     ),
                     (
-                        hex::decode(
-                            "04ec12998482b49cff9925cf695c114762a27c32bcd1afe898073bdab6f0d306",
-                        )
-                        .unwrap()
-                        .as_slice()
-                        .try_into()
-                        .unwrap(),
-                        felt_str!("62399604864", 10),
+                        class_hash_str(
+                            "0x04ec12998482b49cff9925cf695c114762a27c32bcd1afe898073bdab6f0d306",
+                        ),
+                        felt_str("62399604864"),
                     ),
                 ]
                 .into_iter()
@@ -780,26 +790,28 @@ pub mod tests {
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo1_call() {
+        // https://starkscan.co/tx/0x008f1f8ee931f40aa5ef9111e0836d68d8d1cf07801c0d17750d66937f02fb54
+
         // Set up the engine
-        let block_number = 354498; // actual block is 354499
+        let block_number = 368719 ; // actual tx block is 368720
         let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
-        // https://starkscan.co/tx/0x02b0c258bface27f454bb1abafe2dca9ece3122dba3e4eebb447fe7fa73662e1
         let params = SimulationParameters::new(
-            Address(felt_str!(
-                "074fd232c2f114c7b191dab04f56e316c4ecabef2c5b88f68e602b5fc550cc14",
-                16
-            )),
-            Address(felt_str!(
-                "0759ce49cd527815a02e235dbf43581229bcef6415f439dbce96186a388a7c6c",
-                16
-            )),
-            vec![felt_str!("01", 16)],
-            "increase_balance".to_owned(),
+            address_str("0x04eb4dcf306e28e13e6361bca368056d4bfd3051ee96fe6b7207662fbcaf3d2d"),
+            address_str("0x07d14dfd8ee95b41fce179170d88ba1f0d5a512e13aeb232f19cfeec0a88f8bf"),
+            vec![
+                felt_str("602131441545"),
+                felt_str("1698855348"),
+                felt_str("28263441981469284"),
+                felt_str("841052542115774484"),
+                felt_str("3254871180842845207740459874836292658857302757892203765805208854602709573266"),
+                felt_str("3507176392343394624391389069340504903187207915538258427726787963729562556344"),
+                ],
+            "write_confirmation".to_owned(),
             None,
-            Some(100000),
-            354498,
+            Some(u128::MAX),
+            block_number,
         );
 
         // Simulate the transaction
@@ -815,7 +827,7 @@ pub mod tests {
 
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
-    fn test_set_block_and_reset_cache() {
+    fn test_set_block() {
         // Set up the engine
         let block_number = 354498; // actual block is 354499
         let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
