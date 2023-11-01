@@ -32,10 +32,11 @@ mod tests {
         ))
     }
 
+    #[allow(unused_variables)]
     fn setup_engine(
         block_number: u64,
-        token0: Address,
-        token1: Address,
+        token0: Option<Address>,
+        token1: Option<Address>,
     ) -> SimulationEngine<RpcStateReader> {
         let rpc_state_reader = Arc::new(setup_reader(block_number));
 
@@ -67,7 +68,7 @@ mod tests {
             string_to_address("da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3");
         let token1 =
             string_to_address("068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8");
-        let mut engine = setup_engine(block_number, token0, token1);
+        let mut engine = setup_engine(block_number, Some(token0), Some(token1));
 
         let ekubo_address =
             string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
@@ -92,13 +93,13 @@ mod tests {
             Felt252::from_str_radix("69147602770206732762", 16).unwrap(), // amount
             Felt252::from(0),                                             // amount sign
             Felt252::from(0),                                             // istoken1
-            Felt252::from_str_radix("340269419829709255939292639488384", 16).unwrap(), // sqrt ratio limit
+            Felt252::from_str_radix("340269419829709255939292639488384", 16).unwrap(), /* sqrt ratio limit */
             Felt252::from(0),
             Felt252::from(100), // skip ahead
         ];
 
         let params = SimulationParameters::new(
-            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"), // caller used in other tests
+            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"), /* caller used in other tests */
             ekubo_address,
             swap_calldata,
             "swap".to_owned(),
@@ -110,5 +111,91 @@ mod tests {
         let result0 = engine.simulate(&params);
 
         assert!(result0.is_ok())
+    }
+
+    #[test]
+    fn test_get_eth_usdc_spot_price_ekubo() {
+        let block_number = 367676;
+        let mut engine = setup_engine(block_number, None, None);
+
+        let ekubo_address =
+            string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
+
+        let swap_calldata = vec![
+            Felt252::from_str_radix(
+                "2087021424722619777119509474943472645767659996348769578120564519014510906823",
+                10,
+            )
+            .unwrap(), // token0
+            Felt252::from_str_radix(
+                "2368576823837625528275935341135881659748932889268308403712618244410713532584",
+                10,
+            )
+            .unwrap(), // token1
+            Felt252::from_str_radix("170141183460469235273462165868118016", 10).unwrap(), // fee
+            Felt252::from(1000), // tick spacing
+            Felt252::from(0),    // extension
+        ];
+
+        let params = SimulationParameters::new(
+            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"), /* caller used in other tests */
+            ekubo_address,
+            swap_calldata,
+            "get_pool_price".to_owned(),
+            None,
+            Some(100000),
+            block_number,
+        );
+
+        let result0 = engine.simulate(&params);
+
+        let res = result0.unwrap().result[0].clone();
+
+        // To get the human readable price we will need to convert this on the Python side like
+        // this: https://www.wolframalpha.com/input?i=(14458875492015717597830515600275777+/+2**128)**2*10**12
+        assert_eq!(res, Felt252::from_str_radix("14458875492015717597830515600275777", 10).unwrap())
+    }
+
+    #[test]
+    fn test_get_dai_usdc_spot_price_ekubo() {
+        let block_number = 367676;
+        let mut engine = setup_engine(block_number, None, None);
+
+        let ekubo_address =
+            string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
+
+        let swap_calldata = vec![
+            Felt252::from_str_radix(
+                "385291772725090318157700937045086145273563247402457518748197066808155336371",
+                10,
+            )
+            .unwrap(), // token0
+            Felt252::from_str_radix(
+                "2368576823837625528275935341135881659748932889268308403712618244410713532584",
+                10,
+            )
+            .unwrap(), // token1
+            Felt252::from_str_radix("170141183460469235273462165868118016", 10).unwrap(), // fee
+            Felt252::from(1000), // tick spacing
+            Felt252::from(0),    // extension
+        ];
+
+        let params = SimulationParameters::new(
+            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"), /* caller used in other tests */
+            ekubo_address,
+            swap_calldata,
+            "get_pool_price".to_owned(),
+            None,
+            Some(100000),
+            block_number,
+        );
+
+        let result0 = engine.simulate(&params);
+
+        let res = result0.unwrap().result[0].clone();
+
+        // To get the human readable price we will need to convert this on the Python side like
+        // this: https://www.wolframalpha.com/input?i=(340321610937302884216160363291566+/+2**128)**2*10**12
+        assert_eq!(res, Felt252::from_str_radix("340321610937302884216160363291566", 10).unwrap())
     }
 }
