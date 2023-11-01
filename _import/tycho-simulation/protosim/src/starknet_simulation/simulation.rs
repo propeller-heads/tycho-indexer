@@ -502,7 +502,7 @@ pub mod tests {
     pub fn class_hash_str(val: &str) -> ClassHash {
         felt_str(val).to_be_bytes()
     }
-    
+
     #[test]
     fn test_address_str_with_prefix() {
         let input = "3658190653781265738165783961758321";
@@ -793,7 +793,7 @@ pub mod tests {
         // https://starkscan.co/tx/0x008f1f8ee931f40aa5ef9111e0836d68d8d1cf07801c0d17750d66937f02fb54
 
         // Set up the engine
-        let block_number = 368719 ; // actual tx block is 368720
+        let block_number = 368719; // actual tx block is 368720
         let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
@@ -805,9 +805,13 @@ pub mod tests {
                 felt_str("1698855348"),
                 felt_str("28263441981469284"),
                 felt_str("841052542115774484"),
-                felt_str("3254871180842845207740459874836292658857302757892203765805208854602709573266"),
-                felt_str("3507176392343394624391389069340504903187207915538258427726787963729562556344"),
-                ],
+                felt_str(
+                    "3254871180842845207740459874836292658857302757892203765805208854602709573266",
+                ),
+                felt_str(
+                    "3507176392343394624391389069340504903187207915538258427726787963729562556344",
+                ),
+            ],
             "write_confirmation".to_owned(),
             None,
             Some(u128::MAX),
