@@ -3,4 +3,12 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
-# See more config options https://github.com/foundry-rs/foundry/tree/master/config
+[rpc_endpoints]
+mainnet = "${ETH_RPC_URL}"
+
+
+[fmt]
+line_length = 80
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_MAINNET_KEY}" }
