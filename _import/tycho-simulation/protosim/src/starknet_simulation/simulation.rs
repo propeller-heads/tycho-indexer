@@ -391,7 +391,7 @@ impl SimulationEngine<RpcStateReader> {
                 .state
                 .state_reader
                 .with_updated_block(new_block);
-            self.state = CachedState::new(Arc::new(new_state_reader), HashMap::new());
+            self.clear_cache(new_state_reader.into());
         }
     }
 
@@ -467,9 +467,11 @@ impl SimulationEngine<RpcStateReader> {
 mod tests {
     use std::{collections::HashSet, env};
 
+    use crate::starknet_simulation::rpc_reader::tests::setup_reader;
+
     use super::*;
     use num_traits::Num;
-    use rpc_state_reader::rpc_state::{RpcChain, RpcState};
+    use rpc_state_reader::rpc_state::RpcChain;
     use rstest::rstest;
     use starknet_in_rust::{
         core::errors::state_errors::StateError, execution::CallInfo,
@@ -485,16 +487,9 @@ mod tests {
         rpc_chain: RpcChain,
         contract_overrides: Option<Vec<ContractOverride>>,
     ) -> SimulationEngine<RpcStateReader> {
-        // Ensure the env is set
-        if std::env::var("INFURA_API_KEY").is_err() {
-            dotenv::dotenv().expect("Missing .env file");
-        }
+        let rpc_state_reader = Arc::new(setup_reader(block_number, rpc_chain));
 
         // Initialize the engine
-        let rpc_state_reader = Arc::new(RpcStateReader::new(RpcState::new_infura(
-            rpc_chain,
-            BlockNumber(block_number).into(),
-        )));
         SimulationEngine::new(rpc_state_reader, contract_overrides.unwrap_or_default())
             .expect("should initialize engine")
     }
@@ -711,7 +706,7 @@ mod tests {
         let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
-        // https://voyager.online/tx/0x6f3dbc9fc1abea1c054eaf1ec69587f4be1477ed1d8ed408c1216317f10f5a8
+        // https://starkscan.co/tx/0x6f3dbc9fc1abea1c054eaf1ec69587f4be1477ed1d8ed408c1216317f10f5a8
         let params = SimulationParameters::new(
             string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"),
             string_to_address("0454f0bd015e730e5adbb4f080b075fdbf55654ff41ee336203aa2e1ac4d4309"),
@@ -752,7 +747,7 @@ mod tests {
         let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
-        // https://voyager.online/tx/0x02b0c258bface27f454bb1abafe2dca9ece3122dba3e4eebb447fe7fa73662e1
+        // https://starkscan.co/tx/0x02b0c258bface27f454bb1abafe2dca9ece3122dba3e4eebb447fe7fa73662e1
         let params = SimulationParameters::new(
             string_to_address("074fd232c2f114c7b191dab04f56e316c4ecabef2c5b88f68e602b5fc550cc14"),
             string_to_address("0759ce49cd527815a02e235dbf43581229bcef6415f439dbce96186a388a7c6c"),
@@ -772,5 +767,21 @@ mod tests {
         }
         assert!(result.is_ok());
         dbg!("Simulation result is: {:?}", result.unwrap());
+    }
+
+    #[rstest]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_set_block_and_reset_cache() {
+        // Set up the engine
+        let block_number = 354498; // actual block is 354499
+        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+
+        assert_eq!(engine.state.state_reader.block(), &BlockNumber(block_number).into());
+
+        // Set the block to a different block
+        let new_block_number = 354499;
+        engine.set_block_and_reset_cache(BlockNumber(new_block_number).into());
+
+        assert_eq!(engine.state.state_reader.block(), &BlockNumber(new_block_number).into());
     }
 }
