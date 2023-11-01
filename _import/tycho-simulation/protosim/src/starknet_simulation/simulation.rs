@@ -83,7 +83,7 @@ impl SimulationParameters {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct SimulationResult {
     /// Output of transaction execution
     pub result: Vec<Felt252>,
@@ -91,6 +91,16 @@ pub struct SimulationResult {
     pub state_updates: HashMap<Address, Overrides>,
     /// Gas used by the transaction (already reduced by the refunded gas)
     pub gas_used: u128,
+}
+
+impl SimulationResult {
+    pub fn new(
+        result: Vec<Felt252>,
+        state_updates: HashMap<Address, Overrides>,
+        gas_used: u128,
+    ) -> Self {
+        Self { result, state_updates, gas_used }
+    }
 }
 
 /**
@@ -456,31 +466,25 @@ impl SimulationEngine<RpcStateReader> {
             )
             .map_err(|err| SimulationError::TransactionError(err.to_string()))?;
 
-        dbg!(&result);
-
         // Interpret and return the results
         self.interpret_result(result, test_state.cache())
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::{collections::HashSet, env};
 
     use crate::starknet_simulation::rpc_reader::tests::setup_reader;
 
     use super::*;
-    use num_traits::Num;
+    use cairo_vm::felt::felt_str;
     use rpc_state_reader::rpc_state::RpcChain;
     use rstest::rstest;
     use starknet_in_rust::{
         core::errors::state_errors::StateError, execution::CallInfo,
         state::cached_state::ContractClassCache,
     };
-
-    pub fn string_to_address(address: &str) -> Address {
-        Address(Felt252::from_str_radix(address, 16).expect("hex address"))
-    }
 
     fn setup_engine(
         block_number: u64,
@@ -701,42 +705,76 @@ mod tests {
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo0_call() {
+        // https://starkscan.co/tx/0x046e50c398bf08a69c7bbf1dedc35760556ba7c426a704d1ecb67378f01ffe59
+
         // Set up the engine
-        let block_number = 354168; // actual block is 354169
+        let block_number = 366118; // actual block is 366119
         let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
 
         // Prepare the simulation parameters
-        // https://starkscan.co/tx/0x6f3dbc9fc1abea1c054eaf1ec69587f4be1477ed1d8ed408c1216317f10f5a8
-        let params = SimulationParameters::new(
-            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"),
-            string_to_address("0454f0bd015e730e5adbb4f080b075fdbf55654ff41ee336203aa2e1ac4d4309"),
-            vec![
-                Felt252::from_str_radix(
-                    "38653331383037353264346139656338643063386366353938363866643766",
-                    16,
-                )
-                .unwrap(),
-                Felt252::from_str_radix(
-                    "36376163346134333537613564376166313734646537313537653931376438",
-                    16,
-                )
-                .unwrap(),
+        let params =
+            SimulationParameters::new(
+                Address(felt_str!(
+                    "035fc5a31b2cf06af3a7e9b9b00a508b72dea342277c7415b770fbd69a6c5933",
+                    16
+                )),
+                Address(felt_str!(
+                    "022b05f9396d2c48183f6deaf138a57522bcc8b35b67dee919f76403d1783136",
+                    16
+                )),
+                vec![
+                felt_str!("467359278613506166151492726487752216059557962335532790304583050955123345960", 10), // Felt252
+                felt_str!("62399604864", 10), // The lower bits of Uint256
+                felt_str!("0", 10), // The upper bits of Uint256
             ],
-            "transaction".to_owned(),
-            None,
-            Some(100000),
-            354168,
-        );
+                "approve".to_owned(),
+                None,
+                Some(u128::MAX),
+                block_number,
+            );
 
         // Simulate the transaction
-        let result = engine.simulate(&params);
+        let result = engine
+            .simulate(&params)
+            .expect("should simulate");
 
-        // Check the result
-        if let Err(err) = result {
-            panic!("Failed to simulate transaction with error: {:?}", err);
-        }
-        assert!(result.is_ok());
-        dbg!("Simulation result is: {:?}", result.unwrap());
+        let expected_result = SimulationResult::new(
+            vec![felt_str!("1", 10)],
+            vec![(
+                Address(felt_str!(
+                    "980641348758169158361564622616439166824113829417782360965256920656439161142",
+                    10
+                )),
+                vec![
+                    (
+                        hex::decode(
+                            "04ec12998482b49cff9925cf695c114762a27c32bcd1afe898073bdab6f0d307",
+                        )
+                        .unwrap()
+                        .as_slice()
+                        .try_into()
+                        .unwrap(),
+                        felt_str!("0", 10),
+                    ),
+                    (
+                        hex::decode(
+                            "04ec12998482b49cff9925cf695c114762a27c32bcd1afe898073bdab6f0d306",
+                        )
+                        .unwrap()
+                        .as_slice()
+                        .try_into()
+                        .unwrap(),
+                        felt_str!("62399604864", 10),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            )]
+            .into_iter()
+            .collect(),
+            0,
+        );
+        assert_eq!(result, expected_result);
     }
 
     #[rstest]
@@ -749,9 +787,15 @@ mod tests {
         // Prepare the simulation parameters
         // https://starkscan.co/tx/0x02b0c258bface27f454bb1abafe2dca9ece3122dba3e4eebb447fe7fa73662e1
         let params = SimulationParameters::new(
-            string_to_address("074fd232c2f114c7b191dab04f56e316c4ecabef2c5b88f68e602b5fc550cc14"),
-            string_to_address("0759ce49cd527815a02e235dbf43581229bcef6415f439dbce96186a388a7c6c"),
-            vec![Felt252::from_str_radix("01", 16).unwrap()],
+            Address(felt_str!(
+                "074fd232c2f114c7b191dab04f56e316c4ecabef2c5b88f68e602b5fc550cc14",
+                16
+            )),
+            Address(felt_str!(
+                "0759ce49cd527815a02e235dbf43581229bcef6415f439dbce96186a388a7c6c",
+                16
+            )),
+            vec![felt_str!("01", 16)],
             "increase_balance".to_owned(),
             None,
             Some(100000),
