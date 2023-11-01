@@ -5,11 +5,11 @@ mod tests {
     use num_traits::Num;
     use protosim::starknet_simulation::{
         rpc_reader::RpcStateReader,
-        simulation::{ContractOverride, SimulationEngine, SimulationParameters},
+        simulation::{SimulationEngine, SimulationParameters},
     };
     use rpc_state_reader::rpc_state::{RpcChain, RpcState};
     use starknet_api::block::BlockNumber;
-    use starknet_in_rust::utils::{Address, ClassHash};
+    use starknet_in_rust::utils::Address;
     use std::{env, sync::Arc};
 
     fn string_to_address(address: &str) -> Address {
@@ -17,12 +17,11 @@ mod tests {
     }
 
     fn setup_reader(block_number: u64) -> RpcStateReader {
-        dotenv().expect("Missing .env file");
-        let rpc_endpoint = format!(
-            "https://{}.infura.io/v3/{}",
-            RpcChain::MainNet,
-            env::var("INFURA_API_KEY").expect("missing infura api key")
-        );
+        let infura_api_key = env::var("INFURA_API_KEY").unwrap_or_else(|_| {
+            dotenv().expect("Missing .env file");
+            env::var("INFURA_API_KEY").expect("Missing INFURA_API_KEY in .env file")
+        });
+        let rpc_endpoint = format!("https://{}.infura.io/v3/{}", RpcChain::MainNet, infura_api_key);
         let feeder_url = format!("https://{}.starknet.io/feeder_gateway", RpcChain::MainNet);
         RpcStateReader::new(RpcState::new(
             RpcChain::MainNet,
@@ -42,8 +41,8 @@ mod tests {
 
         // // Ekubo contract
         // let address =
-        //     string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
-        // let class_hash: ClassHash =
+        //     string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b"
+        // ); let class_hash: ClassHash =
         //     hex::decode("008e44da7924f4807d4200f8ff9938182e0bd6841dcb62ef397fcfd7fb2ff1e0")
         //         .unwrap()
         //         .as_slice()
