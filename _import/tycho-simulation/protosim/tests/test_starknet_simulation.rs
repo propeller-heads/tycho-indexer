@@ -12,6 +12,13 @@ mod tests {
     use starknet_in_rust::utils::{felt_to_hash, get_storage_var_address, Address, ClassHash};
     use std::{collections::HashMap, env, sync::Arc};
 
+    const BOB_ADDRESS: &str = "065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99";
+    const EKUBO_ADDRESS: &str = "00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b";
+    const USDC_ADDRESS: &str = "053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8";
+    const USDT_ADDRESS: &str = "068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8";
+    const ETH_ADDRESS: &str = "049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
+    const DAI_ADDRESS: &str = "da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3";
+
     fn string_to_address(address: &str) -> Address {
         Address(Felt252::from_str_radix(address, 16).expect("hex address"))
     }
@@ -37,7 +44,7 @@ mod tests {
         contract_overrides: Option<Vec<ContractOverride>>,
     ) -> SimulationEngine<RpcStateReader> {
         let rpc_state_reader = Arc::new(setup_reader(block_number));
-        let contract_overrides = contract_overrides.unwrap_or_else(Vec::new);
+        let contract_overrides = contract_overrides.unwrap_or_default();
 
         SimulationEngine::new(rpc_state_reader, contract_overrides).unwrap()
     }
@@ -79,14 +86,10 @@ mod tests {
     fn test_consecutive_simulations_ekubo() {
         // Test vars
         let block_number = 354168;
-        let token0 =
-            string_to_address("da114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3");
-        let token1 =
-            string_to_address("068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8");
-        let test_wallet =
-            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99");
-        let ekubo_address =
-            string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
+        let token0 = string_to_address(DAI_ADDRESS);
+        let token1 = string_to_address(USDT_ADDRESS);
+        let test_wallet = string_to_address(BOB_ADDRESS);
+        let ekubo_address = string_to_address(EKUBO_ADDRESS);
         let sell_amount = Felt252::from_str_radix("3bf9da25c1bfd31da", 16).unwrap();
 
         // Contruct engine with sell token override
@@ -136,27 +139,18 @@ mod tests {
         let block_number = 367676;
         let mut engine = setup_engine(block_number, None);
 
-        let ekubo_address =
-            string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
+        let ekubo_address = string_to_address(EKUBO_ADDRESS);
 
         let swap_calldata = vec![
-            Felt252::from_str_radix(
-                "2087021424722619777119509474943472645767659996348769578120564519014510906823",
-                10,
-            )
-            .unwrap(), // token0
-            Felt252::from_str_radix(
-                "2368576823837625528275935341135881659748932889268308403712618244410713532584",
-                10,
-            )
-            .unwrap(), // token1
+            Felt252::from_str_radix(ETH_ADDRESS, 16).unwrap(), // token0
+            Felt252::from_str_radix(USDC_ADDRESS, 16).unwrap(), // token1
             Felt252::from_str_radix("170141183460469235273462165868118016", 10).unwrap(), // fee
-            Felt252::from(1000), // tick spacing
-            Felt252::from(0),    // extension
+            Felt252::from(1000),                               // tick spacing
+            Felt252::from(0),                                  // extension
         ];
 
         let params = SimulationParameters::new(
-            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"), /* caller used in other tests */
+            string_to_address(BOB_ADDRESS),
             ekubo_address,
             swap_calldata,
             "get_pool_price".to_owned(),
@@ -179,27 +173,18 @@ mod tests {
         let block_number = 367676;
         let mut engine = setup_engine(block_number, None);
 
-        let ekubo_address =
-            string_to_address("00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
+        let ekubo_address = string_to_address(EKUBO_ADDRESS);
 
         let swap_calldata = vec![
-            Felt252::from_str_radix(
-                "385291772725090318157700937045086145273563247402457518748197066808155336371",
-                10,
-            )
-            .unwrap(), // token0
-            Felt252::from_str_radix(
-                "2368576823837625528275935341135881659748932889268308403712618244410713532584",
-                10,
-            )
-            .unwrap(), // token1
+            Felt252::from_str_radix(DAI_ADDRESS, 16).unwrap(), // token0
+            Felt252::from_str_radix(USDC_ADDRESS, 16).unwrap(), // token1
             Felt252::from_str_radix("170141183460469235273462165868118016", 10).unwrap(), // fee
-            Felt252::from(1000), // tick spacing
-            Felt252::from(0),    // extension
+            Felt252::from(1000),                               // tick spacing
+            Felt252::from(0),                                  // extension
         ];
 
         let params = SimulationParameters::new(
-            string_to_address("065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99"), /* caller used in other tests */
+            string_to_address(BOB_ADDRESS),
             ekubo_address,
             swap_calldata,
             "get_pool_price".to_owned(),
