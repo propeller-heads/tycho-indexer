@@ -1,6 +1,6 @@
-# Propeller Builder
+# Protosim
 
-A builder written in Rust aware of protocol logic.
+Monorepo for all things related to protocol simulations using rust.
 
 ## Documentation
 
