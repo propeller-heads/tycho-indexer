@@ -93,6 +93,7 @@ impl StateReader for RpcStateReader {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use dotenv::dotenv;
     use std::env;
 
     use rpc_state_reader::rpc_state::{RpcBlockInfo, RpcChain};
@@ -101,11 +102,11 @@ pub(crate) mod tests {
     use super::*;
 
     pub fn setup_reader(block_number: u64, rpc_chain: RpcChain) -> RpcStateReader {
-        let rpc_endpoint = format!(
-            "https://{}.infura.io/v3/{}",
-            rpc_chain,
-            env::var("INFURA_API_KEY").expect("missing infura api key")
-        );
+        let infura_api_key = env::var("INFURA_API_KEY").unwrap_or_else(|_| {
+            dotenv().expect("Missing .env file");
+            env::var("INFURA_API_KEY").expect("Missing INFURA_API_KEY in .env file")
+        });
+        let rpc_endpoint = format!("https://{}.infura.io/v3/{}", rpc_chain, infura_api_key);
         let rpc_chain_id: ChainId = rpc_chain.into();
         let feeder_url = format!("https://{}.starknet.io/feeder_gateway", rpc_chain_id);
         RpcStateReader::new(RpcState::new(
