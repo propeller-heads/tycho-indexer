@@ -384,8 +384,13 @@ impl<SR: StateReader> SimulationEngine<SR> {
     /// This is useful when the state of the RPC reader has changed and the cache is no longer
     /// valid. For example if the StateReader was set to a concrete block and a new block was
     /// added to the chain.
+    ///
+    /// Note: This function does not clean up the contract cache. This is not necessary as it
+    /// contains immutable contract code.
     pub fn clear_cache(&mut self, rpc_state_reader: Arc<SR>) {
-        self.state = CachedState::new(rpc_state_reader, HashMap::new());
+        // We keep contracts code in the cache.
+        let contract_cache = self.state.contract_classes().clone();
+        self.state = CachedState::new(rpc_state_reader, contract_cache);
     }
 }
 
