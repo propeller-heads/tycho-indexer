@@ -11,6 +11,14 @@ mod tests {
     use starknet_in_rust::utils::{felt_to_hash, get_storage_var_address, Address, ClassHash};
     use std::{collections::HashMap, env, sync::Arc};
 
+    const BOB_ADDRESS: &str = "0x065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99";
+    const EKUBO_ADDRESS: &str =
+        "0x00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b";
+    const USDC_ADDRESS: &str = "0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8";
+    const USDT_ADDRESS: &str = "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8";
+    const ETH_ADDRESS: &str = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
+    const DAI_ADDRESS: &str = "0xda114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3";
+
     pub fn felt_str(val: &str) -> Felt252 {
         let base = if val.starts_with("0x") { 16_u32 } else { 10_u32 };
         let stripped_val = val.strip_prefix("0x").unwrap_or(val);
@@ -42,8 +50,7 @@ mod tests {
         contract_overrides: Option<Vec<ContractOverride>>,
     ) -> SimulationEngine<RpcStateReader> {
         let rpc_state_reader = Arc::new(setup_reader(block_number));
-        let contract_overrides = contract_overrides.unwrap_or_else(Vec::new);
-
+        let contract_overrides = contract_overrides.unwrap_or_default();
         SimulationEngine::new(rpc_state_reader, contract_overrides).unwrap()
     }
 
@@ -85,14 +92,10 @@ mod tests {
     fn test_consecutive_simulations_ekubo() {
         // Test vars
         let block_number = 354168;
-        let token0 =
-            address_str("0xda114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3");
-        let token1 =
-            address_str("0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8");
-        let test_wallet =
-            address_str("0x065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99");
-        let ekubo_address =
-            address_str("0x00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b");
+        let token0 = address_str(DAI_ADDRESS);
+        let token1 = address_str(USDT_ADDRESS);
+        let test_wallet = address_str(BOB_ADDRESS);
+        let ekubo_address = address_str(EKUBO_ADDRESS);
         let sell_amount = felt_str("0x3bf9da25c1bfd31da");
 
         // Contruct engine with sell token override
@@ -134,5 +137,73 @@ mod tests {
         let result0 = engine.simulate(&params);
 
         assert!(result0.is_ok())
+    }
+
+    #[test]
+    fn test_get_eth_usdc_spot_price_ekubo() {
+        let block_number = 367676;
+        let mut engine = setup_engine(block_number, None);
+
+        let ekubo_address = address_str(EKUBO_ADDRESS);
+
+        let swap_calldata = vec![
+            felt_str(ETH_ADDRESS),                            // token0
+            felt_str(USDC_ADDRESS),                           // token1
+            felt_str("170141183460469235273462165868118016"), // fee
+            Felt252::from(1000),                              // tick spacing
+            Felt252::from(0),                                 // extension
+        ];
+
+        let params = SimulationParameters::new(
+            address_str(BOB_ADDRESS),
+            ekubo_address,
+            swap_calldata,
+            "get_pool_price".to_owned(),
+            None,
+            Some(100000),
+            block_number,
+        );
+
+        let result0 = engine.simulate(&params);
+
+        let res = result0.unwrap().result[0].clone();
+
+        // To get the human readable price we will need to convert this on the Python side like
+        // this: https://www.wolframalpha.com/input?i=(14458875492015717597830515600275777+/+2**128)**2*10**12
+        assert_eq!(res, felt_str("14458875492015717597830515600275777"))
+    }
+
+    #[test]
+    fn test_get_dai_usdc_spot_price_ekubo() {
+        let block_number = 367676;
+        let mut engine = setup_engine(block_number, None);
+
+        let ekubo_address = address_str(EKUBO_ADDRESS);
+
+        let swap_calldata = vec![
+            felt_str(DAI_ADDRESS),                            // token0
+            felt_str(USDC_ADDRESS),                           // token1
+            felt_str("170141183460469235273462165868118016"), // fee
+            Felt252::from(1000),                              // tick spacing
+            Felt252::from(0),                                 // extension
+        ];
+
+        let params = SimulationParameters::new(
+            address_str(BOB_ADDRESS),
+            ekubo_address,
+            swap_calldata,
+            "get_pool_price".to_owned(),
+            None,
+            Some(100000),
+            block_number,
+        );
+
+        let result0 = engine.simulate(&params);
+
+        let res = result0.unwrap().result[0].clone();
+
+        // To get the human readable price we will need to convert this on the Python side like
+        // this: https://www.wolframalpha.com/input?i=(340321610937302884216160363291566+/+2**128)**2*10**12
+        assert_eq!(res, felt_str("340321610937302884216160363291566"))
     }
 }
