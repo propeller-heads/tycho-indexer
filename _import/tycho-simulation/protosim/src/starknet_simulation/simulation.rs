@@ -190,8 +190,8 @@ fn compute_class_hash(
 /// * `contract_address: Address` - The address of the contract.
 /// * `class_hash: ClassHash` - The class hash of the contract (can differ from that of the contract
 ///   onchain if you wish to mock the contract)
-/// * `path: Option<String>` - The path to the contract file. WARNING: if `None`, the contract will be
-///   fetched from the state reader, adding rpc overhead. This should be avoided if possible!
+/// * `path: Option<String>` - The path to the contract file. WARNING: if `None`, the contract will
+///   be fetched from the state reader, adding rpc overhead. This should be avoided if possible!
 /// * `storage_overrides: Option<HashMap<StorageEntry, Felt252>>` - The storage overrides for the
 ///   contract.
 #[derive(Debug, Clone)]
@@ -606,7 +606,7 @@ pub mod tests {
     fn test_create_engine_with_contract_without_path() {
         // USDC token contract
         let address =
-            address_str("053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8");
+            address_str("0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8");
         let class_hash: ClassHash =
             hex::decode("052c7ba99c77fc38dd3346beea6c0753c3471f2e3135af5bb837d6c9523fff62")
                 .unwrap()
