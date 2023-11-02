@@ -851,8 +851,8 @@ pub mod tests {
     #[rstest]
     fn test_clear_cache() {
         // Set up the engine
-        let block_number = 354498;
-        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
 
         // Insert contracts in cache
         let mut contract_classes = HashMap::new();
@@ -869,8 +869,7 @@ pub mod tests {
             .unwrap();
 
         // Clear cache
-        let state_reader = engine.state.state_reader.clone();
-        engine.clear_cache(state_reader);
+        engine.clear_cache(rpc_state_reader.clone());
 
         // Assert that we still have contracts cached
         let contract_cache = engine.state.contract_classes();
