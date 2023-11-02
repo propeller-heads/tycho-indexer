@@ -404,8 +404,13 @@ impl<SR: StateReader> SimulationEngine<SR> {
     /// This is useful when the state of the RPC reader has changed and the cache is no longer
     /// valid. For example if the StateReader was set to a concrete block and a new block was
     /// added to the chain.
+    ///
+    /// Note: This function does not clean up the contract cache. This is not necessary as it
+    /// contains immutable contract code.
     pub fn clear_cache(&mut self, rpc_state_reader: Arc<SR>) {
-        self.state = CachedState::new(rpc_state_reader, HashMap::new());
+        // We keep contracts code in the cache.
+        let contract_cache = self.state.contract_classes().clone();
+        self.state = CachedState::new(rpc_state_reader, contract_cache);
     }
 }
 
@@ -873,7 +878,6 @@ pub mod tests {
     }
 
     #[rstest]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_set_block() {
         // Set up the engine
         let block_number = 354498; // actual block is 354499
@@ -886,5 +890,38 @@ pub mod tests {
         engine.set_block_and_reset_cache(BlockNumber(new_block_number).into());
 
         assert_eq!(engine.state.state_reader.block(), &BlockNumber(new_block_number).into());
+    }
+
+    #[rstest]
+    fn test_clear_cache() {
+        // Set up the engine
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+
+        // Insert contracts in cache
+        let mut contract_classes = HashMap::new();
+        let contract_hash: [u8; 32] = [1; 32];
+
+        let cargo_manifest_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let path = cargo_manifest_path.join("tests/resources/fibonacci.json");
+        let compiled_class = load_compiled_class_from_path(path).unwrap();
+        contract_classes.insert(contract_hash, compiled_class.clone());
+
+        engine
+            .state
+            .set_contract_classes(contract_classes)
+            .unwrap();
+
+        // Clear cache
+        engine.clear_cache(rpc_state_reader.clone());
+
+        // Assert that we still have contracts cached
+        let contract_cache = engine.state.contract_classes();
+        let cached_contract = contract_cache
+            .get(&contract_hash)
+            .unwrap()
+            .clone();
+
+        assert_eq!(cached_contract, compiled_class);
     }
 }
