@@ -606,7 +606,7 @@ pub mod tests {
     fn test_create_engine_with_contract_without_path() {
         // USDC token contract
         let address =
-            string_to_address("053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8");
+            address_str("053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8");
         let class_hash: ClassHash =
             hex::decode("052c7ba99c77fc38dd3346beea6c0753c3471f2e3135af5bb837d6c9523fff62")
                 .unwrap()
