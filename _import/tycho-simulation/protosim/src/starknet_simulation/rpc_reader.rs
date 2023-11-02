@@ -25,7 +25,7 @@ impl ToContractAddress for Address {
 }
 
 #[derive(Debug, Clone)]
-pub struct RpcStateReader(RpcState);
+pub struct RpcStateReader(pub RpcState);
 
 impl RpcStateReader {
     pub fn new(state: RpcState) -> Self {
