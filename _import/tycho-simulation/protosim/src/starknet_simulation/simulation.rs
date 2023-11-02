@@ -834,7 +834,6 @@ pub mod tests {
     }
 
     #[rstest]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_set_block() {
         // Set up the engine
         let block_number = 354498; // actual block is 354499
@@ -847,5 +846,39 @@ pub mod tests {
         engine.set_block_and_reset_cache(BlockNumber(new_block_number).into());
 
         assert_eq!(engine.state.state_reader.block(), &BlockNumber(new_block_number).into());
+    }
+
+    #[rstest]
+    fn test_clear_cache() {
+        // Set up the engine
+        let block_number = 354498;
+        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+
+        // Insert contracts in cache
+        let mut contract_classes = HashMap::new();
+        let contract_hash: [u8; 32] = [1; 32];
+
+        let cargo_manifest_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let path = cargo_manifest_path.join("tests/resources/fibonacci.json");
+        let compiled_class = load_compiled_class_from_path(path).unwrap();
+        contract_classes.insert(contract_hash, compiled_class.clone());
+
+        engine
+            .state
+            .set_contract_classes(contract_classes)
+            .unwrap();
+
+        // Clear cache
+        let state_reader = engine.state.state_reader.clone();
+        engine.clear_cache(state_reader);
+
+        // Assert that we still have contracts cached
+        let contract_cache = engine.state.contract_classes();
+        let cached_contract = contract_cache
+            .get(&contract_hash)
+            .unwrap()
+            .clone();
+
+        assert_eq!(cached_contract, compiled_class);
     }
 }
