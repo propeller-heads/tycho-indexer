@@ -73,13 +73,13 @@ mod tests {
         // override balance
         let balance_storage_hash =
             felt_to_hash(&get_storage_var_address("ERC20_balances", &[wallet.0.clone()]).unwrap());
-        storage_overrides.insert((sell_token.clone(), balance_storage_hash), sell_amount.clone());
+        storage_overrides.insert((wallet.clone(), balance_storage_hash), sell_amount.clone());
 
         // override allowance
         let allowance_storage_hash = felt_to_hash(
-            &get_storage_var_address("ERC20_allowances", &[wallet.0, spender.0]).unwrap(),
+            &get_storage_var_address("ERC20_allowances", &[wallet.0.clone(), spender.0]).unwrap(),
         );
-        storage_overrides.insert((sell_token.clone(), allowance_storage_hash), sell_amount);
+        storage_overrides.insert((wallet, allowance_storage_hash), sell_amount);
 
         let token_contract =
             ContractOverride::new(sell_token, class_hash, None, Some(storage_overrides));
@@ -91,7 +91,7 @@ mod tests {
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_consecutive_simulations_ekubo() {
         // Test vars
-        let block_number = 354168;
+        let block_number = 365471;
         let token0 = address_str(DAI_ADDRESS);
         let token1 = address_str(USDT_ADDRESS);
         let test_wallet = address_str(BOB_ADDRESS);
@@ -130,7 +130,7 @@ mod tests {
             swap_calldata,
             "swap".to_owned(),
             None,
-            Some(100000),
+            Some(u128::MAX),
             block_number,
         );
 
