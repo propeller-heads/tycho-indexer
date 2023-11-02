@@ -359,7 +359,6 @@ impl<SR: StateReader> SimulationEngine<SR> {
     fn interpret_result(
         &self,
         result: ExecutionResult,
-        state_cache: &StateCache,
     ) -> Result<SimulationResult, SimulationError> {
         // Check if revertError is not None
         if let Some(revert_error) = result.revert_error {
@@ -383,7 +382,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         debug!("Simulation successful: {:#?} {:#?}", result, gas_used);
 
         // Collect state changes
-        let all_writes = state_cache.storage_writes();
+        let all_writes = self.state.cache().storage_writes();
         let simultation_write_keys = call_info.get_visited_storage_entries();
         let state_updates: HashMap<Address, HashMap<[u8; 32], Felt252>> = all_writes
             .iter()
@@ -406,6 +405,16 @@ impl<SR: StateReader> SimulationEngine<SR> {
     /// added to the chain.
     pub fn clear_cache(&mut self, rpc_state_reader: Arc<SR>) {
         self.state = CachedState::new(rpc_state_reader, HashMap::new());
+    }
+
+    /// Clears storage and nonce writes from the cache of the simulation engine.
+    ///
+    /// This should be called after every simulation to reset the contract writes applied during
+    /// simulation without resetting the entirety of the contract's cache.
+    pub fn clear_cache_writes(&mut self) {
+        let cache = self.state.cache_mut();
+        cache.storage_writes_mut().clear();
+        cache.nonce_writes_mut().clear();
     }
 }
 
@@ -475,7 +484,7 @@ impl SimulationEngine<RpcStateReader> {
         let mut tx_execution_context = TransactionExecutionContext::default();
 
         // Execute the simulated call
-        let result = call
+        let execution_result = call
             .execute(
                 &mut self.state,
                 &block_context,
@@ -487,7 +496,12 @@ impl SimulationEngine<RpcStateReader> {
             .map_err(|err| SimulationError::TransactionError(err.to_string()))?;
 
         // Interpret and return the results
-        self.interpret_result(result, self.state.cache())
+        let simulation_result = self.interpret_result(execution_result);
+
+        // Clear simulation writes from cache
+        self.clear_cache_writes();
+
+        simulation_result
     }
 }
 
@@ -564,7 +578,7 @@ pub mod tests {
         }
 
         fn get_nonce_at(&self, contract_address: &Address) -> Result<Felt252, StateError> {
-            todo!()
+            Ok(Felt252::from(1))
         }
 
         fn get_storage_at(&self, storage_entry: &StorageEntry) -> Result<Felt252, StateError> {
@@ -654,10 +668,44 @@ pub mod tests {
     }
 
     #[rstest]
+    fn test_clear_cache_writes() {
+        let rpc_state_reader = Arc::new(StateReaderMock::new());
+        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let address = Address(Felt252::from(0u8));
+        let write_hash = [0u8; 32];
+        let value: Felt252 = 0.into();
+
+        // Add a cache write
+        engine
+            .state
+            .set_storage_at(&(address.clone(), write_hash), value);
+        // Add a nonce write
+        engine
+            .state
+            .increment_nonce(&address)
+            .ok();
+
+        // Check writes exist
+        let cache = engine.state.cache_mut();
+        assert!(!cache.storage_writes().is_empty());
+        assert!(!cache.nonce_writes_mut().is_empty());
+
+        // Clear writes
+        engine.clear_cache_writes();
+
+        // Check writes are empty
+        let final_cache = engine.state.cache_mut();
+        assert!(final_cache.storage_writes().is_empty());
+        assert!(final_cache
+            .nonce_writes_mut()
+            .is_empty())
+    }
+
+    #[rstest]
     fn test_interpret_results() {
         let address = Address(Felt252::from(0u8));
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
 
         // Construct expected values
         let gas_consumed = 10;
@@ -667,19 +715,20 @@ pub mod tests {
             .collect();
         let mut state_updates = HashMap::new();
         let mut storage_write: HashMap<[u8; 32], Felt252> = HashMap::new();
-        let hash = [0u8; 32];
+        let write_hash = [0u8; 32];
         let value: Felt252 = 0.into();
-        storage_write.insert(hash, value.clone());
+        storage_write.insert(write_hash, value.clone());
         state_updates.insert(address.clone(), storage_write);
 
-        // Construct state
-        let mut state = CachedState::new(rpc_state_reader, HashMap::new());
-        // Apply overrides
+        // Apply overrides (state changes that mustn't appear in the result)
         let override_hash = [1u8; 32];
-        state.set_storage_at(&(address.clone(), override_hash), value.clone());
-        // Get result state
-        let mut result_state = state.create_transactional();
-        result_state.set_storage_at(&(address.clone(), hash), value);
+        engine
+            .state
+            .set_storage_at(&(address.clone(), override_hash), value.clone());
+        // Apply mock simulation write (state change that must appear in the result)
+        engine
+            .state
+            .set_storage_at(&(address.clone(), write_hash), value);
 
         // Construct execution result
         let mut call_info =
@@ -690,13 +739,13 @@ pub mod tests {
         call_info.accessed_storage_keys = HashSet::new();
         call_info
             .accessed_storage_keys
-            .insert(hash);
+            .insert(write_hash);
         let execution_result =
             ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
 
         // Call interpret_result
         let result = engine
-            .interpret_result(execution_result, result_state.cache())
+            .interpret_result(execution_result)
             .unwrap();
 
         assert_eq!(result.gas_used, gas_consumed);
@@ -709,8 +758,6 @@ pub mod tests {
         // Construct state and engine
         let rpc_state_reader = Arc::new(StateReaderMock::new());
         let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
-        let state = CachedState::new(rpc_state_reader, HashMap::new());
-        let result_state = state.create_transactional();
 
         // Construct reverted execution result
         let execution_result_with_revert = ExecutionResult {
@@ -719,7 +766,7 @@ pub mod tests {
             n_reverted_steps: 0,
         };
 
-        match engine.interpret_result(execution_result_with_revert, result_state.cache()) {
+        match engine.interpret_result(execution_result_with_revert) {
             Err(SimulationError::TransactionError(message)) => {
                 assert!(message.contains("Execution reverted with error: Test Revert"));
             }
@@ -732,14 +779,12 @@ pub mod tests {
         // Construct state and engine
         let rpc_state_reader = Arc::new(StateReaderMock::new());
         let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
-        let state = CachedState::new(rpc_state_reader, HashMap::new());
-        let result_state = state.create_transactional();
 
         // Construct execution result with no call info
         let execution_result_no_call_info =
             ExecutionResult { call_info: None, revert_error: None, n_reverted_steps: 0 };
 
-        match engine.interpret_result(execution_result_no_call_info, result_state.cache()) {
+        match engine.interpret_result(execution_result_no_call_info) {
             Err(SimulationError::ResultError(message)) => {
                 assert_eq!(message, "Call info is empty");
             }
@@ -753,8 +798,6 @@ pub mod tests {
         let address = Address(Felt252::from(0u8));
         let rpc_state_reader = Arc::new(StateReaderMock::new());
         let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
-        let state = CachedState::new(rpc_state_reader, HashMap::new());
-        let result_state = state.create_transactional();
 
         // Construct execution result with failed call
         let mut call_info =
@@ -763,7 +806,7 @@ pub mod tests {
         let execution_result_fail_flag =
             ExecutionResult { call_info: Some(call_info), revert_error: None, n_reverted_steps: 0 };
 
-        match engine.interpret_result(execution_result_fail_flag, result_state.cache()) {
+        match engine.interpret_result(execution_result_fail_flag) {
             Err(SimulationError::ResultError(message)) => {
                 assert_eq!(message, "Execution failed");
             }
