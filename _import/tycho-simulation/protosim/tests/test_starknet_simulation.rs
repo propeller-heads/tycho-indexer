@@ -38,7 +38,6 @@ mod tests {
         ))
     }
 
-    #[allow(unused_variables)]
     fn setup_engine(
         block_number: u64,
         contract_overrides: Option<Vec<ContractOverride>>,
