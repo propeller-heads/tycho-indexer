@@ -432,7 +432,6 @@ impl SimulationEngine<RpcStateReader> {
         &mut self,
         params: &SimulationParameters,
     ) -> Result<SimulationResult, SimulationError> {
-        dbg!(&params);
         // Reset cache if the internal block is different from the block in params
         let block_value = BlockValue::Number(BlockNumber(params.block_number));
         self.set_block_and_reset_cache(block_value);
@@ -451,8 +450,6 @@ impl SimulationEngine<RpcStateReader> {
         // Create the simulated call
         let entry_point = params.entry_point.as_bytes();
         let entrypoint_selector = Felt252::from_bytes_be(&calculate_sn_keccak(entry_point));
-
-        dbg!(&params.to);
 
         let class_hash = self
             .state
@@ -526,9 +523,11 @@ pub mod tests {
     #[test]
     fn test_address_str_with_prefix() {
         let input = "3658190653781265738165783961758321";
+
         let expected_felt = Felt252::from(3658190653781265738165783961758321u128);
         let expected = Address(expected_felt);
         let result = address_str(input);
+
         assert_eq!(result, expected);
     }
 
