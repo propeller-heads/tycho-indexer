@@ -45,7 +45,6 @@ mod tests {
     ) -> SimulationEngine<RpcStateReader> {
         let rpc_state_reader = Arc::new(setup_reader(block_number));
         let contract_overrides = contract_overrides.unwrap_or_default();
-
         SimulationEngine::new(rpc_state_reader, contract_overrides).unwrap()
     }
 
@@ -113,8 +112,7 @@ mod tests {
             sell_amount,      // amount
             Felt252::from(0), // amount sign
             Felt252::from(0), // istoken1
-            Felt252::from_str_radix("10c6cdcb20b7a5db24ca0ceb6980", 16).unwrap(), /* sqrt ratio
-                               * limit */
+            Felt252::from_str_radix("10c6cdcb20b7a5db24ca0ceb6980", 16).unwrap(), // sqrt ratio limit
             Felt252::from(0),
             Felt252::from(100), // skip ahead
         ];
