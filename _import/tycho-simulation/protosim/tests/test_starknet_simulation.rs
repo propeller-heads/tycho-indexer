@@ -74,13 +74,13 @@ mod tests {
         // override balance
         let balance_storage_hash =
             felt_to_hash(&get_storage_var_address("ERC20_balances", &[wallet.0.clone()]).unwrap());
-        storage_overrides.insert((wallet.clone(), balance_storage_hash), sell_amount.clone());
+        storage_overrides.insert((sell_token.clone(), balance_storage_hash), sell_amount.clone());
 
         // override allowance
         let allowance_storage_hash = felt_to_hash(
             &get_storage_var_address("ERC20_allowances", &[wallet.0.clone(), spender.0]).unwrap(),
         );
-        storage_overrides.insert((wallet, allowance_storage_hash), sell_amount);
+        storage_overrides.insert((sell_token.clone(), allowance_storage_hash), sell_amount);
 
         let token_contract =
             ContractOverride::new(sell_token, class_hash, None, Some(storage_overrides));
@@ -120,7 +120,7 @@ mod tests {
             sell_amount,                                   // amount
             Felt252::from(0),                              // amount sign
             Felt252::from(0),                              // istoken1
-            felt_str("0x65740af99bee7b4bf062fb147160000"), // sqrt ratio limit (lower bits
+            felt_str("0x65740af99bee7b4bf062fb147160000"), // sqrt ratio limit (lower bits)
             Felt252::from(0),                              // sqrt ratio limit (upper bits)
             Felt252::from(0),                              // skip ahead
             test_wallet.0.clone(),                         // recipient
