@@ -12,7 +12,7 @@ use protosim::{
     },
     starknet_simulation::simulation::{
         ContractOverride as RustContractOverride, Overrides, SimulationError, SimulationParameters,
-        SimulationResult,
+        SimulationResult, StorageHash,
     },
 };
 
@@ -44,21 +44,16 @@ pub fn python_overrides_to_rust(
 }
 
 pub fn rust_overrides_to_python(
-    input: HashMap<Address, Overrides>,
-) -> HashMap<(String, BigUint), BigUint> {
-    input
-        .into_iter()
-        .fold(HashMap::new(), |mut acc, (address, overrides)| {
-            overrides
-                .into_iter()
-                .for_each(|(slot, value)| {
-                    acc.insert(
-                        (address.0.to_str_radix(16), Felt252::from_bytes_be(&slot).to_biguint()),
-                        value.to_biguint(),
-                    );
-                });
-            acc
-        })
+    input: HashMap<Address, HashMap<StorageHash, Felt252>>,
+) -> HashMap<String, HashMap<BigUint, BigUint>> {
+    input.into_iter().fold(HashMap::new(), |mut result, (address, inner_map)| {
+        let inner_result = inner_map.into_iter().fold(HashMap::new(), |mut inner_result, (slot, value)| {
+            inner_result.insert(BigUint::from_bytes_be(&slot), value.to_biguint());
+            inner_result
+        });
+        result.insert(address.0.to_str_radix(16), inner_result);
+        result
+    })
 }
 
 /// Parameters for Starknet transaction simulation.
