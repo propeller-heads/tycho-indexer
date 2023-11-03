@@ -14,8 +14,9 @@ mod tests {
     const BOB_ADDRESS: &str = "0x065c19e14e2587d2de74c561b2113446ca4b389aabe6da1dc4accb6404599e99";
     const EKUBO_ADDRESS: &str =
         "0x00000005dd3d2f4429af886cd1a3b08289dbcea99a294197e9eb43b0e0325b4b";
+    const EKUBO_SIMPLE_SWAP_ADDRESS: &str =
+        "0x07a83729aaaae6344d6fca558614cd22ecdd3f5cd90ec0cd20c8d6bf08170431";
     const USDC_ADDRESS: &str = "0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8";
-    const USDT_ADDRESS: &str = "0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8";
     const ETH_ADDRESS: &str = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
     const DAI_ADDRESS: &str = "0xda114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3";
 
@@ -91,12 +92,12 @@ mod tests {
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_consecutive_simulations_ekubo() {
         // Test vars
-        let block_number = 365471;
+        let block_number = 194554;
         let token0 = address_str(DAI_ADDRESS);
-        let token1 = address_str(USDT_ADDRESS);
+        let token1 = address_str(ETH_ADDRESS);
         let test_wallet = address_str(BOB_ADDRESS);
-        let ekubo_address = address_str(EKUBO_ADDRESS);
-        let sell_amount = felt_str("0x3bf9da25c1bfd31da");
+        let ekubo_address = address_str(EKUBO_SIMPLE_SWAP_ADDRESS);
+        let sell_amount = felt_str("0x5afb5ab61ef191");
 
         // Contruct engine with sell token override
         let contract_overrides = construct_token_overrides(
@@ -107,21 +108,23 @@ mod tests {
         );
         let mut engine = setup_engine(block_number, Some(contract_overrides));
 
-        // obtained from this Ekubo core swap call: https://voyager.online/tx/0x634fa25f6b3fb6aceffbf689edb04eb24d4eb118a955d3439382a231e78b7e7#internalCalls
+        // obtained from this Ekubo simple swap call: https://starkscan.co/call/0x04857b5a7af37e9b9f6fae27923d725f07016a4449f74f5ab91c04f13bbc8d23_1_3
         let swap_calldata = vec![
             // Pool key data
-            token0.0,                                    // token0
-            token1.0,                                    // token1
-            felt_str("0x5e59d28446cbf2061e33040400000"), // fee
-            Felt252::from(10),                           // tick spacing
-            Felt252::from(0),                            // extension
+            token0.0,                                     // token0
+            token1.0,                                     // token1
+            felt_str("0xc49ba5e353f7d00000000000000000"), // fee
+            Felt252::from(5982),                          // tick spacing
+            Felt252::from(0),                             // extension
             // Swap data
-            sell_amount,                                // amount
-            Felt252::from(0),                           // amount sign
-            Felt252::from(0),                           // istoken1
-            felt_str("0x10c6cdcb20b7a5db24ca0ceb6980"), // sqrt ratio limit (lower bits
-            Felt252::from(0),                           // sqrt ratio limit (upper bits)
-            Felt252::from(100),                         // skip ahead
+            sell_amount,                                   // amount
+            Felt252::from(0),                              // amount sign
+            Felt252::from(0),                              // istoken1
+            felt_str("0x65740af99bee7b4bf062fb147160000"), // sqrt ratio limit (lower bits
+            Felt252::from(0),                              // sqrt ratio limit (upper bits)
+            Felt252::from(0),                              // skip ahead
+            test_wallet.0.clone(),                         // recipient
+            Felt252::from(0),                              // calculated_amount_threshold
         ];
 
         let params = SimulationParameters::new(
@@ -135,6 +138,8 @@ mod tests {
         );
 
         let result0 = engine.simulate(&params);
+
+        dbg!(&result0);
 
         assert!(result0.is_ok())
     }
