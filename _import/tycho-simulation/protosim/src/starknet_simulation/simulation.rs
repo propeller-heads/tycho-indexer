@@ -410,7 +410,8 @@ impl<SR: StateReader> SimulationEngine<SR> {
     /// Clears storage and nonce writes from the cache of the simulation engine.
     ///
     /// This should be called after every simulation to reset the contract writes applied during
-    /// simulation without resetting the entirety of the contract's cache.
+    /// simulation. This will not reset the entirety of the contract's cache, so all data retrieved
+    /// from the rpc persists.
     pub fn clear_cache_writes(&mut self) {
         let cache = self.state.cache_mut();
         cache.storage_writes_mut().clear();
