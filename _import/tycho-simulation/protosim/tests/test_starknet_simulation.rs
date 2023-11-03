@@ -63,7 +63,7 @@ mod tests {
     ) -> Vec<ContractOverride> {
         // ERC20 contract overrides - using USDC token contract template
         let class_hash: ClassHash =
-            hex::decode("052c7ba99c77fc38dd3346beea6c0753c3471f2e3135af5bb837d6c9523fff62")
+            hex::decode("02760f25d5a4fb2bdde5f561fd0b44a3dee78c28903577d37d669939d97036a0")
                 .unwrap()
                 .as_slice()
                 .try_into()
