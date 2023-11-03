@@ -1,11 +1,10 @@
-use num_bigint::BigUint;
 use protosim::{
     rpc_state_reader::rpc_state::{BlockTag, BlockValue, RpcChain, RpcState},
-    starknet_api::block::BlockNumber,
+    starknet_api::{block::BlockNumber, hash::StarkFelt},
     starknet_simulation::{rpc_reader::RpcStateReader, simulation::SimulationEngine},
 };
 use pyo3::prelude::*;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use crate::starknet_structs_py::{
     ContractOverride, StarknetSimulationErrorDetails, StarknetSimulationParameters,
@@ -29,9 +28,8 @@ impl StarknetSimulationEngine {
     /// * `rpc_endpoint` - The RPC endpoint to use for RPC calls.
     /// * `feeder_url` - The feeder URL to use for RPC calls.
     /// * `contract_overrides` - A list of contract overrides to use for simulation.
-    /// * `block_tag` - The block tag to use for RPC calls. One of "latest", "pending". Defaults to
-    ///   "latest".
-    /// * `block_number` - The block number to use for RPC calls. Overrides `block_tag` if provided.
+    /// * `block` - The block to use for RPC calls. Either a block number as a decimal string, a
+    ///   block tag of "latest" or "pending", or block hash as a hex string prefixed with 0x.
     #[new]
     #[allow(unused_variables)]
     fn new(
@@ -39,18 +37,14 @@ impl StarknetSimulationEngine {
         rpc_endpoint: String,
         feeder_url: String,
         contract_overrides: Vec<ContractOverride>,
-        block_tag: Option<String>,
-        block_number: Option<u64>,
+        block: String,
     ) -> Self {
-        let block = match block_number {
-            Some(val) => BlockValue::Number(BlockNumber(val)),
-            None => match block_tag {
-                Some(val) => match val.as_str() {
-                    "latest" => BlockValue::Tag(BlockTag::Latest),
-                    "pending" => BlockValue::Tag(BlockTag::Pending),
-                    _ => panic!("Invalid block tag {}", val),
-                },
-                None => BlockValue::Tag(BlockTag::Latest),
+        let block = match block.parse::<u64>() {
+            Ok(block_number) => BlockValue::Number(BlockNumber(block_number)),
+            Err(_) => match block.as_str() {
+                "latest" => BlockValue::Tag(BlockTag::Latest),
+                "pending" => BlockValue::Tag(BlockTag::Pending),
+                val => BlockValue::Hash(StarkFelt::try_from(val).unwrap()),
             },
         };
         let chain = match chain.as_str() {
@@ -78,7 +72,7 @@ impl StarknetSimulationEngine {
     /// * `params` - The simulation parameters of type `StarknetSimulationParameters`.
     #[allow(unused_variables)]
     fn run_sim(
-        self_: PyRef<Self>,
+        mut self_: PyRefMut<Self>,
         params: StarknetSimulationParameters,
     ) -> PyResult<StarknetSimulationResult> {
         match self_.0.simulate(&params.into()) {
