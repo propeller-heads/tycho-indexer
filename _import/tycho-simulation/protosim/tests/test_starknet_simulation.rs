@@ -101,7 +101,7 @@ mod tests {
 
         // Contruct engine with sell token override
         let contract_overrides = construct_token_overrides(
-            test_wallet.clone(),
+            ekubo_address.clone(),
             token0.clone(),
             sell_amount.clone(),
             ekubo_address.clone(),
