@@ -433,9 +433,10 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
 
 #[cfg(test)]
 mod tests {
+    use dotenv::dotenv;
     use revm::primitives::U256 as rU256;
     use rstest::{fixture, rstest};
-    use std::{error::Error, str::FromStr, sync::Arc};
+    use std::{env, error::Error, str::FromStr, sync::Arc};
 
     use super::*;
     use ethers::{
@@ -460,8 +461,13 @@ mod tests {
     }
 
     fn get_client() -> Arc<Provider<Http>> {
+        let infura_api_key = env::var("INFURA_API_KEY").unwrap_or_else(|_| {
+            dotenv().expect("Missing .env file");
+            env::var("INFURA_API_KEY").expect("Missing INFURA_API_KEY in .env file")
+        });
+
         let client = Provider::<Http>::try_from(
-            "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
+            format!("https://mainnet.infura.io/v3/{}", infura_api_key).as_str(),
         )
         .unwrap();
         Arc::new(client)

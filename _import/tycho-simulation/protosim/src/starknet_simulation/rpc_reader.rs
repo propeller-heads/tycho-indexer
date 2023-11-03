@@ -1,5 +1,5 @@
 use cairo_vm::felt::Felt252;
-use rpc_state_reader::rpc_state::{BlockValue, RpcChain, RpcState};
+use rpc_state_reader::rpc_state::{BlockValue, RpcState};
 use starknet_api::{
     core::{ClassHash as SNClassHash, ContractAddress, PatriciaKey},
     hash::StarkHash,
@@ -24,13 +24,22 @@ impl ToContractAddress for Address {
     }
 }
 
-#[derive(Debug)]
-pub struct RpcStateReader(RpcState);
+#[derive(Debug, Clone)]
+pub struct RpcStateReader(pub RpcState);
 
 impl RpcStateReader {
-    pub fn new(chain: RpcChain, block: BlockValue, rpc_endpoint: &str, feeder_url: &str) -> Self {
-        let rpc_state = RpcState::new(chain, block, rpc_endpoint, feeder_url);
-        RpcStateReader(rpc_state)
+    pub fn new(state: RpcState) -> Self {
+        Self(state)
+    }
+
+    pub fn with_updated_block(&self, new_block: BlockValue) -> Self {
+        let mut cloned_state = self.0.clone();
+        cloned_state.block = new_block;
+        RpcStateReader(cloned_state)
+    }
+
+    pub fn block(&self) -> &BlockValue {
+        &self.0.block
     }
 }
 
@@ -83,21 +92,35 @@ impl StateReader for RpcStateReader {
 }
 
 #[cfg(test)]
-mod tests {
-    use rpc_state_reader::rpc_state::RpcChain;
-    use starknet_api::block::BlockNumber;
+pub(crate) mod tests {
+    use dotenv::dotenv;
+    use std::env;
+
+    use rpc_state_reader::rpc_state::{RpcBlockInfo, RpcChain, RpcState};
+    use starknet_api::{block::BlockNumber, core::ChainId};
 
     use super::*;
 
-    fn setup_reader() -> RpcStateReader {
-        let rpc_state = RpcState::new_infura(RpcChain::MainNet, BlockNumber(333333).into());
-        RpcStateReader(rpc_state)
+    pub fn setup_reader(block_number: u64, rpc_chain: RpcChain) -> RpcStateReader {
+        let infura_api_key = env::var("INFURA_API_KEY").unwrap_or_else(|_| {
+            dotenv().expect("Missing .env file");
+            env::var("INFURA_API_KEY").expect("Missing INFURA_API_KEY in .env file")
+        });
+        let rpc_endpoint = format!("https://{}.infura.io/v3/{}", rpc_chain, infura_api_key);
+        let rpc_chain_id: ChainId = rpc_chain.into();
+        let feeder_url = format!("https://{}.starknet.io/feeder_gateway", rpc_chain_id);
+        RpcStateReader::new(RpcState::new(
+            rpc_chain,
+            BlockNumber(block_number).into(),
+            &rpc_endpoint,
+            &feeder_url,
+        ))
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_class_hash_at() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333, RpcChain::MainNet);
 
         // Jedi Swap ETH/USDC pool address
         let address_bytes =
@@ -122,9 +145,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_contract_class() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333, RpcChain::MainNet);
 
         // Jedi Swap ETH/USDC pool class hash
         let class_hash: ClassHash =
@@ -142,9 +165,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_nonce_at() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333, RpcChain::MainNet);
 
         // a test wallet address
         let address_bytes =
@@ -160,9 +183,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_storage_at() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333, RpcChain::MainNet);
 
         let address_bytes =
             hex::decode("04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a")
@@ -180,9 +203,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "onchain_tests"), ignore)]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_get_compiled_class_hash() {
-        let reader = setup_reader();
+        let reader = setup_reader(333333, RpcChain::MainNet);
 
         // Jedi Swap ETH/USDC pool class hash
         let class_hash: &ClassHash = &[
@@ -201,5 +224,20 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, expected_hash)
+    }
+
+    #[test]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_with_updated_block() {
+        let reader = setup_reader(333333, RpcChain::MainNet);
+        let RpcBlockInfo { block_number: initial_block_number, .. } = reader.0.get_block_info();
+        let new_block = BlockNumber(333334).into();
+
+        let updated_reader = reader.with_updated_block(new_block);
+        let RpcBlockInfo { block_number: updated_block_number, .. } =
+            updated_reader.0.get_block_info();
+        assert_eq!(initial_block_number, BlockNumber(333333));
+        assert_eq!(updated_block_number, BlockNumber(333334));
+        assert_ne!(initial_block_number, updated_block_number);
     }
 }

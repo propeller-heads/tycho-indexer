@@ -1,6 +1,6 @@
 use num_bigint::BigUint;
 use protosim::{
-    rpc_state_reader::rpc_state::{BlockTag, BlockValue, RpcChain},
+    rpc_state_reader::rpc_state::{BlockTag, BlockValue, RpcChain, RpcState},
     starknet_api::block::BlockNumber,
     starknet_simulation::{rpc_reader::RpcStateReader, simulation::SimulationEngine},
 };
@@ -59,7 +59,8 @@ impl StarknetSimulationEngine {
             "starknet-goerli2" => RpcChain::TestNet2,
             _ => panic!("Invalid chain {}", chain),
         };
-        let state_reader = RpcStateReader::new(chain, block, &rpc_endpoint, &feeder_url);
+        let state_reader =
+            RpcStateReader::new(RpcState::new(chain, block, &rpc_endpoint, &feeder_url));
         let engine = SimulationEngine::new(
             Arc::new(state_reader),
             contract_overrides
