@@ -1,5 +1,9 @@
 use pyo3::prelude::*;
 use simulation_py::SimulationEngine;
+use starknet_simulation_py::StarknetSimulationEngine;
+use starknet_structs_py::{
+    StarknetContractOverride, StarknetSimulationParameters, StarknetSimulationResult,
+};
 use structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationParameters, SimulationResult, StateUpdate,
     TychoDB,
@@ -42,5 +46,9 @@ fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<AccountInfo>()?;
     m.add_class::<SimulationDB>()?;
     m.add_class::<TychoDB>()?;
+    m.add_class::<StarknetSimulationEngine>()?;
+    m.add_class::<StarknetContractOverride>()?;
+    m.add_class::<StarknetSimulationParameters>()?;
+    m.add_class::<StarknetSimulationResult>()?;
     Ok(())
 }

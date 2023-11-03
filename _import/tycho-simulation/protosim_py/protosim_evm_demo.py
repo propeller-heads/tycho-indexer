@@ -4,8 +4,6 @@
 See the Readme.md file for instructions.
 """
 
-from enum import Enum
-from time import sleep
 from protosim_py import (
     SimulationEngine,
     SimulationParameters,
@@ -106,10 +104,6 @@ def test_tycho_db():
         db=db,
         trace=True
     )
-
-    # Let the db initialize for 2 seconds
-    print("Waiting for Tycho DB to initialize")
-    sleep(1)
 
     print("Inserting Account")
     engine.init_account(
