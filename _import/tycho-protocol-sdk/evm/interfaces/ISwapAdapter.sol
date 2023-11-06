@@ -2,9 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import "interfaces/IPairFunctionsTypes.sol";
+import "interfaces/ISwapAdapterTypes.sol";
 
-/// @title IPairFunctions
+/// @title ISwapAdapterTypes
 /// @dev Implement this interface to support propeller routing through your pairs.
 /// @dev Before implementing the interface we need to introduce three function for a
 /// @dev given pair: The swap(x), gas(x) and price(x) functions:
@@ -15,10 +15,10 @@ import "interfaces/IPairFunctionsTypes.sol";
 /// @dev Last but not least, the price function is the derivative of the swap
 /// @dev function. It represents the best possible price a user can get from a
 /// @dev pair after swapping x of the specified token.
-/// @dev During calls to price, swap and getLimits, the caller can be assumed to
+/// @dev During calls to swap and getLimits, the caller can be assumed to
 /// @dev have the required sell or buy token balance as well as unlimited approvals
 /// @dev to this contract.
-interface IPairFunctions is IPairFunctionTypes {
+interface ISwapAdapter is ISwapAdapterTypes {
     /// @notice Calculates pair prices for specified amounts (optional).
     /// @dev The returned prices should include all dex fees, in case the fee
     /// @dev is dynamic, the returned price is expected to include the minimum fee.
@@ -46,7 +46,11 @@ interface IPairFunctions is IPairFunctionTypes {
     /// @dev the swap and change the state of the evm accordingly.
     /// @dev Please include a gas usage estimate for each amount. This can be achieved
     /// @dev e.g. by using the `gasleft()` function.
-    /// @dev
+    /// @dev The return type trade, has a price attribute which should contain the
+    ///      value of `price(specifiedAmount)`. As this is optional, defined via
+    ///      `Capability.PriceFunction`, it is valid to return a zero value for this
+    ///      price in that case it will be estimated numerically. To return zero use
+    ///      Fraction(0, 1).
     /// @param pairId The ID of the trading pair.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
@@ -78,10 +82,6 @@ interface IPairFunctions is IPairFunctionTypes {
     function getCapabilities(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
         external
         returns (Capabilities[] memory);
-
-    /// @notice Minimum gas usage of exchange logic excluding transfers.
-    /// @return gasUsage the amount of gas used by the exchange logic
-    function minGasUsage() external view returns (uint256);
 
     /// @notice Retrieves the tokens in the selected pair.
     /// @dev Mainly used for testing as this is redundant with the required substreams

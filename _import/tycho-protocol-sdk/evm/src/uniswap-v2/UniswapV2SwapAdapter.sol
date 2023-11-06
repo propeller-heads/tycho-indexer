@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import "interfaces/IPairFunctions.sol";
+import "interfaces/ISwapAdapter.sol";
 
-contract UniswapV2PairFunctions is IPairFunctions {
+contract UniswapV2SwapAdapter is ISwapAdapter {
     IUniswapV2Factory immutable factory;
 
     constructor(address factory_) {
@@ -36,9 +36,6 @@ contract UniswapV2PairFunctions is IPairFunctions {
         pure
         returns (Fraction memory)
     {
-        if (amountIn == 0) {
-            return Fraction(0, 0);
-        }
         if (reserveIn == 0 || reserveOut == 0) {
             revert Unavailable("At least one reserve is zero!");
         }
@@ -186,7 +183,7 @@ contract UniswapV2PairFunctions is IPairFunctions {
         override
         returns (Capabilities[] memory capabilities)
     {
-        capabilities = new Capabilities[](10);
+        capabilities = new Capabilities[](3);
         capabilities[0] = Capabilities.SellSide;
         capabilities[1] = Capabilities.BuySide;
         capabilities[2] = Capabilities.PriceFunction;
@@ -218,10 +215,6 @@ contract UniswapV2PairFunctions is IPairFunctions {
         for (uint256 i = 0; i < ids.length; i++) {
             ids[i] = bytes20(factory.allPairs(offset + i));
         }
-    }
-
-    function minGasUsage() external view returns (uint256) {
-        return 30000;
     }
 }
 

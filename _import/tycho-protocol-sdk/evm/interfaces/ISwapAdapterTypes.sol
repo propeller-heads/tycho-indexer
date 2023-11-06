@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
-interface IPairFunctionTypes {
+interface ISwapAdapterTypes {
     /// @dev The SwapSide enum represents possible sides of a trade: Sell or Buy.
     /// @dev E.g. if SwapSide is Sell, the sell amount is interpreted to be fixed.
     enum SwapSide {
@@ -12,9 +12,9 @@ interface IPairFunctionTypes {
     }
 
     /// @dev The Capabilities enum represents possible features of a trading pair.
-    enum Capabilities
-    // Support SwapSide.Sell values (required)
-    {
+    enum Capabilities {
+        Unset,
+        // Support SwapSide.Sell values (required)
         SellSide,
         // Support SwapSide.Buy values (optional)
         BuySide,
