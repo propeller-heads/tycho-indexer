@@ -100,7 +100,8 @@ mod tests {
         // mock having transferred tokens to the swap contract before triggering the swap function
         token_overrides =
             add_balance_override(token_overrides, ekubo_swap_address.clone(), sell_amount.clone());
-        // mock the core contract's reserve balance since this is checked during swap and errors if incorrect
+        // mock the core contract's reserve balance since this is checked during swap and errors if
+        // incorrect
         token_overrides = add_balance_override(
             token_overrides,
             ekubo_core_address,
