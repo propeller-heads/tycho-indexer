@@ -19,7 +19,7 @@ contract UniswapV2PairFunctionTest is Test, IPairFunctionTypes {
             UniswapV2PairFunctions(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     }
 
-    function testPriceFuzz(uint256 amount0, uint256 amount1) public view {
+    function testPriceFuzz(uint256 amount0, uint256 amount1) public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = pairFunctions.getLimits(pair, SwapSide.Sell);
         vm.assume(amount0 < limits[0]);
@@ -29,7 +29,13 @@ contract UniswapV2PairFunctionTest is Test, IPairFunctionTypes {
         amounts[0] = amount0;
         amounts[1] = amount1;
 
-        pairFunctions.price(pair, WETH, USDC, amounts);
+        Fraction[] memory prices =
+            pairFunctions.price(pair, WETH, USDC, amounts);
+
+        for (uint256 i = 0; i < prices.length; i++) {
+            assertGt(prices[i].nominator, 0);
+            assertGt(prices[i].denominator, 0);
+        }
     }
 
     function testPriceDecreasing() public {
@@ -43,8 +49,10 @@ contract UniswapV2PairFunctionTest is Test, IPairFunctionTypes {
         Fraction[] memory prices =
             pairFunctions.price(pair, WETH, USDC, amounts);
 
-        for (uint256 i = 1; i < 99; i++) {
+        for (uint256 i = 0; i < 99; i++) {
             assertEq(compareFractions(prices[i], prices[i + 1]), 1);
+            assertGt(prices[i].denominator, 0);
+            assertGt(prices[i + 1].denominator, 0);
         }
     }
 
@@ -108,5 +116,17 @@ contract UniswapV2PairFunctionTest is Test, IPairFunctionTypes {
 
     function testSwapBuyIncreasing() public {
         executeIncreasingSwaps(SwapSide.Buy);
+    }
+
+    function testGetCapabilities(bytes32 pair, address t0, address t1) public {
+        Capabilities[] memory res =
+            pairFunctions.getCapabilities(pair, IERC20(t0), IERC20(t1));
+
+        assertEq(res.length, 3);
+    }
+
+    function testGetLimits() public {
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+        pairFunctions.getLimits(pair, SwapSide.Sell);
     }
 }

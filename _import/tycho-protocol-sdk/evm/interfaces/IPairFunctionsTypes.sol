@@ -12,9 +12,9 @@ interface IPairFunctionTypes {
     }
 
     /// @dev The Capabilities enum represents possible features of a trading pair.
-    enum Capabilities
-    // Support SwapSide.Sell values (required)
-    {
+    enum Capabilities {
+        Unset,
+        // Support SwapSide.Sell values (required)
         SellSide,
         // Support SwapSide.Buy values (optional)
         BuySide,
