@@ -139,12 +139,23 @@ mod tests {
             block_number,
         );
 
+        // SIMULATION 1
         let result0 = engine.simulate(&params);
 
         assert!(result0.is_ok());
         let res = result0.unwrap();
         assert_eq!(res.gas_used, 9480810);
         assert_eq!(res.result[2], felt_str("21909951468890105")); // check amount out
+
+        // SIMULATION 2
+
+        let result1 = engine.simulate(&params);
+        // dbg!(&result1);
+        assert!(result1.is_ok());
+        let res = result1.unwrap();
+        assert_eq!(res.gas_used, 9480810);
+        assert_eq!(res.result[2], felt_str("21909951468890105")); // check amount out is not
+                                                                  // affected by previous simulation
     }
 
     #[test]
