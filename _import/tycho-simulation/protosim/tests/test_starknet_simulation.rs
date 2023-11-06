@@ -4,7 +4,7 @@ mod tests {
     use dotenv::dotenv;
     use protosim::starknet_simulation::{
         rpc_reader::RpcStateReader,
-        simulation::{ContractOverride, SimulationEngine, SimulationParameters},
+        simulation::{ContractOverride, Overrides, SimulationEngine, SimulationParameters},
     };
     use rpc_state_reader::rpc_state::{RpcChain, RpcState};
     use starknet_api::block::BlockNumber;
@@ -55,11 +55,7 @@ mod tests {
         SimulationEngine::new(rpc_state_reader, contract_overrides).unwrap()
     }
 
-    fn construct_token_override(
-        address: Address,
-        token: Address,
-        amount: Felt252,
-    ) -> ContractOverride {
+    fn construct_token_contract_override(token: Address) -> ContractOverride {
         // ERC20 contract overrides - using USDC token contract template
         let class_hash: ClassHash =
             hex::decode("02760f25d5a4fb2bdde5f561fd0b44a3dee78c28903577d37d669939d97036a0")
@@ -68,14 +64,19 @@ mod tests {
                 .try_into()
                 .unwrap();
 
-        let mut storage_overrides = HashMap::new();
+        ContractOverride::new(token, class_hash, None, None)
+    }
 
+    fn add_balance_override(
+        mut overrides: Overrides,
+        address: Address,
+        amount: Felt252,
+    ) -> Overrides {
         // override balance
         let balance_storage_hash =
             felt_to_hash(&get_storage_var_address("ERC20_balances", &[address.0.clone()]).unwrap());
-        storage_overrides.insert((token.clone(), balance_storage_hash), amount.clone());
-
-        ContractOverride::new(token, class_hash, None, Some(storage_overrides))
+        overrides.insert(balance_storage_hash, amount);
+        overrides
     }
 
     #[test]
@@ -90,19 +91,23 @@ mod tests {
         let ekubo_core_address = address_str(EKUBO_ADDRESS);
         let sell_amount = felt_str("0x5afb5ab61ef191");
 
-        // Contruct engine with contract overrides
-        let sell_token_override = construct_token_override(
-            ekubo_swap_address.clone(),
-            token0.clone(),
-            sell_amount.clone(),
-        ); // mocks having transferred tokens to the swap contract before triggering the swap function
-        let reserves_override = construct_token_override(
+        // Construct engine with contract overrides
+        let sell_token_contract_override = construct_token_contract_override(token0.clone());
+        let mut engine = setup_engine(block_number, Some(vec![sell_token_contract_override]));
+
+        // Construct simulation overrides - token balances
+        let mut token_overrides = Overrides::new();
+        // mock having transferred tokens to the swap contract before triggering the swap function
+        token_overrides =
+            add_balance_override(token_overrides, ekubo_swap_address.clone(), sell_amount.clone());
+        // mock the core contract's reserve balance since this is checked during swap and errors if incorrect
+        token_overrides = add_balance_override(
+            token_overrides,
             ekubo_core_address,
-            token0.clone(),
             felt_str("2421600066015287788594"),
-        ); // mocks the core contract's reserve balance - this is checked during swap and errors if incorrect
-        let contract_overrides = vec![sell_token_override, reserves_override];
-        let mut engine = setup_engine(block_number, Some(contract_overrides));
+        );
+        let mut storage_overrides = HashMap::new();
+        storage_overrides.insert(token0.clone(), token_overrides);
 
         // obtained from this Ekubo simple swap call: https://starkscan.co/call/0x04857b5a7af37e9b9f6fae27923d725f07016a4449f74f5ab91c04f13bbc8d23_1_3
         let swap_calldata = vec![
@@ -128,7 +133,7 @@ mod tests {
             ekubo_swap_address,
             swap_calldata,
             "swap".to_owned(),
-            None,
+            Some(storage_overrides),
             Some(u128::MAX),
             block_number,
         );
@@ -138,7 +143,7 @@ mod tests {
         assert!(result0.is_ok());
         let res = result0.unwrap();
         assert_eq!(res.gas_used, 9480810);
-        assert_eq!(res.result[2], felt_str("21909951468890105")) // check amount out
+        assert_eq!(res.result[2], felt_str("21909951468890105")); // check amount out
     }
 
     #[test]
