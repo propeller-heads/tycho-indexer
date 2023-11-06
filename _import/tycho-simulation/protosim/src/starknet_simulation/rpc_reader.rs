@@ -96,7 +96,7 @@ pub(crate) mod tests {
     use dotenv::dotenv;
     use std::env;
 
-    use rpc_state_reader::rpc_state::{RpcBlockInfo, RpcChain};
+    use rpc_state_reader::rpc_state::{RpcBlockInfo, RpcChain, RpcState};
     use starknet_api::{block::BlockNumber, core::ChainId};
 
     use super::*;

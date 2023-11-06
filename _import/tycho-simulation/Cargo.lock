@@ -4053,6 +4053,7 @@ dependencies = [
  "indexmap 2.0.2",
  "itertools 0.11.0",
  "mockito",
+ "num-traits 0.2.17",
  "petgraph",
  "reqwest",
  "revm",
