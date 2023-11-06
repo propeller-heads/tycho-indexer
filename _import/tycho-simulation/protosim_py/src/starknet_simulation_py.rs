@@ -1,10 +1,14 @@
-use num_bigint::BigUint;
-use protosim::starknet_simulation::{rpc_reader::RpcStateReader, simulation::SimulationEngine};
+use protosim::{
+    rpc_state_reader::rpc_state::{BlockTag, BlockValue, RpcChain, RpcState},
+    starknet_api::{block::BlockNumber, hash::StarkFelt},
+    starknet_simulation::{rpc_reader::RpcStateReader, simulation::SimulationEngine},
+};
 use pyo3::prelude::*;
-use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::starknet_structs_py::{
-    ContractOverride, StarknetSimulationParameters, StarknetSimulationResult,
+    ContractOverride, StarknetSimulationErrorDetails, StarknetSimulationParameters,
+    StarknetSimulationResult,
 };
 
 /// Starknet transaction simulation engine.
@@ -24,9 +28,8 @@ impl StarknetSimulationEngine {
     /// * `rpc_endpoint` - The RPC endpoint to use for RPC calls.
     /// * `feeder_url` - The feeder URL to use for RPC calls.
     /// * `contract_overrides` - A list of contract overrides to use for simulation.
-    /// * `block_tag` - The block tag to use for RPC calls. One of "latest", "pending". Defaults to
-    ///   "latest".
-    /// * `block_number` - The block number to use for RPC calls. Overrides `block_tag` if provided.
+    /// * `block` - The block to use for RPC calls. Either a block number as a decimal string, a
+    ///   block tag of "latest" or "pending", or block hash as a hex string prefixed with 0x.
     #[new]
     #[allow(unused_variables)]
     fn new(
@@ -34,10 +37,32 @@ impl StarknetSimulationEngine {
         rpc_endpoint: String,
         feeder_url: String,
         contract_overrides: Vec<ContractOverride>,
-        block_tag: Option<String>,
-        block_number: Option<u64>,
+        block: String,
     ) -> Self {
-        todo!()
+        let block = match block.parse::<u64>() {
+            Ok(block_number) => BlockValue::Number(BlockNumber(block_number)),
+            Err(_) => match block.as_str() {
+                "latest" => BlockValue::Tag(BlockTag::Latest),
+                "pending" => BlockValue::Tag(BlockTag::Pending),
+                val => BlockValue::Hash(StarkFelt::try_from(val).unwrap()),
+            },
+        };
+        let chain = match chain.as_str() {
+            "starknet-mainnet" => RpcChain::MainNet,
+            "starknet-goerli" => RpcChain::TestNet,
+            "starknet-goerli2" => RpcChain::TestNet2,
+            _ => panic!("Invalid chain {}", chain),
+        };
+        let state_reader =
+            RpcStateReader::new(RpcState::new(chain, block, &rpc_endpoint, &feeder_url));
+        let engine = SimulationEngine::new(
+            Arc::new(state_reader),
+            contract_overrides
+                .into_iter()
+                .map(Into::into),
+        )
+        .expect("Failed to create simulation engine");
+        Self(engine)
     }
 
     /// Simulate a Starknet transaction.
@@ -47,18 +72,12 @@ impl StarknetSimulationEngine {
     /// * `params` - The simulation parameters of type `StarknetSimulationParameters`.
     #[allow(unused_variables)]
     fn run_sim(
-        self_: PyRef<Self>,
+        mut self_: PyRefMut<Self>,
         params: StarknetSimulationParameters,
     ) -> PyResult<StarknetSimulationResult> {
-        todo!()
-    }
-
-    /// Update the state of the simulation engine.
-    #[allow(unused_variables)]
-    fn update_state(
-        #[allow(unused_mut)] mut self_: PyRefMut<Self>,
-        updates: HashMap<String, HashMap<BigUint, BigUint>>,
-    ) -> PyResult<HashMap<String, HashMap<BigUint, BigUint>>> {
-        todo!()
+        match self_.0.simulate(&params.into()) {
+            Ok(sim_res) => Ok(sim_res.into()),
+            Err(sim_err) => Err(PyErr::from(StarknetSimulationErrorDetails::from(sim_err))),
+        }
     }
 }
