@@ -1,6 +1,5 @@
 use rpc_state_reader::rpc_state::BlockValue;
 use starknet_api::block::BlockNumber;
-use starknet_in_rust::state::state_api::State;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use cairo_vm::felt::Felt252;
@@ -9,14 +8,14 @@ use starknet_in_rust::{
     definitions::block_context::BlockContext,
     execution::{
         execution_entry_point::{ExecutionEntryPoint, ExecutionResult},
-        CallType, TransactionExecutionContext,
+        TransactionExecutionContext,
     },
     services::api::contract_classes::{
         compiled_class::CompiledClass, deprecated_contract_class::ContractClass,
     },
     state::{
         cached_state::CachedState,
-        state_api::StateReader,
+        state_api::{State, StateReader},
         state_cache::{StateCache, StorageEntry},
         ExecutionResourcesManager,
     },
@@ -449,21 +448,16 @@ impl SimulationEngine<RpcStateReader> {
 
         // Create the simulated call
         let entry_point = params.entry_point.as_bytes();
-        let entrypoint_selector = Felt252::from_bytes_be(&calculate_sn_keccak(entry_point));
-
-        let class_hash = self
-            .state
-            .get_class_hash_at(&params.to)
-            .map_err(|err| SimulationError::StateError(err.to_string()))?;
+        let entry_point_selector = Felt252::from_bytes_be(&calculate_sn_keccak(entry_point));
 
         let call = ExecutionEntryPoint::new(
             params.to.clone(),
             params.data.clone(),
-            entrypoint_selector,
+            entry_point_selector,
             params.caller.clone(),
             EntryPointType::External,
-            Some(CallType::Delegate),
-            Some(class_hash),
+            None,
+            None,
             params.gas_limit.unwrap_or(0),
         );
 
@@ -472,7 +466,13 @@ impl SimulationEngine<RpcStateReader> {
         // Set up the call context
         let block_context = BlockContext::default();
         let mut resources_manager = ExecutionResourcesManager::default();
-        let mut tx_execution_context = TransactionExecutionContext::default();
+        let mut tx_execution_context = TransactionExecutionContext::create_for_testing(
+            params.caller.clone(),
+            u128::MAX,
+            Default::default(),
+            block_context.invoke_tx_max_n_steps(),
+            1.into(),
+        );
 
         // Execute the simulated call
         let result = call
@@ -771,6 +771,7 @@ pub mod tests {
         }
     }
 
+    // Simulation of an inner call to a Cairo 0 contract.
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo0_call() {
@@ -830,6 +831,7 @@ pub mod tests {
         assert_eq!(result, expected_result);
     }
 
+    // Simulation of an inner call to a Cairo 1 contract.
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_simulate_cairo1_call() {
@@ -870,6 +872,63 @@ pub mod tests {
         }
         assert!(result.is_ok());
         dbg!("Simulation result is: {:?}", result.unwrap());
+    }
+
+    // Simulation of an external multicall.
+    #[rstest]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_simulate_multicall() {
+        // https://starkscan.co/tx/0x046e50c398bf08a69c7bbf1dedc35760556ba7c426a704d1ecb67378f01ffe59
+
+        // Set up the engine
+        let block_number = 366118; // actual block is 366119
+        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+
+        // Prepare the simulation parameters
+        let params = SimulationParameters::new(
+            address_str("0"),
+            address_str("0x0131c7d655f9636a761cf655dec380dba4ac71c99193fcce666521312a6a9303"),
+            vec![
+                felt_str("2"),
+                felt_str(
+                    "980641348758169158361564622616439166824113829417782360965256920656439161142",
+                ),
+                felt_str(
+                    "949021990203918389843157787496164629863144228991510976554585288817234167820",
+                ),
+                felt_str("3"),
+                felt_str(
+                    "467359278613506166151492726487752216059557962335532790304583050955123345960",
+                ),
+                felt_str("62399604864"),
+                felt_str("0"),
+                felt_str(
+                    "467359278613506166151492726487752216059557962335532790304583050955123345960",
+                ),
+                felt_str(
+                    "322637753074552370500544931377150993467524337001753746958704872129235461672",
+                ),
+                felt_str("7"),
+                felt_str("1"),
+                felt_str("62399604864"),
+                felt_str("0"),
+                felt_str("2265697025134158"),
+                felt_str("0"),
+                felt_str("4057938"),
+                felt_str("0"),
+            ],
+            "__execute__".to_owned(),
+            None,
+            Some(u128::MAX),
+            block_number,
+        );
+
+        // Simulate the transaction
+        let result = engine
+            .simulate(&params)
+            .expect("should simulate");
+        dbg!(&result);
+        assert!(result.gas_used > 0, "Gas used should be positive");
     }
 
     #[rstest]
