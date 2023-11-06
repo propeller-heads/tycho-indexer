@@ -426,7 +426,10 @@ impl SimulationEngine<RpcStateReader> {
 
     /// Simulate a transaction
     ///
-    /// State's block will be modified to be the last block before the simulation's block.
+    /// Simulates a V1 Invoke transaction [https://docs.starknet.io/documentation/architecture_and_concepts/Network_Architecture/transactions/#invoke_v1].
+    /// This may be either an extranal call i.e. a multicall to a smart contract wallet or an
+    /// internal call between smart contracts. State's block will be modified to be the last
+    /// block before the simulation's block.
     pub fn simulate(
         &mut self,
         params: &SimulationParameters,
@@ -471,7 +474,7 @@ impl SimulationEngine<RpcStateReader> {
             u128::MAX,
             Default::default(),
             block_context.invoke_tx_max_n_steps(),
-            1.into(),
+            1.into(), // Set this to 0 to simulate a V0 type invoke transaction
         );
 
         // Execute the simulated call
