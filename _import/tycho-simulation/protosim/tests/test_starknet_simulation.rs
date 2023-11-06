@@ -55,12 +55,11 @@ mod tests {
         SimulationEngine::new(rpc_state_reader, contract_overrides).unwrap()
     }
 
-    fn construct_token_overrides(
-        wallet: Address,
-        sell_token: Address,
-        sell_amount: Felt252,
-        spender: Address,
-    ) -> Vec<ContractOverride> {
+    fn construct_token_override(
+        address: Address,
+        token: Address,
+        amount: Felt252,
+    ) -> ContractOverride {
         // ERC20 contract overrides - using USDC token contract template
         let class_hash: ClassHash =
             hex::decode("02760f25d5a4fb2bdde5f561fd0b44a3dee78c28903577d37d669939d97036a0")
@@ -73,19 +72,10 @@ mod tests {
 
         // override balance
         let balance_storage_hash =
-            felt_to_hash(&get_storage_var_address("ERC20_balances", &[wallet.0.clone()]).unwrap());
-        storage_overrides.insert((sell_token.clone(), balance_storage_hash), sell_amount.clone());
+            felt_to_hash(&get_storage_var_address("ERC20_balances", &[address.0.clone()]).unwrap());
+        storage_overrides.insert((token.clone(), balance_storage_hash), amount.clone());
 
-        // override allowance
-        let allowance_storage_hash = felt_to_hash(
-            &get_storage_var_address("ERC20_allowances", &[wallet.0.clone(), spender.0]).unwrap(),
-        );
-        storage_overrides.insert((sell_token.clone(), allowance_storage_hash), sell_amount);
-
-        let token_contract =
-            ContractOverride::new(sell_token, class_hash, None, Some(storage_overrides));
-
-        vec![token_contract]
+        ContractOverride::new(token, class_hash, None, Some(storage_overrides))
     }
 
     #[test]
@@ -96,16 +86,22 @@ mod tests {
         let token0 = address_str(DAI_ADDRESS);
         let token1 = address_str(ETH_ADDRESS);
         let test_wallet = address_str(BOB_ADDRESS);
-        let ekubo_address = address_str(EKUBO_SIMPLE_SWAP_ADDRESS);
+        let ekubo_swap_address = address_str(EKUBO_SIMPLE_SWAP_ADDRESS);
+        let ekubo_core_address = address_str(EKUBO_ADDRESS);
         let sell_amount = felt_str("0x5afb5ab61ef191");
 
-        // Contruct engine with sell token override
-        let contract_overrides = construct_token_overrides(
-            ekubo_address.clone(),
+        // Contruct engine with contract overrides
+        let sell_token_override = construct_token_override(
+            ekubo_swap_address.clone(),
             token0.clone(),
             sell_amount.clone(),
-            ekubo_address.clone(),
-        );
+        ); // mocks having transferred tokens to the swap contract before triggering the swap function
+        let reserves_override = construct_token_override(
+            ekubo_core_address,
+            token0.clone(),
+            felt_str("2421600066015287788594"),
+        ); // mocks the core contract's reserve balance - this is checked during swap and errors if incorrect
+        let contract_overrides = vec![sell_token_override, reserves_override];
         let mut engine = setup_engine(block_number, Some(contract_overrides));
 
         // obtained from this Ekubo simple swap call: https://starkscan.co/call/0x04857b5a7af37e9b9f6fae27923d725f07016a4449f74f5ab91c04f13bbc8d23_1_3
@@ -129,7 +125,7 @@ mod tests {
 
         let params = SimulationParameters::new(
             test_wallet,
-            ekubo_address,
+            ekubo_swap_address,
             swap_calldata,
             "swap".to_owned(),
             None,
@@ -139,9 +135,10 @@ mod tests {
 
         let result0 = engine.simulate(&params);
 
-        dbg!(&result0);
-
-        assert!(result0.is_ok())
+        assert!(result0.is_ok());
+        let res = result0.unwrap();
+        assert_eq!(res.gas_used, 9480810);
+        assert_eq!(res.result[2], felt_str("21909951468890105")) // check amount out
     }
 
     #[test]
@@ -169,9 +166,9 @@ mod tests {
             block_number,
         );
 
-        let result0 = engine.simulate(&params);
+        let result = engine.simulate(&params);
 
-        let res = result0.unwrap().result[0].clone();
+        let res = result.unwrap().result[0].clone();
 
         // To get the human readable price we will need to convert this on the Python side like
         // this: https://www.wolframalpha.com/input?i=(14458875492015717597830515600275777+/+2**128)**2*10**12
@@ -203,9 +200,9 @@ mod tests {
             block_number,
         );
 
-        let result0 = engine.simulate(&params);
+        let result = engine.simulate(&params);
 
-        let res = result0.unwrap().result[0].clone();
+        let res = result.unwrap().result[0].clone();
 
         // To get the human readable price we will need to convert this on the Python side like
         // this: https://www.wolframalpha.com/input?i=(340321610937302884216160363291566+/+2**128)**2*10**12
