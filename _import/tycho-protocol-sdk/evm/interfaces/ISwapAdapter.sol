@@ -2,9 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import "interfaces/IPairFunctionsTypes.sol";
+import "interfaces/ISwapAdapterTypes.sol";
 
-/// @title IPairFunctions
+/// @title ISwapAdapterTypes
 /// @dev Implement this interface to support propeller routing through your pairs.
 /// @dev Before implementing the interface we need to introduce three function for a
 /// @dev given pair: The swap(x), gas(x) and price(x) functions:
@@ -18,7 +18,7 @@ import "interfaces/IPairFunctionsTypes.sol";
 /// @dev During calls to swap and getLimits, the caller can be assumed to
 /// @dev have the required sell or buy token balance as well as unlimited approvals
 /// @dev to this contract.
-interface IPairFunctions is IPairFunctionTypes {
+interface ISwapAdapter is ISwapAdapterTypes {
     /// @notice Calculates pair prices for specified amounts (optional).
     /// @dev The returned prices should include all dex fees, in case the fee
     /// @dev is dynamic, the returned price is expected to include the minimum fee.

@@ -3,11 +3,11 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import "src/uniswap-v2/UniswapV2PairFunctions.sol";
-import "interfaces/IPairFunctionsTypes.sol";
+import "src/uniswap-v2/UniswapV2SwapAdapter.sol";
+import "interfaces/ISwapAdapterTypes.sol";
 
-contract UniswapV2PairFunctionTest is Test, IPairFunctionTypes {
-    UniswapV2PairFunctions pairFunctions;
+contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
+    UniswapV2SwapAdapter pairFunctions;
     IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     address constant USDC_WETH_PAIR = 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
@@ -16,7 +16,7 @@ contract UniswapV2PairFunctionTest is Test, IPairFunctionTypes {
         uint256 forkBlock = 17000000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         pairFunctions = new
-            UniswapV2PairFunctions(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+            UniswapV2SwapAdapter(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     }
 
     function testPriceFuzz(uint256 amount0, uint256 amount1) public {

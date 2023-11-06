@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import "interfaces/IPairFunctions.sol";
+import "interfaces/ISwapAdapter.sol";
 
-contract UniswapV2PairFunctions is IPairFunctions {
+contract UniswapV2SwapAdapter is ISwapAdapter {
     IUniswapV2Factory immutable factory;
 
     constructor(address factory_) {
