@@ -219,10 +219,7 @@ impl From<simulation::SimulationResult> for SimulationResult {
             py_state_updates.insert(format!("{:#x}", key), StateUpdate::from(val));
         }
         SimulationResult {
-            result: rust_result
-                .result
-                .try_into()
-                .expect("Can't convert output bytes to a Python-compatible type"),
+            result: rust_result.result.into(),
             state_updates: py_state_updates,
             gas_used: rust_result.gas_used,
         }
