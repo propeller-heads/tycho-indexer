@@ -57,7 +57,7 @@ mod tests {
         dbg!(&contract_overrides);
         let rpc_state_reader = Arc::new(setup_reader());
         let contract_overrides = contract_overrides.unwrap_or_default();
-        SimulationEngine::new(rpc_state_reader, contract_overrides).unwrap()
+        SimulationEngine::new(rpc_state_reader, contract_overrides.into()).unwrap()
     }
 
     fn construct_token_contract_override(token: Address) -> ContractOverride {

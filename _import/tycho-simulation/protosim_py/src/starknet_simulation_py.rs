@@ -42,9 +42,12 @@ impl StarknetSimulationEngine {
         ));
         let engine = SimulationEngine::new(
             Arc::new(state_reader),
-            contract_overrides
-                .into_iter()
-                .map(Into::into),
+            Some(
+                contract_overrides
+                    .into_iter()
+                    .map(|override_| override_.into())
+                    .collect(),
+            ),
         )
         .expect("Failed to create simulation engine");
         Self(engine)

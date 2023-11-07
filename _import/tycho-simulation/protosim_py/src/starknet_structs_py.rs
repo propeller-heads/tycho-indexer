@@ -4,7 +4,7 @@ use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
 use protosim::{
-    starknet_in_rust::{felt::Felt252, state::state_cache::StorageEntry, utils::Address},
+    starknet_in_rust::{felt::Felt252, utils::Address},
     starknet_simulation::{
         address_str, class_hash_str,
         simulation::{
@@ -165,50 +165,21 @@ pub struct StarknetContractOverride {
     /// Supports .casm (Cairo 0) and .json () files.
     #[pyo3(get)]
     pub path: Option<String>,
-    /// Storage overrides for the contract
-    ///
-    /// Mapping of tuple (contract address, storage slot) to storage value.
-    #[pyo3(get)]
-    pub storage_overrides: Option<HashMap<(String, BigUint), BigUint>>,
 }
 
 #[pymethods]
 impl StarknetContractOverride {
     #[new]
-    pub fn new(
-        address: String,
-        class_hash: String,
-        path: Option<String>,
-        storage_overrides: Option<HashMap<(String, BigUint), BigUint>>,
-    ) -> Self {
-        Self { address, class_hash, path, storage_overrides }
+    pub fn new(address: String, class_hash: String, path: Option<String>) -> Self {
+        Self { address, class_hash, path }
     }
 }
 
 impl From<StarknetContractOverride> for RustContractOverride {
     fn from(contract_override: StarknetContractOverride) -> Self {
-        let StarknetContractOverride { address, class_hash, path, storage_overrides } =
-            contract_override;
+        let StarknetContractOverride { address, class_hash, path } = contract_override;
 
-        // Convert storage overrides to format
-        let storage_overrides: Option<HashMap<StorageEntry, Felt252>> =
-            storage_overrides.map(|storages| {
-                storages
-                    .into_iter()
-                    .map(|((address, slot), value)| {
-                        (
-                            (address_str(&address), Felt252::from(slot).to_be_bytes()),
-                            Felt252::from(value),
-                        )
-                    })
-                    .collect()
-            });
-        RustContractOverride::new(
-            address_str(&address),
-            class_hash_str(&class_hash),
-            path,
-            storage_overrides,
-        )
+        RustContractOverride::new(address_str(&address), class_hash_str(&class_hash), path)
     }
 }
 

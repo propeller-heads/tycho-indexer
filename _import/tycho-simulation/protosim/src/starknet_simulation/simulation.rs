@@ -215,10 +215,17 @@ impl ContractOverride {
 /// of a given block and the simulation engine expects the data to be correct for the given block.
 /// This is unforunately not enforcable by the trait and thus the simulation `simulate()` function
 /// is implemented over a concrete type (more info on [SimulationEngine<RpcStateReader>]).
+///
+/// # Fields
+///
+/// * `state: CachedState<SR>` - The state of the simulation engine.
+/// * `contract_overrides: Vec<ContractOverride>` - A permanent list of contract overrides persisted
+///   across simulations, does not reset on a new block.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct SimulationEngine<SR: StateReader> {
     state: CachedState<SR>,
+    contract_overrides: Vec<ContractOverride>,
 }
 
 #[allow(unused_variables)]
@@ -226,7 +233,7 @@ pub struct SimulationEngine<SR: StateReader> {
 impl<SR: StateReader> SimulationEngine<SR> {
     pub fn new(
         rpc_state_reader: Arc<SR>,
-        contract_overrides: impl IntoIterator<Item = ContractOverride>,
+        contract_overrides: Option<Vec<ContractOverride>>,
     ) -> Result<Self, SimulationError> {
         // Prepare initial values
         let mut address_to_class_hash: HashMap<Address, ClassHash> = HashMap::new();
@@ -238,11 +245,15 @@ impl<SR: StateReader> SimulationEngine<SR> {
             HashMap::new();
 
         // Load contracts
-        for input_contract in contract_overrides {
+        for input_contract in contract_overrides
+            .clone()
+            .unwrap_or_default()
+            .iter()
+        {
             let class_hash = input_contract.class_hash;
             let compiled_class_hash;
             let compiled_class;
-            if let Some(path) = input_contract.path {
+            if let Some(path) = input_contract.path.clone() {
                 // Load contract from path
                 compiled_class = load_compiled_class_from_path(&path).map_err(|e| {
                     SimulationError::InitError(format!(
@@ -280,7 +291,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
             // Update caches
             address_to_class_hash.insert(input_contract.contract_address.clone(), class_hash);
             class_hash_to_compiled_class.insert(compiled_class_hash, compiled_class.clone());
-            address_to_nonce.insert(input_contract.contract_address, Felt252::from(0u8));
+            address_to_nonce.insert(input_contract.contract_address.clone(), Felt252::from(0u8));
 
             class_hash_to_compiled_class_hash.insert(class_hash, compiled_class_hash);
         }
@@ -307,7 +318,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         let state: CachedState<SR> =
             CachedState::new_for_testing(rpc_state_reader, cache, class_hash_to_compiled_class);
 
-        Ok(Self { state })
+        Ok(Self { state, contract_overrides: contract_overrides.unwrap_or_default() })
     }
 
     fn set_state(&mut self, state: HashMap<Address, Overrides>) {
@@ -396,8 +407,42 @@ impl<SR: StateReader> SimulationEngine<SR> {
     /// contains immutable contract code.
     pub fn clear_cache(&mut self, rpc_state_reader: Arc<SR>) {
         // We keep contracts code in the cache.
-        let contract_cache = self.state.contract_classes().clone();
-        self.state = CachedState::new(rpc_state_reader, contract_cache);
+        let contract_cache: HashMap<ClassHash, CompiledClass> =
+            self.state.contract_classes().clone();
+        // We initiate the class_hash_initial_values from permanent contract overrides
+        // Also we persist compiled_class_hash_initial_values and compiled_class_hash_writes,
+        // because they can't change.
+        let cache = StateCache::new(
+            self.contract_overrides
+                .iter()
+                .map(|contract_override| {
+                    (
+                        contract_override
+                            .contract_address
+                            .clone(),
+                        contract_override.class_hash,
+                    )
+                })
+                .collect(),
+            self.state
+                .cache_mut()
+                .compiled_class_hash_initial_values_mut()
+                .clone(),
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            self.state
+                .cache_mut()
+                .compiled_class_hash_writes_mut()
+                .clone(),
+            HashMap::new(),
+            HashMap::new(),
+            self.state
+                .cache_mut()
+                .class_hash_to_compiled_class_hash_mut()
+                .clone(),
+        );
+        self.state = CachedState::new_for_testing(rpc_state_reader, cache, contract_cache);
     }
 
     /// Clears storage and nonce writes from the cache of the simulation engine.
@@ -534,7 +579,7 @@ pub mod tests {
         let rpc_state_reader = Arc::new(setup_reader(block_number, rpc_chain));
 
         // Initialize the engine
-        SimulationEngine::new(rpc_state_reader, contract_overrides.unwrap_or_default())
+        SimulationEngine::new(rpc_state_reader, contract_overrides)
             .expect("should initialize engine")
     }
 
@@ -588,7 +633,7 @@ pub mod tests {
         let address: Address = Address(Felt252::from(0u8));
         let input_contract = ContractOverride::new(address, [0u8; 32], Some(path_str));
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let engine_result = SimulationEngine::new(rpc_state_reader, vec![input_contract]);
+        let engine_result = SimulationEngine::new(rpc_state_reader, vec![input_contract].into());
         if let Err(err) = engine_result {
             panic!("Failed to create engine with error: {:?}", err);
         }
@@ -611,7 +656,8 @@ pub mod tests {
 
         // Create engine
         let rpc_state_reader = setup_reader(333333, RpcChain::MainNet);
-        let engine_result = SimulationEngine::new(Arc::new(rpc_state_reader), vec![input_contract]);
+        let engine_result =
+            SimulationEngine::new(Arc::new(rpc_state_reader), vec![input_contract].into());
         if let Err(err) = engine_result {
             panic!("Failed to create engine with error: {:?}", err);
         }
@@ -626,6 +672,7 @@ pub mod tests {
                 Arc::new(StateReaderMock::new()),
                 ContractClassCache::default(),
             ),
+            contract_overrides: vec![],
         };
 
         let mut state = HashMap::new();
@@ -651,7 +698,7 @@ pub mod tests {
     #[rstest]
     fn test_clear_cache_writes() {
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), None).unwrap();
         let address = Address(Felt252::from(0u8));
         let write_hash = [0u8; 32];
         let value: Felt252 = 0.into();
@@ -686,7 +733,7 @@ pub mod tests {
     fn test_interpret_results() {
         let address = Address(Felt252::from(0u8));
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), None).unwrap();
 
         // Construct expected values
         let gas_consumed = 10;
@@ -738,7 +785,7 @@ pub mod tests {
     fn test_interpret_results_with_revert_error() {
         // Construct state and engine
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), None).unwrap();
 
         // Construct reverted execution result
         let execution_result_with_revert = ExecutionResult {
@@ -759,7 +806,7 @@ pub mod tests {
     fn test_interpret_results_with_empty_call_info() {
         // Construct state and engine
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), None).unwrap();
 
         // Construct execution result with no call info
         let execution_result_no_call_info =
@@ -778,7 +825,7 @@ pub mod tests {
         // Construct state and engine
         let address = Address(Felt252::from(0u8));
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let engine = SimulationEngine::new(rpc_state_reader.clone(), None).unwrap();
 
         // Construct execution result with failed call
         let mut call_info =
@@ -958,7 +1005,7 @@ pub mod tests {
     fn test_clear_cache() {
         // Set up the engine
         let rpc_state_reader = Arc::new(StateReaderMock::new());
-        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), vec![]).unwrap();
+        let mut engine = SimulationEngine::new(rpc_state_reader.clone(), None).unwrap();
 
         // Insert contracts in cache
         let mut contract_classes = HashMap::new();

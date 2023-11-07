@@ -80,7 +80,7 @@ def test_consecutive_simulations_ekubo():
 
     # Construct engine with contract overrides
     sell_token_contract_override = StarknetContractOverride(
-        token0, "0x02760f25d5a4fb2bdde5f561fd0b44a3dee78c28903577d37d669939d97036a0", None, None)
+        token0, "0x02760f25d5a4fb2bdde5f561fd0b44a3dee78c28903577d37d669939d97036a0", None)
     engine = setup_engine([sell_token_contract_override])
 
     # Construct simulation parameters
@@ -111,20 +111,17 @@ def test_consecutive_simulations_ekubo():
         block_number=block_number,
         gas_limit=U128MAX,
     )
-    print(f"Params: {params=}")
 
     # Run simulation
     result = engine.run_sim(params)
-    assert result.is_success()
     assert result.gas_used == 9480810
-    assert result.result[2] == "21909951468890105"
+    assert result.result[2] == 21909951468890105
 
     # Run simulation again
     # Running the simulation should not persist any state changes, so running it again should give the same result
     result = engine.run_sim(params)
-    assert result.is_success()
     assert result.gas_used == 9480810
-    assert result.result[2] == "21909951468890105"
+    assert result.result[2] == 21909951468890105
 
 if __name__ == "__main__":
     # test_starknet_simulation()
