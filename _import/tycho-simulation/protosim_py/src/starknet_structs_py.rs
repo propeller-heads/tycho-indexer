@@ -172,6 +172,19 @@ pub struct StarknetContractOverride {
     pub storage_overrides: Option<HashMap<(String, BigUint), BigUint>>,
 }
 
+#[pymethods]
+impl StarknetContractOverride {
+    #[new]
+    pub fn new(
+        address: String,
+        class_hash: String,
+        path: Option<String>,
+        storage_overrides: Option<HashMap<(String, BigUint), BigUint>>,
+    ) -> Self {
+        Self { address, class_hash, path, storage_overrides }
+    }
+}
+
 impl From<StarknetContractOverride> for RustContractOverride {
     fn from(contract_override: StarknetContractOverride) -> Self {
         let StarknetContractOverride { address, class_hash, path, storage_overrides } =

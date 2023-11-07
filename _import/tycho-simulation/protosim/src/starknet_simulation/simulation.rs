@@ -184,6 +184,7 @@ fn compute_class_hash(
 }
 
 /// A struct with metadata about a contract to be initialized.
+/// These overrides are permanent over
 ///
 /// # Fields
 ///
@@ -192,24 +193,16 @@ fn compute_class_hash(
 ///   onchain if you wish to mock the contract)
 /// * `path: Option<String>` - The path to the contract file. WARNING: if `None`, the contract will
 ///   be fetched from the state reader, adding rpc overhead. This should be avoided if possible!
-/// * `storage_overrides: Option<HashMap<StorageEntry, Felt252>>` - The storage overrides for the
-///   contract.
 #[derive(Debug, Clone)]
 pub struct ContractOverride {
     pub contract_address: Address,
     pub class_hash: ClassHash,
     pub path: Option<String>,
-    pub storage_overrides: Option<HashMap<StorageEntry, Felt252>>,
 }
 
 impl ContractOverride {
-    pub fn new(
-        contract_address: Address,
-        class_hash: ClassHash,
-        path: Option<String>,
-        storage_overrides: Option<HashMap<StorageEntry, Felt252>>,
-    ) -> Self {
-        Self { contract_address, class_hash, path, storage_overrides }
+    pub fn new(contract_address: Address, class_hash: ClassHash, path: Option<String>) -> Self {
+        Self { contract_address, class_hash, path }
     }
 }
 
@@ -239,7 +232,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         let mut address_to_class_hash: HashMap<Address, ClassHash> = HashMap::new();
         let mut class_hash_to_compiled_class: HashMap<ClassHash, CompiledClass> = HashMap::new();
         let mut address_to_nonce: HashMap<Address, Felt252> = HashMap::new();
-        let mut storage_updates: HashMap<StorageEntry, Felt252> = HashMap::new();
+        let storage_updates: HashMap<StorageEntry, Felt252> = HashMap::new();
 
         let mut class_hash_to_compiled_class_hash: HashMap<ClassHash, CompiledClassHash> =
             HashMap::new();
@@ -288,11 +281,6 @@ impl<SR: StateReader> SimulationEngine<SR> {
             address_to_class_hash.insert(input_contract.contract_address.clone(), class_hash);
             class_hash_to_compiled_class.insert(compiled_class_hash, compiled_class.clone());
             address_to_nonce.insert(input_contract.contract_address, Felt252::from(0u8));
-            storage_updates.extend(
-                input_contract
-                    .storage_overrides
-                    .unwrap_or_default(),
-            );
 
             class_hash_to_compiled_class_hash.insert(class_hash, compiled_class_hash);
         }
@@ -598,7 +586,7 @@ pub mod tests {
         let path_str: String = path.to_str().unwrap().to_owned();
 
         let address: Address = Address(Felt252::from(0u8));
-        let input_contract = ContractOverride::new(address, [0u8; 32], Some(path_str), None);
+        let input_contract = ContractOverride::new(address, [0u8; 32], Some(path_str));
         let rpc_state_reader = Arc::new(StateReaderMock::new());
         let engine_result = SimulationEngine::new(rpc_state_reader, vec![input_contract]);
         if let Err(err) = engine_result {
@@ -619,7 +607,7 @@ pub mod tests {
                 .as_slice()
                 .try_into()
                 .unwrap();
-        let input_contract = ContractOverride::new(address, class_hash, None, None);
+        let input_contract = ContractOverride::new(address, class_hash, None);
 
         // Create engine
         let rpc_state_reader = setup_reader(333333, RpcChain::MainNet);
@@ -909,10 +897,39 @@ pub mod tests {
     }
 
     #[rstest]
-    fn test_set_block() {
+    fn test_set_block_and_reset_cache() {
+        let contract_override_address =
+            address_str("0xda114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3");
+
         // Set up the engine
-        let block_number = 354498; // actual block is 354499
-        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+        let block_number = 354498;
+        let contract_overrides = vec![ContractOverride::new(
+            contract_override_address.clone(),
+            class_hash_str(
+                "0x052c7ba99c77fc38dd3346beea6c0753c3471f2e3135af5bb837d6c9523fff62", /* Needs to be an actuall class hash to work with state reader */
+            ),
+            None,
+        )];
+        let mut engine = setup_engine(block_number, RpcChain::MainNet, contract_overrides.into());
+
+        // Set state storage inital value
+        engine
+            .state
+            .cache_mut()
+            .storage_initial_values_mut()
+            .extend(vec![(
+                (contract_override_address.clone(), class_hash_str("0123")),
+                felt_str("0123"),
+            )]);
+        // Set state storage writes
+        engine
+            .state
+            .cache_mut()
+            .storage_writes_mut()
+            .extend(vec![(
+                (contract_override_address.clone(), class_hash_str("456")),
+                felt_str("456"),
+            )]);
 
         assert_eq!(engine.state.state_reader.block(), &BlockNumber(block_number).into());
 
@@ -921,6 +938,20 @@ pub mod tests {
         engine.set_block_and_reset_cache(BlockNumber(new_block_number).into());
 
         assert_eq!(engine.state.state_reader.block(), &BlockNumber(new_block_number).into());
+        assert_eq!(
+            felt_str("0"),
+            engine
+                .state
+                .get_storage_at(&(contract_override_address.clone(), class_hash_str("0123")))
+                .unwrap()
+        );
+        assert_eq!(
+            felt_str("0"),
+            engine
+                .state
+                .get_storage_at(&(contract_override_address.clone(), class_hash_str("456")))
+                .unwrap()
+        );
     }
 
     #[rstest]
