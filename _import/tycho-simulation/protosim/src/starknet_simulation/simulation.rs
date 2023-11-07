@@ -184,7 +184,7 @@ fn compute_class_hash(
 }
 
 /// A struct with metadata about a contract to be initialized.
-/// These overrides are permanent over
+/// These overrides are permanent and will not be reset on a new block.
 ///
 /// # Fields
 ///
@@ -548,9 +548,7 @@ impl SimulationEngine<RpcStateReader> {
 pub mod tests {
     use std::{collections::HashSet, env};
 
-    use crate::starknet_simulation::{
-        address_str, class_hash_str, felt_str, rpc_reader::tests::setup_reader,
-    };
+    use crate::starknet_simulation::rpc_reader::tests::setup_reader;
 
     use super::*;
     use rpc_state_reader::rpc_state::RpcChain;
@@ -559,6 +557,21 @@ pub mod tests {
         core::errors::state_errors::StateError, execution::CallInfo,
         state::cached_state::ContractClassCache,
     };
+
+    pub fn felt_str(val: &str) -> Felt252 {
+        let base = if val.starts_with("0x") { 16_u32 } else { 10_u32 };
+        let stripped_val = val.strip_prefix("0x").unwrap_or(val);
+
+        Felt252::parse_bytes(stripped_val.as_bytes(), base).expect("Failed to parse input")
+    }
+
+    pub fn address_str(val: &str) -> Address {
+        Address(felt_str(val))
+    }
+
+    pub fn class_hash_str(val: &str) -> ClassHash {
+        felt_str(val).to_be_bytes()
+    }
 
     #[test]
     fn test_address_str_with_prefix() {

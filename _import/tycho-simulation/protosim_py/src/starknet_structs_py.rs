@@ -6,11 +6,11 @@ use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use protosim::{
     starknet_in_rust::{felt::Felt252, utils::Address},
     starknet_simulation::{
-        address_str, class_hash_str,
+        address_str,
         simulation::{
             ContractOverride as RustContractOverride, Overrides, SimulationError,
             SimulationParameters, SimulationResult, StorageHash,
-        },
+        }, class_hash_str,
     },
 };
 
@@ -20,7 +20,7 @@ pub fn python_overrides_to_rust(
     input
         .into_iter()
         .fold(HashMap::new(), |mut acc, ((address, slot), value)| {
-            let address = address_str(&address);
+            let address = address_str(&address).expect("should be valid address");
             let slot = Felt252::from(slot).to_be_bytes();
             let value = Felt252::from(value);
             match acc.entry(address) {
@@ -102,8 +102,8 @@ impl StarknetSimulationParameters {
 impl From<StarknetSimulationParameters> for SimulationParameters {
     fn from(value: StarknetSimulationParameters) -> Self {
         Self {
-            caller: address_str(&value.caller),
-            to: address_str(&value.to),
+            caller: address_str(&value.caller).expect("should be valid address"),
+            to: address_str(&value.to).expect("should be valid address"),
             data: value
                 .data
                 .into_iter()
@@ -179,7 +179,11 @@ impl From<StarknetContractOverride> for RustContractOverride {
     fn from(contract_override: StarknetContractOverride) -> Self {
         let StarknetContractOverride { address, class_hash, path } = contract_override;
 
-        RustContractOverride::new(address_str(&address), class_hash_str(&class_hash), path)
+        RustContractOverride::new(
+            address_str(&address).expect("should be valid address"),
+            class_hash_str(&class_hash).expect("should be valid class hash"),
+            path,
+        )
     }
 }
 

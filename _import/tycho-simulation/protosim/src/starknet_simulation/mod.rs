@@ -1,20 +1,22 @@
-use cairo_vm::felt::Felt252;
+use cairo_vm::felt::{Felt252, ParseFeltError};
+use num_traits::Num;
 use starknet_in_rust::utils::{Address, ClassHash};
 
 pub mod rpc_reader;
 pub mod simulation;
 
-pub fn felt_str(val: &str) -> Felt252 {
-    let base = if val.starts_with("0x") { 16_u32 } else { 10_u32 };
-    let stripped_val = val.strip_prefix("0x").unwrap_or(val);
+pub fn felt_str(val: &str) -> Result<Felt252, ParseFeltError> {
+    let base = if val.starts_with("0x") { 16 } else { 10 };
+    let stripped_val = val.trim_start_matches("0x");
 
-    Felt252::parse_bytes(stripped_val.as_bytes(), base).expect("Failed to parse input")
+    Felt252::from_str_radix(stripped_val, base)
 }
 
-pub fn address_str(val: &str) -> Address {
-    Address(felt_str(val))
+pub fn address_str(val: &str) -> Result<Address, ParseFeltError> {
+    felt_str(val).map(Address)
 }
 
-pub fn class_hash_str(val: &str) -> ClassHash {
-    felt_str(val).to_be_bytes()
+pub fn class_hash_str(val: &str) -> Result<ClassHash, ParseFeltError> {
+    let felt = felt_str(val)?;
+    Ok(felt.to_be_bytes())
 }
