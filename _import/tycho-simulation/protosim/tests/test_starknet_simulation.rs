@@ -53,8 +53,6 @@ mod tests {
     fn setup_engine(
         contract_overrides: Option<Vec<ContractOverride>>,
     ) -> SimulationEngine<RpcStateReader> {
-        // TODO: remove
-        dbg!(&contract_overrides);
         let rpc_state_reader = Arc::new(setup_reader());
         let contract_overrides = contract_overrides.unwrap_or_default();
         SimulationEngine::new(rpc_state_reader, contract_overrides.into()).unwrap()

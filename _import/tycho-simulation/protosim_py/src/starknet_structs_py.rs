@@ -6,11 +6,11 @@ use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use protosim::{
     starknet_in_rust::{felt::Felt252, utils::Address},
     starknet_simulation::{
-        address_str,
+        address_str, class_hash_str,
         simulation::{
             ContractOverride as RustContractOverride, Overrides, SimulationError,
             SimulationParameters, SimulationResult, StorageHash,
-        }, class_hash_str,
+        },
     },
 };
 
