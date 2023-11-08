@@ -349,6 +349,13 @@ impl PreCachedDB {
     pub fn clear_temp_storage(&mut self) {
         info!("Temp storage in TychoDB is never set, nothing to clear");
     }
+
+    /// If block is set, returns the number. Otherwise returns None.
+    pub fn block_number(&self) -> Option<u64> {
+        self.block_on(async { self.inner.read().await.block })
+            .as_ref()
+            .map(|header| header.number)
+    }
 }
 
 impl DatabaseRef for PreCachedDB {
@@ -566,6 +573,29 @@ mod tests {
             .block_on(async { mock_db.inner.read().await.block })
             .expect("block is Some");
         assert_eq!(block.number, 1);
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_block_number_getter(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
+        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        mock_db.init_account(address, AccountInfo::default(), None);
+
+        let new_block = Block {
+            number: 1,
+            hash: B256::default(),
+            parent_hash: B256::default(),
+            chain: Chain::Ethereum,
+            ts: NaiveDateTime::from_timestamp_millis(123).unwrap(),
+        };
+        let updates = HashMap::default();
+
+        mock_db.update_state(&updates, new_block.into());
+
+        let block_number = mock_db.block_number();
+        assert_eq!(block_number.unwrap(), 1);
 
         Ok(())
     }
