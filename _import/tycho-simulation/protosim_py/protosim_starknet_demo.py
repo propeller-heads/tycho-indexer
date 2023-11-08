@@ -43,7 +43,7 @@ def setup_engine(contract_overrides: list = None) -> StarknetSimulationEngine:
     return engine
 
 
-def test_starknet_simulation():
+def test_starknet_approve_simulation():
     print("Running Starknet simulation")
 
     # Load api key from env variable or .env file
@@ -69,7 +69,7 @@ def test_starknet_simulation():
     print(f"gas_used: {result.gas_used=}")
 
 # Test consecutive simulations
-def test_consecutive_simulations_ekubo():
+def test_starknet_swap_simulation():
     block_number = 194554
     token0 = DAI_ADDRESS
     token1 = ETH_ADDRESS
@@ -124,6 +124,6 @@ def test_consecutive_simulations_ekubo():
     assert result.result[2] == 21909951468890105
 
 if __name__ == "__main__":
-    # test_starknet_simulation()
+    test_starknet_approve_simulation()
 
-    test_consecutive_simulations_ekubo()
+    test_starknet_swap_simulation()

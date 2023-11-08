@@ -409,8 +409,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
         let contract_cache: HashMap<ClassHash, CompiledClass> =
             self.state.contract_classes().clone();
         // We initiate the class_hash_initial_values from permanent contract overrides
-        // Also we persist compiled_class_hash_initial_values and compiled_class_hash_writes,
-        // because they can't change.
+        // Also we persist compiled_class_hash_initial_values because they can't change.
         let cache = StateCache::new(
             self.contract_overrides
                 .iter()
@@ -430,10 +429,7 @@ impl<SR: StateReader> SimulationEngine<SR> {
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
-            self.state
-                .cache_mut()
-                .compiled_class_hash_writes_mut()
-                .clone(),
+            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
             self.state
