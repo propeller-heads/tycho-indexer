@@ -11,12 +11,21 @@ use std::{collections::HashMap, str::FromStr};
 
 use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
 
+#[derive(Clone, Copy)]
+enum DatabaseType {
+    RpcReader,
+    Tycho,
+}
+
 /// It is very hard and messy to implement polymorphism with PyO3.
 /// Instead we use an enum to store the all possible simulation engines.
 /// and we keep them invisible to the Python user.
 enum SimulationEngineInner {
-    SimulationDB(simulation::SimulationEngine<database::SimulationDB<Provider<Http>>>),
-    TychoDB(simulation::SimulationEngine<tycho_db::PreCachedDB>),
+    SimulationDB(
+        simulation::SimulationEngine<database::SimulationDB<Provider<Http>>>,
+        DatabaseType,
+    ),
+    TychoDB(simulation::SimulationEngine<tycho_db::PreCachedDB>, DatabaseType),
 }
 
 impl SimulationEngineInner {
@@ -25,8 +34,8 @@ impl SimulationEngineInner {
         params: &simulation::SimulationParameters,
     ) -> Result<simulation::SimulationResult, simulation::SimulationError> {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => engine.simulate(params),
-            SimulationEngineInner::TychoDB(engine) => engine.simulate(params),
+            SimulationEngineInner::SimulationDB(engine, _) => engine.simulate(params),
+            SimulationEngineInner::TychoDB(engine, _) => engine.simulate(params),
         }
     }
 
@@ -38,12 +47,12 @@ impl SimulationEngineInner {
         mocked: bool,
     ) {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => {
+            SimulationEngineInner::SimulationDB(engine, _) => {
                 engine
                     .state
                     .init_account(address, account, permanent_storage, mocked)
             }
-            SimulationEngineInner::TychoDB(engine) => {
+            SimulationEngineInner::TychoDB(engine, _) => {
                 engine
                     .state
                     .init_account(address, account, permanent_storage)
@@ -57,10 +66,10 @@ impl SimulationEngineInner {
         block: database::BlockHeader,
     ) -> HashMap<B160, account_storage::StateUpdate> {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => engine
+            SimulationEngineInner::SimulationDB(engine, _) => engine
                 .state
                 .update_state(updates, block),
-            SimulationEngineInner::TychoDB(engine) => engine
+            SimulationEngineInner::TychoDB(engine, _) => engine
                 .state
                 .update_state(updates, block),
         }
@@ -68,11 +77,11 @@ impl SimulationEngineInner {
 
     fn query_storage(&self, address: B160, slot: rU256) -> Option<rU256> {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => engine
+            SimulationEngineInner::SimulationDB(engine, _) => engine
                 .state
                 .query_storage(address, slot)
                 .ok(),
-            SimulationEngineInner::TychoDB(engine) => engine
+            SimulationEngineInner::TychoDB(engine, _) => engine
                 .state
                 .get_storage(&address, &slot),
         }
@@ -80,8 +89,15 @@ impl SimulationEngineInner {
 
     fn clear_temp_storage(&mut self) {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
-            SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
+            SimulationEngineInner::SimulationDB(engine, _) => engine.state.clear_temp_storage(),
+            SimulationEngineInner::TychoDB(engine, _) => engine.state.clear_temp_storage(),
+        }
+    }
+
+    fn db_type(&self) -> DatabaseType {
+        match self {
+            SimulationEngineInner::SimulationDB(_, db_type) => *db_type,
+            SimulationEngineInner::TychoDB(_, db_type) => *db_type,
         }
     }
 }
@@ -107,13 +123,13 @@ impl SimulationEngine {
     #[classmethod]
     fn new_with_simulation_db(_cls: &PyType, db: SimulationDB, trace: Option<bool>) -> Self {
         let engine = simulation::SimulationEngine::new(db.inner, trace.unwrap_or(false));
-        Self(SimulationEngineInner::SimulationDB(engine))
+        Self(SimulationEngineInner::SimulationDB(engine, DatabaseType::RpcReader))
     }
 
     #[classmethod]
     fn new_with_tycho_db(_cls: &PyType, db: TychoDB, trace: Option<bool>) -> Self {
         let engine = simulation::SimulationEngine::new(db.inner, trace.unwrap_or(false));
-        Self(SimulationEngineInner::TychoDB(engine))
+        Self(SimulationEngineInner::TychoDB(engine, DatabaseType::Tycho))
     }
 
     /// Simulate transaction.
@@ -189,5 +205,15 @@ impl SimulationEngine {
 
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {
         self_.0.clear_temp_storage()
+    }
+
+    /// Returns the type of database the simulation engine is using.
+    fn db_type(&self) -> PyResult<String> {
+        let db_type = self.0.db_type();
+        let db_type_str = match db_type {
+            DatabaseType::RpcReader => "rpc_reader",
+            DatabaseType::Tycho => "tycho",
+        };
+        Ok(db_type_str.to_string())
     }
 }
