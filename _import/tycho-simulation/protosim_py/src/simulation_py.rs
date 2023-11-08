@@ -11,6 +11,12 @@ use std::{collections::HashMap, str::FromStr};
 
 use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
 
+#[derive(Clone, Copy)]
+enum DatabaseType {
+    RpcReader,
+    Tycho,
+}
+
 /// It is very hard and messy to implement polymorphism with PyO3.
 /// Instead we use an enum to store the all possible simulation engines.
 /// and we keep them invisible to the Python user.
@@ -82,6 +88,13 @@ impl SimulationEngineInner {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
             SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
+        }
+    }
+
+    fn db_type(&self) -> DatabaseType {
+        match self {
+            SimulationEngineInner::SimulationDB(_) => DatabaseType::RpcReader,
+            SimulationEngineInner::TychoDB(_) => DatabaseType::Tycho,
         }
     }
 }
@@ -189,5 +202,15 @@ impl SimulationEngine {
 
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {
         self_.0.clear_temp_storage()
+    }
+
+    /// Returns the type of database the simulation engine is using.
+    fn db_type(&self) -> PyResult<String> {
+        let db_type = self.0.db_type();
+        let db_type_str = match db_type {
+            DatabaseType::RpcReader => "rpc_reader",
+            DatabaseType::Tycho => "tycho",
+        };
+        Ok(db_type_str.to_string())
     }
 }
