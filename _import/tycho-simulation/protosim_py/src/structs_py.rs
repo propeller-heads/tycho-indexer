@@ -410,4 +410,9 @@ impl TychoDB {
         let db = tycho_db::PreCachedDB::new(tycho_url);
         Self { inner: db }
     }
+
+    /// Get the current block number of a TychoDB instance.
+    pub fn block_number(self_: PyRefMut<Self>) -> Option<u64> {
+        self_.inner.block_number()
+    }
 }
