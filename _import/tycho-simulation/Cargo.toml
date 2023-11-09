@@ -13,9 +13,9 @@ members = ["protosim", "protosim_py"]
 time = "0.3.17"
 protosim = { version = "^0.1.0", path = "./protosim" }
 ethers = "^2.0.2"
-rdkafka = "0.29.0"
+rdkafka = "0.36.0"
 tokio = { version = "1.23.0", features = ["full"] }
-redis = { version = "0.22.1", features = ["tokio-comp"] }
+redis = { version = "0.23.3", features = ["tokio-comp"] }
 futures = "0.3.25"
 serde_json = { version = "1.0.91", features = ["arbitrary_precision"] }
 serde = "1.0.152"
@@ -30,7 +30,7 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 
 
 [dev-dependencies]
-rstest = "0.16.0"
+rstest = "0.18.2"
 http = "0.2.8"
 
 [profile.bench]

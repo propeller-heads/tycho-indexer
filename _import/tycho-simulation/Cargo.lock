@@ -159,9 +159,9 @@ checksum = "7de8ce5e0f9f8d88245311066a578d72b7af3e7088f32783804676302df237e4"
 
 [[package]]
 name = "approx"
-version = "0.3.2"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0e60b75072ecd4168020818c0107f2857bb6c4e64252d8d3983f6263b40a5c3"
+checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
 dependencies = [
  "num-traits 0.2.17",
 ]
@@ -3142,9 +3142,9 @@ dependencies = [
 
 [[package]]
 name = "libz-sys"
-version = "1.1.8"
+version = "1.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9702761c3935f8cc2f101793272e202c72b99da8f4224a19ddcf1279a6450bbf"
+checksum = "d97137b25e321a73eef1418d1d5d2eda4d77e12813f8e6dead84bc52c5870a7b"
 dependencies = [
  "cc",
  "libc",
@@ -4260,9 +4260,9 @@ dependencies = [
 
 [[package]]
 name = "rdkafka"
-version = "0.29.0"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd7c5d6d17442bcb9f943aae96d67d98c6d36af60442dd5da62aaa7fcbb25c48"
+checksum = "d54f02a5a40220f8a2dfa47ddb38ba9064475a5807a69504b6f91711df2eea63"
 dependencies = [
  "futures-channel",
  "futures-util",
@@ -4278,9 +4278,9 @@ dependencies = [
 
 [[package]]
 name = "rdkafka-sys"
-version = "4.3.0+1.9.2"
+version = "4.7.0+2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d222a401698c7f2010e3967353eae566d9934dcda49c29910da922414ab4e3f4"
+checksum = "55e0d2f9ba6253f6ec72385e453294f8618e9e15c2c6aba2a5c01ccf9622d615"
 dependencies = [
  "libc",
  "libz-sys",
@@ -4290,9 +4290,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.22.3"
+version = "0.23.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa8455fa3621f6b41c514946de66ea0531f57ca017b2e6c7cc368035ea5b46df"
+checksum = "4f49cdc0bb3f412bf8e7d1bd90fe1d9eb10bc5c399ba90973c14662a27b3f8ba"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4303,6 +4303,7 @@ dependencies = [
  "pin-project-lite",
  "ryu",
  "sha1_smol",
+ "socket2 0.4.9",
  "tokio",
  "tokio-util",
  "url",
@@ -4565,9 +4566,9 @@ dependencies = [
 
 [[package]]
 name = "rstest"
-version = "0.16.0"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b07f2d176c472198ec1e6551dc7da28f1c089652f66a7b722676c2238ebc0edf"
+checksum = "97eeab2f3c0a199bc4be135c36c924b6590b88c377d416494288c14f2db30199"
 dependencies = [
  "futures",
  "futures-timer",
@@ -4577,15 +4578,18 @@ dependencies = [
 
 [[package]]
 name = "rstest_macros"
-version = "0.16.0"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7229b505ae0706e64f37ffc54a9c163e11022a6636d58fe1f3f52018257ff9f7"
+checksum = "d428f8247852f894ee1be110b375111b586d4fa431f6c46e64ba5a0dcccbe605"
 dependencies = [
  "cfg-if",
+ "glob",
  "proc-macro2",
  "quote",
+ "regex",
+ "relative-path",
  "rustc_version",
- "syn 1.0.109",
+ "syn 2.0.29",
  "unicode-ident",
 ]
 
