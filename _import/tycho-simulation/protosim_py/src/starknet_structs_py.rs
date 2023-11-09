@@ -4,21 +4,15 @@ use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
 use protosim::{
-    num_traits::Num,
-    starknet_in_rust::{
-        felt::Felt252,
-        state::state_cache::StorageEntry,
-        utils::{string_to_hash, Address},
-    },
-    starknet_simulation::simulation::{
-        ContractOverride as RustContractOverride, Overrides, SimulationError, SimulationParameters,
-        SimulationResult, StorageHash,
+    starknet_in_rust::{felt::Felt252, utils::Address},
+    starknet_simulation::{
+        address_str, class_hash_str,
+        simulation::{
+            ContractOverride as RustContractOverride, Overrides, SimulationError,
+            SimulationParameters, SimulationResult, StorageHash,
+        },
     },
 };
-
-pub fn string_to_address(address: &str) -> Address {
-    Address(Felt252::from_str_radix(address, 16).expect("hex address"))
-}
 
 pub fn python_overrides_to_rust(
     input: HashMap<(String, BigUint), BigUint>,
@@ -26,7 +20,7 @@ pub fn python_overrides_to_rust(
     input
         .into_iter()
         .fold(HashMap::new(), |mut acc, ((address, slot), value)| {
-            let address = string_to_address(&address);
+            let address = address_str(&address).expect("should be valid address");
             let slot = Felt252::from(slot).to_be_bytes();
             let value = Felt252::from(value);
             match acc.entry(address) {
@@ -62,8 +56,8 @@ pub fn rust_overrides_to_python(
 }
 
 /// Parameters for Starknet transaction simulation.
-#[pyclass]
 #[derive(Clone, Debug)]
+#[pyclass]
 pub struct StarknetSimulationParameters {
     /// Address of the sending account
     #[pyo3(get)]
@@ -89,11 +83,27 @@ pub struct StarknetSimulationParameters {
     pub block_number: u64,
 }
 
+#[pymethods]
+impl StarknetSimulationParameters {
+    #[new]
+    pub fn new(
+        caller: String,
+        to: String,
+        data: Vec<BigUint>,
+        entry_point: String,
+        block_number: u64,
+        overrides: Option<HashMap<(String, BigUint), BigUint>>,
+        gas_limit: Option<u128>,
+    ) -> Self {
+        Self { caller, to, data, entry_point, overrides, gas_limit, block_number }
+    }
+}
+
 impl From<StarknetSimulationParameters> for SimulationParameters {
     fn from(value: StarknetSimulationParameters) -> Self {
         Self {
-            caller: string_to_address(&value.caller),
-            to: string_to_address(&value.to),
+            caller: address_str(&value.caller).expect("should be valid address"),
+            to: address_str(&value.to).expect("should be valid address"),
             data: value
                 .data
                 .into_iter()
@@ -143,7 +153,7 @@ impl From<SimulationResult> for StarknetSimulationResult {
 /// For example to override an ERC20 contract to a standardized implementation.
 #[pyclass]
 #[derive(Clone, Debug)]
-pub struct ContractOverride {
+pub struct StarknetContractOverride {
     /// Address of the contract to override represented as a hexadecimal string.
     #[pyo3(get)]
     pub address: String,
@@ -155,35 +165,24 @@ pub struct ContractOverride {
     /// Supports .casm (Cairo 0) and .json () files.
     #[pyo3(get)]
     pub path: Option<String>,
-    /// Storage overrides for the contract
-    ///
-    /// Mapping of tuple (contract address, storage slot) to storage value.
-    #[pyo3(get)]
-    pub storage_overrides: Option<HashMap<(String, BigUint), BigUint>>,
 }
 
-impl From<ContractOverride> for RustContractOverride {
-    fn from(contract_override: ContractOverride) -> Self {
-        let ContractOverride { address, class_hash, path, storage_overrides } = contract_override;
+#[pymethods]
+impl StarknetContractOverride {
+    #[new]
+    pub fn new(address: String, class_hash: String, path: Option<String>) -> Self {
+        Self { address, class_hash, path }
+    }
+}
 
-        // Convert storage overrides to format
-        let storage_overrides: Option<HashMap<StorageEntry, Felt252>> =
-            storage_overrides.map(|storages| {
-                storages
-                    .into_iter()
-                    .map(|((address, slot), value)| {
-                        (
-                            (string_to_address(&address), Felt252::from(slot).to_be_bytes()),
-                            Felt252::from(value),
-                        )
-                    })
-                    .collect()
-            });
+impl From<StarknetContractOverride> for RustContractOverride {
+    fn from(contract_override: StarknetContractOverride) -> Self {
+        let StarknetContractOverride { address, class_hash, path } = contract_override;
+
         RustContractOverride::new(
-            string_to_address(&address),
-            string_to_hash(&class_hash),
+            address_str(&address).expect("should be valid address"),
+            class_hash_str(&class_hash).expect("should be valid class hash"),
             path,
-            storage_overrides,
         )
     }
 }

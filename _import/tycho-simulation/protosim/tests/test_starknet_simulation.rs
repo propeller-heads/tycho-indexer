@@ -6,8 +6,7 @@ mod tests {
         rpc_reader::RpcStateReader,
         simulation::{ContractOverride, Overrides, SimulationEngine, SimulationParameters},
     };
-    use rpc_state_reader::rpc_state::{RpcChain, RpcState};
-    use starknet_api::block::BlockNumber;
+    use rpc_state_reader::rpc_state::{BlockTag, RpcChain, RpcState};
     use starknet_in_rust::utils::{felt_to_hash, get_storage_var_address, Address, ClassHash};
     use std::{collections::HashMap, env, sync::Arc};
 
@@ -31,7 +30,11 @@ mod tests {
         Address(felt_str(val))
     }
 
-    fn setup_reader(block_number: u64) -> RpcStateReader {
+    /// Setup Starknet RPC state reader
+    ///
+    /// Does not accept block number as input since it is overwritten by the simulation engine,
+    /// taking it as a parameter might make the user think that it is permanent
+    fn setup_reader() -> RpcStateReader {
         let infura_api_key = env::var("INFURA_API_KEY").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
             env::var("INFURA_API_KEY").expect("Missing INFURA_API_KEY in .env file")
@@ -40,19 +43,19 @@ mod tests {
         let feeder_url = format!("https://{}.starknet.io/feeder_gateway", RpcChain::MainNet);
         RpcStateReader::new(RpcState::new(
             RpcChain::MainNet,
-            BlockNumber(block_number).into(),
+            BlockTag::Latest.into(),
             &rpc_endpoint,
             &feeder_url,
         ))
     }
 
+    /// Setup simulation engine with contract overrides
     fn setup_engine(
-        block_number: u64,
         contract_overrides: Option<Vec<ContractOverride>>,
     ) -> SimulationEngine<RpcStateReader> {
-        let rpc_state_reader = Arc::new(setup_reader(block_number));
+        let rpc_state_reader = Arc::new(setup_reader());
         let contract_overrides = contract_overrides.unwrap_or_default();
-        SimulationEngine::new(rpc_state_reader, contract_overrides).unwrap()
+        SimulationEngine::new(rpc_state_reader, contract_overrides.into()).unwrap()
     }
 
     fn construct_token_contract_override(token: Address) -> ContractOverride {
@@ -64,7 +67,7 @@ mod tests {
                 .try_into()
                 .unwrap();
 
-        ContractOverride::new(token, class_hash, None, None)
+        ContractOverride::new(token, class_hash, None)
     }
 
     fn add_balance_override(
@@ -93,7 +96,7 @@ mod tests {
 
         // Construct engine with contract overrides
         let sell_token_contract_override = construct_token_contract_override(token0.clone());
-        let mut engine = setup_engine(block_number, Some(vec![sell_token_contract_override]));
+        let mut engine = setup_engine(Some(vec![sell_token_contract_override]));
 
         // Construct simulation overrides - token balances
         let mut token_overrides = Overrides::new();
@@ -141,7 +144,7 @@ mod tests {
 
         // SIMULATION 1
         let result0 = engine.simulate(&params);
-
+        dbg!(&result0);
         assert!(result0.is_ok());
         let res = result0.unwrap();
         assert_eq!(res.gas_used, 9480810);
@@ -150,7 +153,7 @@ mod tests {
         // SIMULATION 2
 
         let result1 = engine.simulate(&params);
-        // dbg!(&result1);
+        dbg!(&result1);
         assert!(result1.is_ok());
         let res = result1.unwrap();
         assert_eq!(res.gas_used, 9480810);
@@ -161,7 +164,7 @@ mod tests {
     #[test]
     fn test_get_eth_usdc_spot_price_ekubo() {
         let block_number = 367676;
-        let mut engine = setup_engine(block_number, None);
+        let mut engine = setup_engine(None);
 
         let ekubo_address = address_str(EKUBO_ADDRESS);
 
@@ -195,7 +198,7 @@ mod tests {
     #[test]
     fn test_get_dai_usdc_spot_price_ekubo() {
         let block_number = 367676;
-        let mut engine = setup_engine(block_number, None);
+        let mut engine = setup_engine(None);
 
         let ekubo_address = address_str(EKUBO_ADDRESS);
 

@@ -50,7 +50,7 @@ jobs:
         with:
           cache-on-failure: true
 
-      - run: cargo +nightly clippy --workspace --all-targets --all-features
+      - run: cargo +nightly clippy --workspace --all-targets --all-features -- -D clippy::dbg-macro
         env:
           RUSTFLAGS: -Dwarnings
 
