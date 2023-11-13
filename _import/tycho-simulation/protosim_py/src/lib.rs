@@ -1,3 +1,4 @@
+use logging::init_rust_to_python_logging;
 use pyo3::prelude::*;
 use simulation_py::SimulationEngine;
 use starknet_simulation_py::StarknetSimulationEngine;
@@ -8,8 +9,8 @@ use structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationParameters, SimulationResult, StateUpdate,
     TychoDB,
 };
-use tracing_subscriber::EnvFilter;
 
+mod logging;
 mod simulation_py;
 mod starknet_simulation_py;
 mod starknet_structs_py;
@@ -21,22 +22,7 @@ fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     // initialize up a logger
     pyo3_log::init();
 
-    // Start configuring a `fmt` subscriber
-    tracing_subscriber::fmt()
-        // Use a more compact, abbreviated log format
-        .compact()
-        // Display source code file paths
-        .with_file(true)
-        // Display source code line numbers
-        .with_line_number(true)
-        // Display the thread ID an event was recorded on
-        .with_thread_ids(true)
-        // Don't display the event's target (module path)
-        .with_target(false)
-        // Set default log level from RUST_LOG env variable
-        .with_env_filter(EnvFilter::from_default_env())
-        // Build the subscriber
-        .finish();
+    init_rust_to_python_logging()?;
 
     m.add_class::<SimulationEngine>()?;
     m.add_class::<SimulationParameters>()?;
@@ -50,5 +36,8 @@ fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<StarknetContractOverride>()?;
     m.add_class::<StarknetSimulationParameters>()?;
     m.add_class::<StarknetSimulationResult>()?;
+
+    // // Function to forward rust logs to python
+    // m.add_function(wrap_pyfunction!(init_custom_logging, m)?)?;
     Ok(())
 }
