@@ -36,7 +36,7 @@ def test_simulation_db():
     )
     engine = SimulationEngine.new_with_simulation_db(
         db=db,
-        trace=True
+        trace=False
     )
 
     params = SimulationParameters(
@@ -99,10 +99,10 @@ def test_tycho_db():
     print("Run test function")
 
     # Select the simulation database based on the input
-    db = TychoDB(tycho_url="127.0.0.1:4242")
+    db = TychoDB(tycho_http_url="http://127.0.0.1:4242", tycho_ws_url="ws://127.0.0.1:4242")
     engine = SimulationEngine.new_with_tycho_db(
         db=db,
-        trace=True
+        trace=False
     )
 
     print("Inserting Account")

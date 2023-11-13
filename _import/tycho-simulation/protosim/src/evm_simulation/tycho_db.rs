@@ -12,7 +12,7 @@ use revm::{
 use crate::evm_simulation::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
-    tycho_client::{TychoHttpClientImpl, AMBIENT_ACCOUNT_ADDRESS, TychoWsClientImpl},
+    tycho_client::{TychoHttpClientImpl, TychoWsClientImpl, AMBIENT_ACCOUNT_ADDRESS},
     tycho_models::{AccountUpdate, ChangeType, StateRequestBody, StateRequestParameters, Version},
 };
 
@@ -56,8 +56,8 @@ pub struct PreCachedDB {
 
 impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
-    pub fn new(tycho_url: &str) -> Self {
-        info!(?tycho_url, "Creating new PreCachedDB instance");
+    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> Self {
+        info!(?tycho_http_url, "Creating new PreCachedDB instance");
 
         let tycho_db = PreCachedDB {
             inner: Arc::new(RwLock::new(PreCachedDBInner {
@@ -68,20 +68,20 @@ impl PreCachedDB {
 
         // Run the async get state initialization
         info!("Spawning initialization thread");
-        let http_client = TychoHttpClientImpl::new(tycho_url).expect("should create http client");
+        let http_client =
+            TychoHttpClientImpl::new(tycho_http_url).expect("should create http client");
         tycho_db.initialize_state(&http_client);
         info!("Initialization thread finished");
 
         let tycho_db_clone = tycho_db.clone();
         let (_tx, rx) = tokio::sync::mpsc::channel::<()>(5);
 
-        let tycho_url_clone = tycho_url.to_owned();
-
         info!("Spawning update loop");
-        let ws_client = TychoWsClientImpl::new(tycho_url).expect("should create ws client");
+        let ws_client = TychoWsClientImpl::new(tycho_ws_url).expect("should create ws client");
 
+        let tycho_ws_url = tycho_ws_url.to_owned();
         std::thread::spawn(move || {
-            info_span!("update_loop", tycho_url = tycho_url_clone);
+            info_span!("update_loop", tycho_ws_url);
             tycho_db_clone.update_loop(ws_client, rx)
         });
 
@@ -720,9 +720,10 @@ mod tests {
         let ambient_contract =
             B160::from_str("0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
 
-        let tycho_url = "127.0.0.1:4242";
-        info!(tycho_url, "Creating PreCachedDB");
-        let db = PreCachedDB::new(tycho_url);
+        let tycho_http_url = "http://127.0.0.1:4242";
+        let tycho_ws_url = "ws://127.0.0.1:4242";
+        info!(tycho_http_url, tycho_ws_url, "Creating PreCachedDB");
+        let db = PreCachedDB::new(tycho_http_url, tycho_ws_url);
 
         info!("Fetching account info");
 

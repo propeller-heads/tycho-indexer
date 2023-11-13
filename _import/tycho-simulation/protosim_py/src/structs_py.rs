@@ -402,12 +402,14 @@ impl TychoDB {
     /// Create a new TychoDB instance.
     ///
     /// Arguments
-    /// * `tycho_url` - URL of the Tycho Indexer instance.
+    ///
+    /// * `tycho_http_url` - URL of the Tycho Indexer HTTP endpoint.
+    /// * `tycho_ws_url` - URL of the Tycho Indexer WebSocket endpoint.
     /// * `block` - Block header to use as a starting point for the database.
     #[new]
-    pub fn new(tycho_url: &str) -> Self {
-        info!(?tycho_url, "Creating python TychoDB wrapper instance");
-        let db = tycho_db::PreCachedDB::new(tycho_url);
+    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> Self {
+        info!(?tycho_http_url, ?tycho_ws_url, "Creating python TychoDB wrapper instance");
+        let db = tycho_db::PreCachedDB::new(tycho_http_url, tycho_ws_url);
         Self { inner: db }
     }
 
