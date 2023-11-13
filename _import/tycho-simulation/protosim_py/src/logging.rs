@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
-use tracing::{level_filters::LevelFilter, Event, Subscriber};
-use tracing_subscriber::{layer::Context, prelude::*, registry::LookupSpan, EnvFilter, Layer};
+use tracing::{Event, Subscriber};
+use tracing_subscriber::{layer::Context, prelude::*, registry::LookupSpan, Layer};
 
 struct PythonLoggerLayer;
 
@@ -28,12 +28,12 @@ where
                             .getattr("DEBUG")
                             .unwrap_or_else(|_| py.None().into_ref(py)),
                         tracing::Level::TRACE => logger
-                            .getattr("NOTSET")
-                            .unwrap_or_else(|_| py.None().into_ref(py)), /* Python logging
-                                                                          * doesn't have a
-                                                                          * TRACE level, using
-                                                                          * NOTSET as a
-                                                                          * fallback */
+                            .getattr("TRACE")
+                            .unwrap_or_else(|_| {
+                                logger
+                                    .getattr("NOTSET") // Fallback to NOTSET if TRACE is not available
+                                    .unwrap_or_else(|_| py.None().into_ref(py))
+                            }), // TRACE is set as a custom level by defibot
                     };
 
                     // Extract the message from the event
@@ -54,17 +54,13 @@ where
 }
 
 /// Initialize forwarding from Rust logs to Python logs
+///
+/// Follows log level setting from the python library
 #[pyfunction]
-pub fn init_custom_logging() -> PyResult<()> {
+pub fn init_rust_to_python_logging() -> PyResult<()> {
     // Set up Rust logging with the mapped level
-    let env_filter = EnvFilter::from_default_env().add_directive(LevelFilter::DEBUG.into());
-    let layer = PythonLoggerLayer;
-    let subscriber: tracing_subscriber::layer::Layered<
-        EnvFilter,
-        tracing_subscriber::layer::Layered<_, tracing_subscriber::Registry>,
-    > = tracing_subscriber::registry()
-        .with(layer)
-        .with(env_filter);
+    let python_logger = PythonLoggerLayer;
+    let subscriber = tracing_subscriber::registry().with(python_logger);
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Error: {}", e)))?;
     Ok(())

@@ -1,4 +1,4 @@
-use logging::init_custom_logging;
+use logging::init_rust_to_python_logging;
 use pyo3::prelude::*;
 use simulation_py::SimulationEngine;
 use starknet_simulation_py::StarknetSimulationEngine;
@@ -22,7 +22,7 @@ fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     // initialize up a logger
     pyo3_log::init();
 
-    init_custom_logging()?;
+    init_rust_to_python_logging()?;
 
     m.add_class::<SimulationEngine>()?;
     m.add_class::<SimulationParameters>()?;

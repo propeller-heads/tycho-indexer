@@ -4,6 +4,7 @@
 See the Readme.md file for instructions.
 """
 
+import os
 from protosim_py import (
     SimulationEngine,
     SimulationParameters,
@@ -23,15 +24,13 @@ U256MAX = 1157920892373161954235709850086879078532699846656405640394575840079131
 def test_simulation_db():
     print("Run test function")
 
-    # Select the simulation database based on the input
-#     engine = SimulationEngine.new_with_simulation_db(
-#         rpc_url="https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-#         block=None,
-#         trace=True
-#     )
+    infura_api_key = os.getenv("INFURA_API_KEY")
+    
+    if infura_api_key is None:
+        raise Exception("INFURA_API_KEY environment variable not set")
    
     db = SimulationDB(
-        rpc_url="https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
+        rpc_url=f"https://mainnet.infura.io/v3/{infura_api_key}",
         block=None
     )
     engine = SimulationEngine.new_with_simulation_db(

@@ -21,7 +21,7 @@ serde = "1.0.152"
 clap = { version = "4.2.7", features = ["derive"] }
 reqwest = "0.11.14"
 async-trait = "0.1"
-tracing = "0.1.37"
+tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
     "env-filter",
     "fmt",
