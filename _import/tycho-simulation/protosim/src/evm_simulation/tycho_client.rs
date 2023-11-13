@@ -305,7 +305,6 @@ mod tests {
                     .send(Message::Text(test_msg_content.to_string()))
                     .expect("Failed to send message");
 
-
                 // Close the WebSocket connection
                 let _ = websocket.close(None);
             }
