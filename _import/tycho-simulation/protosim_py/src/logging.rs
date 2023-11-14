@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 use tracing::{Event, Subscriber};
-use tracing_subscriber::{layer::Context, prelude::*, registry::LookupSpan, Layer};
+use tracing_subscriber::{layer::Context, registry::LookupSpan, Layer};
 
-struct PythonLoggerLayer;
+pub struct PythonLoggerLayer;
 
 impl<S> Layer<S> for PythonLoggerLayer
 where
@@ -51,17 +51,4 @@ where
             }
         });
     }
-}
-
-/// Initialize forwarding from Rust logs to Python logs
-///
-/// Follows log level setting from the python library
-#[pyfunction]
-pub fn init_rust_to_python_logging() -> PyResult<()> {
-    // Set up Rust logging with the mapped level
-    let python_logger = PythonLoggerLayer;
-    let subscriber = tracing_subscriber::registry().with(python_logger);
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Error: {}", e)))?;
-    Ok(())
 }
