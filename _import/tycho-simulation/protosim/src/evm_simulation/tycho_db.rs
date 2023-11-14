@@ -660,7 +660,9 @@ mod tests {
     fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoClient) {
         let (_tx, rx) = mpsc::channel::<()>(1);
 
-        assert!(mock_db.initialize_state(&mock_client).is_ok());
+        assert!(mock_db
+            .initialize_state(&mock_client)
+            .is_ok());
 
         // This update loop is usually run in a separate thread.
         // Because we just send two transactions in the mocking tycho client, we can just blockingly
