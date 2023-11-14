@@ -88,7 +88,7 @@ impl PreCachedDB {
             tycho_db_clone.update_loop(ws_client, rx)
         });
 
-        tycho_db
+        Ok(tycho_db)
     }
 
     /// Initialize the state of the database.
@@ -660,7 +660,7 @@ mod tests {
     fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoClient) {
         let (_tx, rx) = mpsc::channel::<()>(1);
 
-        mock_db.initialize_state(&mock_client);
+        assert!(mock_db.initialize_state(&mock_client).is_ok());
 
         // This update loop is usually run in a separate thread.
         // Because we just send two transactions in the mocking tycho client, we can just blockingly
@@ -727,7 +727,7 @@ mod tests {
         let tycho_http_url = "http://127.0.0.1:4242";
         let tycho_ws_url = "ws://127.0.0.1:4242";
         info!(tycho_http_url, tycho_ws_url, "Creating PreCachedDB");
-        let db = PreCachedDB::new(tycho_http_url, tycho_ws_url);
+        let db = PreCachedDB::new(tycho_http_url, tycho_ws_url).expect("db should initialize");
 
         info!("Fetching account info");
 

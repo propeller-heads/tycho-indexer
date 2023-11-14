@@ -410,9 +410,8 @@ impl TychoDB {
     #[pyo3(signature = (tycho_http_url, tycho_ws_url))]
     pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> PyResult<Self> {
         info!(?tycho_http_url, ?tycho_ws_url, "Creating python TychoDB wrapper instance");
-        let db = tycho_db::PreCachedDB::new(tycho_http_url, tycho_ws_url).map_err(|e| {
-            PyRuntimeError::new_err(format!("Failed to create TychoDB: {}", e))
-        })?;
+        let db = tycho_db::PreCachedDB::new(tycho_http_url, tycho_ws_url)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create TychoDB: {}", e)))?;
         Ok(Self { inner: db })
     }
 
