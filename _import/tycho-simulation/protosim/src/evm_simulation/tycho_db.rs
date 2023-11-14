@@ -12,11 +12,12 @@ use revm::{
 use crate::evm_simulation::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
-    tycho_client::{TychoHttpClientImpl, TychoWsClientImpl, AMBIENT_ACCOUNT_ADDRESS},
+    tycho_client::{
+        TychoClientError, TychoHttpClient, TychoHttpClientImpl, TychoWsClient, TychoWsClientImpl,
+        AMBIENT_ACCOUNT_ADDRESS,
+    },
     tycho_models::{AccountUpdate, ChangeType, StateRequestBody, StateRequestParameters, Version},
 };
-
-use super::tycho_client::{TychoHttpClient, TychoWsClient};
 
 /// Perform bytecode analysis on the code of an account.
 pub fn to_analysed(account_info: AccountInfo) -> AccountInfo {
@@ -34,6 +35,8 @@ pub enum PreCachedDBError {
     MissingAccount(B160),
     #[error("Block needs to be set")]
     BlockNotSet(),
+    #[error("Tycho Client error: {0}")]
+    TychoClientError(#[from] TychoClientError),
 }
 
 #[derive(Clone, Debug)]
@@ -56,7 +59,7 @@ pub struct PreCachedDB {
 
 impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
-    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> Self {
+    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> Result<Self, PreCachedDBError> {
         info!(?tycho_http_url, "Creating new PreCachedDB instance");
 
         let tycho_db = PreCachedDB {
@@ -70,7 +73,7 @@ impl PreCachedDB {
         info!("Spawning initialization thread");
         let http_client =
             TychoHttpClientImpl::new(tycho_http_url).expect("should create http client");
-        tycho_db.initialize_state(&http_client);
+        tycho_db.initialize_state(&http_client)?;
         info!("Initialization thread finished");
 
         let tycho_db_clone = tycho_db.clone();
@@ -90,7 +93,7 @@ impl PreCachedDB {
 
     /// Initialize the state of the database.
     #[instrument(skip_all)]
-    fn initialize_state(&self, client: &impl TychoHttpClient) {
+    fn initialize_state(&self, client: &impl TychoHttpClient) -> Result<(), PreCachedDBError> {
         info!("Getting current state");
         let state = client
             .get_state(
@@ -100,7 +103,7 @@ impl PreCachedDB {
                     Version::default(),
                 ),
             )
-            .expect("current state");
+            .map_err(PreCachedDBError::TychoClientError)?;
 
         for account in state.accounts.into_iter() {
             info!(%account.address, "Initializing account");
@@ -115,6 +118,7 @@ impl PreCachedDB {
                 Some(account.slots),
             );
         }
+        Ok(())
     }
 
     /// Start the update loop.
