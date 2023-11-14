@@ -1,4 +1,3 @@
-use logging::PythonLoggerLayer;
 use pyo3::prelude::*;
 use simulation_py::SimulationEngine;
 use starknet_simulation_py::StarknetSimulationEngine;
@@ -9,9 +8,8 @@ use structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationParameters, SimulationResult, StateUpdate,
     TychoDB,
 };
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
-mod logging;
 mod simulation_py;
 mod starknet_simulation_py;
 mod starknet_structs_py;
@@ -38,9 +36,7 @@ fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
         // Set default log level from RUST_LOG env variable
         .with_env_filter(EnvFilter::from_default_env())
         // Build the subscriber
-        .finish()
-        // Add python forwarding
-        .with(PythonLoggerLayer);
+        .finish();
 
     let _ = tracing::subscriber::set_global_default(subscriber);
 
