@@ -1,6 +1,6 @@
 [package]
 name = "protosim"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 
@@ -13,9 +13,7 @@ enum_dispatch = "0.3.8"
 serde_json = "1.0.105"
 serde = "1.0.152"
 tokio = { version = "1.32.0", features = ["full"] }
-tokio-tungstenite = "0.20.1"
 async-trait = "0.1.73"
-hyper = "0.14.27"
 futures = "0.3.28"
 revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
     "ethersdb",
@@ -25,10 +23,6 @@ hex = "0.4.3"
 thiserror = "1"
 chrono = { version = "0.4.26", features = ["serde"] }
 tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.17", default-features = false, features = [
-    "env-filter",
-    "fmt",
-] }
 strum = "0.25.0"
 strum_macros = "0.25.2"
 uuid = { version = "1.4.1", features = [
@@ -42,15 +36,20 @@ starknet_api = "0.4.1"
 starknet = "0.5.0"
 cairo-vm = { version = "0.8.5", features = ["cairo-1-hints"] }
 dotenv = "0.15.0"
-reqwest = "0.11.14"
+reqwest = "0.11.22"
 rpc_state_reader = { git = "https://github.com/lambdaclass/starknet_in_rust.git", package = "rpc_state_reader", tag = "v0.4.0" }
 num-traits = "0.2.17"
+tungstenite = "0.20.1"
 
 [dev-dependencies]
 mockito = "1.1.1"
 warp = "0.3.5"
-approx = "0.3.2"
-rstest = "0.16.0"
+approx = "0.5.1"
+rstest = "0.18.2"
+tracing-subscriber = { version = "0.3.17", default-features = false, features = [
+    "env-filter",
+    "fmt",
+] }
 
 [features]
 default = []
