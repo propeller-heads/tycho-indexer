@@ -12,11 +12,12 @@ use revm::{
 use crate::evm_simulation::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
-    tycho_client::{TychoHttpClientImpl, TychoWsClientImpl, AMBIENT_ACCOUNT_ADDRESS},
+    tycho_client::{
+        TychoClientError, TychoHttpClient, TychoHttpClientImpl, TychoWsClient, TychoWsClientImpl,
+        AMBIENT_ACCOUNT_ADDRESS,
+    },
     tycho_models::{AccountUpdate, ChangeType, StateRequestBody, StateRequestParameters, Version},
 };
-
-use super::tycho_client::{TychoHttpClient, TychoWsClient};
 
 /// Perform bytecode analysis on the code of an account.
 pub fn to_analysed(account_info: AccountInfo) -> AccountInfo {
@@ -34,6 +35,8 @@ pub enum PreCachedDBError {
     MissingAccount(B160),
     #[error("Block needs to be set")]
     BlockNotSet(),
+    #[error("Tycho Client error: {0}")]
+    TychoClientError(#[from] TychoClientError),
 }
 
 #[derive(Clone, Debug)]
@@ -56,7 +59,7 @@ pub struct PreCachedDB {
 
 impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
-    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> Self {
+    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> Result<Self, PreCachedDBError> {
         info!(?tycho_http_url, "Creating new PreCachedDB instance");
 
         let tycho_db = PreCachedDB {
@@ -69,15 +72,16 @@ impl PreCachedDB {
         // Run the async get state initialization
         info!("Spawning initialization thread");
         let http_client =
-            TychoHttpClientImpl::new(tycho_http_url).expect("should create http client");
-        tycho_db.initialize_state(&http_client);
+            TychoHttpClientImpl::new(tycho_http_url).map_err(PreCachedDBError::TychoClientError)?;
+        tycho_db.initialize_state(&http_client)?;
         info!("Initialization thread finished");
 
         let tycho_db_clone = tycho_db.clone();
         let (_tx, rx) = tokio::sync::mpsc::channel::<()>(5);
 
         info!("Spawning update loop");
-        let ws_client = TychoWsClientImpl::new(tycho_ws_url).expect("should create ws client");
+        let ws_client =
+            TychoWsClientImpl::new(tycho_ws_url).map_err(PreCachedDBError::TychoClientError)?;
 
         let tycho_ws_url = tycho_ws_url.to_owned();
         std::thread::spawn(move || {
@@ -85,12 +89,12 @@ impl PreCachedDB {
             tycho_db_clone.update_loop(ws_client, rx)
         });
 
-        tycho_db
+        Ok(tycho_db)
     }
 
     /// Initialize the state of the database.
     #[instrument(skip_all)]
-    fn initialize_state(&self, client: &impl TychoHttpClient) {
+    fn initialize_state(&self, client: &impl TychoHttpClient) -> Result<(), PreCachedDBError> {
         info!("Getting current state");
         let state = client
             .get_state(
@@ -100,7 +104,7 @@ impl PreCachedDB {
                     Version::default(),
                 ),
             )
-            .expect("current state");
+            .map_err(PreCachedDBError::TychoClientError)?;
 
         for account in state.accounts.into_iter() {
             info!(%account.address, "Initializing account");
@@ -115,6 +119,7 @@ impl PreCachedDB {
                 Some(account.slots),
             );
         }
+        Ok(())
     }
 
     /// Start the update loop.
@@ -656,7 +661,9 @@ mod tests {
     fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoClient) {
         let (_tx, rx) = mpsc::channel::<()>(1);
 
-        mock_db.initialize_state(&mock_client);
+        assert!(mock_db
+            .initialize_state(&mock_client)
+            .is_ok());
 
         // This update loop is usually run in a separate thread.
         // Because we just send two transactions in the mocking tycho client, we can just blockingly
@@ -723,7 +730,7 @@ mod tests {
         let tycho_http_url = "http://127.0.0.1:4242";
         let tycho_ws_url = "ws://127.0.0.1:4242";
         info!(tycho_http_url, tycho_ws_url, "Creating PreCachedDB");
-        let db = PreCachedDB::new(tycho_http_url, tycho_ws_url);
+        let db = PreCachedDB::new(tycho_http_url, tycho_ws_url).expect("db should initialize");
 
         info!("Fetching account info");
 
