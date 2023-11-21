@@ -72,7 +72,7 @@ impl PreCachedDB {
         // Run the async get state initialization
         info!("Spawning initialization thread");
         let http_client =
-            TychoHttpClientImpl::new(tycho_http_url).expect("should create http client");
+            TychoHttpClientImpl::new(tycho_http_url).map_err(PreCachedDBError::TychoClientError)?;
         tycho_db.initialize_state(&http_client)?;
         info!("Initialization thread finished");
 
@@ -80,7 +80,8 @@ impl PreCachedDB {
         let (_tx, rx) = tokio::sync::mpsc::channel::<()>(5);
 
         info!("Spawning update loop");
-        let ws_client = TychoWsClientImpl::new(tycho_ws_url).expect("should create ws client");
+        let ws_client =
+            TychoWsClientImpl::new(tycho_ws_url).map_err(PreCachedDBError::TychoClientError)?;
 
         let tycho_ws_url = tycho_ws_url.to_owned();
         std::thread::spawn(move || {
