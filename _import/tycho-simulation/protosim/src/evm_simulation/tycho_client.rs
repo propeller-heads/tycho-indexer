@@ -36,16 +36,16 @@ pub enum TychoClientError {
 #[derive(Debug, Clone)]
 pub struct TychoHttpClientImpl {
     http_client: Client<HttpConnector>,
-    url: Uri,
+    uri: Uri,
 }
 
 impl TychoHttpClientImpl {
     pub fn new(base_uri: &str) -> Result<Self, TychoClientError> {
-        let url = base_uri
+        let uri = base_uri
             .parse::<Uri>()
             .map_err(|e| TychoClientError::UriParsing(base_uri.to_string(), e.to_string()))?;
 
-        Ok(Self { http_client: Client::new(), url })
+        Ok(Self { http_client: Client::new(), uri })
     }
 }
 
@@ -77,23 +77,23 @@ impl TychoHttpClient for TychoHttpClientImpl {
             warn!("No contract ids specified in request.");
         }
 
-        let url = format!(
+        let uri = format!(
             "{}/{}/contract_state?{}",
-            self.url
+            self.uri
                 .to_string()
                 .trim_end_matches('/'),
             TYCHO_SERVER_VERSION,
             filters.to_query_string()
         );
 
-        debug!(%url, "Sending contract_state request to Tycho server");
+        debug!(%uri, "Sending contract_state request to Tycho server");
         let body = serde_json::to_string(&request)
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
         let header = hyper::header::HeaderValue::from_str("application/json")
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
-        let req = Request::post(url)
+        let req = Request::post(uri)
             .header(hyper::header::CONTENT_TYPE, header)
             .body(Body::from(body))
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
@@ -118,16 +118,16 @@ impl TychoHttpClient for TychoHttpClientImpl {
 }
 
 pub struct TychoWsClientImpl {
-    url: Uri,
+    uri: Uri,
 }
 
 impl TychoWsClientImpl {
-    pub fn new(ws_url: &str) -> Result<Self, TychoClientError> {
-        let url = ws_url
+    pub fn new(ws_uri: &str) -> Result<Self, TychoClientError> {
+        let uri = ws_uri
             .parse::<Uri>()
-            .map_err(|e| TychoClientError::UriParsing(ws_url.to_string(), e.to_string()))?;
+            .map_err(|e| TychoClientError::UriParsing(ws_uri.to_string(), e.to_string()))?;
 
-        Ok(Self { url })
+        Ok(Self { uri })
     }
 }
 
@@ -160,14 +160,14 @@ impl TychoWsClient for TychoWsClientImpl {
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
-        let ws_url = format!("{}{}/ws", self.url, TYCHO_SERVER_VERSION); // TODO: Set path properly
-        info!(?ws_url, "Spawning task to connect to WebSocket server");
+        let ws_uri = format!("{}{}/ws", self.uri, TYCHO_SERVER_VERSION); // TODO: Set path properly
+        info!(?ws_uri, "Spawning task to connect to WebSocket server");
         tokio::spawn(async move {
             let mut active_extractors: HashMap<Uuid, ExtractorIdentity> = HashMap::new();
 
             // Connect to Tycho server
-            info!(?ws_url, "Connecting to WebSocket server");
-            let (ws, _) = connect_async(&ws_url)
+            info!(?ws_uri, "Connecting to WebSocket server");
+            let (ws, _) = connect_async(&ws_uri)
                 .await
                 .map_err(|e| error!(error = %e, "Failed to connect to WebSocket server"))
                 .expect("connect to websocket");
@@ -393,7 +393,7 @@ mod tests {
 
         let client = TychoHttpClientImpl::new(
             server
-                .url()
+                .uri()
                 .replace("http://", "")
                 .as_str(),
         )

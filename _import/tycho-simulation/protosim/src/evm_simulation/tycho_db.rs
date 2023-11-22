@@ -74,25 +74,20 @@ impl PreCachedDB {
             TychoHttpClientImpl::new(tycho_http_url).map_err(PreCachedDBError::TychoClientError)?;
         // Run the async get state initialization
         // Create a channel to send the result of the async block.
-        let (tx, rx) = std::sync::mpsc::channel();
         let tycho_db_clone = tycho_db.clone();
 
         info!("Spawning initialization thread");
         // We need to spawn a new thread to run the async block in a sync context.
-        std::thread::spawn(move || {
-            tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(async move {
-                    tycho_db_clone
-                        .initialize_state(&http_client)
-                        .await
-                        .expect("initialization ok")
-                });
-            tx.send(()).unwrap();
+        let handle = std::thread::spawn(move || -> Result<(), PreCachedDBError> {
+            let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
+            runtime.block_on(async {
+                tycho_db_clone
+                    .initialize_state(&http_client)
+                    .await
+            })
         });
+        handle.join().unwrap()?;
 
-        // Block and wait for the result.
-        rx.recv().unwrap();
         info!("Initialization thread finished");
 
         let tycho_db_clone = tycho_db.clone();
@@ -133,7 +128,6 @@ impl PreCachedDB {
                 ),
             )
             .await
-            // .expect("current state");
             .map_err(PreCachedDBError::TychoClientError)?;
 
         for account in state.accounts.into_iter() {
