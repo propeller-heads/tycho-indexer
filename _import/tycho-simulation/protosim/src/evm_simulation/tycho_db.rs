@@ -695,9 +695,8 @@ mod tests {
                 account_updates,
                 HashMap::new(),
             );
-            tx.blocking_send(message.clone())
-                .unwrap();
-            tx.blocking_send(message).unwrap();
+            tx.send(message.clone()).await.unwrap();
+            tx.send(message).await.unwrap();
             rx
         }
 
@@ -737,8 +736,12 @@ mod tests {
         dbg!(account_info);
 
         let block = mock_db
-            .block_on(async { mock_db.inner.read().await.block })
+            .inner
+            .read()
+            .await
+            .block
             .expect("block is Some");
+
         assert_eq!(
             block,
             Block {

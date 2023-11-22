@@ -85,7 +85,6 @@ impl TychoHttpClient for TychoHttpClientImpl {
             TYCHO_SERVER_VERSION,
             filters.to_query_string()
         );
-
         debug!(%uri, "Sending contract_state request to Tycho server");
         let body = serde_json::to_string(&request)
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
@@ -259,60 +258,60 @@ impl TychoWsClient for TychoWsClientImpl {
 mod tests {
     use crate::evm_simulation::tycho_models::{AccountUpdate, Block, ChangeType};
     use chrono::NaiveDateTime;
-    use std::str::FromStr;
 
     use super::*;
 
     use mockito::Server;
 
-    use futures::SinkExt;
     use revm::primitives::{B160, B256, U256 as rU256};
-    use warp::{ws::WebSocket, Filter};
+    use std::{net::TcpListener, str::FromStr};
 
     #[tokio::test]
     async fn test_realtime_messages() {
-        // Mock WebSocket server using warp
-        async fn handle_connection(ws: WebSocket) {
-            let (mut tx, _) = ws.split();
-            let test_msg_content = r#"
-            {
-                "extractor": "vm:ambient",
-                "chain": "ethereum",
-                "block": {
-                    "number": 123,
-                    "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    "chain": "ethereum",
-                    "ts": "2023-09-14T00:00:00"
-                },
-                "account_updates": {
-                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
-                        "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                        "chain": "ethereum",
-                        "slots": {},
-                        "balance": "0x00000000000000000000000000000000000000000000000000000000000001f4",
-                        "code": "",
-                        "change": "Update"
-                    }
-                },
-                "new_pools": {}
-            }
-            "#;
-            // test that the response is deserialized correctly
-            serde_json::from_str::<BlockAccountChanges>(test_msg_content).expect("deserialize");
-            let test_msg = warp::ws::Message::text(test_msg_content);
-            let _ = tx.send(test_msg).await;
-        }
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = server.local_addr().unwrap();
 
-        // let ws_route = warp::ws().map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
-        let ws_route = warp::path!("v1" / "ws")
-            .and(warp::ws())
-            .map(|ws: warp::ws::Ws| ws.on_upgrade(handle_connection));
-        let (addr, server) = warp::serve(ws_route).bind_ephemeral(([127, 0, 0, 1], 0));
-        tokio::task::spawn(server);
+        let server_thread = std::thread::spawn(move || {
+            // Accept only the first connection
+            if let Ok((stream, _)) = server.accept() {
+                let mut websocket = tungstenite::accept(stream).unwrap();
+
+                let test_msg_content = r#"
+                {
+                    "extractor": "vm:ambient",
+                    "chain": "ethereum",
+                    "block": {
+                        "number": 123,
+                        "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                        "parent_hash":
+                            "0x0000000000000000000000000000000000000000000000000000000000000000",            
+                        "chain": "ethereum",             "ts": "2023-09-14T00:00:00"
+                                },
+                                "account_updates": {
+                                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                                        "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                                        "chain": "ethereum",
+                                        "slots": {},
+                                        "balance":
+                        "0x00000000000000000000000000000000000000000000000000000000000001f4",            
+                        "code": "",                 "change": "Update"
+                                    }
+                                },
+                                "new_pools": {}
+                }
+                "#;
+
+                websocket
+                    .send(Message::Text(test_msg_content.to_string()))
+                    .expect("Failed to send message");
+
+                // Close the WebSocket connection
+                let _ = websocket.close(None);
+            }
+        });
 
         // Now, you can create a client and connect to the mocked WebSocket server
-        let client = TychoWsClientImpl::new(&format!("{}", addr)).unwrap();
+        let client = TychoWsClientImpl::new(&format!("ws://{}", addr)).unwrap();
 
         // You can listen to the realtime_messages and expect the messages that you send from
         // handle_connection
@@ -358,6 +357,8 @@ mod tests {
         );
 
         assert_eq!(received_msg, expected);
+
+        server_thread.join().unwrap();
     }
 
     #[tokio::test]
@@ -391,13 +392,7 @@ mod tests {
             .create_async()
             .await;
 
-        let client = TychoHttpClientImpl::new(
-            server
-                .uri()
-                .replace("http://", "")
-                .as_str(),
-        )
-        .expect("create client");
+        let client = TychoHttpClientImpl::new(server.url().as_str()).expect("create client");
 
         let response = client
             .get_state(&Default::default(), &Default::default())
