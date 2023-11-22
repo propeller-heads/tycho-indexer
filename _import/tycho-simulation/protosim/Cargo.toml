@@ -13,7 +13,9 @@ enum_dispatch = "0.3.8"
 serde_json = "1.0.105"
 serde = "1.0.152"
 tokio = { version = "1.32.0", features = ["full"] }
+tokio-tungstenite = "0.20.1"
 async-trait = "0.1.73"
+hyper = "0.14.27"
 futures = "0.3.28"
 revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
     "ethersdb",
@@ -39,7 +41,6 @@ dotenv = "0.15.0"
 reqwest = "0.11.22"
 rpc_state_reader = { git = "https://github.com/lambdaclass/starknet_in_rust.git", package = "rpc_state_reader", tag = "v0.4.0" }
 num-traits = "0.2.17"
-tungstenite = "0.20.1"
 
 [dev-dependencies]
 mockito = "1.1.1"
@@ -50,6 +51,7 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
+tungstenite = "0.20.1"
 
 [features]
 default = []

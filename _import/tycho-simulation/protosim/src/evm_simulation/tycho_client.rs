@@ -1,12 +1,8 @@
-use reqwest::{
-    blocking::{Client, ClientBuilder},
-    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
-    Url,
-};
+use futures::StreamExt;
+use hyper::{client::HttpConnector, Body, Client, Request, Uri};
 use std::{collections::HashMap, string::ToString};
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
-use tungstenite::{connect, Message};
 use uuid::Uuid;
 
 use super::tycho_models::{
@@ -15,7 +11,10 @@ use super::tycho_models::{
 use crate::evm_simulation::tycho_models::{
     StateRequestBody, StateRequestParameters, StateRequestResponse,
 };
+use async_trait::async_trait;
+use futures::SinkExt;
 use tokio::sync::mpsc::{self, Receiver};
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 /// TODO read consts from config
 pub const TYCHO_SERVER_VERSION: &str = "v1";
@@ -25,7 +24,7 @@ pub const AMBIENT_ACCOUNT_ADDRESS: &str = "0xaaaaaaaaa24eeeb8d57d431224f73832bc3
 #[derive(Error, Debug)]
 pub enum TychoClientError {
     #[error("Failed to parse URI: {0}. Error: {1}")]
-    UrlParsing(String, String),
+    UriParsing(String, String),
     #[error("Failed to format request: {0}")]
     FormatRequest(String),
     #[error("Unexpected HTTP client error: {0}")]
@@ -36,45 +35,33 @@ pub enum TychoClientError {
 
 #[derive(Debug, Clone)]
 pub struct TychoHttpClientImpl {
-    http_client: Client,
-    url: Url,
+    http_client: Client<HttpConnector>,
+    uri: Uri,
 }
+
 impl TychoHttpClientImpl {
-    pub fn new(http_url: &str) -> Result<Self, TychoClientError> {
-        // Add a default header to accept JSON
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+    pub fn new(base_uri: &str) -> Result<Self, TychoClientError> {
+        let uri = base_uri
+            .parse::<Uri>()
+            .map_err(|e| TychoClientError::UriParsing(base_uri.to_string(), e.to_string()))?;
 
-        let client = ClientBuilder::new()
-            .default_headers(headers)
-            .build()
-            .map_err(|e| TychoClientError::HttpClient(e.to_string()))?;
-        let url = Url::parse(http_url)
-            .map_err(|e| TychoClientError::UrlParsing(http_url.to_owned(), e.to_string()))?;
-
-        if url.scheme() != "http" && url.scheme() != "https" {
-            return Err(TychoClientError::UrlParsing(
-                http_url.to_owned(),
-                "URL scheme must be http or https".to_owned(),
-            ));
-        }
-
-        Ok(Self { http_client: client, url })
+        Ok(Self { http_client: Client::new(), uri })
     }
 }
 
+#[async_trait]
 pub trait TychoHttpClient {
-    fn get_state(
+    async fn get_state(
         &self,
         filters: &StateRequestParameters,
         request: &StateRequestBody,
     ) -> Result<StateRequestResponse, TychoClientError>;
 }
 
+#[async_trait]
 impl TychoHttpClient for TychoHttpClientImpl {
     #[instrument(skip(self, filters, request))]
-    fn get_state(
+    async fn get_state(
         &self,
         filters: &StateRequestParameters,
         request: &StateRequestBody,
@@ -90,35 +77,38 @@ impl TychoHttpClient for TychoHttpClientImpl {
             warn!("No contract ids specified in request.");
         }
 
-        // Build the URL
-        let mut url = self
-            .url
-            .join(format!("{}/contract_state", TYCHO_SERVER_VERSION).as_str())
-            .map_err(|e| TychoClientError::UrlParsing(self.url.to_string(), e.to_string()))?;
-
-        // Add query params
-        url.set_query(Some(&filters.to_query_string()));
-
-        debug!(%url, "Sending contract_state request to Tycho server");
+        let uri = format!(
+            "{}/{}/contract_state?{}",
+            self.uri
+                .to_string()
+                .trim_end_matches('/'),
+            TYCHO_SERVER_VERSION,
+            filters.to_query_string()
+        );
+        debug!(%uri, "Sending contract_state request to Tycho server");
         let body = serde_json::to_string(&request)
             .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
 
-        // let header = hyper::header::HeaderValue::from_str("application/json")
-        //     .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
+        let header = hyper::header::HeaderValue::from_str("application/json")
+            .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
+
+        let req = Request::post(uri)
+            .header(hyper::header::CONTENT_TYPE, header)
+            .body(Body::from(body))
+            .map_err(|e| TychoClientError::FormatRequest(e.to_string()))?;
+        debug!(?req, "Sending request to Tycho server");
 
         let response = self
             .http_client
-            .post(url)
-            .body(body)
-            .send()
+            .request(req)
+            .await
             .map_err(|e| TychoClientError::HttpClient(e.to_string()))?;
         debug!(?response, "Received response from Tycho server");
 
-        // Check the response status and read the body
-        let response_body = response
-            .text()
+        let body = hyper::body::to_bytes(response.into_body())
+            .await
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
-        let accounts: StateRequestResponse = serde_json::from_str(&response_body)
+        let accounts: StateRequestResponse = serde_json::from_slice(&body)
             .map_err(|e| TychoClientError::ParseResponse(e.to_string()))?;
         info!(?accounts, "Received contract_state response from Tycho server");
 
@@ -127,25 +117,20 @@ impl TychoHttpClient for TychoHttpClientImpl {
 }
 
 pub struct TychoWsClientImpl {
-    url: Url,
+    uri: Uri,
 }
 
 impl TychoWsClientImpl {
-    pub fn new(ws_url: &str) -> Result<Self, TychoClientError> {
-        let url = Url::parse(ws_url)
-            .map_err(|e| TychoClientError::UrlParsing(ws_url.to_owned(), e.to_string()))?;
+    pub fn new(ws_uri: &str) -> Result<Self, TychoClientError> {
+        let uri = ws_uri
+            .parse::<Uri>()
+            .map_err(|e| TychoClientError::UriParsing(ws_uri.to_string(), e.to_string()))?;
 
-        if url.scheme() != "ws" && url.scheme() != "wss" {
-            return Err(TychoClientError::UrlParsing(
-                ws_url.to_owned(),
-                "URL scheme must be ws or wss".to_owned(),
-            ));
-        }
-
-        Ok(Self { url })
+        Ok(Self { uri })
     }
 }
 
+#[async_trait]
 pub trait TychoWsClient {
     /// Subscribe to an extractor and receive realtime messages
     fn subscribe(&self, extractor_id: ExtractorIdentity) -> Result<(), TychoClientError>;
@@ -154,9 +139,10 @@ pub trait TychoWsClient {
     fn unsubscribe(&self, subscription_id: Uuid) -> Result<(), TychoClientError>;
 
     /// Consumes realtime messages from the WebSocket server
-    fn realtime_messages(&self) -> Receiver<BlockAccountChanges>;
+    async fn realtime_messages(&self) -> Receiver<BlockAccountChanges>;
 }
 
+#[async_trait]
 impl TychoWsClient for TychoWsClientImpl {
     #[allow(unused_variables)]
     fn subscribe(&self, extractor_id: ExtractorIdentity) -> Result<(), TychoClientError> {
@@ -168,86 +154,100 @@ impl TychoWsClient for TychoWsClientImpl {
         panic!("Not implemented");
     }
 
-    fn realtime_messages(&self) -> Receiver<BlockAccountChanges> {
+    async fn realtime_messages(&self) -> Receiver<BlockAccountChanges> {
         // Create a channel to send and receive messages.
         let (tx, rx) = mpsc::channel(30); //TODO: Set this properly.
 
         // Spawn a task to connect to the WebSocket server and listen for realtime messages.
-        // let ws_url = format!("ws://{}/{}/ws", self.url, TYCHO_SERVER_VERSION); // TODO: Set path
-        // properly
-        let ws_url = self
-            .url
-            .join(format!("{}/ws", TYCHO_SERVER_VERSION).as_str())
-            .unwrap();
-        info!(?ws_url, "Spawning task to connect to WebSocket server");
-        let mut active_extractors: HashMap<Uuid, ExtractorIdentity> = HashMap::new();
+        let ws_uri = format!("{}{}/ws", self.uri, TYCHO_SERVER_VERSION); // TODO: Set path properly
+        info!(?ws_uri, "Spawning task to connect to WebSocket server");
+        tokio::spawn(async move {
+            let mut active_extractors: HashMap<Uuid, ExtractorIdentity> = HashMap::new();
 
-        // Connect to Tycho server
-        info!(?ws_url, "Connecting to WebSocket server");
-        let (mut ws, _) = connect(&ws_url)
-            .map_err(|e| error!(error = %e, "Failed to connect to WebSocket server"))
-            .expect("connect to websocket");
+            // Connect to Tycho server
+            info!(?ws_uri, "Connecting to WebSocket server");
+            let (ws, _) = connect_async(&ws_uri)
+                .await
+                .map_err(|e| error!(error = %e, "Failed to connect to WebSocket server"))
+                .expect("connect to websocket");
+            // Split the WebSocket into a sender and receive of messages.
+            let (mut ws_sink, ws_stream) = ws.split();
 
-        // Send a subscribe request to ambient extractor
-        // TODO: Read from config
-        let command = Command::Subscribe {
-            extractor_id: ExtractorIdentity::new(Chain::Ethereum, AMBIENT_EXTRACTOR_HANDLE),
-        };
-        let _ = ws
-            .send(Message::Text(serde_json::to_string(&command).unwrap()))
-            .map_err(|e| error!(error = %e, "Failed to send subscribe request"));
+            // Send a subscribe request to ambient extractor
+            // TODO: Read from config
+            let command = Command::Subscribe {
+                extractor_id: ExtractorIdentity::new(Chain::Ethereum, AMBIENT_EXTRACTOR_HANDLE),
+            };
+            let _ = ws_sink
+                .send(Message::Text(serde_json::to_string(&command).unwrap()))
+                .await
+                .map_err(|e| error!(error = %e, "Failed to send subscribe request"));
 
-        // Use the stream directly to listen for messages.
-        while let Ok(msg) = ws.read() {
-            match msg {
-                Message::Text(text) => match serde_json::from_str::<WebSocketMessage>(&text) {
-                    Ok(WebSocketMessage::BlockAccountChanges(block_state_changes)) => {
-                        info!(
-                            ?block_state_changes,
-                            "Received a block state change, sending to channel"
-                        );
-                        tx.blocking_send(block_state_changes)
-                            .map_err(|e| error!(error = %e, "Failed to send message"))
-                            .expect("send message");
+            // Use the stream directly to listen for messages.
+            let mut incoming_messages = ws_stream.boxed();
+            while let Some(msg) = incoming_messages.next().await {
+                match msg {
+                    Ok(Message::Text(text)) => {
+                        match serde_json::from_str::<WebSocketMessage>(&text) {
+                            Ok(WebSocketMessage::BlockAccountChanges(block_state_changes)) => {
+                                info!(
+                                    ?block_state_changes,
+                                    "Received a block state change, sending to channel"
+                                );
+                                tx.send(block_state_changes)
+                                    .await
+                                    .map_err(|e| error!(error = %e, "Failed to send message"))
+                                    .expect("send message");
+                            }
+                            Ok(WebSocketMessage::Response(Response::NewSubscription {
+                                extractor_id,
+                                subscription_id,
+                            })) => {
+                                info!(
+                                    ?extractor_id,
+                                    ?subscription_id,
+                                    "Received a new subscription"
+                                );
+                                active_extractors.insert(subscription_id, extractor_id);
+                                trace!(?active_extractors, "Active extractors");
+                            }
+                            Ok(WebSocketMessage::Response(Response::SubscriptionEnded {
+                                subscription_id,
+                            })) => {
+                                info!(?subscription_id, "Received a subscription ended");
+                                active_extractors
+                                    .remove(&subscription_id)
+                                    .expect("subscription id in active extractors");
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Failed to deserialize message");
+                            }
+                        }
                     }
-                    Ok(WebSocketMessage::Response(Response::NewSubscription {
-                        extractor_id,
-                        subscription_id,
-                    })) => {
-                        info!(?extractor_id, ?subscription_id, "Received a new subscription");
-                        active_extractors.insert(subscription_id, extractor_id);
-                        trace!(?active_extractors, "Active extractors");
+                    Ok(Message::Ping(_)) => {
+                        // Respond to pings with pongs.
+                        ws_sink
+                            .send(Message::Pong(Vec::new()))
+                            .await
+                            .unwrap();
                     }
-                    Ok(WebSocketMessage::Response(Response::SubscriptionEnded {
-                        subscription_id,
-                    })) => {
-                        info!(?subscription_id, "Received a subscription ended");
-                        active_extractors
-                            .remove(&subscription_id)
-                            .expect("subscription id in active extractors");
+                    Ok(Message::Pong(_)) => {
+                        // Do nothing.
+                    }
+                    Ok(Message::Close(_)) => {
+                        // Close the connection.
+                        drop(tx);
+                        return
+                    }
+                    Ok(unknown_msg) => {
+                        info!("Received an unknown message type: {:?}", unknown_msg);
                     }
                     Err(e) => {
-                        error!(error = %e, "Failed to deserialize message");
+                        error!("Failed to get a websocket message: {}", e);
                     }
-                },
-                Message::Ping(_) => {
-                    // Respond to pings with pongs.
-                    ws.send(Message::Pong(Vec::new()))
-                        .unwrap();
-                }
-                Message::Pong(_) => {
-                    // Do nothing.
-                }
-                Message::Close(_) => {
-                    // Close the connection.
-                    drop(tx);
-                    break;
-                }
-                unknown_msg => {
-                    info!("Received an unknown message type: {:?}", unknown_msg);
                 }
             }
-        }
+        });
 
         info!("Returning receiver");
         rx
@@ -258,16 +258,16 @@ impl TychoWsClient for TychoWsClientImpl {
 mod tests {
     use crate::evm_simulation::tycho_models::{AccountUpdate, Block, ChangeType};
     use chrono::NaiveDateTime;
-    use std::{net::TcpListener, str::FromStr};
 
     use super::*;
 
     use mockito::Server;
 
     use revm::primitives::{B160, B256, U256 as rU256};
+    use std::{net::TcpListener, str::FromStr};
 
-    #[test]
-    fn test_realtime_messages() {
+    #[tokio::test]
+    async fn test_realtime_messages() {
         let server = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = server.local_addr().unwrap();
 
@@ -315,9 +315,10 @@ mod tests {
 
         // You can listen to the realtime_messages and expect the messages that you send from
         // handle_connection
-        let mut rx = client.realtime_messages();
+        let mut rx = client.realtime_messages().await;
         let received_msg = rx
-            .blocking_recv()
+            .recv()
+            .await
             .expect("receive message");
 
         let expected_blk = Block {
@@ -360,9 +361,9 @@ mod tests {
         server_thread.join().unwrap();
     }
 
-    #[test]
-    fn test_simple_route_mock() {
-        let mut server = Server::new();
+    #[tokio::test]
+    async fn test_simple_route_mock_async() {
+        let mut server = Server::new_async().await;
         let server_resp = r#"
         {
             "accounts": [
@@ -388,12 +389,14 @@ mod tests {
             .mock("POST", "/v1/contract_state?chain=ethereum")
             .expect(1)
             .with_body(server_resp)
-            .create();
+            .create_async()
+            .await;
 
-        let client = TychoHttpClientImpl::new(&server.url()).expect("create client");
+        let client = TychoHttpClientImpl::new(server.url().as_str()).expect("create client");
 
         let response = client
             .get_state(&Default::default(), &Default::default())
+            .await
             .expect("get state");
         let accounts = response.accounts;
 
