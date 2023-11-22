@@ -15,22 +15,24 @@ use protosim::{
 };
 
 pub fn python_overrides_to_rust(
-    input: HashMap<(String, BigUint), BigUint>,
+    input: HashMap<String, HashMap<BigUint, BigUint>>,
 ) -> HashMap<Address, Overrides> {
     input
         .into_iter()
-        .fold(HashMap::new(), |mut acc, ((address, slot), value)| {
+        .fold(HashMap::new(), |mut acc, (address, slots)| {
             let address = address_str(&address).expect("should be valid address");
-            let slot = Felt252::from(slot).to_be_bytes();
-            let value = Felt252::from(value);
-            match acc.entry(address) {
-                Entry::Occupied(mut entry) => {
-                    entry.get_mut().insert(slot, value);
-                }
-                Entry::Vacant(entry) => {
-                    let mut new_map = HashMap::new();
-                    new_map.insert(slot, value);
-                    entry.insert(new_map);
+            for (slot, value) in slots {
+                let slot = Felt252::from(slot).to_be_bytes();
+                let value = Felt252::from(value);
+                match acc.entry(address.clone()) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().insert(slot, value);
+                    }
+                    Entry::Vacant(entry) => {
+                        let mut new_map = HashMap::new();
+                        new_map.insert(slot, value);
+                        entry.insert(new_map);
+                    }
                 }
             }
             acc
@@ -74,7 +76,7 @@ pub struct StarknetSimulationParameters {
     /// Starknet state overrides.
     /// Will be merged with the existing state. Will take effect only for current simulation.
     /// Must be given as a contract address to its variable override map.
-    pub overrides: Option<HashMap<(String, BigUint), BigUint>>,
+    pub overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
     /// Limit of gas to be used by the transaction
     #[pyo3(get)]
     pub gas_limit: Option<u128>,
@@ -92,7 +94,7 @@ impl StarknetSimulationParameters {
         data: Vec<BigUint>,
         entry_point: String,
         block_number: u64,
-        overrides: Option<HashMap<(String, BigUint), BigUint>>,
+        overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
         gas_limit: Option<u128>,
     ) -> Self {
         Self { caller, to, data, entry_point, overrides, gas_limit, block_number }
