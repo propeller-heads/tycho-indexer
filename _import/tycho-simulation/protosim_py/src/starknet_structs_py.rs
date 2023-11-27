@@ -52,9 +52,15 @@ pub fn rust_overrides_to_python(
                         inner_result.insert(BigUint::from_bytes_be(&slot), value.to_biguint());
                         inner_result
                     });
-            result.insert(address.0.to_str_radix(16), inner_result);
+            result.insert(str_address(address), inner_result);
             result
         })
+}
+
+fn str_address(address: Address) -> String {
+    let hex_string = address.0.to_str_radix(16);
+    let padded = format!("{:0>64}", hex_string);
+    format!("0x{}", padded)
 }
 
 /// Parameters for Starknet transaction simulation.
