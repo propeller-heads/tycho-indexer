@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_get_dai_usdc_spot_price_ekubo() {
-        let block_number = 367676;
+        let block_number = 426179;
         let mut engine = setup_engine(None);
 
         let ekubo_address = address_str(EKUBO_ADDRESS);
@@ -226,6 +226,6 @@ mod tests {
 
         // To get the human readable price we will need to convert this on the Python side like
         // this: https://www.wolframalpha.com/input?i=(340321610937302884216160363291566+/+2**128)**2*10**12
-        assert_eq!(res, felt_str("340321610937302884216160363291566"))
+        assert_eq!(res, felt_str("340288844056980486564646108486642"))
     }
 }
