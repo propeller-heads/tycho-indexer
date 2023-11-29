@@ -166,8 +166,6 @@ mod tests {
         let block_number = 367676;
         let mut engine = setup_engine(None);
 
-        let ekubo_address = address_str(EKUBO_ADDRESS);
-
         let swap_calldata = vec![
             felt_str(ETH_ADDRESS),                            // token0
             felt_str(USDC_ADDRESS),                           // token1
@@ -178,7 +176,7 @@ mod tests {
 
         let params = SimulationParameters::new(
             address_str(BOB_ADDRESS),
-            ekubo_address,
+            address_str(EKUBO_ADDRESS),
             swap_calldata,
             "get_pool_price".to_owned(),
             None,
@@ -200,8 +198,6 @@ mod tests {
         let block_number = 426179;
         let mut engine = setup_engine(None);
 
-        let ekubo_address = address_str(EKUBO_ADDRESS);
-
         let swap_calldata = vec![
             felt_str(DAI_ADDRESS),                            // token0
             felt_str(USDC_ADDRESS),                           // token1
@@ -212,7 +208,7 @@ mod tests {
 
         let params = SimulationParameters::new(
             address_str(BOB_ADDRESS),
-            ekubo_address,
+            address_str(EKUBO_ADDRESS),
             swap_calldata,
             "get_pool_price".to_owned(),
             None,
@@ -227,5 +223,90 @@ mod tests {
         // To get the human readable price we will need to convert this on the Python side like
         // this: https://www.wolframalpha.com/input?i=(340321610937302884216160363291566+/+2**128)**2*10**12
         assert_eq!(res, felt_str("340288844056980486564646108486642"))
+    }
+
+    #[test]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_get_amount_out_eth_dai() {
+        let test_wallet = address_str(BOB_ADDRESS);
+        let ekubo_swap_address = address_str(EKUBO_SIMPLE_SWAP_ADDRESS);
+
+        // Test vars
+        let block_number = 386000;
+        let token0 = address_str(DAI_ADDRESS);
+        let token1 = address_str(ETH_ADDRESS);
+        let tokens = vec![token0.clone(),token1.clone()];
+        let sell_amount = felt_str("0x2386f26fc10000");
+        let expected_buy_amount = "18801973723146384196";
+        let sell_token_index = 1;
+
+        // Get ekubo's balance of sell token
+        let mut engine = setup_engine(None);
+
+        let balance_params = SimulationParameters::new(
+            test_wallet.clone(),
+            tokens[sell_token_index].clone(),
+            vec![felt_str(EKUBO_ADDRESS)],
+            "balanceOf".to_owned(),
+            None,
+            Some(u128::MAX),
+            block_number,
+        );
+
+        let balance = engine.simulate(&balance_params);
+
+
+        // Construct engine with contract overrides
+        let sell_token_contract_override = construct_token_contract_override(tokens[sell_token_index].clone());
+        let mut engine = setup_engine(Some(vec![sell_token_contract_override]));
+        // Construct simulation overrides - token balances
+        let mut token_overrides = Overrides::new();
+        // mock having transferred tokens to the swap contract before triggering the swap function
+        token_overrides =
+            add_balance_override(token_overrides, ekubo_swap_address.clone(), sell_amount.clone());
+        // mock the core contract's reserve balance since this is checked during swap and errors if
+        // incorrect
+        token_overrides = add_balance_override(
+            token_overrides,
+            address_str(EKUBO_ADDRESS),
+            balance.unwrap().result[0].to_owned(),
+        );
+        let mut storage_overrides = HashMap::new();
+        storage_overrides.insert(tokens[sell_token_index].clone(), token_overrides);
+
+        let swap_calldata = vec![
+            // Pool key data
+            token0.0,                                     // token0
+            token1.0,                                     // token1
+            felt_str("0x20c49ba5e353f80000000000000000"), // fee
+            Felt252::from(1000),                          // tick spacing
+            Felt252::from(0),                             // extension
+            // Swap data
+            sell_amount,                                   // amount
+            Felt252::from(0),                              // amount sign
+            Felt252::from(1),                              // istoken1
+            felt_str("0x6f3528fe26840249f4b191ef6dff7928"), // sqrt ratio limit (lower bits)
+            felt_str("0xfffffc080ed7b455"),             // sqrt ratio limit (upper bits)
+            Felt252::from(0),                              // skip ahead
+            test_wallet.0.clone(),                         // recipient
+            Felt252::from(0),                              // calculated_amount_threshold
+        ];
+
+        let params = SimulationParameters::new(
+            test_wallet.clone(),
+            ekubo_swap_address.clone(),
+            swap_calldata,
+            "swap".to_owned(),
+            Some(storage_overrides.clone()),
+            Some(u128::MAX),
+            block_number,
+        );
+
+        let result0 = engine.simulate(&params);
+        assert!(result0.is_ok());
+        let res = result0.unwrap();
+        let amount_out_index = if sell_token_index == 1 { 0 } else { 2 };
+        assert_eq!(res.gas_used, 7701570);
+        assert_eq!(res.result[amount_out_index], felt_str(expected_buy_amount)); // check amount out
     }
 }
