@@ -59,8 +59,7 @@ pub fn rust_overrides_to_python(
 
 fn str_address(address: Address) -> String {
     let hex_string = address.0.to_str_radix(16);
-    let padded = format!("{:0>64}", hex_string);
-    format!("0x{}", padded)
+    format!("0x{}", hex_string)
 }
 
 /// Parameters for Starknet transaction simulation.
