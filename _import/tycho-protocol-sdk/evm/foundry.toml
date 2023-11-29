@@ -9,6 +9,7 @@ mainnet = "${ETH_RPC_URL}"
 
 [fmt]
 line_length = 80
+wrap_comments = true
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_MAINNET_KEY}" }
