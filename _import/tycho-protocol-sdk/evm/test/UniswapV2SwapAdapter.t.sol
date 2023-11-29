@@ -33,7 +33,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
             pairFunctions.price(pair, WETH, USDC, amounts);
 
         for (uint256 i = 0; i < prices.length; i++) {
-            assertGt(prices[i].nominator, 0);
+            assertGt(prices[i].numerator, 0);
             assertGt(prices[i].denominator, 0);
         }
     }
@@ -61,14 +61,15 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         pure
         returns (int8)
     {
-        uint256 crossProduct1 = frac1.nominator * frac2.denominator;
-        uint256 crossProduct2 = frac2.nominator * frac1.denominator;
+        uint256 crossProduct1 = frac1.numerator * frac2.denominator;
+        uint256 crossProduct2 = frac2.numerator * frac1.denominator;
 
-        if (crossProduct1 == crossProduct2) return 0; // fractions are equal
-
-        else if (crossProduct1 > crossProduct2) return 1; // frac1 is greater than frac2
-
-        else return -1; // frac1 is less than frac2
+        // fractions are equal
+        if (crossProduct1 == crossProduct2) return 0;
+        // frac1 is greater than frac2
+        else if (crossProduct1 > crossProduct2) return 1;
+        // frac1 is less than frac2
+        else return -1;
     }
 
     function testSwapFuzz(uint256 amount, bool isBuy) public {
@@ -127,6 +128,6 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function testGetLimits() public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        pairFunctions.getLimits(pair, SwapSide.Sell);
+        uint256[] memory limits = pairFunctions.getLimits(pair, SwapSide.Sell);
     }
 }

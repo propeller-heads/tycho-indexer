@@ -101,7 +101,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return amountOut;
     }
 
-    // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
+    // given an input amount of an asset and pair reserves, returns the maximum
+    // output amount of the other asset
     function getAmountOut(
         uint256 amountIn,
         uint256 reserveIn,
@@ -142,7 +143,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return amount;
     }
 
-    // given an output amount of an asset and pair reserves, returns a required input amount of the other asset
+    // given an output amount of an asset and pair reserves, returns a required
+    // input amount of the other asset
     function getAmountIn(
         uint256 amountOut,
         uint256 reserveIn,
