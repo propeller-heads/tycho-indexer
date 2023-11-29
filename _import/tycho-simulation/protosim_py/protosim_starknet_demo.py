@@ -61,9 +61,9 @@ def test_starknet_approve_simulation():
         block_number=366118,
     )
 
-    print("Running simulation")
+    print("Running approval simulation")
     result = engine.run_sim(params)
-    print("Simulation result:")
+    print("Approval simulation result:")
     print(f"result: {result.result=}")
     print(f"states_updates: {result.states_updates=}")
     print(f"gas_used: {result.gas_used=}")
@@ -75,7 +75,6 @@ def test_starknet_swap_simulation():
     token1 = ETH_ADDRESS
     test_wallet = BOB_ADDRESS
     ekubo_swap_address = EKUBO_SIMPLE_SWAP_ADDRESS
-    ekubo_core_address = EKUBO_ADDRESS
     sell_amount = "0x5afb5ab61ef191"
 
     # Construct engine with contract overrides
@@ -85,8 +84,10 @@ def test_starknet_swap_simulation():
 
     # Construct simulation parameters
     storage_overrides = {
-        (token0, int("2039938672845109684464553252816414832543773106309397125013760479565072283554")): int("25609114925068689"),
-        (token0, int("1919009528300487416898558168639787817852314761514939568475739027942176236393")): int("2421600066015287788594"),
+        token0: {
+            int("2039938672845109684464553252816414832543773106309397125013760479565072283554"): int("25609114925068689"),
+            int("1919009528300487416898558168639787817852314761514939568475739027942176236393"): int("2421600066015287788594"),
+            }
     }
     params = StarknetSimulationParameters(
         caller=test_wallet,
@@ -113,15 +114,25 @@ def test_starknet_swap_simulation():
     )
 
     # Run simulation
+    print("Running swap simulation #1")
     result = engine.run_sim(params)
     assert result.gas_used == 9480810
     assert result.result[2] == 21909951468890105
+    print("Simulation result:")
+    print(f"result: {result.result=}")
+    print(f"states_updates: {result.states_updates=}")
+    print(f"gas_used: {result.gas_used=}")
 
     # Run simulation again
     # Running the simulation should not persist any state changes, so running it again should give the same result
+    print("Running swap simulation #2")
     result = engine.run_sim(params)
     assert result.gas_used == 9480810
     assert result.result[2] == 21909951468890105
+    print("Simulation result:")
+    print(f"result: {result.result=}")
+    print(f"states_updates: {result.states_updates=}")
+    print(f"gas_used: {result.gas_used=}")
 
 if __name__ == "__main__":
     test_starknet_approve_simulation()
