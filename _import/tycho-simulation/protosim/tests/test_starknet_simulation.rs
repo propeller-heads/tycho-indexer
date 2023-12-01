@@ -235,7 +235,7 @@ mod tests {
         let block_number = 386000;
         let token0 = address_str(DAI_ADDRESS);
         let token1 = address_str(ETH_ADDRESS);
-        let tokens = vec![token0.clone(),token1.clone()];
+        let tokens = vec![token0.clone(), token1.clone()];
         let sell_amount = felt_str("0x2386f26fc10000");
         let expected_buy_amount = "18801973723146384196";
         let sell_token_index = 1;
@@ -255,9 +255,9 @@ mod tests {
 
         let balance = engine.simulate(&balance_params);
 
-
         // Construct engine with contract overrides
-        let sell_token_contract_override = construct_token_contract_override(tokens[sell_token_index].clone());
+        let sell_token_contract_override =
+            construct_token_contract_override(tokens[sell_token_index].clone());
         let mut engine = setup_engine(Some(vec![sell_token_contract_override]));
         // Construct simulation overrides - token balances
         let mut token_overrides = Overrides::new();
@@ -282,14 +282,14 @@ mod tests {
             Felt252::from(1000),                          // tick spacing
             Felt252::from(0),                             // extension
             // Swap data
-            sell_amount,                                   // amount
-            Felt252::from(0),                              // amount sign
-            Felt252::from(1),                              // istoken1
+            sell_amount,                                    // amount
+            Felt252::from(0),                               // amount sign
+            Felt252::from(1),                               // istoken1
             felt_str("0x6f3528fe26840249f4b191ef6dff7928"), // sqrt ratio limit (lower bits)
-            felt_str("0xfffffc080ed7b455"),             // sqrt ratio limit (upper bits)
-            Felt252::from(0),                              // skip ahead
-            test_wallet.0.clone(),                         // recipient
-            Felt252::from(0),                              // calculated_amount_threshold
+            felt_str("0xfffffc080ed7b455"),                 // sqrt ratio limit (upper bits)
+            Felt252::from(0),                               // skip ahead
+            test_wallet.0.clone(),                          // recipient
+            Felt252::from(0),                               // calculated_amount_threshold
         ];
 
         let params = SimulationParameters::new(
