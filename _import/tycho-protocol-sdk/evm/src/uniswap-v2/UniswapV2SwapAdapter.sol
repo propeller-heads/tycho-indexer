@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import {IERC20, ISwapAdapter} from "interfaces/ISwapAdapter.sol";
+import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+
+uint256 constant RESERVE_LIMIT_FACTOR = 10;
 
 contract UniswapV2SwapAdapter is ISwapAdapter {
     IUniswapV2Factory immutable factory;
@@ -170,11 +172,11 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         limits = new uint256[](2);
         (uint256 r0, uint256 r1,) = pair.getReserves();
         if (side == SwapSide.Sell) {
-            limits[0] = r0 * 10;
-            limits[1] = r1 * 10;
+            limits[0] = r0 * RESERVE_LIMIT_FACTOR;
+            limits[1] = r1 * RESERVE_LIMIT_FACTOR;
         } else {
-            limits[0] = r1 * 10;
-            limits[1] = r0 * 10;
+            limits[0] = r1 * RESERVE_LIMIT_FACTOR;
+            limits[1] = r0 * RESERVE_LIMIT_FACTOR;
         }
     }
 

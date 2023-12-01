@@ -1,4 +1,4 @@
-interfaces/=src/interfaces/
 forge-std/=lib/forge-std/src/
 openzeppelin-contracts/=lib/openzeppelin-contracts/
 src/=src/
+balancer-v2/interfaces/=lib/balancer-v2-monorepo/pkg/interfaces/contracts

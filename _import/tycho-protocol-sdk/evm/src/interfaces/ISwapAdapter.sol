@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import {ISwapAdapterTypes} from "interfaces/ISwapAdapterTypes.sol";
+import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 
 /// @title ISwapAdapter
 /// @dev Implement this interface to support propeller routing through your

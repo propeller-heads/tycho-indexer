@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import "src/uniswap-v2/UniswapV2SwapAdapter.sol";
-import "interfaces/ISwapAdapterTypes.sol";
+import "src/interfaces/ISwapAdapterTypes.sol";
 
 contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     UniswapV2SwapAdapter pairFunctions;

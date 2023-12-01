@@ -4,6 +4,3 @@
 [submodule "lib/openzeppelin-contracts"]
 	path = evm/lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
-[submodule "evm/lib/balancer-v2-monorepo"]
-	path = evm/lib/balancer-v2-monorepo
-	url = https://github.com/balancer/balancer-v2-monorepo
