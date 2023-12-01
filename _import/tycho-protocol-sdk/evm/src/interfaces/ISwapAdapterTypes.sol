@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 interface ISwapAdapterTypes {
     /// @dev The SwapSide enum represents possible sides of a trade: Sell or
@@ -12,9 +12,9 @@ interface ISwapAdapterTypes {
         Buy
     }
 
-    /// @dev The Capabilities enum represents possible features of a trading
+    /// @dev The Capability enum represents possible features of a trading
     /// pair.
-    enum Capabilities {
+    enum Capability {
         Unset,
         // Support SwapSide.Sell values (required)
         SellSide,
@@ -24,18 +24,19 @@ interface ISwapAdapterTypes {
         PriceFunction,
         // Support tokens that charge a fee on transfer (optional)
         FeeOnTransfer,
-        // The pair does not suffer from price impact and mantains a constant
-        // price for increasingly larger speficied amounts. (optional)
+        // The pair does not suffer from price impact and maintains a constant
+        // price for increasingly larger specified amounts. (optional)
         ConstantPrice,
         // Indicates that the pair does not read it's own token balances while
         // swapping. (optional)
         TokenBalanceIndependent,
         // Indicates that prices are returned scaled, else it is assumed prices
-        // still require scaling by token decimals.
+        // still require scaling by token decimals. (required)
         ScaledPrices
     }
 
     /// @dev Representation used for rational numbers such as prices.
+    // TODO: Use only uint128 for numerator and denominator.
     struct Fraction {
         uint256 numerator;
         uint256 denominator;
@@ -43,9 +44,12 @@ interface ISwapAdapterTypes {
 
     /// @dev The Trade struct holds data about an executed trade.
     struct Trade {
-        uint256 receivedAmount; // The amount received from the trade.
-        uint256 gasUsed; // The amount of gas used in the trade.
-        Fraction price; // The price of the pair after the trade.
+        // The amount received from the trade.
+        uint256 receivedAmount;
+        // The amount of gas used in the trade.
+        uint256 gasUsed;
+        // The price of the pair after the trade. For zero use Fraction(0, 1).
+        Fraction price;
     }
 
     /// @dev The Unavailable error is thrown when a pool or swap is not
@@ -55,4 +59,8 @@ interface ISwapAdapterTypes {
     /// @dev The LimitExceeded error is thrown when a limit has been exceeded.
     /// E.g. the specified amount can't be traded safely.
     error LimitExceeded(uint256 limit);
+
+    /// @dev The NotImplemented error is thrown when a function is not
+    /// implemented.
+    error NotImplemented(string reason);
 }

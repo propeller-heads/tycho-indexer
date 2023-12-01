@@ -120,7 +120,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     }
 
     function testGetCapabilities(bytes32 pair, address t0, address t1) public {
-        Capabilities[] memory res =
+        Capability[] memory res =
             pairFunctions.getCapabilities(pair, IERC20(t0), IERC20(t1));
 
         assertEq(res.length, 3);

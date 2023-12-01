@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import "interfaces/ISwapAdapterTypes.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import {ISwapAdapterTypes} from "interfaces/ISwapAdapterTypes.sol";
 
-/// @title ISwapAdapterTypes
+/// @title ISwapAdapter
 /// @dev Implement this interface to support propeller routing through your
 /// pairs. Before implementing the interface we need to introduce three function
 /// for a given pair: The swap(x), gas(x) and price(x) functions: The swap
-/// function accepts some specified token amount: x and returns the amount y a
+/// function accepts some specified token amount x and returns the amount y a
 /// user can get by swapping x through the venue. The gas function simply
 /// returns the estimated gas cost given a specified amount x. Last but not
 /// least, the price function is the derivative of the swap function. It
@@ -44,7 +44,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
      * @dev This function should be state modifying meaning it should actually
      * execute the swap and change the state of the evm accordingly. Please
      * include a gas usage estimate for each amount. This can be achieved e.g.
-     * by using the `gasleft()` function. The return type trade, has a price
+     * by using the `gasleft()` function. The return type `Trade` has a price
      * attribute which should contain the value of `price(specifiedAmount)`. As
      * this is optional, defined via `Capability.PriceFunction`, it is valid to
      * return a zero value for this price in that case it will be estimated
@@ -67,26 +67,28 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @notice Retrieves the limits for each token.
     /// @dev Retrieve the maximum limits of a token that can be traded. The
     /// limit is reached when the change in the received amounts is zero or
-    /// close to zero. If in doubt over estimate. The swap function should not
-    /// error with `LimitExceeded` if called with amounts below the limit.
+    /// close to zero. Overestimate if in doubt rather than underestimate. The
+    /// swap function should not error with `LimitExceeded` if called with
+    /// amounts below the limit.
     /// @param pairId The ID of the trading pair.
-    /// @return An array of limits.
+    /// @param side The side of the trade (Sell or Buy).
+    /// @return limits An array of limits.
     function getLimits(bytes32 pairId, SwapSide side)
         external
-        returns (uint256[] memory);
+        returns (uint256[] memory limits);
 
     /// @notice Retrieves the capabilities of the selected pair.
     /// @param pairId The ID of the trading pair.
-    /// @return An array of Capabilities.
+    /// @return capabilities An array of Capability.
     function getCapabilities(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
         external
-        returns (Capabilities[] memory);
+        returns (Capability[] memory capabilities);
 
     /// @notice Retrieves the tokens in the selected pair.
     /// @dev Mainly used for testing as this is redundant with the required
     /// substreams implementation.
     /// @param pairId The ID of the trading pair.
-    /// @return tokens array of IERC20 contracts.
+    /// @return tokens An array of IERC20 contracts.
     function getTokens(bytes32 pairId)
         external
         returns (IERC20[] memory tokens);
@@ -94,10 +96,10 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @notice Retrieves a range of pool IDs.
     /// @dev Mainly used for testing it is alright to not return all available
     /// pools here. Nevertheless this is useful to test against the substreams
-    /// implementation. If implemented it safes time writing custom tests.
+    /// implementation. If implemented it saves time writing custom tests.
     /// @param offset The starting index from which to retrieve pool IDs.
     /// @param limit The maximum number of pool IDs to retrieve.
-    /// @return ids array of pool IDs.
+    /// @return ids An array of pool IDs.
     function getPoolIds(uint256 offset, uint256 limit)
         external
         returns (bytes32[] memory ids);

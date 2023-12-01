@@ -46,7 +46,7 @@ instances:
     arguments:
       - "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
 
-# Specify some automatic test cases in case getPools and
+# Specify some automatic test cases in case getPoolIds and
 # getTokens are not implemented.
 tests:
   instances:
@@ -117,7 +117,7 @@ Retrieves the capabilities of the selected pair.
 ```solidity
 function getCapabilities(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
     external
-    returns (Capabilities[] memory);
+    returns (Capability[] memory);
 ```
 
 #### getTokens (optional)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import "interfaces/ISwapAdapter.sol";
+import {IERC20, ISwapAdapter} from "interfaces/ISwapAdapter.sol";
 
 contract UniswapV2SwapAdapter is ISwapAdapter {
     IUniswapV2Factory immutable factory;
@@ -56,11 +56,10 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         uint256 specifiedAmount
     ) external override returns (Trade memory trade) {
         if (specifiedAmount == 0) {
-            return trade;
+            return trade; // TODO: This returns Fraction(0, 0) instead of the expected zero Fraction(0, 1)
         }
 
         IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
-        uint256 gasBefore = 0;
         uint112 r0;
         uint112 r1;
         bool zero2one = sellToken < buyToken;
@@ -69,7 +68,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         } else {
             (r1, r0,) = pair.getReserves();
         }
-        gasBefore = gasleft();
+        uint256 gasBefore = gasleft();
         if (side == SwapSide.Sell) {
             trade.receivedAmount =
                 sell(pair, sellToken, zero2one, r0, r1, specifiedAmount);
@@ -101,7 +100,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return amountOut;
     }
 
-    // given an input amount of an asset and pair reserves, returns the maximum
+    // Given an input amount of an asset and pair reserves, returns the maximum
     // output amount of the other asset
     function getAmountOut(
         uint256 amountIn,
@@ -183,12 +182,12 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         external
         pure
         override
-        returns (Capabilities[] memory capabilities)
+        returns (Capability[] memory capabilities)
     {
-        capabilities = new Capabilities[](3);
-        capabilities[0] = Capabilities.SellSide;
-        capabilities[1] = Capabilities.BuySide;
-        capabilities[2] = Capabilities.PriceFunction;
+        capabilities = new Capability[](3);
+        capabilities[0] = Capability.SellSide;
+        capabilities[1] = Capability.BuySide;
+        capabilities[2] = Capability.PriceFunction;
     }
 
     function getTokens(bytes32 pairId)
