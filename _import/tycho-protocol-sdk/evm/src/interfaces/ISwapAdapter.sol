@@ -60,7 +60,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
         bytes32 pairId,
         IERC20 sellToken,
         IERC20 buyToken,
-        SwapSide side,
+        OrderSide side,
         uint256 specifiedAmount
     ) external returns (Trade memory trade);
 
@@ -71,9 +71,10 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// swap function should not error with `LimitExceeded` if called with
     /// amounts below the limit.
     /// @param pairId The ID of the trading pair.
-    /// @param side The side of the trade (Sell or Buy).
+    /// @param sellToken The token being sold.
+    /// @param buyToken The token being bought.
     /// @return limits An array of limits.
-    function getLimits(bytes32 pairId, SwapSide side)
+    function getLimits(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
         external
         returns (uint256[] memory limits);
 

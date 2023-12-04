@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
-uint256 constant RESERVE_LIMIT_FACTOR = 10;
+uint256 constant RESERVE_LIMIT_FACTOR = 10; // TODO why is the factor so high?
 
 contract UniswapV2SwapAdapter is ISwapAdapter {
     IUniswapV2Factory immutable factory;
@@ -54,11 +54,12 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         bytes32 pairId,
         IERC20 sellToken,
         IERC20 buyToken,
-        SwapSide side,
+        OrderSide side,
         uint256 specifiedAmount
     ) external override returns (Trade memory trade) {
         if (specifiedAmount == 0) {
-            return trade; // TODO: This returns Fraction(0, 0) instead of the expected zero Fraction(0, 1)
+            return trade; // TODO: This returns Fraction(0, 0) instead of the
+                // expected zero Fraction(0, 1)
         }
 
         IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
@@ -71,7 +72,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
             (r1, r0,) = pair.getReserves();
         }
         uint256 gasBefore = gasleft();
-        if (side == SwapSide.Sell) {
+        if (side == OrderSide.Sell) {
             trade.receivedAmount =
                 sell(pair, sellToken, zero2one, r0, r1, specifiedAmount);
         } else {
@@ -154,15 +155,18 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         if (amountIn == 0) {
             return 0;
         }
-        if (reserveIn == 0 || reserveOut == 0) {
-            revert Unavailable("At least one reserve is zero!");
+        if (reserveIn == 0) {
+            revert Unavailable("reserveIn is zero");
+        }
+        if (reserveOut == 0) {
+            revert Unavailable("reserveOut is zero");
         }
         uint256 numerator = reserveIn * amountOut * 1000;
         uint256 denominator = (reserveOut - amountOut) * 997;
         amountIn = (numerator / denominator) + 1;
     }
 
-    function getLimits(bytes32 pairId, SwapSide side)
+    function getLimits(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
         external
         view
         override
@@ -170,13 +174,10 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     {
         IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
         limits = new uint256[](2);
-        (uint256 r0, uint256 r1,) = pair.getReserves();
-        if (side == SwapSide.Sell) {
-            limits[0] = r0 * RESERVE_LIMIT_FACTOR;
-            limits[1] = r1 * RESERVE_LIMIT_FACTOR;
+        if (sellToken < buyToken) {
+            (limits[0], limits[1],) = pair.getReserves();
         } else {
-            limits[0] = r1 * RESERVE_LIMIT_FACTOR;
-            limits[1] = r0 * RESERVE_LIMIT_FACTOR;
+            (limits[1], limits[0],) = pair.getReserves();
         }
     }
 
@@ -187,8 +188,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         returns (Capability[] memory capabilities)
     {
         capabilities = new Capability[](3);
-        capabilities[0] = Capability.SellSide;
-        capabilities[1] = Capability.BuySide;
+        capabilities[0] = Capability.SellOrder;
+        capabilities[1] = Capability.BuyOrder;
         capabilities[2] = Capability.PriceFunction;
     }
 

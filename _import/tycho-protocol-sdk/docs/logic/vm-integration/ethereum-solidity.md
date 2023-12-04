@@ -93,7 +93,7 @@ function swap(
     bytes32 pairId,
     IERC20 sellToken,
     IERC20 buyToken,
-    SwapSide side,
+    OrderSide side,
     uint256 specifiedAmount
 ) external returns (Trade memory trade);
 ```
@@ -105,7 +105,7 @@ Retrieves the limits for each token.
 This method returns the maximum limits of a token that can be traded. The limit is reached when the change in the received amounts is zero or close to zero. If in doubt over estimate the limit. The swap function should not error with LimitExceeded if called with any amounts below the limit.
 
 ```solidity
-function getLimits(bytes32 pairId, SwapSide side)
+function getLimits(bytes32 pairId, OrderSide side)
     external
     returns (uint256[] memory);
 ```

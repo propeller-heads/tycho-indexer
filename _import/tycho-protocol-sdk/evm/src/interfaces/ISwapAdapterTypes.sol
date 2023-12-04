@@ -4,10 +4,10 @@ pragma solidity ^0.8.13;
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 interface ISwapAdapterTypes {
-    /// @dev The SwapSide enum represents possible sides of a trade: Sell or
-    /// Buy. E.g. if SwapSide is Sell, the sell amount is interpreted to be
+    /// @dev The OrderSide enum represents possible sides of a trade: Sell or
+    /// Buy. E.g. if OrderSide is Sell, the sell amount is interpreted to be
     /// fixed.
-    enum SwapSide {
+    enum OrderSide {
         Sell,
         Buy
     }
@@ -16,10 +16,10 @@ interface ISwapAdapterTypes {
     /// pair.
     enum Capability {
         Unset,
-        // Support SwapSide.Sell values (required)
-        SellSide,
-        // Support SwapSide.Buy values (optional)
-        BuySide,
+        // Support OrderSide.Sell values (required)
+        SellOrder,
+        // Support OrderSide.Buy values (optional)
+        BuyOrder,
         // Support evaluating the price function (optional)
         PriceFunction,
         // Support tokens that charge a fee on transfer (optional)
@@ -44,7 +44,8 @@ interface ISwapAdapterTypes {
 
     /// @dev The Trade struct holds data about an executed trade.
     struct Trade {
-        // The amount received from the trade.
+        // If the side is sell, it is the amount of tokens sold. If the side is
+        // buy, it is the amount of tokens bought.
         uint256 receivedAmount;
         // The amount of gas used in the trade.
         uint256 gasUsed;

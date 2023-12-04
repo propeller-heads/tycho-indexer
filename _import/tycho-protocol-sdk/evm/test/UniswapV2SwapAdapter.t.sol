@@ -21,7 +21,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function testPriceFuzz(uint256 amount0, uint256 amount1) public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        uint256[] memory limits = pairFunctions.getLimits(pair, SwapSide.Sell);
+        uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
         vm.assume(amount0 < limits[0]);
         vm.assume(amount1 < limits[0]);
 
@@ -74,11 +74,14 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function testSwapFuzz(uint256 amount, bool isBuy) public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        SwapSide side = SwapSide.Sell;
+        OrderSide side = OrderSide.Sell;
+        uint256[] memory limits;
         if (isBuy) {
-            side = SwapSide.Buy;
+            side = OrderSide.Buy;
+            limits = pairFunctions.getLimits(pair, WETH, USDC);
+        } else {
+            limits = pairFunctions.getLimits(pair, USDC, WETH);
         }
-        uint256[] memory limits = pairFunctions.getLimits(pair, side);
         vm.assume(amount < limits[0]);
         deal(address(USDC), address(this), amount);
         USDC.approve(address(pairFunctions), amount);
@@ -87,10 +90,10 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     }
 
     function testSwapSellIncreasing() public {
-        executeIncreasingSwaps(SwapSide.Sell);
+        executeIncreasingSwaps(OrderSide.Sell);
     }
 
-    function executeIncreasingSwaps(SwapSide side) internal {
+    function executeIncreasingSwaps(OrderSide side) internal {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
 
         uint256[] memory amounts = new uint256[](100);
@@ -116,7 +119,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     }
 
     function testSwapBuyIncreasing() public {
-        executeIncreasingSwaps(SwapSide.Buy);
+        executeIncreasingSwaps(OrderSide.Buy);
     }
 
     function testGetCapabilities(bytes32 pair, address t0, address t1) public {
@@ -128,6 +131,6 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function testGetLimits() public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        uint256[] memory limits = pairFunctions.getLimits(pair, SwapSide.Sell);
+        uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
     }
 }
