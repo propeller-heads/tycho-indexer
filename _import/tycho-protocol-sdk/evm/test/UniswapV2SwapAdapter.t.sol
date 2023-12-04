@@ -74,15 +74,11 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function testSwapFuzz(uint256 amount, bool isBuy) public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        OrderSide side = OrderSide.Sell;
-        uint256[] memory limits;
-        if (isBuy) {
-            side = OrderSide.Buy;
-            limits = pairFunctions.getLimits(pair, WETH, USDC);
-        } else {
-            limits = pairFunctions.getLimits(pair, USDC, WETH);
-        }
+        OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
+
+        uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
         vm.assume(amount < limits[0]);
+        
         deal(address(USDC), address(this), amount);
         USDC.approve(address(pairFunctions), amount);
 
@@ -132,5 +128,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     function testGetLimits() public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
+
+        assertEq(limits.length, 2);
     }
 }

@@ -16,9 +16,9 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         bytes32 pairId,
         IERC20 sellToken,
         IERC20 buyToken,
-        uint256[] memory sellAmounts
+        uint256[] memory specifiedAmounts
     ) external view override returns (Fraction[] memory prices) {
-        prices = new Fraction[](sellAmounts.length);
+        prices = new Fraction[](specifiedAmounts.length);
         IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
         uint112 r0;
         uint112 r1;
@@ -28,8 +28,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
             (r1, r0,) = pair.getReserves();
         }
 
-        for (uint256 i = 0; i < sellAmounts.length; i++) {
-            prices[i] = getPriceAt(sellAmounts[i], r0, r1);
+        for (uint256 i = 0; i < specifiedAmounts.length; i++) {
+            prices[i] = getPriceAt(specifiedAmounts[i], r0, r1);
         }
     }
 

@@ -29,14 +29,15 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @param pairId The ID of the trading pair.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
-    /// @param sellAmounts The specified amounts used for price calculation.
+    /// @param specifiedAmounts The specified amounts used for price
+    /// calculation.
     /// @return prices array of prices as fractions corresponding to the
     /// provided amounts.
     function price(
         bytes32 pairId,
         IERC20 sellToken,
         IERC20 buyToken,
-        uint256[] memory sellAmounts
+        uint256[] memory specifiedAmounts
     ) external view returns (Fraction[] memory prices);
 
     /**
