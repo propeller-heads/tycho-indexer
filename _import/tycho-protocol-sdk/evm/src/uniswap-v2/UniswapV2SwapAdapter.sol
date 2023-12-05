@@ -152,7 +152,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         uint256 reserveIn,
         uint256 reserveOut
     ) internal pure returns (uint256 amountIn) {
-        if (amountIn == 0) {
+        if (amountOut == 0) {
             return 0;
         }
         if (reserveIn == 0) {
