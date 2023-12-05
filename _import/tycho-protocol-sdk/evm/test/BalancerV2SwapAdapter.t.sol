@@ -21,7 +21,7 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
         0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
 
     function setUp() public {
-        uint256 forkBlock = 17000000;
+        uint256 forkBlock = 18710000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         adapter = new BalancerV2SwapAdapter(payable(address(balancerV2Vault)));
@@ -62,19 +62,40 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
     //     assertGt(price.numerator, 0);
     // }
 
-    function testSwapFuzz() public {
-        // uint256[] memory limits = adapter.getLimits(B_80BAL_20WETH_POOL_ID, BAL, WETH);
-        // vm.assume(amount < limits[0]);
-        // vm.assume(amount > 1000000); // TODO getting reverts for amounts near zero
-        uint256 amount = 100000;
+    function testSwapFuzz(uint256 specifiedAmount, bool isBuy) public {
+        OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
+        vm.assume(specifiedAmount > 0);
 
-        OrderSide side = OrderSide.Sell;
+        uint256[] memory limits = adapter.getLimits(B_80BAL_20WETH_POOL_ID, BAL, WETH);
 
-        deal(address(BAL), address(adapter), amount);        
-        // BAL.approve(address(adapter), amount);
-        // BAL.approve(address(balancerV2Vault), amount);
+        if (side == OrderSide.Buy) {
+            vm.assume(specifiedAmount < limits[1]);
 
-        adapter.swap(B_80BAL_20WETH_POOL_ID, BAL, WETH, side, amount);
+            // sellAmount is not specified for buy orders
+            deal(address(BAL), address(this), type(uint256).max);
+            BAL.approve(address(adapter), type(uint256).max);
+        }
+        else {
+            vm.assume(specifiedAmount < limits[0]);
+
+            deal(address(BAL), address(this), specifiedAmount);
+            BAL.approve(address(adapter), specifiedAmount);
+        }
+        
+        uint256 bal_balance = BAL.balanceOf(address(this));
+        uint256 weth_balance = WETH.balanceOf(address(this));
+
+        Trade memory trade = adapter.swap(B_80BAL_20WETH_POOL_ID, BAL, WETH, side, specifiedAmount);
+
+        if (trade.calculatedAmount > 0) {
+            if (side == OrderSide.Buy) {
+                assertEq(specifiedAmount, WETH.balanceOf(address(this)) - weth_balance);
+                assertEq(trade.calculatedAmount, bal_balance - BAL.balanceOf(address(this)));
+            } else {
+                assertEq(specifiedAmount, bal_balance - BAL.balanceOf(address(this)));
+                assertEq(trade.calculatedAmount, WETH.balanceOf(address(this)) - weth_balance);
+            }
+        }
     }
 
     function testGetLimits() public view {

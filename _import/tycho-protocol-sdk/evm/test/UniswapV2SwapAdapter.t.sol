@@ -17,6 +17,11 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         pairFunctions = new
             UniswapV2SwapAdapter(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+
+        vm.label(address(pairFunctions), "UniswapV2SwapAdapter");
+        vm.label(address(WETH), "WETH");
+        vm.label(address(USDC), "USDC");
+        vm.label(address(USDC_WETH_PAIR), "USDC_WETH_PAIR");
     }
 
     function testPriceFuzz(uint256 amount0, uint256 amount1) public {
@@ -72,17 +77,40 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         else return -1;
     }
 
-    function testSwapFuzz(uint256 amount, bool isBuy) public {
-        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+    function testSwapFuzz(uint256 specifiedAmount, bool isBuy) public {
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
 
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
-        vm.assume(amount < limits[0]);
-        
-        deal(address(USDC), address(this), amount);
-        USDC.approve(address(pairFunctions), amount);
 
-        pairFunctions.swap(pair, USDC, WETH, side, amount);
+        if (side == OrderSide.Buy) {
+            vm.assume(specifiedAmount < limits[1]);
+
+            // sellAmount is not specified for buy orders
+            deal(address(USDC), address(this), type(uint256).max);
+            USDC.approve(address(pairFunctions), type(uint256).max);
+        }
+        else {
+            vm.assume(specifiedAmount < limits[0]);
+
+            deal(address(USDC), address(this), specifiedAmount);
+            USDC.approve(address(pairFunctions), specifiedAmount);
+        }
+
+        uint256 usdc_balance = USDC.balanceOf(address(this));
+        uint256 weth_balance = WETH.balanceOf(address(this));
+
+        Trade memory trade = pairFunctions.swap(pair, USDC, WETH, side, specifiedAmount);
+
+        if (trade.calculatedAmount > 0) {
+            if (side == OrderSide.Buy) {
+                assertEq(specifiedAmount, WETH.balanceOf(address(this)) - weth_balance);
+                assertEq(trade.calculatedAmount, usdc_balance - USDC.balanceOf(address(this)));
+            } else {
+                assertEq(specifiedAmount, usdc_balance - USDC.balanceOf(address(this)));
+                assertEq(trade.calculatedAmount, WETH.balanceOf(address(this)) - weth_balance);
+            }
+        }
     }
 
     function testSwapSellIncreasing() public {
@@ -91,24 +119,27 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function executeIncreasingSwaps(OrderSide side) internal {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+        uint256 iterations = 100;
 
-        uint256[] memory amounts = new uint256[](100);
+        uint256[] memory amounts = new uint256[](iterations);
         for (uint256 i = 0; i < 100; i++) {
             amounts[i] = 1000 * i * 10 ** 6;
         }
 
-        Trade[] memory trades = new Trade   [](100);
+        Trade[] memory trades = new Trade[](iterations);
         uint256 beforeSwap;
-        for (uint256 i = 0; i < 100; i++) {
+        for (uint256 i = 0; i < iterations; i++) {
             beforeSwap = vm.snapshot();
+
             deal(address(USDC), address(this), amounts[i]);
             USDC.approve(address(pairFunctions), amounts[i]);
+
             trades[i] = pairFunctions.swap(pair, USDC, WETH, side, amounts[i]);
             vm.revertTo(beforeSwap);
         }
 
-        for (uint256 i = 1; i < 99; i++) {
-            assertLe(trades[i].receivedAmount, trades[i + 1].receivedAmount);
+        for (uint256 i = 1; i < iterations - 1; i++) {
+            assertLe(trades[i].calculatedAmount, trades[i + 1].calculatedAmount);
             assertLe(trades[i].gasUsed, trades[i + 1].gasUsed);
             assertEq(compareFractions(trades[i].price, trades[i + 1].price), 1);
         }

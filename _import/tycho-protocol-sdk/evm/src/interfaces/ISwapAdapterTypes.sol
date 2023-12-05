@@ -46,7 +46,7 @@ interface ISwapAdapterTypes {
     struct Trade {
         // If the side is sell, it is the amount of tokens sold. If the side is
         // buy, it is the amount of tokens bought.
-        uint256 receivedAmount;
+        uint256 calculatedAmount;
         // The amount of gas used in the trade.
         uint256 gasUsed;
         // The price of the pair after the trade. For zero use Fraction(0, 1).

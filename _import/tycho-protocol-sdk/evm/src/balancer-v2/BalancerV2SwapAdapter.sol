@@ -44,7 +44,41 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             IVault.SwapKind.GIVEN_IN, swapSteps, assets, funds
         );
 
+        // TODO: the delta of buyToken is negative, so we need to flip the sign 
         calculatedPrice = Fraction(uint256(assetDeltas[1]), sellAmount);
+    }
+
+    function getSellAmount(
+        bytes32 pairId,
+        IERC20 sellToken,
+        IERC20 buyToken,
+        uint256 buyAmount
+    ) public returns (uint256 sellAmount) {
+        IVault.BatchSwapStep[] memory swapSteps = new IVault.BatchSwapStep[](1);
+        swapSteps[0] = IVault.BatchSwapStep({
+            poolId: pairId,
+            assetInIndex: 0,
+            assetOutIndex: 1,
+            amount: buyAmount,
+            userData: ""
+        });
+        address[] memory assets = new address[](2);
+        assets[0] = address(sellToken);
+        assets[1] = address(buyToken);
+        IVault.FundManagement memory funds = IVault.FundManagement({
+            sender: msg.sender,
+            fromInternalBalance: false,
+            recipient: payable(msg.sender),
+            toInternalBalance: false
+        });
+
+        // assetDeltas correspond to the assets array
+        int256[] memory assetDeltas = new int256[](2);
+        assetDeltas = vault.queryBatchSwap(
+            IVault.SwapKind.GIVEN_OUT, swapSteps, assets, funds
+        );
+
+        sellAmount = uint256(assetDeltas[0]);
     }
 
     function priceBatch(
@@ -75,31 +109,39 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         OrderSide side,
         uint256 specifiedAmount
     ) external override returns (Trade memory trade) {
+        uint256 sellAmount;
+        IVault.SwapKind kind;
+        uint256 limit; // TODO set this slippage limit properly
         if (side == OrderSide.Sell) {
-            sellToken.approve(address(vault), specifiedAmount);
+            kind = IVault.SwapKind.GIVEN_IN;
+            sellAmount = specifiedAmount;
+            limit = 0;
         } else {
-            buyToken.approve(address(vault), type(uint256).max);
+            kind = IVault.SwapKind.GIVEN_OUT;
+            sellAmount = getSellAmount(pairId, sellToken, buyToken, specifiedAmount);
+            limit = type(uint256).max;
         }
+
+        sellToken.transferFrom(msg.sender, address(this), sellAmount);
+        sellToken.approve(address(vault), sellAmount);
+
         uint256 gasBefore = gasleft();
-        trade.receivedAmount = vault.swap(
+        trade.calculatedAmount = vault.swap(
             IVault.SingleSwap({
                 poolId: pairId,
-                kind: side == OrderSide.Sell
-                    ? IVault.SwapKind.GIVEN_IN
-                    : IVault.SwapKind.GIVEN_OUT,
+                kind: kind,
                 assetIn: address(sellToken),
                 assetOut: address(buyToken),
                 amount: specifiedAmount,
                 userData: ""
             }),
-            // This contract is not an approved relayer (yet), so the sender and recipient cannot be msg.sender
             IVault.FundManagement({
                 sender: address(this),
                 fromInternalBalance: false,
-                recipient: payable(address(this)),
+                recipient: msg.sender,
                 toInternalBalance: false
             }),
-            0,
+            limit,
             block.timestamp + SWAP_DEADLINE_SEC
         );
         trade.gasUsed = gasBefore - gasleft();

@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
-uint256 constant RESERVE_LIMIT_FACTOR = 10; // TODO why is the factor so high?
+uint256 constant RESERVE_LIMIT_FACTOR = 2; // TODO why is the factor so high?
 
 contract UniswapV2SwapAdapter is ISwapAdapter {
     IUniswapV2Factory immutable factory;
@@ -73,10 +73,10 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         }
         uint256 gasBefore = gasleft();
         if (side == OrderSide.Sell) {
-            trade.receivedAmount =
+            trade.calculatedAmount =
                 sell(pair, sellToken, zero2one, r0, r1, specifiedAmount);
         } else {
-            trade.receivedAmount =
+            trade.calculatedAmount =
                 buy(pair, sellToken, zero2one, r0, r1, specifiedAmount);
         }
         trade.gasUsed = gasBefore - gasleft();
@@ -90,11 +90,12 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         uint112 reserveIn,
         uint112 reserveOut,
         uint256 amount
-    ) internal returns (uint256 receivedAmount) {
+    ) internal returns (uint256 calculatedAmount) {
         address swapper = msg.sender;
+        uint256 amountOut = getAmountOut(amount, reserveIn, reserveOut);
+
         // TODO: use safeTransferFrom
         sellToken.transferFrom(swapper, address(pair), amount);
-        uint256 amountOut = getAmountOut(amount, reserveIn, reserveOut);
         if (zero2one) {
             pair.swap(0, amountOut, swapper, "");
         } else {
@@ -129,9 +130,10 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         uint112 reserveIn,
         uint112 reserveOut,
         uint256 amountOut
-    ) internal returns (uint256 receivedAmount) {
+    ) internal returns (uint256 calculatedAmount) {
         address swapper = msg.sender;
         uint256 amount = getAmountIn(amountOut, reserveIn, reserveOut);
+
         if (amount == 0) {
             return 0;
         }
@@ -174,10 +176,13 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     {
         IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
         limits = new uint256[](2);
+        (uint256 r0, uint256 r1,) = pair.getReserves();
         if (sellToken < buyToken) {
-            (limits[0], limits[1],) = pair.getReserves();
+            limits[0] = r0 / RESERVE_LIMIT_FACTOR;
+            limits[1] = r1 / RESERVE_LIMIT_FACTOR;
         } else {
-            (limits[1], limits[0],) = pair.getReserves();
+            limits[0] = r1 / RESERVE_LIMIT_FACTOR;
+            limits[1] = r0 / RESERVE_LIMIT_FACTOR;
         }
     }
 
