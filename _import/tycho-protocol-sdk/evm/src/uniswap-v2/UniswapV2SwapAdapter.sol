@@ -13,13 +13,13 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     }
 
     function price(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         uint256[] memory specifiedAmounts
     ) external view override returns (Fraction[] memory prices) {
         prices = new Fraction[](specifiedAmounts.length);
-        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
+        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(poolId)));
         uint112 r0;
         uint112 r1;
         if (sellToken < buyToken) {
@@ -51,7 +51,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     }
 
     function swap(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         OrderSide side,
@@ -62,7 +62,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
                 // expected zero Fraction(0, 1)
         }
 
-        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
+        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(poolId)));
         uint112 r0;
         uint112 r1;
         bool zero2one = sellToken < buyToken;
@@ -168,13 +168,13 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         amountIn = (numerator / denominator) + 1;
     }
 
-    function getLimits(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
         view
         override
         returns (uint256[] memory limits)
     {
-        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
+        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(poolId)));
         limits = new uint256[](2);
         (uint256 r0, uint256 r1,) = pair.getReserves();
         if (sellToken < buyToken) {
@@ -198,14 +198,14 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         capabilities[2] = Capability.PriceFunction;
     }
 
-    function getTokens(bytes32 pairId)
+    function getTokens(bytes32 poolId)
         external
         view
         override
         returns (IERC20[] memory tokens)
     {
         tokens = new IERC20[](2);
-        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(pairId)));
+        IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(poolId)));
         tokens[0] = IERC20(pair.token0());
         tokens[1] = IERC20(pair.token1());
     }

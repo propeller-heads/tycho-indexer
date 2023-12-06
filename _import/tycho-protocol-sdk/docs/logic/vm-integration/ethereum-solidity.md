@@ -50,7 +50,7 @@ instances:
 # getTokens are not implemented.
 tests:
   instances:
-    - pair_id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
+    - pool_id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
       sell_token: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
       buy_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
       block: 17000000
@@ -61,7 +61,7 @@ tests:
 
 #### Price (optional)
 
-Calculates pair prices for specified amounts (optional).
+Calculates pool prices for specified amounts (optional).
 
 The returned prices should include all protocol fees, in case the fee is dynamic, the returned price is expected to include the minimum fee.&#x20;
 
@@ -71,7 +71,7 @@ The method needs to be implemented as view as this is usually more efficient and
 
 ```solidity
 function price(
-    bytes32 pairId,
+    bytes32 poolId,
     IERC20 sellToken,
     IERC20 buyToken,
     uint256[] memory sellAmounts
@@ -80,7 +80,7 @@ function price(
 
 #### Swap
 
-Simulates swapping tokens on a given pair.
+Simulates swapping tokens on a given pool.
 
 This function should be state modifying meaning it should actually execute the swap and change the state of the vm accordingly.
 
@@ -90,7 +90,7 @@ The return type Trade, has a price attribute which should contain the value of p
 
 ```solidity
 function swap(
-    bytes32 pairId,
+    bytes32 poolId,
     IERC20 sellToken,
     IERC20 buyToken,
     OrderSide side,
@@ -105,29 +105,29 @@ Retrieves the limits for each token.
 This method returns the maximum limits of a token that can be traded. The limit is reached when the change in the received amounts is zero or close to zero. If in doubt over estimate the limit. The swap function should not error with LimitExceeded if called with any amounts below the limit.
 
 ```solidity
-function getLimits(bytes32 pairId, OrderSide side)
+function getLimits(bytes32 poolId, OrderSide side)
     external
     returns (uint256[] memory);
 ```
 
 #### getCapabilities
 
-Retrieves the capabilities of the selected pair.
+Retrieves the capabilities of the selected pool.
 
 ```solidity
-function getCapabilities(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
+function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
     external
     returns (Capability[] memory);
 ```
 
 #### getTokens (optional)
 
-Retrieves the tokens for the given pair.
+Retrieves the tokens for the given pool.
 
 _Mainly used for testing as this is redundant with the required substreams implementation._
 
 ```solidity
-function getTokens(bytes32 pairId)
+function getTokens(bytes32 poolId)
     external
     returns (IERC20[] memory tokens);
 ```

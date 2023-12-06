@@ -22,21 +22,21 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
     /// Also this function is not 'view' because Balancer V2 simulates the swap
     /// and
     /// then returns the amount diff in revert data.
-    /// @param pairId The ID of the trading pool.
+    /// @param poolId The ID of the trading pool.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
     /// @param sellAmount The amount of tokens being sold.
     /// @return calculatedPrice The price of the buy token in terms of the sell
     /// as a Fraction struct.
     function priceSingle(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         uint256 sellAmount
     ) public returns (Fraction memory calculatedPrice) {
         IVault.BatchSwapStep[] memory swapSteps = new IVault.BatchSwapStep[](1);
         swapSteps[0] = IVault.BatchSwapStep({
-            poolId: pairId,
+            poolId: poolId,
             assetInIndex: 0,
             assetOutIndex: 1,
             amount: sellAmount,
@@ -65,14 +65,14 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
     }
 
     function getSellAmount(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         uint256 buyAmount
     ) public returns (uint256 sellAmount) {
         IVault.BatchSwapStep[] memory swapSteps = new IVault.BatchSwapStep[](1);
         swapSteps[0] = IVault.BatchSwapStep({
-            poolId: pairId,
+            poolId: poolId,
             assetInIndex: 0,
             assetOutIndex: 1,
             amount: buyAmount,
@@ -98,14 +98,14 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
     }
 
     function priceBatch(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         uint256[] memory specifiedAmounts
     ) external returns (Fraction[] memory calculatedPrices) {
         for (uint256 i = 0; i < specifiedAmounts.length; i++) {
             calculatedPrices[i] =
-                priceSingle(pairId, sellToken, buyToken, specifiedAmounts[i]);
+                priceSingle(poolId, sellToken, buyToken, specifiedAmounts[i]);
         }
     }
 
@@ -119,7 +119,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
     }
 
     function swap(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         OrderSide side,
@@ -135,7 +135,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
         } else {
             kind = IVault.SwapKind.GIVEN_OUT;
             sellAmount =
-                getSellAmount(pairId, sellToken, buyToken, specifiedAmount);
+                getSellAmount(poolId, sellToken, buyToken, specifiedAmount);
             limit = type(uint256).max;
         }
 
@@ -145,7 +145,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
         uint256 gasBefore = gasleft();
         trade.calculatedAmount = vault.swap(
             IVault.SingleSwap({
-                poolId: pairId,
+                poolId: poolId,
                 kind: kind,
                 assetIn: address(sellToken),
                 assetOut: address(buyToken),
@@ -162,10 +162,10 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
             block.timestamp + SWAP_DEADLINE_SEC
         );
         trade.gasUsed = gasBefore - gasleft();
-        trade.price = priceSingle(pairId, sellToken, buyToken, specifiedAmount);
+        trade.price = priceSingle(poolId, sellToken, buyToken, specifiedAmount);
     }
 
-    function getLimits(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
         view
         override
@@ -173,7 +173,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
     {
         limits = new uint256[](2);
         (IERC20[] memory tokens, uint256[] memory balances,) =
-            vault.getPoolTokens(pairId);
+            vault.getPoolTokens(poolId);
 
         for (uint256 i = 0; i < tokens.length; i++) {
             if (tokens[i] == sellToken) {
@@ -196,13 +196,13 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
         capabilities[1] = Capability.BuyOrder;
     }
 
-    function getTokens(bytes32 pairId)
+    function getTokens(bytes32 poolId)
         external
         view
         override
         returns (IERC20[] memory tokens)
     {
-        (tokens,,) = vault.getPoolTokens(pairId);
+        (tokens,,) = vault.getPoolTokens(poolId);
     }
 
     /// @dev Balancer V2 does not support enumerating pools, they have to be

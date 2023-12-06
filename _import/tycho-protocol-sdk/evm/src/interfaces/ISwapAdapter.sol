@@ -6,18 +6,18 @@ import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 
 /// @title ISwapAdapter
 /// @dev Implement this interface to support propeller routing through your
-/// pairs. Before implementing the interface we need to introduce three function
-/// for a given pair: The swap(x), gas(x) and price(x) functions: The swap
+/// pools. Before implementing the interface we need to introduce three function
+/// for a given pool: The swap(x), gas(x) and price(x) functions: The swap
 /// function accepts some specified token amount x and returns the amount y a
 /// user can get by swapping x through the venue. The gas function simply
 /// returns the estimated gas cost given a specified amount x. Last but not
 /// least, the price function is the derivative of the swap function. It
-/// represents the best possible price a user can get from a pair after swapping
+/// represents the best possible price a user can get from a pool after swapping
 /// x of the specified token. During calls to swap and getLimits, the caller can
 /// be assumed to have the required sell or buy token balance as well as
 /// unlimited approvals to this contract.
 interface ISwapAdapter is ISwapAdapterTypes {
-    /// @notice Calculates pair prices for specified amounts (optional).
+    /// @notice Calculates pool prices for specified amounts (optional).
     /// @dev The returned prices should include all dex fees, in case the fee is
     /// dynamic, the returned price is expected to include the minimum fee.
     /// Ideally this method should be implemented, although it is optional as
@@ -26,7 +26,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// calling it should revert using the `NotImplemented` error. The method
     /// needs to be implemented as view as this is usually more efficient and
     /// can be run in parallel. all.
-    /// @param pairId The ID of the trading pair.
+    /// @param poolId The ID of the trading pool.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
     /// @param specifiedAmounts The specified amounts used for price
@@ -34,14 +34,14 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @return prices array of prices as fractions corresponding to the
     /// provided amounts.
     function price(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         uint256[] memory specifiedAmounts
     ) external view returns (Fraction[] memory prices);
 
     /**
-     * @notice Simulates swapping tokens on a given pair.
+     * @notice Simulates swapping tokens on a given pool.
      * @dev This function should be state modifying meaning it should actually
      * execute the swap and change the state of the evm accordingly. Please
      * include a gas usage estimate for each amount. This can be achieved e.g.
@@ -50,7 +50,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
      * this is optional, defined via `Capability.PriceFunction`, it is valid to
      * return a zero value for this price in that case it will be estimated
      * numerically. To return zero use Fraction(0, 1).
-     * @param pairId The ID of the trading pair.
+     * @param poolId The ID of the trading pool.
      * @param sellToken The token being sold.
      * @param buyToken The token being bought.
      * @param side The side of the trade (Sell or Buy).
@@ -58,7 +58,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
      * @return trade Trade struct representing the executed trade.
      */
     function swap(
-        bytes32 pairId,
+        bytes32 poolId,
         IERC20 sellToken,
         IERC20 buyToken,
         OrderSide side,
@@ -71,27 +71,27 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// close to zero. Overestimate if in doubt rather than underestimate. The
     /// swap function should not error with `LimitExceeded` if called with
     /// amounts below the limit.
-    /// @param pairId The ID of the trading pair.
+    /// @param poolId The ID of the trading pool.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
     /// @return limits An array of limits.
-    function getLimits(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
         returns (uint256[] memory limits);
 
-    /// @notice Retrieves the capabilities of the selected pair.
-    /// @param pairId The ID of the trading pair.
+    /// @notice Retrieves the capabilities of the selected pool.
+    /// @param poolId The ID of the trading pool.
     /// @return capabilities An array of Capability.
-    function getCapabilities(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
+    function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
         returns (Capability[] memory capabilities);
 
-    /// @notice Retrieves the tokens in the selected pair.
+    /// @notice Retrieves the tokens in the selected pool.
     /// @dev Mainly used for testing as this is redundant with the required
     /// substreams implementation.
-    /// @param pairId The ID of the trading pair.
+    /// @param poolId The ID of the trading pool.
     /// @return tokens An array of IERC20 contracts.
-    function getTokens(bytes32 pairId)
+    function getTokens(bytes32 poolId)
         external
         returns (IERC20[] memory tokens);
 

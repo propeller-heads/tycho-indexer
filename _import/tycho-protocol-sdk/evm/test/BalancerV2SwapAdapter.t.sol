@@ -202,11 +202,11 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
         assert(limits[1] > 0);
     }
 
-    function testGetCapabilitiesFuzz(bytes32 pair, address t0, address t1)
+    function testGetCapabilitiesFuzz(bytes32 pool, address t0, address t1)
         public
     {
         Capability[] memory res =
-            adapter.getCapabilities(pair, IERC20(t0), IERC20(t1));
+            adapter.getCapabilities(pool, IERC20(t0), IERC20(t1));
 
         assertEq(res.length, 2);
         assertEq(uint256(res[0]), uint256(Capability.SellOrder));

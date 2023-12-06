@@ -13,7 +13,7 @@ interface ISwapAdapterTypes {
     }
 
     /// @dev The Capability enum represents possible features of a trading
-    /// pair.
+    /// pool.
     enum Capability {
         Unset,
         // Support OrderSide.Sell values (required)
@@ -24,10 +24,10 @@ interface ISwapAdapterTypes {
         PriceFunction,
         // Support tokens that charge a fee on transfer (optional)
         FeeOnTransfer,
-        // The pair does not suffer from price impact and maintains a constant
+        // The pool does not suffer from price impact and maintains a constant
         // price for increasingly larger specified amounts. (optional)
         ConstantPrice,
-        // Indicates that the pair does not read it's own token balances while
+        // Indicates that the pool does not read it's own token balances while
         // swapping. (optional)
         TokenBalanceIndependent,
         // Indicates that prices are returned scaled, else it is assumed prices
@@ -49,7 +49,7 @@ interface ISwapAdapterTypes {
         uint256 calculatedAmount;
         // The amount of gas used in the trade.
         uint256 gasUsed;
-        // The price of the pair after the trade. For zero use Fraction(0, 1).
+        // The price of the pool after the trade. For zero use Fraction(0, 1).
         Fraction price;
     }
 
