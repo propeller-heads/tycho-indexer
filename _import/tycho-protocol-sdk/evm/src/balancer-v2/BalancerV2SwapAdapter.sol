@@ -3,18 +3,31 @@ pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import "forge-std/Test.sol";
 
-// Maximum Swap In/Out Ratio - 0.3 https://balancer.gitbook.io/balancer/core-concepts/protocol/limitations#v2-limits
-uint256 constant RESERVE_LIMIT_FACTOR = 4; 
+// Maximum Swap In/Out Ratio - 0.3
+// https://balancer.gitbook.io/balancer/core-concepts/protocol/limitations#v2-limits
+uint256 constant RESERVE_LIMIT_FACTOR = 4;
 uint256 constant SWAP_DEADLINE_SEC = 1000;
 
-contract BalancerV2SwapAdapter is ISwapAdapter {
+contract BalancerV2SwapAdapter is ISwapAdapter, Test {
     IVault immutable vault;
 
     constructor(address payable vault_) {
         vault = IVault(vault_);
     }
 
+    /// @notice Calculate the price of the buy token in terms of the sell token.
+    /// @dev The resulting price is not scaled by the token decimals.
+    /// Also this function is not 'view' because Balancer V2 simulates the swap
+    /// and
+    /// then returns the amount diff in revert data.
+    /// @param pairId The ID of the trading pool.
+    /// @param sellToken The token being sold.
+    /// @param buyToken The token being bought.
+    /// @param sellAmount The amount of tokens being sold.
+    /// @return calculatedPrice The price of the buy token in terms of the sell
+    /// as a Fraction struct.
     function priceSingle(
         bytes32 pairId,
         IERC20 sellToken,
@@ -44,9 +57,11 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         assetDeltas = vault.queryBatchSwap(
             IVault.SwapKind.GIVEN_IN, swapSteps, assets, funds
         );
-
-        // TODO: the delta of buyToken is negative, so we need to flip the sign 
-        calculatedPrice = Fraction(uint256(assetDeltas[1]), sellAmount);
+        // assetDeltas[1] is the amount of tokens sent from the vault (i.e.
+        // bought), so the sign is negative, which means the sign should be
+        // flipped to get the price.
+        calculatedPrice =
+            Fraction(uint256(-assetDeltas[1]), uint256(assetDeltas[0]));
     }
 
     function getSellAmount(
@@ -119,7 +134,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             limit = 0;
         } else {
             kind = IVault.SwapKind.GIVEN_OUT;
-            sellAmount = getSellAmount(pairId, sellToken, buyToken, specifiedAmount);
+            sellAmount =
+                getSellAmount(pairId, sellToken, buyToken, specifiedAmount);
             limit = type(uint256).max;
         }
 
@@ -146,7 +162,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             block.timestamp + SWAP_DEADLINE_SEC
         );
         trade.gasUsed = gasBefore - gasleft();
-        trade.price = Fraction(0, 1); // Without the price function return 0.
+        trade.price = priceSingle(pairId, sellToken, buyToken, specifiedAmount);
     }
 
     function getLimits(bytes32 pairId, IERC20 sellToken, IERC20 buyToken)
