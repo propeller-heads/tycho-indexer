@@ -10,7 +10,7 @@ import "src/libraries/FractionMath.sol";
 contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     using FractionMath for Fraction;
 
-    UniswapV2SwapAdapter pairFunctions;
+    UniswapV2SwapAdapter adapter;
     IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     address constant USDC_WETH_PAIR = 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
@@ -20,10 +20,10 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     function setUp() public {
         uint256 forkBlock = 17000000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        pairFunctions = new
+        adapter = new
             UniswapV2SwapAdapter(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
 
-        vm.label(address(pairFunctions), "UniswapV2SwapAdapter");
+        vm.label(address(adapter), "UniswapV2SwapAdapter");
         vm.label(address(WETH), "WETH");
         vm.label(address(USDC), "USDC");
         vm.label(address(USDC_WETH_PAIR), "USDC_WETH_PAIR");
@@ -31,7 +31,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function testPriceFuzz(uint256 amount0, uint256 amount1) public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
+        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
         vm.assume(amount0 < limits[0]);
         vm.assume(amount1 < limits[0]);
 
@@ -39,8 +39,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         amounts[0] = amount0;
         amounts[1] = amount1;
 
-        Fraction[] memory prices =
-            pairFunctions.price(pair, WETH, USDC, amounts);
+        Fraction[] memory prices = adapter.price(pair, WETH, USDC, amounts);
 
         for (uint256 i = 0; i < prices.length; i++) {
             assertGt(prices[i].numerator, 0);
@@ -56,8 +55,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
             amounts[i] = 1000 * i * 10 ** 6;
         }
 
-        Fraction[] memory prices =
-            pairFunctions.price(pair, WETH, USDC, amounts);
+        Fraction[] memory prices = adapter.price(pair, WETH, USDC, amounts);
 
         for (uint256 i = 0; i < TEST_ITERATIONS - 1; i++) {
             assertEq(prices[i].compareFractions(prices[i + 1]), 1);
@@ -70,26 +68,26 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
 
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
+        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
 
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1]);
 
             // sellAmount is not specified for buy orders
             deal(address(USDC), address(this), type(uint256).max);
-            USDC.approve(address(pairFunctions), type(uint256).max);
+            USDC.approve(address(adapter), type(uint256).max);
         } else {
             vm.assume(specifiedAmount < limits[0]);
 
             deal(address(USDC), address(this), specifiedAmount);
-            USDC.approve(address(pairFunctions), specifiedAmount);
+            USDC.approve(address(adapter), specifiedAmount);
         }
 
         uint256 usdc_balance = USDC.balanceOf(address(this));
         uint256 weth_balance = WETH.balanceOf(address(this));
 
         Trade memory trade =
-            pairFunctions.swap(pair, USDC, WETH, side, specifiedAmount);
+            adapter.swap(pair, USDC, WETH, side, specifiedAmount);
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -132,9 +130,9 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
             beforeSwap = vm.snapshot();
 
             deal(address(USDC), address(this), amounts[i]);
-            USDC.approve(address(pairFunctions), amounts[i]);
+            USDC.approve(address(adapter), amounts[i]);
 
-            trades[i] = pairFunctions.swap(pair, USDC, WETH, side, amounts[i]);
+            trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
             vm.revertTo(beforeSwap);
         }
 
@@ -151,14 +149,14 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
     function testGetCapabilities(bytes32 pair, address t0, address t1) public {
         Capability[] memory res =
-            pairFunctions.getCapabilities(pair, IERC20(t0), IERC20(t1));
+            adapter.getCapabilities(pair, IERC20(t0), IERC20(t1));
 
         assertEq(res.length, 3);
     }
 
     function testGetLimits() public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        uint256[] memory limits = pairFunctions.getLimits(pair, USDC, WETH);
+        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
 
         assertEq(limits.length, 2);
     }
