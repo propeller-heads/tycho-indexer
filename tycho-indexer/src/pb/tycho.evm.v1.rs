@@ -73,6 +73,10 @@ pub struct TransactionChanges {
     pub tx: ::core::option::Option<Transaction>,
     #[prost(message, repeated, tag = "2")]
     pub contract_changes: ::prost::alloc::vec::Vec<ContractChange>,
+    #[prost(message, repeated, tag = "3")]
+    pub components: ::prost::alloc::vec::Vec<ProtocolComponent>,
+    #[prost(message, repeated, tag = "4")]
+    pub tvl: ::prost::alloc::vec::Vec<TvlUpdate>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

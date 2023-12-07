@@ -70,7 +70,12 @@ fn map_changes(
 ) -> Result<tycho::BlockContractChanges, substreams::errors::Error> {
     let mut block_changes = tycho::BlockContractChanges { block: None, changes: Vec::new() };
 
-    let mut tx_change = tycho::TransactionChanges { tx: None, contract_changes: Vec::new() };
+    let mut tx_change = tycho::TransactionChanges {
+        tx: None,
+        contract_changes: Vec::new(),
+        components: Vec::new(),
+        tvl: Vec::new(),
+    };
 
     let mut changed_contracts: HashMap<Vec<u8>, InterimContractChange> = HashMap::new();
 

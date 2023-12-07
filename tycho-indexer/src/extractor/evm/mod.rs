@@ -662,6 +662,8 @@ pub mod fixtures {
                         change: ChangeType::Update.into(),
                     },
                 ],
+                components: todo!(),
+                tvl: todo!(),
             }],
         }
     }
@@ -670,6 +672,7 @@ pub mod fixtures {
 #[cfg(test)]
 mod test {
     use super::*;
+    use prost::Message;
     use rstest::rstest;
 
     const HASH_256_0: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";
