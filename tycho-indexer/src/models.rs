@@ -90,8 +90,6 @@ pub trait NormalisedMessage:
     fn source(&self) -> ExtractorIdentity;
 }
 
-
-
 // remove this and use chain specific component
 #[allow(dead_code)]
 pub struct ProtocolComponent {

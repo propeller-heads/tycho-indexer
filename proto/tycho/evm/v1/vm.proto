@@ -50,7 +50,6 @@ message Contract {
 }
 
 message TVLUpdate {
-  bytes address = 1;
   bytes token = 2;
   bytes balance = 3;
 }

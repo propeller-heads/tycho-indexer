@@ -285,6 +285,20 @@ pub struct TvlChange {
     tx: H256,
 }
 
+impl TvlChange {
+    pub fn try_from_message(
+        msg: substreams::TvlUpdate,
+        tx: &Transaction,
+    ) -> Result<Self, ExtractionError> {
+        return Ok(Self {
+            token: pad_and_parse_h160(&msg.token).map_err(ExtractionError::DecodeError)?,
+            new_balance: pad_and_parse_32bytes::<U256>(&msg.balance)
+                .map_err(ExtractionError::DecodeError)?,
+            tx: tx.hash,
+        });
+    }
+}
+
 impl NormalisedMessage for BlockAccountChanges {
     fn source(&self) -> ExtractorIdentity {
         ExtractorIdentity::new(self.chain, &self.extractor)
@@ -901,5 +915,34 @@ mod test {
         let res = msg.aggregate_updates().unwrap();
 
         assert_eq!(res, block_account_changes());
+    }
+
+    #[rstest]
+    fn test_try_from_message_tvl_change() {
+        let tx = Transaction {
+            hash: H256::from_low_u64_be(
+                0x0000000000000000000000000000000000000000000000000000000011121314,
+            ),
+            block_hash: H256::from_low_u64_be(
+                0x0000000000000000000000000000000000000000000000000000000031323334,
+            ),
+            from: H160::from_low_u64_be(0x0000000000000000000000000000000041424344),
+            to: Some(H160::from_low_u64_be(0x0000000000000000000000000000000051525354)),
+            index: 2,
+        };
+        let expected_balance = U256::from("3000");
+        let msg_balance = expected_balance
+            .to_big_endian(&mut [0; 32])
+            .encode_to_vec();
+
+        let expected_token = H160::from_low_u64_be(55);
+        let msg_token = expected_token.to_fixed_bytes().to_vec();
+
+        let msg = substreams::TvlUpdate { balance: msg_balance, token: msg_token };
+        let from_message = TvlChange::try_from_message(msg, &tx).unwrap();
+
+        assert_eq!(from_message.new_balance, expected_balance);
+        assert_eq!(from_message.tx, tx.hash);
+        assert_eq!(from_message.token, expected_token);
     }
 }
