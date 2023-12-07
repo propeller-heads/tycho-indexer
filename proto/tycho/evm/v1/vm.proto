@@ -40,16 +40,16 @@ message ContractChange {
   ChangeType change = 5;
 }
 
-message ProtocolComponent{
+message ProtocolComponent {
   repeated bytes tokens = 1;
   repeated Contract contracts = 2;
 }
 
-message Contract{
+message Contract {
   repeated bytes contract = 1;
 }
 
-message TVLUpdate{
+message TVLUpdate {
   bytes address = 1;
   bytes token = 2;
   bytes balance = 3;
