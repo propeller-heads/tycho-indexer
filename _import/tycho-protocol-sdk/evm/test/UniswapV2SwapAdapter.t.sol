@@ -73,7 +73,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1]);
 
-            // sellAmount is not specified for buy orders
+            // TODO calculate the amountIn by using price function as in BalancerV2 testPriceDecreasing
             deal(address(USDC), address(this), type(uint256).max);
             USDC.approve(address(adapter), type(uint256).max);
         } else {

@@ -3,7 +3,8 @@ pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
-uint256 constant RESERVE_LIMIT_FACTOR = 2; // TODO why is the factor so high?
+// Uniswap handles arbirary amounts, but we limit the amount to 10x just in case 
+uint256 constant RESERVE_LIMIT_FACTOR = 10;
 
 contract UniswapV2SwapAdapter is ISwapAdapter {
     IUniswapV2Factory immutable factory;
@@ -12,6 +13,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         factory = IUniswapV2Factory(factory_);
     }
 
+    /// @inheritdoc ISwapAdapter
     function price(
         bytes32 poolId,
         IERC20 sellToken,
@@ -33,6 +35,11 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         }
     }
 
+    /// @notice Calculates pool prices for specified amounts
+    /// @param amountIn The amount of the token being sold.
+    /// @param reserveIn The reserve of the token being sold.
+    /// @param reserveOut The reserve of the token being bought.
+    /// @return The price as a fraction corresponding to the provided amount.
     function getPriceAt(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
         internal
         pure
@@ -50,6 +57,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return Fraction(newReserveOut * 1000, newReserveIn * 997);
     }
 
+    /// @inheritdoc ISwapAdapter
     function swap(
         bytes32 poolId,
         IERC20 sellToken,
@@ -58,8 +66,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         uint256 specifiedAmount
     ) external override returns (Trade memory trade) {
         if (specifiedAmount == 0) {
-            return trade; // TODO: This returns Fraction(0, 0) instead of the
-                // expected zero Fraction(0, 1)
+            return trade;
         }
 
         IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(poolId)));
@@ -83,6 +90,14 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         trade.price = getPriceAt(specifiedAmount, r0, r1);
     }
 
+    /// @notice Executes a sell order on a given pool.
+    /// @param pair The pair to trade on.
+    /// @param sellToken The token being sold.
+    /// @param zero2one Whether the sell token is token0 or token1.
+    /// @param reserveIn The reserve of the token being sold.
+    /// @param reserveOut The reserve of the token being bought.
+    /// @param amount The amount to be traded.
+    /// @return calculatedAmount The amount of tokens received.
     function sell(
         IUniswapV2Pair pair,
         IERC20 sellToken,
@@ -104,8 +119,11 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return amountOut;
     }
 
-    // Given an input amount of an asset and pair reserves, returns the maximum
-    // output amount of the other asset
+    /// @notice Given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
+    /// @param amountIn The amount of the token being sold.
+    /// @param reserveIn The reserve of the token being sold.
+    /// @param reserveOut The reserve of the token being bought.
+    /// @return amountOut The amount of tokens received.
     function getAmountOut(
         uint256 amountIn,
         uint256 reserveIn,
@@ -123,6 +141,14 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         amountOut = numerator / denominator;
     }
 
+    /// @notice Execute a buy order on a given pool.
+    /// @param pair The pair to trade on.
+    /// @param sellToken The token being sold.
+    /// @param zero2one Whether the sell token is token0 or token1.
+    /// @param reserveIn The reserve of the token being sold.
+    /// @param reserveOut The reserve of the token being bought.
+    /// @param amountOut The amount of tokens to be bought.
+    /// @return calculatedAmount The amount of tokens sold.
     function buy(
         IUniswapV2Pair pair,
         IERC20 sellToken,
@@ -147,8 +173,10 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return amount;
     }
 
-    // given an output amount of an asset and pair reserves, returns a required
-    // input amount of the other asset
+    /// @notice Given an output amount of an asset and pair reserves, returns a required input amount of the other asset
+    /// @param amountOut The amount of the token being bought.
+    /// @param reserveIn The reserve of the token being sold.
+    /// @param reserveOut The reserve of the token being bought.
     function getAmountIn(
         uint256 amountOut,
         uint256 reserveIn,
@@ -168,6 +196,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         amountIn = (numerator / denominator) + 1;
     }
 
+    /// @inheritdoc ISwapAdapter
     function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
         view
@@ -186,6 +215,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         }
     }
 
+    /// @inheritdoc ISwapAdapter
     function getCapabilities(bytes32, IERC20, IERC20)
         external
         pure
@@ -198,6 +228,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         capabilities[2] = Capability.PriceFunction;
     }
 
+    /// @inheritdoc ISwapAdapter
     function getTokens(bytes32 poolId)
         external
         view
@@ -210,6 +241,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         tokens[1] = IERC20(pair.token1());
     }
 
+    /// @inheritdoc ISwapAdapter
     function getPoolIds(uint256 offset, uint256 limit)
         external
         view

@@ -73,12 +73,9 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
 
         for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
             amounts[i] = 1000 * (i + 1) * 10 ** 18;
-            console.log("i = ", i);
-            console.log("amounts[i] = ", amounts[i]);
             prices[i] = adapter.priceSingle(
                 B_80BAL_20WETH_POOL_ID, BAL, WETH, amounts[i]
             );
-            console.log("prices = ", prices[i].numerator, prices[i].denominator);
         }
 
         for (uint256 i = 0; i < TEST_ITERATIONS - 1; i++) {
@@ -98,7 +95,7 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1]);
 
-            // sellAmount is not specified for buy orders
+            // TODO calculate the amountIn by using price function as in testPriceDecreasing
             deal(address(BAL), address(this), type(uint256).max);
             BAL.approve(address(adapter), type(uint256).max);
         } else {

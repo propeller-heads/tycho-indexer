@@ -5,11 +5,11 @@ import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 
 /// @title ISwapAdapter
-/// @dev Implement this interface to support propeller routing through your
-/// pools. Before implementing the interface we need to introduce three function
-/// for a given pool: The swap(x), gas(x) and price(x) functions: The swap
-/// function accepts some specified token amount x and returns the amount y a
-/// user can get by swapping x through the venue. The gas function simply
+/// @dev Implement this interface to support Propeller routing through your
+/// pools. Before implementing the interface we need to introduce some function
+/// for a given pool. The main one, the swap(x) function, implements a sell
+/// order of a specified .
+/// The gas function simply
 /// returns the estimated gas cost given a specified amount x. Last but not
 /// least, the price function is the derivative of the swap function. It
 /// represents the best possible price a user can get from a pool after swapping
@@ -44,12 +44,12 @@ interface ISwapAdapter is ISwapAdapterTypes {
      * @notice Simulates swapping tokens on a given pool.
      * @dev This function should be state modifying meaning it should actually
      * execute the swap and change the state of the evm accordingly. Please
-     * include a gas usage estimate for each amount. This can be achieved e.g.
-     * by using the `gasleft()` function. The return type `Trade` has a price
-     * attribute which should contain the value of `price(specifiedAmount)`. As
-     * this is optional, defined via `Capability.PriceFunction`, it is valid to
-     * return a zero value for this price in that case it will be estimated
-     * numerically. To return zero use Fraction(0, 1).
+     * include a gas usage estimate for each amount. This can be achieved e.g. by
+     * using the `gasleft()` function. The return type `Trade` has an attribute
+     * called price which should contain the value of `price(specifiedAmount)`.
+     * As this is optional, defined via `Capability.PriceFunction`, it is valid
+     * to return a Fraction(0, 0) value for this price. In that case the price
+     * will be estimated numerically.
      * @param poolId The ID of the trading pool.
      * @param sellToken The token being sold.
      * @param buyToken The token being bought.
@@ -68,7 +68,8 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @notice Retrieves the limits for each token.
     /// @dev Retrieve the maximum limits of a token that can be traded. The
     /// limit is reached when the change in the received amounts is zero or
-    /// close to zero. Overestimate if in doubt rather than underestimate. The
+    /// close to zero or when the swap fails because of the pools restrictions. 
+    /// Overestimate if in doubt rather than underestimate. The
     /// swap function should not error with `LimitExceeded` if called with
     /// amounts below the limit.
     /// @param poolId The ID of the trading pool.

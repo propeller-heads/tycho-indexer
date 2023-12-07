@@ -20,8 +20,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter, Test {
     /// @notice Calculate the price of the buy token in terms of the sell token.
     /// @dev The resulting price is not scaled by the token decimals.
     /// Also this function is not 'view' because Balancer V2 simulates the swap
-    /// and
-    /// then returns the amount diff in revert data.
+    /// and then returns the amount diff in revert data.
     /// @param poolId The ID of the trading pool.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
