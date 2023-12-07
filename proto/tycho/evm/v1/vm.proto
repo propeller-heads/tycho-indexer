@@ -42,11 +42,7 @@ message ContractChange {
 
 message ProtocolComponent {
   repeated bytes tokens = 1;
-  repeated Contract contracts = 2;
-}
-
-message Contract {
-  repeated bytes contract = 1;
+  repeated bytes contracts = 2;
 }
 
 message TVLUpdate {
