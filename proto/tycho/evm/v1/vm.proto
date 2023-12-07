@@ -40,9 +40,26 @@ message ContractChange {
   ChangeType change = 5;
 }
 
+message ProtocolComponent{
+  repeated bytes tokens = 1;
+  repeated Contract contracts = 2;
+}
+
+message Contract{
+  repeated bytes contract = 1;
+}
+
+message TVLUpdate{
+  bytes address = 1;
+  bytes token = 2;
+  bytes balance = 3;
+}
+
 message TransactionChanges {
   Transaction tx = 1;
   repeated ContractChange contract_changes = 2;
+  repeated ProtocolComponent components = 3;
+  repeated TVLUpdate tvl = 4;
 }
 
 message BlockContractChanges {

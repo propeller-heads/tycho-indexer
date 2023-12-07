@@ -20,7 +20,7 @@ message Module {
   oneof kind {
     KindMap kind_map = 2;
     KindStore kind_store = 3;
-  }
+  };
 
   uint32 binary_index = 4;
   string binary_entrypoint = 5;
@@ -82,9 +82,9 @@ message Module {
       Mode mode = 2;
 
       enum Mode {
-        UNSET = 0;
-        GET = 1;
-        DELTAS = 2;
+	UNSET = 0;
+	GET = 1;
+	DELTAS = 2;
       }
     }
     message Params {

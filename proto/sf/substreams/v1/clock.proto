@@ -1,10 +1,9 @@
 syntax = "proto3";
 
 package sf.substreams.v1;
+option go_package = "github.com/streamingfast/substreams/pb/sf/substreams/v1;pbsubstreams";
 
 import "google/protobuf/timestamp.proto";
-
-option go_package = "github.com/streamingfast/substreams/pb/sf/substreams/v1;pbsubstreams";
 
 // Clock is a pointer to a block with added timestamp
 message Clock {

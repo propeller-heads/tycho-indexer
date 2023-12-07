@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package sf.substreams.v1;
 
-import "google/protobuf/any.proto";
-import "google/protobuf/descriptor.proto";
-import "sf/substreams/v1/modules.proto";
-
 option go_package = "github.com/streamingfast/substreams/pb/sf/substreams/v1;pbsubstreams";
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/any.proto";
+import "sf/substreams/v1/modules.proto";
 
 message Package {
   // Needs to be one so this file can be used _directly_ as a
@@ -24,6 +24,8 @@ message Package {
 
   google.protobuf.Any sink_config = 10;
   string sink_module = 11;
+  // image is the bytes to a JPEG, WebP or PNG file. Max size is 2 MiB
+  bytes image = 12;
 }
 
 message PackageMetadata {
