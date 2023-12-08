@@ -453,24 +453,28 @@ pub trait StorableToken<S, N, I>: Sized + Send + Sync + 'static {
     fn contract_id(&self) -> ContractId;
 }
 
+#[allow(dead_code)]
 pub struct ProtocolFilter<'a> {
     ids: Option<&'a [&'a str]>,
     tvl: Option<FilterPredicate<f64>>,
     version: Option<Version>,
 }
 
+#[allow(dead_code)]
 pub enum FilterPredicate<T> {
     Lt(T),
     Gt(T),
     Beween(T, T),
 }
 
+#[allow(dead_code)]
 pub struct ProtocolComponentId {
     id: Vec<u8>,
     chain: Chain,
     protocol_type_name: String,
 }
 
+#[allow(dead_code)]
 pub struct BalanceChange {
     id: ProtocolComponentId,
     // balances are only approximations only so f64 is ok here
@@ -478,6 +482,7 @@ pub struct BalanceChange {
     balance: f64,
 }
 
+#[allow(dead_code)]
 pub struct ProtocolChanges<T> {
     deleted_components: Vec<ProtocolComponentId>,
     added_comoponents: Vec<T>,

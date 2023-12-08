@@ -5,7 +5,7 @@ use diesel_async::{
 use ethers::types::{H160, H256};
 use mockall::automock;
 use prost::Message;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 use tracing::{debug, info};
 
 use async_trait::async_trait;
@@ -438,10 +438,10 @@ mod gateway_test {
     //!
     //! Note that it is ok to use higher level db methods here as there is a layer of abstraction
     //! between this component and the actual db interactions
+    use super::*;
     use crate::storage::{postgres, postgres::PostgresGateway, ChangeType, ContractId};
     use ethers::types::U256;
-
-    use super::*;
+    use std::collections::HashMap;
 
     const TX_HASH_0: &str = "0x2f6350a292c0fc918afe67cb893744a080dacb507b0cea4cc07437b8aff23cdb";
     const TX_HASH_1: &str = "0x0d9e0da36cf9f305a189965b248fc79c923619801e8ab5ef158d4fd528a291ad";

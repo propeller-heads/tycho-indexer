@@ -710,7 +710,6 @@ pub mod fixtures {
 #[cfg(test)]
 mod test {
     use super::*;
-    use prost::Message;
     use rstest::rstest;
 
     const HASH_256_0: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";
@@ -840,7 +839,7 @@ mod test {
     }
 
     fn create_transaction() -> Transaction {
-        return Transaction {
+        Transaction {
             hash: H256::from_low_u64_be(
                 0x0000000000000000000000000000000000000000000000000000000011121314,
             ),
@@ -850,7 +849,7 @@ mod test {
             from: H160::from_low_u64_be(0x0000000000000000000000000000000041424344),
             to: Some(H160::from_low_u64_be(0x0000000000000000000000000000000051525354)),
             index: 2,
-        };
+        }
     }
 
     fn block_state_changes() -> BlockStateChanges {
@@ -965,7 +964,7 @@ mod test {
     #[rstest]
     fn test_try_from_message_tvl_change() {
         let tx = create_transaction();
-        let expected_balance = U256::from_dec_str(&"3000").unwrap();
+        let expected_balance = U256::from_dec_str("3000").unwrap();
         let mut msg_balance = [0; 32];
         expected_balance.to_big_endian(&mut msg_balance);
 
