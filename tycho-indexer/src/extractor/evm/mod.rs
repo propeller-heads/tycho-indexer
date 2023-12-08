@@ -21,7 +21,7 @@ use ethers::{
     types::{H160, H256, U256},
     utils::keccak256,
 };
-use serde::de::Unexpected::Option;
+
 use serde::{Deserialize, Serialize};
 
 use super::ExtractionError;
@@ -699,8 +699,8 @@ pub mod fixtures {
                         change: ChangeType::Update.into(),
                     },
                 ],
-                components: todo!(),
-                tvl: todo!(),
+                components: vec![],
+                tvl: vec![],
             }],
         }
     }
@@ -838,8 +838,8 @@ mod test {
         assert_eq!(res, exp);
     }
 
-    fn block_state_changes() -> BlockStateChanges {
-        let tx = Transaction {
+    fn create_transaction() -> Transaction {
+        return Transaction {
             hash: H256::from_low_u64_be(
                 0x0000000000000000000000000000000000000000000000000000000011121314,
             ),
@@ -850,6 +850,10 @@ mod test {
             to: Some(H160::from_low_u64_be(0x0000000000000000000000000000000051525354)),
             index: 2,
         };
+    }
+
+    fn block_state_changes() -> BlockStateChanges {
+        let tx = create_transaction();
         BlockStateChanges {
             extractor: "test".to_string(),
             chain: Chain::Ethereum,
@@ -959,28 +963,20 @@ mod test {
 
     #[rstest]
     fn test_try_from_message_tvl_change() {
-        let tx = Transaction {
-            hash: H256::from_low_u64_be(
-                0x0000000000000000000000000000000000000000000000000000000011121314,
-            ),
-            block_hash: H256::from_low_u64_be(
-                0x0000000000000000000000000000000000000000000000000000000031323334,
-            ),
-            from: H160::from_low_u64_be(0x0000000000000000000000000000000041424344),
-            to: Some(H160::from_low_u64_be(0x0000000000000000000000000000000051525354)),
-            index: 2,
-        };
-        let expected_balance = U256::from("3000");
+        let tx = create_transaction();
+        let expected_balance = U256::from_dec_str(&"3000").unwrap();
+        println!("{:?}", expected_balance);
+        println!("{:?}", expected_balance.0);
         let msg_balance = expected_balance
             .to_big_endian(&mut [0; 32])
             .encode_to_vec();
-
+        println!("{:?}", msg_balance);
         let expected_token = H160::from_low_u64_be(55);
         let msg_token = expected_token.to_fixed_bytes().to_vec();
 
         let msg = substreams::TvlUpdate { balance: msg_balance, token: msg_token };
         let from_message = TvlChange::try_from_message(msg, &tx).unwrap();
-
+        println!("{:?}", from_message.new_balance);
         assert_eq!(from_message.new_balance, expected_balance);
         assert_eq!(from_message.tx, tx.hash);
         assert_eq!(from_message.token, expected_token);
