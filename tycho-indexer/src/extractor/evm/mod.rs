@@ -37,6 +37,7 @@ pub struct ProtocolComponent {
 }
 
 impl ProtocolComponent {
+    #[allow(dead_code)]
     pub fn try_from_message(
         msg: substreams::ProtocolComponent,
         chain: Chain,
@@ -322,6 +323,7 @@ pub struct TvlChange {
 }
 
 impl TvlChange {
+    #[allow(dead_code)]
     pub fn try_from_message(
         msg: substreams::TvlUpdate,
         tx: &Transaction,

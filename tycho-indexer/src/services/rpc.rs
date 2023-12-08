@@ -159,7 +159,7 @@ struct Block {
 #[cfg(test)]
 mod tests {
     use crate::storage::postgres::db_fixtures;
-    use actix_web::test;
+    use actix_web::{test, App};
     use diesel_async::AsyncConnection;
     use ethers::types::{H160, H256, U256};
     use std::{collections::HashMap, str::FromStr};
@@ -287,8 +287,8 @@ mod tests {
         let time_difference = expected
             .version
             .timestamp
-            .timestamp_millis()
-            - result
+            .timestamp_millis() -
+            result
                 .version
                 .timestamp
                 .timestamp_millis();
