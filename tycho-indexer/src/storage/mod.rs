@@ -945,4 +945,4 @@ pub trait StateGateway<DB>:
 }
 
 pub type StateGatewayType<DB, B, TX, C, D> =
-    Arc<dyn StateGateway<DB, Transaction = TX, Block = B, ContractState = C, Delta = D, DB = ()>>;
+    Arc<dyn StateGateway<DB, Transaction = TX, Block = B, ContractState = C, Delta = D>>;
