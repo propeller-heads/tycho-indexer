@@ -80,7 +80,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    models::{Chain, ExtractionState, ProtocolComponent, ProtocolState, ProtocolSystem},
+    models::{Chain, ExtractionState, ProtocolComponent, ProtocolState},
     serde_helpers::{deserialize_hex, serialize_hex},
 };
 
@@ -945,4 +945,4 @@ pub trait StateGateway<DB>:
 }
 
 pub type StateGatewayType<DB, B, TX, C, D> =
-    Arc<dyn StateGateway<DB, Transaction = TX, Block = B, ContractState = C, Delta = D>>;
+    Arc<dyn StateGateway<DB, Transaction = TX, Block = B, ContractState = C, Delta = D, DB = ()>>;

@@ -5,7 +5,7 @@ use diesel_async::{
 use ethers::types::{H160, H256};
 use mockall::automock;
 use prost::Message;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 use tracing::{debug, info};
 
 use async_trait::async_trait;
@@ -271,7 +271,7 @@ where
             Ok(changes) => changes,
             Err(ExtractionError::Empty) => {
                 self.update_cursor(inp.cursor).await;
-                return Ok(None)
+                return Ok(None);
             }
             Err(e) => return Err(e),
         };
@@ -408,8 +408,8 @@ mod test {
             .returning(|| Ok("cursor".into()));
         gw.expect_revert()
             .withf(|v, cursor| {
-                v == &BlockIdentifier::Hash(hex::decode(&evm::fixtures::HASH_256_0[2..]).unwrap()) &&
-                    cursor == "cursor@400"
+                v == &BlockIdentifier::Hash(hex::decode(&evm::fixtures::HASH_256_0[2..]).unwrap())
+                    && cursor == "cursor@400"
             })
             .times(1)
             .returning(|_, _| Ok(evm::BlockAccountChanges::default()));
