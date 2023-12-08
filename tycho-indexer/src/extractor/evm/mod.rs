@@ -28,14 +28,13 @@ use super::ExtractionError;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ProtocolComponent {
-    id: H160,
+    id: Vec<u8>,
     protocol_type_name: String,
     protocol_system: ProtocolSystem,
     chain: Chain,
     tokens: Vec<H160>,
     contracts: Vec<H160>,
     attributes: Option<serde_json::Value>,
-    tvl: HashMap<H160, f64>,
 }
 
 impl ProtocolComponent {
@@ -44,27 +43,9 @@ impl ProtocolComponent {
         chain: Chain,
         protocol_system: ProtocolSystem,
         protocol_type_name: String,
-        tvl_updates: Vec<TvlUpdate>,
     ) -> Result<Self, ExtractionError> {
-        let relevant_tvl = tvl_updates
-            .into_iter()
-            .filter(|t| {
-                msg.contracts
-                    .contains(&t.component_address)
-            })
-            .collect();
-
-        let mut component_balance_map: HashMap<H160, f64> = HashMap::new();
-        for update in relevant_tvl {
-            let component_address = update.component_address;
-            let balance = f64::from_bits(u64::from_le_bytes(update.balance.try_into().unwrap()));
-
-            // Insert the mapping into the HashMap
-            component_balance_map.insert(pad_and_parse_h160(&component_address)?, balance);
-        }
-
         return Ok(Self {
-            id: pad_and_parse_h160(&msg.address).map_err(ExtractionError::DecodeError)?,
+            id: msg.id,
             protocol_type_name,
             protocol_system,
             tokens: msg
@@ -87,7 +68,6 @@ impl ProtocolComponent {
                 .collect::<Vec<_>>(),
             attributes: None,
             chain,
-            tvl: component_balance_map,
         });
     }
 }

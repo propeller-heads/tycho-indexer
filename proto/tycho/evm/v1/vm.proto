@@ -43,13 +43,12 @@ message ContractChange {
 message ProtocolComponent {
   repeated bytes tokens = 1;
   repeated bytes contracts = 2;
-  bytes address = 3;
+  bytes id = 3;
 }
 
 message TVLUpdate {
   bytes token = 2;
   bytes balance = 3;
-  bytes component_address = 4;
 }
 
 message TransactionChanges {

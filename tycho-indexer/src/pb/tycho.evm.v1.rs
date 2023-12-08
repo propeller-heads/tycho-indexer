@@ -57,7 +57,7 @@ pub struct ProtocolComponent {
     #[prost(message, repeated, tag = "2")]
     pub contracts: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", tag = "3")]
-    pub address: ::prost::alloc::vec::Vec<u8>,
+    pub id: ::prost::alloc::vec::Vec<u8>,
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -67,8 +67,6 @@ pub struct TvlUpdate {
     pub token: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "3")]
     pub balance: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub component_address: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
