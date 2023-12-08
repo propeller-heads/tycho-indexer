@@ -8,7 +8,7 @@ import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 /// @dev Implement this interface to support Propeller routing through your
 /// pools. Before implementing the interface we need to introduce some function
 /// for a given pool. The main one, the swap(x) function, implements a sell
-/// order of a specified .
+/// order of a specified token.
 /// The gas function simply
 /// returns the estimated gas cost given a specified amount x. Last but not
 /// least, the price function is the derivative of the swap function. It
@@ -18,14 +18,14 @@ import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 /// unlimited approvals to this contract.
 interface ISwapAdapter is ISwapAdapterTypes {
     /// @notice Calculates pool prices for specified amounts (optional).
-    /// @dev The returned prices should include all dex fees, in case the fee is
+    /// @dev The returned prices should include all dex fees. In case the fee is
     /// dynamic, the returned price is expected to include the minimum fee.
     /// Ideally this method should be implemented, although it is optional as
     /// the price function can be numerically estimated from the swap function.
-    /// In case it is not available it should be flagged via capabilities and
+    /// In case it is not available, it should be flagged via capabilities and
     /// calling it should revert using the `NotImplemented` error. The method
     /// needs to be implemented as view as this is usually more efficient and
-    /// can be run in parallel. all.
+    /// can be run in parallel.
     /// @param poolId The ID of the trading pool.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
@@ -42,8 +42,8 @@ interface ISwapAdapter is ISwapAdapterTypes {
 
     /**
      * @notice Simulates swapping tokens on a given pool.
-     * @dev This function should be state modifying meaning it should actually
-     * execute the swap and change the state of the evm accordingly. Please
+     * @dev This function should be state modifying, meaning it should actually
+     * execute the swap and change the state of the EVM accordingly. Please
      * include a gas usage estimate for each amount. This can be achieved e.g. by
      * using the `gasleft()` function. The return type `Trade` has an attribute
      * called price which should contain the value of `price(specifiedAmount)`.
@@ -97,9 +97,9 @@ interface ISwapAdapter is ISwapAdapterTypes {
         returns (IERC20[] memory tokens);
 
     /// @notice Retrieves a range of pool IDs.
-    /// @dev Mainly used for testing it is alright to not return all available
-    /// pools here. Nevertheless this is useful to test against the substreams
-    /// implementation. If implemented it saves time writing custom tests.
+    /// @dev Mainly used for testing. It is alright to not return all available
+    /// pools here. Nevertheless, this is useful to test against the substreams
+    /// implementation. If implemented, it saves time writing custom tests.
     /// @param offset The starting index from which to retrieve pool IDs.
     /// @param limit The maximum number of pool IDs to retrieve.
     /// @return ids An array of pool IDs.

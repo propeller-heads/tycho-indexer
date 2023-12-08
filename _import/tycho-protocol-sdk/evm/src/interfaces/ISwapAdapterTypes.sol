@@ -27,8 +27,8 @@ interface ISwapAdapterTypes {
         // The pool does not suffer from price impact and maintains a constant
         // price for increasingly larger specified amounts. (optional)
         ConstantPrice,
-        // Indicates that the pool does not read it's own token balances while
-        // swapping. (optional)
+        // Indicates that the pool does not read its own token balances
+        // from token contracts while swapping. (optional)
         TokenBalanceIndependent,
         // Indicates that prices are returned scaled, else it is assumed prices
         // still require scaling by token decimals. (required)
