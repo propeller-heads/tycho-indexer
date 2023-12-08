@@ -308,7 +308,7 @@ CREATE TABLE account_balance(
     "valid_from" timestamptz NOT NULL,
     -- The ts at which this state stopped being valid at. Null if this
     --	state is the currently valid entry.
-    "valid_to" timestamptz,
+    "valid_to" timestamptz NOT NULL,
     -- Timestamp this entry was inserted into this table.
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Timestamp this entry was inserted into this table.
