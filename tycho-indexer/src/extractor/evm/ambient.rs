@@ -5,7 +5,7 @@ use diesel_async::{
 use ethers::types::{H160, H256};
 use mockall::automock;
 use prost::Message;
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, info};
 
 use async_trait::async_trait;
