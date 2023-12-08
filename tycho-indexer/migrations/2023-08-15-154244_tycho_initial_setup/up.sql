@@ -294,7 +294,7 @@ CREATE TABLE IF NOT EXISTS token_prices(
     -- we don't allow a token to be deleted unless the protocol component was removed
     "token_id" bigint REFERENCES "token"(id) NOT NULL,
     "price" double precision NOT NULL,
-)
+);
 -- Versioned account balance.
 CREATE TABLE account_balance(
     "id" bigserial PRIMARY KEY,
