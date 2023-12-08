@@ -965,18 +965,15 @@ mod test {
     fn test_try_from_message_tvl_change() {
         let tx = create_transaction();
         let expected_balance = U256::from_dec_str(&"3000").unwrap();
-        println!("{:?}", expected_balance);
-        println!("{:?}", expected_balance.0);
-        let msg_balance = expected_balance
-            .to_big_endian(&mut [0; 32])
-            .encode_to_vec();
-        println!("{:?}", msg_balance);
+        let mut msg_balance = [0; 32];
+        expected_balance.to_big_endian(&mut msg_balance);
+
         let expected_token = H160::from_low_u64_be(55);
         let msg_token = expected_token.to_fixed_bytes().to_vec();
 
-        let msg = substreams::TvlUpdate { balance: msg_balance, token: msg_token };
+        let msg = substreams::TvlUpdate { balance: msg_balance.to_vec(), token: msg_token };
         let from_message = TvlChange::try_from_message(msg, &tx).unwrap();
-        println!("{:?}", from_message.new_balance);
+
         assert_eq!(from_message.new_balance, expected_balance);
         assert_eq!(from_message.tx, tx.hash);
         assert_eq!(from_message.token, expected_token);
