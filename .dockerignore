@@ -9,4 +9,4 @@ venv
 .git
 **/*.spkg
 Dockerfile
-.env
+env.sh
