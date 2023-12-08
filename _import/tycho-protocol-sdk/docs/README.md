@@ -9,6 +9,8 @@ To integrate with PropellerHeads solvers, two components need to be provided:
 * **Protocol logic:** Provides simulations of the protocols logic.
 * **Indexing**: Provides access to the protocol state used by the simulation. This component is optional if your protocol is stateless.
 
+To propose an integration, create a pull request in this repository with the above components implemented.
+
 ### Protocol Logic
 
 PropellerHeads currently exposes two integration modes to specify the protocols' underlying logic:
