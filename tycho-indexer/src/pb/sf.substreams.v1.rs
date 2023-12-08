@@ -254,6 +254,9 @@ pub struct Package {
     pub sink_config: ::core::option::Option<::prost_types::Any>,
     #[prost(string, tag = "11")]
     pub sink_module: ::prost::alloc::string::String,
+    /// image is the bytes to a JPEG, WebP or PNG file. Max size is 2 MiB
+    #[prost(bytes = "vec", tag = "12")]
+    pub image: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

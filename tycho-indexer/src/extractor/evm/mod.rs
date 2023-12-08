@@ -14,25 +14,82 @@ use tracing::warn;
 use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
 use crate::pb::tycho::evm::v1 as substreams;
+
+use crate::pb::tycho::evm::v1::TvlUpdate;
 use chrono::NaiveDateTime;
 use ethers::{
     types::{H160, H256, U256},
     utils::keccak256,
 };
+use serde::de::Unexpected::Option;
 use serde::{Deserialize, Serialize};
 
 use super::ExtractionError;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ProtocolComponent {
-    id: Vec<u8>,
+    id: H160,
     protocol_type_name: String,
     protocol_system: ProtocolSystem,
-    tokens: Vec<H160>,
     chain: Chain,
+    tokens: Vec<H160>,
     contracts: Vec<H160>,
     attributes: Option<serde_json::Value>,
     tvl: HashMap<H160, f64>,
+}
+
+impl ProtocolComponent {
+    pub fn try_from_message(
+        msg: substreams::ProtocolComponent,
+        chain: Chain,
+        protocol_system: ProtocolSystem,
+        protocol_type_name: String,
+        tvl_updates: Vec<TvlUpdate>,
+    ) -> Result<Self, ExtractionError> {
+        let relevant_tvl = tvl_updates
+            .into_iter()
+            .filter(|t| {
+                msg.contracts
+                    .contains(&t.component_address)
+            })
+            .collect();
+
+        let mut component_balance_map: HashMap<H160, f64> = HashMap::new();
+        for update in relevant_tvl {
+            let component_address = update.component_address;
+            let balance = f64::from_bits(u64::from_le_bytes(update.balance.try_into().unwrap()));
+
+            // Insert the mapping into the HashMap
+            component_balance_map.insert(pad_and_parse_h160(&component_address)?, balance);
+        }
+
+        return Ok(Self {
+            id: pad_and_parse_h160(&msg.address).map_err(ExtractionError::DecodeError)?,
+            protocol_type_name,
+            protocol_system,
+            tokens: msg
+                .tokens
+                .into_iter()
+                .map(|inner_vec| {
+                    pad_and_parse_h160(inner_vec.as_slice())
+                        .map_err(|err| err.to_string())
+                        .unwrap()
+                })
+                .collect::<Vec<_>>(),
+            contracts: msg
+                .contracts
+                .into_iter()
+                .map(|inner_vec| {
+                    pad_and_parse_h160(inner_vec.as_slice())
+                        .map_err(|err| err.to_string())
+                        .unwrap()
+                })
+                .collect::<Vec<_>>(),
+            attributes: None,
+            chain,
+            tvl: component_balance_map,
+        });
+    }
 }
 
 #[allow(dead_code)]
@@ -219,7 +276,7 @@ impl AccountUpdate {
             return Err(ExtractionError::Unknown(format!(
                 "Can't merge AccountUpdates from differing identities; Expected {:#020x}, got {:#020x}",
                 self.address, other.address
-            )))
+            )));
         }
 
         self.slots.extend(other.slots);
@@ -351,19 +408,19 @@ impl AccountUpdateWithTx {
             return Err(ExtractionError::Unknown(format!(
                 "Can't merge AccountUpdates from different blocks: 0x{:x} != 0x{:x}",
                 self.tx.block_hash, other.tx.block_hash,
-            )))
+            )));
         }
         if self.tx.hash == other.tx.hash {
             return Err(ExtractionError::Unknown(format!(
                 "Can't merge AccountUpdates from the same transaction: 0x{:x}",
                 self.tx.hash
-            )))
+            )));
         }
         if self.tx.index > other.tx.index {
             return Err(ExtractionError::Unknown(format!(
                 "Can't merge AccountUpdates with lower transaction index: {} > {}",
                 self.tx.index, other.tx.index
-            )))
+            )));
         }
         self.tx = other.tx;
         self.update.merge(other.update)
@@ -509,7 +566,7 @@ impl BlockStateChanges {
                 block,
                 tx_updates,
                 new_pools: HashMap::new(),
-            })
+            });
         }
         Err(ExtractionError::Empty)
     }
