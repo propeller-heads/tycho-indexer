@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
-// Uniswap handles arbirary amounts, but we limit the amount to 10x just in case 
+// Uniswap handles arbirary amounts, but we limit the amount to 10x just in case
 uint256 constant RESERVE_LIMIT_FACTOR = 10;
 
 contract UniswapV2SwapAdapter is ISwapAdapter {
@@ -119,7 +119,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return amountOut;
     }
 
-    /// @notice Given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
+    /// @notice Given an input amount of an asset and pair reserves, returns the
+    /// maximum output amount of the other asset
     /// @param amountIn The amount of the token being sold.
     /// @param reserveIn The reserve of the token being sold.
     /// @param reserveOut The reserve of the token being bought.
@@ -173,7 +174,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         return amount;
     }
 
-    /// @notice Given an output amount of an asset and pair reserves, returns a required input amount of the other asset
+    /// @notice Given an output amount of an asset and pair reserves, returns a
+    /// required input amount of the other asset
     /// @param amountOut The amount of the token being bought.
     /// @param reserveIn The reserve of the token being sold.
     /// @param reserveOut The reserve of the token being bought.

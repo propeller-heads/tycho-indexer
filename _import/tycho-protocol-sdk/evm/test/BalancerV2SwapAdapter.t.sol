@@ -95,7 +95,8 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1]);
 
-            // TODO calculate the amountIn by using price function as in testPriceDecreasing
+            // TODO calculate the amountIn by using price function as in
+            // testPriceDecreasing
             deal(address(BAL), address(this), type(uint256).max);
             BAL.approve(address(adapter), type(uint256).max);
         } else {

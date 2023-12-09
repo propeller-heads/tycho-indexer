@@ -68,7 +68,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @notice Retrieves the limits for each token.
     /// @dev Retrieve the maximum limits of a token that can be traded. The
     /// limit is reached when the change in the received amounts is zero or
-    /// close to zero or when the swap fails because of the pools restrictions. 
+    /// close to zero or when the swap fails because of the pools restrictions.
     /// Overestimate if in doubt rather than underestimate. The
     /// swap function should not error with `LimitExceeded` if called with
     /// amounts below the limit.

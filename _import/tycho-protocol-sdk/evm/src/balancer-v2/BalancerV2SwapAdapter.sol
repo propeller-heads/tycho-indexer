@@ -3,14 +3,13 @@ pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
-import "forge-std/Test.sol";
 
 // Maximum Swap In/Out Ratio - 0.3
 // https://balancer.gitbook.io/balancer/core-concepts/protocol/limitations#v2-limits
 uint256 constant RESERVE_LIMIT_FACTOR = 4;
 uint256 constant SWAP_DEADLINE_SEC = 1000;
 
-contract BalancerV2SwapAdapter is ISwapAdapter, Test {
+contract BalancerV2SwapAdapter is ISwapAdapter {
     IVault immutable vault;
 
     constructor(address payable vault_) {
