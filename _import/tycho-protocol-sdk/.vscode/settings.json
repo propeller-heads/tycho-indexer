@@ -1,6 +1,6 @@
 {
     "solidity.formatter": "forge",
-    "solidity.compileUsingRemoteVersion": "v0.8.19",
+    "solidity.compileUsingRemoteVersion": "v0.8.20",
     "solidity.packageDefaultDependenciesContractsDirectory": "evm/src",
     "solidity.packageDefaultDependenciesDirectory": "evm/lib",
 }
