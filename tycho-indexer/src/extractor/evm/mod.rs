@@ -426,6 +426,8 @@ impl TvlChange {
         })
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub struct ProtocolComponent {
     // an id for this component, could be hex repr of contract address
     id: ContractId,
@@ -449,7 +451,7 @@ pub struct ProtocolComponent {
 ///
 /// `ContractId` is a simple wrapper around a `String` to ensure type safety
 /// and clarity when working with contract identifiers.
-#[derive(PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub struct ContractId(pub String);
 
 impl ProtocolComponent {
