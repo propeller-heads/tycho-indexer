@@ -14,7 +14,6 @@ CLEAN_JSON=$(echo "$OUTPUT" | perl -0777 -pe 's/^.*?({.*}).*$/$1/s')
 
 # Extract the data from "@data" key using jq
 DATA=$(echo "$CLEAN_JSON" | jq -r '.["@data"]')
-echo $DATA
 
 echo "$DATA" | aws s3 cp - s3://defibot-data/test-assets/tycho/block_$BLOCK_NUMBER.json
 
