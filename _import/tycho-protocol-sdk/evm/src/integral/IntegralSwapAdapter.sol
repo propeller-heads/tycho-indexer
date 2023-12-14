@@ -40,11 +40,15 @@ contract IntegralSwapAdapter is ISwapAdapter {
         revert NotImplemented("IntegralSwapAdapter.getLimits");
     }
 
+    /// @inheritdoc ISwapAdapter
     function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
         returns (Capability[] memory capabilities)
     {
-        revert NotImplemented("IntegralSwapAdapter.getCapabilities");
+        capabilities = new Capability[](3);
+        capabilities[0] = Capability.SellOrder;
+        capabilities[1] = Capability.BuyOrder;
+        capabilities[2] = Capability.PriceFunction;
     }
 
     /// @inheritdoc ISwapAdapter
