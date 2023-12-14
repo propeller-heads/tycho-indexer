@@ -47,11 +47,15 @@ contract IntegralSwapAdapter is ISwapAdapter {
         revert NotImplemented("IntegralSwapAdapter.getCapabilities");
     }
 
+    /// @inheritdoc ISwapAdapter
     function getTokens(bytes32 poolId)
         external
         returns (IERC20[] memory tokens)
     {
-        revert NotImplemented("IntegralSwapAdapter.getTokens");
+        tokens = new IERC20[](2);
+        IUniswapV2Pair pair = ITwapPair(address(bytes20(poolId)));
+        tokens[0] = IERC20(pair.token0());
+        tokens[1] = IERC20(pair.token1());
     }
 
     /// @inheritdoc ISwapAdapter
