@@ -233,7 +233,7 @@ impl BlockAccountChanges {
         chain: Chain,
         block: Block,
         account_updates: HashMap<H160, AccountUpdate>,
-        new_components: Vec<ProtocolComponent>,
+        new_protocol_components: Vec<ProtocolComponent>,
         deleted_protocol_components: Vec<ProtocolComponent>,
         tvl_change: Vec<TvlChange>,
     ) -> Self {
@@ -242,7 +242,7 @@ impl BlockAccountChanges {
             chain,
             block,
             account_updates,
-            new_protocol_components: new_components,
+            new_protocol_components,
             deleted_protocol_components,
             tvl_changes: tvl_change,
         }
