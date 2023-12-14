@@ -1,4 +1,8 @@
 #![allow(unused_variables)]
+
+use std::{str::FromStr, sync::Arc};
+
+use async_trait::async_trait;
 use diesel_async::{
     pooled_connection::deadpool::Pool, scoped_futures::ScopedFutureExt, AsyncConnection,
     AsyncPgConnection,
@@ -6,13 +10,9 @@ use diesel_async::{
 use ethers::types::{H160, H256};
 use mockall::automock;
 use prost::Message;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use tokio::sync::Mutex;
 use tracing::{debug, info, instrument};
 
-use async_trait::async_trait;
-use tokio::sync::Mutex;
-
-use super::EVMStateGateway;
 use crate::{
     extractor::{evm, ExtractionError, Extractor, ExtractorMsg},
     models::{Chain, ExtractionState, ExtractorIdentity, ProtocolSystem},
@@ -22,6 +22,8 @@ use crate::{
     },
     storage::{BlockIdentifier, BlockOrTimestamp, StorageError},
 };
+
+use super::EVMStateGateway;
 
 const AMBIENT_CONTRACT: [u8; 20] = hex_literal::hex!("aaaaaaaaa24eeeb8d57d431224f73832bc34f688");
 
@@ -347,7 +349,6 @@ where
 
 #[cfg(test)]
 mod test {
-
     use crate::{extractor::evm, pb::sf::substreams::v1::BlockRef};
 
     use super::*;
@@ -470,9 +471,12 @@ mod gateway_test {
     //!
     //! Note that it is ok to use higher level db methods here as there is a layer of abstraction
     //! between this component and the actual db interactions
-    use crate::storage::{postgres, postgres::PostgresGateway, ChangeType, ContractId};
+    use std::collections::HashMap;
+
     use diesel_async::pooled_connection::deadpool::Object;
     use ethers::types::U256;
+
+    use crate::storage::{postgres, postgres::PostgresGateway, ChangeType, ContractId};
 
     use super::*;
 
