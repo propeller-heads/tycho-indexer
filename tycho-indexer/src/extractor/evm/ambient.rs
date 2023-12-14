@@ -440,8 +440,8 @@ mod test {
             .returning(|| Ok("cursor".into()));
         gw.expect_revert()
             .withf(|v, cursor| {
-                v == &BlockIdentifier::Hash(evm::fixtures::HASH_256_0.into())
-                    && cursor == "cursor@400"
+                v == &BlockIdentifier::Hash(evm::fixtures::HASH_256_0.into()) &&
+                    cursor == "cursor@400"
             })
             .times(1)
             .returning(|_, _| Ok(evm::BlockAccountChanges::default()));
