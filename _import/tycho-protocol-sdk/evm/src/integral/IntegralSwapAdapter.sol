@@ -33,6 +33,8 @@ contract IntegralSwapAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
+        view
+        override
         returns (uint256[] memory limits)
     {
         (
