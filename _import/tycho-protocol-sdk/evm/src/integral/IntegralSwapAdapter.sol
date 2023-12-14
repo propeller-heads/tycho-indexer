@@ -43,6 +43,8 @@ contract IntegralSwapAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
         external
+        pure
+        override
         returns (Capability[] memory capabilities)
     {
         capabilities = new Capability[](3);
@@ -54,10 +56,12 @@ contract IntegralSwapAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function getTokens(bytes32 poolId)
         external
+        view
+        override
         returns (IERC20[] memory tokens)
     {
         tokens = new IERC20[](2);
-        IUniswapV2Pair pair = ITwapPair(address(bytes20(poolId)));
+        ITwapPair pair = ITwapPair(address(bytes20(poolId)));
         tokens[0] = IERC20(pair.token0());
         tokens[1] = IERC20(pair.token1());
     }
@@ -145,6 +149,32 @@ interface ITwapFactory {
     ) external;
 }
 
+interface ITwapERC20 is IERC20 {
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+
+    function nonces(address owner) external view returns (uint256);
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    function increaseAllowance(address spender, uint256 addedValue) external returns (bool);
+
+    function decreaseAllowance(address spender, uint256 subtractedValue) external returns (bool);
+}
+
+interface IReserves {
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1);
+
+    function getFees() external view returns (uint256 fee0, uint256 fee1);
+}
+
 interface ITwapPair is ITwapERC20, IReserves {
     event Mint(address indexed sender, uint256 amount0In, uint256 amount1In, uint256 liquidityOut, address indexed to);
     event Burn(address indexed sender, uint256 amount0Out, uint256 amount1Out, uint256 liquidityIn, address indexed to);
@@ -223,30 +253,4 @@ interface ITwapPair is ITwapERC20, IReserves {
     function getDepositAmount0In(uint256 amount0, bytes calldata data) external view returns (uint256 depositAmount0In);
 
     function getDepositAmount1In(uint256 amount1, bytes calldata data) external view returns (uint256 depositAmount1In);
-}
-
-interface ITwapERC20 is IERC20 {
-    function PERMIT_TYPEHASH() external pure returns (bytes32);
-
-    function nonces(address owner) external view returns (uint256);
-
-    function permit(
-        address owner,
-        address spender,
-        uint256 value,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
-
-    function increaseAllowance(address spender, uint256 addedValue) external returns (bool);
-
-    function decreaseAllowance(address spender, uint256 subtractedValue) external returns (bool);
-}
-
-interface IReserves {
-    function getReserves() external view returns (uint112 reserve0, uint112 reserve1);
-
-    function getFees() external view returns (uint256 fee0, uint256 fee1);
 }
