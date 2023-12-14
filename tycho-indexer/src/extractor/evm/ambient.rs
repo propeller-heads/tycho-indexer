@@ -171,7 +171,7 @@ impl AmbientPgGateway {
             // TODO: get protocol components from gateway (in ENG-2049)
             Vec::new(),
             Vec::new(),
-            HashMap::new(),
+            Vec::new(),
         );
         Result::<evm::BlockAccountChanges, StorageError>::Ok(changes)
     }
