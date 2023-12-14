@@ -1243,7 +1243,7 @@ mod test {
             .collect(),
         };
         BlockAccountChanges::new(
-            &"test".to_string(),
+            "test",
             Chain::Ethereum,
             Block {
                 number: 1,
@@ -1576,7 +1576,7 @@ mod test {
         let result = ProtocolComponent::try_from_message(
             msg,
             expected_chain,
-            expected_protocol_system.clone(),
+            expected_protocol_system,
             protocol_type_id.clone(),
         );
 
