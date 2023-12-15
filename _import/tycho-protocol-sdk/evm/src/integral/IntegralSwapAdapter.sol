@@ -11,13 +11,26 @@ contract IntegralSwapAdapter is ISwapAdapter {
         relayer = ITwapRelayer(relayer_);
     }
 
+    /// @inheritdoc ISwapAdapter
     function price(
         bytes32 _poolId,
         IERC20 _sellToken,
         IERC20 _buyToken,
         uint256[] memory _specifiedAmounts
     ) external view override returns (Fraction[] memory _prices) {
-        revert NotImplemented("IntegralSwapAdapter.price");
+        _prices = new Fraction[](_specifiedAmounts.length);
+        ITwapPair pair = ITwapPair(address(bytes20(_poolId)));
+        uint112 r0;
+        uint112 r1;
+        if (address(_sellToken) == pair.token0()) { // sell
+            (r0, r1) = pair.getReserves();
+        } else { // buy
+            (r1, r0) = pair.getReserves();
+        }
+
+        for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
+            _prices[i] = getPriceAt(_specifiedAmounts[i], r0, r1, pair);
+        }
     }
 
     function swap(
@@ -93,6 +106,38 @@ contract IntegralSwapAdapter is ISwapAdapter {
         for (uint256 i = 0; i < ids.length; i++) {
             ids[i] = bytes20(factory.allPairs(offset + i));
         }
+    }
+
+    /// @notice Calculates pool prices after trade for specified amounts
+    /// @param amountIn The amount of the token being sold.
+    /// @param reserveIn The reserve of the token being sold.
+    /// @param reserveOut The reserve of the token being bought.
+    /// @param pair (ITwapPair) The pair where to execute the swap in.
+    /// @dev Although Integral declares in its Docs that the fee is 1 BP(0.01%, 0.0001 multiplier),
+    /// it can be changed at any time by calling a function of the contract by its owner or operator,
+    /// therefore it is obtained dynamically to ensure this function output remains reliable over time
+    /// @return The price as a fraction corresponding to the provided amount.
+    function getPriceAt(uint256 amountIn, uint256 reserveIn, uint256 reserveOut, ITwapPair pair)
+        internal
+        view
+        returns (Fraction memory)
+    {
+        if (reserveIn == 0 || reserveOut == 0) {
+            revert Unavailable("At least one reserve is zero!");
+        }
+        uint256 feeBP = relayer.swapFee(address(pair));
+
+        uint256 amountInWithFee = amountIn - ( (amountIn * feeBP) / 10**18 );
+        uint256 numerator = amountInWithFee * reserveOut;
+        uint256 denominator = (reserveIn * 1000) + amountInWithFee;
+        uint256 amountOut = numerator / denominator;
+        uint256 newReserveOut = reserveOut - amountOut;
+        uint256 newReserveIn = reserveIn + amountIn;
+
+        return Fraction(
+            newReserveOut * 1000, 
+            newReserveIn - ( (newReserveIn * feeBP) / 10**18 )
+        );
     }
 }
 
