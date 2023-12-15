@@ -132,6 +132,10 @@ impl AmbientPgGateway {
         self.state_gateway
             .update_contracts(&self.chain, changes_slice, conn)
             .await?;
+
+        for component in changes.protocol_components.iter() {
+            // todo()! self.protocol_gateway.insert(component) in ENG-2031
+        }
         self.save_cursor(new_cursor, conn)
             .await?;
         Result::<(), StorageError>::Ok(())
@@ -158,6 +162,9 @@ impl AmbientPgGateway {
             .filter_map(|u| if u.address == address { Some((u.address, u)) } else { None })
             .collect();
 
+        // todo()!: get protocol components from gateway and maybe delete them (after ENG-2030 and
+        // 2034)
+
         self.state_gateway
             .revert_state(to, conn)
             .await?;
@@ -170,7 +177,7 @@ impl AmbientPgGateway {
             self.chain,
             block,
             account_updates,
-            // TODO: get protocol components from gateway (in ENG-2049)
+            // todo()!: Pass the correct components here (after ENG-2030 and 2034)
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -473,6 +480,7 @@ mod gateway_test {
     //! between this component and the actual db interactions
     use std::collections::HashMap;
 
+    use crate::hex_bytes::Bytes;
     use diesel_async::pooled_connection::deadpool::Object;
     use ethers::types::U256;
 
@@ -560,6 +568,21 @@ mod gateway_test {
     }
 
     fn ambient_creation_and_update() -> evm::BlockStateChanges {
+        let protocol_component = evm::ProtocolComponent {
+            id: evm::ContractId("0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688".to_owned()),
+            protocol_system: ProtocolSystem::Ambient,
+            protocol_type_id: String::from("id-1"),
+            chain: Chain::Ethereum,
+            tokens: vec!["token1".to_string(), "token2".to_string()],
+            contract_ids: vec![
+                evm::ContractId("DIANA-THALES".to_string()),
+                evm::ContractId("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string()),
+            ],
+            static_attributes: HashMap::from([
+                ("key1".to_string(), Bytes::from(b"value1".to_vec())),
+                ("key2".to_string(), Bytes::from(b"value2".to_vec())),
+            ]),
+        };
         evm::BlockStateChanges {
             extractor: "vm:ambient".to_owned(),
             chain: Chain::Ethereum,
@@ -584,7 +607,7 @@ mod gateway_test {
                     evm::fixtures::transaction02(TX_HASH_0, evm::fixtures::HASH_256_0, 1),
                 ),
             ],
-            protocol_components: Vec::new(),
+            protocol_components: vec![protocol_component],
             tvl_changes: Vec::new(),
         }
     }
