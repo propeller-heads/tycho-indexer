@@ -3,6 +3,9 @@ pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
+/// @dev Integral submitted deadline of 3600 seconds (1 hour) to Paraswap
+uint32 constant SWAP_DEADLINE_SEC = 1000;
+
 /// @title Integral Swap Adapter
 contract IntegralSwapAdapter is ISwapAdapter {
     ITwapRelayer immutable relayer;
@@ -40,7 +43,28 @@ contract IntegralSwapAdapter is ISwapAdapter {
         OrderSide side,
         uint256 specifiedAmount
     ) external returns (Trade memory trade) {
-        revert NotImplemented("IntegralSwapAdapter.swap");
+        if (specifiedAmount == 0) {
+            return trade;
+        }
+
+        ITwapPair pair = ITwapPair(address(bytes20(poolId)));
+        uint112 r0;
+        uint112 r1;
+        if (address(sellToken) == pair.token0()) {
+            (r0, r1) = pair.getReserves();
+        } else {
+            (r1, r0) = pair.getReserves();
+        }
+        uint256 gasBefore = gasleft();
+        if (side == OrderSide.Sell) { // sell
+            trade.calculatedAmount =
+                sell(address(sellToken), address(buyToken), specifiedAmount);
+        } else { // buy
+            trade.calculatedAmount =
+                buy(address(sellToken), address(buyToken), specifiedAmount);
+        }
+        trade.gasUsed = gasBefore - gasleft();
+        trade.price = getPriceAt(specifiedAmount, r0, r1, pair);
     }
 
     /// @inheritdoc ISwapAdapter
@@ -138,6 +162,64 @@ contract IntegralSwapAdapter is ISwapAdapter {
             newReserveOut * 1000, 
             newReserveIn - ( (newReserveIn * feeBP) / 10**18 )
         );
+    }
+
+    /// @notice Executes a sell order on a given pool.
+    /// @param sellToken The address of the token being sold.
+    /// @param buyToken The address of the token being bought.
+    /// @param amount The amount to be traded.
+    /// @return uint256 The amount of tokens received.
+    function sell(
+        address sellToken,
+        address buyToken,
+        uint256 amount
+    ) internal returns (uint256) {
+        address swapper = msg.sender;
+        uint256 amountOut = relayer.quoteSell(sellToken, buyToken, amount);
+
+        if (amountOut == 0) {
+            revert Unavailable("AmountOut is zero!");
+        }
+        relayer.sell(ITwapRelayer.SellParams({
+            tokenIn: sellToken,
+            tokenOut: buyToken,
+            wrapUnwrap: false,
+            to: swapper,
+            submitDeadline: SWAP_DEADLINE_SEC,
+            amountIn: amount,
+            amountOutMin: amountOut
+        }));
+
+        return amountOut;
+    }
+
+    /// @notice Executes a buy order on a given pool.
+    /// @param sellToken The address of the token being sold.
+    /// @param buyToken The address of the token being bought.
+    /// @param amountBought The amount of buyToken tokens to buy.
+    /// @return uint256 The amount of tokens received.
+    function buy(
+        address sellToken,
+        address buyToken,
+        uint256 amountBought
+    ) internal returns (uint256) {
+        address swapper = msg.sender;
+        uint256 amountIn = relayer.quoteBuy(sellToken, buyToken, amountBought);
+
+        if (amountIn == 0) {
+            revert Unavailable("AmountIn is zero!");
+        }
+        relayer.buy(ITwapRelayer.BuyParams({
+            tokenIn: sellToken,
+            tokenOut: buyToken,
+            wrapUnwrap: false,
+            to: swapper,
+            submitDeadline: SWAP_DEADLINE_SEC,
+            amountInMax: amountIn,
+            amountOut: amountBought
+        }));
+
+        return amountIn;
     }
 }
 
