@@ -37,6 +37,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
         }
     }
 
+    /// @inheritdoc ISwapAdapter
     function swap(
         bytes32 poolId,
         IERC20 sellToken,
