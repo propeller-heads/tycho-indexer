@@ -3,7 +3,8 @@ pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
-/// @dev Integral submitted deadline of 3600 seconds (1 hour) to Paraswap
+/// @dev Integral submitted deadline of 3600 seconds (1 hour) to Paraswap, but it is not strictly necessary to be this long
+/// as the contract allows less durations, we use 1000 seconds (15 minutes) as deadline
 uint32 constant SWAP_DEADLINE_SEC = 1000;
 
 /// @title Integral Swap Adapter
