@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package sf.substreams.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
+import "sf/substreams/v1/modules.proto";
+
+option go_package = "github.com/streamingfast/substreams/pb/sf/substreams/v1;pbsubstreams";
+
+message Package {
+  // Needs to be one so this file can be used _directly_ as a
+  // buf `Image` andor a ProtoSet for grpcurl and other tools
+  repeated google.protobuf.FileDescriptorProto proto_files = 1;
+  reserved 2 to 4; // Reserved for future: in case protosets adds fields
+
+  uint64 version = 5;
+  sf.substreams.v1.Modules modules = 6;
+  repeated ModuleMetadata module_meta = 7;
+  repeated PackageMetadata package_meta = 8;
+
+  // Source network for Substreams to fetch its data from.
+  string network = 9;
+
+  google.protobuf.Any sink_config = 10;
+  string sink_module = 11;
+  // image is the bytes to a JPEG, WebP or PNG file. Max size is 2 MiB
+  bytes image = 12;
+}
+
+message PackageMetadata {
+  string version = 1;
+  string url = 2;
+  string name = 3;
+  string doc = 4;
+}
+
+message ModuleMetadata {
+  // Corresponds to the index in `Package.metadata.package_meta`
+  uint64 package_index = 1;
+  string doc = 2;
+}

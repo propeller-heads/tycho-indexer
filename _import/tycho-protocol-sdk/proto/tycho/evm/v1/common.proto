@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package tycho.evm.v1;
+
+message Block {
+  bytes hash = 1;
+  bytes parent_hash = 2;
+  uint64 number = 3;
+  uint64 ts = 4;
+}
+
+message Transaction {
+  bytes hash = 1;
+  bytes from = 2;
+  bytes to = 3;
+  uint64 index = 4;
+}
+
+enum ChangeType {
+  CHANGE_TYPE_UNSPECIFIED = 0;
+  CHANGE_TYPE_UPDATE = 1;
+  CHANGE_TYPE_CREATION = 2;
+  CHANGE_TYPE_DELETION = 3;
+}
+
+message Attribute {
+  string name = 1;
+  bytes value = 2;
+  ChangeType change = 3;
+}
+
+message ProtocolComponent {
+  string id = 1;
+  repeated bytes tokens = 2;
+  repeated string contracts = 3;
+  repeated Attribute static_att = 4;
+  ChangeType change = 5;
+}
+
+message BalanceChange {
+  bytes token = 1;
+  bytes balance = 2;
+  bytes component_id = 3;
+}
