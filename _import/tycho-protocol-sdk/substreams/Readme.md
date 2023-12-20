@@ -5,8 +5,10 @@ blockchains.
 
 ## Adding a new package
 
-To add a new package add folder. The naming convention is `[CHAIN]-[PROTOCOL_SYSTEM]`. In this new folder add a manifest
-file `substreams.yaml`. You can use the template below to get started:
+To add a new package add folder. The naming convention is `[CHAIN]-[PROTOCOL_SYSTEM]`. 
+
+### Manifest
+In this new folder add a manifest file `substreams.yaml`. You can use the template below to get started:
 
 ```yaml
 specVersion: v0.1.0
@@ -36,13 +38,12 @@ binaries:
     file: ../../target/wasm32-unknown-unknown/substreams/substreams_[CHAIN]_[PROTOCOL_SYSTEM].wasm
 
 modules:
-  # sample module provides access to blocks.
-  - name: map_block
+  - name: map_changes
     kind: map
     inputs:
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:acme.block_meta.v1.BlockMeta
+      type: proto:tycho.evm.state.v1.BlockContractChanges
 ```
 
 Substreams packages are Rust crates so we also need a `cargo.toml`.
@@ -64,6 +65,9 @@ substreams-ethereum = "0.9"
 prost = "0.11"
 
 ```
+
+There are already some generated rust files in the `src/pb` directory. These are generated from the protobuf files in the 
+
 
 Now we can generate the Rust protobuf code:
 

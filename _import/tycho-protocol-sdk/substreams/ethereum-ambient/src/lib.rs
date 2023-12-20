@@ -3,9 +3,9 @@ use std::collections::{hash_map::Entry, HashMap};
 use anyhow::{anyhow, bail};
 use ethabi::{decode, ParamType};
 use hex_literal::hex;
-use substreams_ethereum::pb::eth::{self};
+use substreams_ethereum::pb::eth;
 
-use pb::tycho::evm::v1::{self as tycho, ChangeType};
+use pb::tycho::evm::v1::{self as tycho};
 
 mod pb;
 
@@ -52,24 +52,6 @@ impl From<InterimContractChange> for tycho::ContractChange {
 }
 
 /// Extracts all contract changes relevant to vm simulations
-///
-/// This implementation has currently two major limitations:
-/// 1. It is hardwired to only care about changes to the ambient main contract, this is ok for this
-///    particular use case but for a more general purpose implementation this is not ideal
-/// 2. Changes are processed separately, this means that if there are any side effects between each
-///    other (e.g. if account is deleted and then created again in ethereum all the storage is set
-///    to 0. So there is a side effect between account creation and contract storage.) these might
-///    not be properly accounted for. Most of the time this should not be a major issue but may lead
-///    to wrong results so consume this implementation with care. See example below for a concrete
-///    case where this is problematic.
-///
-/// ## A very contrived example:
-/// 1. Some existing contract receives a transaction that changes it state, the state is updated
-/// 2. Next, this contract has self destruct called on itself
-/// 3. The contract is created again using CREATE2 at the same address
-/// 4. The contract receives a transaction that changes it state
-/// 5. We would emit this as as contract creation with slots set from 1 and from 4, although we
-///    should only emit the slots changed from 4.
 #[substreams::handlers::map]
 fn map_changes(
     block: eth::v2::Block,
@@ -179,7 +161,7 @@ fn map_changes(
                             let static_attribute = tycho::Attribute {
                                 name: String::from("pool_index"),
                                 value: pool_index.to_be_bytes().to_vec(),
-                                change: ChangeType::Creation.into(),
+                                change: tycho::ChangeType::Creation.into(),
                             };
 
                             let mut tokens: Vec<Vec<u8>> = vec![base.clone(), quote.clone()];
@@ -195,7 +177,7 @@ fn map_changes(
                                 tokens,
                                 contracts: vec![hex::encode(AMBIENT_CONTRACT)],
                                 static_att: vec![static_attribute],
-                                change: ChangeType::Creation.into(),
+                                change: tycho::ChangeType::Creation.into(),
                             };
                             tx_change
                                 .component_changes
@@ -257,9 +239,9 @@ fn map_changes(
                         code: Vec::new(),
                         slots,
                         change: if created_accounts.contains_key(&storage_change.address) {
-                            ChangeType::Creation
+                            tycho::ChangeType::Creation
                         } else {
-                            ChangeType::Update
+                            tycho::ChangeType::Update
                         },
                     });
                 }
@@ -298,9 +280,9 @@ fn map_changes(
                             code: Vec::new(),
                             slots: HashMap::new(),
                             change: if created_accounts.contains_key(&balance_change.address) {
-                                ChangeType::Creation
+                                tycho::ChangeType::Creation
                             } else {
-                                ChangeType::Update
+                                tycho::ChangeType::Update
                             },
                         });
                     }
@@ -337,9 +319,9 @@ fn map_changes(
                         code: code_change.new_code.clone(),
                         slots: HashMap::new(),
                         change: if created_accounts.contains_key(&code_change.address) {
-                            ChangeType::Creation
+                            tycho::ChangeType::Creation
                         } else {
-                            ChangeType::Update
+                            tycho::ChangeType::Update
                         },
                     });
                 }
