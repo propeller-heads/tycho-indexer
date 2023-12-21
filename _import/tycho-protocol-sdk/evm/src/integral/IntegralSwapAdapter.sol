@@ -4,8 +4,8 @@ pragma solidity ^0.8.13;
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
 /// @dev Integral submitted deadline of 3600 seconds (1 hour) to Paraswap, but it is not strictly necessary to be this long
-/// as the contract allows less durations, we use 1000 seconds (15 minutes) as deadline
-uint32 constant SWAP_DEADLINE_SEC = 1000;
+/// as the contract allows less durations, we use 1000 seconds (15 minutes) as a deadline
+uint256 constant SWAP_DEADLINE_SEC = 1000;
 
 /// @title Integral Swap Adapter
 contract IntegralSwapAdapter is ISwapAdapter {
@@ -85,9 +85,11 @@ contract IntegralSwapAdapter is ISwapAdapter {
             uint256 limitMax1
         ) = relayer.getPoolState(address(sellToken), address(buyToken));
 
-        limits = new uint256[](2);
+        limits = new uint256[](4);
         limits[0] = limitMax0;
         limits[1] = limitMax1;
+        limits[2] = limitMin0;
+        limits[3] = limitMin1;
     }
 
     /// @inheritdoc ISwapAdapter
@@ -182,12 +184,16 @@ contract IntegralSwapAdapter is ISwapAdapter {
         if (amountOut == 0) {
             revert Unavailable("AmountOut is zero!");
         }
+
+        IERC20(sellToken).transferFrom(msg.sender, address(this), amount);
+        IERC20(sellToken).approve(address(relayer), amount);
+
         relayer.sell(ITwapRelayer.SellParams({
             tokenIn: sellToken,
             tokenOut: buyToken,
             wrapUnwrap: false,
             to: swapper,
-            submitDeadline: SWAP_DEADLINE_SEC,
+            submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
             amountIn: amount,
             amountOutMin: amountOut
         }));
@@ -211,12 +217,16 @@ contract IntegralSwapAdapter is ISwapAdapter {
         if (amountIn == 0) {
             revert Unavailable("AmountIn is zero!");
         }
+
+        IERC20(sellToken).transferFrom(msg.sender, address(this), amountIn);
+        IERC20(sellToken).approve(address(relayer), amountIn);
+
         relayer.buy(ITwapRelayer.BuyParams({
             tokenIn: sellToken,
             tokenOut: buyToken,
             wrapUnwrap: false,
             to: swapper,
-            submitDeadline: SWAP_DEADLINE_SEC,
+            submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
             amountInMax: amountIn,
             amountOut: amountBought
         }));
