@@ -66,6 +66,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         }
     }
 
+
     function testSwapBuyWethIntegral(uint256 specifiedAmount) public {
         OrderSide side = OrderSide.Buy;
 
@@ -79,22 +80,54 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         deal(address(USDC), address(this), type(uint256).max);
         USDC.approve(address(adapter), type(uint256).max);
 
-        uint256 usdc_balance = USDC.balanceOf(address(this));
-        uint256 weth_balance = WETH.balanceOf(address(this));
+        uint256 usdc_balance_before = USDC.balanceOf(address(this));
+        uint256 weth_balance_before = WETH.balanceOf(address(this));
 
         Trade memory trade = adapter.swap(pair, USDC, WETH, side, specifiedAmount);
 
         if (trade.calculatedAmount > 0) {
             assertEq(specifiedAmount,
-                WETH.balanceOf(address(this)) + weth_balance
+                WETH.balanceOf(address(this)) + weth_balance_before
             );
 
             assertEq(
                 trade.calculatedAmount,
-                usdc_balance - USDC.balanceOf(address(this))
+                usdc_balance_before - USDC.balanceOf(address(this))
             );
         }
 
+    }
+
+
+    function testSwapSellUsdcIntegral(uint256 specifiedAmount) public {
+        OrderSide side = OrderSide.Sell;
+
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+
+        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
+
+        vm.assume(specifiedAmount < limits[0]);
+        vm.assume(specifiedAmount > limits[2]);
+
+        deal(address(USDC), address(this), type(uint256).max);
+        USDC.approve(address(adapter), type(uint256).max);
+
+        uint256 usdc_balance_before = USDC.balanceOf(address(this));
+        uint256 weth_balance_before = WETH.balanceOf(address(this));
+
+        Trade memory trade = adapter.swap(pair, USDC, WETH, side, specifiedAmount);
+
+        if (trade.calculatedAmount > 0) {
+            assertEq(specifiedAmount,
+                usdc_balance_before - USDC.balanceOf(address(this))
+            );
+
+            assertEq(
+                trade.calculatedAmount,
+                weth_balance_before + WETH.balanceOf(address(this))
+            );
+        }
+        
     }
 
 }
