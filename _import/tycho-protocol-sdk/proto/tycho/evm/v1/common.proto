@@ -2,20 +2,33 @@ syntax = "proto3";
 
 package tycho.evm.v1;
 
+// This file contains the proto definitions for Substreams common to all integrations.
+
+// A struct describing a block.
 message Block {
+  // The blocks hash.
   bytes hash = 1;
+  // The parent blocks hash.
   bytes parent_hash = 2;
+  // The block number.
   uint64 number = 3;
+  // The block timestamp.
   uint64 ts = 4;
 }
 
+// A struct describing a transaction.
 message Transaction {
+  // The transaction hash.
   bytes hash = 1;
+  // The sender of the transaction.
   bytes from = 2;
+  // The receiver of the transaction.
   bytes to = 3;
+  // The transactions index within the block.
   uint64 index = 4;
 }
 
+// Enum to specify the type of a change.
 enum ChangeType {
   CHANGE_TYPE_UNSPECIFIED = 0;
   CHANGE_TYPE_UPDATE = 1;
@@ -23,22 +36,39 @@ enum ChangeType {
   CHANGE_TYPE_DELETION = 3;
 }
 
+// A custom struct representing an arbitrary attribute of a protocol component.
 message Attribute {
+  // The name of the attribute.
   string name = 1;
+  // The value of the attribute.
   bytes value = 2;
+  // The type of change the attribute underwent.
   ChangeType change = 3;
 }
 
+// A struct describing a part of the protocol.
 message ProtocolComponent {
+  // A unique identifier for the component within the protocol.
+  // Can be a stringified address or a string describing the trading pair.
   string id = 1;
+  // Addresses of the ERC20 tokens used by the component.
   repeated bytes tokens = 2;
-  repeated string contracts = 3;
+  // Addresses of the contracts used by the component.
+  repeated bytes contracts = 3;
+  // Attributes of the component.
+  // The inner ChangeType of the attribute has to match the ChangeType of the ProtocolComponent.
   repeated Attribute static_att = 4;
+  // Type of change the component underwent.
   ChangeType change = 5;
 }
 
+// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
+// Note that if the ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
 message BalanceChange {
+  // The address of the ERC20 token whose balance changed.
   bytes token = 1;
+  // The new balance of the token.
   bytes balance = 2;
+  // The id of the component whose TVL is tracked.
   bytes component_id = 3;
 }
