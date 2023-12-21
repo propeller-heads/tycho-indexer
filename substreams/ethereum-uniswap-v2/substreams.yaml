@@ -1,6 +1,6 @@
 specVersion: v0.1.0
 package:
-  name: 'substreams_ethereum_uniswap_v2'
+  name: "substreams_ethereum_uniswap_v2"
   version: v0.1.0
 
 protobuf:
