@@ -1,0 +1,13 @@
+[package]
+name = "substreams-ethereum-template"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "substreams_ethereum_template"
+crate-type = ["cdylib"]
+
+[dependencies]
+substreams = "0.5"
+substreams-ethereum = "0.9"
+prost = "0.11"

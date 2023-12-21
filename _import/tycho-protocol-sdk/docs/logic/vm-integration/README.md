@@ -24,12 +24,12 @@ Following exchanges have been integrated using VM approach:
    foundryup
     ```
 
-2. Start by making a local copy of the Propeller Protocol Lib repository:
+1. Start by making a local copy of the Propeller Protocol Lib repository:
     ```bash
     git clone https://github.com/propeller-heads/propeller-protocol-lib
     ```
 
-3. Install forge dependencies:
+1. Install forge dependencies:
     ```bash
     cd ./propeller-protocol-lib/evm/
     forge install

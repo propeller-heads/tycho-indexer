@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package tycho.evm.v1;
+
+import "tycho/evm/v1/common.proto";
+
+// This file contains proto definitions specific to the VM integration.
+
+// A key value entry into contract storage.
+message ContractSlot {
+  // A contract's storage slot.
+  bytes slot = 2;
+  // The new value for this storage slot.
+  bytes value = 3;
+}
+
+// Changes made to a single contract's state.
+message ContractChange {
+  // The contract's address
+  bytes address = 1;
+  // The new balance of the contract, empty bytes indicates no change.
+  bytes balance = 2;
+  // The new code of the contract, empty bytes indicates no change.
+  bytes code = 3;
+  // The changes to this contract's slots, empty sequence indicates no change.
+  repeated ContractSlot slots = 4;
+  // Whether this is an update, a creation or a deletion.
+  ChangeType change = 5;
+}
+
+// A set of changes aggregated by transaction.
+message TransactionContractChanges {
+  // The transaction instance that results in the changes.
+  Transaction tx = 1;
+  // Contains the changes induced by the above transaction, aggregated on a per-contract basis.
+  // Must include changes to every contract that is tracked by all ProtocolComponents.
+  repeated ContractChange contract_changes = 2;
+  // An array of any component changes.
+  repeated ProtocolComponent component_changes = 3;
+  // An array of balance changes to components.
+  repeated BalanceChange balance_changes = 4;
+}
+
+// A set of transaction changes within a single block.
+message BlockContractChanges {
+  // The block for which these changes are collectively computed.
+  Block block = 1;
+  // The set of transaction changes observed in the specified block.
+  repeated TransactionContractChanges changes = 2;
+}
