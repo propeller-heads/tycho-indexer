@@ -5,9 +5,12 @@ package:
 
 protobuf:
   files:
-    - vm.proto
+
+    - uniswap.proto
+
   importPaths:
-    - ../../proto/tycho/evm/v1/
+    - ./proto/v1
+
 
 binaries:
   default:
@@ -15,10 +18,33 @@ binaries:
     file: ../../target/wasm32-unknown-unknown/substreams/substreams_ethereum_uniswap_v2.wasm
 
 modules:
-  # sample module provides access to blocks.
-  - name: map_changes
+  - name: map_pool_created
     kind: map
     inputs:
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:tycho.evm.state.v1.BlockEntityChanges
+      type: proto:tycho.evm.uniswap.v2.Pools
+
+  - name: store_pools
+    kind: store
+    updatePolicy: set_if_not_exists
+    valueType: proto:tycho.evm.uniswap.v2.Pool
+    inputs:
+      - map: map_pool_created
+
+  - name: map_pool_events
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: store_pools
+        mode: deltas
+    output:
+      type: proto:tycho.evm.uniswap.v2.Events
+
+  - name: store_input_token_balances
+    kind: store
+    updatePolicy: set
+    valueType: bigint
+    inputs:
+      - map: map_pool_events
+

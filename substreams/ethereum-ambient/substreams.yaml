@@ -48,3 +48,4 @@ modules:
       - store: store_pools
     output:
       type: proto:tycho.evm.state.v1.BlockContractChanges
+
