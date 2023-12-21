@@ -90,7 +90,7 @@ Read our [Substreams README.md](../../../substreams/README.md) for more informat
 
     See the [Ambient reference example](../../../substreams/ethereum-ambient/src/lib.rs) for more information.
 
-
+1. If you are more advanced with Substreams, you can define more steps than a single "map" step, including defining your own protobuf files. Add these protobuf files in your `pb` folder and update the manifest accordingly. This allows for better parallelization of the indexing process. See the official documentation of [modules](https://substreams.streamingfast.io/concepts-and-fundamentals/modules#modules-basics-overview).
 
 ### Testing
 
