@@ -29,4 +29,22 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
 
     }
 
+    function testPriceFuzzIntegral(uint256 amount0, uint256 amount1) public {
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
+        vm.assume(amount0 < limits[0]);
+        vm.assume(amount1 < limits[1]);
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = amount0;
+        amounts[1] = amount1;
+
+        Fraction[] memory prices = adapter.price(pair, WETH, USDC, amounts);
+
+        for (uint256 i = 0; i < prices.length; i++) {
+            assertGt(prices[i].numerator, 0);
+            assertGt(prices[i].denominator, 0);
+        }
+    }
+
 }
