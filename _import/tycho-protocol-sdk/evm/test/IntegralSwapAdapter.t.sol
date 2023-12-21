@@ -130,4 +130,63 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         
     }
 
+
+    function testSwapFuzzIntegral(uint256 specifiedAmount, bool isBuy) public {
+        OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
+
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+        uint256[] memory limits = new uint256[](4);
+
+        if (side == OrderSide.Buy) {
+            limits = adapter.getLimits(pair, USDC, WETH);
+            vm.assume(specifiedAmount < limits[1]);
+            vm.assume(specifiedAmount > limits[3]);
+
+            deal(address(USDC), address(this), type(uint256).max);
+            USDC.approve(address(adapter), type(uint256).max);
+        } 
+        else {
+            limits = adapter.getLimits(pair, USDC, WETH);
+            vm.assume(specifiedAmount < limits[0]);
+            vm.assume(specifiedAmount > limits[2]);
+
+            deal(address(USDC), address(this), type(uint256).max);
+            USDC.approve(address(adapter), specifiedAmount);
+            
+        }
+
+        uint256 usdc_balance_before = USDC.balanceOf(address(this));
+        uint256 weth_balance_before = WETH.balanceOf(address(this));
+
+        Trade memory trade = adapter.swap(pair, USDC, WETH, side, specifiedAmount);
+        
+        if (trade.calculatedAmount > 0) {
+            if (side == OrderSide.Buy) {
+
+                assertEq(
+                    specifiedAmount,
+                    WETH.balanceOf(address(this)) + weth_balance_before
+                );
+
+                assertEq(
+                    trade.calculatedAmount,
+                    usdc_balance_before - USDC.balanceOf(address(this))
+                );
+
+            } else {
+
+                assertEq(
+                    specifiedAmount,
+                    usdc_balance_before - USDC.balanceOf(address(this))
+                );
+
+                assertEq(
+                    trade.calculatedAmount,
+                    weth_balance_before + WETH.balanceOf(address(this))
+                );
+            }
+        }
+        
+    }
+
 }
