@@ -33,8 +33,9 @@ message TransactionContractChanges {
   // The transaction instance that results in the changes.
   Transaction tx = 1;
   // Contains the changes induced by the above transaction, aggregated on a per-contract basis.
+  // Must include changes to every contract that is tracked by all ProtocolComponents.
   repeated ContractChange contract_changes = 2;
-  // An array of newly added components.
+  // An array of any component changes.
   repeated ProtocolComponent component_changes = 3;
   // An array of balance changes to components.
   repeated BalanceChange balance_changes = 4;

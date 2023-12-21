@@ -65,6 +65,33 @@ The module is a Rust library that is compiled into a SPKG (`.spkg`) file using t
 
 Read our [Substreams README.md](../../../substreams/README.md) for more information on how to write the Rust module.
 
+### How to implement the integration
+
+1. Create a new directory for your integration by cloning the template, rename all the references to `ethereum-template` to `[CHAIN]-[PROTOCOL_SYSTEM]`:
+
+    ```bash
+    cp -r ./substreams/ethereum-template ./substreams/[CHAIN]-[PROTOCOL_SYSTEM]
+    ```
+1. Implement the logic in the Rust module `lib.rs`. The main function to implement is the `map_changes` function, which is called for every block. 
+    
+    ```rust
+    #[substreams::handlers::map]
+    fn map_changes(
+        block: eth::v2::Block,
+    ) -> Result<tycho::BlockContractChanges, substreams::errors::Error> {}
+    ```
+    The `map_changes` function takes a raw block as input and returns a `BlockContractChanges` struct, which is derived from the `BlockContractChanges` protobuf message in [vm.proto](../../../proto/tycho/evm/v1/vm.proto). 
+
+
+1. The `BlockContractChanges` is a list of `TransactionContractChanges`, which includes these main fields:
+    - list of `ContractChange` - All storage slots that have changed in the transaction for every contract tracked by any ProtocolComponent
+    - list of `ProtocolComponent` - All the protocol component changes in the transaction
+    - list of `BalanceChange` - All the contract component changes in the transaction
+
+    See the [Ambient reference example](../../../substreams/ethereum-ambient/src/lib.rs) for more information.
+
+
+
 ### Testing
 
 Read the [Substreams testing docs](../../../substreams/README.md#testing-your-implementation) for more information on how to test your integration.

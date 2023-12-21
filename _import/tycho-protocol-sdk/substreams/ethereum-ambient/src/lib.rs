@@ -3,7 +3,7 @@ use std::collections::{hash_map::Entry, HashMap};
 use anyhow::{anyhow, bail};
 use ethabi::{decode, ParamType};
 use hex_literal::hex;
-use substreams_ethereum::pb::eth;
+use substreams_ethereum::pb::eth::{self};
 
 use pb::tycho::evm::v1::{self as tycho};
 
@@ -24,8 +24,7 @@ impl SlotValue {
     }
 }
 
-// uses a map for slots, protobuf does not
-// allow bytes in hashmap keys
+// Uses a map for slots, protobuf does not allow bytes in hashmap keys
 struct InterimContractChange {
     address: Vec<u8>,
     balance: Vec<u8>,
@@ -52,16 +51,25 @@ impl From<InterimContractChange> for tycho::ContractChange {
 }
 
 /// Extracts all contract changes relevant to vm simulations
+///
+/// This is the main logic of the substreams integration. It takes a raw ethereum block on input and extracts the BlockContractChanges stream. It includes tracking:
+/// - new pool initializations
+/// - all storage slot changes for the Ambient contract
+/// - all ERC20 balance changes for the Ambient pools
+/// - all code changes and balance updates of the Ambient contract
+/// 
+/// Generally we detect all changes in transactions sequentially and detect if it is a CREATE or UPDATE change based on already present data.
 #[substreams::handlers::map]
 fn map_changes(
     block: eth::v2::Block,
 ) -> Result<tycho::BlockContractChanges, substreams::errors::Error> {
-    let mut block_changes = tycho::BlockContractChanges { block: None, changes: Vec::new() };
+    let mut block_changes = tycho::BlockContractChanges::default();
 
     let mut tx_change = tycho::TransactionContractChanges::default();
 
     let mut changed_contracts: HashMap<Vec<u8>, InterimContractChange> = HashMap::new();
 
+    // Collect all accounts created in this block
     let created_accounts: HashMap<_, _> = block
         .transactions()
         .flat_map(|tx| {
@@ -74,7 +82,7 @@ fn map_changes(
         .collect();
 
     for block_tx in block.transactions() {
-        // extract storage changes
+        // Extract storage changes for all contracts relevant to this ProtocolComponent (i.e. Ambient)
         let mut storage_changes = block_tx
             .calls
             .iter()
@@ -87,6 +95,7 @@ fn map_changes(
             .collect::<Vec<_>>();
         storage_changes.sort_unstable_by_key(|change| change.ordinal);
 
+        // Detect all call to the Ambient contracts, even inner calls
         let ambient_calls = block_tx
             .calls
             .iter()
@@ -94,6 +103,8 @@ fn map_changes(
             .filter(|call| call.address == AMBIENT_CONTRACT)
             .collect::<Vec<_>>();
 
+        // Detect all pool initializations
+        // Official documentation: https://docs.ambient.finance/developers/dex-contract-interface/pool-initialization 
         for call in ambient_calls {
             if call.input.len() < 4 {
                 continue;
@@ -175,7 +186,7 @@ fn map_changes(
                                     pool_index
                                 ),
                                 tokens,
-                                contracts: vec![hex::encode(AMBIENT_CONTRACT)],
+                                contracts: vec![AMBIENT_CONTRACT.to_vec()],
                                 static_att: vec![static_attribute],
                                 change: tycho::ChangeType::Creation.into(),
                             };
@@ -192,10 +203,12 @@ fn map_changes(
             }
         }
 
+        // Extract all contract changes.
+        // We cache the data in a general interim contract > slot > value data structure.
         // Note: some contracts change slot values and change them back to their
-        //  original value before the transactions ends we remember the initial
-        //  value before the first change and in the end filter found deltas
-        //  that ended up not actually changing anything.
+        // original value before the transactions ends we remember the initial
+        // value before the first change and in the end filter found deltas
+        // that ended up not actually changing anything.
         for storage_change in storage_changes.iter() {
             match changed_contracts.entry(storage_change.address.clone()) {
                 // We have already an entry recording a change about this contract
@@ -223,7 +236,7 @@ fn map_changes(
                         }
                     }
                 }
-                // Intialise a new contract change after obsering a storage change
+                // Intialise a new contract change after observing a storage change
                 Entry::Vacant(e) => {
                     let mut slots = HashMap::new();
                     slots.insert(
@@ -248,7 +261,7 @@ fn map_changes(
             }
         }
 
-        // extract balance changes
+        // Extract balance changes
         let mut balance_changes = block_tx
             .calls
             .iter()
@@ -290,7 +303,7 @@ fn map_changes(
             }
         }
 
-        // extract code changes
+        // Extract code changes
         let mut code_changes = block_tx
             .calls
             .iter()
@@ -328,7 +341,7 @@ fn map_changes(
             }
         }
 
-        // if there were any changes, add transaction and push the changes
+        // If there were any changes, add transaction and push the changes
         if !storage_changes.is_empty() || !balance_changes.is_empty() || !code_changes.is_empty() {
             tx_change.tx = Some(tycho::Transaction {
                 hash: block_tx.hash.clone(),

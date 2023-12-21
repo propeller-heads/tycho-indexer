@@ -37,6 +37,7 @@ enum ChangeType {
 }
 
 // A custom struct representing an arbitrary attribute of a protocol component.
+// This is mainly used by the native integration to track the necessary information about the protocol.
 message Attribute {
   // The name of the attribute.
   string name = 1;
@@ -47,6 +48,11 @@ message Attribute {
 }
 
 // A struct describing a part of the protocol.
+// Note: For example this can be a UniswapV2 pair, that would track the two ERC20 tokens used by the pair, 
+// the contract would be only the single sontract. The attributes would be empty for the VM integration, 
+// because we track all the relevant info via storage slots and balance changes.
+// It can also be a wrapping contract, like WETH, that has a constant price, but it allows swapping tokens. 
+// This is why the name ProtocolComponent is used instead of "Pool" or "Pair".
 message ProtocolComponent {
   // A unique identifier for the component within the protocol.
   // Can be a stringified address or a string describing the trading pair.
@@ -54,8 +60,9 @@ message ProtocolComponent {
   // Addresses of the ERC20 tokens used by the component.
   repeated bytes tokens = 2;
   // Addresses of the contracts used by the component.
+  // Usually it is a single contract, but some protocols use multiple contracts.
   repeated bytes contracts = 3;
-  // Attributes of the component.
+  // Attributes of the component. Used mainly be the native integration.
   // The inner ChangeType of the attribute has to match the ChangeType of the ProtocolComponent.
   repeated Attribute static_att = 4;
   // Type of change the component underwent.
@@ -64,11 +71,13 @@ message ProtocolComponent {
 
 // A struct for following the changes of Total Value Locked (TVL) of a protocol component.
 // Note that if the ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
+// E.g. for UniswapV2 pair WETH/USDC, this tracks the USDC and WETH balance of the pair contract.
 message BalanceChange {
   // The address of the ERC20 token whose balance changed.
   bytes token = 1;
   // The new balance of the token.
   bytes balance = 2;
   // The id of the component whose TVL is tracked.
+  // If the protocol component includes multiple contracts, the balance change must be aggregated to reflect how much tokens can be traded.
   bytes component_id = 3;
 }
