@@ -13,8 +13,10 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
     IntegralSwapAdapter adapter;
     IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    address constant USDC_WETH_PAIR = 0x2fe16Dd18bba26e457B7dD2080d5674312b026a2;
-    address constant relayerAddress = 0xd17b3c9784510E33cD5B87b490E79253BcD81e2E;
+    address constant USDC_WETH_PAIR =
+        0x2fe16Dd18bba26e457B7dD2080d5674312b026a2;
+    address constant relayerAddress =
+        0xd17b3c9784510E33cD5B87b490E79253BcD81e2E;
 
     uint256 constant TEST_ITERATIONS = 100;
 
@@ -26,9 +28,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         vm.label(address(WETH), "WETH");
         vm.label(address(USDC), "USDC");
         vm.label(address(USDC_WETH_PAIR), "USDC_WETH_PAIR");
-
     }
-
 
     function testPriceFuzzIntegral(uint256 amount0, uint256 amount1) public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
@@ -48,7 +48,6 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         }
     }
 
-
     function testPriceDecreasingIntegral() public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
@@ -66,7 +65,6 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         }
     }
 
-
     function testSwapBuyWethIntegral(uint256 specifiedAmount) public {
         OrderSide side = OrderSide.Buy;
 
@@ -83,10 +81,17 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         uint256 usdc_balance_before = USDC.balanceOf(address(this));
         uint256 weth_balance_before = WETH.balanceOf(address(this));
 
-        Trade memory trade = adapter.swap(pair, USDC, WETH, side, specifiedAmount);
+        Trade memory trade = adapter.swap(
+            pair,
+            USDC,
+            WETH,
+            side,
+            specifiedAmount
+        );
 
         if (trade.calculatedAmount > 0) {
-            assertEq(specifiedAmount,
+            assertEq(
+                specifiedAmount,
                 WETH.balanceOf(address(this)) + weth_balance_before
             );
 
@@ -95,9 +100,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
                 usdc_balance_before - USDC.balanceOf(address(this))
             );
         }
-
     }
-
 
     function testSwapSellUsdcIntegral(uint256 specifiedAmount) public {
         OrderSide side = OrderSide.Sell;
@@ -115,10 +118,17 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         uint256 usdc_balance_before = USDC.balanceOf(address(this));
         uint256 weth_balance_before = WETH.balanceOf(address(this));
 
-        Trade memory trade = adapter.swap(pair, USDC, WETH, side, specifiedAmount);
+        Trade memory trade = adapter.swap(
+            pair,
+            USDC,
+            WETH,
+            side,
+            specifiedAmount
+        );
 
         if (trade.calculatedAmount > 0) {
-            assertEq(specifiedAmount,
+            assertEq(
+                specifiedAmount,
                 usdc_balance_before - USDC.balanceOf(address(this))
             );
 
@@ -127,9 +137,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
                 weth_balance_before + WETH.balanceOf(address(this))
             );
         }
-        
     }
-
 
     function testSwapFuzzIntegral(uint256 specifiedAmount, bool isBuy) public {
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
@@ -144,25 +152,28 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
 
             deal(address(USDC), address(this), type(uint256).max);
             USDC.approve(address(adapter), type(uint256).max);
-        } 
-        else {
+        } else {
             limits = adapter.getLimits(pair, USDC, WETH);
             vm.assume(specifiedAmount < limits[0]);
             vm.assume(specifiedAmount > limits[2]);
 
             deal(address(USDC), address(this), type(uint256).max);
             USDC.approve(address(adapter), specifiedAmount);
-            
         }
 
         uint256 usdc_balance_before = USDC.balanceOf(address(this));
         uint256 weth_balance_before = WETH.balanceOf(address(this));
 
-        Trade memory trade = adapter.swap(pair, USDC, WETH, side, specifiedAmount);
-        
+        Trade memory trade = adapter.swap(
+            pair,
+            USDC,
+            WETH,
+            side,
+            specifiedAmount
+        );
+
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
-
                 assertEq(
                     specifiedAmount,
                     WETH.balanceOf(address(this)) + weth_balance_before
@@ -172,9 +183,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
                     trade.calculatedAmount,
                     usdc_balance_before - USDC.balanceOf(address(this))
                 );
-
             } else {
-
                 assertEq(
                     specifiedAmount,
                     usdc_balance_before - USDC.balanceOf(address(this))
@@ -186,7 +195,43 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
                 );
             }
         }
-        
     }
 
+    function executeIncreasingSwapsIntegral(OrderSide side) internal {
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+
+        uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
+        for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
+            amounts[i] = 1000 * i * 10 ** 6;
+        }
+
+        Trade[] memory trades = new Trade[](TEST_ITERATIONS);
+        uint256 beforeSwap;
+        for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
+            beforeSwap = vm.snapshot();
+
+            deal(address(USDC), address(this), amounts[i]);
+            USDC.approve(address(adapter), amounts[i]);
+
+            trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
+            vm.revertTo(beforeSwap);
+        }
+
+        for (uint256 i = 1; i < TEST_ITERATIONS - 1; i++) {
+            assertLe(
+                trades[i].calculatedAmount,
+                trades[i + 1].calculatedAmount
+            );
+            assertLe(trades[i].gasUsed, trades[i + 1].gasUsed);
+            assertEq(trades[i].price.compareFractions(trades[i + 1].price), 1);
+        }
+    }
+
+    function testSwapSellIncreasingIntegral() public {
+        executeIncreasingSwapsIntegral(OrderSide.Sell);
+    }
+
+    function testSwapBuyIncreasingIntegral() public {
+        executeIncreasingSwapsIntegral(OrderSide.Buy);
+    }
 }
