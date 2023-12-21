@@ -234,4 +234,25 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
     function testSwapBuyIncreasingIntegral() public {
         executeIncreasingSwapsIntegral(OrderSide.Buy);
     }
+
+    function testGetCapabilitiesIntegral(
+        bytes32 pair,
+        address t0,
+        address t1
+    ) public {
+        Capability[] memory res = adapter.getCapabilities(
+            pair,
+            IERC20(t0),
+            IERC20(t1)
+        );
+
+        assertEq(res.length, 3);
+    }
+
+    function testGetLimitsIntegral() public {
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
+
+        assertEq(limits.length, 4);
+    }
 }
