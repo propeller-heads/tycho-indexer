@@ -1,4 +1,3 @@
-/*
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
@@ -36,10 +35,10 @@ contract IntegralSwapAdapter is ISwapAdapter {
         if (address(_sellToken) == pair.token1()) {
             inverted = true;
         }
-        uint256 price = relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken));
+        uint256 price_ = relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken));
 
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            _prices[i] = price;
+            _prices[i] = Fraction(price_, 1);
         }
     }
 
@@ -58,13 +57,13 @@ contract IntegralSwapAdapter is ISwapAdapter {
         uint256 gasBefore = gasleft();
         if (side == OrderSide.Sell) { // sell
             trade.calculatedAmount =
-                sell(address(sellToken), address(buyToken), specifiedAmount);
+                sell(sellToken, buyToken, specifiedAmount);
         } else { // buy
             trade.calculatedAmount =
-                buy(address(sellToken), address(buyToken), specifiedAmount);
+                buy(sellToken, buyToken, specifiedAmount);
         }
         trade.gasUsed = gasBefore - gasleft();
-        trade.price = relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken));
+        trade.price = Fraction(relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken)), 1);
     }
 
     /// @inheritdoc ISwapAdapter
@@ -74,7 +73,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
         override
         returns (uint256[] memory limits)
     {
-        return _getLimits(poollId, sellToken, buyToken);
+        return _getLimits(poolId, sellToken, buyToken);
     }
 
     /// @inheritdoc ISwapAdapter
@@ -127,28 +126,28 @@ contract IntegralSwapAdapter is ISwapAdapter {
     /// @param amount The amount to be traded.
     /// @return uint256 The amount of tokens received.
     function sell(
-        address sellToken,
-        address buyToken,
+        IERC20 sellToken,
+        IERC20 buyToken,
         uint256 amount
     ) internal returns (uint256) {
         address swapper = msg.sender;
 
-        (uint256 limitMinSellToken, , uint256 limitMaxSellToken) = _getLimits(_poolId, _sellToken, _buyToken);
-        if(amount < limitMinSellToken || amount > limitMaxSellToken) {
-            revert Unavailable("specifiedAmount is out of limits range");
+        uint256[] memory limits = _getLimits(0, sellToken, buyToken);
+        if(amount > limits[0] || amount < limits[2]) {
+            revert Unavailable("amount is out of limits range");
         }
 
-        uint256 amountOut = relayer.quoteSell(sellToken, buyToken, amount);
+        uint256 amountOut = relayer.quoteSell(address(sellToken), address(buyToken), amount);
         if (amountOut == 0) {
             revert Unavailable("AmountOut is zero!");
         }
 
-        IERC20(sellToken).transferFrom(msg.sender, address(this), amount);
-        IERC20(sellToken).approve(address(relayer), amount);
+        sellToken.transferFrom(msg.sender, address(this), amount);
+        sellToken.approve(address(relayer), amount);
 
         relayer.sell(ITwapRelayer.SellParams({
-            tokenIn: sellToken,
-            tokenOut: buyToken,
+            tokenIn: address(sellToken),
+            tokenOut: address(buyToken),
             wrapUnwrap: false,
             to: swapper,
             submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
@@ -165,28 +164,28 @@ contract IntegralSwapAdapter is ISwapAdapter {
     /// @param amountBought The amount of buyToken tokens to buy.
     /// @return uint256 The amount of tokens received.
     function buy(
-        address sellToken,
-        address buyToken,
+        IERC20 sellToken,
+        IERC20 buyToken,
         uint256 amountBought
     ) internal returns (uint256) {
         address swapper = msg.sender;
 
-        (, uint256 limitMinBuyToken, , uint256 limitMaxBuyToken) = _getLimits(_poolId, _sellToken, _buyToken);
-        if(amountBought < limitMinBuyToken || amountBought > limitMaxBuyToken) {
-            revert Unavailable("specifiedAmount is out of limits range");
+        uint256[] memory limits = _getLimits(0, sellToken, buyToken);
+        if(amountBought > limits[1] || amountBought < limits[3]) {
+            revert Unavailable("amountBought is out of limits range");
         }
 
-        uint256 amountIn = relayer.quoteBuy(sellToken, buyToken, amountBought);
+        uint256 amountIn = relayer.quoteBuy(address(sellToken), address(buyToken), amountBought);
         if (amountIn == 0) {
             revert Unavailable("AmountIn is zero!");
         }
 
-        IERC20(sellToken).transferFrom(msg.sender, address(this), amountIn);
-        IERC20(sellToken).approve(address(relayer), amountIn);
+        sellToken.transferFrom(msg.sender, address(this), amountIn);
+        sellToken.approve(address(relayer), amountIn);
 
         relayer.buy(ITwapRelayer.BuyParams({
-            tokenIn: sellToken,
-            tokenOut: buyToken,
+            tokenIn: address(sellToken),
+            tokenOut: address(buyToken),
             wrapUnwrap: false,
             to: swapper,
             submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
@@ -199,7 +198,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
 
     /// @notice Internal counterpart of _getLimits
     /// @dev As Integral also has minimum limits of sell/buy amounts, we return them too.
-    /// @return limits[4]: [0] = limitMax of sellToken, [1] = limitMax of buyToken, [2] = limitMin of sellToken, [3] = limitMin of buyToken
+    /// @return limits [length:4]: [0] = limitMax of sellToken, [1] = limitMax of buyToken, [2] = limitMin of sellToken, [3] = limitMin of buyToken
     function _getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken) internal view returns (uint256[] memory limits) {
         (
             uint256 price_,
@@ -210,11 +209,13 @@ contract IntegralSwapAdapter is ISwapAdapter {
             uint256 limitMax1
         ) = relayer.getPoolState(address(sellToken), address(buyToken));
 
-        limits = new uint256[](4);
-        limits[0] = limitMax0;
-        limits[1] = limitMax1;
-        limits[2] = limitMin0;
-        limits[3] = limitMin1;
+        uint256[] memory limits_ = new uint256[](4);
+        limits_[0] = limitMax0;
+        limits_[1] = limitMax1;
+        limits_[2] = limitMin0;
+        limits_[3] = limitMin1;
+
+        return limits_;
     }
 }
 
@@ -570,4 +571,3 @@ interface ITwapPair is ITwapERC20, IReserves {
 
     function getDepositAmount1In(uint256 amount1, bytes calldata data) external view returns (uint256 depositAmount1In);
 }
-*/
