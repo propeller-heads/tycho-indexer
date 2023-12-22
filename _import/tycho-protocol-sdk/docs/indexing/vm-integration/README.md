@@ -1,4 +1,6 @@
-# Substreams Integration
+# VM Integration
+
+Our indexing integrations use the Substreams library to transform raw blockchain data into higher level data streams. This is done by implementing a Rust module that is compiled into a SPKG file and then loaded by the Substreams server.
 
 ## Example
 
@@ -35,9 +37,9 @@ We have integrated the **Ambient** protocol as a reference, see `/substreams/eth
     git clone https://github.com/propeller-heads/propeller-protocol-lib
     ```
 
-## Understanding the Substreams integration
+## Understanding the Substreams VM integration
 
-Substreams is a new indexing technology, which uses Rust modules to compose raw blockchain data streams into higher level data streams, in out case specific to the protocol. These modules together with the protobuf definitions and manifest are then wrapped into SPKG packages (more info [here](https://substreams.streamingfast.io/quick-access/glossary#spkg-.spkg)) that is then run remotely on the Substreams server.
+Substreams is a new indexing technology, which uses Rust modules to compose raw blockchain data streams into higher level data streams, in our case specific to the protocol. These modules together with the protobuf definitions and manifest are then wrapped into SPKG packages (more info [here](https://substreams.streamingfast.io/quick-access/glossary#spkg-.spkg)) that are then run remotely on the Substreams server.
 
 For more information, read the [quick explanation of Substreams](https://thegraph.com/docs/en/substreams/) or jump into the [Substreams documentation](https://substreams.streamingfast.io/). It describes the functions that need to be implemented as well as the manifest file.
 
@@ -53,7 +55,7 @@ First get familiar with the raw ProtoBuf definitions provided by us:
 
 You can also create your own intermediate ProtoBufs. These files should reside in your own substreams package, e.g. `./substreams/ethereum-template/proto/custom-messages.proto`. You have to link these files in the `substreams.yaml` file, see the [manifest docs](https://substreams.streamingfast.io/developers-guide/creating-your-manifest) for more information or you can look at the official substreams example integration of [UniswapV2](https://github.com/messari/substreams/blob/master/uniswap-v2/substreams.yaml#L20-L22).
 
-*Note: Internally we are referring to the substreams integration as `Tycho`, which is why our protobuf files are under the `proto/tycho` directory.*
+*Note: Internally we are referring to our indexing library as `Tycho`, which is why our protobuf files are under the `proto/tycho` directory.*
 
 ### Rust module
 

@@ -1,11 +1,10 @@
 # Subtreams packages
 
-This directory contains all substream packages that are used by the extractors to access certain data from diffrent
-blockchains.
+This directory contains all substream packages that are used to index integrated protocols across different blockchains.
 
 ## Adding a new package
 
-To add a new package add folder. The naming convention is `[CHAIN]-[PROTOCOL_SYSTEM]`. 
+To add a new package add a folder. The naming convention is `[CHAIN]-[PROTOCOL_SYSTEM]`. 
 
 ### Manifest
 In this new folder add a manifest file `substreams.yaml`. You can use the template below to get started:
@@ -20,14 +19,11 @@ protobuf:
   files:
     - vm.proto
     - common.proto
+    # You can specify any internal proto files here
   importPaths:
-    # This is different compared to the substreams example, 
-    # we need to share protobuf definitions with tycho you 
-    # are invited to reuse existing definitions if they are 
-    # useful to you.
-    - ../../proto/evm/v1
-    # any private message types only used in internal modules 
-    # can remain local to the crate.
+    - ../../proto/tycho/evm/v1/
+    # Any private message types only used in internal modules 
+    # can remain local to the folder.
     - ./proto
 
 binaries:
@@ -66,7 +62,11 @@ prost = "0.11"
 
 ```
 
-There are already some generated rust files in the `src/pb` directory. These are generated from the protobuf files in the 
+There are already some generated rust files in the `src/pb` directory. These are generated 
+from the protobuf files in the `/proto/tycho/evm/v1` directory. They specify the output protobuf messages
+we want to generate. The input Block is specified by the subtreams crate, specifically the [sf.ethereum.type.v2.Block](https://github.com/streamingfast/substreams-ethereum/blob/develop/core/src/pb/sf.ethereum.type.v2.rs) message.
+
+You can define your own protobuf messages, make a new directory `/substreams/[CHAIN]-[PROTOCOL]/proto` for them.
 
 
 Now we can generate the Rust protobuf code:
