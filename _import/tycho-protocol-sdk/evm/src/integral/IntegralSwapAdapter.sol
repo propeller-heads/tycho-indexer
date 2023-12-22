@@ -134,7 +134,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
 
         uint256[] memory limits = _getLimits(0, sellToken, buyToken);
         if(amount > limits[0] || amount < limits[2]) {
-            revert Unavailable("amount is out of limits range");
+            revert LimitExceeded(amount);
         }
 
         uint256 amountOut = relayer.quoteSell(address(sellToken), address(buyToken), amount);
@@ -172,7 +172,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
 
         uint256[] memory limits = _getLimits(0, sellToken, buyToken);
         if(amountBought > limits[1] || amountBought < limits[3]) {
-            revert Unavailable("amountBought is out of limits range");
+            revert LimitExceeded(amountBought);
         }
 
         uint256 amountIn = relayer.quoteBuy(address(sellToken), address(buyToken), amountBought);
