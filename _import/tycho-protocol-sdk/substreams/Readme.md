@@ -64,7 +64,7 @@ prost = "0.11"
 
 There are already some generated rust files in the `src/pb` directory. These are generated 
 from the protobuf files in the `/proto/tycho/evm/v1` directory. They specify the output protobuf messages
-we want to generate. The input Block is specified by the sustreams crate, specifically the [sf.ethereum.type.v2.Block](https://github.com/streamingfast/substreams-ethereum/blob/develop/core/src/pb/sf.ethereum.type.v2.rs) message.
+we want to generate. The input Block is specified by the subtreams crate, specifically the [sf.ethereum.type.v2.Block](https://github.com/streamingfast/substreams-ethereum/blob/develop/core/src/pb/sf.ethereum.type.v2.rs) message.
 
 You can define your own protobuf messages, make a new directory `/substreams/[CHAIN]-[PROTOCOL]/proto` for them.
 
