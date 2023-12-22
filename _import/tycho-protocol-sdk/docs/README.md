@@ -22,7 +22,7 @@ While VM integration is certainly the quickest and probably most accessible one 
 
 ### Indexing
 
-For indexing purposes, it is required that you provide a [substreams](https://substreams.streamingfast.io/) package that emits a specified set of messages. If your protocol already has a [substreams package](https://github.com/messari/substreams) package for indexing implemented, you can adjust it to emit the required messages.
+For indexing purposes, it is required that you provide a [substreams](https://substreams.streamingfast.io/) package that emits a specified set of messages. If your protocol already has a [substreams package](https://github.com/messari/substreams) for indexing implemented, you can adjust it to emit the required messages.
 
 **VM Integration** Currently the only supported integration is for EVM protocols in order to complement the Solidity protocol logic. **[Read more here.](indexing/vm-integration/README.md)**
 **Custom Entity Integration** Coming soon, this integration will complement the upcoming native Rust protocol logic.

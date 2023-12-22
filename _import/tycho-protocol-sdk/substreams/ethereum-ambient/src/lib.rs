@@ -82,7 +82,8 @@ fn map_changes(
         .collect();
 
     for block_tx in block.transactions() {
-        // Extract storage changes for all contracts relevant to this ProtocolComponent (i.e. Ambient)
+        // Extract storage changes for all contracts relevant to this protocol system.
+        // Ambient is a protocol system consisting of many ProtocolComponents (one for each pool), but they all share the same AMBIENT_CONTRACT contract.
         let mut storage_changes = block_tx
             .calls
             .iter()

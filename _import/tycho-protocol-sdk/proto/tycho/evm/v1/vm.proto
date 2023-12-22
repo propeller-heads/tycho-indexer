@@ -18,7 +18,7 @@ message ContractSlot {
 message ContractChange {
   // The contract's address
   bytes address = 1;
-  // The new balance of the contract, empty bytes indicates no change.
+  // The new native balance of the contract, empty bytes indicates no change.
   bytes balance = 2;
   // The new code of the contract, empty bytes indicates no change.
   bytes code = 3;

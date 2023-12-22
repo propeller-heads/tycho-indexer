@@ -48,14 +48,14 @@ message Attribute {
 }
 
 // A struct describing a part of the protocol.
-// Note: For example this can be a UniswapV2 pair, that would track the two ERC20 tokens used by the pair, 
-// the contract would be only the single sontract. The attributes would be empty for the VM integration, 
-// because we track all the relevant info via storage slots and balance changes.
+// Note: For example this can be a UniswapV2 pair, that tracks the two ERC20 tokens used by the pair, 
+// the component would represent a single contract. In case of VM integration, such component would 
+// not need any attributes, because all the relevant info would be tracked via storage slots and balance changes.
 // It can also be a wrapping contract, like WETH, that has a constant price, but it allows swapping tokens. 
 // This is why the name ProtocolComponent is used instead of "Pool" or "Pair".
 message ProtocolComponent {
   // A unique identifier for the component within the protocol.
-  // Can be a stringified address or a string describing the trading pair.
+  // Can be e.g. a stringified address or a string describing the trading pair.
   string id = 1;
   // Addresses of the ERC20 tokens used by the component.
   repeated bytes tokens = 2;
@@ -70,7 +70,7 @@ message ProtocolComponent {
 }
 
 // A struct for following the changes of Total Value Locked (TVL) of a protocol component.
-// Note that if the ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
+// Note that if a ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
 // E.g. for UniswapV2 pair WETH/USDC, this tracks the USDC and WETH balance of the pair contract.
 message BalanceChange {
   // The address of the ERC20 token whose balance changed.
