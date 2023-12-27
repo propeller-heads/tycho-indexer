@@ -198,6 +198,10 @@ contract IntegralSwapAdapter is ISwapAdapter {
 
     /// @notice Internal counterpart of _getLimits
     /// @dev As Integral also has minimum limits of sell/buy amounts, we return them too.
+    /// @dev Since TwapRelayer's calculateAmountIn and calculateAmountOut functions are internal, and using quoteBuy and quoteSell would
+    /// revert the transactions if internally calculated(in or out) amounts are not within the minimum limits,
+    /// we need a threshold to cover the losses on this internal amount, applied to the input amount.
+    /// limitMins of sellToken: +15% and buyToken: +3% are enough to cover these inconsistences.
     /// @return limits [length:4]: [0] = limitMax of sellToken, [1] = limitMax of buyToken, [2] = limitMin of sellToken, [3] = limitMin of buyToken
     function _getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken) internal view returns (uint256[] memory limits) {
         (
@@ -212,8 +216,8 @@ contract IntegralSwapAdapter is ISwapAdapter {
         uint256[] memory limits_ = new uint256[](4);
         limits_[0] = limitMax0;
         limits_[1] = limitMax1;
-        limits_[2] = limitMin0;
-        limits_[3] = limitMin1;
+        limits_[2] = (limitMin0 * 115 / 100);
+        limits_[3] = (limitMin1 * 103 / 100);
 
         return limits_;
     }

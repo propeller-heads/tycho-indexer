@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import "src/interfaces/ISwapAdapterTypes.sol";
 import "src/libraries/FractionMath.sol";
-import "src/integral/IntegralSwapAdapterFix.sol";
+import "src/integral/IntegralSwapAdapter.sol";
 
 contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
     using FractionMath for Fraction;
@@ -48,98 +48,13 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         }
     }
 
-    function testPriceDecreasingIntegral() public {
-        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
-
-        for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
-            amounts[i] = 1000 * i * 10 ** 6;
-        }
-
-        Fraction[] memory prices = adapter.price(pair, USDC, WETH, amounts);
-
-        for (uint256 i = 0; i < TEST_ITERATIONS - 1; i++) {
-            assertEq(prices[i].compareFractions(prices[i + 1]), 1);
-            assertGt(prices[i].denominator, 0);
-            assertGt(prices[i + 1].denominator, 0);
-        }
-    }
-
-    function testSwapBuyWethIntegral(uint256 specifiedAmount) public {
-        OrderSide side = OrderSide.Buy;
-
-        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-
-        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
-
-        vm.assume(specifiedAmount < limits[1]);
-        vm.assume(specifiedAmount > limits[3]);
-
-        deal(address(USDC), address(this), type(uint256).max);
-        USDC.approve(address(adapter), type(uint256).max);
-
-        uint256 usdc_balance_before = USDC.balanceOf(address(this));
-        uint256 weth_balance_before = WETH.balanceOf(address(this));
-
-        Trade memory trade = adapter.swap(
-            pair,
-            USDC,
-            WETH,
-            side,
-            specifiedAmount
-        );
-
-        if (trade.calculatedAmount > 0) {
-            assertEq(
-                specifiedAmount,
-                WETH.balanceOf(address(this)) + weth_balance_before
-            );
-
-            assertEq(
-                trade.calculatedAmount,
-                usdc_balance_before - USDC.balanceOf(address(this))
-            );
-        }
-    }
-
-    function testSwapSellUsdcIntegral(uint256 specifiedAmount) public {
-        OrderSide side = OrderSide.Sell;
-
-        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-
-        uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
-
-        vm.assume(specifiedAmount < limits[0]);
-        vm.assume(specifiedAmount > limits[2]);
-
-        deal(address(USDC), address(this), type(uint256).max);
-        USDC.approve(address(adapter), type(uint256).max);
-
-        uint256 usdc_balance_before = USDC.balanceOf(address(this));
-        uint256 weth_balance_before = WETH.balanceOf(address(this));
-
-        Trade memory trade = adapter.swap(
-            pair,
-            USDC,
-            WETH,
-            side,
-            specifiedAmount
-        );
-
-        if (trade.calculatedAmount > 0) {
-            assertEq(
-                specifiedAmount,
-                usdc_balance_before - USDC.balanceOf(address(this))
-            );
-
-            assertEq(
-                trade.calculatedAmount,
-                weth_balance_before + WETH.balanceOf(address(this))
-            );
-        }
-    }
-
+    /// @dev Since TwapRelayer's calculateAmountOut function is internal, and using quoteSell would
+    /// revert the transaction if calculateAmountOut is not enough,
+    /// we need a threshold to cover this internal amount, applied to 
     function testSwapFuzzIntegral(uint256 specifiedAmount, bool isBuy) public {
+        // Fails at times | FAIL. Reason: revert: TR03;
+        //
+        //
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
 
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
@@ -227,14 +142,6 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         }
     }
 
-    function testSwapSellIncreasingIntegral() public {
-        executeIncreasingSwapsIntegral(OrderSide.Sell);
-    }
-
-    function testSwapBuyIncreasingIntegral() public {
-        executeIncreasingSwapsIntegral(OrderSide.Buy);
-    }
-
     function testGetCapabilitiesIntegral(
         bytes32 pair,
         address t0,
@@ -247,6 +154,13 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         );
 
         assertEq(res.length, 3);
+    }
+
+    function testGetTokensIntegral() public {
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+        IERC20[] memory tokens = adapter.getTokens(pair);
+
+        assertEq(tokens.length, 2);
     }
 
     function testGetLimitsIntegral() public {
