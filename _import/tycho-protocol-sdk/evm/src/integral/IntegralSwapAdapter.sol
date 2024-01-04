@@ -29,12 +29,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
         uint256[] memory _specifiedAmounts
     ) external view override returns (Fraction[] memory _prices) {
         _prices = new Fraction[](_specifiedAmounts.length);
-        ITwapPair pair = ITwapPair(address(bytes20(_poolId)));
 
-        bool inverted = false;
-        if (address(_sellToken) == pair.token1()) {
-            inverted = true;
-        }
         uint256 price_ = relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken));
 
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
@@ -63,6 +58,11 @@ contract IntegralSwapAdapter is ISwapAdapter {
                 buy(sellToken, buyToken, specifiedAmount);
         }
         trade.gasUsed = gasBefore - gasleft();
+        /**
+         * @dev once we get reply from propeller about return values in price() function and in every Fraction
+         * Fraction[0] = relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken)) * 10^(IERC20(sellToken).decimals) / 10^18
+         * Fraction[1] = 10^(IERC20(buyToken).decimals)
+         */
         trade.price = Fraction(relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken)), 1);
     }
 
@@ -132,11 +132,6 @@ contract IntegralSwapAdapter is ISwapAdapter {
     ) internal returns (uint256) {
         address swapper = msg.sender;
 
-        uint256[] memory limits = _getLimits(0, sellToken, buyToken);
-        if(amount > limits[0] || amount < limits[2]) {
-            revert LimitExceeded(amount);
-        }
-
         uint256 amountOut = relayer.quoteSell(address(sellToken), address(buyToken), amount);
         if (amountOut == 0) {
             revert Unavailable("AmountOut is zero!");
@@ -170,11 +165,6 @@ contract IntegralSwapAdapter is ISwapAdapter {
     ) internal returns (uint256) {
         address swapper = msg.sender;
 
-        uint256[] memory limits = _getLimits(0, sellToken, buyToken);
-        if(amountBought > limits[1] || amountBought < limits[3]) {
-            revert LimitExceeded(amountBought);
-        }
-
         uint256 amountIn = relayer.quoteBuy(address(sellToken), address(buyToken), amountBought);
         if (amountIn == 0) {
             revert Unavailable("AmountIn is zero!");
@@ -197,27 +187,19 @@ contract IntegralSwapAdapter is ISwapAdapter {
     }
 
     /// @notice Internal counterpart of _getLimits
-    /// @dev As Integral also has minimum limits of sell/buy amounts, we return them too.
-    /// @dev Since TwapRelayer's calculateAmountIn and calculateAmountOut functions are internal, and using quoteBuy and quoteSell would
-    /// revert the transactions if internally calculated(in or out) amounts are not within the minimum limits,
-    /// we need a threshold to cover the losses on this internal amount, applied to the input amount.
-    /// limitMins of sellToken: +15% and buyToken: +3% are enough to cover these inconsistences.
-    /// @return limits [length:4]: [0] = limitMax of sellToken, [1] = limitMax of buyToken, [2] = limitMin of sellToken, [3] = limitMin of buyToken
     function _getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken) internal view returns (uint256[] memory limits) {
         (
             uint256 price_,
             uint256 fee,
-            uint256 limitMin0,
+            ,
             uint256 limitMax0,
-            uint256 limitMin1,
+            ,
             uint256 limitMax1
         ) = relayer.getPoolState(address(sellToken), address(buyToken));
 
-        uint256[] memory limits_ = new uint256[](4);
+        uint256[] memory limits_ = new uint256[](2);
         limits_[0] = limitMax0;
         limits_[1] = limitMax1;
-        limits_[2] = (limitMin0 * 115 / 100);
-        limits_[3] = (limitMin1 * 103 / 100);
 
         return limits_;
     }
