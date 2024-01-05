@@ -72,11 +72,8 @@ pub struct ProtocolComponent {
     /// Addresses of the ERC20 tokens used by the component.
     #[prost(bytes="vec", repeated, tag="2")]
     pub tokens: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    /// Addresses of the contracts used by the component.
     #[prost(bytes="vec", repeated, tag="3")]
     pub contracts: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    /// Attributes of the component.
-    /// The inner ChangeType of the attribute has to match the ChangeType of the ProtocolComponent.
     #[prost(message, repeated, tag="4")]
     pub static_att: ::prost::alloc::vec::Vec<Attribute>,
     /// Type of change the component underwent.
