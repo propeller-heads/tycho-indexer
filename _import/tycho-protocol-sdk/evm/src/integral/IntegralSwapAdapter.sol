@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 
 /// @dev Integral submitted deadline of 3600 seconds (1 hour) to Paraswap, but it is not strictly necessary to be this long
 /// as the contract allows less durations, we use 1000 seconds (15 minutes) as a deadline
@@ -33,7 +34,10 @@ contract IntegralSwapAdapter is ISwapAdapter {
         uint256 price_ = relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken));
 
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            _prices[i] = Fraction(price_, 1);
+            _prices[i] = Fraction(
+                relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken)) * 10**(ERC20(address(_sellToken)).decimals()) / 10**18,
+                10**(ERC20(address(_buyToken)).decimals())
+            );
         }
     }
 
@@ -58,12 +62,10 @@ contract IntegralSwapAdapter is ISwapAdapter {
                 buy(sellToken, buyToken, specifiedAmount);
         }
         trade.gasUsed = gasBefore - gasleft();
-        /**
-         * @dev once we get reply from propeller about return values in price() function and in every Fraction
-         * Fraction[0] = relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken)) * 10^(IERC20(sellToken).decimals) / 10^18
-         * Fraction[1] = 10^(IERC20(buyToken).decimals)
-         */
-        trade.price = Fraction(relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken)), 1);
+        trade.price = Fraction(
+            relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken)) * 10**(ERC20(address(sellToken)).decimals()) / 10**18,
+            10**(ERC20(address(buyToken)).decimals())
+        );
     }
 
     /// @inheritdoc ISwapAdapter
@@ -197,11 +199,9 @@ contract IntegralSwapAdapter is ISwapAdapter {
             uint256 limitMax1
         ) = relayer.getPoolState(address(sellToken), address(buyToken));
 
-        uint256[] memory limits_ = new uint256[](2);
-        limits_[0] = limitMax0;
-        limits_[1] = limitMax1;
-
-        return limits_;
+        limits = new uint256[](2);
+        limits[0] = limitMax0;
+        limits[1] = limitMax1;
     }
 }
 

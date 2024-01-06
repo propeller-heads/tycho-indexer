@@ -42,9 +42,9 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             uint256 limitMax1
         ) = relayer.getPoolState(address(sellToken), address(buyToken));
  
-        uint256[] memory limits_ = new uint256[](2);
-        limits_[0] = limitMin0;
-        limits_[1] = limitMin1;
+        limits = new uint256[](2);
+        limits[0] = limitMin0;
+        limits[1] = limitMin1;
     }
  
     function testPriceFuzzIntegral(uint256 amount0, uint256 amount1) public {
