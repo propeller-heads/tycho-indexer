@@ -30,14 +30,9 @@ contract IntegralSwapAdapter is ISwapAdapter {
         uint256[] memory _specifiedAmounts
     ) external view override returns (Fraction[] memory _prices) {
         _prices = new Fraction[](_specifiedAmounts.length);
-
-        uint256 price_ = relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken));
-
+        
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            _prices[i] = Fraction(
-                relayer.getPriceByTokenAddresses(address(_sellToken), address(_buyToken)) * 10**(ERC20(address(_sellToken)).decimals()) / 10**18,
-                10**(ERC20(address(_buyToken)).decimals())
-            );
+            _prices[i] = getPriceAt(address(_sellToken), address(_buyToken));
         }
     }
 
@@ -62,10 +57,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
                 buy(sellToken, buyToken, specifiedAmount);
         }
         trade.gasUsed = gasBefore - gasleft();
-        trade.price = Fraction(
-            relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken)) * 10**(ERC20(address(sellToken)).decimals()) / 10**18,
-            10**(ERC20(address(buyToken)).decimals())
-        );
+        trade.price = getPriceAt(address(sellToken), address(buyToken));
     }
 
     /// @inheritdoc ISwapAdapter
@@ -202,6 +194,20 @@ contract IntegralSwapAdapter is ISwapAdapter {
         limits = new uint256[](2);
         limits[0] = limitMax0;
         limits[1] = limitMax1;
+    }
+
+    /// @notice Get swap price including fee
+    /// @param sellToken token to sell
+    /// @param buyToken token to buy
+    function getPriceAt(address sellToken, address buyToken) internal view returns(Fraction memory) {
+        uint256 priceWithoutFee = relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken));
+        ITwapFactory factory = ITwapFactory(relayer.factory());
+        address pairAddress = factory.getPair(address(sellToken), address(buyToken));
+
+        return Fraction(
+            priceWithoutFee * 10**18,
+            10**(ERC20(sellToken).decimals()) * 10**18 * (10**18 - relayer.swapFee(pairAddress)) / 10**(ERC20(buyToken).decimals())
+        );
     }
 }
 
