@@ -70,7 +70,18 @@ contract IntegralSwapAdapter is ISwapAdapter {
         override
         returns (uint256[] memory limits)
     {
-        return _getLimits(poolId, sellToken, buyToken);
+        (
+            ,
+            ,
+            ,
+            uint256 limitMax0,
+            ,
+            uint256 limitMax1
+        ) = relayer.getPoolState(address(sellToken), address(buyToken));
+
+        limits = new uint256[](2);
+        limits[0] = limitMax0;
+        limits[1] = limitMax1;
     }
 
     /// @inheritdoc ISwapAdapter
@@ -177,22 +188,6 @@ contract IntegralSwapAdapter is ISwapAdapter {
         }));
 
         return amountIn;
-    }
-
-    /// @notice Internal counterpart of _getLimits
-    function _getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken) internal view returns (uint256[] memory limits) {
-        (
-            uint256 price_,
-            uint256 fee,
-            ,
-            uint256 limitMax0,
-            ,
-            uint256 limitMax1
-        ) = relayer.getPoolState(address(sellToken), address(buyToken));
-
-        limits = new uint256[](2);
-        limits[0] = limitMax0;
-        limits[1] = limitMax1;
     }
 
     /// @notice Get swap price including fee
