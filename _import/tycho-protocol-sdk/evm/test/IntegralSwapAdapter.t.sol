@@ -175,7 +175,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             IERC20(t1)
         );
  
-        assertEq(res.length, 3);
+        assertEq(res.length, 4);
     }
  
     function testGetTokensIntegral() public {
