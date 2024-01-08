@@ -27,7 +27,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
     /// it will always be the same (pre and post trade) and independent of the amounts swapped,
     /// but we still return an array of length=specifiedAmounts.length with same values to make sure the return value is the expected from caller.
     function price(
-        bytes32 _poolId,
+        bytes32,
         IERC20 _sellToken,
         IERC20 _buyToken,
         uint256[] memory _specifiedAmounts
@@ -41,7 +41,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
 
     /// @inheritdoc ISwapAdapter
     function swap(
-        bytes32 poolId,
+        bytes32,
         IERC20 sellToken,
         IERC20 buyToken,
         OrderSide side,
@@ -64,7 +64,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
-    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
         external
         view
         override
@@ -85,7 +85,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
-    function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
+    function getCapabilities(bytes32, IERC20, IERC20)
         external
         pure
         override
