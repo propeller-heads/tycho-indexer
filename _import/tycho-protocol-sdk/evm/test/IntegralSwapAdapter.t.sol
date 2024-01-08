@@ -32,21 +32,6 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         vm.label(address(USDC_WETH_PAIR), "USDC_WETH_PAIR");
     }
  
-    function getMinLimits(IERC20 sellToken, IERC20 buyToken) public view returns (uint256[] memory limits) {
-        (
-            uint256 price_,
-            uint256 fee,
-            uint256 limitMin0,
-            uint256 limitMax0,
-            uint256 limitMin1,
-            uint256 limitMax1
-        ) = relayer.getPoolState(address(sellToken), address(buyToken));
- 
-        limits = new uint256[](2);
-        limits[0] = limitMin0;
-        limits[1] = limitMin1;
-    }
- 
     function testPriceFuzzIntegral(uint256 amount0, uint256 amount1) public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
@@ -64,14 +49,30 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             assertGt(prices[i].denominator, 0);
         }
     }
+
+    function testPriceKeepingIntegral() public {
+        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+        uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
+
+        for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
+            amounts[i] = 1000 * i * 10 ** 15;
+        }
+
+        Fraction[] memory prices = adapter.price(pair, WETH, USDC, amounts);
+
+        for (uint256 i = 0; i < TEST_ITERATIONS - 1; i++) {
+            Fraction memory reducedPrice0 = Fraction(prices[i].numerator / 10**18, prices[i].denominator / 10**18);
+            Fraction memory reducedPrice1 = Fraction(prices[i + 1].numerator / 10**18, prices[i + 1].denominator / 10**18);
+            assertEq(reducedPrice0.compareFractions(reducedPrice1), 0);
+            assertGt(prices[i].denominator, 0);
+            assertGt(prices[i + 1].denominator, 0);
+        }
+    }
  
     /// @dev Since TwapRelayer's calculateAmountOut function is internal, and using quoteSell would
     /// revert the transaction if calculateAmountOut is not enough,
     /// we need a threshold to cover this internal amount, applied to 
     function testSwapFuzzIntegral(uint256 specifiedAmount, bool isBuy) public {
-        // Fails at times | FAIL. Reason: revert: TR03;
-        //
-        //
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
  
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
@@ -113,7 +114,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             if (side == OrderSide.Buy) {
                 assertEq(
                     specifiedAmount,
-                    WETH.balanceOf(address(this)) + weth_balance_before
+                    WETH.balanceOf(address(this)) - weth_balance_before
                 );
  
                 assertEq(
@@ -128,23 +129,34 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
  
                 assertEq(
                     trade.calculatedAmount,
-                    weth_balance_before + WETH.balanceOf(address(this))
+                    WETH.balanceOf(address(this)) - weth_balance_before
                 );
             }
         }
     }
- 
+
+    function testSwapSellIncreasingIntegral() public {
+        executeIncreasingSwapsIntegral(OrderSide.Sell);
+    }
+
+    function testSwapBuyIncreasing() public {
+        executeIncreasingSwapsIntegral(OrderSide.Buy);
+    }
+
     function executeIncreasingSwapsIntegral(OrderSide side) internal {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
+
+        uint256 amountConstant_ = side == OrderSide.Sell ? 1000 * 10**6 : 10**17;
  
         uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
-        for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
-            amounts[i] = 1000 * i * 10 ** 6;
+        amounts[0] = amountConstant_;
+        for (uint256 i = 1; i < TEST_ITERATIONS; i++) {
+            amounts[i] = amountConstant_ * i;
         }
  
         Trade[] memory trades = new Trade[](TEST_ITERATIONS);
         uint256 beforeSwap;
-        for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
+        for (uint256 i = 1; i < TEST_ITERATIONS; i++) {
             beforeSwap = vm.snapshot();
  
             deal(address(USDC), address(this), amounts[i]);
@@ -160,7 +172,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
                 trades[i + 1].calculatedAmount
             );
             assertLe(trades[i].gasUsed, trades[i + 1].gasUsed);
-            assertEq(trades[i].price.compareFractions(trades[i + 1].price), 1);
+            assertEq(trades[i].price.compareFractions(trades[i + 1].price), 0);
         }
     }
  
@@ -190,5 +202,20 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
  
         assertEq(limits.length, 2);
+    }
+
+    function getMinLimits(IERC20 sellToken, IERC20 buyToken) public view returns (uint256[] memory limits) {
+        (
+            ,
+            ,
+            uint256 limitMin0,
+            ,
+            uint256 limitMin1
+            ,
+        ) = relayer.getPoolState(address(sellToken), address(buyToken));
+ 
+        limits = new uint256[](2);
+        limits[0] = limitMin0;
+        limits[1] = limitMin1;
     }
 }

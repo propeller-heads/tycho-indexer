@@ -46,7 +46,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
         IERC20 buyToken,
         OrderSide side,
         uint256 specifiedAmount
-    ) external returns (Trade memory trade) {
+    ) external override returns (Trade memory trade) {
         if (specifiedAmount == 0) {
             return trade;
         }
