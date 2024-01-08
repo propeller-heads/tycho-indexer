@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @dev Integral submitted deadline of 3600 seconds (1 hour) to Paraswap, but it is not strictly necessary to be this long
 /// as the contract allows less durations, we use 1000 seconds (15 minutes) as a deadline
@@ -10,6 +11,8 @@ uint256 constant SWAP_DEADLINE_SEC = 1000;
 
 /// @title Integral Swap Adapter
 contract IntegralSwapAdapter is ISwapAdapter {
+    using SafeERC20 for IERC20;
+
     ITwapRelayer immutable relayer;
 
     constructor(address relayer_) {
@@ -124,21 +127,19 @@ contract IntegralSwapAdapter is ISwapAdapter {
         IERC20 buyToken,
         uint256 amount
     ) internal returns (uint256) {
-        address swapper = msg.sender;
-
         uint256 amountOut = relayer.quoteSell(address(sellToken), address(buyToken), amount);
         if (amountOut == 0) {
             revert Unavailable("AmountOut is zero!");
         }
 
-        sellToken.transferFrom(msg.sender, address(this), amount);
-        sellToken.approve(address(relayer), amount);
+        sellToken.safeTransferFrom(msg.sender, address(this), amount);
+        sellToken.safeIncreaseAllowance(address(relayer), amount);
 
         relayer.sell(ITwapRelayer.SellParams({
             tokenIn: address(sellToken),
             tokenOut: address(buyToken),
             wrapUnwrap: false,
-            to: swapper,
+            to: msg.sender,
             submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
             amountIn: amount,
             amountOutMin: amountOut
@@ -157,21 +158,19 @@ contract IntegralSwapAdapter is ISwapAdapter {
         IERC20 buyToken,
         uint256 amountBought
     ) internal returns (uint256) {
-        address swapper = msg.sender;
-
         uint256 amountIn = relayer.quoteBuy(address(sellToken), address(buyToken), amountBought);
         if (amountIn == 0) {
             revert Unavailable("AmountIn is zero!");
         }
 
-        sellToken.transferFrom(msg.sender, address(this), amountIn);
-        sellToken.approve(address(relayer), amountIn);
+        sellToken.safeTransferFrom(msg.sender, address(this), amountIn);
+        sellToken.safeIncreaseAllowance(address(relayer), amountIn);
 
         relayer.buy(ITwapRelayer.BuyParams({
             tokenIn: address(sellToken),
             tokenOut: address(buyToken),
             wrapUnwrap: false,
-            to: swapper,
+            to: msg.sender,
             submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
             amountInMax: amountIn,
             amountOut: amountBought
