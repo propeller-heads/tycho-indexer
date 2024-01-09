@@ -81,7 +81,7 @@ use crate::{
     extractor::evm::ProtocolState,
     hex_bytes::Bytes,
     models::{Chain, ExtractionState, ProtocolSystem},
-    storage::postgres::orm,
+    storage::postgres::{orm, orm::ProtocolType},
 };
 
 pub mod postgres;
@@ -501,6 +501,21 @@ pub trait ProtocolGateway {
     //     system: Option<ProtocolSystem>,
     //     ids: Option<&[&str]>,
     // ) -> Result<Vec<Self::ProtocolComponent>, StorageError>;
+
+    /// Stores new found ProtocolTypes or update if existing.
+    ///
+    /// # Parameters
+    /// - `new`  The new protocol types.
+    ///
+    /// # Returns
+    /// Ok if stored successfully, may error if:
+    /// - related entities are not in store yet.
+    /// - type with same is id already present.
+    async fn upsert_protocol_types(
+        &self,
+        new: &[&ProtocolType],
+        conn: &mut Self::DB,
+    ) -> Result<(), StorageError>;
 
     /// Stores new found ProtocolComponents.
     ///
