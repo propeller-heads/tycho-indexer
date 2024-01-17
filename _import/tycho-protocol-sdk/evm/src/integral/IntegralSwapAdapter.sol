@@ -8,6 +8,7 @@ import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/Safe
 /// @dev Integral submitted deadline of 3600 seconds (1 hour) to Paraswap, but it is not strictly necessary to be this long
 /// as the contract allows less durations, we use 1000 seconds (15 minutes) as a deadline
 uint256 constant SWAP_DEADLINE_SEC = 1000;
+uint256 constant STANDARD_TOKEN_DECIMALS = 10**18;
 
 /// @title Integral Swap Adapter
 contract IntegralSwapAdapter is ISwapAdapter {
@@ -33,10 +34,41 @@ contract IntegralSwapAdapter is ISwapAdapter {
         uint256[] memory _specifiedAmounts
     ) external view override returns (Fraction[] memory _prices) {
         _prices = new Fraction[](_specifiedAmounts.length);
+        uint256 price = getPriceAt(address(_sellToken), address(_buyToken));
         
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            _prices[i] = getPriceAt(address(_sellToken), address(_buyToken));
+            _prices[i] = price;
         }
+    }
+
+    /// @notice Get swap price including fee
+    /// @param sellToken token to sell
+    /// @param buyToken token to buy
+    function getPriceAt(address sellToken, address buyToken) internal view returns(Fraction memory) {
+        uint256 priceWithoutFee = relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken));
+        ITwapFactory factory = ITwapFactory(relayer.factory());
+        address pairAddress = factory.getPair(address(sellToken), address(buyToken));
+
+        // get swapFee formatted; swapFee is a constant
+        uint256 swapFeeFormatted = (STANDARD_TOKEN_DECIMALS - relayer.swapFee(pairAddress));
+
+        // get token decimals
+        uint256 sellTokenDecimals = 10**ERC20(sellToken).decimals();
+        uint256 buyTokenDecimals = 10**ERC20(buyToken).decimals();
+
+        /**
+         * @dev
+         * Denominator works as a "standardizer" for the price rather than a reserve value
+         * as Integral takes prices from oracles and do not operate with reserves;
+         * it is therefore used to maintain integrity for the Fraction division,
+         * as numerator and denominator could have different token decimals(es. ETH(18)-USDC(6)).
+         * Both numerator and denominator are also multiplied by STANDARD_TOKEN_DECIMALS
+         * to ensure that precision losses are minimized or null.
+         */
+        return Fraction(
+            priceWithoutFee * STANDARD_TOKEN_DECIMALS,
+            STANDARD_TOKEN_DECIMALS * sellTokenDecimals * swapFeeFormatted / buyTokenDecimals
+        );
     }
 
     /// @inheritdoc ISwapAdapter
@@ -154,7 +186,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
             to: msg.sender,
             submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
             amountIn: amount,
-            amountOutMin: amountOut
+            amountOutMin: 0
         }));
 
         return amountOut;
@@ -189,20 +221,6 @@ contract IntegralSwapAdapter is ISwapAdapter {
         }));
 
         return amountIn;
-    }
-
-    /// @notice Get swap price including fee
-    /// @param sellToken token to sell
-    /// @param buyToken token to buy
-    function getPriceAt(address sellToken, address buyToken) internal view returns(Fraction memory) {
-        uint256 priceWithoutFee = relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken));
-        ITwapFactory factory = ITwapFactory(relayer.factory());
-        address pairAddress = factory.getPair(address(sellToken), address(buyToken));
-
-        return Fraction(
-            priceWithoutFee * 10**18,
-            10**(ERC20(sellToken).decimals()) * 10**18 * (10**18 - relayer.swapFee(pairAddress)) / 10**(ERC20(buyToken).decimals())
-        );
     }
 }
 

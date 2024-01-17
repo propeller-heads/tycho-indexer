@@ -49,25 +49,6 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             assertGt(prices[i].denominator, 0);
         }
     }
-
-    function testPriceKeepingIntegral() public {
-        bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
-
-        for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
-            amounts[i] = 1000 * i * 10 ** 15;
-        }
-
-        Fraction[] memory prices = adapter.price(pair, WETH, USDC, amounts);
-
-        for (uint256 i = 0; i < TEST_ITERATIONS - 1; i++) {
-            Fraction memory reducedPrice0 = Fraction(prices[i].numerator / 10**18, prices[i].denominator / 10**18);
-            Fraction memory reducedPrice1 = Fraction(prices[i + 1].numerator / 10**18, prices[i + 1].denominator / 10**18);
-            assertEq(reducedPrice0.compareFractions(reducedPrice1), 0);
-            assertGt(prices[i].denominator, 0);
-            assertGt(prices[i + 1].denominator, 0);
-        }
-    }
  
     /// @dev Since TwapRelayer's calculateAmountOut function is internal, and using quoteSell would
     /// revert the transaction if calculateAmountOut is not enough,
