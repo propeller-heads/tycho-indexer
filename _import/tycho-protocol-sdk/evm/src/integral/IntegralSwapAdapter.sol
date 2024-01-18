@@ -41,36 +41,6 @@ contract IntegralSwapAdapter is ISwapAdapter {
         }
     }
 
-    /// @notice Get swap price including fee
-    /// @param sellToken token to sell
-    /// @param buyToken token to buy
-    function getPriceAt(address sellToken, address buyToken) internal view returns(Fraction memory) {
-        uint256 priceWithoutFee = relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken));
-        ITwapFactory factory = ITwapFactory(relayer.factory());
-        address pairAddress = factory.getPair(address(sellToken), address(buyToken));
-
-        // get swapFee formatted; swapFee is a constant
-        uint256 swapFeeFormatted = (STANDARD_TOKEN_DECIMALS - relayer.swapFee(pairAddress));
-
-        // get token decimals
-        uint256 sellTokenDecimals = 10**ERC20(sellToken).decimals();
-        uint256 buyTokenDecimals = 10**ERC20(buyToken).decimals();
-
-        /**
-         * @dev
-         * Denominator works as a "standardizer" for the price rather than a reserve value
-         * as Integral takes prices from oracles and do not operate with reserves;
-         * it is therefore used to maintain integrity for the Fraction division,
-         * as numerator and denominator could have different token decimals(es. ETH(18)-USDC(6)).
-         * Both numerator and denominator are also multiplied by STANDARD_TOKEN_DECIMALS
-         * to ensure that precision losses are minimized or null.
-         */
-        return Fraction(
-            priceWithoutFee * STANDARD_TOKEN_DECIMALS,
-            STANDARD_TOKEN_DECIMALS * sellTokenDecimals * swapFeeFormatted / buyTokenDecimals
-        );
-    }
-
     /// @inheritdoc ISwapAdapter
     function swap(
         bytes32,
@@ -221,6 +191,36 @@ contract IntegralSwapAdapter is ISwapAdapter {
         }));
 
         return amountIn;
+    }
+
+    /// @notice Get swap price including fee
+    /// @param sellToken token to sell
+    /// @param buyToken token to buy
+    function getPriceAt(address sellToken, address buyToken) internal view returns(Fraction memory) {
+        uint256 priceWithoutFee = relayer.getPriceByTokenAddresses(address(sellToken), address(buyToken));
+        ITwapFactory factory = ITwapFactory(relayer.factory());
+        address pairAddress = factory.getPair(address(sellToken), address(buyToken));
+
+        // get swapFee formatted; swapFee is a constant
+        uint256 swapFeeFormatted = (STANDARD_TOKEN_DECIMALS - relayer.swapFee(pairAddress));
+
+        // get token decimals
+        uint256 sellTokenDecimals = 10**ERC20(sellToken).decimals();
+        uint256 buyTokenDecimals = 10**ERC20(buyToken).decimals();
+
+        /**
+         * @dev
+         * Denominator works as a "standardizer" for the price rather than a reserve value
+         * as Integral takes prices from oracles and do not operate with reserves;
+         * it is therefore used to maintain integrity for the Fraction division,
+         * as numerator and denominator could have different token decimals(es. ETH(18)-USDC(6)).
+         * Both numerator and denominator are also multiplied by STANDARD_TOKEN_DECIMALS
+         * to ensure that precision losses are minimized or null.
+         */
+        return Fraction(
+            priceWithoutFee * STANDARD_TOKEN_DECIMALS,
+            STANDARD_TOKEN_DECIMALS * sellTokenDecimals * swapFeeFormatted / buyTokenDecimals
+        );
     }
 }
 
