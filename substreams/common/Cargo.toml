@@ -1,0 +1,11 @@
+[package]
+name = "substreams-common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+prost = "^0.11.0"
+regex = "1.6.0"
+substreams.workspace = true
+substreams-ethereum.workspace = true
+thiserror = "1.0.35"

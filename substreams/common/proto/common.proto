@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package messari.common.v1;
+
+message Transaction {
+  string hash = 1; // bytes: Hash
+  uint64 nonce = 2;
+  uint64 block_number = 3;
+  uint64 block_timestamp = 4;
+  string gas_price = 5; // string: BigInt, in wei
+  uint64 gas_limit = 6;
+}
+
+message Address {
+  string address = 1;
+}
+
+message Addresses {
+  repeated Address items = 1;
+}

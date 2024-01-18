@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package messari.erc20.v1;
+
+message ERC20Tokens {
+  repeated ERC20Token items = 1;
+}
+
+message ERC20Token {
+  string address = 1;
+  string name = 2;
+  string symbol = 3;
+  uint64 decimals = 4;
+}
+
+message TransferEvents {
+  repeated TransferEvent items = 1;
+}
+
+message TransferEvent {
+  string tx_hash = 1;
+  uint32 log_index = 2;
+  uint64 log_ordinal = 3;
+  string token_address = 4;
+  string from = 5;
+  string to = 6;
+  string amount = 7; // BigInt, in token's native amount
+}
+
+message TokenBalance {
+  string token_address = 1;
+  string balance = 2; // BigInt, in token's native amount
+}
+
+message Account {
+  string address = 1;
+  repeated TokenBalance balances = 2;
+}
