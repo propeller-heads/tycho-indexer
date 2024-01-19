@@ -84,6 +84,11 @@ contract IntegralSwapAdapter is ISwapAdapter {
         limits = new uint256[](2);
         limits[0] = limitMax0;
         limits[1] = limitMax1;
+        /** 
+         * @dev minLimits in integral are the args: 2(for sellToken, the one before limitMax0)
+         * and 4(for buyToken, the one before limitMax1) of the function relayer.getPoolState(sellToken, buyToken);
+         * an implementation of them can be found in the test of this adapter
+         */
     }
 
     /// @inheritdoc ISwapAdapter
