@@ -1,10 +1,14 @@
 [workspace]
+<<<<<<< HEAD
 members = [
     "tycho-indexer",
     "substreams/common", "substreams/substreams-helper", "substreams/ethereum-ambient", "substreams/ethereum-uniswap-v2",
     "tycho-client",
     "tycho-types",
 ]
+=======
+members = ["tycho-indexer", "substreams/common", "substreams/substreams-helper", "substreams/ethereum-ambient", "substreams/ethereum-uniswap-v2"]
+>>>>>>> 158d0ac (Finish map_pool_created)
 resolver = "2"
 
 # profile for building substreams crates
@@ -15,6 +19,7 @@ opt-level = 'z'
 strip = "debuginfo"
 
 [workspace.dependencies]
+<<<<<<< HEAD
 chrono = { version = "0.4.26", features = ["serde"] }
 serde_json = "1.0.105"
 serde = { version = "1.0", features = ["rc"] }
@@ -47,6 +52,8 @@ utoipa = { version = "4.2.0", features = ["chrono"] }
 ethers = "^2.0.2"
 diesel = { version = "2.1.0", features = ["postgres", "chrono", "serde_json"] }
 diesel-async = { version = "0.4.1", features = ["postgres", "deadpool"] }
+=======
+>>>>>>> 158d0ac (Finish map_pool_created)
 substreams = "0.5"
 substreams-ethereum = "0.9"
 regex = "1.6.0"
@@ -54,5 +61,9 @@ prost = "0.11"
 prost-types = "0.10.1"
 hex-literal = "0.4.1"
 ethabi = "18.0.0"
+<<<<<<< HEAD
+=======
+hex = "0.4.2"
+>>>>>>> 158d0ac (Finish map_pool_created)
 bytes = "1.5.0"
 anyhow = "1.0.75"

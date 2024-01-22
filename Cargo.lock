@@ -4473,9 +4473,13 @@ dependencies = [
  "ethabi 18.0.0",
  "hex",
  "hex-literal 0.4.1",
+<<<<<<< HEAD
  "num-bigint",
  "prost 0.11.9",
  "quote",
+=======
+ "prost 0.11.9",
+>>>>>>> 158d0ac (Finish map_pool_created)
  "substreams",
  "substreams-ethereum",
  "tiny-keccak",
