@@ -15,7 +15,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../../target/wasm32-unknown-unknown/substreams/substreams_ethereum_uniswap_v2.wasm
+    file: ../../target/wasm32-unknown-unknown/release/substreams_ethereum_uniswap_v2.wasm
 
 modules:
   - name: map_pool_created
@@ -37,7 +37,6 @@ modules:
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_pools
-        mode: deltas
     output:
       type: proto:tycho.evm.uniswap.v2.Events
 
@@ -47,4 +46,7 @@ modules:
     valueType: bigint
     inputs:
       - map: map_pool_events
+      - map: map_pool_created
+    output:
+      type: proto:tycho.evm.state.v1.BlockEntityChanges
 

@@ -1,5 +1,7 @@
-use std::ops::{Div, Mul};
-use std::str::FromStr;
+use std::{
+    ops::{Div, Mul},
+    str::FromStr,
+};
 
 use num_bigint::BigUint;
 use pad::PadStr;
@@ -64,16 +66,14 @@ pub fn divide_by_decimals(big_float_amount: BigDecimal, decimals: u64) -> BigDec
 }
 
 pub fn get_balance_gain(balance_change: &BalanceChange) -> BigInt {
-    match (
-        balance_change.old_value.as_ref(),
-        balance_change.new_value.as_ref(),
-    ) {
+    match (balance_change.old_value.as_ref(), balance_change.new_value.as_ref()) {
         (Some(old_value_raw), Some(new_value_raw)) => {
             let old_value = old_value_raw.deserialize();
             let new_value = new_value_raw.deserialize();
             new_value - old_value
         }
-        (Some(old_value), None) => old_value.deserialize(), // Maybe we should panic if this happens also..
+        (Some(old_value), None) => old_value.deserialize(), /* Maybe we should panic if this */
+        // happens also..
         (None, Some(new_value)) => new_value.deserialize(),
         (None, None) => BigInt::zero(),
     }

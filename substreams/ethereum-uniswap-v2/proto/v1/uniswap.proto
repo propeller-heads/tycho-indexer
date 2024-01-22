@@ -7,15 +7,13 @@ message Pools {
 }
 
 message Pool {
-  string name = 1;
-  string symbol = 2;
-  string address = 3;
+  bytes address = 1;
 
-  string token0 = 4;
-  string token1 = 5;
+  bytes token0 = 2;
+  bytes token1 = 3;
 
-  int64 created_timestamp = 6;
-  int64 created_block_number = 7;
+  int64 created_timestamp = 4;
+  int64 created_block_number = 5;
 }
 
 message Events {
