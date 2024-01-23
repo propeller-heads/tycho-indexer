@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 
 /// @dev Wrapped imports (incl. ISwapAdapter and IERC20) are included in utils
 import "./AngleUtils.sol";
+import "forge-std/Test.sol";
 
 /// @title AngleAdapter
 contract AngleAdapter is ISwapAdapter {
@@ -59,7 +60,7 @@ contract AngleAdapter is ISwapAdapter {
     /// @dev mint may have no limits, but we underestimate them to make sure, with the same amount of sellToken.
     /// We use the quoteIn (incl. fee), because calculating fee requires a part of the implementation of
     /// the Angle Diamond Storage, and therefore redundant functions and excessive contract size, with an high complexity.
-    /// In addition, we underestimate to * 0.9 to ensure swaps with OrderSide.Buy won't fail anyway.
+    /// In addition, we underestimate to / RESERVE_LIMIT_FACTOR to ensure swaps with OrderSide.Buy won't fail anyway.
     function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
         external
         view
@@ -79,8 +80,9 @@ contract AngleAdapter is ISwapAdapter {
             else {
                 limits[0] = sellToken.balanceOf(transmuterAddress);
             }
-            limits[0] = limits[0] * 90 / 100;
             limits[1] = transmuter.quoteIn(limits[0], sellTokenAddress, buyTokenAddress);
+            limits[1] = limits[1] / RESERVE_LIMIT_FACTOR;
+            limits[0] = limits[0] / RESERVE_LIMIT_FACTOR;
         }
         else { // burn(sell agToken)
             Collateral memory collatInfo = transmuter.getCollateralInfo(buyTokenAddress);
@@ -91,9 +93,9 @@ contract AngleAdapter is ISwapAdapter {
             else {
                 collatLimit = buyToken.balanceOf(transmuterAddress);
             }
-            collatLimit = collatLimit * 90 / 100;
             limits[0] = transmuter.quoteIn(collatLimit, buyTokenAddress, sellTokenAddress);
-            limits[1] = collatLimit;
+            limits[1] = collatLimit / RESERVE_LIMIT_FACTOR;
+            limits[0] = limits[0] / RESERVE_LIMIT_FACTOR;
         }
     }
 
@@ -140,6 +142,7 @@ contract AngleAdapter is ISwapAdapter {
         view
         returns (Fraction memory)
     {
+        console.log("log", amountIn, tokenIn, tokenOut);
         uint256 amountOut = transmuter.quoteIn(amountIn, tokenIn, tokenOut);
         return Fraction(
             amountOut,
