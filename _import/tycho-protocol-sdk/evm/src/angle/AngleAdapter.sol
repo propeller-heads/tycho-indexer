@@ -53,6 +53,7 @@ contract AngleAdapter is ISwapAdapter {
         limits = new uint256[](2);
         address sellTokenAddress = address(sellToken);
         address buyTokenAddress = address(buyToken);
+        address transmuterAddress = address(transmuter);
 
         if(buyTokenAddress == transmuter.agToken()) { // mint(buy agToken)
             Collateral memory collatInfo = transmuter.getCollateralInfo(sellTokenAddress);
@@ -60,7 +61,7 @@ contract AngleAdapter is ISwapAdapter {
                 limits[0] = LibManager.maxAvailable(collatInfo.managerData.config);
             }
             else {
-                limits[0] = sellToken.balanceOf(address(transmuter));
+                limits[0] = sellToken.balanceOf(transmuterAddress);
             }
             limits[1] = transmuter.quoteIn(limits[0], sellTokenAddress, buyTokenAddress);
         }
@@ -71,7 +72,7 @@ contract AngleAdapter is ISwapAdapter {
                 collatLimit = LibManager.maxAvailable(collatInfo.managerData.config);
             }
             else {
-                collatLimit = buyToken.balanceOf(address(transmuter));
+                collatLimit = buyToken.balanceOf(transmuterAddress);
             }
             limits[0] = transmuter.quoteIn(collatLimit, buyTokenAddress, sellTokenAddress);
             limits[1] = collatLimit;
@@ -102,11 +103,13 @@ contract AngleAdapter is ISwapAdapter {
         tokens[collateralsAddresses.length] = IERC20(transmuter.agToken());
     }
 
-    function getPoolIds(uint256 offset, uint256 limit)
+    function getPoolIds(uint256, uint256)
         external
-        returns (bytes32[] memory ids)
+        pure
+        override
+        returns (bytes32[] memory)
     {
-        revert NotImplemented("TemplateSwapAdapter.getPoolIds");
+        revert NotImplemented("AngleAdapter.getPoolIds");
     }
 
     /// @notice Calculates pool prices for specified amounts
