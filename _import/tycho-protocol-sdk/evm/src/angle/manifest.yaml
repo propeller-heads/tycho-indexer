@@ -1,7 +1,7 @@
 # information about the author helps us reach out in case of issues.
 author:
-  name: YourCompany
-  email: developer@yourcompany.xyz
+  name: Propellerheads.xyz
+  email: alan@propellerheads.xyz
 
 # Protocol Constants
 constants:
@@ -13,7 +13,7 @@ constants:
     - PriceFunction
 
 # The file containing the adapter contract
-contract: TemplateSwapAdapter.sol
+contract: AngleAdapter.sol
 
 # Deployment instances used to generate chain specific bytecode.
 instances:
