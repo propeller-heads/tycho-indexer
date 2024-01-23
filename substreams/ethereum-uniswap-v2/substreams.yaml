@@ -20,6 +20,7 @@ binaries:
 modules:
   - name: map_pool_created
     kind: map
+    initialBlock: 10008300
     inputs:
       - source: sf.ethereum.type.v2.Block
     output:
@@ -34,19 +35,9 @@ modules:
 
   - name: map_pool_events
     kind: map
+    initialBlock: 10008300
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_pools
     output:
       type: proto:tycho.evm.uniswap.v2.Events
-
-  - name: store_input_token_balances
-    kind: store
-    updatePolicy: set
-    valueType: bigint
-    inputs:
-      - map: map_pool_events
-      - map: map_pool_created
-    output:
-      type: proto:tycho.evm.state.v1.BlockEntityChanges
-
