@@ -2,7 +2,8 @@
 pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.13;
 
-import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+/// @dev Wrapped imports (incl. ISwapAdapter and IERC20) are included in utils
+import "./AngleUtils.sol";
 
 /// @title AngleAdapter
 contract AngleAdapter is ISwapAdapter {
@@ -13,6 +14,7 @@ contract AngleAdapter is ISwapAdapter {
         transmuter = _transmuter;
     }
 
+    /// @inheritdoc ISwapAdapter
     function price(
         bytes32,
         IERC20 _sellToken,
@@ -38,11 +40,42 @@ contract AngleAdapter is ISwapAdapter {
         revert NotImplemented("TemplateSwapAdapter.swap");
     }
 
+    /// @inheritdoc ISwapAdapter
+    /// @dev mint may have no limits, but we underestimate them to make sure, with the same amount of sellToken.
+    /// We use the quoteIn (incl. fee), because calculating fee requires a part of the implementation of
+    /// the Angle Diamond Storage, and therefore redundant functions and excessive contract size, with an high complexity.
     function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
         external
+        view
+        override
         returns (uint256[] memory limits)
     {
-        revert NotImplemented("TemplateSwapAdapter.getLimits");
+        limits = new uint256[](2);
+        address sellTokenAddress = address(sellToken);
+        address buyTokenAddress = address(buyToken);
+
+        if(buyTokenAddress == transmuter.agToken()) { // mint(buy agToken)
+            Collateral memory collatInfo = transmuter.getCollateralInfo(sellTokenAddress);
+            if(collatInfo.isManaged > 0) {
+                limits[0] = LibManager.maxAvailable(collatInfo.managerData.config);
+            }
+            else {
+                limits[0] = sellToken.balanceOf(address(transmuter));
+            }
+            limits[1] = transmuter.quoteIn(limits[0], sellTokenAddress, buyTokenAddress);
+        }
+        else { // burn(sell agToken)
+            Collateral memory collatInfo = transmuter.getCollateralInfo(buyTokenAddress);
+            uint256 collatLimit;
+            if(collatInfo.isManaged > 0) {
+                collatLimit = LibManager.maxAvailable(collatInfo.managerData.config);
+            }
+            else {
+                collatLimit = buyToken.balanceOf(address(transmuter));
+            }
+            limits[0] = transmuter.quoteIn(collatLimit, buyTokenAddress, sellTokenAddress);
+            limits[1] = collatLimit;
+        }
     }
 
     function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
@@ -52,11 +85,21 @@ contract AngleAdapter is ISwapAdapter {
         revert NotImplemented("TemplateSwapAdapter.getCapabilities");
     }
 
-    function getTokens(bytes32 poolId)
+    /// @inheritdoc ISwapAdapter
+    /// @dev Since Angle has no pool IDs but supports 3 tokens(agToken and the collaterals),
+    /// we return all the available collaterals and the agToken(agEUR)
+    function getTokens(bytes32)
         external
+        view
+        override
         returns (IERC20[] memory tokens)
     {
-        revert NotImplemented("TemplateSwapAdapter.getTokens");
+        address[] memory collateralsAddresses = transmuter.getCollateralList();
+        tokens = new IERC20[](collateralsAddresses.length + 1);
+        for(uint256 i = 0; i < collateralsAddresses.length; i++) {
+            tokens[i] = IERC20(collateralsAddresses[i]);
+        }
+        tokens[collateralsAddresses.length] = IERC20(transmuter.agToken());
     }
 
     function getPoolIds(uint256 offset, uint256 limit)
@@ -85,39 +128,6 @@ contract AngleAdapter is ISwapAdapter {
 }
 
 abstract contract ITransmuter {
-    struct Tuple6871229 {
-        address facetAddress;
-        uint8 action;
-        bytes4[] functionSelectors;
-    }
-
-    struct Tuple1236461 {
-        address facetAddress;
-        bytes4[] functionSelectors;
-    }
-
-    struct Tuple3550792 {
-        uint8 isManaged;
-        uint8 isMintLive;
-        uint8 isBurnLive;
-        uint8 decimals;
-        uint8 onlyWhitelisted;
-        uint216 normalizedStables;
-        uint64[] xFeeMint;
-        int64[] yFeeMint;
-        uint64[] xFeeBurn;
-        int64[] yFeeBurn;
-        bytes oracleConfig;
-        bytes whitelistData;
-        Tuple5479340 managerData;
-    }
-
-    struct Tuple5479340 {
-        address[] subCollaterals;
-        bytes config;
-    }
-
-    function diamondCut(Tuple6871229[] memory _diamondCut, address _init, bytes memory _calldata) external {}
 
     function implementation() external view returns (address) {}
 
@@ -129,8 +139,6 @@ abstract contract ITransmuter {
 
     function facetFunctionSelectors(address _facet) external view returns (bytes4[] memory _facetFunctionSelectors) {}
 
-    function facets() external view returns (Tuple1236461[] memory facets_) {}
-
     function accessControlManager() external view returns (address) {}
 
     function agToken() external view returns (address) {}
@@ -141,7 +149,7 @@ abstract contract ITransmuter {
 
     function getCollateralDecimals(address collateral) external view returns (uint8) {}
 
-    function getCollateralInfo(address collateral) external view returns (Tuple3550792 memory) {}
+    function getCollateralInfo(address collateral) external view returns (Collateral memory) {}
 
     function getCollateralList() external view returns (address[] memory) {}
 
@@ -202,8 +210,6 @@ abstract contract ITransmuter {
     function revokeCollateral(address collateral) external {}
 
     function setAccessControlManager(address _newAccessControlManager) external {}
-
-    function setCollateralManager(address collateral, Tuple5479340 memory managerData) external {}
 
     function setOracle(address collateral, bytes memory oracleConfig) external {}
 
