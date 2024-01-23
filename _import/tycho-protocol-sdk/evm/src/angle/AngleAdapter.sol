@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 
 /// @dev Wrapped imports (incl. ISwapAdapter and IERC20) are included in utils
 import "./AngleUtils.sol";
-import "forge-std/Test.sol";
 
 /// @title AngleAdapter
 contract AngleAdapter is ISwapAdapter {
@@ -142,7 +141,6 @@ contract AngleAdapter is ISwapAdapter {
         view
         returns (Fraction memory)
     {
-        console.log("log", amountIn, tokenIn, tokenOut);
         uint256 amountOut = transmuter.quoteIn(amountIn, tokenIn, tokenOut);
         return Fraction(
             amountOut,
