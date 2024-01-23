@@ -30,6 +30,7 @@ contract AngleAdapter is ISwapAdapter {
         }
     }
 
+    /// @inheritdoc ISwapAdapter
     function swap(
         bytes32 poolId,
         IERC20 sellToken,
@@ -37,13 +38,28 @@ contract AngleAdapter is ISwapAdapter {
         OrderSide side,
         uint256 specifiedAmount
     ) external returns (Trade memory trade) {
-        revert NotImplemented("TemplateSwapAdapter.swap");
+        if (specifiedAmount == 0) {
+            return trade;
+        }
+
+        uint256 gasBefore = gasleft();
+        if (side == OrderSide.Sell) {
+            trade.calculatedAmount =
+                sell(sellToken, buyToken, specifiedAmount);
+            trade.price = getPriceAt(specifiedAmount, address(sellToken), address(buyToken));
+        } else {
+            trade.calculatedAmount =
+                buy(sellToken, buyToken, specifiedAmount);
+            trade.price = getPriceAt(specifiedAmount, address(buyToken), address(sellToken));
+        }
+        trade.gasUsed = gasBefore - gasleft();
     }
 
     /// @inheritdoc ISwapAdapter
     /// @dev mint may have no limits, but we underestimate them to make sure, with the same amount of sellToken.
     /// We use the quoteIn (incl. fee), because calculating fee requires a part of the implementation of
     /// the Angle Diamond Storage, and therefore redundant functions and excessive contract size, with an high complexity.
+    /// In addition, we underestimate to * 0.9 to ensure swaps with OrderSide.Buy won't fail anyway.
     function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
         external
         view
@@ -63,6 +79,7 @@ contract AngleAdapter is ISwapAdapter {
             else {
                 limits[0] = sellToken.balanceOf(transmuterAddress);
             }
+            limits[0] = limits[0] * 90 / 100;
             limits[1] = transmuter.quoteIn(limits[0], sellTokenAddress, buyTokenAddress);
         }
         else { // burn(sell agToken)
@@ -74,6 +91,7 @@ contract AngleAdapter is ISwapAdapter {
             else {
                 collatLimit = buyToken.balanceOf(transmuterAddress);
             }
+            collatLimit = collatLimit * 90 / 100;
             limits[0] = transmuter.quoteIn(collatLimit, buyTokenAddress, sellTokenAddress);
             limits[1] = collatLimit;
         }
@@ -127,6 +145,48 @@ contract AngleAdapter is ISwapAdapter {
             amountOut,
             amountIn
         );
+    }
+
+    /// @notice Executes a sell order on the contract.
+    /// @param sellToken The token being sold.
+    /// @param buyToken The token being bought.
+    /// @param amount The amount to be traded.
+    /// @return calculatedAmount The amount of tokens received.
+    function sell(
+        IERC20 sellToken,
+        IERC20 buyToken,
+        uint256 amount
+    ) internal returns (uint256 calculatedAmount) {
+        address sellTokenAddress = address(sellToken);
+        address buyTokenAddress = address(buyToken);
+        uint256 amountOut = transmuter.quoteIn(amount, sellTokenAddress, buyTokenAddress);
+
+        // TODO: use safeTransferFrom
+        sellToken.transferFrom(msg.sender, address(this), amount);
+        sellToken.approve(address(transmuter), amount);
+        transmuter.swapExactInput(amount, 0, sellTokenAddress, buyTokenAddress, msg.sender, 0);
+        return amountOut;
+    }
+
+    /// @notice Executes a buy order on the contract.
+    /// @param sellToken The token being sold.
+    /// @param buyToken The token being bought.
+    /// @param amountOut The amount of buyToken to receive.
+    /// @return calculatedAmount The amount of tokens received.
+    function buy(
+        IERC20 sellToken,
+        IERC20 buyToken,
+        uint256 amountOut
+    ) internal returns (uint256 calculatedAmount) {
+        address sellTokenAddress = address(sellToken);
+        address buyTokenAddress = address(buyToken);
+        uint256 amountIn = transmuter.quoteOut(amountOut, sellTokenAddress, buyTokenAddress);
+
+        // TODO: use safeTransferFrom
+        sellToken.transferFrom(msg.sender, address(this), amountIn);
+        sellToken.approve(address(transmuter), amountIn);
+        transmuter.swapExactOutput(amountOut, type(uint256).max, sellTokenAddress, buyTokenAddress, msg.sender, 0);
+        return amountIn;
     }
 }
 
