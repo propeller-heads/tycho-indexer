@@ -35,7 +35,7 @@ contract AngleAdapter is ISwapAdapter {
 
     /// @inheritdoc ISwapAdapter
     function swap(
-        bytes32 poolId,
+        bytes32,
         IERC20 sellToken,
         IERC20 buyToken,
         OrderSide side,
@@ -100,11 +100,17 @@ contract AngleAdapter is ISwapAdapter {
         }
     }
 
-    function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
+    /// @inheritdoc ISwapAdapter
+    function getCapabilities(bytes32, IERC20, IERC20)
         external
+        pure
+        override
         returns (Capability[] memory capabilities)
     {
-        revert NotImplemented("TemplateSwapAdapter.getCapabilities");
+        capabilities = new Capability[](3);
+        capabilities[0] = Capability.SellOrder;
+        capabilities[1] = Capability.BuyOrder;
+        capabilities[2] = Capability.PriceFunction;
     }
 
     /// @inheritdoc ISwapAdapter
