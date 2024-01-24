@@ -1,18 +1,15 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use substreams::hex;
 use substreams::pb::substreams::StoreDeltas;
-use substreams::store::{
-    StoreAdd, StoreAddBigInt, StoreGet, StoreGetBigInt, StoreGetProto, StoreNew,
-    StoreSetIfNotExists, StoreSetIfNotExistsProto,
-};
-use substreams::{hex, log};
+use substreams::store::{StoreAdd, StoreAddBigInt, StoreNew};
 
 use substreams::key;
 use substreams::scalar::BigInt;
-use substreams_ethereum::block_view::{CallView, LogView};
+
 use substreams_ethereum::pb::eth;
-use substreams_ethereum::pb::eth::v2::{balance_change, Call, Log, TransactionTrace};
+use substreams_ethereum::pb::eth::v2::{Call, Log};
 use substreams_ethereum::{Event, Function};
 
 use itertools::Itertools;
@@ -67,8 +64,8 @@ impl PartialEq for TransactionWrapper {
 ///  fufill both the required details + any extra `Attributes`
 /// Ref: https://docs.balancer.fi/reference/contracts/deployment-addresses/mainnet.html
 fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::ProtocolComponent> {
-    match pool_addr {
-        &hex!("897888115Ada5773E02aA29F775430BFB5F34c51") => {
+    match *pool_addr {
+        hex!("897888115Ada5773E02aA29F775430BFB5F34c51") => {
             let create_call =
                 abi::weighted_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -98,7 +95,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
                 change: tycho::ChangeType::Creation.into(),
             })
         }
-        &hex!("DB8d758BCb971e482B2C45f7F8a7740283A1bd3A") => {
+        hex!("DB8d758BCb971e482B2C45f7F8a7740283A1bd3A") => {
             let create_call =
                 abi::composable_stable_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -128,7 +125,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
                 change: tycho::ChangeType::Creation.into(),
             })
         }
-        &hex!("813EE7a840CE909E7Fea2117A44a90b8063bd4fd") => {
+        hex!("813EE7a840CE909E7Fea2117A44a90b8063bd4fd") => {
             let create_call =
                 abi::erc_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -160,7 +157,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
                 change: tycho::ChangeType::Creation.into(),
             })
         }
-        &hex!("5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347") => {
+        hex!("5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347") => {
             let create_call =
                 abi::euler_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -190,7 +187,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
                 change: tycho::ChangeType::Creation.into(),
             })
         }
-        &hex!("39A79EB449Fc05C92c39aA6f0e9BfaC03BE8dE5B") => {
+        hex!("39A79EB449Fc05C92c39aA6f0e9BfaC03BE8dE5B") => {
             let create_call =
                 abi::gearbox_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -222,7 +219,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
         }
         // The `ManagedPoolFactory` is a bit ✨ unique ✨, so we'll leave it commented out for now
         // Take a look at it's `Create` call to see how the params are structured.
-        // &hex!("BF904F9F340745B4f0c4702c7B6Ab1e808eA6b93") => {
+        // hex!("BF904F9F340745B4f0c4702c7B6Ab1e808eA6b93") => {
         //     let create_call = abi::managed_pool_factory::functions::Create::match_and_decode(call)?;
         //     let pool_created =
         //         abi::managed_pool_factory::events::PoolCreated::match_and_decode(log)?;
@@ -246,7 +243,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
         //         change: tycho::ChangeType::Creation.into(),
         //     })
         // }
-        &hex!("4E11AEec21baF1660b1a46472963cB3DA7811C89") => {
+        hex!("4E11AEec21baF1660b1a46472963cB3DA7811C89") => {
             let create_call =
                 abi::silo_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -276,7 +273,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
                 change: tycho::ChangeType::Creation.into(),
             })
         }
-        &hex!("5F5222Ffa40F2AEd6380D022184D6ea67C776eE0") => {
+        hex!("5F5222Ffa40F2AEd6380D022184D6ea67C776eE0") => {
             let create_call =
                 abi::yearn_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -308,7 +305,7 @@ fn pool_factory_map(pool_addr: &[u8], log: &Log, call: &Call) -> Option<tycho::P
         }
         // The `WeightedPool2TokenFactory` is a deprecated contract but we've included it since one
         //  of the highest TVL pools, 80BAL-20WETH, is able to be tracked.
-        &hex!("A5bf2ddF098bb0Ef6d120C98217dD6B141c74EE0") => {
+        hex!("A5bf2ddF098bb0Ef6d120C98217dD6B141c74EE0") => {
             let create_call =
                 abi::weighted_pool_tokens_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
@@ -361,7 +358,7 @@ pub fn map_balance_deltas(block: eth::v2::Block) -> Result<tycho::BalanceDeltas,
                             hash: log.receipt.transaction.hash.clone(),
                             from: log.receipt.transaction.from.clone(),
                             to: log.receipt.transaction.to.clone(),
-                            index: Into::<u64>::into(log.receipt.transaction.index).clone(),
+                            index: Into::<u64>::into(log.receipt.transaction.index),
                         }),
                         token: token.clone(),
                         delta: delta.to_signed_bytes_be(),
@@ -395,7 +392,7 @@ pub fn store_balance_changes(deltas: tycho::BalanceDeltas, store: StoreAddBigInt
 pub fn map_changes(
     block: eth::v2::Block,
     deltas: tycho::BalanceDeltas,
-    store: StoreDeltas,  // Note, this map module is using the `deltas` mode for the store.
+    store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
 ) -> Result<tycho::BlockContractChanges> {
     // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
     // We store these as a hashmap by tx hash since we need to agg by tx hash later
@@ -414,14 +411,14 @@ pub fn map_changes(
                                 hash: tx.hash.clone(),
                                 from: tx.from.clone(),
                                 to: tx.to.clone(),
-                                index: Into::<u64>::into(tx.index).clone(),
+                                index: Into::<u64>::into(tx.index),
                             }),
                             contract_changes: vec![],
                             balance_changes: vec![],
                             component_changes: vec![pool_factory_map(
                                 pool_factory_address,
-                                &log,
-                                &call.call,
+                                log,
+                                call.call,
                             )?],
                         },
                     ))
@@ -487,8 +484,7 @@ pub fn map_changes(
             ts: block.timestamp_seconds(),
         }),
         changes: transaction_contract_changes
-            .into_iter()
-            .map(|(_, v)| v)
+            .into_values()
             .sorted_unstable_by_key(|tx_change| tx_change.tx.clone().unwrap().index)
             .collect::<Vec<_>>(),
     })
