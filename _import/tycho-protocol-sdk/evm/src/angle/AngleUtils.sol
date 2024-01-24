@@ -10,7 +10,7 @@ pragma solidity ^0.8.13;
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 
 /// @dev custom reserve limit factor to prevent revert errors in OrderSide.Buy
-uint256 constant RESERVE_LIMIT_FACTOR = 5;
+uint256 constant RESERVE_LIMIT_FACTOR = 10;
 
 interface IAgToken is IERC20 {
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
