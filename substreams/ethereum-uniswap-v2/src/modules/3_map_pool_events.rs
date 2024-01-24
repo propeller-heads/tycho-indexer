@@ -1,48 +1,73 @@
-use substreams::store::{DeltaBigInt, Deltas, StoreGet};
-use substreams::store::StoreGetProto;
+use std::vec;
+use substreams::store::{StoreGet, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::{self as eth};
 
-use substreams_helper::event_handler::EventHandler;
-use substreams_helper::hex::Hexable;
+use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 
-use crate::abi::pool::events::Sync;
-use crate::pb::tycho::evm::uniswap::v2::{Event, Events, Pool};
-use crate::pb::tycho::evm::uniswap::v2::event::Type::SyncType;
-use crate::pb::tycho::evm::uniswap::v2::SyncEvent;
-use crate::traits::PoolAddresser;
+use crate::{
+    abi::pool::events::Sync,
+    pb::tycho::evm::{
+        uniswap::v2::Pool,
+        v1::{
+            Attribute, ChangeType, EntityChanges, SameTypeTransactionContractChanges,
+            TransactionEntityChanges,
+        },
+    },
+    traits::{PoolAddresser},
+};
+use crate::pb::tycho::evm::v1::Transaction;
 
 #[substreams::handlers::map]
 pub fn map_pool_events(
     block: eth::Block,
     pools_store: StoreGetProto<Pool>,
-) -> Result<Events, substreams::errors::Error> {
+) -> Result<SameTypeTransactionContractChanges, substreams::errors::Error> {
     let mut events = vec![];
 
-    // Since we only need updated reserves,
-    // Sync event is sufficient for our use-case
+    // Sync event is sufficient for our use-case. Since it's emitted on
+    // every reserve-altering function call, we can use it as the only event
+    // to update the reserves of a pool.
     handle_sync(&block, &pools_store, &mut events);
 
-    Ok(Events { events })
+    Ok(SameTypeTransactionContractChanges { changes: events })
 }
 
-fn handle_sync(block: &eth::Block, store: &StoreGetProto<Pool>, events: &mut Vec<Event>) {
+fn handle_sync(
+    block: &eth::Block,
+    store: &StoreGetProto<Pool>,
+    events: &mut Vec<TransactionEntityChanges>,
+) {
     let mut on_sync = |event: Sync, tx: &eth::TransactionTrace, log: &eth::Log| {
         let pool_address = log.address.to_hex();
 
-        events.push(Event {
-            hash: tx.hash.to_hex(),
-            log_index: log.index,
-            log_ordinal: log.ordinal,
-            to: tx.to.to_hex(),
-            from: tx.from.to_hex(),
-            block_number: block.number,
-            timestamp: block.timestamp_seconds(),
-            pool: pool_address,
-            r#type: Some(SyncType(SyncEvent {
-                reserve0: event.reserve0.to_string(),
-                reserve1: event.reserve1.to_string(),
-            })),
-        });
+        // Convert reserves to hex
+        // TODO: Verify this conversion. Value needs to be bytes, should it be simple conversion or hex?
+        let reserve0: Vec<u8> = event.reserve0.to_signed_bytes_le();
+        let reserve1: Vec<u8> = event.reserve1.to_signed_bytes_le();
+
+        let tycho_tx: Transaction = tx.into();
+        // Events
+        events.push(TransactionEntityChanges {
+            tx: Option::from(tycho_tx),
+            entity_changes: vec![EntityChanges {
+                component_id: pool_address.clone(),
+                attributes: vec![
+                    Attribute {
+                        name: "reserve0".to_string(),
+                        value: reserve0,
+                        change: i32::from(ChangeType::Update),
+                    },
+                    Attribute {
+                        name: "reserve1".to_string(),
+                        value: reserve1,
+                        change: i32::from(ChangeType::Update),
+                    },
+                ],
+            }],
+            component_changes: vec![],
+            balance_changes: vec![],
+        })
+
     };
 
     let mut eh = EventHandler::new(&block);
@@ -50,4 +75,3 @@ fn handle_sync(block: &eth::Block, store: &StoreGetProto<Pool>, events: &mut Vec
     eh.on::<Sync, _>(&mut on_sync);
     eh.handle_events();
 }
-

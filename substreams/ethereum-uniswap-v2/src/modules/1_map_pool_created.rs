@@ -18,6 +18,7 @@ pub fn map_pool_created(block: eth::Block) -> Result<Pools, substreams::errors::
 }
 
 fn get_pools(block: &eth::Block, pools: &mut Vec<Pool>) {
+    // Extract new pools from PairCreated events
     let mut on_pair_created = |event: PairCreated, _tx: &eth::TransactionTrace, _log: &eth::Log| {
         pools.push(Pool {
             address: Vec::from(event.pair.as_slice()),
@@ -25,6 +26,7 @@ fn get_pools(block: &eth::Block, pools: &mut Vec<Pool>) {
             token1: Vec::from(event.token1.as_slice()),
             created_timestamp: block.timestamp_seconds() as i64,
             created_block_number: block.number as i64,
+            created_tx_hash: block.hash.clone(),
         })
     };
 

@@ -43,18 +43,18 @@ impl StoreKey {
         let chunks: Vec<&str> = key.split(":").collect();
 
         if chunks[0] != self.unique_id() {
-            return None;
+            return None
         }
-        return Some(chunks[1].to_string());
+        return Some(chunks[1].to_string())
     }
 
     pub fn get_pool_and_token(&self, key: &str) -> Option<(String, String)> {
         let chunks: Vec<&str> = key.split(":").collect();
 
         if chunks[0] != self.unique_id() {
-            return None;
+            return None
         }
-        return Some((chunks[1].to_string(), chunks[2].to_string()));
+        return Some((chunks[1].to_string(), chunks[2].to_string()))
     }
 
     pub fn unique_id(&self) -> String {

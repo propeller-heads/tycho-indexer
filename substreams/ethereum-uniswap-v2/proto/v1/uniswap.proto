@@ -14,6 +14,8 @@ message Pool {
 
   int64 created_timestamp = 4;
   int64 created_block_number = 5;
+
+  bytes created_tx_hash = 6;
 }
 
 message Events {

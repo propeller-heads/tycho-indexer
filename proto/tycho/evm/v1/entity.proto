@@ -30,3 +30,8 @@ message BlockEntityChanges {
   // The set of transaction changes observed in the specified block.
   repeated TransactionEntityChanges changes = 2;
 }
+
+message SameTypeTransactionContractChanges {
+  // The set of transaction changes observed in the specified block.
+  repeated TransactionEntityChanges changes = 1;
+}

@@ -1,5 +1,7 @@
-use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 use std::str;
+
+use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
+
 use substreams_helper::hex::Hexable;
 
 use crate::{
@@ -9,6 +11,8 @@ use crate::{
 
 #[substreams::handlers::store]
 pub fn store_pools(pools_created: Pools, store: StoreSetIfNotExistsProto<Pool>) {
+    // Store pools. Required so the next maps can match any event to an known pool by their address
+
     for pool in pools_created.pools {
         //  Use ordinal 0 because the address should be unique, so ordering doesn't matter.
         let pool_address: &str = &pool.address.to_hex();

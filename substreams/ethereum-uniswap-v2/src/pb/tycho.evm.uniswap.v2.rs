@@ -18,6 +18,8 @@ pub struct Pool {
     pub created_timestamp: i64,
     #[prost(int64, tag="5")]
     pub created_block_number: i64,
+    #[prost(bytes="vec", tag="6")]
+    pub created_tx_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
