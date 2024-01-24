@@ -29,7 +29,7 @@ contract AngleAdapter is ISwapAdapter {
         address buyTokenAddress = address(_buyToken);
 
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            _prices[i] = getPriceAt(_specifiedAmounts[i], sellTokenAddress, buyTokenAddress);
+            _prices[i] = getPriceAt(_specifiedAmounts[i], sellTokenAddress, buyTokenAddress, OrderSide.Sell);
         }
     }
 
@@ -49,12 +49,11 @@ contract AngleAdapter is ISwapAdapter {
         if (side == OrderSide.Sell) {
             trade.calculatedAmount =
                 sell(sellToken, buyToken, specifiedAmount);
-            trade.price = getPriceAt(specifiedAmount, address(sellToken), address(buyToken));
         } else {
             trade.calculatedAmount =
                 buy(sellToken, buyToken, specifiedAmount);
-            trade.price = getPriceAt(specifiedAmount, address(buyToken), address(sellToken));
         }
+        trade.price = getPriceAt(specifiedAmount, address(sellToken), address(buyToken), side);
         trade.gasUsed = gasBefore - gasleft();
     }
 
@@ -135,16 +134,26 @@ contract AngleAdapter is ISwapAdapter {
     }
 
     /// @notice Calculates pool prices for specified amounts
-    /// @param amountIn The amount of the token being sold
+    /// @param amount The amount of the token being sold(if side == Sell) or bought(if side == Buy)
     /// @param tokenIn The token being sold
     /// @param tokenOut The token being bought
+    /// @param side Order side
     /// @return The price as a fraction corresponding to the provided amount.
-    function getPriceAt(uint256 amountIn, address tokenIn, address tokenOut)
+    function getPriceAt(uint256 amount, address tokenIn, address tokenOut, OrderSide side)
         internal
         view
         returns (Fraction memory)
     {
-        uint256 amountOut = transmuter.quoteIn(amountIn, tokenIn, tokenOut);
+        uint256 amountOut;
+        uint256 amountIn;
+        if(side == OrderSide.Sell) {
+            amountIn = amount;
+            amountOut = transmuter.quoteIn(amountIn, tokenIn, tokenOut);
+        }
+        else {
+            amountOut = amount;
+            amountIn = transmuter.quoteOut(amount, tokenIn, tokenOut);
+        }
         return Fraction(
             amountOut,
             amountIn
