@@ -6,6 +6,9 @@ pragma solidity ^0.8.13;
 import "./AngleUtils.sol";
 
 /// @title AngleAdapter
+/// @dev Information about prices: When swapping collateral to agEUR, the trade price will not decrease(amountOut);
+/// Instead, when swapping agEUR to collateral, it will, because agEUR is minted, and this mechanism is used to
+/// stabilize the agEUR price.
 contract AngleAdapter is ISwapAdapter {
 
     ITransmuter transmuter;
