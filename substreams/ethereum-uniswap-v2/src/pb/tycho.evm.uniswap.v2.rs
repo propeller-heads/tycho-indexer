@@ -14,11 +14,7 @@ pub struct Pool {
     pub token0: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes="vec", tag="3")]
     pub token1: ::prost::alloc::vec::Vec<u8>,
-    #[prost(int64, tag="4")]
-    pub created_timestamp: i64,
-    #[prost(int64, tag="5")]
-    pub created_block_number: i64,
-    #[prost(bytes="vec", tag="6")]
+    #[prost(bytes="vec", tag="4")]
     pub created_tx_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

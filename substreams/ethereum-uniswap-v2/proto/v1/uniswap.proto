@@ -12,10 +12,7 @@ message Pool {
   bytes token0 = 2;
   bytes token1 = 3;
 
-  int64 created_timestamp = 4;
-  int64 created_block_number = 5;
-
-  bytes created_tx_hash = 6;
+  bytes created_tx_hash = 4;
 }
 
 message Events {
