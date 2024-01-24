@@ -40,4 +40,23 @@ modules:
       - source: sf.ethereum.type.v2.Block
       - store: store_pools
     output:
-      type: proto:tycho.evm.v1.entity:BlockEntityChanges
+      type: proto:tycho.evm.v1.SameTypeTransactionContractChanges
+
+  - name: extract_protocol_components
+    kind: map
+    initialBlock: 10008300
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: map_pool_created
+    output:
+      type: proto:tycho.evm.v1.SameTypeTransactionContractChanges
+
+  - name: block_sink
+    kind: map
+    initialBlock: 10008300
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: extract_protocol_components
+      - map:
+    output:
+      type: proto:tycho.evm.v1.BlockEntityChanges
