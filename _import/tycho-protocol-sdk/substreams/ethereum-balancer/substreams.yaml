@@ -38,7 +38,7 @@ modules:
     initialBlock: 12369300
     inputs:
       - source: sf.ethereum.type.v2.Block
-      - map: map_transactions_created
+      - map: map_balance_deltas
       - store: store_balance_changes
         mode: deltas  # This is the key property that simplifies `BalanceChange` handling
     output:
