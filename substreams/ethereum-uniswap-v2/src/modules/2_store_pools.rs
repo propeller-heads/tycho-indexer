@@ -11,7 +11,7 @@ use crate::{
 
 #[substreams::handlers::store]
 pub fn store_pools(pools_created: Pools, store: StoreSetIfNotExistsProto<Pool>) {
-    // Store pools. Required so the next maps can match any event to an known pool by their address
+    // Store pools. Required so the next maps can match any event to a known pool by their address
 
     for pool in pools_created.pools {
         //  Use ordinal 0 because the address should be unique, so ordering doesn't matter.

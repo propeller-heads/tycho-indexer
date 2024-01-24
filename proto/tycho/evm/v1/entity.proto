@@ -31,7 +31,7 @@ message BlockEntityChanges {
   repeated TransactionEntityChanges changes = 2;
 }
 
-message SameTypeTransactionContractChanges {
+message SameTypeTransactionChanges {
   // The set of transaction changes observed in the specified block.
   repeated TransactionEntityChanges changes = 1;
 }

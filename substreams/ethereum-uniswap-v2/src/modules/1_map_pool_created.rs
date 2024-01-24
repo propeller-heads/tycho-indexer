@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[substreams::handlers::map]
-pub fn map_pool_created(block: eth::Block) -> Result<Pools, substreams::errors::Error> {
+pub fn map_pools_created(block: eth::Block) -> Result<Pools, substreams::errors::Error> {
     let mut pools: Vec<Pool> = vec![];
 
     get_pools(&block, &mut pools);

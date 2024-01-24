@@ -1,19 +1,19 @@
 [package]
 name = "substreams-ethereum-uniswap-v2"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "substreams_ethereum_uniswap_v2"
 crate-type = ["cdylib"]
 
 [dependencies]
-substreams = "0.5"
-substreams-ethereum = "0.9"
-prost = "0.11"
-ethabi = "18.0.0"
-anyhow = { version = "1.0.76", features = [] }
-hex-literal = "0.4.1"
+substreams.workspace = true
+substreams-ethereum.workspace = true
+prost.workspace = true
+ethabi.workspace = true
+anyhow = { workspace = true, features = [] }
+hex-literal.workspace = true
 substreams-helper = { path = "../substreams-helper" }
 num-bigint = "0.4.4"
 
@@ -21,6 +21,6 @@ num-bigint = "0.4.4"
 getrandom = { version = "0.2", features = ["custom"] }
 
 [build-dependencies]
-anyhow = "1"
-substreams-ethereum = "0.9"
+anyhow.workspace = true
+substreams-ethereum.workspace = true
 substreams-common = { path = "../common" }

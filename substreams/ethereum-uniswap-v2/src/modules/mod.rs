@@ -1,6 +1,6 @@
 pub use block_sink::block_sink;
 pub use extract_protocol_components::extract_protocol_components;
-pub use map_pool_created::map_pool_created;
+pub use map_pool_created::map_pools_created;
 pub use map_pool_events::map_pool_events;
 pub use store_pools::store_pools;
 

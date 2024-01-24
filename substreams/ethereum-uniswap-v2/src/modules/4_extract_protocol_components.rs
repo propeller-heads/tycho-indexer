@@ -6,7 +6,7 @@ use crate::pb::tycho::evm::{
     uniswap::v2::Pools,
     v1::{
         Attribute, ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
-        SameTypeTransactionContractChanges, TransactionEntityChanges,
+        SameTypeTransactionChanges, TransactionEntityChanges,
     },
 };
 use crate::pb::tycho::evm::v1::Transaction;
@@ -15,12 +15,12 @@ use crate::pb::tycho::evm::v1::Transaction;
 pub fn extract_protocol_components(
     block: eth::Block,
     pools_created: Pools,
-) -> Result<SameTypeTransactionContractChanges, substreams::errors::Error> {
+) -> Result<SameTypeTransactionChanges, substreams::errors::Error> {
     let mut tx_entity_changes: Vec<TransactionEntityChanges> = vec![];
 
     handle_created_pools(block, pools_created, &mut tx_entity_changes);
 
-    Ok(SameTypeTransactionContractChanges { changes: tx_entity_changes })
+    Ok(SameTypeTransactionChanges { changes: tx_entity_changes })
 }
 
 fn handle_created_pools(
@@ -45,34 +45,19 @@ fn handle_created_pools(
                 tokens: vec![pool.token0, pool.token1],
                 contracts: vec![pool.address],
                 static_att: vec![
+                    // Trading Fee is hardcoded to 0.3%, saved as int in bps (basis points)
                     Attribute {
-                        name: "reserve0".to_string(),
-                        value: BigInt::zero().to_signed_bytes_le(),
-                        change: i32::from(ChangeType::Creation),
-                    },
-                    Attribute {
-                        name: "reserve1".to_string(),
-                        value: BigInt::zero().to_signed_bytes_le(),
-                        change: i32::from(ChangeType::Creation),
+                        name: "fee".to_string(),
+                        value: BigInt::from(30).to_signed_bytes_le(),
+                        change: ChangeType::Creation.into(),
                     },
                 ],
                 change: i32::from(ChangeType::Creation),
                 protocol_type: Option::from(ProtocolType {
                     name: "UniswapV2".to_string(),
-                    financial_type: i32::from(FinancialType::Swap),
-                    attribute_schema: vec![
-                        Attribute {
-                            name: "reserve0".to_string(),
-                            value: BigInt::zero().to_signed_bytes_le(),
-                            change: i32::from(ChangeType::Creation),
-                        },
-                        Attribute {
-                            name: "reserve1".to_string(),
-                            value: BigInt::zero().to_signed_bytes_le(),
-                            change: i32::from(ChangeType::Creation),
-                        },
-                    ],
-                    implementation_type: i32::from(ImplementationType::Custom),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Custom.into(),
                 }),
             }],
             balance_changes: vec![],

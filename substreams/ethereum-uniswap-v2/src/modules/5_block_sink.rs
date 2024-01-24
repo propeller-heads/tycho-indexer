@@ -1,18 +1,19 @@
 use substreams_ethereum::pb::eth::v2::{self as eth};
 
 use crate::pb::tycho::evm::v1::{
-    Block, BlockEntityChanges, SameTypeTransactionContractChanges, TransactionEntityChanges,
+    Block, BlockEntityChanges, SameTypeTransactionChanges, TransactionEntityChanges,
 };
 
 #[substreams::handlers::map]
 pub fn block_sink(
     block: eth::Block,
-    balance_changes: SameTypeTransactionContractChanges,
-    new_protocol_components: SameTypeTransactionContractChanges,
+    state_changes: SameTypeTransactionChanges,
+    new_protocol_components: SameTypeTransactionChanges,
 ) -> Result<BlockEntityChanges, substreams::errors::Error> {
     let tycho_block: Block = block.into();
 
-    let tx_entity_changes = balance_changes
+    // Aggregates all changes from the state changes (sync events) and the new protocol components
+    let tx_entity_changes = state_changes
         .changes
         .into_iter()
         .chain(

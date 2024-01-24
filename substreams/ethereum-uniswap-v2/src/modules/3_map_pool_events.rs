@@ -9,7 +9,7 @@ use crate::{
     pb::tycho::evm::{
         uniswap::v2::Pool,
         v1::{
-            Attribute, ChangeType, EntityChanges, SameTypeTransactionContractChanges,
+            Attribute, ChangeType, EntityChanges, SameTypeTransactionChanges,
             TransactionEntityChanges,
         },
     },
@@ -21,7 +21,7 @@ use crate::pb::tycho::evm::v1::Transaction;
 pub fn map_pool_events(
     block: eth::Block,
     pools_store: StoreGetProto<Pool>,
-) -> Result<SameTypeTransactionContractChanges, substreams::errors::Error> {
+) -> Result<SameTypeTransactionChanges, substreams::errors::Error> {
     let mut events = vec![];
 
     // Sync event is sufficient for our use-case. Since it's emitted on
@@ -29,7 +29,7 @@ pub fn map_pool_events(
     // to update the reserves of a pool.
     handle_sync(&block, &pools_store, &mut events);
 
-    Ok(SameTypeTransactionContractChanges { changes: events })
+    Ok(SameTypeTransactionChanges { changes: events })
 }
 
 fn handle_sync(
@@ -41,7 +41,6 @@ fn handle_sync(
         let pool_address = log.address.to_hex();
 
         // Convert reserves to hex
-        // TODO: Verify this conversion. Value needs to be bytes, should it be simple conversion or hex?
         let reserve0: Vec<u8> = event.reserve0.to_signed_bytes_le();
         let reserve1: Vec<u8> = event.reserve1.to_signed_bytes_le();
 
@@ -55,19 +54,18 @@ fn handle_sync(
                     Attribute {
                         name: "reserve0".to_string(),
                         value: reserve0,
-                        change: i32::from(ChangeType::Update),
+                        change: ChangeType::Update.into(),
                     },
                     Attribute {
                         name: "reserve1".to_string(),
                         value: reserve1,
-                        change: i32::from(ChangeType::Update),
+                        change: ChangeType::Update.into(),
                     },
                 ],
             }],
             component_changes: vec![],
             balance_changes: vec![],
         })
-
     };
 
     let mut eh = EventHandler::new(&block);

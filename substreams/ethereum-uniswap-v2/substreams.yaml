@@ -18,7 +18,7 @@ binaries:
     file: ../../target/wasm32-unknown-unknown/release/substreams_ethereum_uniswap_v2.wasm
 
 modules:
-  - name: map_pool_created
+  - name: map_pools_created
     kind: map
     initialBlock: 10008300
     inputs:
@@ -28,10 +28,11 @@ modules:
 
   - name: store_pools
     kind: store
+    initialBlock: 10008300
     updatePolicy: set_if_not_exists
     valueType: proto:tycho.evm.uniswap.v2.Pool
     inputs:
-      - map: map_pool_created
+      - map: map_pools_created
 
   - name: map_pool_events
     kind: map
@@ -40,16 +41,16 @@ modules:
       - source: sf.ethereum.type.v2.Block
       - store: store_pools
     output:
-      type: proto:tycho.evm.v1.SameTypeTransactionContractChanges
+      type: proto:tycho.evm.v1.SameTypeTransactionChanges
 
   - name: extract_protocol_components
     kind: map
     initialBlock: 10008300
     inputs:
       - source: sf.ethereum.type.v2.Block
-      - map: map_pool_created
+      - map: map_pools_created
     output:
-      type: proto:tycho.evm.v1.SameTypeTransactionContractChanges
+      type: proto:tycho.evm.v1.SameTypeTransactionChanges
 
   - name: block_sink
     kind: map
@@ -57,6 +58,6 @@ modules:
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: extract_protocol_components
-      - map:
+      - map: map_pool_events
     output:
       type: proto:tycho.evm.v1.BlockEntityChanges

@@ -232,7 +232,7 @@ pub struct BlockEntityChanges {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SameTypeTransactionContractChanges {
+pub struct SameTypeTransactionChanges {
     /// The set of transaction changes observed in the specified block.
     #[prost(message, repeated, tag="1")]
     pub changes: ::prost::alloc::vec::Vec<TransactionEntityChanges>,
