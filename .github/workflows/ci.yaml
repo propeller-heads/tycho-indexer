@@ -102,4 +102,7 @@ jobs:
 
       - name: pg-formatter-action
         uses: Soarex16/pg-formatter-action@v1
+
+      - name: Check diffs
+        run: git diff --exit-code
           
