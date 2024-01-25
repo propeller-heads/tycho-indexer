@@ -66,7 +66,7 @@ pub fn generate_pb(out_dir: Option<&str>) -> Result<(), Error> {
 
     // generate pb files under src/pb
     Command::new("substreams")
-        .args(&[
+        .args([
             "protogen",
             substreams_yaml.to_string_lossy().as_ref(),
             "--output-path=target/tmp",
@@ -110,7 +110,7 @@ pub fn generate_pb(out_dir: Option<&str>) -> Result<(), Error> {
             let version = filename[2];
             pb_files_hash
                 .entry((package_name, name))
-                .or_insert(HashSet::new())
+                .or_default()
                 .insert(version.to_owned());
         }
         let mut pb_files_vec = pb_files_hash
@@ -203,7 +203,7 @@ pub fn generate(out_dir: Option<&str>) -> Result<(), Error> {
 /// Get filenames without file type suffix
 pub fn dir_filenames(path: impl AsRef<OsStr>) -> Vec<String> {
     println!("Searching for files in {}", path.as_ref().to_str().unwrap());
-    if let Ok(read_dir) = fs::read_dir(&path.as_ref()) {
+    if let Ok(read_dir) = fs::read_dir(path.as_ref()) {
         read_dir
             .map(|x| {
                 x.unwrap()
