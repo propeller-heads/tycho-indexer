@@ -1,6 +1,7 @@
 # Compiler files
 cache/
 out/
+coverage/
 
 # Ignores development broadcast logs
 !/broadcast
@@ -12,3 +13,7 @@ docs/
 
 # Dotenv file
 .env
+
+# Others
+.DS_STORE
+lcov.info
