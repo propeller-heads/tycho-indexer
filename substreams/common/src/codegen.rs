@@ -1,10 +1,12 @@
-use std::collections::{HashMap, HashSet};
-use std::env::current_dir;
-use std::ffi::OsStr;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::string::ToString;
+use std::{
+    collections::{HashMap, HashSet},
+    env::current_dir,
+    ffi::OsStr,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    string::ToString,
+};
 use substreams_ethereum::Abigen;
 
 /// Default output directory for generated code.
@@ -23,14 +25,16 @@ pub fn generate_abi(out_dir: Option<&str>) -> Result<(), Error> {
     fs::create_dir_all(&target_abi_dir).ok();
 
     // generate abi structs under target/abi based on abi json under abi/
-    abi_filenames.iter().for_each(|contract| {
-        Abigen::new(contract, &format!("abi/{}.json", contract))
-            .unwrap()
-            .generate()
-            .unwrap()
-            .write_to_file(format!("{}/abi/{}.rs", out_dir, contract))
-            .unwrap()
-    });
+    abi_filenames
+        .iter()
+        .for_each(|contract| {
+            Abigen::new(contract, &format!("abi/{}.json", contract))
+                .unwrap()
+                .generate()
+                .unwrap()
+                .write_to_file(format!("{}/abi/{}.rs", out_dir, contract))
+                .unwrap()
+        });
 
     // generate src/abi.rs module
     write_or_replace_if_different(
@@ -55,10 +59,21 @@ pub fn generate_abi(out_dir: Option<&str>) -> Result<(), Error> {
 
 pub fn generate_pb(out_dir: Option<&str>) -> Result<(), Error> {
     let out_dir = out_dir.unwrap_or(DEFAULT_OUTPUT_DIR);
-    let pb_file = current_dir().unwrap().join("src").join("pb.rs");
-    let tmp_dir = current_dir().unwrap().join("target").join("tmp");
-    let target_pb_dir = current_dir().unwrap().join(out_dir).join("pb");
-    let substreams_yaml = current_dir().unwrap().join("substreams.yaml");
+    let pb_file = current_dir()
+        .unwrap()
+        .join("src")
+        .join("pb.rs");
+    let tmp_dir = current_dir()
+        .unwrap()
+        .join("target")
+        .join("tmp");
+    let target_pb_dir = current_dir()
+        .unwrap()
+        .join(out_dir)
+        .join("pb");
+    let substreams_yaml = current_dir()
+        .unwrap()
+        .join("substreams.yaml");
 
     if tmp_dir.exists() {
         fs::remove_dir_all(&tmp_dir).unwrap();
@@ -68,7 +83,9 @@ pub fn generate_pb(out_dir: Option<&str>) -> Result<(), Error> {
     Command::new("substreams")
         .args([
             "protogen",
-            substreams_yaml.to_string_lossy().as_ref(),
+            substreams_yaml
+                .to_string_lossy()
+                .as_ref(),
             "--output-path=target/tmp",
         ])
         .status()
@@ -81,13 +98,16 @@ pub fn generate_pb(out_dir: Option<&str>) -> Result<(), Error> {
                 let dir_entry = x.unwrap();
                 (
                     dir_entry.path(),
-                    dir_entry.file_name().to_string_lossy().to_string(),
+                    dir_entry
+                        .file_name()
+                        .to_string_lossy()
+                        .to_string(),
                 )
             })
             .for_each(|(filepath, filename)| {
-                if filename.starts_with("sf.ethereum")
-                    || filename.starts_with("sf.substreams")
-                    || filename.starts_with("google")
+                if filename.starts_with("sf.ethereum") ||
+                    filename.starts_with("sf.substreams") ||
+                    filename.starts_with("google")
                 {
                     fs::remove_file(filepath).unwrap();
                 }
@@ -116,7 +136,9 @@ pub fn generate_pb(out_dir: Option<&str>) -> Result<(), Error> {
         let mut pb_files_vec = pb_files_hash
             .into_iter()
             .map(|((package_name, filename), versions_hash)| {
-                let mut versions = versions_hash.into_iter().collect::<Vec<_>>();
+                let mut versions = versions_hash
+                    .into_iter()
+                    .collect::<Vec<_>>();
                 versions.sort();
 
                 (package_name, filename, versions)
@@ -128,9 +150,10 @@ pub fn generate_pb(out_dir: Option<&str>) -> Result<(), Error> {
     };
 
     if !target_pb_dir.exists() {
-        // We use create_dir rather than create_dir_all as the substreams protogen cmd above always creates the
-        // target/tmp folder if successful so we only need to create the pb folder itself. Failure to create this
-        // folder would imply a failure with the substreams protogen cmd.
+        // We use create_dir rather than create_dir_all as the substreams protogen cmd above always
+        // creates the target/tmp folder if successful so we only need to create the pb
+        // folder itself. Failure to create this folder would imply a failure with the
+        // substreams protogen cmd.
         fs::create_dir(&target_pb_dir).unwrap_or_else(|e| panic!("Error creating dir: {}", e));
     }
 
@@ -223,7 +246,8 @@ pub fn dir_filenames(path: impl AsRef<OsStr>) -> Vec<String> {
 fn write_or_replace_if_different(filepath: PathBuf, content: String) {
     if filepath.exists() {
         let mut current_content = fs::read_to_string(&filepath).unwrap();
-        // This is primarily for windows OS to make sure different newline declarations are treated equivalent when comparing file contents
+        // This is primarily for windows OS to make sure different newline declarations are treated
+        // equivalent when comparing file contents
         current_content = current_content.replace("\r\n", "\n");
         if content == current_content {
             return;

@@ -31,8 +31,7 @@ pub fn map_pool_events(
     handle_sync(&block, &mut created_pairs.clone(), &mut tx_changes_map, &pools_store);
 
     // Make a list of all HashMap values:
-    let tx_entity_changes: Vec<TransactionEntityChanges> = tx_changes_map.into_values()
-        .collect();
+    let tx_entity_changes: Vec<TransactionEntityChanges> = tx_changes_map.into_values().collect();
 
     let tycho_block: Block = block.into();
 

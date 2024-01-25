@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use ethabi::ethereum_types::Address;
-use substreams_ethereum::pb::eth::v2::{self as eth};
-use substreams_ethereum::Event;
+use substreams_ethereum::{
+    pb::eth::v2::{self as eth},
+    Event,
+};
 
 use crate::common::HasAddresser;
 
@@ -20,8 +22,9 @@ use crate::common::HasAddresser;
 /// ```
 ///
 /// You'll likely want to mutate some value from the handlers that is in the current scope.
-/// For that, make your handlers be closures, that close over the variable you want to mutate, and have the whole
-/// EventHandler block of code in its own scope (either by wrapping it in an aux function or by wrapping it in {...})
+/// For that, make your handlers be closures, that close over the variable you want to mutate, and
+/// have the whole EventHandler block of code in its own scope (either by wrapping it in an aux
+/// function or by wrapping it in {...})
 ///
 /// Like so:
 /// ```
@@ -47,11 +50,7 @@ pub struct EventHandler<'a> {
 
 impl<'a> EventHandler<'a> {
     pub fn new(block: &'a eth::Block) -> Self {
-        Self {
-            block,
-            handlers: HashMap::new(),
-            addresses: None,
-        }
+        Self { block, handlers: HashMap::new(), addresses: None }
     }
 
     /// Sets the HasAddresser as a filter for which events to handle.
@@ -64,7 +63,8 @@ impl<'a> EventHandler<'a> {
     /// Registers a handler to be run on a given event. The handler should have the signature:
     /// `|ev: SomeEvent, tx: &pbeth::v2::TransactionTrace, log: &pbeth::v2::Log|`.
     /// You can only assign one handler to each Event type.
-    /// Handlers are keyed by the name of the event they are handling, so be careful to not assign handlers for 2 different events named equal.
+    /// Handlers are keyed by the name of the event they are handling, so be careful to not assign
+    /// handlers for 2 different events named equal.
     pub fn on<E: Event, F>(&mut self, mut handler: F)
     where
         F: FnMut(E, &eth::TransactionTrace, &eth::Log) + 'a,
@@ -79,16 +79,16 @@ impl<'a> EventHandler<'a> {
         );
     }
 
-    /// Will run all registered handlers for all events present on the block that match the given filters.
-    /// You'll likely want to run this just once.
+    /// Will run all registered handlers for all events present on the block that match the given
+    /// filters. You'll likely want to run this just once.
     pub fn handle_events(&mut self) {
         for log in self.block.logs() {
             if is_log_from_reverted_call(log.log) {
                 continue;
             }
 
-            if self.addresses.is_some()
-                && !&self
+            if self.addresses.is_some() &&
+                !&self
                     .addresses
                     .as_ref()
                     .unwrap()
