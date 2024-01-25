@@ -34,7 +34,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
         uint256[] memory _specifiedAmounts
     ) external view override returns (Fraction[] memory _prices) {
         _prices = new Fraction[](_specifiedAmounts.length);
-        uint256 price = getPriceAt(address(_sellToken), address(_buyToken));
+        Fraction memory price = getPriceAt(address(_sellToken), address(_buyToken));
         
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
             _prices[i] = price;
