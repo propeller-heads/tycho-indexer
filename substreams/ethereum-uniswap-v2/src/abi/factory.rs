@@ -1,4 +1,3 @@
-
 const INTERNAL_ERR: &'static str = "`ethabi_derive` internal error";
 /// Contract's functions.
 #[allow(dead_code, unused_imports, unused_variables)]
