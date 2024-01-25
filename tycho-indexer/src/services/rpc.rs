@@ -323,8 +323,32 @@ impl RpcHandler {
             }
         }
     }
+// Helper function to handle requests
+async fn handle_request<ReqBody, ReqParams, Res, F, Fut>(
+    query: web::Query<ReqParams>,
+    body: web::Json<ReqBody>,
+    handler: web::Data<RpcHandler>,
+    operation: F,
+) -> HttpResponse
+where
+    F: FnOnce(web::Data<RpcHandler>, web::Json<ReqBody>, web::Query<ReqParams>) -> Fut,
+    Fut: Future<Output = Result<Res, RpcError>>,
+    ReqBody: Send + 'static,
+    ReqParams: Send + 'static,
+    Res: serde::Serialize,
+{
+    let response = operation(handler, body, query).await;
+
+    match response {
+        Ok(result) => HttpResponse::Ok().json(result),
+        Err(err) => {
+            error!(error = %err, "Error while processing request.");
+            HttpResponse::InternalServerError().finish()
+        }
+    }
 }
 
+// Endpoint function for contract_state
 #[utoipa::path(
     post,
     path = "/v1/contract_state",
@@ -332,30 +356,22 @@ impl RpcHandler {
         (status = 200, description = "OK", body = ContractStateRequestResponse),
     ),
     request_body = ContractStateRequestBody,
-    params(
-        RequestParameters
-    ),
+    params(RequestParameters),
 )]
 pub async fn contract_state(
     query: web::Query<RequestParameters>,
     body: web::Json<ContractStateRequestBody>,
     handler: web::Data<RpcHandler>,
 ) -> HttpResponse {
-    // Call the handler to get the state
-    let response = handler
-        .into_inner()
-        .get_contract_state(&body, &query)
-        .await;
-
-    match response {
-        Ok(state) => HttpResponse::Ok().json(state),
-        Err(err) => {
-            error!(error = %err, ?body, ?query, "Error while getting contract state.");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    handle_request(query, body, handler, |h, b, q| async move {
+        h.into_inner()
+            .get_contract_state(&b, &q)
+            .await
+    })
+    .await
 }
 
+// Endpoint function for contract_delta
 #[utoipa::path(
     post,
     path = "/v1/contract_delta",
@@ -363,20 +379,20 @@ pub async fn contract_state(
         (status = 200, description = "OK", body = ContractDeltaRequestResponse),
     ),
     request_body = ContractDeltaRequestBody,
-    params(
-        RequestParameters
-    ),
+    params(RequestParameters),
 )]
 pub async fn contract_delta(
     query: web::Query<RequestParameters>,
     body: web::Json<ContractDeltaRequestBody>,
     handler: web::Data<RpcHandler>,
 ) -> HttpResponse {
-    // Call the handler to get the state
-    let response = handler
-        .into_inner()
-        .get_contract_delta(&body, &query)
-        .await;
+    handle_request(query, body, handler, |h, b, q| async move {
+        h.into_inner()
+            .get_contract_delta(&b, &q)
+            .await
+    })
+    .await
+}
 
     match response {
         Ok(state) => HttpResponse::Ok().json(state),
