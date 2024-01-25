@@ -161,7 +161,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
             to: msg.sender,
             submitDeadline: uint32(block.timestamp + SWAP_DEADLINE_SEC),
             amountIn: amount,
-            amountOutMin: 0
+            amountOutMin: amountOut
         }));
 
         return amountOut;
