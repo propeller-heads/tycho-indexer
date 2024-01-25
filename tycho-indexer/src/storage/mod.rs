@@ -813,7 +813,7 @@ pub trait StorableProtocolComponent<S, N, I>: Sized + Send + Sync + 'static {
     ) -> Result<N, StorageError>;
 }
 
-#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, ToSchema)]
 pub enum ChangeType {
     #[default]
     Update,

@@ -5,8 +5,11 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     extractor::{evm, runner::ExtractorHandle, ExtractionError},
     models::Chain,
-    services::rpc::{Block, EVMAccount, StateRequestBody, StateRequestResponse, Version},
-    storage::{postgres::PostgresGateway, ContractId},
+    services::rpc::{
+        Block, ContractDeltaRequestBody, ContractDeltaRequestResponse, ContractStateRequestBody,
+        ContractStateRequestResponse, EVMAccount, EVMAccountUpdate, Version,
+    },
+    storage::{postgres::PostgresGateway, ChangeType, ContractId},
 };
 use actix_web::{dev::ServerHandle, web, App, HttpServer};
 use actix_web_opentelemetry::RequestTracing;
@@ -19,11 +22,11 @@ mod rpc;
 mod ws;
 
 pub type EvmPostgresGateway = PostgresGateway<
-    evm::Block,
-    evm::Transaction,
-    evm::Account,
-    evm::AccountUpdate,
-    evm::ERC20Token,
+    evm::Block,         //B
+    evm::Transaction,   //TX
+    evm::Account,       //A
+    evm::AccountUpdate, //D
+    evm::ERC20Token,    //T
 >;
 
 pub struct ServicesBuilder {
@@ -77,15 +80,19 @@ impl ServicesBuilder {
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
         #[derive(OpenApi)]
         #[openapi(
-            paths(rpc::contract_state),
+            paths(rpc::contract_state, rpc::contract_delta),
             components(
                 schemas(Version),
                 schemas(Block),
                 schemas(ContractId),
-                schemas(StateRequestResponse),
-                schemas(StateRequestBody),
+                schemas(ContractStateRequestResponse),
+                schemas(ContractStateRequestBody),
+                schemas(ContractDeltaRequestResponse),
+                schemas(ContractDeltaRequestBody),
                 schemas(Chain),
                 schemas(EVMAccount),
+                schemas(EVMAccountUpdate),
+                schemas(ChangeType),
             )
         )]
         struct ApiDoc;
@@ -100,6 +107,10 @@ impl ServicesBuilder {
                 .service(
                     web::resource(format!("/{}/contract_state", self.prefix))
                         .route(web::post().to(rpc::contract_state)),
+                )
+                .service(
+                    web::resource(format!("/{}/contract_delta", self.prefix))
+                        .route(web::post().to(rpc::contract_delta)),
                 )
                 .app_data(ws_data.clone())
                 .service(
