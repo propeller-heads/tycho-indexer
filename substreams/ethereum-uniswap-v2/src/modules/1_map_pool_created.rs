@@ -56,7 +56,7 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionEntityChanges>) 
         })
     };
 
-    let mut eh = EventHandler::new(&block);
+    let mut eh = EventHandler::new(block);
 
     // TODO: Parametrize Factory Address
     eh.filter_by_address(vec![

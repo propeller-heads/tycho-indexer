@@ -82,7 +82,7 @@ impl<'a> EventHandler<'a> {
     /// You'll likely want to run this just once.
     pub fn handle_events(&mut self) {
         for log in self.block.logs() {
-            if is_log_from_reverted_call(&log.log) {
+            if is_log_from_reverted_call(log.log) {
                 continue;
             }
 
@@ -91,13 +91,13 @@ impl<'a> EventHandler<'a> {
                     .addresses
                     .as_ref()
                     .unwrap()
-                    .has_address(Address::from_slice(&log.log.address.as_slice()))
+                    .has_address(Address::from_slice(log.log.address.as_slice()))
             {
                 continue;
             }
 
             for handler in self.handlers.values_mut() {
-                handler(&log.log, log.receipt.transaction);
+                handler(log.log, log.receipt.transaction);
             }
         }
     }

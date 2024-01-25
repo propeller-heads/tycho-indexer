@@ -64,6 +64,6 @@ impl HasAddresser for StoreGetInt64 {
 
 impl HasAddresser for Address {
     fn has_address(&self, key: Address) -> bool {
-        key == self.to_owned()
+        key == *self
     }
 }

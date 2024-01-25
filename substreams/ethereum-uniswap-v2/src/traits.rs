@@ -28,7 +28,7 @@ impl<'a> PoolAddresser<'a> {
 
 impl<'a> HasAddresser for PoolAddresser<'a> {
     fn has_address(&self, key: Address) -> bool {
-        return self.has_address(key);
+        self.has_address(key)
     }
 }
 
