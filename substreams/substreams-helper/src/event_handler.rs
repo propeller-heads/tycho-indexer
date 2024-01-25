@@ -40,6 +40,7 @@ use crate::common::HasAddresser;
 /// ```
 pub struct EventHandler<'a> {
     block: &'a eth::Block,
+    #[allow(clippy::type_complexity)]
     handlers: HashMap<&'static str, Box<dyn FnMut(&eth::Log, &eth::TransactionTrace) + 'a>>,
     addresses: Option<Box<dyn HasAddresser + 'a>>,
 }
