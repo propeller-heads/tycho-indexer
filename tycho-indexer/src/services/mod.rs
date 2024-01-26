@@ -7,7 +7,8 @@ use crate::{
     models::Chain,
     services::rpc::{
         Block, ContractDeltaRequestBody, ContractDeltaRequestResponse, ContractStateRequestBody,
-        ContractStateRequestResponse, EVMAccount, EVMAccountUpdate, Version,
+        ContractStateRequestResponse, EVMAccount, EVMAccountUpdate, EVMProtocolState, ProtocolId,
+        ProtocolStateRequestBody, ProtocolStateRequestResponse, Version,
     },
     storage::{postgres::PostgresGateway, ChangeType, ContractId},
 };
@@ -80,18 +81,22 @@ impl ServicesBuilder {
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
         #[derive(OpenApi)]
         #[openapi(
-            paths(rpc::contract_state, rpc::contract_delta),
+            paths(rpc::contract_state, rpc::contract_delta, rpc::protocol_state),
             components(
                 schemas(Version),
                 schemas(Block),
                 schemas(ContractId),
+                schemas(ProtocolId),
                 schemas(ContractStateRequestResponse),
                 schemas(ContractStateRequestBody),
                 schemas(ContractDeltaRequestResponse),
                 schemas(ContractDeltaRequestBody),
+                schemas(ProtocolStateRequestResponse),
+                schemas(ProtocolStateRequestBody),
                 schemas(Chain),
                 schemas(EVMAccount),
                 schemas(EVMAccountUpdate),
+                schemas(EVMProtocolState),
                 schemas(ChangeType),
             )
         )]
@@ -111,6 +116,10 @@ impl ServicesBuilder {
                 .service(
                     web::resource(format!("/{}/contract_delta", self.prefix))
                         .route(web::post().to(rpc::contract_delta)),
+                )
+                .service(
+                    web::resource(format!("/{}/protocol_state", self.prefix))
+                        .route(web::post().to(rpc::protocol_state)),
                 )
                 .app_data(ws_data.clone())
                 .service(

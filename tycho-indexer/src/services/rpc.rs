@@ -6,7 +6,7 @@ use crate::{
     models::Chain,
     storage::{
         self, Address, BlockHash, BlockIdentifier, BlockOrTimestamp, ChangeType, ContractId,
-        ContractStateGateway, StorageError,
+        ContractStateGateway, ProtocolGateway, StorageError,
     },
 };
 
@@ -18,6 +18,7 @@ use diesel_async::{
     pooled_connection::deadpool::{self, Pool},
     AsyncPgConnection,
 };
+use futures03::Future;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -78,8 +79,30 @@ impl From<evm::Account> for EVMAccount {
         }
     }
 }
+// Equivalent to evm::ProtocolState. This struct was created to avoid modifying the
+// evm::ProtocolState struct for RPC purpose.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize, ToSchema)]
+pub struct EVMProtocolState {
+    pub component_id: String,
+    #[schema(value_type=HashMap<String, String>)]
+    pub attributes: HashMap<String, Bytes>,
+    #[schema(value_type=String)]
+    pub modify_tx: H256,
+}
+
+impl From<evm::ProtocolState> for EVMProtocolState {
+    fn from(protocol_state: evm::ProtocolState) -> Self {
+        Self {
+            component_id: protocol_state.component_id,
+            attributes: protocol_state.attributes,
+            modify_tx: protocol_state.modify_tx,
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+// Equivalent to evm::AccountUpdate. This struct was created to avoid modifying the
+// evm::AccountUpdate struct for RPC purpose.
 pub struct EVMAccountUpdate {
     #[schema(value_type=String)]
     pub address: H160,
@@ -153,6 +176,27 @@ impl ContractDeltaRequestResponse {
     fn new(accounts: Vec<EVMAccountUpdate>) -> Self {
         Self { accounts }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema)]
+pub struct ProtocolId {
+    pub id: String,
+    pub chain: Chain,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+pub(crate) struct ProtocolStateRequestBody {
+    #[serde(rename = "protocolIds")]
+    protocol_ids: Option<Vec<ProtocolId>>,
+    #[serde(rename = "protocolSystem")]
+    protocol_system: Option<String>,
+    #[serde(default = "Version::default")]
+    version: Version,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+pub(crate) struct ProtocolStateRequestResponse {
+    accounts: Vec<EVMProtocolState>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -244,7 +288,7 @@ impl RpcHandler {
         let addresses = addresses.as_deref();
 
         // Get the contract states from the database
-        // TODO support additional tvl_gt and intertia_min_gt filters
+        // TODO: support additional tvl_gt and intertia_min_gt filters
         match self
             .db_gateway
             .get_contracts(&params.chain, addresses, Some(&version), true, db_connection)
@@ -271,7 +315,7 @@ impl RpcHandler {
     ) -> Result<ContractDeltaRequestResponse, RpcError> {
         let mut conn = self.db_connection_pool.get().await?;
 
-        info!(?request, ?params, "Getting contract state.");
+        info!(?request, ?params, "Getting contract delta.");
         self.get_contract_delta_inner(request, params, &mut conn)
             .await
     }
@@ -296,8 +340,8 @@ impl RpcHandler {
         debug!(?addresses, "Getting contract states.");
         let addresses = addresses.as_deref();
 
-        // Get the contract states from the database
-        // TODO support additional tvl_gt and intertia_min_gt filters
+        // Get the contract deltas from the database
+        // TODO: support additional tvl_gt and intertia_min_gt filters
         match self
             .db_gateway
             .get_accounts_delta(&params.chain, Some(&start), &end, db_connection)
@@ -318,11 +362,73 @@ impl RpcHandler {
                 ))
             }
             Err(err) => {
-                error!(error = %err, "Error while getting contract states.");
+                error!(error = %err, "Error while getting contract delta.");
                 Err(err.into())
             }
         }
     }
+
+    #[instrument(skip(self, request, params))]
+    async fn get_protocol_state(
+        &self,
+        request: &ProtocolStateRequestBody,
+        params: &RequestParameters,
+    ) -> Result<ProtocolStateRequestResponse, RpcError> {
+        let mut conn = self.db_connection_pool.get().await?;
+
+        info!(?request, ?params, "Getting protocol state.");
+        self.get_protocol_state_inner(request, params, &mut conn)
+            .await
+    }
+
+    async fn get_protocol_state_inner(
+        &self,
+        request: &ProtocolStateRequestBody,
+        params: &RequestParameters,
+        db_connection: &mut AsyncPgConnection,
+    ) -> Result<ProtocolStateRequestResponse, RpcError> {
+        //TODO: handle when no id is specified with filters
+        let at = BlockOrTimestamp::try_from(&request.version)?;
+
+        let version = storage::Version(at, storage::VersionKind::Last);
+
+        // Get the protocol IDs from the request
+        let protocol_ids: Option<Vec<ProtocolId>> = request.protocol_ids.clone();
+        let ids: Option<Vec<&str>> = protocol_ids.as_ref().map(|ids| {
+            ids.iter()
+                .map(|id| id.id.as_str())
+                .collect::<Vec<&str>>()
+        });
+        debug!(?ids, "Getting protocol states.");
+        let ids = ids.as_deref();
+
+        // Get the protocol states from the database
+        // TODO support additional tvl_gt and intertia_min_gt filters
+        match self
+            .db_gateway
+            .get_protocol_states(
+                &params.chain,
+                Some(version),
+                request.protocol_system.clone(),
+                ids,
+                db_connection,
+            )
+            .await
+        {
+            Ok(accounts) => Ok(ProtocolStateRequestResponse {
+                accounts: accounts
+                    .into_iter()
+                    .map(EVMProtocolState::from)
+                    .collect(),
+            }),
+            Err(err) => {
+                error!(error = %err, "Error while getting protocol states.");
+                Err(err.into())
+            }
+        }
+    }
+}
+
 // Helper function to handle requests
 async fn handle_request<ReqBody, ReqParams, Res, F, Fut>(
     query: web::Query<ReqParams>,
@@ -404,13 +510,34 @@ pub async fn contract_delta(
     .await
 }
 
-    match response {
-        Ok(state) => HttpResponse::Ok().json(state),
-        Err(err) => {
-            error!(error = %err, ?body, ?query, "Error while getting contract state.");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+// Endpoint function for protocol_state
+#[utoipa::path(
+    post,
+    path = "/v1/protocol_state",
+    responses(
+        (status = 200, description = "OK", body = ProtocolStateRequestResponse),
+    ),
+    request_body = ProtocolStateRequestBody,
+    params(
+        RequestParameters
+    ),
+)]
+pub async fn protocol_state(
+    query: web::Query<RequestParameters>,
+    body: web::Json<ProtocolStateRequestBody>,
+    handler: web::Data<RpcHandler>,
+) -> HttpResponse {
+    handle_request(query, body, handler, |h, b, q| async move {
+        // We don't want to directly return the result of the function because we want to
+        // ensure the returned type is what we expect. This is because the only constraint in
+        // handle_request is that this type implements serde::Serialize, and it's too broad
+        let result: Result<ProtocolStateRequestResponse, RpcError> = h
+            .into_inner()
+            .get_protocol_state(&b, &q)
+            .await;
+        result
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -427,6 +554,8 @@ mod tests {
     use ethers::types::{H160, U256};
 
     use std::{collections::HashMap, str::FromStr, sync::Arc};
+
+    use crate::storage::postgres::orm;
 
     use super::*;
 
@@ -603,7 +732,7 @@ mod tests {
         assert_eq!(result.version.block, expected.version.block);
     }
 
-    pub async fn setup_account(conn: &mut AsyncPgConnection) -> String {
+    pub async fn setup_contract_data(conn: &mut AsyncPgConnection) -> String {
         // Adds fixtures: chain, block, transaction, account, account_balance
         let acc_address = "6B175474E89094C44Da98b954EedeAC495271d0F";
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
@@ -706,12 +835,11 @@ mod tests {
         let pool = postgres::connect(&db_url)
             .await
             .unwrap();
-        let cloned_pool = pool.clone();
-        let mut conn = cloned_pool.get().await.unwrap();
+        let mut conn = pool.get().await.unwrap();
         conn.begin_test_transaction()
             .await
             .unwrap();
-        let acc_address = setup_account(&mut conn).await;
+        let acc_address = setup_contract_data(&mut conn).await;
 
         let db_gateway = Arc::new(EvmPostgresGateway::from_connection(&mut conn).await);
         let req_handler = RpcHandler::new(db_gateway, pool);
@@ -769,7 +897,7 @@ mod tests {
         conn.begin_test_transaction()
             .await
             .unwrap();
-        let acc_address = setup_account(&mut conn).await;
+        let acc_address = setup_contract_data(&mut conn).await;
 
         let db_gateway = Arc::new(EvmPostgresGateway::from_connection(&mut conn).await);
         let req_handler = RpcHandler::new(db_gateway, pool);
@@ -814,8 +942,164 @@ mod tests {
             },
         };
 
-        let state = req_handler
+        let delta = req_handler
             .get_contract_delta_inner(&request, &RequestParameters::default(), &mut conn)
+            .await
+            .unwrap();
+
+        assert_eq!(delta.accounts.len(), 1);
+        assert_eq!(delta.accounts[0], expected.into());
+    }
+
+    const WETH: &str = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+    const USDC: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+
+    async fn setup_protocol_data(conn: &mut AsyncPgConnection) -> Vec<String> {
+        let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
+        let chain_id_sn = db_fixtures::insert_chain(conn, "starknet").await;
+        let blk = db_fixtures::insert_blocks(conn, chain_id).await;
+        let tx_hashes = [
+            "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
+            "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54".to_string(),
+            "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7".to_string(),
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388".to_string(),
+        ];
+
+        let txn = db_fixtures::insert_txns(
+            conn,
+            &[
+                (blk[0], 1i64, &tx_hashes[0]),
+                (blk[0], 2i64, &tx_hashes[1]),
+                // ----- Block 01 LAST
+                (blk[1], 1i64, &tx_hashes[2]),
+                (blk[1], 2i64, &tx_hashes[3]),
+                // ----- Block 02 LAST
+            ],
+        )
+        .await;
+
+        let protocol_system_id_ambient =
+            db_fixtures::insert_protocol_system(conn, "ambient".to_owned()).await;
+        let protocol_system_id_zz =
+            db_fixtures::insert_protocol_system(conn, "zigzag".to_owned()).await;
+
+        let protocol_type_id = db_fixtures::insert_protocol_type(
+            conn,
+            "Pool",
+            Some(orm::FinancialType::Swap),
+            None,
+            Some(orm::ImplementationType::Custom),
+        )
+        .await;
+        let protocol_component_id = db_fixtures::insert_protocol_component(
+            conn,
+            "state1",
+            chain_id,
+            protocol_system_id_ambient,
+            protocol_type_id,
+            txn[0],
+        )
+        .await;
+        let _protocol_component_id2 = db_fixtures::insert_protocol_component(
+            conn,
+            "state3",
+            chain_id,
+            protocol_system_id_ambient,
+            protocol_type_id,
+            txn[0],
+        )
+        .await;
+        db_fixtures::insert_protocol_component(
+            conn,
+            "state2",
+            chain_id_sn,
+            protocol_system_id_zz,
+            protocol_type_id,
+            txn[1],
+        )
+        .await;
+
+        // protocol state for state1-reserve1
+        db_fixtures::insert_protocol_state(
+            conn,
+            protocol_component_id,
+            txn[0],
+            "reserve1".to_owned(),
+            Bytes::from(U256::from(1100)),
+            Some(txn[2]),
+        )
+        .await;
+
+        // protocol state for state1-reserve2
+        db_fixtures::insert_protocol_state(
+            conn,
+            protocol_component_id,
+            txn[0],
+            "reserve2".to_owned(),
+            Bytes::from(U256::from(500)),
+            None,
+        )
+        .await;
+
+        // protocol state update for state1-reserve1
+        db_fixtures::insert_protocol_state(
+            conn,
+            protocol_component_id,
+            txn[3],
+            "reserve1".to_owned(),
+            Bytes::from(U256::from(1000)),
+            None,
+        )
+        .await;
+
+        // insert tokens
+        db_fixtures::insert_token(conn, chain_id, WETH.trim_start_matches("0x"), "WETH", 18).await;
+        db_fixtures::insert_token(conn, chain_id, USDC.trim_start_matches("0x"), "USDC", 6).await;
+        tx_hashes.to_vec()
+    }
+
+    fn evm_attributes<'a>(
+        data: impl IntoIterator<Item = (&'a str, i32)>,
+    ) -> HashMap<String, Bytes> {
+        data.into_iter()
+            .map(|(s, v)| (s.to_owned(), Bytes::from(U256::from(v))))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_state() {
+        let db_url = std::env::var("DATABASE_URL").unwrap();
+        let pool = postgres::connect(&db_url)
+            .await
+            .unwrap();
+        let mut conn = pool.get().await.unwrap();
+        conn.begin_test_transaction()
+            .await
+            .unwrap();
+        setup_protocol_data(&mut conn).await;
+
+        let db_gateway = Arc::new(EvmPostgresGateway::from_connection(&mut conn).await);
+        let req_handler = RpcHandler::new(db_gateway, pool);
+
+        let expected = evm::ProtocolState {
+            component_id: "state1".to_owned(),
+            attributes: evm_attributes([("reserve1", 1000), ("reserve2", 500)]),
+            modify_tx: "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
+                .parse()
+                .unwrap(),
+        };
+
+        let request = ProtocolStateRequestBody {
+            protocol_ids: Some(vec![ProtocolId {
+                id: "state1".to_owned(),
+                chain: Chain::Ethereum,
+            }]),
+            protocol_system: None,
+            version: Version { timestamp: Some(Utc::now().naive_utc()), block: None },
+        };
+
+        let state = req_handler
+            .get_protocol_state_inner(&request, &RequestParameters::default(), &mut conn)
             .await
             .unwrap();
 
