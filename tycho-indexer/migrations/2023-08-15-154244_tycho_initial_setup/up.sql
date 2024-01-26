@@ -88,15 +88,10 @@ CREATE TABLE IF NOT EXISTS protocol_system(
 );
 
 -- Table describing the different protocol types available in the system.
-CREATE TABLE IF
-    NOT EXISTS protocol_type(
-    "id" bigserial       PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS protocol_type(
+    "id" bigserial PRIMARY KEY,
     -- The name of the type e.g. uniswap-v2:pool
-    "name" varchar(255)       NOT
-
-
-
-    NULL,
+    "name" varchar(255) NOT NULL,
     -- The actual type of the protocol.
     "financial_type" financial_protocol_type NOT NULL,
     -- The jsonschema to evaluate the attribute json for pools of this type.
@@ -434,7 +429,7 @@ BEGIN
     WHERE
         valid_to IS NULL
         AND account_id = NEW.account_id
-        -- running this after inserts allows us to use upserts, 
+        -- running this after inserts allows us to use upserts,
         -- currently the application does not use that though
         AND id != NEW.id;
     RETURN NEW;
@@ -459,7 +454,7 @@ BEGIN
     WHERE
         valid_to IS NULL
         AND account_id = NEW.account_id
-        -- running this after inserts allows us to use upserts, 
+        -- running this after inserts allows us to use upserts,
         -- currently the application does not use that though
         AND id != NEW.id;
     RETURN NEW;
