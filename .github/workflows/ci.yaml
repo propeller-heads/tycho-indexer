@@ -102,6 +102,9 @@ jobs:
 
       - name: pg-formatter-action
         uses: Soarex16/pg-formatter-action@v1
+        with:
+          pattern: "tycho-indexer/migrations/**/*.sql"
+          extra-args: -i --no-space-function 
 
       - name: Check diffs
         run: git diff --exit-code
