@@ -364,9 +364,14 @@ pub async fn contract_state(
     handler: web::Data<RpcHandler>,
 ) -> HttpResponse {
     handle_request(query, body, handler, |h, b, q| async move {
-        h.into_inner()
+        // We don't want to directly return the result of the function because we want to
+        // ensure the returned type is what we expect. This is because the only constraint in
+        // handle_request is that this type implements serde::Serialize, and it's too broad
+        let result: Result<ContractStateRequestResponse, RpcError> = h
+            .into_inner()
             .get_contract_state(&b, &q)
-            .await
+            .await;
+        result
     })
     .await
 }
@@ -387,9 +392,14 @@ pub async fn contract_delta(
     handler: web::Data<RpcHandler>,
 ) -> HttpResponse {
     handle_request(query, body, handler, |h, b, q| async move {
-        h.into_inner()
+        // We don't want to directly return the result of the function because we want to
+        // ensure the returned type is what we expect. This is because the only constraint in
+        // handle_request is that this type implements serde::Serialize, and it's too broad
+        let result: Result<ContractDeltaRequestResponse, RpcError> = h
+            .into_inner()
             .get_contract_delta(&b, &q)
-            .await
+            .await;
+        result
     })
     .await
 }
