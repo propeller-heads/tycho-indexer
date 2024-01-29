@@ -17,6 +17,22 @@ binaries:
     file: target/wasm32-unknown-unknown/release/substreams_balancer.wasm
 
 modules:
+  - name: map_pools_created
+    kind: map
+    initialBlock: 12369300
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.GroupedTransactionProtocolComponents
+
+  - name: store_pools_created
+    kind: store
+    initialBlock: 12369300
+    updatePolicy: add
+    valueType: int64
+    inputs:
+      - map: map_pools_created
+
   - name: map_balance_deltas
     kind: map
     initialBlock: 12369300  # An arbitrary block that should change based on your requirements
@@ -38,7 +54,9 @@ modules:
     initialBlock: 12369300
     inputs:
       - source: sf.ethereum.type.v2.Block
+      - map: map_pools_created
       - map: map_balance_deltas
+      - store: store_pools_created
       - store: store_balance_changes
         mode: deltas  # This is the key property that simplifies `BalanceChange` handling
     output:

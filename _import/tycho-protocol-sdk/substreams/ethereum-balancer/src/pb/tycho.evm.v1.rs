@@ -32,6 +32,7 @@ pub struct Transaction {
     #[prost(bytes="vec", tag="3")]
     pub to: ::prost::alloc::vec::Vec<u8>,
     /// The transactions index within the block.
+    /// TODO: should this be uint32? to match the type from the native substream type?
     #[prost(uint64, tag="4")]
     pub index: u64,
 }
@@ -80,9 +81,17 @@ pub struct ProtocolComponent {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ProtocolComponents {
-    #[prost(message, repeated, tag="1")]
+pub struct TransactionProtocolComponents {
+    #[prost(message, optional, tag="1")]
+    pub tx: ::core::option::Option<Transaction>,
+    #[prost(message, repeated, tag="2")]
     pub components: ::prost::alloc::vec::Vec<ProtocolComponent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GroupedTransactionProtocolComponents {
+    #[prost(message, repeated, tag="1")]
+    pub tx_components: ::prost::alloc::vec::Vec<TransactionProtocolComponents>,
 }
 /// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
 /// Note that if a ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
@@ -128,14 +137,6 @@ pub struct BalanceDelta {
 pub struct BalanceDeltas {
     #[prost(message, repeated, tag="1")]
     pub balance_deltas: ::prost::alloc::vec::Vec<BalanceDelta>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlockBalanceChanges {
-    #[prost(message, optional, tag="1")]
-    pub block: ::core::option::Option<Block>,
-    #[prost(message, repeated, tag="2")]
-    pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
 }
 /// Enum to specify the type of a change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

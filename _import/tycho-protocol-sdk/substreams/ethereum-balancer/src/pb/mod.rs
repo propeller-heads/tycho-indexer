@@ -1,3 +1,4 @@
+// @generated
 pub mod tycho {
     pub mod evm {
         // @@protoc_insertion_point(attribute:tycho.evm.v1)

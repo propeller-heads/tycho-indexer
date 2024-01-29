@@ -70,8 +70,13 @@ message ProtocolComponent {
   ChangeType change = 5;
 }
 
-message ProtocolComponents {
-  repeated ProtocolComponent components = 1;
+message TransactionProtocolComponents {
+  Transaction tx = 1;
+  repeated ProtocolComponent components = 2;
+}
+
+message GroupedTransactionProtocolComponents {
+  repeated TransactionProtocolComponents tx_components = 1;
 }
 
 // A struct for following the changes of Total Value Locked (TVL) of a protocol component.
