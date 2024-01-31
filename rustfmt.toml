@@ -7,5 +7,8 @@ binop_separator = "Back"
 trailing_comma = "Vertical"
 trailing_semicolon = false
 use_field_init_shorthand = true
-chain_width=40
-ignore=["substreams/ethereum-uniswap-v2/src/abi"]
+chain_width = 40
+ignore = [
+    "substreams/ethereum-uniswap-v2/src/abi",
+    "substreams/ethereum-uniswap-v3/src/abi",
+]
