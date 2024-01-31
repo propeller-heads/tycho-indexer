@@ -4524,6 +4524,7 @@ dependencies = [
  "anyhow",
  "ethabi 18.0.0",
  "getrandom",
+ "hex",
  "hex-literal 0.4.1",
  "num-bigint",
  "prost 0.11.9",
@@ -4531,6 +4532,25 @@ dependencies = [
  "substreams-common",
  "substreams-ethereum",
  "substreams-helper",
+]
+
+[[package]]
+name = "substreams-ethereum-uniswap-v3"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ethabi 18.0.0",
+ "getrandom",
+ "hex",
+ "hex-literal 0.4.1",
+ "num-bigint",
+ "prost 0.11.9",
+ "substreams",
+ "substreams-common",
+ "substreams-entity-change",
+ "substreams-ethereum",
+ "substreams-helper",
+ "tiny-keccak",
 ]
 
 [[package]]
