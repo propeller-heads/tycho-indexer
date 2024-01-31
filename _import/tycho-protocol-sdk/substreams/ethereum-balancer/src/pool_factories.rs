@@ -42,11 +42,11 @@ impl SerializableVecBigInt for Vec<BigInt> {
 ///  fufill both the required details + any extra `Attributes`
 /// Ref: https://docs.balancer.fi/reference/contracts/deployment-addresses/mainnet.html
 pub fn address_map(
-    pool_addr: &[u8],
+    pool_factory_address: &[u8],
     log: &Log,
     call: &Call,
 ) -> Option<tycho::ProtocolComponent> {
-    match *pool_addr {
+    match *pool_factory_address {
         hex!("897888115Ada5773E02aA29F775430BFB5F34c51") => {
             let create_call =
                 abi::weighted_pool_factory::functions::Create::match_and_decode(call)?;
@@ -56,7 +56,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: create_call.tokens,
-                contracts: vec![pool_addr.into(), pool_created.pool],
+                contracts: vec![pool_factory_address.into(), pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -81,7 +81,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: create_call.tokens,
-                contracts: vec![pool_addr.into(), pool_created.pool],
+                contracts: vec![pool_factory_address.into(), pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -101,7 +101,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_addr.into(), pool_created.pool],
+                contracts: vec![pool_factory_address.into(), pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -128,7 +128,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_addr.into(), pool_created.pool],
+                contracts: vec![pool_factory_address.into(), pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -200,7 +200,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_addr.into(), pool_created.pool],
+                contracts: vec![pool_factory_address.into(), pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -225,7 +225,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_addr.into(), pool_created.pool],
+                contracts: vec![pool_factory_address.into(), pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -252,7 +252,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: create_call.tokens,
-                contracts: vec![pool_addr.into(), pool_created.pool],
+                contracts: vec![pool_factory_address.into(), pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
