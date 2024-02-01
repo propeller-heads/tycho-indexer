@@ -174,7 +174,12 @@ impl AmbientPgGateway {
             .tx_updates
             .iter()
             .filter(|&u| u.is_update())
-            .map(|u| (u.tx.hash.into(), u.update.clone()))
+            .flat_map(|u| {
+                u.account_updates
+                    .clone()
+                    .into_iter()
+                    .map(|au| (u.tx.hash.into(), au))
+            })
             .collect();
         let changes_slice: &[(Bytes, AccountUpdate)] = collected_changes.as_slice();
 
@@ -770,28 +775,29 @@ mod test_serial_db {
             extractor: "vm:ambient".to_owned(),
             chain: Chain::Ethereum,
             block: evm::Block::default(),
-            tx_updates: vec![
-                evm::AccountUpdateWithTx::new(
-                    H160(AMBIENT_CONTRACT),
-                    Chain::Ethereum,
-                    HashMap::new(),
-                    None,
-                    Some(vec![0, 0, 0, 0].into()),
-                    ChangeType::Creation,
-                    evm::fixtures::transaction01(),
-                ),
-                evm::AccountUpdateWithTx::new(
-                    H160(AMBIENT_CONTRACT),
-                    Chain::Ethereum,
-                    evm::fixtures::evm_slots([(1, 200)]),
-                    Some(U256::from(1000)),
-                    None,
-                    ChangeType::Update,
-                    evm::fixtures::transaction02(TX_HASH_0, evm::fixtures::HASH_256_0, 1),
-                ),
-            ],
-            protocol_components: Vec::new(),
-            component_balances: Vec::new(),
+            tx_updates: vec![evm::TransactionUpdates::new(
+                vec![
+                    AccountUpdate::new(
+                        H160(AMBIENT_CONTRACT),
+                        Chain::Ethereum,
+                        evm::fixtures::evm_slots([(1, 200)]),
+                        Some(U256::from(1000)),
+                        None,
+                        ChangeType::Creation,
+                    ),
+                    AccountUpdate::new(
+                        H160(AMBIENT_CONTRACT),
+                        Chain::Ethereum,
+                        evm::fixtures::evm_slots([(1, 200)]),
+                        Some(U256::from(1000)),
+                        None,
+                        ChangeType::Update,
+                    ),
+                ],
+                vec![],
+                vec![],
+                evm::fixtures::transaction02(TX_HASH_0, evm::fixtures::HASH_256_0, 1),
+            )],
         }
     }
 
@@ -807,17 +813,19 @@ mod test_serial_db {
             extractor: "vm:ambient".to_owned(),
             chain: Chain::Ethereum,
             block,
-            tx_updates: vec![evm::AccountUpdateWithTx::new(
-                H160(AMBIENT_CONTRACT),
-                Chain::Ethereum,
-                evm::fixtures::evm_slots([(42, 0xbadbabe)]),
-                Some(U256::from(2000)),
-                None,
-                ChangeType::Update,
+            tx_updates: vec![evm::TransactionUpdates::new(
+                vec![AccountUpdate::new(
+                    H160(AMBIENT_CONTRACT),
+                    Chain::Ethereum,
+                    evm::fixtures::evm_slots([(42, 0xbadbabe)]),
+                    Some(U256::from(2000)),
+                    None,
+                    ChangeType::Update,
+                )],
+                vec![],
+                vec![],
                 evm::fixtures::transaction02(TX_HASH_1, BLOCK_HASH_0, 1),
             )],
-            protocol_components: Vec::new(),
-            component_balances: Vec::new(),
         }
     }
 

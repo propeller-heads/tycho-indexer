@@ -133,7 +133,7 @@ impl Account {
     }
 }
 
-impl From<&AccountUpdateWithTx> for Account {
+impl From<&TransactionUpdates> for Account {
     /// Creates a full account from a change.
     ///
     /// This can be used to get an insertable an account if we know the update
@@ -143,7 +143,7 @@ impl From<&AccountUpdateWithTx> for Account {
     /// missing, it will use the corresponding types default.
     /// Will use the associated transaction as creation, balance and code modify
     /// transaction.
-    fn from(value: &AccountUpdateWithTx) -> Self {
+    fn from(value: &TransactionUpdates) -> Self {
         let empty_hash = H256::from(keccak256(Vec::new()));
         if value.change != ChangeType::Creation {
             warn!("Creating an account from a partial change!")
@@ -190,6 +190,37 @@ impl AccountUpdate {
         Self { address, chain, slots, balance, code, change }
     }
 
+    pub fn try_from_message(
+        msg: substreams::ContractChange,
+        tx: &Transaction,
+        chain: Chain,
+    ) -> Result<Self, ExtractionError> {
+        let change = msg.change().into();
+        let update = AccountUpdate::new(
+            pad_and_parse_h160(&msg.address.into()).map_err(ExtractionError::DecodeError)?,
+            chain,
+            msg.slots
+                .into_iter()
+                .map(|cs| {
+                    Ok((
+                        pad_and_parse_32bytes::<U256>(&cs.slot)
+                            .map_err(ExtractionError::DecodeError)?,
+                        pad_and_parse_32bytes::<U256>(&cs.value)
+                            .map_err(ExtractionError::DecodeError)?,
+                    ))
+                })
+                .collect::<Result<HashMap<_, _>, ExtractionError>>()?,
+            if !msg.balance.is_empty() {
+                Some(pad_and_parse_32bytes(&msg.balance).map_err(ExtractionError::DecodeError)?)
+            } else {
+                None
+            },
+            if !msg.code.is_empty() { Some(msg.code.into()) } else { None },
+            change,
+        );
+        Ok(update)
+    }
+
     /// Merge this update (`self`) with another one (`other`)
     ///
     /// This function is utilized for aggregating multiple updates into a single
@@ -202,7 +233,7 @@ impl AccountUpdate {
     ///
     /// There are no further validation checks within this method, hence it
     /// could be used as needed. However, you should give preference to
-    /// utilizing [AccountUpdateWithTx] for merging, when possible.
+    /// utilizing [TransactionUpdates] for merging, when possible.
     ///
     /// # Errors
     ///
@@ -290,28 +321,26 @@ impl NormalisedMessage for BlockAccountChanges {
 
 /// Updates grouped by their respective transaction.
 #[derive(Debug, Clone, PartialEq)]
-pub struct AccountUpdateWithTx {
+pub struct TransactionUpdates {
     // TODO: for ambient it works to have only a single update here but long
     // term we need to be able to store changes to multiple accounts per
     // transactions.
-    pub update: AccountUpdate,
+    pub account_updates: Vec<AccountUpdate>,
+    pub protocol_componets: Vec<ProtocolComponent>,
+    pub component_balances: Vec<ComponentBalance>,
     pub tx: Transaction,
     // pub protocol_components: Vec<ProtocolComponent>,
     // pub component_balances: Vec<ComponentBalance>,
 }
 
-impl AccountUpdateWithTx {
-    #[allow(clippy::too_many_arguments)]
+impl TransactionUpdates {
     pub fn new(
-        address: H160,
-        chain: Chain,
-        slots: HashMap<U256, U256>,
-        balance: Option<U256>,
-        code: Option<Bytes>,
-        change: ChangeType,
+        account_updates: Vec<AccountUpdate>,
+        protocol_componets: Vec<ProtocolComponent>,
+        component_balances: Vec<ComponentBalance>,
         tx: Transaction,
     ) -> Self {
-        Self { update: AccountUpdate { address, chain, slots, balance, code, change }, tx }
+        Self { account_updates, protocol_componets, component_balances, tx }
     }
 
     /// Merges this update with another one.
@@ -331,7 +360,7 @@ impl AccountUpdateWithTx {
     /// # Errors
     /// This method will return `ExtractionError::MergeError` if any of the above
     /// conditions is violated.
-    pub fn merge(&mut self, other: AccountUpdateWithTx) -> Result<(), ExtractionError> {
+    pub fn merge(&mut self, other: TransactionUpdates) -> Result<(), ExtractionError> {
         if self.tx.block_hash != other.tx.block_hash {
             return Err(ExtractionError::MergeError(format!(
                 "Can't merge AccountUpdates from different blocks: 0x{:x} != 0x{:x}",
@@ -355,11 +384,11 @@ impl AccountUpdateWithTx {
     }
 }
 
-impl Deref for AccountUpdateWithTx {
+impl Deref for TransactionUpdates {
     type Target = AccountUpdate;
 
     fn deref(&self) -> &Self::Target {
-        &self.update
+        &self.account_updates
     }
 }
 
@@ -372,9 +401,7 @@ pub struct BlockContractChanges {
     extractor: String,
     chain: Chain,
     pub block: Block,
-    pub tx_updates: Vec<AccountUpdateWithTx>,
-    pub protocol_components: Vec<ProtocolComponent>,
-    pub component_balances: Vec<ComponentBalance>,
+    pub tx_updates: Vec<TransactionUpdates>,
 }
 
 pub type EVMStateGateway<DB> =
@@ -417,41 +444,6 @@ impl Transaction {
             to,
             index: msg.index,
         })
-    }
-}
-
-impl AccountUpdateWithTx {
-    /// Parses account update from tychos protobuf account update message
-    pub fn try_from_message(
-        msg: substreams::ContractChange,
-        tx: &Transaction,
-        chain: Chain,
-    ) -> Result<Self, ExtractionError> {
-        let change = msg.change().into();
-        let update = AccountUpdateWithTx::new(
-            pad_and_parse_h160(&msg.address.into()).map_err(ExtractionError::DecodeError)?,
-            chain,
-            msg.slots
-                .into_iter()
-                .map(|cs| {
-                    Ok((
-                        pad_and_parse_32bytes::<U256>(&cs.slot)
-                            .map_err(ExtractionError::DecodeError)?,
-                        pad_and_parse_32bytes::<U256>(&cs.value)
-                            .map_err(ExtractionError::DecodeError)?,
-                    ))
-                })
-                .collect::<Result<HashMap<_, _>, ExtractionError>>()?,
-            if !msg.balance.is_empty() {
-                Some(pad_and_parse_32bytes(&msg.balance).map_err(ExtractionError::DecodeError)?)
-            } else {
-                None
-            },
-            if !msg.code.is_empty() { Some(msg.code.into()) } else { None },
-            change,
-            *tx,
-        );
-        Ok(update)
     }
 }
 
@@ -620,14 +612,15 @@ impl BlockContractChanges {
         if let Some(block) = msg.block {
             let block = Block::try_from_message(block, chain)?;
             let mut tx_updates = Vec::new();
-            let mut protocol_components = Vec::new();
 
             for change in msg.changes.into_iter() {
+                let mut account_updates = Vec::new();
+                let mut protocol_components = Vec::new();
                 if let Some(tx) = change.tx {
                     let tx = Transaction::try_from_message(tx, &block.hash)?;
                     for el in change.contract_changes.into_iter() {
-                        let update = AccountUpdateWithTx::try_from_message(el, &tx, chain)?;
-                        tx_updates.push(update);
+                        let update = AccountUpdate::try_from_message(el, &tx, chain)?;
+                        account_updates.push(update);
                     }
                     for component_msg in change.component_changes.into_iter() {
                         let component = ProtocolComponent::try_from_message(
@@ -640,17 +633,16 @@ impl BlockContractChanges {
                         )?;
                         protocol_components.push(component);
                     }
+                    tx_updates.push(TransactionUpdates::new(
+                        account_updates,
+                        protocol_components,
+                        Vec::new(),
+                        tx,
+                    ));
                 }
             }
             tx_updates.sort_unstable_by_key(|update| update.tx.index);
-            return Ok(Self {
-                extractor: extractor.to_owned(),
-                chain,
-                block,
-                tx_updates,
-                protocol_components,
-                component_balances: Vec::new(),
-            });
+            return Ok(Self { extractor: extractor.to_owned(), chain, block, tx_updates });
         }
         Err(ExtractionError::Empty)
     }
@@ -674,7 +666,7 @@ impl BlockContractChanges {
     /// This returns an error if there was a problem during merge. The error
     /// type is `ExtractionError`.
     pub fn aggregate_updates(self) -> Result<BlockAccountChanges, ExtractionError> {
-        let mut account_updates: HashMap<H160, AccountUpdateWithTx> = HashMap::new();
+        let mut account_updates: HashMap<H160, TransactionUpdates> = HashMap::new();
 
         for update in self.tx_updates.into_iter() {
             match account_updates.entry(update.address) {
@@ -693,9 +685,16 @@ impl BlockContractChanges {
             self.block,
             account_updates
                 .into_iter()
-                .map(|(k, v)| (k, v.update))
+                .flat_map(|(k, v)| {
+                    v.account_updates
+                        .into_iter()
+                        .map(move |u| (k, u))
+                })
                 .collect(),
-            self.protocol_components,
+            self.tx_updates
+                .iter()
+                .flat_map(|tx_u| tx_u.protocol_componets)
+                .collect(),
             Vec::new(),
             Vec::new(),
         ))
@@ -1349,17 +1348,21 @@ mod test {
         )
     }
 
-    fn update_w_tx() -> AccountUpdateWithTx {
+    fn update_w_tx() -> TransactionUpdates {
         let code = vec![0, 0, 0, 0];
-        AccountUpdateWithTx::new(
-            "0xe688b84b23f322a994A53dbF8E15FA82CDB71127"
-                .parse()
-                .unwrap(),
-            Chain::Ethereum,
-            fixtures::evm_slots([]),
-            Some(U256::from(10000)),
-            Some(code.into()),
-            ChangeType::Update,
+        TransactionUpdates::new(
+            vec![AccountUpdate::new(
+                "0xe688b84b23f322a994A53dbF8E15FA82CDB71127"
+                    .parse()
+                    .unwrap(),
+                Chain::Ethereum,
+                fixtures::evm_slots([]),
+                Some(U256::from(10000)),
+                Some(code.into()),
+                ChangeType::Update,
+            )],
+            vec![],
+            vec![],
             fixtures::transaction01(),
         )
     }
@@ -1501,37 +1504,33 @@ mod test {
                 ts: NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
             },
             tx_updates: vec![
-                AccountUpdateWithTx {
-                    update: AccountUpdate {
-                        address: H160::from_low_u64_be(0x0000000000000000000000000000000061626364),
-                        chain: Chain::Ethereum,
-                        slots: fixtures::evm_slots([
-                            (2711790500, 2981278644),
-                            (3250766788, 3520254932),
-                        ]),
-                        balance: Some(U256::from(1903326068)),
-                        code: Some(vec![129, 130, 131, 132].into()),
-                        change: ChangeType::Update,
-                    },
+                TransactionUpdates {
+                    account_updates: vec![AccountUpdate::new(
+                        H160::from_low_u64_be(0x0000000000000000000000000000000061626364),
+                        Chain::Ethereum,
+                        fixtures::evm_slots([(2711790500, 2981278644), (3250766788, 3520254932)]),
+                        Some(U256::from(1903326068)),
+                        Some(vec![129, 130, 131, 132].into()),
+                        ChangeType::Update,
+                    )],
+                    protocol_componets: vec![protocol_component.clone()],
+                    component_balances: vec![],
                     tx,
                 },
-                AccountUpdateWithTx {
-                    update: AccountUpdate {
-                        address: H160::from_low_u64_be(0x0000000000000000000000000000000061626364),
-                        chain: Chain::Ethereum,
-                        slots: fixtures::evm_slots([
-                            (2981278644, 3250766788),
-                            (2442302356, 2711790500),
-                        ]),
-                        balance: Some(U256::from(4059231220u64)),
-                        code: Some(vec![1, 2, 3, 4].into()),
-                        change: ChangeType::Update,
-                    },
+                TransactionUpdates {
+                    account_updates: vec![AccountUpdate::new(
+                        H160::from_low_u64_be(0x0000000000000000000000000000000061626364),
+                        Chain::Ethereum,
+                        fixtures::evm_slots([(2981278644, 3250766788), (2442302356, 2711790500)]),
+                        Some(U256::from(4059231220u64)),
+                        Some(vec![1, 2, 3, 4].into()),
+                        ChangeType::Update,
+                    )],
+                    protocol_componets: vec![],
+                    component_balances: vec![],
                     tx,
                 },
             ],
-            protocol_components: vec![protocol_component],
-            component_balances: Vec::new(),
         }
     }
 
