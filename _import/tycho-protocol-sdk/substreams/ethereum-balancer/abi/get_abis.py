@@ -3,8 +3,7 @@ import json
 import os
 import re
 import time
-
-import requests
+import urllib.request
 
 # Exports contract ABI in JSON
 
@@ -38,13 +37,12 @@ def __main__():
         print(f"Getting ABI for {name} at {addr} ({normalized_name})")
 
         try:
-            ...
-            response = requests.get(ABI_ENDPOINT.format(address=addr))
-            response_json = response.json()
-            abi_json = json.loads(response_json["result"])
-            result = json.dumps(abi_json, indent=4, sort_keys=True)
-            with open(f"{normalized_name}.json", "w") as f:
-                f.write(result)
+            with urllib.request.urlopen(ABI_ENDPOINT.format(address=addr)) as response:
+                response_json = json.loads(response.read().decode())
+                abi_json = json.loads(response_json["result"])
+                result = json.dumps(abi_json, indent=4, sort_keys=True)
+                with open(f"{normalized_name}.json", "w") as f:
+                    f.write(result)
         except Exception as err:
             print(response.content)
             raise err
