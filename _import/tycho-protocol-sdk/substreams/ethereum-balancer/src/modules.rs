@@ -41,14 +41,8 @@ pub fn map_pools_created(
     Ok(tycho::GroupedTransactionProtocolComponents {
         tx_components: block
             .transactions()
-            .map(|tx| tycho::TransactionProtocolComponents {
-                tx: Some(tycho::Transaction {
-                    hash: tx.hash.clone(),
-                    from: tx.from.clone(),
-                    to: tx.to.clone(),
-                    index: Into::<u64>::into(tx.index),
-                }),
-                components: tx
+            .filter_map(|tx| {
+                let components = tx
                     .logs_with_calls()
                     .filter(|(_, call)| !call.call.state_reverted)
                     .filter_map(|(log, call)| {
@@ -58,7 +52,21 @@ pub fn map_pools_created(
                             call.call,
                         )?)
                     })
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<_>>();
+
+                if !components.is_empty() {
+                    Some(tycho::TransactionProtocolComponents {
+                        tx: Some(tycho::Transaction {
+                            hash: tx.hash.clone(),
+                            from: tx.from.clone(),
+                            to: tx.to.clone(),
+                            index: Into::<u64>::into(tx.index),
+                        }),
+                        components,
+                    })
+                } else {
+                    None
+                }
             })
             .collect::<Vec<_>>(),
     })
