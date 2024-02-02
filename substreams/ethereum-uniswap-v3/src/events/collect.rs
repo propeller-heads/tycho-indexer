@@ -1,5 +1,4 @@
 use substreams_ethereum::pb::eth::v2::StorageChange;
-use substreams_helper::hex::Hexable;
 
 use crate::{
     abi::pool::events::Collect,
@@ -28,21 +27,7 @@ impl EventHandlers for Collect {
         changed_attributes
     }
 
-    fn get_balance_delta(&self, pool: &Pool, ordinal: usize) -> Vec<BalanceDelta> {
-        let changed_balance = vec![
-            BalanceDelta {
-                token: pool.token0.clone(),
-                delta: self.amount0.clone(),
-                component_id: pool.address.clone().to_hex(),
-                ordinal,
-            },
-            BalanceDelta {
-                token: pool.token1.clone(),
-                delta: self.amount1.clone(),
-                component_id: pool.address.clone().to_hex(),
-                ordinal,
-            },
-        ];
-        changed_balance
+    fn get_balance_delta(&self, _pool: &Pool, _ordinal: u64) -> Vec<BalanceDelta> {
+        vec![]
     }
 }

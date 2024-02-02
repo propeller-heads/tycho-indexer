@@ -1,14 +1,11 @@
 use std::{collections::HashMap, usize, vec};
-use substreams::{
-    log,
-    store::{StoreGet, StoreGetProto},
-};
+use substreams::store::{StoreGet, StoreGetBigInt, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::{self as eth, Log, StorageChange, TransactionTrace};
 
 use substreams_helper::hex::Hexable;
 
 use crate::{
-    events::get_log_changed_attribute,
+    events::{get_log_changed_attributes, get_log_changed_balances},
     pb::tycho::evm::{
         uniswap::v3::Pool,
         v1::{
@@ -22,13 +19,14 @@ use crate::{
 #[substreams::handlers::map]
 pub fn map_pool_events(
     block: eth::Block,
-    created_pairs: SameTypeTransactionChanges,
+    created_pools: SameTypeTransactionChanges,
     pools_store: StoreGetProto<Pool>,
+    balance_store: StoreGetBigInt,
 ) -> Result<BlockEntityChanges, substreams::errors::Error> {
     let mut tx_changes_map: HashMap<Vec<u8>, TransactionEntityChanges> = HashMap::new();
 
     // Add created pairs to the tx_changes_map
-    for change in &created_pairs.changes {
+    for change in &created_pools.changes {
         let transaction = change.tx.as_ref().unwrap();
         tx_changes_map.insert(transaction.hash.clone(), change.clone());
     }
@@ -39,8 +37,6 @@ pub fn map_pool_events(
             if let Some(pool) =
                 pools_store.get_last(StoreKey::Pool.get_unique_pool_key(&log.address.to_hex()))
             {
-                log::info!("Log from pool address: {}", pool.address.clone().to_hex());
-
                 // Handle Uniswap V3 events, it will update the tx_changes_map
                 handle_pool_events(
                     &mut tx_changes_map,
@@ -48,12 +44,68 @@ pub fn map_pool_events(
                     log,
                     &call_view.call.storage_changes,
                     &pool,
+                    &balance_store,
                 );
             } else {
                 continue;
             }
         }
     }
+
+    // for tx_balance_delta in balance_deltas.tx_deltas {
+    //     for balance_delta in tx_balance_delta.deltas {
+    //         let pool_address_hex = balance_delta.pool_address.to_hex();
+    //         let pool = pools_store
+    //             .get_last(StoreKey::Pool.get_unique_pool_key(&pool_address_hex))
+    //             .unwrap();
+    //         let tx_hash = tx_balance_delta.tx_hash.clone();
+    //         let token_0_balance = balance_store.get_last(format!(
+    //             "pool:{0}:token:{1}",
+    //             pool_address_hex,
+    //             pool.token0.to_hex()
+    //         ));
+    //         let token_1_balance = balance_store.get_last(format!(
+    //             "pool:{0}:token:{1}",
+    //             pool_address_hex,
+    //             pool.token1.to_hex()
+    //         ));
+
+    //         let token_0_balance_change = BalanceChange {
+    //             component_id: balance_delta.pool_address.clone(),
+    //             token: pool.token0.clone(),
+    //             balance: token_0_balance
+    //                 .clone()
+    //                 .expect("Couldn't get base balance from store")
+    //                 .to_bytes_be()
+    //                 .1,
+    //         };
+    //         let token_1_balance_change = BalanceChange {
+    //             component_id: balance_delta.pool_address.clone(),
+    //             token: pool.token1.clone(),
+    //             balance: token_1_balance
+    //                 .clone()
+    //                 .expect("Couldn't get base balance from store")
+    //                 .to_bytes_be()
+    //                 .1,
+    //         };
+
+    //         update_tx_changes_map
+
+    //         if let Some(tx_changes) = tx_changes_map.get_mut(&tx_hash) {
+    //             tx_changes
+    //                 .balance_changes
+    //                 .extend([token_0_balance_change, token_1_balance_change]);
+    //         } else {
+    //             let tx_changes = TransactionEntityChanges {
+    //                 tx: None,
+    //                 entity_changes: vec![],
+    //                 balance_changes: vec![token_0_balance_change, token_1_balance_change],
+    //                 component_changes: vec![],
+    //             };
+    //             tx_changes_map.insert(tx_hash, tx_changes);
+    //         }
+    //     }
+    // }
 
     // Make a list of all HashMap values:
     let tx_entity_changes: Vec<TransactionEntityChanges> = tx_changes_map.into_values().collect();
@@ -72,8 +124,43 @@ fn handle_pool_events(
     event: &Log,
     storage_changes: &[StorageChange],
     pool: &Pool,
+    balance_store: &StoreGetBigInt,
 ) {
-    let changed_attributes = get_log_changed_attribute(event, storage_changes, pool);
+    let changed_attributes = get_log_changed_attributes(event, storage_changes, pool);
+    let mut balance_changes: Vec<BalanceChange> = vec![];
+    if !(get_log_changed_balances(event, pool).is_empty()) {
+        let token_0_balance = balance_store.get_last(format!(
+            "pool:{0}:token:{1}",
+            hex::encode(&pool.address),
+            hex::encode(&pool.token0)
+        ));
+        let token_1_balance = balance_store.get_last(format!(
+            "pool:{0}:token:{1}",
+            hex::encode(&pool.address),
+            hex::encode(&pool.token1)
+        ));
+
+        let token_0_balance_change = BalanceChange {
+            component_id: pool.address.clone(),
+            token: pool.token0.clone(),
+            balance: token_0_balance
+                .clone()
+                .expect("Couldn't get balance from store")
+                .to_bytes_be()
+                .1,
+        };
+        let token_1_balance_change = BalanceChange {
+            component_id: pool.address.clone(),
+            token: pool.token1.clone(),
+            balance: token_1_balance
+                .clone()
+                .expect("Couldn't get balance from store")
+                .to_bytes_be()
+                .1,
+        };
+
+        balance_changes.extend([token_0_balance_change, token_1_balance_change]);
+    }
 
     // Create entity changes
     let entity_changes: Vec<EntityChanges> = vec![EntityChanges {
@@ -81,7 +168,7 @@ fn handle_pool_events(
         attributes: changed_attributes,
     }];
 
-    update_tx_changes_map(entity_changes, vec![], tx_changes_map, tx_trace);
+    update_tx_changes_map(entity_changes, balance_changes, tx_changes_map, tx_trace);
 }
 
 fn update_tx_changes_map(
@@ -98,45 +185,13 @@ fn update_tx_changes_map(
 
     // Update the tx changes
     if let Some(tx_changes) = tx_changes {
-        // Iterate over incoming entity changes
-        for change in entity_changes {
-            match tx_changes
-                .entity_changes
-                .iter_mut()
-                .find(|e| e.component_id == change.component_id)
-            {
-                Some(existing_change) => {
-                    // If an existing entity change with the same component_id is found, add the new
-                    // attributes to the existing entity change.
+        // Merge the entity changes
+        tx_changes.entity_changes =
+            merge_entity_changes(&tx_changes.entity_changes, &entity_changes);
 
-                    // Create a hashmap to ensure each attribute name is unique.
-                    let mut attributes = HashMap::new();
-
-                    // Insert elements from existing_change.
-                    for attr in existing_change.attributes.clone() {
-                        attributes
-                            .entry(attr.name.clone())
-                            .or_insert(attr);
-                    }
-
-                    // Insert elements from change. If an attribute with the same name is already
-                    // present, it replaces it.
-                    for attr in change.attributes {
-                        attributes.insert(attr.name.clone(), attr);
-                    }
-
-                    existing_change.attributes = attributes.into_values().collect();
-                }
-                None => {
-                    // If no existing entity change with the same component_id, add the new change
-                    tx_changes.entity_changes.push(change);
-                }
-            }
-        }
-
-        tx_changes
-            .balance_changes
-            .extend(balance_changes);
+        // Merge the balance changes
+        tx_changes.balance_changes =
+            merge_balance_changes(&tx_changes.balance_changes, &balance_changes);
     } else {
         // If the tx is not in the map, add it
         let tx_changes = TransactionEntityChanges {
@@ -147,4 +202,89 @@ fn update_tx_changes_map(
         };
         tx_changes_map.insert(tx_hash, tx_changes);
     }
+}
+
+/// Merges new entity changes into an existing collection of entity changes and returns the merged
+/// result. For each entity change, if an entity change with the same component_id exists, its
+/// attributes are merged. If an attribute with the same name exists, the new attribute replaces the
+/// old one.
+///
+/// Parameters:
+/// - `existing_changes`: A reference to a vector of existing entity changes.
+/// - `new_changes`: A reference to a vector of new entity changes to be merged.
+///
+/// Returns:
+/// A new `Vec<EntityChanges>` containing the merged entity changes.
+fn merge_entity_changes(
+    existing_changes: &Vec<EntityChanges>,
+    new_changes: &Vec<EntityChanges>,
+) -> Vec<EntityChanges> {
+    let mut changes_map = existing_changes
+        .iter()
+        .cloned()
+        .map(|change| (change.component_id.clone(), change))
+        .collect::<HashMap<_, _>>();
+
+    for change in new_changes {
+        match changes_map.get_mut(&change.component_id) {
+            Some(existing_change) => {
+                let mut attributes_map = existing_change
+                    .attributes
+                    .iter()
+                    .cloned()
+                    .map(|attr| (attr.name.clone(), attr))
+                    .collect::<HashMap<_, _>>();
+
+                for attr in &change.attributes {
+                    attributes_map.insert(attr.name.clone(), attr.clone());
+                }
+
+                existing_change.attributes = attributes_map.into_values().collect();
+            }
+            None => {
+                changes_map.insert(change.component_id.clone(), change.clone());
+            }
+        }
+    }
+
+    changes_map.into_values().collect()
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct BalanceChangeKey {
+    token: Vec<u8>,
+    component_id: Vec<u8>,
+}
+
+/// Merges two vectors of `BalanceChange` structures into a single vector, ensuring uniqueness based
+/// on a combination of `token` and `component_id`. If two `BalanceChange` instances have the same
+/// `token` and `component_id`, the instance from the `new_entries` vector will replace the one from
+/// the `current` vector.
+///
+/// Parameters:
+/// - `current`: A reference to a vector of `BalanceChange` instances representing the current
+///   balance changes.
+/// - `new_entries`: A reference to a vector of `BalanceChange` instances representing new balance
+///   changes to be merged.
+///
+/// Returns:
+/// A `Vec<BalanceChange>` that contains the merged balance changes. If `current` and `new_entries`
+/// contain `BalanceChange` instances with the same `token` and `component_id`, the instance from
+/// `new_entries` is used.
+fn merge_balance_changes(
+    current: &Vec<BalanceChange>,
+    new_entries: &Vec<BalanceChange>,
+) -> Vec<BalanceChange> {
+    let mut balances = HashMap::new();
+
+    for balance_change in current.iter().chain(new_entries) {
+        let key = BalanceChangeKey {
+            token: balance_change.token.clone(),
+            component_id: balance_change.component_id.clone(),
+        };
+
+        balances.insert(key, balance_change.clone());
+    }
+
+    balances.into_values().collect()
 }

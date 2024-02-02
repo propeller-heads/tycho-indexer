@@ -1,4 +1,3 @@
-use substreams::scalar::BigInt;
 use substreams_ethereum::{
     pb::eth::v2::{Log, StorageChange},
     Event,
@@ -8,7 +7,10 @@ use crate::{
     abi::pool::events::{
         Burn, Collect, CollectProtocol, Flash, Initialize, Mint, SetFeeProtocol, Swap,
     },
-    pb::tycho::evm::{uniswap::v3::Pool, v1::Attribute},
+    pb::tycho::evm::{
+        uniswap::v3::{BalanceDelta, Pool},
+        v1::Attribute,
+    },
 };
 
 pub mod burn;
@@ -20,14 +22,6 @@ pub mod mint;
 pub mod set_fee_protocol;
 pub mod swap;
 
-#[allow(dead_code)]
-pub struct BalanceDelta {
-    token: Vec<u8>,
-    delta: BigInt,
-    component_id: String,
-    ordinal: usize,
-}
-
 pub trait EventHandlers {
     // Get all relevent changed attributes from the event
     fn get_changed_attributes(
@@ -37,7 +31,7 @@ pub trait EventHandlers {
     ) -> Vec<Attribute>;
 
     // Get all relevent balance deltas from the event
-    fn get_balance_delta(&self, pool: &Pool, ordinal: usize) -> Vec<BalanceDelta>;
+    fn get_balance_delta(&self, pool: &Pool, ordinal: u64) -> Vec<BalanceDelta>;
 }
 
 pub enum EventType {
@@ -68,6 +62,19 @@ impl EventType {
             EventType::CollectProtocol(e) => e.get_changed_attributes(storage_changes, pool),
         }
     }
+
+    fn get_balance_delta(&self, pool: &Pool, ordinal: u64) -> Vec<BalanceDelta> {
+        match self {
+            EventType::Initialize(e) => e.get_balance_delta(pool, ordinal),
+            EventType::Swap(e) => e.get_balance_delta(pool, ordinal),
+            EventType::Flash(e) => e.get_balance_delta(pool, ordinal),
+            EventType::Mint(e) => e.get_balance_delta(pool, ordinal),
+            EventType::Burn(e) => e.get_balance_delta(pool, ordinal),
+            EventType::Collect(e) => e.get_balance_delta(pool, ordinal),
+            EventType::SetFeeProtocol(e) => e.get_balance_delta(pool, ordinal),
+            EventType::CollectProtocol(e) => e.get_balance_delta(pool, ordinal),
+        }
+    }
 }
 
 pub fn decode_event(event: &Log) -> Option<EventType> {
@@ -90,13 +97,22 @@ pub fn decode_event(event: &Log) -> Option<EventType> {
     }
 }
 
-pub fn get_log_changed_attribute(
+pub fn get_log_changed_attributes(
     event: &Log,
     storage_changes: &[StorageChange],
     pool: &Pool,
 ) -> Vec<Attribute> {
     if let Some(event) = decode_event(event) {
         return event.get_changed_attributes(storage_changes, pool);
+    };
+
+    // If no event is matched, return empty
+    vec![]
+}
+
+pub fn get_log_changed_balances(event: &Log, pool: &Pool) -> Vec<BalanceDelta> {
+    if let Some(e) = decode_event(event) {
+        return e.get_balance_delta(pool, event.ordinal);
     };
 
     // If no event is matched, return empty

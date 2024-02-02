@@ -1,5 +1,6 @@
+use num_bigint::Sign;
+use substreams::scalar::BigInt;
 use substreams_ethereum::pb::eth::v2::StorageChange;
-use substreams_helper::hex::Hexable;
 
 use crate::{
     abi::pool::events::Swap,
@@ -22,21 +23,21 @@ impl EventHandlers for Swap {
         pool_storage.get_changed_attributes()
     }
 
-    fn get_balance_delta(&self, pool: &Pool, ordinal: usize) -> Vec<BalanceDelta> {
-        let changed_balance = vec![
+    fn get_balance_delta(&self, pool: &Pool, ordinal: u64) -> Vec<BalanceDelta> {
+        let create_balance_delta = |token_address: Vec<u8>, amount: BigInt| -> BalanceDelta {
+            let (amount_sign, amount_bytes) = amount.clone().to_bytes_le();
             BalanceDelta {
-                token: pool.token0.clone(),
-                delta: self.amount0.clone(),
-                component_id: pool.address.clone().to_hex(),
+                token_address,
+                amount: amount_bytes,
+                sign: amount_sign == Sign::Plus,
+                pool_address: pool.address.clone(),
                 ordinal,
-            },
-            BalanceDelta {
-                token: pool.token1.clone(),
-                delta: self.amount1.clone(),
-                component_id: pool.address.clone().to_hex(),
-                ordinal,
-            },
-        ];
-        changed_balance
+            }
+        };
+
+        vec![
+            create_balance_delta(pool.token0.clone(), self.amount0.clone()),
+            create_balance_delta(pool.token1.clone(), self.amount1.clone()),
+        ]
     }
 }

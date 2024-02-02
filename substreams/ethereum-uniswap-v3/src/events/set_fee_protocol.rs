@@ -21,7 +21,7 @@ impl EventHandlers for SetFeeProtocol {
         pool_storage.get_changed_attributes()
     }
 
-    fn get_balance_delta(&self, _pool: &Pool, _ordinal: usize) -> Vec<BalanceDelta> {
+    fn get_balance_delta(&self, _pool: &Pool, _ordinal: u64) -> Vec<BalanceDelta> {
         vec![]
     }
 }

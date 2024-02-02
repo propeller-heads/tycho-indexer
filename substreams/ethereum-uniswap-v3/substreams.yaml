@@ -34,6 +34,23 @@ modules:
     inputs:
       - map: map_pools_created
 
+  - name: map_balance_changes
+    kind: map
+    initialBlock: 12369621
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: store_pools
+    output:
+      type: proto:tycho.evm.uniswap.v3.BalanceDeltas
+
+  - name: store_pools_balances
+    kind: store
+    initialBlock: 12369621
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_balance_changes
+
   - name: map_pool_events
     kind: map
     initialBlock: 12369621
@@ -41,5 +58,6 @@ modules:
       - source: sf.ethereum.type.v2.Block
       - map: map_pools_created
       - store: store_pools
+      - store: store_pools_balances
     output:
       type: proto:tycho.evm.v1.BlockEntityChanges

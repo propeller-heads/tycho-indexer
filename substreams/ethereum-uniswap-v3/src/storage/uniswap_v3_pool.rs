@@ -130,6 +130,36 @@ impl<'a> UniswapPoolStorage<'a> {
 
         changed_attributes
     }
+
+    pub fn get_ticks_changes(
+        &self,
+        tick_upper_idx: &BigInt,
+        tick_lower_idx: &BigInt,
+    ) -> Vec<Attribute> {
+        let upper_tick = self.ticks(tick_upper_idx);
+        let lower_tick = self.ticks(tick_lower_idx);
+
+        let mut changed_attributes = Vec::new();
+
+        // We expect upper_tick and lower_tick net liquidity to change on burn
+        if let Some(liq) = upper_tick.net_liquidity() {
+            changed_attributes.push(Attribute {
+                name: format!("ticks/{}/net-liquidity", tick_upper_idx),
+                value: liq.1.to_signed_bytes_le(),
+                change: ChangeType::Update.into(),
+            });
+        }
+
+        if let Some(liq) = lower_tick.net_liquidity() {
+            changed_attributes.push(Attribute {
+                name: format!("ticks/{}/net-liquidity", tick_lower_idx),
+                value: liq.1.to_signed_bytes_le(),
+                change: ChangeType::Update.into(),
+            });
+        }
+
+        changed_attributes
+    }
 }
 
 pub struct Slot0Struct<'a> {
