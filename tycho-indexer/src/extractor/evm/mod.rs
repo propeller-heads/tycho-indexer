@@ -360,7 +360,10 @@ impl TransactionUpdates {
     /// # Errors
     /// This method will return `ExtractionError::MergeError` if any of the above
     /// conditions is violated.
-    pub fn merge(&mut self, other: TransactionUpdates) -> Result<(), ExtractionError> {
+    pub fn merge_account_updates(
+        &mut self,
+        other: TransactionUpdates,
+    ) -> Result<(), ExtractionError> {
         if self.tx.block_hash != other.tx.block_hash {
             return Err(ExtractionError::MergeError(format!(
                 "Can't merge AccountUpdates from different blocks: 0x{:x} != 0x{:x}",
@@ -380,12 +383,40 @@ impl TransactionUpdates {
             )));
         }
         self.tx = other.tx;
-        self.update.merge(other.update)
+
+        // Map AccountUpdates by address
+        let mut account_updates = self.map_account_update_by_address();
+
+        // Merge AccountUpdates
+        for update in other.account_updates.into_iter() {
+            match account_updates.entry(update.address) {
+                Entry::Occupied(mut e) => {
+                    e.get_mut().merge(update)?;
+                }
+                Entry::Vacant(e) => {
+                    e.insert(update);
+                }
+            }
+        }
+
+        self.account_updates = account_updates
+            .into_iter()
+            .map(|(_, v)| v)
+            .collect();
+
+        Ok(())
+    }
+
+    fn map_account_update_by_address(self) -> HashMap<H160, AccountUpdate> {
+        self.account_updates
+            .into_iter()
+            .map(|update| (update.address, update))
+            .collect()
     }
 }
 
 impl Deref for TransactionUpdates {
-    type Target = AccountUpdate;
+    type Target = Vec<AccountUpdate>;
 
     fn deref(&self) -> &Self::Target {
         &self.account_updates
