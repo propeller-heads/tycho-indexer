@@ -132,7 +132,7 @@ impl Account {
     }
 }
 
-impl From<&TransactionUpdates> for Account {
+impl From<&TransactionUpdates> for Vec<Account> {
     /// Creates a full account from a change.
     ///
     /// This can be used to get an insertable an account if we know the update
@@ -143,26 +143,30 @@ impl From<&TransactionUpdates> for Account {
     /// Will use the associated transaction as creation, balance and code modify
     /// transaction.
     fn from(value: &TransactionUpdates) -> Self {
-        let empty_hash = H256::from(keccak256(Vec::new()));
-        if value.change != ChangeType::Creation {
-            warn!("Creating an account from a partial change!")
-        }
-        Account::new(
-            value.chain,
-            value.address,
-            format!("{:#020x}", value.address),
-            value.slots.clone(),
-            value.balance.unwrap_or_default(),
-            value.code.clone().unwrap_or_default(),
-            value
-                .code
-                .as_ref()
-                .map(|v| H256::from(keccak256(v)))
-                .unwrap_or(empty_hash),
-            value.tx.hash,
-            value.tx.hash,
-            Some(value.tx.hash),
-        )
+        value
+            .account_updates
+            .clone()
+            .into_iter()
+            .map(|update| {
+                let acc = Account::new(
+                    update.chain,
+                    update.address,
+                    format!("{:#020x}", update.address),
+                    update.slots.clone(),
+                    update.balance.unwrap_or_default(),
+                    update.code.clone().unwrap_or_default(),
+                    update
+                        .code
+                        .as_ref()
+                        .map(|v| H256::from(keccak256(v)))
+                        .unwrap_or_default(),
+                    value.tx.hash,
+                    value.tx.hash,
+                    Some(value.tx.hash),
+                );
+                acc
+            })
+            .collect()
     }
 }
 
