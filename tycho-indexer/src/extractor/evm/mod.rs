@@ -751,19 +751,22 @@ impl BlockContractChanges {
     pub fn aggregate_updates(mut self) -> Result<BlockAccountChanges, ExtractionError> {
         self.tx_updates
             .sort_unstable_by_key(|update| update.tx.index);
-
         let mut tx_update = self
             .tx_updates
-            .pop()
+            .first()
+            .cloned()
             .ok_or(ExtractionError::Empty)?;
 
-        let mut protocol_components = tx_update.protocol_componets.clone();
-
-        for update in self.tx_updates.into_iter() {
+        let mut protocol_components = self
+            .tx_updates
+            .first()
+            .ok_or(ExtractionError::Empty)?
+            .protocol_componets
+            .clone();
+        for update in self.tx_updates.into_iter().skip(1) {
             tx_update.merge(&update.clone())?;
             protocol_components.extend(update.clone().protocol_componets);
         }
-
         Ok(BlockAccountChanges::new(
             &self.extractor,
             self.chain,
@@ -1118,31 +1121,111 @@ pub mod fixtures {
                 ts: 1000,
             }),
 
-            changes: vec![TransactionContractChanges {
-                tx: Some(Transaction {
-                    hash: vec![0x11, 0x12, 0x13, 0x14],
-                    from: vec![0x41, 0x42, 0x43, 0x44],
-                    to: vec![0x51, 0x52, 0x53, 0x54],
-                    index: 2,
-                }),
-                contract_changes: vec![
-                    ContractChange {
-                        address: vec![0x61, 0x62, 0x63, 0x64],
-                        balance: vec![0x71, 0x72, 0x73, 0x74],
-                        code: vec![0x81, 0x82, 0x83, 0x84],
-                        slots: vec![
-                            ContractSlot {
-                                slot: vec![0xa1, 0xa2, 0xa3, 0xa4],
-                                value: vec![0xb1, 0xb2, 0xb3, 0xb4],
+            changes: vec![
+                TransactionContractChanges {
+                    tx: Some(Transaction {
+                        hash: vec![0x11, 0x12, 0x13, 0x14],
+                        from: vec![0x41, 0x42, 0x43, 0x44],
+                        to: vec![0x51, 0x52, 0x53, 0x54],
+                        index: 2,
+                    }),
+                    contract_changes: vec![
+                        ContractChange {
+                            address: vec![0x61, 0x62, 0x63, 0x64],
+                            balance: vec![0x71, 0x72, 0x73, 0x74],
+                            code: vec![0x81, 0x82, 0x83, 0x84],
+                            slots: vec![
+                                ContractSlot {
+                                    slot: vec![0xa1, 0xa2, 0xa3, 0xa4],
+                                    value: vec![0xb1, 0xb2, 0xb3, 0xb4],
+                                },
+                                ContractSlot {
+                                    slot: vec![0xc1, 0xc2, 0xc3, 0xc4],
+                                    value: vec![0xd1, 0xd2, 0xd3, 0xd4],
+                                },
+                            ],
+                            change: ChangeType::Update.into(),
+                        },
+                        /*ContractChange {
+                            address: vec![0x61, 0x62, 0x63, 0x64],
+                            balance: vec![0xf1, 0xf2, 0xf3, 0xf4],
+                            code: vec![0x01, 0x02, 0x03, 0x04],
+                            slots: vec![
+                                ContractSlot {
+                                    slot: vec![0x91, 0x92, 0x93, 0x94],
+                                    value: vec![0xa1, 0xa2, 0xa3, 0xa4],
+                                },
+                                ContractSlot {
+                                    slot: vec![0xb1, 0xb2, 0xb3, 0xb4],
+                                    value: vec![0xc1, 0xc2, 0xc3, 0xc4],
+                                },
+                            ],
+                            change: ChangeType::Update.into(),
+                        },*/
+                    ],
+                    component_changes: vec![ProtocolComponent {
+                        id: "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688".to_owned(),
+                        tokens: vec![
+                            H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F")
+                                .unwrap()
+                                .0
+                                .to_vec(),
+                            H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F")
+                                .unwrap()
+                                .0
+                                .to_vec(),
+                        ],
+                        contracts: vec![
+                            H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+                                .unwrap()
+                                .0
+                                .to_vec(),
+                            H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+                                .unwrap()
+                                .0
+                                .to_vec(),
+                        ],
+                        static_att: vec![
+                            Attribute {
+                                name: "key1".to_owned(),
+                                value: b"value1".to_vec(),
+                                change: ChangeType::Creation.into(),
                             },
-                            ContractSlot {
-                                slot: vec![0xc1, 0xc2, 0xc3, 0xc4],
-                                value: vec![0xd1, 0xd2, 0xd3, 0xd4],
+                            Attribute {
+                                name: "key2".to_owned(),
+                                value: b"value2".to_vec(),
+                                change: ChangeType::Creation.into(),
                             },
                         ],
-                        change: ChangeType::Update.into(),
-                    },
-                    ContractChange {
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "WeightedPool".to_string(),
+                            financial_type: 0,
+                            attribute_schema: vec![],
+                            implementation_type: 0,
+                        }),
+                    }],
+                    balance_changes: vec![BalanceChange {
+                        token: hex::decode(
+                            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".trim_start_matches("0x"),
+                        )
+                        .unwrap(),
+                        balance: 50000000.encode_to_vec(),
+                        component_id: "WETH-CAI".encode(),
+                    }],
+                },
+                TransactionContractChanges {
+                    tx: Some(Transaction {
+                        hash: vec![
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+                        ],
+                        from: vec![0x41, 0x42, 0x43, 0x44],
+                        to: vec![0x51, 0x52, 0x53, 0x54],
+                        index: 5,
+                    }),
+                    contract_changes: vec![ContractChange {
                         address: vec![0x61, 0x62, 0x63, 0x64],
                         balance: vec![0xf1, 0xf2, 0xf3, 0xf4],
                         code: vec![0x01, 0x02, 0x03, 0x04],
@@ -1157,59 +1240,11 @@ pub mod fixtures {
                             },
                         ],
                         change: ChangeType::Update.into(),
-                    },
-                ],
-                component_changes: vec![ProtocolComponent {
-                    id: "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688".to_owned(),
-                    tokens: vec![
-                        H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F")
-                            .unwrap()
-                            .0
-                            .to_vec(),
-                        H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F")
-                            .unwrap()
-                            .0
-                            .to_vec(),
-                    ],
-                    contracts: vec![
-                        H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-                            .unwrap()
-                            .0
-                            .to_vec(),
-                        H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-                            .unwrap()
-                            .0
-                            .to_vec(),
-                    ],
-                    static_att: vec![
-                        Attribute {
-                            name: "key1".to_owned(),
-                            value: b"value1".to_vec(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "key2".to_owned(),
-                            value: b"value2".to_vec(),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "WeightedPool".to_string(),
-                        financial_type: 0,
-                        attribute_schema: vec![],
-                        implementation_type: 0,
-                    }),
-                }],
-                balance_changes: vec![BalanceChange {
-                    token: hex::decode(
-                        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".trim_start_matches("0x"),
-                    )
-                    .unwrap(),
-                    balance: 50000000.encode_to_vec(),
-                    component_id: "WETH-CAI".encode(),
-                }],
-            }],
+                    }],
+                    component_changes: vec![],
+                    balance_changes: vec![],
+                },
+            ],
         }
     }
 
@@ -1552,6 +1587,21 @@ mod test {
             to: Some(H160::from_low_u64_be(0x0000000000000000000000000000000051525354)),
             index: 2,
         };
+        println!(
+            "{:?}",
+            H256::from_str(HASH_256_1)
+                .unwrap()
+                .as_bytes()
+        );
+        let tx_5 = Transaction {
+            hash: H256::from_str(HASH_256_1).unwrap(),
+            block_hash: H256::from_low_u64_be(
+                0x0000000000000000000000000000000000000000000000000000000031323334,
+            ),
+            from: H160::from_low_u64_be(0x0000000000000000000000000000000041424344),
+            to: Some(H160::from_low_u64_be(0x0000000000000000000000000000000051525354)),
+            index: 5,
+        };
         let protocol_component = ProtocolComponent {
             id: "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688".to_owned(),
             protocol_system: "ambient".to_string(),
@@ -1612,7 +1662,7 @@ mod test {
                     )],
                     protocol_componets: vec![],
                     component_balances: vec![],
-                    tx,
+                    tx: tx_5,
                 },
             ],
         }

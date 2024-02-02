@@ -512,14 +512,7 @@ mod test {
     }
 
     fn block_contract_changes_ok() -> BlockContractChanges {
-        let mut data = evm::fixtures::pb_block_contract_changes();
-        // TODO: make fixtures configurable through parameters so they can be
-        // properly reused. Will need fixture to easily assemble contract
-        // change objects.
-        data.changes[0]
-            .contract_changes
-            .remove(1);
-        data
+        evm::fixtures::pb_block_contract_changes()
     }
 
     #[tokio::test]
