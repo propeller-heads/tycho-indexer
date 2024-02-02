@@ -213,7 +213,6 @@ impl AccountUpdate {
 
     pub fn try_from_message(
         msg: substreams::ContractChange,
-        tx: &Transaction,
         chain: Chain,
     ) -> Result<Self, ExtractionError> {
         let change = msg.change().into();
@@ -1476,7 +1475,14 @@ mod test {
         let update = update_w_tx();
         let exp = account01();
 
-        assert_eq!(Account::from(&update), exp);
+        assert_eq!(
+            update
+                .account_updates
+                .first()
+                .unwrap()
+                .ref_into_account(&update.tx),
+            exp
+        );
     }
 
     #[test]
@@ -1529,7 +1535,7 @@ mod test {
         let mut right = left.clone();
         right.tx = tx;
 
-        let res = left.merge_account_updates(right);
+        let res = left.merge(&right);
 
         assert_eq!(res, exp);
     }

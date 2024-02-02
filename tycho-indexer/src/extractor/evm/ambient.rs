@@ -666,7 +666,6 @@ mod test_serial_db {
     };
     use ethers::types::U256;
     use mpsc::channel;
-    use std::collections::HashMap;
     use tokio::sync::{
         mpsc,
         mpsc::{error::TryRecvError::Empty, Receiver},
