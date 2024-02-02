@@ -10,7 +10,6 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     ops::Deref,
 };
-use tracing::warn;
 
 use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
@@ -700,7 +699,7 @@ impl BlockContractChanges {
                 if let Some(tx) = change.tx {
                     let tx = Transaction::try_from_message(tx, &block.hash)?;
                     for el in change.contract_changes.into_iter() {
-                        let update = AccountUpdate::try_from_message(el, &tx, chain)?;
+                        let update = AccountUpdate::try_from_message(el, chain)?;
                         account_updates.push(update);
                     }
                     for component_msg in change.component_changes.into_iter() {
@@ -747,25 +746,31 @@ impl BlockContractChanges {
     /// This returns an error if there was a problem during merge. The error
     /// type is `ExtractionError`.
     pub fn aggregate_updates(mut self) -> Result<BlockAccountChanges, ExtractionError> {
+        self.tx_updates
+            .sort_unstable_by_key(|update| update.tx.index);
+
         let mut tx_update = self
             .tx_updates
             .pop()
             .ok_or(ExtractionError::Empty)?;
-        let mut protocol_components = Vec::new();
+
+        let mut protocol_components = tx_update.protocol_componets.clone();
 
         for update in self.tx_updates.into_iter() {
-            tx_update.merge_account_updates(update)?;
-            protocol_components.extend(update.protocol_componets.clone());
+            tx_update.merge(&update.clone())?;
+            protocol_components.extend(update.clone().protocol_componets);
         }
 
         Ok(BlockAccountChanges::new(
             &self.extractor,
             self.chain,
             self.block,
-            tx_update.map_account_update_by_address(),
+            tx_update
+                .clone()
+                .map_account_update_by_address(),
             protocol_components,
             Vec::new(),
-            Vec::new(),
+            tx_update.component_balances,
         ))
     }
 }
