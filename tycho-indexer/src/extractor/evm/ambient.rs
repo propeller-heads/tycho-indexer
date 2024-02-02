@@ -160,12 +160,14 @@ impl AmbientPgGateway {
             self.state_gateway
                 .upsert_tx(&changes.block, &update.tx)
                 .await?;
-            if update.is_creation() {
-                let new: evm::Account = update.into();
-                info!(block_number = ?changes.block.number, contract_address = ?new.address, "New contract found at {:#020x}", &new.address);
-                self.state_gateway
-                    .insert_contract(&changes.block, &new)
-                    .await?;
+            for acc_update in update.account_updates.iter() {
+                if acc_update.is_creation() {
+                    let new: evm::Account = update.into();
+                    info!(block_number = ?changes.block.number, contract_address = ?new.address, "New contract found at {:#020x}", &new.address);
+                    self.state_gateway
+                        .insert_contract(&changes.block, &new)
+                        .await?;
+                }
             }
             // insert new protocol components
             // insert new component balances
@@ -173,14 +175,18 @@ impl AmbientPgGateway {
         let collected_changes: Vec<(Bytes, AccountUpdate)> = changes
             .tx_updates
             .iter()
-            .filter(|&u| u.is_update())
             .flat_map(|u| {
-                u.account_updates
+                let a: Vec<(Bytes, AccountUpdate)> = u
+                    .account_updates
                     .clone()
                     .into_iter()
-                    .map(|au| (u.tx.hash.into(), au))
+                    .filter(|acc_u| acc_u.is_update())
+                    .map(|acc_u| (tycho_types::Bytes::from(u.tx.hash), acc_u))
+                    .collect();
+                a
             })
             .collect();
+
         let changes_slice: &[(Bytes, AccountUpdate)] = collected_changes.as_slice();
 
         self.state_gateway
