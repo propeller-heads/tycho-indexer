@@ -360,10 +360,7 @@ impl TransactionUpdates {
     /// # Errors
     /// This method will return `ExtractionError::MergeError` if any of the above
     /// conditions is violated.
-    pub fn merge_account_updates(
-        &mut self,
-        other: TransactionUpdates,
-    ) -> Result<(), ExtractionError> {
+    pub fn merge(&mut self, other: &TransactionUpdates) -> Result<(), ExtractionError> {
         if self.tx.block_hash != other.tx.block_hash {
             return Err(ExtractionError::MergeError(format!(
                 "Can't merge AccountUpdates from different blocks: 0x{:x} != 0x{:x}",
@@ -385,10 +382,19 @@ impl TransactionUpdates {
         self.tx = other.tx;
 
         // Map AccountUpdates by address
-        let mut account_updates = self.map_account_update_by_address();
+        let mut account_updates: HashMap<H160, AccountUpdate> = self
+            .account_updates
+            .clone()
+            .into_iter()
+            .map(|update| (update.address, update))
+            .collect();
 
         // Merge AccountUpdates
-        for update in other.account_updates.into_iter() {
+        for update in other
+            .account_updates
+            .clone()
+            .into_iter()
+        {
             match account_updates.entry(update.address) {
                 Entry::Occupied(mut e) => {
                     e.get_mut().merge(update)?;
@@ -400,8 +406,34 @@ impl TransactionUpdates {
         }
 
         self.account_updates = account_updates
+            .into_values()
+            .collect::<Vec<AccountUpdate>>();
+
+        let mut component_balances_by_id_map: HashMap<(ComponentId, H160), ComponentBalance> = self
+            .component_balances
+            .clone()
             .into_iter()
-            .map(|(_, v)| v)
+            .map(|cb| ((cb.component_id.clone(), cb.token), cb))
+            .collect();
+
+        for cb in other
+            .component_balances
+            .clone()
+            .into_iter()
+        {
+            match component_balances_by_id_map.entry((cb.component_id.clone(), cb.token)) {
+                Entry::Occupied(mut e) => {
+                    e.get_mut().new_balance = cb.new_balance;
+                    e.get_mut().modify_tx = cb.modify_tx;
+                }
+                Entry::Vacant(e) => {
+                    e.insert(cb);
+                }
+            }
+        }
+
+        self.component_balances = component_balances_by_id_map
+            .into_values()
             .collect();
 
         Ok(())
@@ -484,7 +516,7 @@ pub struct ComponentBalance {
     pub new_balance: Bytes,
     // tx where the this balance was observed
     pub modify_tx: H256,
-    pub component_id: String,
+    pub component_id: ComponentId,
 }
 
 impl ComponentBalance {
