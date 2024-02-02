@@ -162,7 +162,7 @@ impl AmbientPgGateway {
                 .await?;
             for acc_update in update.account_updates.iter() {
                 if acc_update.is_creation() {
-                    let new: evm::Account = update.into();
+                    let new: evm::Account = acc_update.ref_into_account(&update.tx);
                     info!(block_number = ?changes.block.number, contract_address = ?new.address, "New contract found at {:#020x}", &new.address);
                     self.state_gateway
                         .insert_contract(&changes.block, &new)

@@ -190,6 +190,24 @@ impl AccountUpdate {
         Self { address, chain, slots, balance, code, change }
     }
 
+    // TODO: Converting into via self as references saves us from cloning the whole struct of
+    // BlockContractChanges in forward.
+    pub fn ref_into_account(&self, tx: &Transaction) -> Account {
+        let code = &self.code.clone().unwrap_or_default();
+        Account::new(
+            self.chain,
+            self.address,
+            format!("{:#020x}", self.address),
+            self.slots.clone(),
+            self.balance.unwrap_or_default(),
+            code.clone(),
+            H256::from(keccak256(code)),
+            tx.hash,
+            tx.hash,
+            Some(tx.hash),
+        )
+    }
+
     pub fn try_from_message(
         msg: substreams::ContractChange,
         tx: &Transaction,
