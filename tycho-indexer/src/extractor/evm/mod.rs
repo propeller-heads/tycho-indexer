@@ -696,36 +696,24 @@ impl BlockContractChanges {
     ///
     /// This returns an error if there was a problem during merge. The error
     /// type is `ExtractionError`.
-    pub fn aggregate_updates(self) -> Result<BlockAccountChanges, ExtractionError> {
-        let mut account_updates: HashMap<H160, TransactionUpdates> = HashMap::new();
+    pub fn aggregate_updates(mut self) -> Result<BlockAccountChanges, ExtractionError> {
+        let mut tx_update = self
+            .tx_updates
+            .pop()
+            .ok_or(ExtractionError::Empty)?;
+        let mut protocol_components = Vec::new();
 
         for update in self.tx_updates.into_iter() {
-            match account_updates.entry(update.address) {
-                Entry::Occupied(mut e) => {
-                    e.get_mut().merge(update)?;
-                }
-                Entry::Vacant(e) => {
-                    e.insert(update);
-                }
-            }
+            tx_update.merge_account_updates(update)?;
+            protocol_components.extend(update.protocol_componets.clone());
         }
 
         Ok(BlockAccountChanges::new(
             &self.extractor,
             self.chain,
             self.block,
-            account_updates
-                .into_iter()
-                .flat_map(|(k, v)| {
-                    v.account_updates
-                        .into_iter()
-                        .map(move |u| (k, u))
-                })
-                .collect(),
-            self.tx_updates
-                .iter()
-                .flat_map(|tx_u| tx_u.protocol_componets)
-                .collect(),
+            tx_update.map_account_update_by_address(),
+            protocol_components,
             Vec::new(),
             Vec::new(),
         ))
