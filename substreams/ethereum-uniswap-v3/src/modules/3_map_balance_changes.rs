@@ -9,7 +9,6 @@ use substreams_helper::hex::Hexable;
 use crate::{
     events::get_log_changed_balances,
     pb::tycho::evm::uniswap::v3::{BalanceDeltas, Pool},
-    store_key::StoreKey,
 };
 
 #[substreams::handlers::map]
@@ -23,7 +22,7 @@ pub fn map_balance_changes(
         for (log, _) in trx.logs_with_calls() {
             // Skip if the log is not from a known uniswapV3 pool.
             if let Some(pool) =
-                pools_store.get_last(StoreKey::Pool.get_unique_pool_key(&log.address.to_hex()))
+                pools_store.get_last(format!("{}:{}", "Pool", &log.address.to_hex()))
             {
                 tx_deltas.extend(get_log_changed_balances(log, &pool))
             } else {

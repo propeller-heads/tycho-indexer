@@ -2,10 +2,7 @@ use std::str;
 
 use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 
-use crate::{
-    pb::tycho::evm::{uniswap::v3::Pool, v1::SameTypeTransactionChanges},
-    store_key::StoreKey,
-};
+use crate::pb::tycho::evm::{uniswap::v3::Pool, v1::SameTypeTransactionChanges};
 
 #[substreams::handlers::store]
 pub fn store_pools(
@@ -23,6 +20,6 @@ pub fn store_pools(
             token1: change.component_changes[0].tokens[1].clone(),
             created_tx_hash: change.tx.as_ref().unwrap().hash.clone(),
         };
-        store.set_if_not_exists(0, StoreKey::Pool.get_unique_pool_key(pool_address), &pool);
+        store.set_if_not_exists(0, format!("{}:{}", "Pool", pool_address), &pool);
     }
 }

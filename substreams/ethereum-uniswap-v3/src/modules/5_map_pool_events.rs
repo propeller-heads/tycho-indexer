@@ -13,7 +13,6 @@ use crate::{
             TransactionEntityChanges,
         },
     },
-    store_key::StoreKey,
 };
 
 #[substreams::handlers::map]
@@ -35,7 +34,7 @@ pub fn map_pool_events(
         for (log, call_view) in trx.logs_with_calls() {
             // Skip if the log is not from a known uniswapV3 pool.
             if let Some(pool) =
-                pools_store.get_last(StoreKey::Pool.get_unique_pool_key(&log.address.to_hex()))
+                pools_store.get_last(format!("{}:{}", "Pool", &log.address.to_hex()))
             {
                 // Handle Uniswap V3 events, it will update the tx_changes_map
                 handle_pool_events(
@@ -51,61 +50,6 @@ pub fn map_pool_events(
             }
         }
     }
-
-    // for tx_balance_delta in balance_deltas.tx_deltas {
-    //     for balance_delta in tx_balance_delta.deltas {
-    //         let pool_address_hex = balance_delta.pool_address.to_hex();
-    //         let pool = pools_store
-    //             .get_last(StoreKey::Pool.get_unique_pool_key(&pool_address_hex))
-    //             .unwrap();
-    //         let tx_hash = tx_balance_delta.tx_hash.clone();
-    //         let token_0_balance = balance_store.get_last(format!(
-    //             "pool:{0}:token:{1}",
-    //             pool_address_hex,
-    //             pool.token0.to_hex()
-    //         ));
-    //         let token_1_balance = balance_store.get_last(format!(
-    //             "pool:{0}:token:{1}",
-    //             pool_address_hex,
-    //             pool.token1.to_hex()
-    //         ));
-
-    //         let token_0_balance_change = BalanceChange {
-    //             component_id: balance_delta.pool_address.clone(),
-    //             token: pool.token0.clone(),
-    //             balance: token_0_balance
-    //                 .clone()
-    //                 .expect("Couldn't get base balance from store")
-    //                 .to_bytes_be()
-    //                 .1,
-    //         };
-    //         let token_1_balance_change = BalanceChange {
-    //             component_id: balance_delta.pool_address.clone(),
-    //             token: pool.token1.clone(),
-    //             balance: token_1_balance
-    //                 .clone()
-    //                 .expect("Couldn't get base balance from store")
-    //                 .to_bytes_be()
-    //                 .1,
-    //         };
-
-    //         update_tx_changes_map
-
-    //         if let Some(tx_changes) = tx_changes_map.get_mut(&tx_hash) {
-    //             tx_changes
-    //                 .balance_changes
-    //                 .extend([token_0_balance_change, token_1_balance_change]);
-    //         } else {
-    //             let tx_changes = TransactionEntityChanges {
-    //                 tx: None,
-    //                 entity_changes: vec![],
-    //                 balance_changes: vec![token_0_balance_change, token_1_balance_change],
-    //                 component_changes: vec![],
-    //             };
-    //             tx_changes_map.insert(tx_hash, tx_changes);
-    //         }
-    //     }
-    // }
 
     // Make a list of all HashMap values:
     let tx_entity_changes: Vec<TransactionEntityChanges> = tx_changes_map.into_values().collect();
@@ -126,8 +70,18 @@ fn handle_pool_events(
     pool: &Pool,
     balance_store: &StoreGetBigInt,
 ) {
-    let changed_attributes = get_log_changed_attributes(event, storage_changes, pool);
+    let changed_attributes = get_log_changed_attributes(
+        event,
+        storage_changes,
+        pool.address
+            .clone()
+            .as_slice()
+            .try_into()
+            .expect("Pool address is not 20 bytes long"),
+    );
+
     let mut balance_changes: Vec<BalanceChange> = vec![];
+
     if !(get_log_changed_balances(event, pool).is_empty()) {
         let token_0_balance = balance_store.get_last(format!(
             "pool:{0}:token:{1}",
@@ -216,7 +170,7 @@ fn update_tx_changes_map(
 /// Returns:
 /// A new `Vec<EntityChanges>` containing the merged entity changes.
 fn merge_entity_changes(
-    existing_changes: &Vec<EntityChanges>,
+    existing_changes: &[EntityChanges],
     new_changes: &Vec<EntityChanges>,
 ) -> Vec<EntityChanges> {
     let mut changes_map = existing_changes
@@ -256,10 +210,9 @@ struct BalanceChangeKey {
     component_id: Vec<u8>,
 }
 
-/// Merges two vectors of `BalanceChange` structures into a single vector, ensuring uniqueness based
-/// on a combination of `token` and `component_id`. If two `BalanceChange` instances have the same
-/// `token` and `component_id`, the instance from the `new_entries` vector will replace the one from
-/// the `current` vector.
+/// Merges two vectors of `BalanceChange` structures into a single vector. If two `BalanceChange`
+/// instances have the same combination of `token` and `component_id`, the value from the
+/// `new_entries` vector will replace the one from the `current` vector.
 ///
 /// Parameters:
 /// - `current`: A reference to a vector of `BalanceChange` instances representing the current
@@ -268,11 +221,9 @@ struct BalanceChangeKey {
 ///   changes to be merged.
 ///
 /// Returns:
-/// A `Vec<BalanceChange>` that contains the merged balance changes. If `current` and `new_entries`
-/// contain `BalanceChange` instances with the same `token` and `component_id`, the instance from
-/// `new_entries` is used.
+/// A `Vec<BalanceChange>` that contains the merged balance changes.
 fn merge_balance_changes(
-    current: &Vec<BalanceChange>,
+    current: &[BalanceChange],
     new_entries: &Vec<BalanceChange>,
 ) -> Vec<BalanceChange> {
     let mut balances = HashMap::new();

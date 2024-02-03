@@ -1,38 +1,5 @@
-use std::ops::Add;
 use substreams::scalar::BigInt;
-use substreams_ethereum::pb::eth::v2::StorageChange;
 use tiny_keccak::{Hasher, Keccak};
-
-pub fn get_storage_change<'a>(
-    storage_changes: &'a [&StorageChange],
-    slot_key: [u8; 32],
-    offset: usize,
-    number_of_bytes: usize,
-) -> Option<(&'a [u8], &'a [u8])> {
-    let storage_change_opt = storage_changes
-        .iter()
-        // filtering out storage changes which keys do not match ours
-        .filter(|&&storage_change| {
-            storage_change
-                .key
-                .eq(slot_key.as_slice())
-        })
-        // keeping old the storage change slot where our values actually changed
-        .filter(|&&storage| {
-            let old_data = read_bytes(&storage.old_value, offset, number_of_bytes);
-            let new_data = read_bytes(&storage.new_value, offset, number_of_bytes);
-            !old_data.eq(new_data)
-        })
-        // take the change with the highest ordinal
-        .max_by(|x, y| x.ordinal.cmp(&y.ordinal));
-
-    storage_change_opt?;
-    let storage = storage_change_opt.unwrap();
-
-    let old_data = read_bytes(&storage.old_value, offset, number_of_bytes);
-    let new_data = read_bytes(&storage.new_value, offset, number_of_bytes);
-    Some((old_data, new_data))
-}
 
 pub fn calc_map_slot(map_index: &[u8; 32], base_slot: &[u8; 32]) -> [u8; 32] {
     let mut output = [0u8; 32];
@@ -41,12 +8,6 @@ pub fn calc_map_slot(map_index: &[u8; 32], base_slot: &[u8; 32]) -> [u8; 32] {
     hasher.update(base_slot);
     hasher.finalize(&mut output);
     output
-}
-
-pub fn calc_struct_slot(struct_slot: &[u8; 32], member_slot: BigInt) -> [u8; 32] {
-    let mut key = BigInt::from_signed_bytes_be(struct_slot.as_slice());
-    key = key.add(member_slot);
-    left_pad_from_bigint(&key)
 }
 
 pub fn left_pad_from_bigint(input: &BigInt) -> [u8; 32] {
@@ -63,17 +24,6 @@ pub fn left_pad(input: &[u8], padding_value: u8) -> [u8; 32] {
     }
     let mut data = [padding_value; 32];
     let offset = 32 - input.len();
-    data[offset..(input.len() + offset)].copy_from_slice(input);
-
-    data
-}
-
-pub fn contract_pad(input: &[u8]) -> [u8; 20] {
-    if input.len() > 20 {
-        panic!("cannot convert vec<u8> to H256");
-    }
-    let mut data = [0u8; 20];
-    let offset = 20 - input.len();
     data[offset..(input.len() + offset)].copy_from_slice(input);
 
     data
@@ -101,7 +51,8 @@ pub fn read_bytes(buf: &[u8], offset: usize, number_of_bytes: usize) -> &[u8] {
     let start_opt = (end + 1).checked_sub(number_of_bytes);
     if start_opt.is_none() {
         panic!(
-            "number of bytes {number_of_bytes} with offset {offset} exceeds buffer size {buf_size}",
+            "number of bytes {number_of_bytes} with offset {offset} exceeds buffer size
+{buf_size}",
             number_of_bytes = number_of_bytes,
             offset = offset,
             buf_size = buf.len()

@@ -1,36 +1,6 @@
-use ethabi::ethereum_types::Address;
-use substreams::store::{StoreGet, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::{self as eth};
 
-use substreams_helper::{common::HasAddresser, hex::Hexable};
-
-use crate::{
-    pb::tycho::evm::{
-        uniswap::v3::Pool,
-        v1::{Block, Transaction},
-    },
-    store_key::StoreKey,
-};
-
-pub struct PoolAddresser<'a> {
-    pub store: &'a StoreGetProto<Pool>,
-}
-
-impl<'a> PoolAddresser<'a> {
-    fn has_address(&self, key: Address) -> bool {
-        let pool = self
-            .store
-            .get_last(StoreKey::Pool.get_unique_pool_key(&key.to_hex()));
-
-        pool.is_some()
-    }
-}
-
-impl<'a> HasAddresser for PoolAddresser<'a> {
-    fn has_address(&self, key: Address) -> bool {
-        self.has_address(key)
-    }
-}
+use crate::pb::tycho::evm::v1::{Block, Transaction};
 
 impl From<eth::Block> for Block {
     fn from(block: eth::Block) -> Self {
