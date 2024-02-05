@@ -668,6 +668,7 @@ mod test_serial_db {
 
     const TX_HASH_0: &str = "0x2f6350a292c0fc918afe67cb893744a080dacb507b0cea4cc07437b8aff23cdb";
     const TX_HASH_1: &str = "0x0d9e0da36cf9f305a189965b248fc79c923619801e8ab5ef158d4fd528a291ad";
+    const TX_HASH_2: &str = "0xcf574444be25450fe26d16b85102b241e964a6e01d75dd962203d4888269be3d";
     const BLOCK_HASH_0: &str = "0x98b4a4fef932b1862be52de218cc32b714a295fae48b775202361a6fa09b66eb";
 
     async fn setup_gw(
@@ -758,11 +759,9 @@ mod test_serial_db {
                 "0xe8e77626586f73b955364c7b4bbf0bb7f7685ebd40e852b164633a4acbd3244c"
                     .parse()
                     .unwrap(),
-                "0x2f6350a292c0fc918afe67cb893744a080dacb507b0cea4cc07437b8aff23cdb"
-                    .parse()
-                    .unwrap(),
-                H256::zero(),
-                Some(H256::zero()),
+                TX_HASH_1.parse().unwrap(),
+                TX_HASH_0.parse().unwrap(),
+                Some(TX_HASH_0.parse().unwrap()),
             ),
             _ => panic!("Unkown version"),
         }
@@ -773,29 +772,34 @@ mod test_serial_db {
             extractor: "vm:ambient".to_owned(),
             chain: Chain::Ethereum,
             block: evm::Block::default(),
-            tx_updates: vec![evm::TransactionUpdates::new(
-                vec![
-                    AccountUpdate::new(
+            tx_updates: vec![
+                evm::TransactionUpdates::new(
+                    vec![AccountUpdate::new(
                         H160(AMBIENT_CONTRACT),
                         Chain::Ethereum,
                         HashMap::new(),
                         None,
                         Some(vec![0, 0, 0, 0].into()),
                         ChangeType::Creation,
-                    ),
-                    AccountUpdate::new(
+                    )],
+                    vec![],
+                    vec![],
+                    evm::fixtures::transaction02(TX_HASH_0, evm::fixtures::HASH_256_0, 1),
+                ),
+                evm::TransactionUpdates::new(
+                    vec![AccountUpdate::new(
                         H160(AMBIENT_CONTRACT),
                         Chain::Ethereum,
                         evm::fixtures::evm_slots([(1, 200)]),
                         Some(U256::from(1000)),
                         None,
                         ChangeType::Update,
-                    ),
-                ],
-                vec![],
-                vec![],
-                evm::fixtures::transaction02(TX_HASH_0, evm::fixtures::HASH_256_0, 1),
-            )],
+                    )],
+                    vec![],
+                    vec![],
+                    evm::fixtures::transaction02(TX_HASH_1, evm::fixtures::HASH_256_0, 2),
+                ),
+            ],
         }
     }
 
@@ -822,7 +826,7 @@ mod test_serial_db {
                 )],
                 vec![],
                 vec![],
-                evm::fixtures::transaction02(TX_HASH_1, BLOCK_HASH_0, 1),
+                evm::fixtures::transaction02(TX_HASH_2, BLOCK_HASH_0, 1),
             )],
         }
     }
