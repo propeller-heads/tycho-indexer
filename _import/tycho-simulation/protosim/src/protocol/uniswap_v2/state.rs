@@ -6,7 +6,7 @@ use crate::{
         errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
-        state::ProtocolSim,
+        state::{ProtocolSim, TychoProtocolState},
     },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
 };
@@ -127,6 +127,29 @@ impl ProtocolSim for UniswapV2State {
         let amount_out = safe_div_u256(numerator, denominator)?;
 
         Ok(GetAmountOutResult::new(amount_out, U256::from(120_000)))
+    }
+}
+
+impl TychoProtocolState for UniswapV2State {
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+    ) -> Result<(), TransitionError<String>> {
+        // reserve0 and reserve1 are considered required attributes and are expected in every delta
+        // we process
+        self.reserve0 = delta
+            .updated_attributes
+            .get("reserve0")
+            .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?
+            .as_u256()
+            .map_err(|err| TransitionError::DecodeError(err))?;
+        self.reserve1 = delta
+            .updated_attributes
+            .get("reserve1")
+            .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?
+            .as_u256()
+            .map_err(|err| TransitionError::DecodeError(err))?;
+        Ok(())
     }
 }
 
