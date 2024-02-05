@@ -778,9 +778,9 @@ mod test_serial_db {
                     AccountUpdate::new(
                         H160(AMBIENT_CONTRACT),
                         Chain::Ethereum,
-                        evm::fixtures::evm_slots([(1, 200)]),
-                        Some(U256::from(1000)),
+                        HashMap::new(),
                         None,
+                        Some(vec![0, 0, 0, 0].into()),
                         ChangeType::Creation,
                     ),
                     AccountUpdate::new(
