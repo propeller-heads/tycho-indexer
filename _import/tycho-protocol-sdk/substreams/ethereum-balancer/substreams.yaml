@@ -38,6 +38,7 @@ modules:
     initialBlock: 12369300  # An arbitrary block that should change based on your requirements
     inputs:
       - source: sf.ethereum.type.v2.Block
+      - store: store_pools_created
     output:
       type: proto:tycho.evm.v1.BalanceDeltas
 

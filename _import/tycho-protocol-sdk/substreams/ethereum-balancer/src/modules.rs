@@ -89,7 +89,10 @@ pub fn store_pools_created(map: tycho::GroupedTransactionProtocolComponents, sto
 /// Since the `PoolBalanceChanged` events administer only deltas, we need to leverage a map and a
 ///  store to be able to tally up final balances for tokens in a pool.
 #[substreams::handlers::map]
-pub fn map_balance_deltas(block: eth::v2::Block) -> Result<tycho::BalanceDeltas, anyhow::Error> {
+pub fn map_balance_deltas(
+    block: eth::v2::Block,
+    store: StoreGetInt64,
+) -> Result<tycho::BalanceDeltas, anyhow::Error> {
     Ok(tycho::BalanceDeltas {
         balance_deltas: block
             .events::<abi::vault::events::PoolBalanceChanged>(&[&VAULT_ADDRESS])
@@ -98,17 +101,28 @@ pub fn map_balance_deltas(block: eth::v2::Block) -> Result<tycho::BalanceDeltas,
                     .tokens
                     .iter()
                     .zip(event.deltas.iter())
-                    .map(|(token, delta)| tycho::BalanceDelta {
-                        ord: log.log.ordinal,
-                        tx: Some(tycho::Transaction {
-                            hash: log.receipt.transaction.hash.clone(),
-                            from: log.receipt.transaction.from.clone(),
-                            to: log.receipt.transaction.to.clone(),
-                            index: Into::<u64>::into(log.receipt.transaction.index),
-                        }),
-                        token: token.clone(),
-                        delta: delta.to_signed_bytes_be(),
-                        component_id: event.pool_id.into(),
+                    .filter_map(|(token, delta)| {
+                        let component_id: Vec<_> = event.pool_id.into();
+
+                        if store
+                            .get_last(format!("pool:{0}", hex::encode(&component_id)))
+                            .is_none()
+                        {
+                            return None;
+                        }
+
+                        Some(tycho::BalanceDelta {
+                            ord: log.log.ordinal,
+                            tx: Some(tycho::Transaction {
+                                hash: log.receipt.transaction.hash.clone(),
+                                from: log.receipt.transaction.from.clone(),
+                                to: log.receipt.transaction.to.clone(),
+                                index: Into::<u64>::into(log.receipt.transaction.index),
+                            }),
+                            token: token.clone(),
+                            delta: delta.to_signed_bytes_be(),
+                            component_id: component_id.clone(),
+                        })
                     })
                     .collect::<Vec<_>>()
             })
