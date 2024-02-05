@@ -6,7 +6,7 @@ use crate::{
         errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
-        state::ProtocolSim,
+        state::{ProtocolSim, TychoProtocolState},
     },
     safe_math::{safe_add_u256, safe_sub_u256},
 };
@@ -296,6 +296,62 @@ impl ProtocolSim for UniswapV3State {
                 .into_raw(),
             result.gas_used,
         ))
+    }
+}
+
+impl TychoProtocolState for UniswapV3State {
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+    ) -> Result<(), TransitionError<String>> {
+        // apply attribute changes
+        if let Some(liquidity) = delta
+            .updated_attributes
+            .get("liquidity")
+        {
+            self.liquidity = liquidity
+                .as_u128()
+                .map_err(|err| TransitionError::DecodeError(err))?;
+        }
+        if let Some(sqrt_price) = delta
+            .updated_attributes
+            .get("sqrt_price")
+        {
+            self.sqrt_price = sqrt_price
+                .as_u256()
+                .map_err(|err| TransitionError::DecodeError(err))?;
+        }
+        if let Some(tick) = delta.updated_attributes.get("tick") {
+            self.tick = tick
+                .as_i32()
+                .map_err(|err| TransitionError::DecodeError(err))?;
+        }
+
+        // apply tick changes
+        for (key, value) in delta.updated_attributes.iter() {
+            if key.starts_with("tick/") {
+                self.ticks.set_tick_liquidity(
+                    key.split('/')[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err))?,
+                    value
+                        .as_i128()
+                        .map_err(|err| TransitionError::DecodeError(err))?,
+                )
+            }
+        }
+        // delete ticks
+        for key in delta.deleted_attributes.iter() {
+            if key.starts_with("tick/") {
+                self.ticks.set_tick_liquidity(
+                    key.split('/')[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err))?,
+                    0,
+                )
+            }
+        }
+        Ok(())
     }
 }
 
