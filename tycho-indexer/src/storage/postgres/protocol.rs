@@ -1302,7 +1302,7 @@ mod test {
 
         let protocol_component_id = db_fixtures::insert_protocol_component(
             conn,
-            "state1",
+            "component-1",
             chain_id,
             protocol_system_id_ambient,
             protocol_type_id,
@@ -1313,7 +1313,7 @@ mod test {
         .await;
         let protocol_component_id2 = db_fixtures::insert_protocol_component(
             conn,
-            "state3",
+            "component-3",
             chain_id,
             protocol_system_id_ambient,
             protocol_type_id,
@@ -1324,7 +1324,7 @@ mod test {
         .await;
         db_fixtures::insert_protocol_component(
             conn,
-            "state2",
+            "component-2",
             chain_id_sn,
             protocol_system_id_zz,
             protocol_type_id,
@@ -1381,7 +1381,7 @@ mod test {
         .into_iter()
         .collect();
         ProtocolState::new(
-            "state1".to_owned(),
+            "component-1".to_owned(),
             attributes,
             "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
                 .parse()
@@ -1392,7 +1392,7 @@ mod test {
     #[rstest]
     #[case::by_chain(None, None)]
     #[case::by_system(Some("ambient".to_string()), None)]
-    #[case::by_ids(None, Some(vec ! ["state1"]))]
+    #[case::by_ids(None, Some(vec ! ["component-1"]))]
     #[tokio::test]
 
     async fn test_get_protocol_states(
@@ -1455,7 +1455,7 @@ mod test {
             vec![("reserve1".to_owned(), Bytes::from(U256::from(1000)))]
                 .into_iter()
                 .collect();
-        ProtocolStateDelta::new("state3".to_owned(), attributes)
+        ProtocolStateDelta::new("component-3".to_owned(), attributes)
     }
 
     #[tokio::test]
@@ -1469,7 +1469,7 @@ mod test {
 
         // set up deletable attribute state
         let protocol_component_id = schema::protocol_component::table
-            .filter(schema::protocol_component::external_id.eq("state2"))
+            .filter(schema::protocol_component::external_id.eq("component-2"))
             .select(schema::protocol_component::id)
             .first::<i64>(&mut conn)
             .await
@@ -1586,7 +1586,7 @@ mod test {
     async fn test_get_balance_deltas() {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
-        let protocol_external_id = String::from("state1");
+        let protocol_external_id = String::from("component-1");
         // set up changed balances
         let protocol_component_id = schema::protocol_component::table
             .filter(schema::protocol_component::external_id.eq(protocol_external_id.clone()))
@@ -1693,7 +1693,7 @@ mod test {
 
         // set up deleted attribute state
         let protocol_component_id = schema::protocol_component::table
-            .filter(schema::protocol_component::external_id.eq("state1"))
+            .filter(schema::protocol_component::external_id.eq("component-1"))
             .select(schema::protocol_component::id)
             .first::<i64>(&mut conn)
             .await
@@ -1737,7 +1737,7 @@ mod test {
 
         // set up deleted attribute different state (one that isn't also updated)
         let protocol_component_id2 = schema::protocol_component::table
-            .filter(schema::protocol_component::external_id.eq("state3"))
+            .filter(schema::protocol_component::external_id.eq("component-3"))
             .select(schema::protocol_component::id)
             .first::<i64>(&mut conn)
             .await
@@ -1757,12 +1757,12 @@ mod test {
 
         // expected result
         let mut state_delta = protocol_state_delta();
-        state_delta.component_id = "state1".to_owned();
+        state_delta.component_id = "component-1".to_owned();
         state_delta.deleted_attributes = vec!["deleted".to_owned()]
             .into_iter()
             .collect();
         let other_state_delta = ProtocolStateDelta {
-            component_id: "state3".to_owned(),
+            component_id: "component-3".to_owned(),
             updated_attributes: HashMap::new(),
             deleted_attributes: vec!["deleted2".to_owned()]
                 .into_iter()
@@ -1792,7 +1792,7 @@ mod test {
 
         // set up newly added attribute state (to be deleted on revert)
         let protocol_component_id = schema::protocol_component::table
-            .filter(schema::protocol_component::external_id.eq("state1"))
+            .filter(schema::protocol_component::external_id.eq("component-1"))
             .select(schema::protocol_component::id)
             .first::<i64>(&mut conn)
             .await
@@ -1869,7 +1869,7 @@ mod test {
         .into_iter()
         .collect();
         let state_delta = ProtocolStateDelta {
-            component_id: "state1".to_owned(),
+            component_id: "component-1".to_owned(),
             updated_attributes: attributes,
             deleted_attributes: vec!["to_delete".to_owned()]
                 .into_iter()
@@ -2048,7 +2048,7 @@ mod test {
         let tx_hash =
             H256::from_str("0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945")
                 .unwrap();
-        let protocol_component_id: String = String::from("state2");
+        let protocol_component_id: String = String::from("component-2");
         let base_token = H160::from_str(WETH.trim_start_matches("0x")).unwrap();
 
         let component_balance = ComponentBalance {
@@ -2089,7 +2089,7 @@ mod test {
             .first::<orm::ProtocolComponent>(&mut conn)
             .await;
         let referenced_component: orm::ProtocolComponent = referenced_component.unwrap();
-        assert_eq!(referenced_component.external_id, String::from("state2"));
+        assert_eq!(referenced_component.external_id, String::from("component-2"));
     }
 
     #[tokio::test]
@@ -2220,8 +2220,8 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let test_components = vec![
-            create_test_protocol_component("state1"),
-            create_test_protocol_component("state2"),
+            create_test_protocol_component("component-1"),
+            create_test_protocol_component("component-2"),
         ];
 
         let res = gw
@@ -2276,7 +2276,7 @@ mod test {
                 assert_eq!(components.len(), 1);
 
                 let pc = &components[0];
-                assert_eq!(pc.id, "state2".to_string());
+                assert_eq!(pc.id, "component-2".to_string());
                 assert_eq!(pc.protocol_system, "zigzag");
                 assert_eq!(pc.chain, Chain::Starknet);
                 assert_eq!(pc.creation_tx, H256::from_str(tx_hashes.get(1).unwrap()).unwrap());
@@ -2290,8 +2290,8 @@ mod test {
     }
 
     #[rstest]
-    #[case::get_one("state1".to_string())]
-    #[case::get_none("state2".to_string())]
+    #[case::get_one("component-1".to_string())]
+    #[case::get_none("component-2".to_string())]
     #[tokio::test]
 
     async fn test_get_protocol_components_with_external_id_only(#[case] external_id: String) {
@@ -2308,7 +2308,7 @@ mod test {
             .await;
 
         match external_id.as_str() {
-            "state1" => {
+            "component-1" => {
                 let components = result.unwrap();
                 assert_eq!(components.len(), 1);
 
@@ -2318,7 +2318,7 @@ mod test {
                 assert_eq!(pc.chain, Chain::Ethereum);
                 assert_eq!(pc.creation_tx, H256::from_str(&tx_hashes[0].to_string()).unwrap());
             }
-            "state2" => {
+            "component-2" => {
                 let components = result.unwrap();
                 assert_eq!(components.len(), 0)
             }
@@ -2333,7 +2333,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let system = "ambient".to_string();
-        let ids = Some(["state1", "state2"].as_slice());
+        let ids = Some(["component-1", "component-2"].as_slice());
         let chain = Chain::Ethereum;
         let result = gw
             .get_protocol_components(&chain, Some(system), ids, None, None, &mut conn)
@@ -2343,7 +2343,7 @@ mod test {
         assert_eq!(components.len(), 1);
 
         let pc = &components[0];
-        assert_eq!(pc.id, "state1".to_string());
+        assert_eq!(pc.id, "component-1".to_string());
         assert_eq!(pc.protocol_system, "ambient");
         assert_eq!(pc.chain, Chain::Ethereum);
         assert_eq!(pc.creation_tx, H256::from_str(&tx_hashes[0].to_string()).unwrap());
@@ -2373,7 +2373,7 @@ mod test {
         assert!(!components.is_empty(), "{}", assert_message.to_string());
 
         let pc = &components[0];
-        assert_eq!(pc.id, format!("state{}", i + 1).to_string());
+        assert_eq!(pc.id, format!("component-{}", i + 1).to_string());
         assert_eq!(pc.chain, chain);
         let i_usize: usize = i as usize;
         assert_eq!(pc.creation_tx, H256::from_str(&tx_hashes[i_usize].to_string()).unwrap());
@@ -2406,7 +2406,7 @@ mod test {
         // only 1 component was inserted in block 2 -> component-3
         assert_eq!(components.len(), 1);
         let pc = &components[0];
-        assert_eq!(pc.id, "state3".to_string());
+        assert_eq!(pc.id, "component-3".to_string());
         assert_eq!(pc.protocol_system, "ambient");
         assert_eq!(pc.chain, Chain::Ethereum);
         assert_eq!(pc.creation_tx, H256::from_str(&tx_hashes[2].to_string()).unwrap());
