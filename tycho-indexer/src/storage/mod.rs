@@ -631,6 +631,8 @@ pub trait ProtocolGateway {
         chain: &Chain,
         system: Option<String>,
         ids: Option<&[&str]>,
+        start_block_number: Option<i64>,
+        end_block_number: Option<i64>,
         conn: &mut Self::DB,
     ) -> Result<Vec<Self::ProtocolComponent>, StorageError>;
 

@@ -131,6 +131,8 @@ where
         chain: &Chain,
         system: Option<String>,
         ids: Option<&[&str]>,
+        start_block_number: Option<i64>,
+        end_block_number: Option<i64>,
         conn: &mut Self::DB,
     ) -> Result<Vec<ProtocolComponent>, StorageError> {
         use super::schema::{protocol_component::dsl::*, transaction::dsl::*};
@@ -138,7 +140,9 @@ where
 
         let mut query = protocol_component
             .inner_join(transaction.on(creation_tx.eq(schema::transaction::id)))
-            .select((orm::ProtocolComponent::as_select(), hash))
+            .inner_join(schema::block::table.on(block_id.eq(schema::block::id)))
+            .select((orm::ProtocolComponent::as_select(), hash, schema::block::number))
+            // .filter(chain_id.eq(chain_id_value))
             .into_boxed();
 
         match (system, ids) {
@@ -172,13 +176,30 @@ where
             }
         }
 
-        let orm_protocol_components = query
-            .load::<(orm::ProtocolComponent, TxHash)>(conn)
-            .await?;
+        // if system.is_some() {
+        //     let protocol_system = self.get_protocol_system_id(&system);
+        //     query = query.filter(protocol_system_id.eq(protocol_system));
+        // };
+        // if ids.is_some() {
+        //     query = query.filter(external_id.eq_any(ids));
+        // }
 
+        if let (Some(start), Some(end)) = (start_block_number, end_block_number) {
+            println!("CAME HERE block_id.gt{}, block_id.le{}", start, end);
+            query = query.filter(
+                schema::block::number
+                    .gt(start)
+                    .and(schema::block::number.le(end)),
+            );
+        }
+
+        let orm_protocol_components = query
+            .load::<(orm::ProtocolComponent, TxHash, i64)>(conn)
+            .await?;
+        println!("THESE ARE THE RES: {:?}", orm_protocol_components);
         let protocol_component_ids = orm_protocol_components
             .iter()
-            .map(|(pc, _)| pc.id)
+            .map(|(pc, _, _)| pc.id)
             .collect::<Vec<i64>>();
 
         let protocol_component_tokens: Vec<(i64, Address)> =
@@ -235,7 +256,7 @@ where
 
         orm_protocol_components
             .into_iter()
-            .map(|(pc, tx_hash)| {
+            .map(|(pc, tx_hash, ther_block_id)| {
                 let ps = self.get_protocol_system(&pc.protocol_system_id);
                 let tokens_by_pc: &Vec<Address> = protocol_component_tokens
                     .get(&pc.id)
@@ -1296,7 +1317,7 @@ mod test {
             chain_id,
             protocol_system_id_ambient,
             protocol_type_id,
-            txn[0],
+            txn[2],
             Some(vec![weth_id]),
             Some(vec![contract_code_id]),
         )
@@ -2244,7 +2265,7 @@ mod test {
         let chain = Chain::Starknet;
 
         let result = gw
-            .get_protocol_components(&chain, system.clone(), None, &mut conn)
+            .get_protocol_components(&chain, system.clone(), None, None, None, &mut conn)
             .await;
 
         assert!(result.is_ok());
@@ -2283,7 +2304,7 @@ mod test {
         let chain = Chain::Ethereum;
 
         let result = gw
-            .get_protocol_components(&chain, None, ids, &mut conn)
+            .get_protocol_components(&chain, None, ids, None, None, &mut conn)
             .await;
 
         match external_id.as_str() {
@@ -2315,7 +2336,7 @@ mod test {
         let ids = Some(["state1", "state2"].as_slice());
         let chain = Chain::Ethereum;
         let result = gw
-            .get_protocol_components(&chain, Some(system), ids, &mut conn)
+            .get_protocol_components(&chain, Some(system), ids, None, None, &mut conn)
             .await;
 
         let components = result.unwrap();
@@ -2338,7 +2359,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let result = gw
-            .get_protocol_components(&chain, None, None, &mut conn)
+            .get_protocol_components(&chain, None, None, None, None, &mut conn)
             .await;
 
         let mut components = result.unwrap();
@@ -2367,5 +2388,27 @@ mod test {
                 .contains(&H160::from_str(WETH).unwrap()),
             "ProtocolComponent is missing WETH contract. Check the tests' data setup"
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_components_with_block_filter() {
+        let mut conn = setup_db().await;
+        let tx_hashes = setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let system = "ambient".to_string();
+        let chain = Chain::Ethereum;
+        let result = gw
+            .get_protocol_components(&chain, Some(system), None, Some(1), Some(2), &mut conn)
+            .await;
+        let components = result.unwrap();
+
+        // only 1 component was inserted in block 2 -> component-3
+        assert_eq!(components.len(), 1);
+        let pc = &components[0];
+        assert_eq!(pc.id, "state3".to_string());
+        assert_eq!(pc.protocol_system, "ambient");
+        assert_eq!(pc.chain, Chain::Ethereum);
+        assert_eq!(pc.creation_tx, H256::from_str(&tx_hashes[2].to_string()).unwrap());
     }
 }

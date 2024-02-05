@@ -288,7 +288,7 @@ impl RpcHandler {
         let ids_slice = ids_strs.as_deref();
         match self
             .db_gateway
-            .get_protocol_components(chain, system, ids_slice, db_connection)
+            .get_protocol_components(chain, system, ids_slice, None, None, db_connection)
             .await
         {
             Ok(components) => Ok(dto::ProtocolComponentRequestResponse::new(
