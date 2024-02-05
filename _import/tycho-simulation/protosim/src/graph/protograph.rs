@@ -228,11 +228,11 @@ impl Iterator for RouteIdSubsetsByMembership<'_> {
                         *route_indices
                             .get(self.vec_idx)
                             .expect("KeySubsetIterator: data was empty!"),
-                    )
+                    );
                 }
                 None => {
                     self.key_idx += 1;
-                    continue
+                    continue;
                 }
             };
         }
@@ -407,7 +407,7 @@ impl ProtoGraph {
         for (ev, logmeta) in events.iter() {
             let address = logmeta.from;
             if let Some(Pair(_, state)) = self.states.get_mut(&address) {
-                let res = state.transition(ev, logmeta);
+                let res = state.event_transition(ev, logmeta);
                 if !ignore_errors {
                     res.unwrap_or_else(|_| {
                         panic!("Error transitioning on event {:?} from address {}", ev, address)
@@ -420,7 +420,7 @@ impl ProtoGraph {
                 }
             } else {
                 trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
-                continue
+                continue;
             }
         }
     }
@@ -450,14 +450,14 @@ impl ProtoGraph {
                 old_state = state;
             } else {
                 trace!("Tried to transition on event from address {} which is not in graph! Skipping...", address);
-                continue
+                continue;
             };
             // Only save original state the first time in case there are multiple logs for the
             // same pool else revert would not properly work anymore.
             self.original_states
                 .entry(address)
                 .or_insert_with(|| old_state.clone());
-            old_state.transition(ev, logmeta)?;
+            old_state.event_transition(ev, logmeta)?;
         }
         Ok(())
     }
@@ -552,7 +552,7 @@ impl ProtoGraph {
         // TODO this should work purely on log updates and the transition
         if let Some(pair) = self.states.get_mut(address) {
             pair.1 = state;
-            return Some(())
+            return Some(());
         }
         None
     }

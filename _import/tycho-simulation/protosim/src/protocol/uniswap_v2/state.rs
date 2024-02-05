@@ -33,7 +33,7 @@ impl UniswapV2State {
         UniswapV2State { reserve0, reserve1, log_index: (0, 0) }
     }
 
-    pub fn transition(
+    pub fn event_transition(
         &mut self,
         msg: &UniswapV2Sync,
         log_meta: &EVMLogMeta,
@@ -106,7 +106,7 @@ impl ProtocolSim for UniswapV2State {
             return Result::Err(TradeSimulationError::new(
                 TradeSimulationErrorKind::InsufficientAmount,
                 None,
-            ))
+            ));
         }
         let zero2one = token_in.address < token_out.address;
         let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
@@ -116,7 +116,7 @@ impl ProtocolSim for UniswapV2State {
             return Result::Err(TradeSimulationError::new(
                 TradeSimulationErrorKind::NoLiquidity,
                 None,
-            ))
+            ));
         }
 
         let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
@@ -237,7 +237,7 @@ mod tests {
         );
 
         state
-            .transition(&event, &log_meta)
+            .event_transition(&event, &log_meta)
             .unwrap();
 
         assert_eq!(state.reserve0, u256("1500"));

@@ -38,7 +38,7 @@
 use enum_dispatch::enum_dispatch;
 use ethers::types::U256;
 
-use crate::models::ERC20Token;
+use crate::{evm_simulation::tycho_models::ProtocolStateDelta, models::ERC20Token};
 
 use super::{
     errors::{TradeSimulationError, TransitionError},
@@ -95,6 +95,26 @@ pub trait ProtocolSim {
     ) -> Result<GetAmountOutResult, TradeSimulationError>;
 }
 
+pub trait TychoProtocolState {
+    /// Decodes and applies a protocol state delta to the state
+    ///
+    /// Will error if the provided delta is missing any required attributes or is any of the
+    /// attribute values cannot be decoded.
+    ///
+    /// # Arguments
+    ///
+    /// * `delta` - A `ProtocolStateDelta` from the tycho indexer
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), TransitionError<String>>` - A `Result` containing `()` on success or a
+    ///  `TransitionError` on failure.
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+    ) -> Result<(), TransitionError<String>>;
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[enum_dispatch(ProtocolSim)]
 /// ProtocolState Enum
@@ -105,7 +125,7 @@ pub enum ProtocolState {
 }
 
 impl ProtocolState {
-    pub fn transition(
+    pub fn event_transition(
         &mut self,
         protocol_event: &ProtocolEvent,
         log: &EVMLogMeta,
@@ -113,14 +133,14 @@ impl ProtocolState {
         match self {
             ProtocolState::UniswapV2(state) => {
                 if let ProtocolEvent::UniswapV2(event) = protocol_event {
-                    state.transition(event, log)?;
+                    state.event_transition(event, log)?;
                 } else {
                     panic!("Invalid event type for address!")
                 }
             }
             ProtocolState::UniswapV3(state) => {
                 if let ProtocolEvent::UniswapV3(event) = protocol_event {
-                    state.transition(event, log)?;
+                    state.event_transition(event, log)?;
                 } else {
                     panic!("Invalid event type for address!")
                 }

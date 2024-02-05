@@ -52,7 +52,6 @@ struct StepComputation {
 }
 
 // TODO: these attributes allow updating the state after a swap
-#[allow(dead_code)]
 struct SwapResults {
     amount_calculated: I256,
     sqrt_price: U256,
@@ -83,7 +82,7 @@ impl UniswapV3State {
         }
     }
 
-    pub fn transition(
+    pub fn event_transition(
         &mut self,
         event: &UniswapV3Event,
         log_meta: &EVMLogMeta,
@@ -129,7 +128,7 @@ impl UniswapV3State {
         sqrt_price_limit: Option<U256>,
     ) -> Result<SwapResults, TradeSimulationError> {
         if self.liquidity == 0 {
-            return Err(TradeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None))
+            return Err(TradeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None));
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -541,7 +540,7 @@ mod tests {
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
         );
 
-        pool.transition(&event, &logmeta())
+        pool.event_transition(&event, &logmeta())
             .unwrap();
 
         if let (tick, Some(liq_lower)) = exp_lower {
@@ -578,7 +577,7 @@ mod tests {
         );
         let event = SwapEvent::new(U256::from(1001), 2000, 120).into();
 
-        pool.transition(&event, &logmeta())
+        pool.event_transition(&event, &logmeta())
             .unwrap();
 
         assert_eq!(pool.sqrt_price, U256::from(1001));
