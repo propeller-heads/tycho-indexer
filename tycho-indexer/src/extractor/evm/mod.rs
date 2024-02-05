@@ -342,11 +342,8 @@ impl NormalisedMessage for BlockAccountChanges {
 /// Updates grouped by their respective transaction.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TransactionUpdates {
-    // TODO: for ambient it works to have only a single update here but long
-    // term we need to be able to store changes to multiple accounts per
-    // transactions.
     pub account_updates: Vec<AccountUpdate>,
-    pub protocol_componets: Vec<ProtocolComponent>,
+    pub protocol_components: Vec<ProtocolComponent>,
     pub component_balances: Vec<ComponentBalance>,
     pub tx: Transaction,
     // pub protocol_components: Vec<ProtocolComponent>,
@@ -360,7 +357,7 @@ impl TransactionUpdates {
         component_balances: Vec<ComponentBalance>,
         tx: Transaction,
     ) -> Self {
-        Self { account_updates, protocol_componets, component_balances, tx }
+        Self { account_updates, protocol_components: protocol_componets, component_balances, tx }
     }
 
     /// Merges this update with another one.
@@ -761,11 +758,11 @@ impl BlockContractChanges {
             .tx_updates
             .first()
             .ok_or(ExtractionError::Empty)?
-            .protocol_componets
+            .protocol_components
             .clone();
         for update in self.tx_updates.into_iter().skip(1) {
             tx_update.merge(&update.clone())?;
-            protocol_components.extend(update.clone().protocol_componets);
+            protocol_components.extend(update.clone().protocol_components);
         }
         Ok(BlockAccountChanges::new(
             &self.extractor,
@@ -1647,7 +1644,7 @@ mod test {
                         Some(vec![129, 130, 131, 132].into()),
                         ChangeType::Update,
                     )],
-                    protocol_componets: vec![protocol_component.clone()],
+                    protocol_components: vec![protocol_component.clone()],
                     component_balances: vec![],
                     tx,
                 },
@@ -1660,7 +1657,7 @@ mod test {
                         Some(vec![1, 2, 3, 4].into()),
                         ChangeType::Update,
                     )],
-                    protocol_componets: vec![],
+                    protocol_components: vec![],
                     component_balances: vec![],
                     tx: tx_5,
                 },
