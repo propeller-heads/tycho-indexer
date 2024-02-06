@@ -25,6 +25,73 @@ use super::{
     tick_math,
 };
 
+// helper hex_byte functions.
+// TODO: move these to tycho hex_bytes module
+#[derive(Debug, Clone, Error)]
+#[error("Failed to parse bytes: {0}")]
+pub struct ConversionError(String);
+
+pub fn bytes_as_u128(val: &Bytes) -> Result<u128, ConversionError> {
+    let bytes_slice = val.as_ref();
+
+    // Create an array with zeros.
+    let mut u128_bytes: [u8; 16] = [0; 16];
+
+    // Copy bytes from bytes_slice to u128_bytes.
+    u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
+
+    // Convert to u128 using little-endian
+    let value = u128::from_le_bytes(u128_bytes);
+
+    Ok(value)
+}
+
+pub fn bytes_as_i128(val: &Bytes) -> Result<i128, ConversionError> {
+    let bytes_slice = val.as_ref();
+
+    // Create an array with zeros.
+    let mut u128_bytes: [u8; 16] = [0; 16];
+
+    // Copy bytes from bytes_slice to u128_bytes.
+    u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
+
+    // Convert to i128 using little-endian
+    let value = i128::from_le_bytes(u128_bytes);
+
+    Ok(value)
+}
+
+pub fn bytes_as_u256(val: &Bytes) -> Result<U256, ConversionError> {
+    let bytes_slice = val.as_ref();
+
+    // Create an array with zeros.
+    let mut u256_bytes: [u8; 32] = [0; 32];
+
+    // Copy bytes from bytes_slice to u256_bytes.
+    u256_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
+
+    // Convert the bytes array to U256 using little-endian.
+    let value = U256::from_little_endian(&u256_bytes);
+
+    Ok(value)
+}
+
+pub fn bytes_as_i32(val: &Bytes) -> Result<i32, ConversionError> {
+    let bytes_slice = val.as_ref();
+
+    // Create an array with zeros.
+    let mut i32_bytes: [u8; 4] = [0; 4];
+
+    // Copy bytes from bytes_slice to i32_bytes.
+    let len = 4.min(bytes_slice.len());
+    i32_bytes[..len].copy_from_slice(&bytes_slice[..len]);
+
+    // Convert to i32 using little-endian
+    let value = i32::from_le_bytes(i32_bytes);
+
+    Ok(value)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV3State {
     liquidity: u128,
@@ -56,6 +123,7 @@ struct StepComputation {
 }
 
 // TODO: these attributes allow updating the state after a swap
+#[allow(dead_code)]
 struct SwapResults {
     amount_calculated: I256,
     sqrt_price: U256,
@@ -301,9 +369,7 @@ impl ProtocolSim for UniswapV3State {
             result.gas_used,
         ))
     }
-}
 
-impl TychoProtocolState for UniswapV3State {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
@@ -313,44 +379,44 @@ impl TychoProtocolState for UniswapV3State {
             .updated_attributes
             .get("liquidity")
         {
-            self.liquidity = liquidity
-                .as_u128()
-                .map_err(|err| TransitionError::DecodeError(err))?;
+            self.liquidity = bytes_as_u128(&liquidity)
+                .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
         }
         if let Some(sqrt_price) = delta
             .updated_attributes
             .get("sqrt_price")
         {
-            self.sqrt_price = sqrt_price
-                .as_u256()
-                .map_err(|err| TransitionError::DecodeError(err))?;
+            self.sqrt_price = bytes_as_u256(sqrt_price)
+                .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
-            self.tick = tick
-                .as_i32()
-                .map_err(|err| TransitionError::DecodeError(err))?;
+            self.tick =
+                bytes_as_i32(tick).map_err(|err| TransitionError::DecodeError(err.to_string()))?;
         }
 
         // apply tick changes
         for (key, value) in delta.updated_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
             if key.starts_with("tick/") {
+                let parts: Vec<&str> = key.split('/').collect();
                 self.ticks.set_tick_liquidity(
-                    key.split('/')[1]
+                    parts[1]
                         .parse::<i32>()
-                        .map_err(|err| TransitionError::DecodeError(err))?,
-                    value
-                        .as_i128()
-                        .map_err(|err| TransitionError::DecodeError(err))?,
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    bytes_as_i128(&value)
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
                 )
             }
         }
-        // delete ticks
+        // delete ticks - ignores deletes for attributes other than tick liquidity
         for key in delta.deleted_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
             if key.starts_with("tick/") {
+                let parts: Vec<&str> = key.split('/').collect();
                 self.ticks.set_tick_liquidity(
-                    key.split('/')[1]
+                    parts[1]
                         .parse::<i32>()
-                        .map_err(|err| TransitionError::DecodeError(err))?,
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
                     0,
                 )
             }
@@ -361,7 +427,10 @@ impl TychoProtocolState for UniswapV3State {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
 
     use ethers::types::{H160, H256};
     use rstest::rstest;
@@ -643,5 +712,53 @@ mod tests {
         assert_eq!(pool.sqrt_price, U256::from(1001));
         assert_eq!(pool.liquidity, 2000);
         assert_eq!(pool.tick, 120);
+    }
+
+    #[test]
+    fn test_delta_transition() {
+        let mut pool = UniswapV3State::new(
+            1000,
+            U256::from_dec_str("1000").unwrap(),
+            FeeAmount::Low,
+            100,
+            vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
+        );
+        let attributes: HashMap<String, Bytes> = [
+            ("liquidity".to_string(), Bytes::from(2000_u64.to_le_bytes().to_vec())),
+            ("sqrt_price".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(120_u64.to_le_bytes().to_vec())),
+            (
+                "tick/255760/net_liquidity".to_string(),
+                Bytes::from(10200_u64.to_le_bytes().to_vec()),
+            ),
+            ("tick/255900/net_liquidity".to_string(), Bytes::from(9800_u64.to_le_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect();
+        let delta = ProtocolStateDelta {
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        pool.delta_transition(delta).unwrap();
+
+        assert_eq!(pool.liquidity, 2000);
+        assert_eq!(pool.sqrt_price, U256::from(1001));
+        assert_eq!(pool.tick, 120);
+        assert_eq!(
+            pool.ticks
+                .get_tick(255760)
+                .unwrap()
+                .net_liquidity,
+            10200
+        );
+        assert_eq!(
+            pool.ticks
+                .get_tick(255900)
+                .unwrap()
+                .net_liquidity,
+            9800
+        );
     }
 }

@@ -96,9 +96,7 @@ pub trait ProtocolSim {
         token_in: &ERC20Token,
         token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, TradeSimulationError>;
-}
 
-pub trait TychoProtocolState {
     /// Decodes and applies a protocol state delta to the state
     ///
     /// Will error if the provided delta is missing any required attributes or if any of the

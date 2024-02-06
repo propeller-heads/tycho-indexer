@@ -35,6 +35,6 @@ impl TradeSimulationError {
 #[derive(Debug)]
 pub enum TransitionError<T> {
     OutOfOrder { state: T, event: T },
-    MissingAttribute { attribute: String },
-    DecodeError { error: String },
+    MissingAttribute(String),
+    DecodeError(String),
 }
