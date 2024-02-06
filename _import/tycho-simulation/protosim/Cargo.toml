@@ -41,6 +41,8 @@ dotenv = "0.15.0"
 reqwest = "0.11.22"
 rpc_state_reader = { git = "https://github.com/propeller-heads/starknet_in_rust.git", package = "rpc_state_reader", branch = "feature/bump-cairo-lang-version" }
 num-traits = "0.2.17"
+tycho-types = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-types"}
+tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client"}
 
 [dev-dependencies]
 mockito = "1.1.1"

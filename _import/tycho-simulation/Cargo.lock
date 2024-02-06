@@ -153,9 +153,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.70"
+version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7de8ce5e0f9f8d88245311066a578d72b7af3e7088f32783804676302df237e4"
+checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
 
 [[package]]
 name = "approx"
@@ -348,7 +348,7 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d7b9decdf35d8908a7e3ef02f64c5e9b1695e230154c0e8de3969142d9b94c"
 dependencies = [
- "futures",
+ "futures 0.3.28",
  "pharos",
  "rustc_version",
 ]
@@ -591,9 +591,9 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "bytes"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
+checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 dependencies = [
  "serde",
 ]
@@ -628,7 +628,7 @@ dependencies = [
  "async-trait",
  "cached_proc_macro",
  "cached_proc_macro_types",
- "futures",
+ "futures 0.3.28",
  "hashbrown 0.13.2",
  "instant",
  "once_cell",
@@ -2328,6 +2328,12 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "futures"
+version = "0.1.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a471a38ef8ed83cd6e40aa59c1ffe17db6855c18e3604d9c4ed8c08ebc28678"
+
+[[package]]
+name = "futures"
 version = "0.3.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23342abe12aba583913b2e62f22225ff9c950774065e4bfb61a19cd9770fec40"
@@ -2423,6 +2429,7 @@ version = "0.3.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26b01e40b772d54cf6c6d721c1d1abd0647a0106a12ecaa1c186273392a69533"
 dependencies = [
+ "futures 0.1.31",
  "futures-channel",
  "futures-core",
  "futures-io",
@@ -3301,7 +3308,7 @@ checksum = "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
 dependencies = [
  "assert-json-diff",
  "colored",
- "futures",
+ "futures 0.3.28",
  "hyper",
  "log",
  "rand",
@@ -3808,7 +3815,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9567389417feee6ce15dd6527a8a1ecac205ef62c2932bcf3d9f6fc5b78b414"
 dependencies = [
- "futures",
+ "futures 0.3.28",
  "rustc_version",
 ]
 
@@ -4009,7 +4016,7 @@ dependencies = [
  "async-trait",
  "clap 4.3.0",
  "ethers",
- "futures",
+ "futures 0.3.28",
  "http",
  "protosim",
  "rdkafka",
@@ -4035,7 +4042,7 @@ dependencies = [
  "dotenv",
  "enum_dispatch",
  "ethers",
- "futures",
+ "futures 0.3.28",
  "hex",
  "hyper",
  "indexmap 2.0.2",
@@ -4060,6 +4067,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tungstenite 0.20.1",
+ "tycho-client",
+ "tycho-types",
  "uuid 1.4.1",
  "warp",
 ]
@@ -4094,7 +4103,7 @@ dependencies = [
  "libc",
  "memoffset 0.9.0",
  "num-bigint",
- "parking_lot 0.12.1",
+ "parking_lot 0.11.2",
  "pyo3-build-config",
  "pyo3-ffi",
  "pyo3-macros",
@@ -4107,7 +4116,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2cc34c1f907ca090d7add03dc523acdd91f3a4dab12286604951e2f5152edad"
 dependencies = [
- "futures",
+ "futures 0.3.28",
  "once_cell",
  "pin-project-lite",
  "pyo3",
@@ -4416,7 +4425,7 @@ dependencies = [
  "auto_impl",
  "ethers-core",
  "ethers-providers",
- "futures",
+ "futures 0.3.28",
  "once_cell",
  "rayon",
  "revm-interpreter",
@@ -4560,7 +4569,7 @@ version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97eeab2f3c0a199bc4be135c36c924b6590b88c377d416494288c14f2db30199"
 dependencies = [
- "futures",
+ "futures 0.3.28",
  "futures-timer",
  "rstest_macros",
  "rustc_version",
@@ -6078,6 +6087,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "tycho-client"
+version = "0.1.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#1a72fba71bc5b5f7ecfbfd37b3fcb303b95db722"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures 0.3.28",
+ "hex",
+ "hyper",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite 0.20.1",
+ "tracing",
+ "tycho-types",
+ "uuid 1.4.1",
+]
+
+[[package]]
+name = "tycho-types"
+version = "0.1.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#1a72fba71bc5b5f7ecfbfd37b3fcb303b95db722"
+dependencies = [
+ "bytes",
+ "chrono",
+ "ethers",
+ "hex",
+ "serde",
+ "serde_json",
+ "strum 0.25.0",
+ "strum_macros 0.25.2",
+ "thiserror",
+ "utoipa",
+ "uuid 1.4.1",
+]
+
+[[package]]
 name = "typenum"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6204,6 +6252,30 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
+
+[[package]]
+name = "utoipa"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "272ebdfbc99111033031d2f10e018836056e4d2c8e2acda76450ec7974269fa7"
+dependencies = [
+ "indexmap 2.0.2",
+ "serde",
+ "serde_json",
+ "utoipa-gen",
+]
+
+[[package]]
+name = "utoipa-gen"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3c9f4d08338c1bfa70dde39412a040a884c6f318b3d09aaaf3437a1e52027fc"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.29",
+]
 
 [[package]]
 name = "uuid"
@@ -6621,7 +6693,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7999f5f4217fe3818726b66257a4475f71e74ffd190776ad053fa159e50737f5"
 dependencies = [
  "async_io_stream",
- "futures",
+ "futures 0.3.28",
  "js-sys",
  "log",
  "pharos",

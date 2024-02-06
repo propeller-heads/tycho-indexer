@@ -1,12 +1,16 @@
 use ethers::types::{Sign, I256, U256};
 
+use thiserror::Error;
+
+use tycho_types::{dto::ProtocolStateDelta, hex_bytes::Bytes};
+
 use crate::{
     models::ERC20Token,
     protocol::{
         errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
-        state::{ProtocolSim, TychoProtocolState},
+        state::ProtocolSim,
     },
     safe_math::{safe_add_u256, safe_sub_u256},
 };
@@ -582,7 +586,7 @@ mod tests {
         (255900, Some(-9800)),
         9999800
     )]
-    fn test_transition_liquidity(
+    fn test_event_transition_liquidity(
         #[case] event: UniswapV3Event,
         #[case] exp_lower: (i32, Option<i128>),
         #[case] exp_upper: (i32, Option<i128>),
@@ -623,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transition_swap() {
+    fn test_event_transition_swap() {
         let mut pool = UniswapV3State::new(
             1000,
             U256::from_dec_str("1000").unwrap(),

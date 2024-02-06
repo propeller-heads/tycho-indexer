@@ -1,5 +1,7 @@
 use ethers::types::U256;
 
+use tycho_types::{dto::ProtocolStateDelta, hex_bytes::Bytes};
+
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -245,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transition() {
+    fn test_event_transition() {
         let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
         let event = UniswapV2Sync::new(u256("1500"), u256("2000"));
         let log_meta = EVMLogMeta::new(

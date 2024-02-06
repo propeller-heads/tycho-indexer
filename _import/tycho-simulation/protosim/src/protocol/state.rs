@@ -38,14 +38,17 @@
 use enum_dispatch::enum_dispatch;
 use ethers::types::U256;
 
-use crate::{evm_simulation::tycho_models::ProtocolStateDelta, models::ERC20Token};
+use tycho_types::dto::ProtocolStateDelta;
 
-use super::{
-    errors::{TradeSimulationError, TransitionError},
-    events::{EVMLogMeta, LogIndex},
-    models::GetAmountOutResult,
-    uniswap_v2::{events::UniswapV2Sync, state::UniswapV2State},
-    uniswap_v3::{events::UniswapV3Event, state::UniswapV3State},
+use crate::{
+    models::ERC20Token,
+    protocol::{
+        errors::{TradeSimulationError, TransitionError},
+        events::{EVMLogMeta, LogIndex},
+        models::GetAmountOutResult,
+        uniswap_v2::{events::UniswapV2Sync, state::UniswapV2State},
+        uniswap_v3::{events::UniswapV3Event, state::UniswapV3State},
+    },
 };
 
 /// ProtocolSim trait
@@ -98,7 +101,7 @@ pub trait ProtocolSim {
 pub trait TychoProtocolState {
     /// Decodes and applies a protocol state delta to the state
     ///
-    /// Will error if the provided delta is missing any required attributes or is any of the
+    /// Will error if the provided delta is missing any required attributes or if any of the
     /// attribute values cannot be decoded.
     ///
     /// # Arguments
