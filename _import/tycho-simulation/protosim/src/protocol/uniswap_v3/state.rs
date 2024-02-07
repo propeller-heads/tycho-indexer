@@ -359,6 +359,8 @@ mod tests {
         str::FromStr,
     };
 
+    use tycho_types::hex_bytes::Bytes;
+
     use ethers::types::{H160, H256};
     use rstest::rstest;
 
