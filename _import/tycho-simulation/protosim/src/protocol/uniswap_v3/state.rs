@@ -1,11 +1,13 @@
 use ethers::types::{Sign, I256, U256};
 
-use tycho_types::dto::ProtocolStateDelta;
+use tycho_types::dto::{NativeSnapshot, ProtocolStateDelta};
 
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        errors::{
+            InvalidSnapshotError, TradeSimulationError, TradeSimulationErrorKind, TransitionError,
+        },
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::ProtocolSim,
@@ -349,6 +351,72 @@ impl ProtocolSim for UniswapV3State {
             }
         }
         Ok(())
+    }
+}
+
+impl TryFrom<NativeSnapshot> for UniswapV3State {
+    type Error = InvalidSnapshotError;
+
+    /// Decodes a `NativeSnapshot` into a `UniswapV3State`. Errors with a `InvalidSnapshotError`
+    /// if the snapshot is missing any required attributes or if the fee amount is not supported.
+    fn try_from(snapshot: NativeSnapshot) -> Result<Self, Self::Error> {
+        let liquidity = u128::from(
+            snapshot
+                .state
+                .updated_attributes
+                .get("liquidity")
+                .ok_or(InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
+                .clone(),
+        );
+
+        let sqrt_price = U256::from(
+            snapshot
+                .state
+                .updated_attributes
+                .get("sqrt_price")
+                .ok_or(InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
+                .clone(),
+        );
+
+        let fee = FeeAmount::try_from(i32::from(
+            snapshot
+                .component
+                .static_attributes
+                .get("fee")
+                .ok_or(InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
+                .clone(),
+        ))
+        .map_err(|_| InvalidSnapshotError::ValueError("Unsuppored fee amount".to_string()))?;
+
+        let tick = i32::from(
+            snapshot
+                .state
+                .updated_attributes
+                .get("tick")
+                .ok_or(InvalidSnapshotError::MissingAttribute("tick".to_string()))?
+                .clone(),
+        );
+
+        let ticks = Vec::new();
+        // collect tick data
+        for (key, value) in snapshot.state.updated_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            if key.starts_with("tick/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                ticks.push(TickInfo::new(
+                    parts[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    i128::from(value.clone()),
+                ));
+            }
+        }
+        // error if no tick data is found
+        if ticks.is_empty() {
+            return Err(InvalidSnapshotError::MissingAttribute("tick liquidities".to_string()));
+        }
+
+        Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
     }
 }
 
