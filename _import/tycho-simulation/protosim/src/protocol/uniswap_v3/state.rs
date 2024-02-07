@@ -655,7 +655,7 @@ mod tests {
             ("sqrt_price".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
             ("tick".to_string(), Bytes::from(120_u64.to_le_bytes().to_vec())),
             (
-                "tick/255760/net_liquidity".to_string(),
+                "tick/-255760/net_liquidity".to_string(),
                 Bytes::from(10200_u64.to_le_bytes().to_vec()),
             ),
             ("tick/255900/net_liquidity".to_string(), Bytes::from(9800_u64.to_le_bytes().to_vec())),
@@ -675,7 +675,7 @@ mod tests {
         assert_eq!(pool.tick, 120);
         assert_eq!(
             pool.ticks
-                .get_tick(255760)
+                .get_tick(-255760)
                 .unwrap()
                 .net_liquidity,
             10200
