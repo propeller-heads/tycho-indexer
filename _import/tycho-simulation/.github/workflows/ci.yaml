@@ -22,6 +22,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Setup git to use https
+        run: |
+            git config --global credential.helper store
+            echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+            git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
       - name: Setup toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
@@ -41,6 +46,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Setup git to use https
+        run: |
+            git config --global credential.helper store
+            echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+            git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
       - name: Setup toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
