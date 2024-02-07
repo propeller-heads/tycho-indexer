@@ -1,11 +1,13 @@
 use ethers::types::U256;
 
-use tycho_types::dto::ProtocolStateDelta;
+use tycho_types::dto::{NativeSnapshot, ProtocolStateDelta};
 
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        errors::{
+            InvalidSnapshotError, TradeSimulationError, TradeSimulationErrorKind, TransitionError,
+        },
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::ProtocolSim,
@@ -152,6 +154,34 @@ impl ProtocolSim for UniswapV2State {
                 .clone(),
         );
         Ok(())
+    }
+}
+
+impl TryFrom<NativeSnapshot> for UniswapV2State {
+    type Error = InvalidSnapshotError;
+
+    /// Decodes a `NativeSnapshot` into a `UniswapV2State`. Errors with a `InvalidSnapshotError`
+    /// if either reserve0 or reserve1 attributes are missing.
+    fn try_from(snapshot: NativeSnapshot) -> Result<Self, Self::Error> {
+        let reserve0 = U256::from(
+            snapshot
+                .state
+                .updated_attributes
+                .get("reserve0")
+                .ok_or(InvalidSnapshotError::MissingAttribute("reserve0".to_string()))?
+                .clone(),
+        );
+
+        let reserve1 = U256::from(
+            snapshot
+                .state
+                .updated_attributes
+                .get("reserve1")
+                .ok_or(InvalidSnapshotError::MissingAttribute("reserve1".to_string()))?
+                .clone(),
+        );
+
+        Ok(UniswapV2State::new(reserve0, reserve1))
     }
 }
 
