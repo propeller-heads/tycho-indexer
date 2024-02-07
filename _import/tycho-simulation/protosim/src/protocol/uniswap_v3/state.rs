@@ -1,8 +1,6 @@
 use ethers::types::{Sign, I256, U256};
 
-use thiserror::Error;
-
-use tycho_types::{dto::ProtocolStateDelta, hex_bytes::Bytes};
+use tycho_types::dto::ProtocolStateDelta;
 
 use crate::{
     models::ERC20Token,
@@ -24,73 +22,6 @@ use super::{
     tick_list::{TickInfo, TickList},
     tick_math,
 };
-
-// helper hex_byte functions.
-// TODO: move these to tycho hex_bytes module
-#[derive(Debug, Clone, Error)]
-#[error("Failed to parse bytes: {0}")]
-pub struct ConversionError(String);
-
-pub fn bytes_as_u128(val: &Bytes) -> Result<u128, ConversionError> {
-    let bytes_slice = val.as_ref();
-
-    // Create an array with zeros.
-    let mut u128_bytes: [u8; 16] = [0; 16];
-
-    // Copy bytes from bytes_slice to u128_bytes.
-    u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
-
-    // Convert to u128 using little-endian
-    let value = u128::from_le_bytes(u128_bytes);
-
-    Ok(value)
-}
-
-pub fn bytes_as_i128(val: &Bytes) -> Result<i128, ConversionError> {
-    let bytes_slice = val.as_ref();
-
-    // Create an array with zeros.
-    let mut u128_bytes: [u8; 16] = [0; 16];
-
-    // Copy bytes from bytes_slice to u128_bytes.
-    u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
-
-    // Convert to i128 using little-endian
-    let value = i128::from_le_bytes(u128_bytes);
-
-    Ok(value)
-}
-
-pub fn bytes_as_u256(val: &Bytes) -> Result<U256, ConversionError> {
-    let bytes_slice = val.as_ref();
-
-    // Create an array with zeros.
-    let mut u256_bytes: [u8; 32] = [0; 32];
-
-    // Copy bytes from bytes_slice to u256_bytes.
-    u256_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
-
-    // Convert the bytes array to U256 using little-endian.
-    let value = U256::from_little_endian(&u256_bytes);
-
-    Ok(value)
-}
-
-pub fn bytes_as_i32(val: &Bytes) -> Result<i32, ConversionError> {
-    let bytes_slice = val.as_ref();
-
-    // Create an array with zeros.
-    let mut i32_bytes: [u8; 4] = [0; 4];
-
-    // Copy bytes from bytes_slice to i32_bytes.
-    let len = 4.min(bytes_slice.len());
-    i32_bytes[..len].copy_from_slice(&bytes_slice[..len]);
-
-    // Convert to i32 using little-endian
-    let value = i32::from_le_bytes(i32_bytes);
-
-    Ok(value)
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV3State {
@@ -379,19 +310,16 @@ impl ProtocolSim for UniswapV3State {
             .updated_attributes
             .get("liquidity")
         {
-            self.liquidity = bytes_as_u128(&liquidity)
-                .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+            self.liquidity = u128::from(liquidity.clone());
         }
         if let Some(sqrt_price) = delta
             .updated_attributes
             .get("sqrt_price")
         {
-            self.sqrt_price = bytes_as_u256(sqrt_price)
-                .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+            self.sqrt_price = U256::from(sqrt_price.clone());
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
-            self.tick =
-                bytes_as_i32(tick).map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+            self.tick = i32::from(tick.clone());
         }
 
         // apply tick changes
@@ -403,8 +331,7 @@ impl ProtocolSim for UniswapV3State {
                     parts[1]
                         .parse::<i32>()
                         .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                    bytes_as_i128(&value)
-                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    i128::from(value.clone()),
                 )
             }
         }

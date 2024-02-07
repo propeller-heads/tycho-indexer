@@ -1,6 +1,6 @@
 use ethers::types::U256;
 
-use tycho_types::{dto::ProtocolStateDelta, hex_bytes::Bytes};
+use tycho_types::dto::ProtocolStateDelta;
 
 use crate::{
     models::ERC20Token,
@@ -14,8 +14,6 @@ use crate::{
 };
 
 use super::{events::UniswapV2Sync, reserve_price::spot_price_from_reserves};
-
-use super::super::uniswap_v3::state::bytes_as_u256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
@@ -139,20 +137,20 @@ impl ProtocolSim for UniswapV2State {
     ) -> Result<(), TransitionError<String>> {
         // reserve0 and reserve1 are considered required attributes and are expected in every delta
         // we process
-        self.reserve0 = bytes_as_u256(
+        self.reserve0 = U256::from(
             delta
                 .updated_attributes
                 .get("reserve0")
-                .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?,
-        )
-        .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
-        self.reserve1 = bytes_as_u256(
+                .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?
+                .clone(),
+        );
+        self.reserve1 = U256::from(
             delta
                 .updated_attributes
                 .get("reserve1")
-                .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?,
-        )
-        .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+                .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?
+                .clone(),
+        );
         Ok(())
     }
 }
@@ -163,6 +161,8 @@ mod tests {
         collections::{HashMap, HashSet},
         str::FromStr,
     };
+
+    use tycho_types::hex_bytes::Bytes;
 
     use super::*;
     use approx::assert_ulps_eq;
