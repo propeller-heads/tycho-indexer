@@ -1,5 +1,7 @@
 use ethers::types::U256;
 
+use tycho_types::dto::ProtocolStateDelta;
+
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -33,7 +35,7 @@ impl UniswapV2State {
         UniswapV2State { reserve0, reserve1, log_index: (0, 0) }
     }
 
-    pub fn transition(
+    pub fn event_transition(
         &mut self,
         msg: &UniswapV2Sync,
         log_meta: &EVMLogMeta,
@@ -106,7 +108,7 @@ impl ProtocolSim for UniswapV2State {
             return Result::Err(TradeSimulationError::new(
                 TradeSimulationErrorKind::InsufficientAmount,
                 None,
-            ))
+            ));
         }
         let zero2one = token_in.address < token_out.address;
         let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
@@ -116,7 +118,7 @@ impl ProtocolSim for UniswapV2State {
             return Result::Err(TradeSimulationError::new(
                 TradeSimulationErrorKind::NoLiquidity,
                 None,
-            ))
+            ));
         }
 
         let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
@@ -128,11 +130,39 @@ impl ProtocolSim for UniswapV2State {
 
         Ok(GetAmountOutResult::new(amount_out, U256::from(120_000)))
     }
+
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+    ) -> Result<(), TransitionError<String>> {
+        // reserve0 and reserve1 are considered required attributes and are expected in every delta
+        // we process
+        self.reserve0 = U256::from(
+            delta
+                .updated_attributes
+                .get("reserve0")
+                .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?
+                .clone(),
+        );
+        self.reserve1 = U256::from(
+            delta
+                .updated_attributes
+                .get("reserve1")
+                .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?
+                .clone(),
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
+
+    use tycho_types::hex_bytes::Bytes;
 
     use super::*;
     use approx::assert_ulps_eq;
@@ -222,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transition() {
+    fn test_event_transition() {
         let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
         let event = UniswapV2Sync::new(u256("1500"), u256("2000"));
         let log_meta = EVMLogMeta::new(
@@ -237,11 +267,58 @@ mod tests {
         );
 
         state
-            .transition(&event, &log_meta)
+            .event_transition(&event, &log_meta)
             .unwrap();
 
         assert_eq!(state.reserve0, u256("1500"));
         assert_eq!(state.reserve1, u256("2000"));
         assert_eq!(state.log_index, log_meta.index());
+    }
+
+    #[test]
+    fn test_delta_transition() {
+        let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
+        let attributes: HashMap<String, Bytes> = vec![
+            ("reserve0".to_string(), Bytes::from(1500_u64.to_le_bytes().to_vec())),
+            ("reserve1".to_string(), Bytes::from(2000_u64.to_le_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect();
+        let delta = ProtocolStateDelta {
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
+            deleted_attributes: HashSet::new(), // usv2 doesn't have any deletable attributes
+        };
+
+        let res = state.delta_transition(delta);
+
+        assert!(res.is_ok());
+        assert_eq!(state.reserve0, u256("1500"));
+        assert_eq!(state.reserve1, u256("2000"));
+    }
+
+    #[test]
+    fn test_delta_transition_missing_attribute() {
+        let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
+        let attributes: HashMap<String, Bytes> =
+            vec![("reserve0".to_string(), Bytes::from(1500_u64.to_be_bytes().to_vec()))]
+                .into_iter()
+                .collect();
+        let delta = ProtocolStateDelta {
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let res = state.delta_transition(delta);
+
+        assert!(res.is_err());
+        // assert it errors for the missing reserve1 attribute delta
+        match res {
+            Err(e) => {
+                assert!(matches!(e, TransitionError::MissingAttribute(ref x) if x=="reserve1"))
+            }
+            _ => panic!("Test failed: was expecting an Err value"),
+        };
     }
 }

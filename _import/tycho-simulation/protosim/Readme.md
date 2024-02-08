@@ -81,12 +81,12 @@ pub trait ProtocolSim {
 
 ### 2\. Adding Events
 
-To transition the state, we need to implement the `transition` method. This method is not part of the `ProtocolSim` trait because the `enum_dispatch` crate cannot generate the correct code for it. Therefore, we need to handle this manually unless we write our own macro for this.
+To transition the state, we need to implement the `event_transition` method. This method is not part of the `ProtocolSim` trait because the `enum_dispatch` crate cannot generate the correct code for it. Therefore, we need to handle this manually unless we write our own macro for this.
 
-The `transition` method's signature is simple:
+The `event_transition` method's signature is simple:
 
 ```rust
-fn transition(&mut self, event: [EventType], logmeta: EVMLogMeta)
+fn event_transition(&mut self, event: [EventType], logmeta: EVMLogMeta)
 ```
 
 The `logmeta` should be used to ensure that the events are applied in the correct order. This is currently biased towards EVM-based chains, but you can use `crate::protocol::events::check_log_idx` to ensure that logs are being processed in the right order.
@@ -95,7 +95,7 @@ If a protocol supports multiple events, you can group them in a protocol-specifi
 
 ### 3\. Register Your DataStructures
 
-As a final step, you will need to register your data structures. To do this, add your new state struct to the `crate::protocol::state::ProtocolState` enum. Additionally, add your new event enum to the `crate::protocol::state::ProtocolEvent` enum. Finally, add a match arm to the `ProtocolState.transition` method in `crate::protocol::state` to match on both the current state and the received event.
+As a final step, you will need to register your data structures. To do this, add your new state struct to the `crate::protocol::state::ProtocolState` enum. Additionally, add your new event enum to the `crate::protocol::state::ProtocolEvent` enum. Finally, add a match arm to the `ProtocolState.event_transition` method in `crate::protocol::state` to match on both the current state and the received event.
 
 That should do it!
 

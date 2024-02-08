@@ -1,5 +1,7 @@
 use ethers::types::{Sign, I256, U256};
 
+use tycho_types::dto::ProtocolStateDelta;
+
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -83,7 +85,7 @@ impl UniswapV3State {
         }
     }
 
-    pub fn transition(
+    pub fn event_transition(
         &mut self,
         event: &UniswapV3Event,
         log_meta: &EVMLogMeta,
@@ -129,7 +131,7 @@ impl UniswapV3State {
         sqrt_price_limit: Option<U256>,
     ) -> Result<SwapResults, TradeSimulationError> {
         if self.liquidity == 0 {
-            return Err(TradeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None))
+            return Err(TradeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None));
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -298,11 +300,66 @@ impl ProtocolSim for UniswapV3State {
             result.gas_used,
         ))
     }
+
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+    ) -> Result<(), TransitionError<String>> {
+        // apply attribute changes
+        if let Some(liquidity) = delta
+            .updated_attributes
+            .get("liquidity")
+        {
+            self.liquidity = u128::from(liquidity.clone());
+        }
+        if let Some(sqrt_price) = delta
+            .updated_attributes
+            .get("sqrt_price")
+        {
+            self.sqrt_price = U256::from(sqrt_price.clone());
+        }
+        if let Some(tick) = delta.updated_attributes.get("tick") {
+            self.tick = i32::from(tick.clone());
+        }
+
+        // apply tick changes
+        for (key, value) in delta.updated_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            if key.starts_with("tick/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.ticks.set_tick_liquidity(
+                    parts[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    i128::from(value.clone()),
+                )
+            }
+        }
+        // delete ticks - ignores deletes for attributes other than tick liquidity
+        for key in delta.deleted_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            if key.starts_with("tick/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.ticks.set_tick_liquidity(
+                    parts[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    0,
+                )
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
+
+    use tycho_types::hex_bytes::Bytes;
 
     use ethers::types::{H160, H256};
     use rstest::rstest;
@@ -527,7 +584,7 @@ mod tests {
         (255900, Some(-9800)),
         9999800
     )]
-    fn test_transition_liquidity(
+    fn test_event_transition_liquidity(
         #[case] event: UniswapV3Event,
         #[case] exp_lower: (i32, Option<i128>),
         #[case] exp_upper: (i32, Option<i128>),
@@ -541,7 +598,7 @@ mod tests {
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
         );
 
-        pool.transition(&event, &logmeta())
+        pool.event_transition(&event, &logmeta())
             .unwrap();
 
         if let (tick, Some(liq_lower)) = exp_lower {
@@ -568,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transition_swap() {
+    fn test_event_transition_swap() {
         let mut pool = UniswapV3State::new(
             1000,
             U256::from_dec_str("1000").unwrap(),
@@ -578,11 +635,59 @@ mod tests {
         );
         let event = SwapEvent::new(U256::from(1001), 2000, 120).into();
 
-        pool.transition(&event, &logmeta())
+        pool.event_transition(&event, &logmeta())
             .unwrap();
 
         assert_eq!(pool.sqrt_price, U256::from(1001));
         assert_eq!(pool.liquidity, 2000);
         assert_eq!(pool.tick, 120);
+    }
+
+    #[test]
+    fn test_delta_transition() {
+        let mut pool = UniswapV3State::new(
+            1000,
+            U256::from_dec_str("1000").unwrap(),
+            FeeAmount::Low,
+            100,
+            vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
+        );
+        let attributes: HashMap<String, Bytes> = [
+            ("liquidity".to_string(), Bytes::from(2000_u64.to_le_bytes().to_vec())),
+            ("sqrt_price".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(120_u64.to_le_bytes().to_vec())),
+            (
+                "tick/-255760/net_liquidity".to_string(),
+                Bytes::from(10200_u64.to_le_bytes().to_vec()),
+            ),
+            ("tick/255900/net_liquidity".to_string(), Bytes::from(9800_u64.to_le_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect();
+        let delta = ProtocolStateDelta {
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        pool.delta_transition(delta).unwrap();
+
+        assert_eq!(pool.liquidity, 2000);
+        assert_eq!(pool.sqrt_price, U256::from(1001));
+        assert_eq!(pool.tick, 120);
+        assert_eq!(
+            pool.ticks
+                .get_tick(-255760)
+                .unwrap()
+                .net_liquidity,
+            10200
+        );
+        assert_eq!(
+            pool.ticks
+                .get_tick(255900)
+                .unwrap()
+                .net_liquidity,
+            9800
+        );
     }
 }

@@ -61,7 +61,7 @@ impl TickList {
     // 3. Ticks are ordered by index
     fn valid_ticks(&self) -> Result<bool, String> {
         if self.tick_spacing == 0 {
-            return Err(String::from("Tick spacing is 0"))
+            return Err(String::from("Tick spacing is 0"));
         }
 
         for i in 0..self.ticks.len() {
@@ -70,14 +70,14 @@ impl TickList {
                 return Err(format!(
                     "Tick index {} not aligned with tick spacing {}",
                     t.index, self.tick_spacing,
-                ))
+                ));
             }
         }
         for i in 0..self.ticks.len() - 1 {
             let t = self.ticks.get(i).unwrap();
             if i != self.ticks.len() && t > self.ticks.get(i + 1).unwrap() {
                 let msg = format!("Ticks are not ordered at position {}", t.index);
-                return Err(msg)
+                return Err(msg);
             }
         }
 
@@ -104,6 +104,25 @@ impl TickList {
             Err(insert_idx) => {
                 self.ticks
                     .insert(insert_idx, TickInfo::new(tick, delta));
+            }
+        }
+    }
+
+    pub fn set_tick_liquidity(&mut self, tick: i32, liquidity: i128) {
+        match self
+            .ticks
+            .binary_search_by(|t| t.index.cmp(&tick))
+        {
+            Ok(existing_idx) => {
+                let tick = &mut self.ticks[existing_idx];
+                tick.net_liquidity = liquidity;
+                if tick.net_liquidity == 0 {
+                    self.ticks.remove(existing_idx);
+                }
+            }
+            Err(insert_idx) => {
+                self.ticks
+                    .insert(insert_idx, TickInfo::new(tick, liquidity));
             }
         }
     }
@@ -141,10 +160,10 @@ impl TickList {
     pub fn next_initialized_tick(&self, index: i32, lte: bool) -> Result<&TickInfo, TickListError> {
         if lte {
             if self.is_below_smallest(index) {
-                return Err(TickListError { kind: TickListErrorKind::BelowSmallest })
+                return Err(TickListError { kind: TickListErrorKind::BelowSmallest });
             }
             if self.is_at_or_above_largest(index) {
-                return Ok(&self.ticks[self.ticks.len() - 1])
+                return Ok(&self.ticks[self.ticks.len() - 1]);
             }
             let tick = match self
                 .ticks
@@ -156,10 +175,10 @@ impl TickList {
             Ok(tick)
         } else {
             if self.is_at_or_above_largest(index) {
-                return Err(TickListError { kind: TickListErrorKind::AtOrAboveLargest })
+                return Err(TickListError { kind: TickListErrorKind::AtOrAboveLargest });
             }
             if self.is_below_smallest(index) {
-                return Ok(&self.ticks[0])
+                return Ok(&self.ticks[0]);
             }
             let idx = match self
                 .ticks
@@ -185,12 +204,12 @@ impl TickList {
             let min_in_word = (word_pos << 8) * spacing;
 
             if self.is_below_safe_tick(tick) {
-                return Err(TickListError { kind: TickListErrorKind::TicksExeeded })
+                return Err(TickListError { kind: TickListErrorKind::TicksExeeded });
             }
 
             if self.is_below_smallest(tick) {
                 let minimum = cmp::max(self.ticks[0].index - spacing, min_in_word);
-                return Ok((minimum, false))
+                return Ok((minimum, false));
             }
 
             let idx = self
@@ -203,13 +222,13 @@ impl TickList {
             let max_in_word = (((word_pos + 1) << 8) - 1) * spacing;
 
             if self.is_at_or_above_safe_tick(tick) {
-                return Err(TickListError { kind: TickListErrorKind::TicksExeeded })
+                return Err(TickListError { kind: TickListErrorKind::TicksExeeded });
             }
 
             if self.is_at_or_above_largest(tick) {
                 let maximum =
                     cmp::min(self.ticks[self.ticks.len() - 1].index + spacing, max_in_word);
-                return Ok((maximum, false))
+                return Ok((maximum, false));
             }
             let idx = self
                 .next_initialized_tick(tick, lte)?

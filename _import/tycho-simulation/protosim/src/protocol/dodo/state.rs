@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 
+use tycho_types::dto::ProtocolStateDelta;
+
 use ethers::{
     prelude::BaseContract,
     types::{H160, U256},
@@ -11,7 +13,7 @@ use revm::{
 
 use crate::{
     evm_simulation::simulation::{SimulationEngine, SimulationParameters},
-    protocol::{models::GetAmountOutResult, state::ProtocolSim},
+    protocol::{errors::TransitionError, models::GetAmountOutResult, state::ProtocolSim},
     u256_num::u256_to_f64,
 };
 
@@ -145,5 +147,13 @@ where
             .decode_output::<U256, _>("querySellBaseToken", simulation_result.result)
             .expect("DODO: Failed decoding get_amount_out result!");
         Ok(GetAmountOutResult { amount: amount_out, gas: U256::from(simulation_result.gas_used) })
+    }
+
+    #[allow(unused_variables)]
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+    ) -> Result<(), TransitionError<String>> {
+        unimplemented!()
     }
 }
