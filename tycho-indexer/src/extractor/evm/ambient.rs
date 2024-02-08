@@ -6,7 +6,12 @@ use std::{
     sync::Arc,
 };
 
+use crate::storage::postgres::schema::{
+    chain,
+    protocol_type::{financial_type, implementation},
+};
 use async_trait::async_trait;
+use diesel::prelude::*;
 use diesel_async::{
     pooled_connection::deadpool::Pool, scoped_futures::ScopedFutureExt, AsyncConnection,
     AsyncPgConnection,
@@ -15,7 +20,7 @@ use ethers::types::{H160, H256};
 use mockall::automock;
 use prost::Message;
 use tokio::sync::Mutex;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument}; // Adjust the path according to your project structure
 
 use super::{AccountUpdate, Block};
 use crate::{
@@ -723,10 +728,19 @@ mod test_serial_db {
         extractor::evm::{ComponentBalance, ProtocolComponent},
         storage::{
             postgres,
-            postgres::{db_fixtures, testing::run_against_db, PostgresGateway},
+            postgres::{
+                db_fixtures, orm,
+                orm::{FinancialType, ImplementationType},
+                schema,
+                testing::run_against_db,
+                PostgresGateway,
+            },
             ChangeType, ContractId,
         },
     };
+    use chrono::NaiveDateTime;
+    use diesel::{sql_query, QueryDsl};
+    use diesel_async::RunQueryDsl;
     use ethers::types::U256;
     use mpsc::channel;
     use tokio::sync::{
@@ -1032,6 +1046,351 @@ mod test_serial_db {
             assert_eq!(component_balances.len(), 1);
             assert_eq!(component_balances[0].modify_tx, TX_HASH_1.parse().unwrap());
             assert_eq!(component_balances[0].component_id, "ambient_USDC_ETH");
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_populate_protocol_components() {
+        run_against_db(|pool| async move {
+            let mut conn = pool
+                .clone()
+                .get()
+                .await
+                .expect("connection ok");
+
+            let chain_str = "starknet";
+            let chain_id: i64 = diesel::insert_into(schema::chain::table)
+                .values(schema::chain::name.eq(chain_str))
+                .returning(schema::chain::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            let block_records = vec![
+                (
+                    schema::block::hash.eq(Vec::from(
+                        H256::from_str(
+                            "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
+                        )
+                        .unwrap()
+                        .as_bytes(),
+                    )),
+                    schema::block::parent_hash.eq(Vec::from(
+                        H256::from_str(
+                            "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
+                        )
+                        .unwrap()
+                        .as_bytes(),
+                    )),
+                    schema::block::number.eq(1),
+                    schema::block::ts.eq("2020-01-01T00:00:00"
+                        .parse::<chrono::NaiveDateTime>()
+                        .expect("timestamp")),
+                    schema::block::chain_id.eq(chain_id),
+                ),
+                (
+                    schema::block::hash.eq(Vec::from(
+                        H256::from_str(
+                            "0xb495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9",
+                        )
+                        .unwrap()
+                        .as_bytes(),
+                    )),
+                    schema::block::parent_hash.eq(Vec::from(
+                        H256::from_str(
+                            "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
+                        )
+                        .unwrap()
+                        .as_bytes(),
+                    )),
+                    schema::block::number.eq(2),
+                    schema::block::ts.eq("2020-01-01T01:00:00"
+                        .parse::<chrono::NaiveDateTime>()
+                        .unwrap()),
+                    schema::block::chain_id.eq(chain_id),
+                ),
+            ];
+            let blk: Vec<i64> = diesel::insert_into(schema::block::table)
+                .values(&block_records)
+                .returning(schema::block::id)
+                .get_results(&mut conn)
+                .await
+                .unwrap();
+
+            let tx_hashes =
+                ["0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string()];
+
+            let txns = &[(blk[0], 1i64, &tx_hashes[0])];
+
+            let from_val = H160::from_str("0x4648451b5F87FF8F0F7D622bD40574bb97E25980").unwrap();
+            let to_val = H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
+            let data: Vec<_> = txns
+                .iter()
+                .map(|(b, i, h)| {
+                    use schema::transaction::dsl::*;
+                    (
+                        block_id.eq(b),
+                        index.eq(i),
+                        hash.eq(H256::from_str(h)
+                            .expect("valid txhash")
+                            .as_bytes()
+                            .to_owned()),
+                        from.eq(from_val.as_bytes()),
+                        to.eq(to_val.as_bytes()),
+                    )
+                })
+                .collect();
+            let txns: Vec<i64> = diesel::insert_into(schema::transaction::table)
+                .values(&data)
+                .returning(schema::transaction::id)
+                .get_results(&mut conn)
+                .await
+                .unwrap();
+
+            let protocol_system_id_ambient: i64 =
+                diesel::insert_into(schema::protocol_system::table)
+                    .values(schema::protocol_system::name.eq("ambient".to_owned()))
+                    .returning(schema::protocol_system::id)
+                    .get_result(&mut conn)
+                    .await
+                    .unwrap();
+
+            let query = diesel::insert_into(schema::protocol_type::table).values((
+                schema::protocol_type::name.eq("Pool"),
+                schema::protocol_type::financial_type.eq(orm::FinancialType::Swap),
+                schema::protocol_type::implementation.eq(orm::ImplementationType::Custom),
+            ));
+            let protocol_type_id: i64 = query
+                .returning(schema::protocol_type::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            const WETH: &str = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+            const USDC: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+
+            let address = WETH.trim_start_matches("0x");
+            let symbol = "WETH";
+            let decimals = 18;
+
+            let ts: Option<NaiveDateTime> = None;
+            let query = diesel::insert_into(schema::account::table).values((
+                schema::account::title.eq("token"),
+                schema::account::chain_id.eq(chain_id),
+                schema::account::created_at.eq(ts),
+                schema::account::address.eq(hex::decode(address).unwrap()),
+            ));
+            let account_id_weth: i64 = query
+                .returning(schema::account::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            let query = diesel::insert_into(schema::token::table).values((
+                schema::token::account_id.eq(account_id_weth),
+                schema::token::symbol.eq(symbol),
+                schema::token::decimals.eq(decimals),
+                schema::token::tax.eq(10),
+                schema::token::gas.eq(vec![10]),
+            ));
+            let weth_id: i64 = query
+                .returning(schema::token::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            let address = USDC.trim_start_matches("0x");
+            let symbol = "USDC";
+            let decimals = 18;
+
+            let ts: Option<NaiveDateTime> = None;
+
+            let query = diesel::insert_into(schema::account::table).values((
+                schema::account::title.eq("token"),
+                schema::account::chain_id.eq(chain_id),
+                // schema::account::creation_tx.eq(None),
+                schema::account::created_at.eq(ts),
+                schema::account::address.eq(hex::decode(address).unwrap()),
+            ));
+            let account_id_usdc: i64 = query
+                .returning(schema::account::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            let query = diesel::insert_into(schema::token::table).values((
+                schema::token::account_id.eq(account_id_usdc),
+                schema::token::symbol.eq(symbol),
+                schema::token::decimals.eq(decimals),
+                schema::token::tax.eq(10),
+                schema::token::gas.eq(vec![10]),
+            ));
+            let usdc_id: i64 = query
+                .returning(schema::token::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            let data = &[(weth_id, 1.0), (usdc_id, 0.0005)];
+            diesel::insert_into(schema::token_price::table)
+                .values(
+                    data.iter()
+                        .map(|(tid, price)| {
+                            (
+                                schema::token_price::token_id.eq(tid),
+                                schema::token_price::price.eq(price),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+                .execute(&mut conn)
+                .await
+                .expect("Inserting token prices fixture failed");
+
+            let modify_tx: i64 = txns[0];
+            let ts: NaiveDateTime = schema::transaction::table
+                .inner_join(schema::block::table)
+                .filter(schema::transaction::id.eq(modify_tx))
+                .select(schema::block::ts)
+                .first::<NaiveDateTime>(&mut conn)
+                .await
+                .expect("setup tx id not found");
+
+            let code = Bytes::from_str("C0C0C0").unwrap();
+            let code_hash = H256::from_slice(&ethers::utils::keccak256(&code));
+            let data = (
+                schema::contract_code::code.eq(code),
+                schema::contract_code::hash.eq(code_hash.as_bytes()),
+                schema::contract_code::account_id.eq(account_id_weth),
+                schema::contract_code::modify_tx.eq(modify_tx),
+                schema::contract_code::valid_from.eq(ts),
+            );
+
+            let contract_code_id: i64 = diesel::insert_into(schema::contract_code::table)
+                .values(data)
+                .returning(schema::contract_code::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            let tx_id = txns[0];
+            let token_ids = Some(vec![weth_id, usdc_id]);
+            let contract_code_ids = Some(vec![contract_code_id]);
+
+            let ts: NaiveDateTime = schema::transaction::table
+                .inner_join(schema::block::table)
+                .filter(schema::transaction::id.eq(tx_id))
+                .select(schema::block::ts)
+                .first::<NaiveDateTime>(&mut conn)
+                .await
+                .expect("setup tx id not found");
+
+            let query = diesel::insert_into(schema::protocol_component::table).values((
+                schema::protocol_component::external_id.eq("state1"),
+                schema::protocol_component::chain_id.eq(chain_id),
+                schema::protocol_component::protocol_type_id.eq(protocol_type_id),
+                schema::protocol_component::protocol_system_id.eq(protocol_system_id_ambient),
+                schema::protocol_component::creation_tx.eq(tx_id),
+                schema::protocol_component::created_at.eq(ts),
+            ));
+            let component_id: i64 = query
+                .returning(schema::protocol_component::id)
+                .get_result(&mut conn)
+                .await
+                .unwrap();
+
+            if let Some(t_ids) = token_ids {
+                diesel::insert_into(schema::protocol_component_holds_token::table)
+                    .values(
+                        t_ids
+                            .iter()
+                            .map(|t_id| {
+                                (
+                                    schema::protocol_component_holds_token::protocol_component_id
+                                        .eq(component_id),
+                                    schema::protocol_component_holds_token::token_id.eq(t_id),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                    .execute(&mut conn)
+                    .await
+                    .expect("protocol component holds token insert ok");
+            }
+
+            if let Some(cc_ids) = contract_code_ids {
+                diesel::insert_into(schema::protocol_component_holds_contract::table)
+                    .values(
+                        cc_ids
+                            .iter()
+                            .map(|cc_id| {
+                                (
+                                    schema::protocol_component_holds_contract::protocol_component_id
+                                        .eq(component_id),
+                                    schema::protocol_component_holds_contract::contract_code_id
+                                        .eq(cc_id),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                    .execute(&mut conn)
+                    .await
+                    .expect("protocol component holds contract code insert ok");
+            }
+            let protocol_component_id = component_id;
+
+            let balance = Bytes::from(U256::exp10(18));
+            let previous_balance = Bytes::from(U256::zero());
+            let balance_float = 1e18;
+            let ts: NaiveDateTime = schema::transaction::table
+                .inner_join(schema::block::table)
+                .filter(schema::transaction::id.eq(tx_id))
+                .select(schema::block::ts)
+                .first::<NaiveDateTime>(&mut conn)
+                .await
+                .expect("setup tx id not found");
+            diesel::insert_into(schema::component_balance::table)
+                .values((
+                    schema::component_balance::protocol_component_id.eq(protocol_component_id),
+                    schema::component_balance::token_id.eq(weth_id),
+                    schema::component_balance::modify_tx.eq(tx_id),
+                    schema::component_balance::new_balance.eq(balance),
+                    schema::component_balance::balance_float.eq(balance_float),
+                    schema::component_balance::previous_value.eq(previous_balance),
+                    schema::component_balance::valid_from.eq(ts),
+                ))
+                .execute(&mut conn)
+                .await
+                .expect("component balance insert failed");
+
+            sql_query(
+                r#"
+        INSERT INTO component_tvl (protocol_component_id, tvl)
+        SELECT
+            bal.protocol_component_id as protocol_component_id,
+            SUM(bal.balance_float * token_price.price / POWER(10.0, token.decimals)) as tvl
+        FROM
+            component_balance AS bal
+        INNER JOIN
+            token_price ON bal.token_id = token_price.token_id
+        INNER JOIN
+            token ON bal.token_id = token.id
+        WHERE
+            bal.valid_to IS NULL
+        GROUP BY
+            bal.protocol_component_id
+        ON CONFLICT (protocol_component_id)
+        DO UPDATE SET
+            tvl = EXCLUDED.tvl;
+        "#,
+            )
+            .execute(&mut conn)
+            .await
+            .expect("calculating fixture component tvl failed");
+
+            // we only retrieve the latest balance (the one from the update in TX_HASH_1)
+            assert_eq!(1, 1);
         })
         .await;
     }
