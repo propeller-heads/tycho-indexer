@@ -386,7 +386,7 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
                 .ok_or(InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
                 .clone(),
         ))
-        .map_err(|_| InvalidSnapshotError::ValueError("Unsuppored fee amount".to_string()))?;
+        .map_err(|_| InvalidSnapshotError::ValueError("Unsupported fee amount".to_string()))?;
 
         let tick = i32::from(
             snapshot
@@ -427,7 +427,11 @@ mod tests {
         str::FromStr,
     };
 
-    use tycho_types::hex_bytes::Bytes;
+    use chrono::NaiveDateTime;
+    use tycho_types::{
+        dto::{Chain, ChangeType, ProtocolComponent},
+        hex_bytes::Bytes,
+    };
 
     use ethers::types::{H160, H256};
     use rstest::rstest;
@@ -756,6 +760,125 @@ mod tests {
                 .unwrap()
                 .net_liquidity,
             9800
+        );
+    }
+
+    fn protocol_component() -> ProtocolComponent {
+        let creation_time = NaiveDateTime::from_timestamp(1622526000, 0); //Sample timestamp
+
+        // Add a static attribute "fee"
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes.insert("fee".to_string(), Bytes::from(3000_i32.to_le_bytes().to_vec()));
+
+        let protocol_component = ProtocolComponent {
+            id: "State1".to_string(),
+            protocol_system: "system1".to_string(),
+            protocol_type_name: "typename1".to_string(),
+            chain: Chain::Ethereum,
+            tokens: Vec::new(),
+            contract_ids: Vec::new(),
+            static_attributes,
+            change: ChangeType::Created,
+            creation_tx: Bytes::from_static(b"transaction_id"),
+            created_at: creation_time,
+        };
+    }
+
+    fn protocol_attributes() -> HashMap<String, Bytes> {
+        vec![
+            ("liquidity".to_string(), Bytes::from(100_u64.to_le_bytes().to_vec())),
+            ("sqrt_price".to_string(), Bytes::from(200_u64.to_le_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(300_i32.to_le_bytes().to_vec())),
+            ("tick/1/net_liquidity".to_string(), Bytes::from(400_i128.to_le_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect::<HashMap<String, Bytes>>()
+    }
+
+    #[test]
+    fn test_try_from() {
+        let snapshot = NativeSnapshot {
+            state: ProtocolStateDelta {
+                component_id: "State1".to_owned(),
+                updated_attributes: protocol_attributes(),
+                deleted_attributes: HashSet::new(),
+            },
+            component: protocol_component(),
+        };
+
+        let result = snapshot.try_into::<UniswapV3State>();
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().liquidity, 100.into());
+        assert_eq!(result.unwrap().sqrt_price, U256::from(200));
+        assert_eq!(result.unwrap().fee, FeeAmount::Medium);
+        assert_eq!(result.unwrap().tick, 300);
+        assert_eq!(result.unwrap().ticks.len(), 1);
+    }
+
+    #[rstest]
+    #[case::missing_liquidity("liquidity")]
+    #[case::missing_sqrt_price("sqrt_price")]
+    #[case::missing_tick("tick")]
+    #[case::missing_tick_liquidity("tick_liquidities")]
+    #[case::missing_fee("fee")]
+    fn test_try_from_invalid(#[case] missing_attribute: String) {
+        // remove missing attribute
+        let mut attributes = protocol_attributes();
+        attributes.remove(&missing_attribute);
+
+        if missing_attribute == "tick_liquidities" {
+            attributes.remove("tick/1/net_liquidity");
+        }
+
+        let mut component = protocol_component();
+        if missing_attribute == "fee" {
+            component
+                .static_attributes
+                .remove("fee");
+        }
+
+        let snapshot = NativeSnapshot {
+            state: ProtocolStateDelta {
+                component_id: "State1".to_owned(),
+                updated_attributes: attributes,
+                deleted_attributes: HashSet::new(),
+            },
+            component,
+        };
+
+        let result = snapshot.try_into::<UniswapV3State>();
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap(),
+            InvalidSnapshotError::MissingAttribute(missing_attribute)
+        );
+    }
+
+    #[test]
+    fn test_try_from_invalid_fee() {
+        // set an invalid fee amount (100, 500, 3_000 and 10_000 are the only valid fee amounts)
+        let mut component = protocol_component();
+        component
+            .static_attributes
+            .insert("fee".to_string(), Bytes::from(4000_i32.to_le_bytes().to_vec()));
+
+        let snapshot = NativeSnapshot {
+            state: ProtocolStateDelta {
+                component_id: "State1".to_owned(),
+                updated_attributes: protocol_attributes(),
+                deleted_attributes: HashSet::new(),
+            },
+            component,
+        };
+
+        let result = snapshot.try_into::<UniswapV3State>();
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap(),
+            InvalidSnapshotError::ValueError("Unsupported fee amount".to_string())
         );
     }
 }
