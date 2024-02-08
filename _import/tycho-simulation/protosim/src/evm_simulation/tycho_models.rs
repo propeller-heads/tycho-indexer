@@ -84,13 +84,6 @@ pub struct Transaction {
     pub index: u64,
 }
 
-impl Transaction {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(hash: B256, block_hash: B256, from: B160, to: Option<B160>, index: u64) -> Self {
-        Self { hash, block_hash, from, to, index }
-    }
-}
-
 /// A container for account updates grouped by account.
 ///
 /// Hold a single update per account. This is a condensed form of

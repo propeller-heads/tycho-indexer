@@ -51,17 +51,23 @@ jobs:
             git config --global credential.helper store
             echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
             git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
-      - name: Setup toolchain
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Setup clippy toolchain - stable
+        uses: dtolnay/rust-toolchain@v1
         with:
-          components: rustfmt, clippy
+          toolchain: stable
+          components: clippy
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
-      - run: cargo +nightly clippy --workspace --all-targets --all-features -- -D clippy::dbg-macro
+      - run: cargo clippy --workspace --all-targets --all-features -- -D clippy::dbg-macro
         env:
           RUSTFLAGS: -Dwarnings
+
+      - name: Setup rustfmt toolchain - nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
 
       - run: cargo +nightly fmt --all --check
