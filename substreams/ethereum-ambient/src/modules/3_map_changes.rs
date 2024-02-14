@@ -252,6 +252,11 @@ fn map_changes(
                 .push(component.clone());
         }
 
+        // TODO We add all of these ComponentBalance changes once per transaction per block.
+        // (look where this is in that for loop). No good. We have many duplicated entries because
+        // of this. We should probably also store in the balance_store the transaction hash
+        // where the change happened, and check then if this transaction corresponds.
+        // Or add them once per block? Not sure if that would work.
         for balance_delta in &block_pool_changes.balance_deltas {
             let pool_hash_hex = hex::encode(&balance_delta.pool_hash);
             let pool = match pool_store.get_last(pool_hash_hex.clone()) {
