@@ -165,13 +165,11 @@ async fn main() -> Result<(), ExtractionError> {
 
     let token_processor = TokenPreProcessor::new(rpc_client);
 
-    // Commented out because the ambient extractor is not working.
-
-    // let (ambient_task, ambient_handle) =
-    //     start_ambient_extractor(&args, pool.clone(), cached_gw.clone(), token_processor.clone())
-    //         .await?;
-    // extractor_handles.push(ambient_handle.clone());
-    // info!("Extractor {} started!", ambient_handle.get_id());
+    let (ambient_task, ambient_handle) =
+        start_ambient_extractor(&args, pool.clone(), cached_gw.clone(), token_processor.clone())
+            .await?;
+    extractor_handles.push(ambient_handle.clone());
+    info!("Extractor {} started!", ambient_handle.get_id());
 
     let (uniswap_v3_task, uniswap_v3_handle) =
         start_uniswap_v3_extractor(&args, pool.clone(), cached_gw.clone(), token_processor.clone())
@@ -194,7 +192,7 @@ async fn main() -> Result<(), ExtractionError> {
         .prefix(server_version_prefix)
         .bind(server_addr)
         .port(server_port)
-        // .register_extractor(ambient_handle)
+        .register_extractor(ambient_handle)
         .register_extractor(uniswap_v2_handle)
         .register_extractor(uniswap_v3_handle)
         .run()?;
@@ -202,11 +200,11 @@ async fn main() -> Result<(), ExtractionError> {
 
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, extractor_handles, handle));
     let (res, _, _) =
-        select_all([uniswap_v2_task, uniswap_v3_task, server_task, shutdown_task]).await;
+        select_all([ambient_task, uniswap_v2_task, uniswap_v3_task, server_task, shutdown_task])
+            .await;
     res.expect("Extractor- nor ServiceTasks should panic!")
 }
 
-#[allow(dead_code)]
 async fn start_ambient_extractor(
     _args: &CliArgs,
     pool: Pool<AsyncPgConnection>,
