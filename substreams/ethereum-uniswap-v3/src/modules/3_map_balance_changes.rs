@@ -1,8 +1,5 @@
 use anyhow::Ok;
-use substreams::{
-    log,
-    store::{StoreGet, StoreGetProto},
-};
+use substreams::store::{StoreGet, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::{self as eth};
 use substreams_helper::hex::Hexable;
 
@@ -38,8 +35,6 @@ pub fn map_balance_changes(
             balances_deltas.extend(tx_deltas);
         }
     }
-
-    log::info!("Balances deltas: {:?}", balances_deltas);
 
     Ok(BalanceDeltas { deltas: balances_deltas })
 }
