@@ -1,6 +1,7 @@
 use ethers::types::{Sign, I256, U256};
 
-use tycho_types::dto::{NativeSnapshot, ProtocolStateDelta};
+use tycho_client::feed::synchronizer::NativeSnapshot;
+use tycho_types::dto::ProtocolStateDelta;
 
 use crate::{
     models::ERC20Token,
@@ -363,58 +364,66 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
         let liquidity = u128::from(
             snapshot
                 .state
-                .updated_attributes
+                .attributes
                 .get("liquidity")
-                .ok_or(InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
                 .clone(),
         );
 
         let sqrt_price = U256::from(
             snapshot
                 .state
-                .updated_attributes
+                .attributes
                 .get("sqrt_price")
-                .ok_or(InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
                 .clone(),
         );
 
-        let fee = FeeAmount::try_from(i32::from(
+        let fee_value = i32::from(
             snapshot
                 .component
                 .static_attributes
                 .get("fee")
-                .ok_or(InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
                 .clone(),
-        ))
-        .map_err(|_| InvalidSnapshotError::ValueError("Unsupported fee amount".to_string()))?;
+        );
+        let fee = FeeAmount::try_from(fee_value)
+            .map_err(|_| InvalidSnapshotError::ValueError("Unsupported fee amount".to_string()))?;
 
         let tick = i32::from(
             snapshot
                 .state
-                .updated_attributes
+                .attributes
                 .get("tick")
-                .ok_or(InvalidSnapshotError::MissingAttribute("tick".to_string()))?
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
                 .clone(),
         );
 
-        let ticks = Vec::new();
-        // collect tick data
-        for (key, value) in snapshot.state.updated_attributes.iter() {
-            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
-            if key.starts_with("tick/") {
-                let parts: Vec<&str> = key.split('/').collect();
-                ticks.push(TickInfo::new(
-                    parts[1]
-                        .parse::<i32>()
-                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                    i128::from(value.clone()),
-                ));
+        let ticks: Result<Vec<_>, _> = snapshot
+            .state
+            .attributes
+            .iter()
+            .filter_map(|(key, value)| {
+                if key.starts_with("tick/") {
+                    Some(
+                        key.split('/')
+                            .nth(1)?
+                            .parse::<i32>()
+                            .map(|tick_index| TickInfo::new(tick_index, i128::from(value.clone())))
+                            .map_err(|err| InvalidSnapshotError::ValueError(err.to_string())),
+                    )
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let ticks = match ticks {
+            Ok(ticks) if !ticks.is_empty() => ticks,
+            _ => {
+                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
             }
-        }
-        // error if no tick data is found
-        if ticks.is_empty() {
-            return Err(InvalidSnapshotError::MissingAttribute("tick liquidities".to_string()));
-        }
+        };
 
         Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
     }
@@ -429,7 +438,7 @@ mod tests {
 
     use chrono::NaiveDateTime;
     use tycho_types::{
-        dto::{Chain, ChangeType, ProtocolComponent},
+        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
         hex_bytes::Bytes,
     };
 
@@ -764,13 +773,13 @@ mod tests {
     }
 
     fn protocol_component() -> ProtocolComponent {
-        let creation_time = NaiveDateTime::from_timestamp(1622526000, 0); //Sample timestamp
+        let creation_time = NaiveDateTime::from_timestamp_opt(1622526000, 0).unwrap(); //Sample timestamp
 
         // Add a static attribute "fee"
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
         static_attributes.insert("fee".to_string(), Bytes::from(3000_i32.to_le_bytes().to_vec()));
 
-        let protocol_component = ProtocolComponent {
+        ProtocolComponent {
             id: "State1".to_string(),
             protocol_system: "system1".to_string(),
             protocol_type_name: "typename1".to_string(),
@@ -778,10 +787,10 @@ mod tests {
             tokens: Vec::new(),
             contract_ids: Vec::new(),
             static_attributes,
-            change: ChangeType::Created,
-            creation_tx: Bytes::from_static(b"transaction_id"),
+            change: ChangeType::Creation,
+            creation_tx: Bytes::from_str("0x0000").unwrap(),
             created_at: creation_time,
-        };
+        }
     }
 
     fn protocol_attributes() -> HashMap<String, Bytes> {
@@ -789,7 +798,7 @@ mod tests {
             ("liquidity".to_string(), Bytes::from(100_u64.to_le_bytes().to_vec())),
             ("sqrt_price".to_string(), Bytes::from(200_u64.to_le_bytes().to_vec())),
             ("tick".to_string(), Bytes::from(300_i32.to_le_bytes().to_vec())),
-            ("tick/1/net_liquidity".to_string(), Bytes::from(400_i128.to_le_bytes().to_vec())),
+            ("tick/60/net_liquidity".to_string(), Bytes::from(400_i128.to_le_bytes().to_vec())),
         ]
         .into_iter()
         .collect::<HashMap<String, Bytes>>()
@@ -798,22 +807,25 @@ mod tests {
     #[test]
     fn test_try_from() {
         let snapshot = NativeSnapshot {
-            state: ProtocolStateDelta {
+            state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
-                updated_attributes: protocol_attributes(),
-                deleted_attributes: HashSet::new(),
+                attributes: protocol_attributes(),
+                modify_tx: Bytes::from_str("0x0000").unwrap(),
             },
             component: protocol_component(),
         };
 
-        let result = snapshot.try_into::<UniswapV3State>();
+        let result = UniswapV3State::try_from(snapshot);
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().liquidity, 100.into());
-        assert_eq!(result.unwrap().sqrt_price, U256::from(200));
-        assert_eq!(result.unwrap().fee, FeeAmount::Medium);
-        assert_eq!(result.unwrap().tick, 300);
-        assert_eq!(result.unwrap().ticks.len(), 1);
+        let res = result.unwrap();
+        assert_eq!(res.liquidity, 100);
+        assert_eq!(res.sqrt_price, U256::from(200));
+        assert_eq!(res.fee, FeeAmount::Medium);
+        assert_eq!(res.tick, 300);
+        let tick = res.ticks.get_tick(60);
+        assert!(tick.is_ok());
+        assert_eq!(tick.unwrap().net_liquidity, 400);
     }
 
     #[rstest]
@@ -828,7 +840,7 @@ mod tests {
         attributes.remove(&missing_attribute);
 
         if missing_attribute == "tick_liquidities" {
-            attributes.remove("tick/1/net_liquidity");
+            attributes.remove("tick/60/net_liquidity");
         }
 
         let mut component = protocol_component();
@@ -839,15 +851,15 @@ mod tests {
         }
 
         let snapshot = NativeSnapshot {
-            state: ProtocolStateDelta {
+            state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
-                updated_attributes: attributes,
-                deleted_attributes: HashSet::new(),
+                attributes,
+                modify_tx: Bytes::from_str("0x0000").unwrap(),
             },
             component,
         };
 
-        let result = snapshot.try_into::<UniswapV3State>();
+        let result = UniswapV3State::try_from(snapshot);
 
         assert!(result.is_err());
         assert_eq!(
@@ -865,15 +877,15 @@ mod tests {
             .insert("fee".to_string(), Bytes::from(4000_i32.to_le_bytes().to_vec()));
 
         let snapshot = NativeSnapshot {
-            state: ProtocolStateDelta {
+            state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
-                updated_attributes: protocol_attributes(),
-                deleted_attributes: HashSet::new(),
+                attributes: protocol_attributes(),
+                modify_tx: Bytes::from_str("0x0000").unwrap(),
             },
             component,
         };
 
-        let result = snapshot.try_into::<UniswapV3State>();
+        let result = UniswapV3State::try_from(snapshot);
 
         assert!(result.is_err());
         assert_eq!(

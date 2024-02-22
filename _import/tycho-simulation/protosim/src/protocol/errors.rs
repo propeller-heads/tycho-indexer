@@ -39,7 +39,7 @@ pub enum TransitionError<T> {
     DecodeError(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum InvalidSnapshotError {
     MissingAttribute(String),
     ValueError(String),

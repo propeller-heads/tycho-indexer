@@ -1,6 +1,7 @@
 use ethers::types::U256;
 
-use tycho_types::dto::{NativeSnapshot, ProtocolStateDelta};
+use tycho_client::feed::synchronizer::NativeSnapshot;
+use tycho_types::dto::ProtocolStateDelta;
 
 use crate::{
     models::ERC20Token,
@@ -166,7 +167,7 @@ impl TryFrom<NativeSnapshot> for UniswapV2State {
         let reserve0 = U256::from(
             snapshot
                 .state
-                .updated_attributes
+                .attributes
                 .get("reserve0")
                 .ok_or(InvalidSnapshotError::MissingAttribute("reserve0".to_string()))?
                 .clone(),
@@ -175,7 +176,7 @@ impl TryFrom<NativeSnapshot> for UniswapV2State {
         let reserve1 = U256::from(
             snapshot
                 .state
-                .updated_attributes
+                .attributes
                 .get("reserve1")
                 .ok_or(InvalidSnapshotError::MissingAttribute("reserve1".to_string()))?
                 .clone(),
@@ -194,7 +195,7 @@ mod tests {
 
     use chrono::NaiveDateTime;
     use tycho_types::{
-        dto::{Chain, ChangeType, ProtocolComponent},
+        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
         hex_bytes::Bytes,
     };
 
@@ -357,13 +358,13 @@ mod tests {
     }
 
     fn protocol_component() -> ProtocolComponent {
-        let creation_time = NaiveDateTime::from_timestamp(1622526000, 0); //Sample timestamp
+        let creation_time = NaiveDateTime::from_timestamp_opt(1622526000, 0).unwrap(); //Sample timestamp
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("attr1".to_string(), "value1".into());
-        static_attributes.insert("attr2".to_string(), "value2".into());
+        static_attributes.insert("attr1".to_string(), "0x000012".into());
+        static_attributes.insert("attr2".to_string(), "0x000005".into());
 
-        let protocol_component = ProtocolComponent {
+        ProtocolComponent {
             id: "State1".to_string(),
             protocol_system: "system1".to_string(),
             protocol_type_name: "typename1".to_string(),
@@ -371,10 +372,10 @@ mod tests {
             tokens: Vec::new(),
             contract_ids: Vec::new(),
             static_attributes: HashMap::new(),
-            change: ChangeType::Created,
-            creation_tx: Bytes::from_static(b"transaction_id"),
+            change: ChangeType::Creation,
+            creation_tx: Bytes::from_str("0x0000").unwrap(),
             created_at: creation_time,
-        };
+        }
     }
 
     #[test]
@@ -386,19 +387,20 @@ mod tests {
         .into_iter()
         .collect();
         let snapshot = NativeSnapshot {
-            state: ProtocolStateDelta {
+            state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
-                updated_attributes: attributes,
-                deleted_attributes: HashSet::new(),
+                attributes,
+                modify_tx: Bytes::from_str("0x0000").unwrap(),
             },
             component: protocol_component(),
         };
 
-        let result = snapshot.try_into::<UniswapV2State>();
+        let result = UniswapV2State::try_from(snapshot);
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().reserve0, 100.into());
-        assert_eq!(result.unwrap().reserve1, 200.into());
+        let res = result.unwrap();
+        assert_eq!(res.reserve0, 100.into());
+        assert_eq!(res.reserve1, 200.into());
     }
 
     #[test]
@@ -408,15 +410,15 @@ mod tests {
                 .into_iter()
                 .collect();
         let snapshot = NativeSnapshot {
-            state: ProtocolStateDelta {
+            state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
-                updated_attributes: attributes,
-                deleted_attributes: HashSet::new(),
+                attributes,
+                modify_tx: Bytes::from_str("0x0000").unwrap(),
             },
             component: protocol_component(),
         };
 
-        let result = snapshot.try_into::<UniswapV2State>();
+        let result = UniswapV2State::try_from(snapshot);
 
         assert!(result.is_err());
         assert_eq!(

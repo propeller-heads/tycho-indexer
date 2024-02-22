@@ -3179,6 +3179,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db2c024b41519440580066ba82aab04092b333e09066a5eb86c7c4890df31f22"
+dependencies = [
+ "hashbrown 0.14.2",
+]
+
+[[package]]
 name = "matchers"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3470,7 +3479,7 @@ checksum = "5f4e3bc495f6e95bc15a6c0c55ac00421504a5a43d09e3cc455d1fea7015581d"
 dependencies = [
  "bitvec 1.0.1",
  "either",
- "lru",
+ "lru 0.7.8",
  "num-bigint",
  "num-integer",
  "num-modular",
@@ -6089,7 +6098,7 @@ dependencies = [
 [[package]]
 name = "tycho-client"
 version = "0.1.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#04e1f9c685fd3c0dacf78fbcb1b2d8f323af8e09"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#06cf1e57a0e9476e45b85ea3437ba0001c876d22"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6097,12 +6106,14 @@ dependencies = [
  "futures 0.3.28",
  "hex",
  "hyper",
+ "lru 0.12.2",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
  "tokio-tungstenite 0.20.1",
  "tracing",
+ "tracing-subscriber",
  "tycho-types",
  "uuid 1.4.1",
 ]
@@ -6110,7 +6121,7 @@ dependencies = [
 [[package]]
 name = "tycho-types"
 version = "0.1.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#04e1f9c685fd3c0dacf78fbcb1b2d8f323af8e09"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#06cf1e57a0e9476e45b85ea3437ba0001c876d22"
 dependencies = [
  "bytes",
  "chrono",
