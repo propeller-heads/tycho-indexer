@@ -4078,6 +4078,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tungstenite 0.20.1",
+ "tycho-client",
  "tycho-types",
  "uuid 1.4.1",
  "warp",
