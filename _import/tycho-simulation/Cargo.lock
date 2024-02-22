@@ -4039,7 +4039,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tycho-client",
- "tycho-types 0.1.0 (git+ssh://github.com/propeller-heads/tycho-indexer.git?branch=ah/ENG-2647/synchronizer)",
+ "tycho-types",
 ]
 
 [[package]]
@@ -4078,7 +4078,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tungstenite 0.20.1",
- "tycho-types 0.1.0 (git+ssh://github.com/propeller-heads/tycho-indexer.git)",
+ "tycho-types",
  "uuid 1.4.1",
  "warp",
 ]
