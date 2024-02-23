@@ -129,9 +129,7 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
 
         let ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks,
-            _ => {
-                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
-            }
+            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
         };
 
         Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
