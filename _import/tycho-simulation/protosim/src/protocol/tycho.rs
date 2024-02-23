@@ -1,5 +1,6 @@
 use ethers::types::U256;
 use tycho_client::feed::synchronizer::NativeSnapshot;
+use tycho_types::dto::ProtocolStateDelta;
 
 use crate::protocol::{
     errors::InvalidSnapshotError,
@@ -7,7 +8,33 @@ use crate::protocol::{
     uniswap_v3::{enums::FeeAmount, state::UniswapV3State},
 };
 
-use super::uniswap_v3::tick_list::TickInfo;
+use super::{errors::TransitionError, uniswap_v3::tick_list::TickInfo};
+
+impl TryFrom<ProtocolStateDelta> for UniswapV2State {
+    type Error = TransitionError<String>;
+
+    /// Decodes a `ProtocolStateDelta` into a `UniswapV2State`. Errors with a `TransitionError`
+    /// if either reserve0 or reserve1 attributes are missing.
+    fn try_from(delta: ProtocolStateDelta) -> Result<Self, Self::Error> {
+        let reserve0 = U256::from(
+            delta
+                .updated_attributes
+                .get("reserve0")
+                .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?
+                .clone(),
+        );
+
+        let reserve1 = U256::from(
+            delta
+                .updated_attributes
+                .get("reserve1")
+                .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?
+                .clone(),
+        );
+
+        Ok(UniswapV2State::new(reserve0, reserve1))
+    }
+}
 
 impl TryFrom<NativeSnapshot> for UniswapV2State {
     type Error = InvalidSnapshotError;
