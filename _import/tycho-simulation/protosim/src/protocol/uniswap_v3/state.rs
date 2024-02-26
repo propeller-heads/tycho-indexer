@@ -314,7 +314,7 @@ impl ProtocolSim for UniswapV3State {
         }
         if let Some(sqrt_price) = delta
             .updated_attributes
-            .get("sqrt_price")
+            .get("sqrt_price_x96")
         {
             self.sqrt_price = U256::from(sqrt_price.clone());
         }
@@ -325,7 +325,7 @@ impl ProtocolSim for UniswapV3State {
         // apply tick changes
         for (key, value) in delta.updated_attributes.iter() {
             // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
-            if key.starts_with("tick/") {
+            if key.starts_with("ticks/") {
                 let parts: Vec<&str> = key.split('/').collect();
                 self.ticks.set_tick_liquidity(
                     parts[1]
@@ -654,13 +654,16 @@ mod tests {
         );
         let attributes: HashMap<String, Bytes> = [
             ("liquidity".to_string(), Bytes::from(2000_u64.to_le_bytes().to_vec())),
-            ("sqrt_price".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
+            ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
             ("tick".to_string(), Bytes::from(120_u64.to_le_bytes().to_vec())),
             (
-                "tick/-255760/net_liquidity".to_string(),
+                "ticks/-255760/net_liquidity".to_string(),
                 Bytes::from(10200_u64.to_le_bytes().to_vec()),
             ),
-            ("tick/255900/net_liquidity".to_string(), Bytes::from(9800_u64.to_le_bytes().to_vec())),
+            (
+                "ticks/255900/net_liquidity".to_string(),
+                Bytes::from(9800_u64.to_le_bytes().to_vec()),
+            ),
         ]
         .into_iter()
         .collect();

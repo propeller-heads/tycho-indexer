@@ -56,7 +56,7 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
             snapshot
                 .state
                 .attributes
-                .get("sqrt_price")
+                .get("sqrt_price_x96")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
                 .clone(),
         );
@@ -86,7 +86,7 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
             .attributes
             .iter()
             .filter_map(|(key, value)| {
-                if key.starts_with("tick/") {
+                if key.starts_with("ticks/") {
                     Some(
                         key.split('/')
                             .nth(1)?
@@ -100,10 +100,12 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
             })
             .collect();
 
-        let ticks = match ticks {
+        let mut ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks,
             _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
         };
+
+        ticks.sort_by_key(|tick| tick.index);
 
         Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
     }
@@ -216,9 +218,9 @@ mod tests {
     fn usv3_attributes() -> HashMap<String, Bytes> {
         vec![
             ("liquidity".to_string(), Bytes::from(100_u64.to_le_bytes().to_vec())),
-            ("sqrt_price".to_string(), Bytes::from(200_u64.to_le_bytes().to_vec())),
+            ("sqrt_price_x96".to_string(), Bytes::from(200_u64.to_le_bytes().to_vec())),
             ("tick".to_string(), Bytes::from(300_i32.to_le_bytes().to_vec())),
-            ("tick/60/net_liquidity".to_string(), Bytes::from(400_i128.to_le_bytes().to_vec())),
+            ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_le_bytes().to_vec())),
         ]
         .into_iter()
         .collect::<HashMap<String, Bytes>>()
@@ -260,7 +262,11 @@ mod tests {
         attributes.remove(&missing_attribute);
 
         if missing_attribute == "tick_liquidities" {
-            attributes.remove("tick/60/net_liquidity");
+            attributes.remove("ticks/60/net_liquidity");
+        }
+
+        if missing_attribute == "sqrt_price" {
+            attributes.remove("sqrt_price_x96");
         }
 
         let mut component = usv3_component();
