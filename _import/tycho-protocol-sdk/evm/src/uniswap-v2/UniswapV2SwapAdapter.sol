@@ -87,7 +87,12 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
                 buy(pair, sellToken, zero2one, r0, r1, specifiedAmount);
         }
         trade.gasUsed = gasBefore - gasleft();
-        trade.price = getPriceAt(specifiedAmount, r0, r1);
+        if(side == OrderSide.Sell) {
+            trade.price = getPriceAt(specifiedAmount, r0, r1);
+        }
+        else {
+            trade.price = getPriceAt(trade.calculatedAmount, r0, r1);
+        }
     }
 
     /// @notice Executes a sell order on a given pool.
