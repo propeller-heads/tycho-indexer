@@ -8,14 +8,19 @@ import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 /// @dev This contract supports the following swaps: eETH<->ETH, wETH<->eETH, wETH<->ETH
 contract EtherfiAdapter is ISwapAdapter {
 
+    uint16 mintFee; // fee = 0.001 ETH * 'mintFee'
+    uint16 burnFee; // fee = 0.001 ETH * 'burnFee'
+
     IWeEth wEeth;
     IeEth eEth;
     ILiquidityPool liquidityPool;
+    IMembershipManager membershipManager;
 
     constructor(address _wEeth) {
         wEeth = IWeEth(_wEeth);
         eEth = wEeth.eETH();
         liquidityPool = eEth.liquidityPool();
+        membershipManager = liquidityPool.membershipManager();
     }
 
     /// @dev Check if tokens in input are supported by this adapter
@@ -31,6 +36,9 @@ contract EtherfiAdapter is ISwapAdapter {
         }
         _;
     }
+
+    /// @dev enable receive as this contract supports ETH
+    receive() external payable {}
 
     function price(
         bytes32 _poolId,
@@ -51,11 +59,42 @@ contract EtherfiAdapter is ISwapAdapter {
         revert NotImplemented("TemplateSwapAdapter.swap");
     }
 
-    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
         external
+        view
+        override
+        checkInputTokens(address(sellToken), address(buyToken))
         returns (uint256[] memory limits)
     {
-        revert NotImplemented("TemplateSwapAdapter.getLimits");
+        address sellTokenAddress = address(sellToken);
+        address buyTokenAddress = address(buyToken);
+        limits = new uint256[](2);
+        
+        if(sellTokenAddress == address(0)) {
+            if(buyTokenAddress == address(eEth)) {
+
+            }
+            else { // ETH-weETH
+
+            }
+        }
+        else if(sellTokenAddress == address(wEeth)) {
+            if(buyTokenAddress == address(0)) {
+
+            }
+            else { // wEeth-ETH
+
+            }
+        }
+        else if(sellTokenAddress == address(eEth)) {
+            if(buyTokenAddress == address(0)) {
+
+            }
+            else { // eEth-wEeth
+
+            }
+        }
+
     }
 
     function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
@@ -86,6 +125,25 @@ contract EtherfiAdapter is ISwapAdapter {
         ids[] = new bytes32[](1);
         ids[0] = bytes20(address(liquidityPool));
     }
+
+    /// @notice Swap ETH for eETH using MembershipManager
+    /// @param payedAmount result of getETHRequiredToMintEeth(), the amount of ETH to pay(incl. fee)
+    /// @param receivedAmount eETH received
+    function swapEthForEeth(uint256 payedAmount, uint256 receivedAmount) internal {
+        return membershipManager.wrapEth(_amount, 0);
+    }
+
+    /// @notice Get ETH required to mint `_amount` eETH
+    function getETHRequiredToMintEeth(uint256 _amount) internal returns (uint256) {
+        uint256 feeAmount = uint256(mintFee) * 0.001 ether;
+        return _amount + feeAmount;
+    }
+}
+
+interface IMembershipManager {
+
+    function wrapEth(uint256 _amount, uint256 _amountForPoints) external payable returns (uint256);
+
 }
 
 interface ILiquidityPool {
@@ -102,6 +160,8 @@ interface ILiquidityPool {
     function deposit() external payable returns (uint256);
     function deposit(address _referral) external payable returns (uint256);
     function deposit(address _user, address _referral) external payable returns (uint256);
+
+    function membershipManager() external view returns (IMembershipManager);
 
 }
 
