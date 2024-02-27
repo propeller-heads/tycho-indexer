@@ -269,6 +269,10 @@ impl RouteEntry {
     }
 }
 
+pub trait Countable {
+    fn count(&self) -> usize;
+}
+
 /// RouteProcessor trait
 /// This trait defines the methods that a route processor must implement in order
 /// to be used to search for trade opportunities.
@@ -277,7 +281,7 @@ pub trait RouteProcessor {
     type Error: std::fmt::Debug;
 
     /// The type representing all opportunities found during route processing.
-    type Output: std::fmt::Debug;
+    type Output: std::fmt::Debug + Countable;
 
     /// Configures the given graph by building all routes the route processor will use.
     ///
