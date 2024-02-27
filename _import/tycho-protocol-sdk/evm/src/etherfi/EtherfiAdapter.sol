@@ -78,11 +78,13 @@ contract EtherfiAdapter is ISwapAdapter {
         tokens[2] = IERC20(address(wEeth));
     }
 
-    function getPoolIds(uint256 offset, uint256 limit)
+    /// @inheritdoc ISwapAdapter
+    function getPoolIds(uint256, uint256)
         external
         returns (bytes32[] memory ids)
     {
-        revert NotImplemented("TemplateSwapAdapter.getPoolIds");
+        ids[] = new bytes32[](1);
+        ids[0] = bytes20(address(liquidityPool));
     }
 }
 
