@@ -27,8 +27,8 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
-tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "faf1eae"}
-tycho-types = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-types", rev = "faf1eae"}
+tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "49aad53"}
+tycho-types = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-types", rev = "49aad53"}
 
 
 [dev-dependencies]
