@@ -65,11 +65,17 @@ contract EtherfiAdapter is ISwapAdapter {
         revert NotImplemented("TemplateSwapAdapter.getCapabilities");
     }
 
-    function getTokens(bytes32 poolId)
+    /// @inheritdoc ISwapAdapter
+    function getTokens(bytes32)
         external
+        view
+        override
         returns (IERC20[] memory tokens)
     {
-        revert NotImplemented("TemplateSwapAdapter.getTokens");
+        tokens = new IERC20[](3);
+        tokens[0] = IERC20(address(0));
+        tokens[1] = IERC20(address(eEth));
+        tokens[2] = IERC20(address(wEeth));
     }
 
     function getPoolIds(uint256 offset, uint256 limit)
