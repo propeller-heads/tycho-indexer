@@ -3,24 +3,21 @@ pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title Etherfi Adapter
-/// @dev This contract supports the following swaps: eETH<->ETH, wETH<->eETH, wETH<->ETH
+/// @dev This contract supports the following swaps: ETH->eETH, wETH<->eETH, ETH->weETH
 contract EtherfiAdapter is ISwapAdapter {
+    using SafeERC20 for IERC20;
 
-    uint16 mintFee; // fee = 0.001 ETH * 'mintFee'
-    uint16 burnFee; // fee = 0.001 ETH * 'burnFee'
-
-    IWeEth wEeth;
+    IWeEth weEth;
     IeEth eEth;
-    ILiquidityPool liquidityPool;
-    IMembershipManager membershipManager;
+    ILiquidityPool public liquidityPool;
 
-    constructor(address _wEeth) {
-        wEeth = IWeEth(_wEeth);
-        eEth = wEeth.eETH();
+    constructor(address _weEth) {
+        weEth = IWeEth(_weEth);
+        eEth = weEth.eETH();
         liquidityPool = eEth.liquidityPool();
-        membershipManager = liquidityPool.membershipManager();
     }
 
     /// @dev Check if tokens in input are supported by this adapter
@@ -28,10 +25,10 @@ contract EtherfiAdapter is ISwapAdapter {
         if(sellToken == buyToken) {
             revert Unavailable("This pool only supports eETH, weEth and ETH");
         }
-        if(sellToken != address(wEeth) && sellToken != address(eEth) && sellToken && sellToken != address(0)) {
+        if(sellToken != address(weEth) && sellToken != address(eEth) && sellToken != address(0)) {
             revert Unavailable("This pool only supports eETH, weEth and ETH");
         }
-        if(buyToken != address(wEeth) && buyToken != address(eEth) && buyToken != address(0)) {
+        if(buyToken != address(weEth) && buyToken != address(eEth)) {
             revert Unavailable("This pool only supports eETH, weEth and ETH");
         }
         _;
@@ -74,15 +71,15 @@ contract EtherfiAdapter is ISwapAdapter {
             if(buyTokenAddress == address(eEth)) {
 
             }
-            else { // ETH-weETH
+            else { // ETH-weEth
 
             }
         }
-        else if(sellTokenAddress == address(wEeth)) {
+        else if(sellTokenAddress == address(weEth)) {
             if(buyTokenAddress == address(0)) {
 
             }
-            else { // wEeth-ETH
+            else { // weEth-ETH
 
             }
         }
@@ -90,7 +87,7 @@ contract EtherfiAdapter is ISwapAdapter {
             if(buyTokenAddress == address(0)) {
 
             }
-            else { // eEth-wEeth
+            else { // eEth-weEth
 
             }
         }
@@ -114,7 +111,7 @@ contract EtherfiAdapter is ISwapAdapter {
         tokens = new IERC20[](3);
         tokens[0] = IERC20(address(0));
         tokens[1] = IERC20(address(eEth));
-        tokens[2] = IERC20(address(wEeth));
+        tokens[2] = IERC20(address(weEth));
     }
 
     /// @inheritdoc ISwapAdapter
@@ -122,27 +119,75 @@ contract EtherfiAdapter is ISwapAdapter {
         external
         returns (bytes32[] memory ids)
     {
-        ids[] = new bytes32[](1);
+        ids = new bytes32[](1);
         ids[0] = bytes20(address(liquidityPool));
     }
 
-    /// @notice Swap ETH for eETH using MembershipManager
-    /// @param payedAmount result of getETHRequiredToMintEeth(), the amount of ETH to pay(incl. fee)
-    /// @param receivedAmount eETH received
-    function swapEthForEeth(uint256 payedAmount, uint256 receivedAmount) internal {
-        return membershipManager.wrapEth(_amount, 0);
+    /// @notice Swap ETH for eETH
+    /// @param amount amountIn or amountOut depending on side
+    function swapEthForEeth(uint256 amount, OrderSide side) internal returns (uint256) {
+        if(side == OrderSide.Buy) {
+            uint256 amountIn = getAmountIn(address(0), address(eEth), amount);
+            uint256 receivedAmount = liquidityPool.deposit{value: amountIn}();
+            IERC20(address(eEth)).safeTransfer(address(msg.sender), receivedAmount);
+            return amountIn;
+        }
+        else {
+            uint256 receivedAmount = liquidityPool.deposit{value: amount}();
+            IERC20(address(eEth)).safeTransfer(address(msg.sender), receivedAmount);
+            return receivedAmount;
+        }
     }
 
-    /// @notice Get ETH required to mint `_amount` eETH
-    function getETHRequiredToMintEeth(uint256 _amount) internal returns (uint256) {
-        uint256 feeAmount = uint256(mintFee) * 0.001 ether;
-        return _amount + feeAmount;
+    /// @notice Swap ETH for weEth
+    /// @param amount amountIn or amountOut depending on side
+    function swapEthForWeEth(uint256 amount, OrderSide side) internal returns (uint256) {
+        if(side == OrderSide.Buy) {
+            uint256 amountIn = getAmountIn(address(0), address(weEth), amount);
+            IERC20(address(eEth)).approve(address(weEth), amountIn);
+            uint256 receivedAmountEeth = liquidityPool.deposit{value: amountIn}();
+            uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
+            IERC20(address(weEth)).safeTransfer(address(msg.sender), receivedAmount);
+            return amountIn;
+        }
+        else {
+            IERC20(address(eEth)).approve(address(weEth), amount);
+            uint256 receivedAmountEeth = liquidityPool.deposit{value: amount}();
+            uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
+            IERC20(address(weEth)).safeTransfer(address(msg.sender), receivedAmount);
+            return receivedAmount;
+        }
     }
+
+    /// @notice Get amountIn for swap functions with OrderSide buy
+    function getAmountIn(address sellToken, address buyToken, uint256 amountOut) internal view returns (uint256) {
+        if(sellToken == address(0)) {
+            if(buyToken == address(eEth)) {
+                return liquidityPool.amountForShare(amountOut);
+            }
+            else {
+                uint256 ethRequiredForEeth = liquidityPool.amountForShare(amountOut);
+                return liquidityPool.amountForShare(ethRequiredForEeth);
+            }
+        }
+        else if(sellToken == address(eEth)) { // eEth-weEth
+            return weEth.getEETHByWeETH(amountOut);
+        }
+        else { // weEth-eEth
+            return weEth.getWeETHByeETH(amountOut);
+        }
+    }
+
 }
 
-interface IMembershipManager {
+interface IWithdrawRequestNFT {
 
-    function wrapEth(uint256 _amount, uint256 _amountForPoints) external payable returns (uint256);
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) 
+    external payable returns (uint256);
+
+    function getClaimableAmount(uint256 tokenId) external view returns (uint256);
+
+    function claimWithdraw(uint256 tokenId) external;
 
 }
 
@@ -161,7 +206,8 @@ interface ILiquidityPool {
     function deposit(address _referral) external payable returns (uint256);
     function deposit(address _user, address _referral) external payable returns (uint256);
 
-    function membershipManager() external view returns (IMembershipManager);
+    function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
+    function withdrawRequestNFT() external view returns (IWithdrawRequestNFT);
 
 }
 
