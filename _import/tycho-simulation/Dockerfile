@@ -1,4 +1,4 @@
-FROM rust:1.66 AS build
+FROM rust:1.74 AS build
 WORKDIR /build
 RUN echo "fn main() {}" > dummy.rs
 COPY protosim protosim

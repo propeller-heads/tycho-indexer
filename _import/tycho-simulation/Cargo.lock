@@ -4038,6 +4038,8 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tycho-client",
+ "tycho-types",
 ]
 
 [[package]]
@@ -6097,8 +6099,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.1.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#06cf1e57a0e9476e45b85ea3437ba0001c876d22"
+version = "0.3.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?rev=49aad53#49aad538f6da583312cf5d2dcf4930a35b44398d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6120,8 +6122,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-types"
-version = "0.1.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git#06cf1e57a0e9476e45b85ea3437ba0001c876d22"
+version = "0.3.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?rev=49aad53#49aad538f6da583312cf5d2dcf4930a35b44398d"
 dependencies = [
  "bytes",
  "chrono",
