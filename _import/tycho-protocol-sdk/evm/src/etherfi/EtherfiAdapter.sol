@@ -60,7 +60,9 @@ contract EtherfiAdapter is ISwapAdapter {
         address buyTokenAddress = address(_buyToken);
 
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            _prices[i] = getPriceAt(sellTokenAddress, buyTokenAddress, _specifiedAmounts[i]);
+            _prices[i] = getPriceAt(
+                sellTokenAddress, buyTokenAddress, _specifiedAmounts[i]
+            );
         }
     }
 
@@ -76,34 +78,39 @@ contract EtherfiAdapter is ISwapAdapter {
         checkInputTokens(address(sellToken), address(buyToken))
         returns (Trade memory trade)
     {
-        // if (specifiedAmount == 0) {
-        //     return trade;
-        // }
+        if (specifiedAmount == 0) {
+            return trade;
+        }
 
-        // address sellTokenAddress = address(sellToken);
-        // address buyTokenAddress = address(buyToken);
-        // uint256 gasBefore = gasleft();
-        // if (sellTokenAddress == address(0)) {
-        //     if (buyTokenAddress == address(eEth)) {
-        //         trade.calculatedAmount = swapEthForEeth(specifiedAmount,
-        // side);
-        //     } else {
-        //         trade.calculatedAmount = swapEthForWeEth(specifiedAmount,
-        // side);
-        //     }
-        // } else {
-        //     if (sellTokenAddress == address(eEth)) {
-        //         trade.calculatedAmount = swapEthForWeEth(specifiedAmount,
-        // side);
-        //     } else {
-        //         trade.calculatedAmount = swapWeEthForEeth(specifiedAmount,
-        // side);
-        //     }
-        // }
-        // trade.gasUsed = gasBefore - gasleft();
-        // // trade.price = getPriceAt();
+        address sellTokenAddress = address(sellToken);
+        address buyTokenAddress = address(buyToken);
+        uint256 gasBefore = gasleft();
+        if (sellTokenAddress == address(0)) {
+            if (buyTokenAddress == address(eEth)) {
+                trade.calculatedAmount = swapEthForEeth(specifiedAmount, side);
+            } else {
+                trade.calculatedAmount = swapEthForWeEth(specifiedAmount, side);
+            }
+        } else {
+            if (sellTokenAddress == address(eEth)) {
+                trade.calculatedAmount = swapEthForWeEth(specifiedAmount, side);
+            } else {
+                trade.calculatedAmount = swapWeEthForEeth(specifiedAmount, side);
+            }
+        }
+        trade.gasUsed = gasBefore - gasleft();
+        if (side == OrderSide.Sell) {
+            trade.price = getPriceAt(
+                sellTokenAddress, buyTokenAddress, specifiedAmount
+            );
+        } else {
+            trade.price = getPriceAt(
+                sellTokenAddress, buyTokenAddress, trade.calculatedAmount
+            );
+        }
     }
 
+    /// @inheritdoc ISwapAdapter
     function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
         external
         view
@@ -115,16 +122,10 @@ contract EtherfiAdapter is ISwapAdapter {
         address buyTokenAddress = address(buyToken);
         limits = new uint256[](2);
 
-        if (sellTokenAddress == address(0)) {
-            if (buyTokenAddress == address(eEth)) {} else { // ETH-weEth
-            }
-        } else if (sellTokenAddress == address(weEth)) {
-            if (buyTokenAddress == address(0)) {} else { // weEth-ETH
-            }
-        } else if (sellTokenAddress == address(eEth)) {
-            if (buyTokenAddress == address(0)) {} else { // eEth-weEth
-            }
-        }
+        /// @dev only limit on Etherfi is applied on deposits(eth->eETH), and is type(uint128).max
+        /// but we use the same amount for the others to underestimate
+        limits[0] = type(uint128).max;
+        limits[1] = limits[0];
     }
 
     function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
