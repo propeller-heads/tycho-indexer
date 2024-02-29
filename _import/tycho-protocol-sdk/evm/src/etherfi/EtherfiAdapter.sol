@@ -94,7 +94,7 @@ contract EtherfiAdapter is ISwapAdapter {
             }
         } else {
             if (sellTokenAddress == address(eEth)) {
-                trade.calculatedAmount = swapEthForWeEth(specifiedAmount, side);
+                trade.calculatedAmount = swapEethForWeEth(specifiedAmount, side);
             } else {
                 trade.calculatedAmount = swapWeEthForEeth(specifiedAmount, side);
             }
@@ -119,13 +119,11 @@ contract EtherfiAdapter is ISwapAdapter {
         checkInputTokens(address(sellToken), address(buyToken))
         returns (uint256[] memory limits)
     {
-        address sellTokenAddress = address(sellToken);
-        address buyTokenAddress = address(buyToken);
         limits = new uint256[](2);
 
         /// @dev only limit on Etherfi is applied on deposits(eth->eETH), and is type(uint128).max
         /// but we use the same amount for the others to underestimate
-        limits[0] = type(uint128).max;
+        limits[0] = IERC20(address(eEth)).totalSupply();
         limits[1] = limits[0];
     }
 
@@ -158,6 +156,8 @@ contract EtherfiAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function getPoolIds(uint256, uint256)
         external
+        view
+        override
         returns (bytes32[] memory ids)
     {
         ids = new bytes32[](1);
@@ -172,15 +172,17 @@ contract EtherfiAdapter is ISwapAdapter {
     {
         if (side == OrderSide.Buy) {
             uint256 amountIn = getAmountIn(address(0), address(eEth), amount);
-            uint256 receivedAmount = liquidityPool.deposit{value: amountIn}();
+            liquidityPool.deposit{value: amountIn}();
             IERC20(address(eEth)).safeTransfer(
-                address(msg.sender), receivedAmount
+                address(msg.sender), amount
             );
             return amountIn;
         } else {
-            uint256 receivedAmount = liquidityPool.deposit{value: amount}();
-            IERC20(address(eEth)).safeTransfer(
-                address(msg.sender), receivedAmount
+            uint256 balBefore = IERC20(address(eEth)).balanceOf(address(msg.sender));
+            liquidityPool.deposit{value: amount}();
+            uint256 receivedAmount = IERC20(address(eEth)).balanceOf(address(msg.sender)) - balBefore;
+            IERC20(address(eEth)).transfer(
+                msg.sender, receivedAmount
             );
             return receivedAmount;
         }
@@ -193,22 +195,30 @@ contract EtherfiAdapter is ISwapAdapter {
         returns (uint256)
     {
         if (side == OrderSide.Buy) {
+            IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
             uint256 amountIn = getAmountIn(address(0), address(weEth), amount);
             IERC20(address(eEth)).approve(address(weEth), amountIn);
+
             uint256 receivedAmountEeth =
                 liquidityPool.deposit{value: amountIn}();
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
+
             IERC20(address(weEth)).safeTransfer(
                 address(msg.sender), receivedAmount
             );
+
             return amountIn;
         } else {
+            IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
             IERC20(address(eEth)).approve(address(weEth), amount);
+
             uint256 receivedAmountEeth = liquidityPool.deposit{value: amount}();
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
+
             IERC20(address(weEth)).safeTransfer(
                 address(msg.sender), receivedAmount
             );
+
             return receivedAmount;
         }
     }
@@ -219,7 +229,30 @@ contract EtherfiAdapter is ISwapAdapter {
         internal
         returns (uint256)
     {
-        if (side == OrderSide.Buy) {} else {}
+        if (side == OrderSide.Buy) {
+            uint256 amountIn = getAmountIn(address(eEth), address(weEth), amount);
+            IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
+            IERC20(address(eEth)).approve(address(weEth), amountIn);
+
+            uint256 balBefore = eEth.shares(address(this));
+            uint256 receivedAmount = weEth.wrap(amountIn);
+            uint256 realSpentEeth = balBefore - eEth.shares(address(this)); 
+
+            IERC20(address(weEth)).safeTransfer(
+                address(msg.sender), receivedAmount
+            );
+
+            return realSpentEeth;
+        } else {
+            IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
+            IERC20(address(eEth)).approve(address(weEth), amount);
+            uint256 receivedAmount = weEth.wrap(amount);
+
+            IERC20(address(weEth)).safeTransfer(
+                address(msg.sender), receivedAmount
+            );
+            return receivedAmount;
+        }
     }
 
     /// @notice Swap weETH for eEth
@@ -228,7 +261,31 @@ contract EtherfiAdapter is ISwapAdapter {
         internal
         returns (uint256)
     {
-        if (side == OrderSide.Buy) {} else {}
+        if (side == OrderSide.Buy) {
+            uint256 amountIn = getAmountIn(address(weEth), address(eEth), amount);
+            IERC20(address(weEth)).safeTransferFrom(msg.sender, address(this), amountIn);
+            uint256 receivedAmount = weEth.unwrap(amountIn);
+            IERC20(address(eEth)).safeTransfer(
+                address(msg.sender), receivedAmount
+            );
+            return amountIn;
+        } else {
+            IERC20(address(weEth)).safeTransferFrom(msg.sender, address(this), amount);
+            uint256 receivedAmount = weEth.unwrap(amount);
+            IERC20(address(eEth)).safeTransfer(
+                address(msg.sender), receivedAmount
+            );
+            return receivedAmount;
+        }
+    }
+
+    /// @dev copy of '_sharesForDepositAmount' internal function in LiquidityPool
+    function _sharesForDepositAmount(uint256 _depositAmount) internal view returns (uint256) {
+        uint256 totalPooledEther = liquidityPool.getTotalPooledEther() - _depositAmount;
+        if (totalPooledEther == 0) {
+            return _depositAmount;
+        }
+        return (_depositAmount * eEth.totalShares()) / totalPooledEther;
     }
 
     /// @notice Get swap price
@@ -241,9 +298,9 @@ contract EtherfiAdapter is ISwapAdapter {
     {
         if (sellToken == address(0)) {
             if (buyToken == address(eEth)) {
-                return Fraction(liquidityPool.sharesForAmount(amount), amount);
+                return Fraction(_sharesForDepositAmount(amount), amount);
             } else {
-                uint256 eEthOut = liquidityPool.sharesForAmount(amount);
+                uint256 eEthOut = _sharesForDepositAmount(amount);
                 return Fraction(liquidityPool.sharesForAmount(eEthOut), amount);
             }
         } else if (sellToken == address(eEth)) {
@@ -269,7 +326,7 @@ contract EtherfiAdapter is ISwapAdapter {
             }
         } else if (sellToken == address(eEth)) {
             // eEth-weEth
-            return weEth.getEETHByWeETH(amountOut);
+            return liquidityPool.amountForShare(amountOut);
         } else {
             // weEth-eEth
             return weEth.getWeETHByeETH(amountOut);
