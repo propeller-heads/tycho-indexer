@@ -121,9 +121,13 @@ contract EtherfiAdapter is ISwapAdapter {
     {
         limits = new uint256[](2);
 
-        /// @dev only limit on Etherfi is applied on deposits(eth->eETH), and is type(uint128).max
-        /// but we use the same amount for the others to underestimate
-        limits[0] = IERC20(address(eEth)).totalSupply();
+        /// @dev Limits are underestimated to 90% of totalSupply as both weEth and eEth have no limits but revert in some cases
+        if(address(sellToken) == address(weEth) || address(buyToken) == address(weEth)) {
+            limits[0] = IERC20(address(weEth)).totalSupply() * 90 / 100;
+        }
+        else {
+            limits[0] = IERC20(address(eEth)).totalSupply() * 90 / 100;
+        }
         limits[1] = limits[0];
     }
 
@@ -194,13 +198,13 @@ contract EtherfiAdapter is ISwapAdapter {
         internal
         returns (uint256)
     {
+        IERC20 eEth_ = IERC20(address(eEth));
         if (side == OrderSide.Buy) {
-            IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
             uint256 amountIn = getAmountIn(address(0), address(weEth), amount);
-            IERC20(address(eEth)).approve(address(weEth), amountIn);
 
             uint256 receivedAmountEeth =
                 liquidityPool.deposit{value: amountIn}();
+            eEth_.approve(address(weEth), receivedAmountEeth);
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
 
             IERC20(address(weEth)).safeTransfer(
@@ -209,10 +213,8 @@ contract EtherfiAdapter is ISwapAdapter {
 
             return amountIn;
         } else {
-            IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
-            IERC20(address(eEth)).approve(address(weEth), amount);
-
             uint256 receivedAmountEeth = liquidityPool.deposit{value: amount}();
+            eEth_.approve(address(weEth), receivedAmountEeth);
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
 
             IERC20(address(weEth)).safeTransfer(
