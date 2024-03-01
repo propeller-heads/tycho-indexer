@@ -107,11 +107,12 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         }
     }
 
-    function testSwapFuzzEtherfiWeEthEth(uint256 specifiedAmount, bool isBuy) public {
+    function testSwapFuzzEtherfiWeEthEeth(uint256 specifiedAmount, bool isBuy) public {
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
 
         IERC20 eEth_ = IERC20(address(eEth));
         IERC20 weEth_ = IERC20(address(weEth));
+        uint256 weEth_bal_before = weEth_.balanceOf(address(this));
         bytes32 pair = bytes32(0);
         uint256[] memory limits = adapter.getLimits(pair, weEth_, eEth_);
 
@@ -136,18 +137,22 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         uint256 eEth_balance = eEth_.balanceOf(address(this));
         uint256 weEth_balance = weEth_.balanceOf(address(this));
 
+        /// @dev as of rounding errors in Etherfi, specifiedAmount might lose small digits for small numbers
+        /// therefore we use weEth_balance - weEth_bal_before as specifiedAmount
+        uint256 realAmountWeEth_ = weEth_balance - weEth_bal_before;
+
         Trade memory trade =
-            adapter.swap(pair, weEth_, eEth_, side, specifiedAmount);
+            adapter.swap(pair, weEth_, eEth_, side, realAmountWeEth_);
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
                 assertGe(
-                    specifiedAmount,
+                    realAmountWeEth_,
                     eEth_.balanceOf(address(this)) - eEth_balance
                 );
                 /// @dev Transfer function contains rounding errors because of rewards in weETH contract, therefore we assume a +/-2 tolerance
                 assertLe(
-                    specifiedAmount - 2,
+                    realAmountWeEth_ - 2,
                     eEth_.balanceOf(address(this)) - eEth_balance
                 );
                 assertLe(
@@ -155,16 +160,15 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                     weEth_balance - weEth_.balanceOf(address(this))
                 );
             } else {
-                assertGe(
-                    specifiedAmount,
-                    weEth_balance - weEth_.balanceOf(address(this))
-                );
-                /// @dev Transfer function contains rounding errors because of rewards in eETH contract, therefore we assume a +/-2 tolerance
-                assertLe(
-                    specifiedAmount - 2,
-                    weEth_balance - weEth_.balanceOf(address(this))
-                );
                 assertEq(
+                    realAmountWeEth_,
+                    weEth_balance - weEth_.balanceOf(address(this))
+                );
+                assertLe(
+                    trade.calculatedAmount - 2,
+                    eEth_.balanceOf(address(this)) - eEth_balance
+                );
+                assertGe(
                     trade.calculatedAmount,
                     eEth_.balanceOf(address(this)) - eEth_balance
                 );
@@ -183,7 +187,7 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1] && specifiedAmount > 10);
 
-            deal(address(adapter), 100**18);
+            deal(address(adapter), eEth_.totalSupply());
         } else {
             vm.assume(specifiedAmount < limits[0] && specifiedAmount > 10);
 
@@ -222,5 +226,126 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                 );
             }
         }
+    }
+
+    function testSwapFuzzEtherfiEthWeEth(uint256 specifiedAmount, bool isBuy) public {
+        OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
+
+        IERC20 eth_ = IERC20(address(0));
+        IERC20 weEth_ = IERC20(address(weEth));
+        bytes32 pair = bytes32(0);
+        uint256[] memory limits = adapter.getLimits(pair, eth_, weEth_);
+
+        if (side == OrderSide.Buy) {
+            vm.assume(specifiedAmount < limits[1] && specifiedAmount > 10);
+
+            deal(address(adapter), weEth_.totalSupply());
+        } else {
+            vm.assume(specifiedAmount < limits[0] && specifiedAmount > 10);
+
+            deal(address(adapter), specifiedAmount);
+        }
+
+        uint256 eth_balance = address(adapter).balance;
+        uint256 weEth_balance = weEth_.balanceOf(address(this));
+
+        Trade memory trade =
+            adapter.swap(pair, eth_, weEth_, side, specifiedAmount);
+
+        if (trade.calculatedAmount > 0) {
+            if (side == OrderSide.Buy) {
+                assertGe(
+                    specifiedAmount,
+                    weEth_.balanceOf(address(this)) - weEth_balance
+                );
+                /// @dev Transfer function contains rounding errors because of rewards in eETH contract, therefore we assume a +/-2 tolerance
+                assertLe(
+                    specifiedAmount - 2,
+                    weEth_.balanceOf(address(this)) - weEth_balance
+                );
+                assertEq(
+                    trade.calculatedAmount,
+                    eth_balance - address(adapter).balance
+                );
+            } else {
+                assertEq(
+                    specifiedAmount,
+                    eth_balance - address(adapter).balance
+                );
+                assertEq(
+                    trade.calculatedAmount,
+                    weEth_.balanceOf(address(this)) - weEth_balance
+                );
+            }
+        }
+    }
+
+    function testSwapSellIncreasingEtherfi() public {
+        executeIncreasingSwapsEtherfi(OrderSide.Sell);
+    }
+
+    function testSwapBuyIncreasingEtherfi() public {
+        executeIncreasingSwapsEtherfi(OrderSide.Buy);
+    }
+
+    function executeIncreasingSwapsIntegral(OrderSide side) internal {
+        bytes32 pair = bytes32(0);
+
+        uint256 amountConstant_ = side == 10**18;
+ 
+        uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
+        amounts[0] = amountConstant_;
+        for (uint256 i = 1; i < TEST_ITERATIONS; i++) {
+            amounts[i] = amountConstant_ * i;
+        }
+ 
+        Trade[] memory trades = new Trade[](TEST_ITERATIONS);
+        uint256 beforeSwap;
+        for (uint256 i = 1; i < TEST_ITERATIONS; i++) {
+            beforeSwap = vm.snapshot();
+ 
+            deal(address(USDC), address(this), amounts[i]);
+            USDC.approve(address(adapter), amounts[i]);
+ 
+            trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
+            vm.revertTo(beforeSwap);
+        }
+ 
+        for (uint256 i = 1; i < TEST_ITERATIONS - 1; i++) {
+            assertLe(
+                trades[i].calculatedAmount,
+                trades[i + 1].calculatedAmount
+            );
+            assertLe(trades[i].gasUsed, trades[i + 1].gasUsed);
+            assertEq(trades[i].price.compareFractions(trades[i + 1].price), 0);
+        }
+    }
+
+    function testGetCapabilitiesEtherfi(
+        bytes32 pair,
+        address t0,
+        address t1
+    ) public {
+        Capability[] memory res = adapter.getCapabilities(
+            pair,
+            IERC20(t0),
+            IERC20(t1)
+        );
+ 
+        assertEq(res.length, 3);
+    }
+ 
+    function testGetTokensEtherfi() public {
+        bytes32 pair = bytes32(0);
+        IERC20[] memory tokens = adapter.getTokens(pair);
+ 
+        assertEq(tokens.length, 3);
+    }
+ 
+    function testGetLimitsEtherfi() public {
+        bytes32 pair = bytes32(0);
+        uint256[] memory limits = adapter.getLimits(pair, IERC20(address(eEth)), IERC20(address(weEth)));
+ 
+        assertEq(limits.length, 2);
     }
 }
