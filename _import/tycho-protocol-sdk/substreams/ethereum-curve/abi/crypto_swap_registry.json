@@ -1,0 +1,751 @@
+[
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "name": "pool",
+                "type": "address"
+            }
+        ],
+        "name": "PoolAdded",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "name": "basepool",
+                "type": "address"
+            }
+        ],
+        "name": "BasePoolAdded",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "name": "pool",
+                "type": "address"
+            }
+        ],
+        "name": "PoolRemoved",
+        "type": "event"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_address_provider",
+                "type": "address"
+            },
+            {
+                "name": "_base_pool_registry",
+                "type": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_from",
+                "type": "address"
+            },
+            {
+                "name": "_to",
+                "type": "address"
+            }
+        ],
+        "name": "find_pool_for_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_from",
+                "type": "address"
+            },
+            {
+                "name": "_to",
+                "type": "address"
+            },
+            {
+                "name": "i",
+                "type": "uint256"
+            }
+        ],
+        "name": "find_pool_for_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_n_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_n_underlying_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address[8]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_underlying_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address[8]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_decimals",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[8]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_underlying_decimals",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[8]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_gauges",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address[10]"
+            },
+            {
+                "name": "",
+                "type": "int128[10]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_balances",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[8]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_underlying_balances",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[8]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_token",
+                "type": "address"
+            }
+        ],
+        "name": "get_virtual_price_from_lp_token",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_A",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_D",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_gamma",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_fees",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[4]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_admin_balances",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[8]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            },
+            {
+                "name": "_from",
+                "type": "address"
+            },
+            {
+                "name": "_to",
+                "type": "address"
+            }
+        ],
+        "name": "get_coin_indices",
+        "outputs": [
+            {
+                "name": "",
+                "type": "int128"
+            },
+            {
+                "name": "",
+                "type": "int128"
+            },
+            {
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "is_meta",
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_base_pool",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_pool_name",
+        "outputs": [
+            {
+                "name": "",
+                "type": "string"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            },
+            {
+                "name": "_lp_token",
+                "type": "address"
+            },
+            {
+                "name": "_gauge",
+                "type": "address"
+            },
+            {
+                "name": "_zap",
+                "type": "address"
+            },
+            {
+                "name": "_n_coins",
+                "type": "uint256"
+            },
+            {
+                "name": "_name",
+                "type": "string"
+            }
+        ],
+        "name": "add_pool",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            },
+            {
+                "name": "_lp_token",
+                "type": "address"
+            },
+            {
+                "name": "_gauge",
+                "type": "address"
+            },
+            {
+                "name": "_zap",
+                "type": "address"
+            },
+            {
+                "name": "_n_coins",
+                "type": "uint256"
+            },
+            {
+                "name": "_name",
+                "type": "string"
+            },
+            {
+                "name": "_base_pool",
+                "type": "address"
+            }
+        ],
+        "name": "add_pool",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            },
+            {
+                "name": "_lp_token",
+                "type": "address"
+            },
+            {
+                "name": "_gauge",
+                "type": "address"
+            },
+            {
+                "name": "_zap",
+                "type": "address"
+            },
+            {
+                "name": "_n_coins",
+                "type": "uint256"
+            },
+            {
+                "name": "_name",
+                "type": "string"
+            },
+            {
+                "name": "_base_pool",
+                "type": "address"
+            },
+            {
+                "name": "_has_positive_rebasing_tokens",
+                "type": "bool"
+            }
+        ],
+        "name": "add_pool",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "remove_pool",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            },
+            {
+                "name": "_liquidity_gauges",
+                "type": "address[10]"
+            }
+        ],
+        "name": "set_liquidity_gauges",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pools",
+                "type": "address[10]"
+            },
+            {
+                "name": "_liquidity_gauges",
+                "type": "address[10]"
+            }
+        ],
+        "name": "batch_set_liquidity_gauges",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "address_provider",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "base_pool_registry",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "arg0",
+                "type": "uint256"
+            }
+        ],
+        "name": "pool_list",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pool_count",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "base_pool_count",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "arg0",
+                "type": "uint256"
+            }
+        ],
+        "name": "get_coin",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "coin_count",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "arg0",
+                "type": "address"
+            }
+        ],
+        "name": "get_pool_from_lp_token",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "arg0",
+                "type": "address"
+            }
+        ],
+        "name": "get_lp_token",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "arg0",
+                "type": "address"
+            }
+        ],
+        "name": "get_zap",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "last_updated",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]
