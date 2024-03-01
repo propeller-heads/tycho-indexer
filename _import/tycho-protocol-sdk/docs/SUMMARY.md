@@ -10,5 +10,4 @@
 
 ## Indexing
 
-* [Substreams Integration](indexing/substreams-integration/README.md)
-  * [Tutorial: Ambient](indexing/substreams-integration/tutorial-ambient.md)
+* [Substreams Integration](indexing/substreams-integration.md)
