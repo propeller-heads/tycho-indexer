@@ -33,6 +33,14 @@ modules:
     inputs:
       - map: map_pools_created
 
+  - name: store_pools_tokens
+    kind: store
+    initialBlock: 19128828
+    updatePolicy: add
+    valueType: string
+    inputs:
+      - map: map_pools_created
+
   - name: map_balance_deltas
     kind: map
     initialBlock: 19128828  # An arbitrary block that should change based on your requirements
