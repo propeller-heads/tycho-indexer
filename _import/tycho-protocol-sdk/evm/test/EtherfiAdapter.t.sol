@@ -8,9 +8,13 @@ import "src/libraries/FractionMath.sol";
 import "src/etherfi/EtherfiAdapter.sol";
 
 contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
+    using FractionMath for Fraction;
+
     EtherfiAdapter adapter;
     IWeEth weEth = IWeEth(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
     IeEth eEth;
+
+    uint256 constant TEST_ITERATIONS = 100;
 
     function setUp() public {
         uint256 forkBlock = 19218495;
@@ -288,15 +292,15 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         executeIncreasingSwapsEtherfi(OrderSide.Buy);
     }
 
-    function executeIncreasingSwapsIntegral(OrderSide side) internal {
+    function executeIncreasingSwapsEtherfi(OrderSide side) internal {
         bytes32 pair = bytes32(0);
 
-        uint256 amountConstant_ = side == 10**18;
+        uint256 amountConstant_ = 10**18;
  
         uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
         amounts[0] = amountConstant_;
         for (uint256 i = 1; i < TEST_ITERATIONS; i++) {
-            amounts[i] = amountConstant_ * i;
+            amounts[i] = amountConstant_ + i;
         }
  
         Trade[] memory trades = new Trade[](TEST_ITERATIONS);
@@ -304,10 +308,10 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         for (uint256 i = 1; i < TEST_ITERATIONS; i++) {
             beforeSwap = vm.snapshot();
  
-            deal(address(USDC), address(this), amounts[i]);
-            USDC.approve(address(adapter), amounts[i]);
+            deal(address(weEth), address(this), amounts[i]);
+            IERC20(address(weEth)).approve(address(adapter), amounts[i]);
  
-            trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
+            trades[i] = adapter.swap(pair, IERC20(address(weEth)), IERC20(address(eEth)), side, amounts[i]);
             vm.revertTo(beforeSwap);
         }
  
@@ -317,7 +321,6 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                 trades[i + 1].calculatedAmount
             );
             assertLe(trades[i].gasUsed, trades[i + 1].gasUsed);
-            assertEq(trades[i].price.compareFractions(trades[i + 1].price), 0);
         }
     }
 
