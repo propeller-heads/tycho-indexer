@@ -204,7 +204,7 @@ contract EtherfiAdapter is ISwapAdapter {
 
             uint256 receivedAmountEeth =
                 liquidityPool.deposit{value: amountIn}();
-            eEth_.approve(address(weEth), receivedAmountEeth);
+            eEth_.safeIncreaseAllowance(address(weEth), receivedAmountEeth);
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
 
             IERC20(address(weEth)).safeTransfer(
@@ -214,7 +214,7 @@ contract EtherfiAdapter is ISwapAdapter {
             return amountIn;
         } else {
             uint256 receivedAmountEeth = liquidityPool.deposit{value: amount}();
-            eEth_.approve(address(weEth), receivedAmountEeth);
+            eEth_.safeIncreaseAllowance(address(weEth), receivedAmountEeth);
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
 
             IERC20(address(weEth)).safeTransfer(
@@ -234,7 +234,7 @@ contract EtherfiAdapter is ISwapAdapter {
         if (side == OrderSide.Buy) {
             uint256 amountIn = getAmountIn(address(eEth), address(weEth), amount);
             IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
-            IERC20(address(eEth)).approve(address(weEth), amountIn);
+            IERC20(address(eEth)).safeIncreaseAllowance(address(weEth), amountIn);
 
             uint256 balBefore = eEth.shares(address(this));
             uint256 receivedAmount = weEth.wrap(amountIn);
@@ -247,7 +247,7 @@ contract EtherfiAdapter is ISwapAdapter {
             return realSpentEeth;
         } else {
             IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), amount);
-            IERC20(address(eEth)).approve(address(weEth), amount);
+            IERC20(address(eEth)).safeIncreaseAllowance(address(weEth), amount);
             uint256 receivedAmount = weEth.wrap(amount);
 
             IERC20(address(weEth)).safeTransfer(
