@@ -98,8 +98,8 @@ pub fn store_pools_created(map: tycho::GroupedTransactionProtocolComponents, sto
 
 /// Simply stores the `ProtocolComponent`s with the pool id as the key
 #[substreams::handlers::store]
-pub fn store_pool_tokens(map: tycho::GroupedTransactionProtocolComponents, store: StoreSetString) {
-    &map.tx_components
+pub fn store_pools_tokens(map: tycho::GroupedTransactionProtocolComponents, store: StoreSetString) {
+    map.tx_components
         .iter()
         .flat_map(|tx_components| &tx_components.components)
         .for_each(|component| {
@@ -120,7 +120,7 @@ pub fn store_pool_tokens(map: tycho::GroupedTransactionProtocolComponents, store
 #[substreams::handlers::map]
 pub fn map_balance_deltas(
     block: eth::v2::Block,
-    store: StoreGetInt64,
+    pools_store: StoreGetInt64,
     tokens_store: StoreGetString,
 ) -> Result<tycho::BalanceDeltas, anyhow::Error> {
     let mut deltas = block
@@ -130,7 +130,7 @@ pub fn map_balance_deltas(
             Some((log, event))
         })
         .filter(|(log, _)| {
-            store
+            pools_store
                 .get_last(format!("pool:{0}", hex::encode(&log.address())))
                 .is_some()
         })
@@ -163,7 +163,7 @@ pub fn map_balance_deltas(
                 Some((log, event))
             })
             .filter(|(log, _)| {
-                store
+                pools_store
                     .get_last(format!("pool:{0}", hex::encode(&log.address())))
                     .is_none()
             })
@@ -198,7 +198,7 @@ pub fn map_balance_deltas(
                 Some((log, event))
             })
             .filter(|(log, _)| {
-                store
+                pools_store
                     .get_last(format!("pool:{0}", hex::encode(&log.address())))
                     .is_none()
             })

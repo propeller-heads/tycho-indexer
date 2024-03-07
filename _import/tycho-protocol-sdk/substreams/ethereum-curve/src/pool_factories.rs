@@ -4,7 +4,7 @@ use substreams_ethereum::{Event, Function};
 use crate::abi;
 use crate::pb;
 use pb::tycho::evm::v1::{self as tycho};
-use substreams::{hex, log};
+use substreams::hex;
 
 use substreams::scalar::BigInt;
 
@@ -38,17 +38,6 @@ impl SerializableVecBigInt for Vec<BigInt> {
     }
 }
 
-/// This is the main function that handles the creation of `ProtocolComponent`s with `Attribute`s
-///  based on the specific factory address. There's 3 factory groups that are represented here:
-///  - Weighted Pool Factories
-///  - Linear Pool Factories
-///  - Stable Pool Factories
-/// (Balancer does have a bit more (esp. in the deprecated section) that could be implemented as
-///  desired.)
-/// We use the specific ABIs to decode both the log event and cooresponding call to gather
-///  `PoolCreated` event information alongside the `Create` calldata that provide us details to
-///  fufill both the required details + any extra `Attributes`
-/// Ref: https://docs.balancer.fi/reference/contracts/deployment-addresses/mainnet.html
 pub fn address_map(
     call_address: &[u8; 20],
     log: &Log,

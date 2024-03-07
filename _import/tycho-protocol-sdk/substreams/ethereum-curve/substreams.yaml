@@ -14,7 +14,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: target/wasm32-unknown-unknown/release/substreams_balancer.wasm
+    file: target/wasm32-unknown-unknown/release/substreams_curve.wasm
 
 modules:
   - name: map_pools_created
@@ -36,7 +36,7 @@ modules:
   - name: store_pools_tokens
     kind: store
     initialBlock: 19128828
-    updatePolicy: add
+    updatePolicy: set
     valueType: string
     inputs:
       - map: map_pools_created
@@ -47,6 +47,7 @@ modules:
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_pools_created
+      - store: store_pools_tokens
     output:
       type: proto:tycho.evm.v1.BalanceDeltas
 
