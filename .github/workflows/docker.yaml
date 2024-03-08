@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - patch/*
+      - tl/ENG-1690-add-build-and-release-steps
   release:
     types:
       - prereleased
