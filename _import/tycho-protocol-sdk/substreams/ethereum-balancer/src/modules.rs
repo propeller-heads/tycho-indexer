@@ -47,7 +47,7 @@ pub fn map_pools_created(
                     .logs_with_calls()
                     .filter(|(_, call)| !call.call.state_reverted)
                     .filter_map(|(log, call)| {
-                        Some(pool_factories::address_map(
+                        pool_factories::address_map(
                             call.call.address.as_slice(),
                             log,
                             call.call,
@@ -57,7 +57,7 @@ pub fn map_pools_created(
                                 to: tx.to.clone(),
                                 index: tx.index.into(),
                             },
-                        )?)
+                        )
                     })
                     .collect::<Vec<_>>();
 
@@ -204,6 +204,7 @@ pub fn map_changes(
         .map(|(store_delta, balance_delta)| {
             let pool_id = key::segment_at(&store_delta.key, 1);
             let token_id = key::segment_at(&store_delta.key, 3);
+
             (
                 balance_delta.tx.unwrap(),
                 tycho::BalanceChange {

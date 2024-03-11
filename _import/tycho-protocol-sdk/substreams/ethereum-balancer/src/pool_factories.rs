@@ -59,7 +59,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: create_call.tokens,
-                contracts: vec![pool_factory_address.into(), pool_created.pool],
+                contracts: vec![pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -74,7 +74,7 @@ pub fn address_map(
                 ],
                 change: tycho::ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "balancer".to_string(),
+                    name: "balancer_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
@@ -91,7 +91,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: create_call.tokens,
-                contracts: vec![pool_factory_address.into(), pool_created.pool],
+                contracts: vec![pool_created.pool],
                 static_att: vec![tycho::Attribute {
                     name: "pool_type".into(),
                     value: "ComposableStablePoolFactory".into(),
@@ -99,7 +99,7 @@ pub fn address_map(
                 }],
                 change: tycho::ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "balancer".to_string(),
+                    name: "balancer_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
@@ -116,7 +116,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_factory_address.into(), pool_created.pool],
+                contracts: vec![pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -133,7 +133,7 @@ pub fn address_map(
                 ],
                 change: tycho::ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "balancer".to_string(),
+                    name: "balancer_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
@@ -150,7 +150,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_factory_address.into(), pool_created.pool],
+                contracts: vec![pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -165,7 +165,7 @@ pub fn address_map(
                 ],
                 change: tycho::ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "balancer".to_string(),
+                    name: "balancer_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
@@ -229,7 +229,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_factory_address.into(), pool_created.pool],
+                contracts: vec![pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -244,7 +244,7 @@ pub fn address_map(
                 ],
                 change: tycho::ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "balancer".to_string(),
+                    name: "balancer_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
@@ -261,7 +261,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: vec![create_call.main_token, create_call.wrapped_token],
-                contracts: vec![pool_factory_address.into(), pool_created.pool],
+                contracts: vec![pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -276,7 +276,7 @@ pub fn address_map(
                 ],
                 change: tycho::ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "balancer".to_string(),
+                    name: "balancer_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
@@ -295,7 +295,7 @@ pub fn address_map(
             Some(tycho::ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
                 tokens: create_call.tokens,
-                contracts: vec![pool_factory_address.into(), pool_created.pool],
+                contracts: vec![pool_created.pool],
                 static_att: vec![
                     tycho::Attribute {
                         name: "pool_type".into(),
@@ -310,7 +310,7 @@ pub fn address_map(
                 ],
                 change: tycho::ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "balancer".to_string(),
+                    name: "balancer_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
