@@ -1,4 +1,9 @@
 // @generated
+// @@protoc_insertion_point(attribute:balancer)
+pub mod balancer {
+    include!("balancer.rs");
+    // @@protoc_insertion_point(balancer)
+}
 pub mod tycho {
     pub mod evm {
         // @@protoc_insertion_point(attribute:tycho.evm.v1)
