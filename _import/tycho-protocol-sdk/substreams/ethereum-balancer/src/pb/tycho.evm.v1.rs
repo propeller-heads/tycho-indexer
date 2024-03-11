@@ -51,6 +51,18 @@ pub struct Attribute {
     #[prost(enumeration="ChangeType", tag="3")]
     pub change: i32,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ProtocolType {
+    #[prost(string, tag="1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(enumeration="FinancialType", tag="2")]
+    pub financial_type: i32,
+    #[prost(message, repeated, tag="3")]
+    pub attribute_schema: ::prost::alloc::vec::Vec<Attribute>,
+    #[prost(enumeration="ImplementationType", tag="4")]
+    pub implementation_type: i32,
+}
 /// A struct describing a part of the protocol.
 /// Note: For example this can be a UniswapV2 pair, that tracks the two ERC20 tokens used by the pair, 
 /// the component would represent a single contract. In case of VM integration, such component would 
@@ -78,20 +90,12 @@ pub struct ProtocolComponent {
     /// Type of change the component underwent.
     #[prost(enumeration="ChangeType", tag="5")]
     pub change: i32,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TransactionProtocolComponents {
-    #[prost(message, optional, tag="1")]
+    /// / Represents the functionality of the component.
+    #[prost(message, optional, tag="6")]
+    pub protocol_type: ::core::option::Option<ProtocolType>,
+    /// Transaction where this component was created
+    #[prost(message, optional, tag="7")]
     pub tx: ::core::option::Option<Transaction>,
-    #[prost(message, repeated, tag="2")]
-    pub components: ::prost::alloc::vec::Vec<ProtocolComponent>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GroupedTransactionProtocolComponents {
-    #[prost(message, repeated, tag="1")]
-    pub tx_components: ::prost::alloc::vec::Vec<TransactionProtocolComponents>,
 }
 /// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
 /// Note that if a ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
@@ -105,38 +109,10 @@ pub struct BalanceChange {
     /// The new balance of the token.
     #[prost(bytes="vec", tag="2")]
     pub balance: ::prost::alloc::vec::Vec<u8>,
-    /// The id of the component whose TVL is tracked.
+    /// The id of the component whose TVL is tracked.  Note: This MUST be utf8 encoded.
     /// If the protocol component includes multiple contracts, the balance change must be aggregated to reflect how much tokens can be traded.
     #[prost(bytes="vec", tag="3")]
     pub component_id: ::prost::alloc::vec::Vec<u8>,
-}
-/// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
-/// Note that if a ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
-/// E.g. for UniswapV2 pair WETH/USDC, this tracks the USDC and WETH balance of the pair contract.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BalanceDelta {
-    #[prost(uint64, tag="1")]
-    pub ord: u64,
-    /// The tx hash of the transaction that caused the balance change.
-    #[prost(message, optional, tag="2")]
-    pub tx: ::core::option::Option<Transaction>,
-    /// The address of the ERC20 token whose balance changed.
-    #[prost(bytes="vec", tag="3")]
-    pub token: ::prost::alloc::vec::Vec<u8>,
-    /// The delta balance of the token.
-    #[prost(bytes="vec", tag="4")]
-    pub delta: ::prost::alloc::vec::Vec<u8>,
-    /// The id of the component whose TVL is tracked.
-    /// If the protocol component includes multiple contracts, the balance change must be aggregated to reflect how much tokens can be traded.
-    #[prost(bytes="vec", tag="5")]
-    pub component_id: ::prost::alloc::vec::Vec<u8>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BalanceDeltas {
-    #[prost(message, repeated, tag="1")]
-    pub balance_deltas: ::prost::alloc::vec::Vec<BalanceDelta>,
 }
 /// Enum to specify the type of a change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -167,6 +143,64 @@ impl ChangeType {
             "CHANGE_TYPE_UPDATE" => Some(Self::Update),
             "CHANGE_TYPE_CREATION" => Some(Self::Creation),
             "CHANGE_TYPE_DELETION" => Some(Self::Deletion),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FinancialType {
+    Swap = 0,
+    Lend = 1,
+    Leverage = 2,
+    Psm = 3,
+}
+impl FinancialType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            FinancialType::Swap => "SWAP",
+            FinancialType::Lend => "LEND",
+            FinancialType::Leverage => "LEVERAGE",
+            FinancialType::Psm => "PSM",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SWAP" => Some(Self::Swap),
+            "LEND" => Some(Self::Lend),
+            "LEVERAGE" => Some(Self::Leverage),
+            "PSM" => Some(Self::Psm),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ImplementationType {
+    Vm = 0,
+    Custom = 1,
+}
+impl ImplementationType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ImplementationType::Vm => "VM",
+            ImplementationType::Custom => "CUSTOM",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VM" => Some(Self::Vm),
+            "CUSTOM" => Some(Self::Custom),
             _ => None,
         }
     }
@@ -232,5 +266,45 @@ pub struct BlockContractChanges {
     /// The set of transaction changes observed in the specified block.
     #[prost(message, repeated, tag="2")]
     pub changes: ::prost::alloc::vec::Vec<TransactionContractChanges>,
+}
+/// A struct for following the changes of Total Value Locked (TVL).
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BalanceDelta {
+    #[prost(uint64, tag="1")]
+    pub ord: u64,
+    /// The tx hash of the transaction that caused the balance change.
+    #[prost(message, optional, tag="2")]
+    pub tx: ::core::option::Option<Transaction>,
+    /// The address of the ERC20 token whose balance changed.
+    #[prost(bytes="vec", tag="3")]
+    pub token: ::prost::alloc::vec::Vec<u8>,
+    /// The delta balance of the token.
+    #[prost(bytes="vec", tag="4")]
+    pub delta: ::prost::alloc::vec::Vec<u8>,
+    /// The id of the component whose TVL is tracked.
+    /// If the protocol component includes multiple contracts, the balance change must be aggregated to reflect how much tokens can be traded.
+    #[prost(bytes="vec", tag="5")]
+    pub component_id: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BalanceDeltas {
+    #[prost(message, repeated, tag="1")]
+    pub balance_deltas: ::prost::alloc::vec::Vec<BalanceDelta>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionProtocolComponents {
+    #[prost(message, optional, tag="1")]
+    pub tx: ::core::option::Option<Transaction>,
+    #[prost(message, repeated, tag="2")]
+    pub components: ::prost::alloc::vec::Vec<ProtocolComponent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GroupedTransactionProtocolComponents {
+    #[prost(message, repeated, tag="1")]
+    pub tx_components: ::prost::alloc::vec::Vec<TransactionProtocolComponents>,
 }
 // @@protoc_insertion_point(module)

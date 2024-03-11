@@ -3,6 +3,7 @@ use substreams_ethereum::{Event, Function};
 
 use crate::abi;
 use crate::pb;
+use crate::pb::tycho::evm::v1::{FinancialType, ImplementationType, ProtocolType, Transaction};
 use pb::tycho::evm::v1::{self as tycho};
 use substreams::hex;
 
@@ -13,6 +14,7 @@ use substreams::scalar::BigInt;
 ///  handled by any downstream application.
 trait SerializableVecBigInt {
     fn serialize_bytes(&self) -> Vec<u8>;
+    #[allow(dead_code)]
     fn deserialize_bytes(bytes: &[u8]) -> Vec<BigInt>;
 }
 
@@ -25,7 +27,7 @@ impl SerializableVecBigInt for Vec<BigInt> {
     fn deserialize_bytes(bytes: &[u8]) -> Vec<BigInt> {
         bytes
             .chunks_exact(32)
-            .map(|chunk| BigInt::from_signed_bytes_be(chunk))
+            .map(BigInt::from_signed_bytes_be)
             .collect::<Vec<BigInt>>()
     }
 }
@@ -45,6 +47,7 @@ pub fn address_map(
     pool_factory_address: &[u8],
     log: &Log,
     call: &Call,
+    tx: &Transaction,
 ) -> Option<tycho::ProtocolComponent> {
     match *pool_factory_address {
         hex!("897888115Ada5773E02aA29F775430BFB5F34c51") => {
@@ -70,6 +73,13 @@ pub fn address_map(
                     },
                 ],
                 change: tycho::ChangeType::Creation.into(),
+                protocol_type: Some(ProtocolType {
+                    name: "balancer".to_string(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+                tx: Some(tx.clone()),
             })
         }
         hex!("DB8d758BCb971e482B2C45f7F8a7740283A1bd3A") => {
@@ -82,14 +92,19 @@ pub fn address_map(
                 id: hex::encode(&pool_created.pool),
                 tokens: create_call.tokens,
                 contracts: vec![pool_factory_address.into(), pool_created.pool],
-                static_att: vec![
-                    tycho::Attribute {
-                        name: "pool_type".into(),
-                        value: "ComposableStablePoolFactory".into(),
-                        change: tycho::ChangeType::Creation.into(),
-                    },
-                ],
+                static_att: vec![tycho::Attribute {
+                    name: "pool_type".into(),
+                    value: "ComposableStablePoolFactory".into(),
+                    change: tycho::ChangeType::Creation.into(),
+                }],
                 change: tycho::ChangeType::Creation.into(),
+                protocol_type: Some(ProtocolType {
+                    name: "balancer".to_string(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+                tx: Some(tx.clone()),
             })
         }
         hex!("813EE7a840CE909E7Fea2117A44a90b8063bd4fd") => {
@@ -117,6 +132,13 @@ pub fn address_map(
                     // Note, rate provider might be provided as `create.protocol_id`, but as a BigInt. needs investigation
                 ],
                 change: tycho::ChangeType::Creation.into(),
+                protocol_type: Some(ProtocolType {
+                    name: "balancer".to_string(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+                tx: Some(tx.clone()),
             })
         }
         hex!("5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347") => {
@@ -142,6 +164,13 @@ pub fn address_map(
                     },
                 ],
                 change: tycho::ChangeType::Creation.into(),
+                protocol_type: Some(ProtocolType {
+                    name: "balancer".to_string(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+                tx: Some(tx.clone()),
             })
         }
         // ❌ Reading the deployed factory for Gearbox showcases that it's currently disabled
@@ -214,6 +243,13 @@ pub fn address_map(
                     },
                 ],
                 change: tycho::ChangeType::Creation.into(),
+                protocol_type: Some(ProtocolType {
+                    name: "balancer".to_string(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+                tx: Some(tx.clone()),
             })
         }
         hex!("5F5222Ffa40F2AEd6380D022184D6ea67C776eE0") => {
@@ -239,6 +275,13 @@ pub fn address_map(
                     },
                 ],
                 change: tycho::ChangeType::Creation.into(),
+                protocol_type: Some(ProtocolType {
+                    name: "balancer".to_string(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+                tx: Some(tx.clone()),
             })
         }
         // The `WeightedPool2TokenFactory` is a deprecated contract but we've included it since one
@@ -266,6 +309,13 @@ pub fn address_map(
                     },
                 ],
                 change: tycho::ChangeType::Creation.into(),
+                protocol_type: Some(ProtocolType {
+                    name: "balancer".to_string(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: vec![],
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+                tx: Some(tx.clone()),
             })
         }
         _ => None,

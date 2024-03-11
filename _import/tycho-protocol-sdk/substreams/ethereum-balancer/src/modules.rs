@@ -17,6 +17,7 @@ use pb::tycho::evm::v1::{self as tycho};
 
 use contract_changes::extract_contract_changes;
 
+use crate::pb::tycho::evm::v1::{BalanceDeltas, GroupedTransactionProtocolComponents};
 use crate::{abi, contract_changes, pb, pool_factories};
 
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
@@ -50,6 +51,12 @@ pub fn map_pools_created(
                             call.call.address.as_slice(),
                             log,
                             call.call,
+                            &tycho::Transaction {
+                                hash: tx.hash.clone(),
+                                from: tx.from.clone(),
+                                to: tx.to.clone(),
+                                index: tx.index.into(),
+                            },
                         )?)
                     })
                     .collect::<Vec<_>>();
@@ -156,8 +163,8 @@ pub fn store_balance_changes(deltas: tycho::BalanceDeltas, store: StoreAddBigInt
 #[substreams::handlers::map]
 pub fn map_changes(
     block: eth::v2::Block,
-    grouped_components: tycho::GroupedTransactionProtocolComponents,
-    deltas: tycho::BalanceDeltas,
+    grouped_components: GroupedTransactionProtocolComponents,
+    deltas: BalanceDeltas,
     components_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
 ) -> Result<tycho::BlockContractChanges> {

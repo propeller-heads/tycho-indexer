@@ -25,6 +25,7 @@ message Transaction {
   // The receiver of the transaction.
   bytes to = 3;
   // The transactions index within the block.
+  // TODO: should this be uint32? to match the type from the native substream type?
   uint64 index = 4;
 }
 
@@ -47,6 +48,26 @@ message Attribute {
   ChangeType change = 3;
 }
 
+enum FinancialType{
+  SWAP = 0;
+  LEND = 1;
+  LEVERAGE = 2;
+  PSM = 3;
+}
+
+
+enum ImplementationType {
+  VM = 0;
+  CUSTOM = 1;
+}
+
+message ProtocolType{
+  string name = 1;
+  FinancialType financial_type = 2;
+  repeated Attribute attribute_schema = 3;
+  ImplementationType implementation_type = 4;
+}
+
 // A struct describing a part of the protocol.
 // Note: For example this can be a UniswapV2 pair, that tracks the two ERC20 tokens used by the pair, 
 // the component would represent a single contract. In case of VM integration, such component would 
@@ -67,6 +88,10 @@ message ProtocolComponent {
   repeated Attribute static_att = 4;
   // Type of change the component underwent.
   ChangeType change = 5;
+  /// Represents the functionality of the component.
+  ProtocolType protocol_type = 6;
+  // Transaction where this component was created
+  Transaction tx = 7;
 }
 
 // A struct for following the changes of Total Value Locked (TVL) of a protocol component.
@@ -77,7 +102,7 @@ message BalanceChange {
   bytes token = 1;
   // The new balance of the token.
   bytes balance = 2;
-  // The id of the component whose TVL is tracked.
+  // The id of the component whose TVL is tracked.  Note: This MUST be utf8 encoded.
   // If the protocol component includes multiple contracts, the balance change must be aggregated to reflect how much tokens can be traded.
   bytes component_id = 3;
 }
