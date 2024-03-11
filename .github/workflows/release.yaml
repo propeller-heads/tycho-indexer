@@ -1,0 +1,38 @@
+# When a release is created, this workflow will build and upload the tycho-client binary to the release.
+name: Release
+
+on:
+  release:
+    types: [ created ]
+  push:
+    branches:
+      - tl/ENG-1690-add-build-and-release-steps
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-assets:
+    needs: create-release
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
+          # Note that glob pattern is not supported yet.
+          bin: tycho-client
+          tar: all
+          zip: none
+          token: ${{ secrets.GITHUB_TOKEN }}
