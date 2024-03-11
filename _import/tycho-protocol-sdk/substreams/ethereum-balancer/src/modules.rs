@@ -102,7 +102,7 @@ pub fn map_balance_deltas(
 ) -> Result<tycho::BalanceDeltas, anyhow::Error> {
     Ok(tycho::BalanceDeltas {
         balance_deltas: block
-            .events::<abi::vault::events::PoolBalanceChanged>(&[&VAULT_ADDRESS])
+            .events::<abi::vault::events::PoolBalanceChanged>(&[VAULT_ADDRESS])
             .flat_map(|(event, log)| {
                 event
                     .tokens
@@ -111,12 +111,7 @@ pub fn map_balance_deltas(
                     .filter_map(|(token, delta)| {
                         let component_id: Vec<_> = event.pool_id.into();
 
-                        if store
-                            .get_last(format!("pool:{0}", hex::encode(&component_id)))
-                            .is_none()
-                        {
-                            return None;
-                        }
+                        store.get_last(format!("pool:{0}", hex::encode(&component_id)))?;
 
                         Some(tycho::BalanceDelta {
                             ord: log.log.ordinal,
@@ -253,7 +248,7 @@ pub fn map_changes(
         }),
         changes: transaction_contract_changes
             .drain()
-            .sorted_unstable_by_key(|(index, _)| index.clone())
+            .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, change)| {
                 if change.contract_changes.is_empty()
                     && change.component_changes.is_empty()

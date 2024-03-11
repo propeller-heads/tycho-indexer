@@ -8,6 +8,7 @@ fn main() -> Result<()> {
 
     let files = fs::read_dir(abi_folder)?;
     let mut mod_rs_content = String::new();
+    mod_rs_content.push_str("#![allow(clippy::all)]\n");
 
     for file in files {
         let file = file?;
