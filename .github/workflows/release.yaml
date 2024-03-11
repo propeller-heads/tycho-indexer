@@ -5,8 +5,8 @@ on:
   release:
     types: [ created ]
   push:
-    branches:
-      - tl/ENG-1690-add-build-and-release-steps
+    tags:
+      - v[0-9]+.*
 
 permissions:
   contents: write
