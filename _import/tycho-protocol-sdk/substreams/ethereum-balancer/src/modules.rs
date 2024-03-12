@@ -17,7 +17,10 @@ use pb::tycho::evm::v1::{self as tycho};
 
 use contract_changes::extract_contract_changes;
 
-use crate::pb::balancer::{BalanceDelta, BalanceDeltas, GroupedTransactionProtocolComponents, TransactionProtocolComponents};
+use crate::pb::balancer::{
+    BalanceDelta, BalanceDeltas, GroupedTransactionProtocolComponents,
+    TransactionProtocolComponents,
+};
 use crate::{abi, contract_changes, pb, pool_factories};
 
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
@@ -34,9 +37,7 @@ impl PartialEq for TransactionWrapper {
 }
 
 #[substreams::handlers::map]
-pub fn map_pools_created(
-    block: eth::v2::Block,
-) -> Result<GroupedTransactionProtocolComponents> {
+pub fn map_pools_created(block: eth::v2::Block) -> Result<GroupedTransactionProtocolComponents> {
     // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
     // We store these as a hashmap by tx hash since we need to agg by tx hash later
     Ok(GroupedTransactionProtocolComponents {
@@ -109,7 +110,7 @@ pub fn map_balance_deltas(
                     .iter()
                     .zip(event.deltas.iter())
                     .filter_map(|(token, delta)| {
-                        let component_id: Vec<_> = event.pool_id.into();
+                        let component_id = event.pool_id[..20].to_vec();
 
                         store.get_last(format!("pool:{0}", hex::encode(&component_id)))?;
 
@@ -119,11 +120,11 @@ pub fn map_balance_deltas(
                                 hash: log.receipt.transaction.hash.clone(),
                                 from: log.receipt.transaction.from.clone(),
                                 to: log.receipt.transaction.to.clone(),
-                                index: Into::<u64>::into(log.receipt.transaction.index),
+                                index: log.receipt.transaction.index.into(),
                             }),
-                            token: token.clone(),
+                            token: token.to_vec(),
                             delta: delta.to_signed_bytes_be(),
-                            component_id: component_id.clone(),
+                            component_id,
                         })
                     })
                     .collect::<Vec<_>>()
