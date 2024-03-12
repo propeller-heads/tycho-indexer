@@ -100,7 +100,7 @@ message ProtocolComponent {
 message BalanceChange {
   // The address of the ERC20 token whose balance changed.
   bytes token = 1;
-  // The new balance of the token.
+  // The new balance of the token. Note: it must be a big endian encoded int.
   bytes balance = 2;
   // The id of the component whose TVL is tracked.  Note: This MUST be utf8 encoded.
   // If the protocol component includes multiple contracts, the balance change must be aggregated to reflect how much tokens can be traded.

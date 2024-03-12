@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use anyhow::Result;
 use substreams::hex;
@@ -200,12 +201,17 @@ pub fn map_changes(
         .map(|(store_delta, balance_delta)| {
             let pool_id = key::segment_at(&store_delta.key, 1);
             let token_id = key::segment_at(&store_delta.key, 3);
+            // store_delta.new_value is an ASCII string representing an integer
+            let ascii_string =
+                String::from_utf8(store_delta.new_value.clone()).expect("Invalid UTF-8 sequence");
+            let balance = BigInt::from_str(&ascii_string).expect("Failed to parse integer");
+            let big_endian_bytes_balance = balance.to_bytes_be().1;
 
             (
                 balance_delta.tx.unwrap(),
                 tycho::BalanceChange {
                     token: hex::decode(token_id).expect("Token ID not valid hex"),
-                    balance: store_delta.new_value,
+                    balance: big_endian_bytes_balance,
                     component_id: hex::decode(pool_id).expect("Token ID not valid hex"),
                 },
             )
