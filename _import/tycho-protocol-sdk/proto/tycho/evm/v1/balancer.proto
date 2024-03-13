@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package balancer;
+package tycho.evm.v1;
 
 import "tycho/evm/v1/common.proto";
 
@@ -8,7 +8,7 @@ import "tycho/evm/v1/common.proto";
 message BalanceDelta {
   uint64 ord = 1;
   // The tx hash of the transaction that caused the balance change.
-  tycho.evm.v1.Transaction tx = 2;
+  Transaction tx = 2;
   // The address of the ERC20 token whose balance changed.
   bytes token = 3;
   // The delta balance of the token.
@@ -23,8 +23,8 @@ message BalanceDeltas {
 }
 
 message TransactionProtocolComponents {
-  tycho.evm.v1.Transaction tx = 1;
-  repeated tycho.evm.v1.ProtocolComponent components = 2;
+  Transaction tx = 1;
+  repeated ProtocolComponent components = 2;
 }
 
 message GroupedTransactionProtocolComponents {

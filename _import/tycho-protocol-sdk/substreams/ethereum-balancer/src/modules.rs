@@ -14,16 +14,14 @@ use substreams::scalar::BigInt;
 use substreams_ethereum::pb::eth;
 
 use itertools::Itertools;
-use pb::tycho::evm::v1::{self as tycho};
+
 
 use contract_changes::extract_contract_changes;
 use substreams_ethereum::Event;
 
-use crate::pb::balancer::{
-    BalanceDelta, BalanceDeltas, GroupedTransactionProtocolComponents,
-    TransactionProtocolComponents,
-};
-use crate::{abi, contract_changes, pb, pool_factories};
+use crate::pb::tycho::evm::v1::{self as tycho};
+use crate::pb::tycho::evm::v1::{BalanceDelta, BalanceDeltas, GroupedTransactionProtocolComponents, TransactionProtocolComponents};
+use crate::{abi, contract_changes, pool_factories};
 
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
