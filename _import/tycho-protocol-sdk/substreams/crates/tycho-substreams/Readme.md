@@ -13,6 +13,6 @@ directory:
 ```bash
 buf generate \
   --path tycho \
-  --template ../crates/tycho-substreams/buf.gen.yaml \
-  --output ../crates/tycho-substreams/ 
+  --template ../substreams/crates/tycho-substreams/buf.gen.yaml \
+  --output ../substreams/crates/tycho-substreams/ 
 ```

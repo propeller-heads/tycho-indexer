@@ -1,6 +1,9 @@
-name: test
+name: test evm
 
-on: workflow_dispatch
+on:
+  push:
+    paths:
+      - "evm/**"
 
 env:
   FOUNDRY_PROFILE: ci
