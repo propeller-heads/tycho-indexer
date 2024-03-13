@@ -18,17 +18,6 @@ use tycho_substreams::pb::tycho::evm::v1::{
 
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
-/// This struct purely exists to spoof the `PartialEq` trait for `Transaction` so we can use it in
-///  a later groupby operation.
-#[derive(Debug)]
-struct TransactionWrapper(tycho::Transaction);
-
-impl PartialEq for TransactionWrapper {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.hash == other.0.hash
-    }
-}
-
 #[substreams::handlers::map]
 pub fn map_pools_created(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
     // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
