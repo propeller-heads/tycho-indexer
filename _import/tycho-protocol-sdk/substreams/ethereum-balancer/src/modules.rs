@@ -9,12 +9,9 @@ use substreams::store::{
 };
 use substreams_ethereum::pb::eth;
 use substreams_ethereum::Event;
-use tycho_substreams::balances;
+use tycho_substreams::balances::aggregate_balances_changes;
 use tycho_substreams::contract::extract_contract_changes;
-use tycho_substreams::pb::tycho::evm::v1::{
-    self as tycho, BalanceDelta, BlockBalanceDeltas, BlockTransactionProtocolComponents,
-    TransactionProtocolComponents,
-};
+use tycho_substreams::prelude::*;
 
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
@@ -145,7 +142,7 @@ pub fn map_balance_deltas(
 ///  store key to ensure that there's a unique balance being tallied for each.
 #[substreams::handlers::store]
 pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
-    balances::store_balance_changes(deltas, store);
+    tycho_substreams::balances::store_balance_changes(deltas, store);
 }
 
 /// This is the main map that handles most of the indexing of this substream.
@@ -161,11 +158,10 @@ pub fn map_changes(
     deltas: BlockBalanceDeltas,
     components_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
-) -> Result<tycho::BlockContractChanges> {
+) -> Result<BlockContractChanges> {
     // We merge contract changes by transaction (identified by transaction index) making it easy to
     //  sort them at the very end.
-    let mut transaction_contract_changes: HashMap<_, tycho::TransactionContractChanges> =
-        HashMap::new();
+    let mut transaction_contract_changes: HashMap<_, TransactionContractChanges> = HashMap::new();
 
     // `ProtocolComponents` are gathered from `map_pools_created` which just need a bit of work to
     //   convert into `TransactionContractChanges`
@@ -176,7 +172,7 @@ pub fn map_changes(
             let tx = tx_component.tx.as_ref().unwrap();
             transaction_contract_changes
                 .entry(tx.index)
-                .or_insert_with(|| tycho::TransactionContractChanges::new(&tx))
+                .or_insert_with(|| TransactionContractChanges::new(&tx))
                 .component_changes
                 .extend_from_slice(&tx_component.components);
         });
@@ -185,12 +181,12 @@ pub fn map_changes(
     //  `BlockBalanceDeltas`. We essentially just process the changes that occurred to the `store` this
     //  block. Then, these balance changes are merged onto the existing map of tx contract changes,
     //  inserting a new one if it doesn't exist.
-    balances::aggregate_balances_changes(balance_store, deltas)
+    aggregate_balances_changes(balance_store, deltas)
         .into_iter()
         .for_each(|(_, (tx, balances))| {
             transaction_contract_changes
                 .entry(tx.index)
-                .or_insert_with(|| tycho::TransactionContractChanges::new(&tx))
+                .or_insert_with(|| TransactionContractChanges::new(&tx))
                 .balance_changes
                 .extend(balances.into_iter().map(|(_, change)| change));
         });
@@ -208,7 +204,7 @@ pub fn map_changes(
 
     // Process all `transaction_contract_changes` for final output in the `BlockContractChanges`,
     //  sorted by transaction index (the key).
-    Ok(tycho::BlockContractChanges {
+    Ok(BlockContractChanges {
         block: Some((&block).into()),
         changes: transaction_contract_changes
             .drain()

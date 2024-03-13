@@ -1,11 +1,9 @@
-use substreams_ethereum::pb::eth::v2::{Call, Log};
-use substreams_ethereum::{Event, Function};
-
 use crate::abi;
 use substreams::hex;
-use tycho_substreams::pb::tycho::evm::v1::{ImplementationType, ProtocolComponent, Transaction};
-
 use substreams::scalar::BigInt;
+use substreams_ethereum::pb::eth::v2::{Call, Log};
+use substreams_ethereum::{Event, Function};
+use tycho_substreams::prelude::*;
 
 /// This trait defines some helpers for serializing and deserializing `Vec<BigInt` which is needed
 ///  to be able to encode the `normalized_weights` and `weights` `Attribute`s. This should also be
