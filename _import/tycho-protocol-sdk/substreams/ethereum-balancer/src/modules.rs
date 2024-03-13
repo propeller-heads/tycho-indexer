@@ -34,24 +34,14 @@ pub fn map_pools_created(block: eth::v2::Block) -> Result<BlockTransactionProtoc
                             call.call.address.as_slice(),
                             log,
                             call.call,
-                            &tycho::Transaction {
-                                hash: tx.hash.clone(),
-                                from: tx.from.clone(),
-                                to: tx.to.clone(),
-                                index: tx.index.into(),
-                            },
+                            &(tx.into()),
                         )
                     })
                     .collect::<Vec<_>>();
 
                 if !components.is_empty() {
                     Some(TransactionProtocolComponents {
-                        tx: Some(tycho::Transaction {
-                            hash: tx.hash.clone(),
-                            from: tx.from.clone(),
-                            to: tx.to.clone(),
-                            index: Into::<u64>::into(tx.index),
-                        }),
+                        tx: Some(tx.into()),
                         components,
                     })
                 } else {
@@ -106,12 +96,7 @@ pub fn map_balance_deltas(
                     for (token, delta) in ev.tokens.iter().zip(ev.deltas.iter()) {
                         deltas.push(BalanceDelta {
                             ord: vault_log.ordinal(),
-                            tx: Some(tycho::Transaction {
-                                hash: vault_log.receipt.transaction.hash.clone(),
-                                from: vault_log.receipt.transaction.from.clone(),
-                                to: vault_log.receipt.transaction.to.clone(),
-                                index: vault_log.receipt.transaction.index.into(),
-                            }),
+                            tx: Some(vault_log.receipt.transaction.into()),
                             token: token.to_vec(),
                             delta: delta.to_signed_bytes_be(),
                             component_id: component_id.clone(),
@@ -133,24 +118,14 @@ pub fn map_balance_deltas(
                     deltas.extend_from_slice(&[
                         BalanceDelta {
                             ord: vault_log.ordinal(),
-                            tx: Some(tycho::Transaction {
-                                hash: vault_log.receipt.transaction.hash.clone(),
-                                from: vault_log.receipt.transaction.from.clone(),
-                                to: vault_log.receipt.transaction.to.clone(),
-                                index: vault_log.receipt.transaction.index.into(),
-                            }),
+                            tx: Some(vault_log.receipt.transaction.into()),
                             token: ev.token_in.to_vec(),
                             delta: ev.amount_in.to_signed_bytes_be(),
                             component_id: component_id.clone(),
                         },
                         BalanceDelta {
                             ord: vault_log.ordinal(),
-                            tx: Some(tycho::Transaction {
-                                hash: vault_log.receipt.transaction.hash.clone(),
-                                from: vault_log.receipt.transaction.from.clone(),
-                                to: vault_log.receipt.transaction.to.clone(),
-                                index: vault_log.receipt.transaction.index.into(),
-                            }),
+                            tx: Some(vault_log.receipt.transaction.into()),
                             token: ev.token_out.to_vec(),
                             delta: ev.amount_out.neg().to_signed_bytes_be(),
                             component_id,
@@ -234,17 +209,7 @@ pub fn map_changes(
     // Process all `transaction_contract_changes` for final output in the `BlockContractChanges`,
     //  sorted by transaction index (the key).
     Ok(tycho::BlockContractChanges {
-        block: Some(tycho::Block {
-            number: block.number,
-            hash: block.hash.clone(),
-            parent_hash: block
-                .header
-                .as_ref()
-                .expect("Block header not present")
-                .parent_hash
-                .clone(),
-            ts: block.timestamp_seconds(),
-        }),
+        block: Some((&block).into()),
         changes: transaction_contract_changes
             .drain()
             .sorted_unstable_by_key(|(index, _)| *index)

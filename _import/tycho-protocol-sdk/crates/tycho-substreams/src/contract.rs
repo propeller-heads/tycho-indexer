@@ -7,12 +7,19 @@
 use std::collections::HashMap;
 
 use substreams_ethereum::pb::eth;
+use substreams_ethereum::pb::eth::v2::StorageChange;
 
 use crate::pb::tycho::evm::v1::{self as tycho};
 
 struct SlotValue {
     new_value: Vec<u8>,
     start_value: Vec<u8>,
+}
+
+impl From<&StorageChange> for SlotValue {
+    fn from(change: &StorageChange) -> Self {
+        Self { new_value: change.new_value.clone(), start_value: change.old_value.clone() }
+    }
 }
 
 impl SlotValue {
@@ -28,6 +35,22 @@ struct InterimContractChange {
     code: Vec<u8>,
     slots: HashMap<Vec<u8>, SlotValue>,
     change: tycho::ChangeType,
+}
+
+impl InterimContractChange {
+    fn new(address: &[u8], creation: bool) -> Self {
+        Self {
+            address: address.to_vec(),
+            balance: vec![],
+            code: vec![],
+            slots: Default::default(),
+            change: if creation {
+                tycho::ChangeType::Creation.into()
+            } else {
+                tycho::ChangeType::Update.into()
+            },
+        }
+    }
 }
 
 impl From<InterimContractChange> for tycho::ContractChange {
@@ -90,28 +113,20 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
             storage_changes
                 .iter()
                 .filter(|changes| inclusion_predicate(&changes.address))
-                .for_each(|storage_change| {
+                .for_each(|&storage_change| {
                     let contract_change = changed_contracts
                         .entry(storage_change.address.clone())
-                        .or_insert_with(|| InterimContractChange {
-                            address: storage_change.address.clone(),
-                            balance: Vec::new(),
-                            code: Vec::new(),
-                            slots: HashMap::new(),
-                            change: if created_accounts.contains_key(&storage_change.address) {
-                                tycho::ChangeType::Creation
-                            } else {
-                                tycho::ChangeType::Update
-                            },
+                        .or_insert_with(|| {
+                            InterimContractChange::new(
+                                &storage_change.address,
+                                created_accounts.contains_key(&storage_change.address),
+                            )
                         });
 
                     let slot_value = contract_change
                         .slots
                         .entry(storage_change.key.clone())
-                        .or_insert_with(|| SlotValue {
-                            new_value: storage_change.new_value.clone(),
-                            start_value: storage_change.old_value.clone(),
-                        });
+                        .or_insert_with(|| storage_change.into());
 
                     slot_value
                         .new_value
@@ -124,16 +139,11 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
                 .for_each(|balance_change| {
                     let contract_change = changed_contracts
                         .entry(balance_change.address.clone())
-                        .or_insert_with(|| InterimContractChange {
-                            address: balance_change.address.clone(),
-                            balance: Vec::new(),
-                            code: Vec::new(),
-                            slots: HashMap::new(),
-                            change: if created_accounts.contains_key(&balance_change.address) {
-                                tycho::ChangeType::Creation
-                            } else {
-                                tycho::ChangeType::Update
-                            },
+                        .or_insert_with(|| {
+                            InterimContractChange::new(
+                                &balance_change.address,
+                                created_accounts.contains_key(&balance_change.address),
+                            )
                         });
 
                     if let Some(new_balance) = &balance_change.new_value {
@@ -150,16 +160,11 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
                 .for_each(|code_change| {
                     let contract_change = changed_contracts
                         .entry(code_change.address.clone())
-                        .or_insert_with(|| InterimContractChange {
-                            address: code_change.address.clone(),
-                            balance: Vec::new(),
-                            code: Vec::new(),
-                            slots: HashMap::new(),
-                            change: if created_accounts.contains_key(&code_change.address) {
-                                tycho::ChangeType::Creation
-                            } else {
-                                tycho::ChangeType::Update
-                            },
+                        .or_insert_with(|| {
+                            InterimContractChange::new(
+                                &code_change.address,
+                                created_accounts.contains_key(&code_change.address),
+                            )
                         });
 
                     contract_change.code.clear();
@@ -174,17 +179,7 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
             {
                 transaction_contract_changes
                     .entry(block_tx.index.into())
-                    .or_insert_with(|| tycho::TransactionContractChanges {
-                        tx: Some(tycho::Transaction {
-                            hash: block_tx.hash.clone(),
-                            from: block_tx.from.clone(),
-                            to: block_tx.to.clone(),
-                            index: block_tx.index as u64,
-                        }),
-                        contract_changes: vec![],
-                        component_changes: vec![],
-                        balance_changes: vec![],
-                    })
+                    .or_insert_with(|| tycho::TransactionContractChanges::new(&(block_tx.into())))
                     .contract_changes
                     .extend(
                         changed_contracts
