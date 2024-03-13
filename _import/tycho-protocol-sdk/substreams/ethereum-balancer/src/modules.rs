@@ -14,16 +14,14 @@ use substreams::scalar::BigInt;
 use substreams_ethereum::pb::eth;
 
 use itertools::Itertools;
-use pb::tycho::evm::v1::{self as tycho};
+
 
 use contract_changes::extract_contract_changes;
 use substreams_ethereum::Event;
 
-use crate::pb::balancer::{
-    BalanceDelta, BalanceDeltas, GroupedTransactionProtocolComponents,
-    TransactionProtocolComponents,
-};
-use crate::{abi, contract_changes, pb, pool_factories};
+use crate::pb::tycho::evm::v1::{self as tycho};
+use crate::pb::tycho::evm::v1::{BalanceDelta, BlockBalanceDeltas, BlockTransactionProtocolComponents, TransactionProtocolComponents};
+use crate::{abi, contract_changes, pool_factories};
 
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
@@ -39,10 +37,10 @@ impl PartialEq for TransactionWrapper {
 }
 
 #[substreams::handlers::map]
-pub fn map_pools_created(block: eth::v2::Block) -> Result<GroupedTransactionProtocolComponents> {
+pub fn map_pools_created(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
     // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
     // We store these as a hashmap by tx hash since we need to agg by tx hash later
-    Ok(GroupedTransactionProtocolComponents {
+    Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
             .filter_map(|tx| {
@@ -84,7 +82,7 @@ pub fn map_pools_created(block: eth::v2::Block) -> Result<GroupedTransactionProt
 
 /// Simply stores the `ProtocolComponent`s with the pool id as the key
 #[substreams::handlers::store]
-pub fn store_pools_created(map: GroupedTransactionProtocolComponents, store: StoreAddInt64) {
+pub fn store_pools_created(map: BlockTransactionProtocolComponents, store: StoreAddInt64) {
     store.add_many(
         0,
         &map.tx_components
@@ -102,7 +100,7 @@ pub fn store_pools_created(map: GroupedTransactionProtocolComponents, store: Sto
 pub fn map_balance_deltas(
     block: eth::v2::Block,
     store: StoreGetInt64,
-) -> Result<BalanceDeltas, anyhow::Error> {
+) -> Result<BlockBalanceDeltas, anyhow::Error> {
     let balance_deltas = block
         .logs()
         .filter(|log| log.address() == VAULT_ADDRESS)
@@ -171,13 +169,13 @@ pub fn map_balance_deltas(
         })
         .collect::<Vec<_>>();
 
-    Ok(BalanceDeltas { balance_deltas })
+    Ok(BlockBalanceDeltas { balance_deltas })
 }
 
 /// It's significant to include both the `pool_id` and the `token_id` for each balance delta as the
 ///  store key to ensure that there's a unique balance being tallied for each.
 #[substreams::handlers::store]
-pub fn store_balance_changes(deltas: BalanceDeltas, store: StoreAddBigInt) {
+pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
     deltas.balance_deltas.iter().for_each(|delta| {
         store.add(
             delta.ord,
@@ -200,8 +198,8 @@ pub fn store_balance_changes(deltas: BalanceDeltas, store: StoreAddBigInt) {
 #[substreams::handlers::map]
 pub fn map_changes(
     block: eth::v2::Block,
-    grouped_components: GroupedTransactionProtocolComponents,
-    deltas: BalanceDeltas,
+    grouped_components: BlockTransactionProtocolComponents,
+    deltas: BlockBalanceDeltas,
     components_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
 ) -> Result<tycho::BlockContractChanges> {
@@ -231,7 +229,7 @@ pub fn map_changes(
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `PoolBalanceChanged` creating
-    //  `BalanceDeltas`. We essentially just process the changes that occured to the `store` this
+    //  `BlockBalanceDeltas`. We essentially just process the changes that occured to the `store` this
     //  block. Then, these balance changes are merged onto the existing map of tx contract changes,
     //  inserting a new one if it doesn't exist.
     balance_store

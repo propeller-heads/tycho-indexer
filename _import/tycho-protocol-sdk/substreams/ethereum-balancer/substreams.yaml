@@ -7,10 +7,9 @@ protobuf:
   files:
     - tycho/evm/v1/vm.proto
     - tycho/evm/v1/common.proto
-    - balancer.proto
+    - tycho/evm/v1/utils.proto
   importPaths:
     - ../../proto
-    - ./proto
 
 binaries:
   default:
