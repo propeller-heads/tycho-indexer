@@ -8,6 +8,7 @@ pub mod tycho {
             // @@protoc_insertion_point(tycho.evm.v1)
 
             impl TransactionContractChanges {
+                /// Creates a new empty `TransactionContractChanges` instance.
                 pub fn new(tx: &Transaction) -> Self {
                     Self {
                         tx: Some(tx.clone()),
@@ -46,6 +47,9 @@ pub mod tycho {
             }
 
             impl ProtocolComponent {
+                /// Creates a new empty `ProtocolComponent` instance.
+                ///
+                /// You can use the `with_*` methods to set the fields in a convience way.
                 pub fn new(id: &str, tx: &Transaction) -> Self {
                     Self {
                         id: id.to_string(),
@@ -58,6 +62,10 @@ pub mod tycho {
                     }
                 }
 
+                /// Shorthand to create a component with a 1-1 relationship to a contract.
+                ///
+                /// Will set the component id to a hex encoded address with a 0x prefix
+                /// and add the contract to contracts attributes.
                 pub fn at_contract(id: &[u8], tx: &Transaction) -> Self {
                     Self {
                         id: format!("0x{}", hex::encode(id)),
@@ -70,6 +78,7 @@ pub mod tycho {
                     }
                 }
 
+                /// Replaces the tokens on this component.
                 pub fn with_tokens<B: AsRef<[u8]>>(mut self, tokens: &[B]) -> Self {
                     self.tokens = tokens
                         .iter()
@@ -78,6 +87,7 @@ pub mod tycho {
                     self
                 }
 
+                /// Replaces the contracts associated with this component.
                 pub fn with_contracts<B: AsRef<[u8]>>(mut self, contracts: &[B]) -> Self {
                     self.contracts = contracts
                         .iter()
@@ -86,6 +96,9 @@ pub mod tycho {
                     self
                 }
 
+                /// Replaces the static attributes on this component.
+                ///
+                /// The change type will be set to Creation.
                 pub fn with_attributes<K: AsRef<str>, V: AsRef<[u8]>>(
                     mut self,
                     attributes: &[(K, V)],
@@ -101,6 +114,10 @@ pub mod tycho {
                     self
                 }
 
+                /// Sets the protocol_type on this component.
+                ///
+                /// Will set the `financial_type` to FinancialType::Swap and the
+                /// `attribute_schema` to an empty list.
                 pub fn as_swap_type(
                     mut self,
                     name: &str,

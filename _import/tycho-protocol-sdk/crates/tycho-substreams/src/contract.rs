@@ -1,12 +1,17 @@
-/// This file contains helpers to capture contract changes from the expanded block model. These
-///  leverage the `code_changes`, `balance_changes`, and `storage_changes` fields available on the
-///  `Call` type provided by block model in a substream (i.e. `logs_and_calls`, etc).
+/// Helpers to extract relevant contract storage.
 ///
-/// ⚠️ These helpers *only* work if the **expanded block model** is available,
+/// This file contains helpers to capture contract changes from the expanded block
+/// model. These leverage the `code_changes`, `balance_changes`, and `storage_changes`
+/// fields available on the `Call` type provided by block model in a substream
+/// (i.e. `logs_and_calls`, etc).
+///
+/// ## Warning
+/// ⚠️ These helpers *only* work if the **extended block model** is available,
 /// more [here](https://streamingfastio.medium.com/new-block-model-to-accelerate-chain-integration-9f65126e5425)
 use std::collections::HashMap;
 
 use substreams_ethereum::pb::eth;
+use substreams_ethereum::pb::eth::v2::block::DetailLevel;
 use substreams_ethereum::pb::eth::v2::StorageChange;
 
 use crate::pb::tycho::evm::v1::{self as tycho};
@@ -70,11 +75,26 @@ impl From<InterimContractChange> for tycho::ContractChange {
     }
 }
 
+/// Extracts relevant contract changes from the block.
+///
+/// Contract changes include changes in storage, code and native balance.
+///
+/// ## Arguments
+///
+/// * `block` - The block to extract changes from. Must be the extended block model.
+/// * `inclusion_predicate` - A predicate function that determines if a contract address is relevant.
+/// * `transaction_contract_changes` - A mutable map to store the contract changes in.
+///
+/// ## Panics
+/// Will panic in case the detail level of the block is not extended.
 pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
     block: &eth::v2::Block,
     inclusion_predicate: F,
     transaction_contract_changes: &mut HashMap<u64, tycho::TransactionContractChanges>,
 ) {
+    if block.detail_level != Into::<i32>::into(DetailLevel::DetaillevelExtended) {
+        panic!("Only extended blocks are supported");
+    }
     let mut changed_contracts: HashMap<Vec<u8>, InterimContractChange> = HashMap::new();
 
     // Collect all accounts created in this block

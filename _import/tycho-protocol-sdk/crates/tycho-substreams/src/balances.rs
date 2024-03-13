@@ -19,6 +19,20 @@ use substreams::key;
 use substreams::pb::substreams::StoreDeltas;
 use substreams::prelude::{BigInt, StoreAdd};
 
+/// Store relative balances changes in a additive manner.
+///
+/// Effectively aggregates the relative balances changes into an absolute balances.
+///
+/// ## Arguments
+///
+/// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes.
+///     Note: relative balance deltas must have strictly increasing ordinals per token
+///     address, will panic otherwise.
+/// * `store` - An AddStore that will add relative balance changes.
+///
+/// This method is meant to be used in combination with `aggregate_balances_changes`
+/// which consumes the store filled with this methods in
+/// [deltas mode](https://substreams.streamingfast.io/documentation/develop/manifest-modules/types#deltas-mode).
 pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<BigInt>) {
     let mut previous_ordinal = HashMap::<String, u64>::new();
     deltas
@@ -49,6 +63,22 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
         });
 }
 
+/// Aggregates absolute balances per transaction and token.
+///
+/// ## Arguments
+/// * `balance_store` - A `StoreDeltas` with all changes that occured in the source
+///     store module.
+/// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes.
+///
+/// Reads absolute balance values from the additive store (see `store_balance_changes`
+/// on how to create such a store), proceeds to zip them with the relative balance
+/// deltas to associate balance values to token and component.
+///
+/// Will keep the last balance change per token per transaction if there are multiple
+/// changes.
+///
+/// Returns a map of transactions hashes to the full transaction and aggregated
+/// absolute balance changes.
 pub fn aggregate_balances_changes(
     balance_store: StoreDeltas,
     deltas: BlockBalanceDeltas,
