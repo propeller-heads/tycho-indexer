@@ -252,7 +252,7 @@ pub fn map_changes(
                 tycho::BalanceChange {
                     token: hex::decode(token_id).expect("Token ID not valid hex"),
                     balance: big_endian_bytes_balance,
-                    component_id: hex::decode(pool_id).expect("Token ID not valid hex"),
+                    component_id: pool_id.as_bytes().to_vec(),
                 },
             )
         })
