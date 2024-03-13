@@ -47,6 +47,7 @@ jobs:
           # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
           # Note that glob pattern is not supported yet.
           bin: tycho-client
+          target: ${{ matrix.target }}
           tar: all
           zip: none
           token: ${{ secrets.GITHUB_TOKEN }}
