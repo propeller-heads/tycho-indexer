@@ -22,7 +22,7 @@ impl SlotValue {
 }
 
 // Uses a map for slots, protobuf does not allow bytes in hashmap keys
-pub struct InterimContractChange {
+struct InterimContractChange {
     address: Vec<u8>,
     balance: Vec<u8>,
     code: Vec<u8>,
@@ -40,17 +40,14 @@ impl From<InterimContractChange> for tycho::ContractChange {
                 .slots
                 .into_iter()
                 .filter(|(_, value)| value.has_changed())
-                .map(|(slot, value)| tycho::ContractSlot {
-                    slot,
-                    value: value.new_value,
-                })
+                .map(|(slot, value)| tycho::ContractSlot { slot, value: value.new_value })
                 .collect(),
             change: value.change.into(),
         }
     }
 }
 
-pub fn extract_contract_changes<F: Fn(&[u8]) -> bool >(
+pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
     block: &eth::v2::Block,
     inclusion_predicate: F,
     transaction_contract_changes: &mut HashMap<u64, tycho::TransactionContractChanges>,
@@ -69,131 +66,131 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool >(
         })
         .collect();
 
-    block.transactions().for_each(|block_tx| {
-        let mut storage_changes = Vec::new();
-        let mut balance_changes = Vec::new();
-        let mut code_changes = Vec::new();
+    block
+        .transactions()
+        .for_each(|block_tx| {
+            let mut storage_changes = Vec::new();
+            let mut balance_changes = Vec::new();
+            let mut code_changes = Vec::new();
 
-        block_tx
-            .calls
-            .iter()
-            .filter(|call| {
-                !call.state_reverted
-                    && inclusion_predicate(&call.address)
-            })
-            .for_each(|call| {
-                storage_changes.extend(call.storage_changes.iter());
-                balance_changes.extend(call.balance_changes.iter());
-                code_changes.extend(call.code_changes.iter());
-            });
+            block_tx
+                .calls
+                .iter()
+                .filter(|call| !call.state_reverted && inclusion_predicate(&call.address))
+                .for_each(|call| {
+                    storage_changes.extend(call.storage_changes.iter());
+                    balance_changes.extend(call.balance_changes.iter());
+                    code_changes.extend(call.code_changes.iter());
+                });
 
-        storage_changes.sort_unstable_by_key(|change| change.ordinal);
-        balance_changes.sort_unstable_by_key(|change| change.ordinal);
-        code_changes.sort_unstable_by_key(|change| change.ordinal);
+            storage_changes.sort_unstable_by_key(|change| change.ordinal);
+            balance_changes.sort_unstable_by_key(|change| change.ordinal);
+            code_changes.sort_unstable_by_key(|change| change.ordinal);
 
-        storage_changes
-            .iter()
-            .filter(|changes| {
-                inclusion_predicate(&changes.address)
-            })
-            .for_each(|storage_change| {
-                let contract_change = changed_contracts
-                    .entry(storage_change.address.clone())
-                    .or_insert_with(|| InterimContractChange {
-                        address: storage_change.address.clone(),
-                        balance: Vec::new(),
-                        code: Vec::new(),
-                        slots: HashMap::new(),
-                        change: if created_accounts.contains_key(&storage_change.address) {
-                            tycho::ChangeType::Creation
-                        } else {
-                            tycho::ChangeType::Update
-                        },
-                    });
+            storage_changes
+                .iter()
+                .filter(|changes| inclusion_predicate(&changes.address))
+                .for_each(|storage_change| {
+                    let contract_change = changed_contracts
+                        .entry(storage_change.address.clone())
+                        .or_insert_with(|| InterimContractChange {
+                            address: storage_change.address.clone(),
+                            balance: Vec::new(),
+                            code: Vec::new(),
+                            slots: HashMap::new(),
+                            change: if created_accounts.contains_key(&storage_change.address) {
+                                tycho::ChangeType::Creation
+                            } else {
+                                tycho::ChangeType::Update
+                            },
+                        });
 
-                let slot_value = contract_change
-                    .slots
-                    .entry(storage_change.key.clone())
-                    .or_insert_with(|| SlotValue {
-                        new_value: storage_change.new_value.clone(),
-                        start_value: storage_change.old_value.clone(),
-                    });
+                    let slot_value = contract_change
+                        .slots
+                        .entry(storage_change.key.clone())
+                        .or_insert_with(|| SlotValue {
+                            new_value: storage_change.new_value.clone(),
+                            start_value: storage_change.old_value.clone(),
+                        });
 
-                slot_value
-                    .new_value
-                    .copy_from_slice(&storage_change.new_value);
-            });
+                    slot_value
+                        .new_value
+                        .copy_from_slice(&storage_change.new_value);
+                });
 
-        balance_changes
-            .iter()
-            .filter(|changes| {
-                inclusion_predicate(&changes.address)
-            })
-            .for_each(|balance_change| {
-                let contract_change = changed_contracts
-                    .entry(balance_change.address.clone())
-                    .or_insert_with(|| InterimContractChange {
-                        address: balance_change.address.clone(),
-                        balance: Vec::new(),
-                        code: Vec::new(),
-                        slots: HashMap::new(),
-                        change: if created_accounts.contains_key(&balance_change.address) {
-                            tycho::ChangeType::Creation
-                        } else {
-                            tycho::ChangeType::Update
-                        },
-                    });
+            balance_changes
+                .iter()
+                .filter(|changes| inclusion_predicate(&changes.address))
+                .for_each(|balance_change| {
+                    let contract_change = changed_contracts
+                        .entry(balance_change.address.clone())
+                        .or_insert_with(|| InterimContractChange {
+                            address: balance_change.address.clone(),
+                            balance: Vec::new(),
+                            code: Vec::new(),
+                            slots: HashMap::new(),
+                            change: if created_accounts.contains_key(&balance_change.address) {
+                                tycho::ChangeType::Creation
+                            } else {
+                                tycho::ChangeType::Update
+                            },
+                        });
 
-                if let Some(new_balance) = &balance_change.new_value {
-                    contract_change.balance.clear();
+                    if let Some(new_balance) = &balance_change.new_value {
+                        contract_change.balance.clear();
+                        contract_change
+                            .balance
+                            .extend_from_slice(&new_balance.bytes);
+                    }
+                });
+
+            code_changes
+                .iter()
+                .filter(|changes| inclusion_predicate(&changes.address))
+                .for_each(|code_change| {
+                    let contract_change = changed_contracts
+                        .entry(code_change.address.clone())
+                        .or_insert_with(|| InterimContractChange {
+                            address: code_change.address.clone(),
+                            balance: Vec::new(),
+                            code: Vec::new(),
+                            slots: HashMap::new(),
+                            change: if created_accounts.contains_key(&code_change.address) {
+                                tycho::ChangeType::Creation
+                            } else {
+                                tycho::ChangeType::Update
+                            },
+                        });
+
+                    contract_change.code.clear();
                     contract_change
-                        .balance
-                        .extend_from_slice(&new_balance.bytes);
-                }
-            });
+                        .code
+                        .extend_from_slice(&code_change.new_code);
+                });
 
-        code_changes
-            .iter()
-            .filter(|changes| {
-                inclusion_predicate(&changes.address)
-            })
-            .for_each(|code_change| {
-                let contract_change = changed_contracts
-                    .entry(code_change.address.clone())
-                    .or_insert_with(|| InterimContractChange {
-                        address: code_change.address.clone(),
-                        balance: Vec::new(),
-                        code: Vec::new(),
-                        slots: HashMap::new(),
-                        change: if created_accounts.contains_key(&code_change.address) {
-                            tycho::ChangeType::Creation
-                        } else {
-                            tycho::ChangeType::Update
-                        },
-                    });
-
-                contract_change.code.clear();
-                contract_change
-                    .code
-                    .extend_from_slice(&code_change.new_code);
-            });
-
-        if !storage_changes.is_empty() || !balance_changes.is_empty() || !code_changes.is_empty() {
-            transaction_contract_changes
-                .entry(block_tx.index.into())
-                .or_insert_with(|| tycho::TransactionContractChanges {
-                    tx: Some(tycho::Transaction {
-                        hash: block_tx.hash.clone(),
-                        from: block_tx.from.clone(),
-                        to: block_tx.to.clone(),
-                        index: block_tx.index as u64,
-                    }),
-                    contract_changes: vec![],
-                    component_changes: vec![],
-                    balance_changes: vec![],
-                })
-                .contract_changes
-                .extend(changed_contracts.drain().map(|(_, change)| change.into()));
-        }
-    });
+            if !storage_changes.is_empty()
+                || !balance_changes.is_empty()
+                || !code_changes.is_empty()
+            {
+                transaction_contract_changes
+                    .entry(block_tx.index.into())
+                    .or_insert_with(|| tycho::TransactionContractChanges {
+                        tx: Some(tycho::Transaction {
+                            hash: block_tx.hash.clone(),
+                            from: block_tx.from.clone(),
+                            to: block_tx.to.clone(),
+                            index: block_tx.index as u64,
+                        }),
+                        contract_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    })
+                    .contract_changes
+                    .extend(
+                        changed_contracts
+                            .drain()
+                            .map(|(_, change)| change.into()),
+                    );
+            }
+        });
 }
