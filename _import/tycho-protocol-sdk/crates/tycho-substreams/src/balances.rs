@@ -11,7 +11,7 @@
 //! 3. In the output module, use aggregate_balance_changes to receive an
 //!     aggregated map of absolute balances.
 //!
-use crate::pb::tycho::evm::v1::{BalanceChange, BlockBalanceDeltas};
+use crate::pb::tycho::evm::v1::{BalanceChange, BlockBalanceDeltas, Transaction};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -52,7 +52,7 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
 pub fn aggregate_balances_changes(
     balance_store: StoreDeltas,
     deltas: BlockBalanceDeltas,
-) -> HashMap<Vec<u8>, HashMap<Vec<u8>, BalanceChange>> {
+) -> HashMap<Vec<u8>, (Transaction, HashMap<Vec<u8>, BalanceChange>)> {
     balance_store
         .deltas
         .into_iter()
@@ -79,15 +79,18 @@ pub fn aggregate_balances_changes(
         .group_by(|(tx, _)| tx.hash.clone())
         .into_iter()
         .map(|(txh, group)| {
-            let balances = group
+            let (mut transactions, balance_changes): (Vec<_>, Vec<_>) = group.into_iter().unzip();
+
+            let balances = balance_changes
                 .into_iter()
-                .map(|(_, delta)| (delta.token.clone(), delta))
+                .map(|balance_change| (balance_change.token.clone(), balance_change))
                 .collect();
-            (txh, balances)
+            (txh, (transactions.pop().unwrap(), balances))
         })
         .collect()
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::mock_store::MockStore;
@@ -270,37 +273,39 @@ mod tests {
             .to_vec();
         let token_0 = hex::decode("bad999").unwrap();
         let token_1 = hex::decode("babe00").unwrap();
+
         let exp = [(
             vec![0, 1],
-            [
-                (
-                    token_0.clone(),
-                    BalanceChange {
-                        token: token_0,
-                        balance: BigInt::from(999)
-                            .to_signed_bytes_be()
-                            .to_vec(),
-                        component_id: comp_id.clone(),
-                    },
-                ),
-                (
-                    token_1.clone(),
-                    BalanceChange {
-                        token: token_1,
-                        balance: vec![150],
-                        component_id: comp_id.clone(),
-                    },
-                ),
-            ]
-            .into_iter()
-            .collect(),
+            (
+                Transaction { hash: vec![0, 1], from: vec![9, 9], to: vec![8, 8], index: 0 },
+                [
+                    (
+                        token_0.clone(),
+                        BalanceChange {
+                            token: token_0,
+                            balance: BigInt::from(999)
+                                .to_signed_bytes_be()
+                                .to_vec(),
+                            component_id: comp_id.clone(),
+                        },
+                    ),
+                    (
+                        token_1.clone(),
+                        BalanceChange {
+                            token: token_1,
+                            balance: vec![150],
+                            component_id: comp_id.clone(),
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
         )]
         .into_iter()
-        .collect();
+        .collect::<HashMap<_, _>>();
 
         let res = aggregate_balances_changes(store_deltas, balance_deltas);
-        dbg!(&res);
-
         assert_eq!(res, exp);
     }
 }

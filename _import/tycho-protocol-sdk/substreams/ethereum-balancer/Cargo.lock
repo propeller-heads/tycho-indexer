@@ -931,6 +931,7 @@ dependencies = [
  "prost-types 0.12.3",
  "substreams",
  "substreams-ethereum",
+ "tycho-substreams",
 ]
 
 [[package]]
@@ -1062,6 +1063,17 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "winnow",
+]
+
+[[package]]
+name = "tycho-substreams"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "itertools 0.12.0",
+ "prost 0.11.9",
+ "substreams",
+ "substreams-ethereum",
 ]
 
 [[package]]

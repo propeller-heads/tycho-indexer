@@ -2,10 +2,10 @@ use substreams_ethereum::pb::eth::v2::{Call, Log};
 use substreams_ethereum::{Event, Function};
 
 use crate::abi;
-use crate::pb;
-use crate::pb::tycho::evm::v1::{FinancialType, ImplementationType, ProtocolType, Transaction};
-use pb::tycho::evm::v1::{self as tycho};
 use substreams::hex;
+use tycho_substreams::pb::tycho::evm::v1::{
+    self as tycho, FinancialType, ImplementationType, ProtocolType, Transaction,
+};
 
 use substreams::scalar::BigInt;
 
