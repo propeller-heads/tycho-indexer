@@ -49,3 +49,4 @@ jobs:
           tar: all
           zip: none
           token: ${{ secrets.GITHUB_TOKEN }}
+          codesign: true
