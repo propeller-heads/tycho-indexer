@@ -97,7 +97,9 @@ pub fn aggregate_balances_changes(
             let big_endian_bytes_balance = balance.to_bytes_be().1;
 
             (
-                balance_delta.tx.unwrap(),
+                balance_delta
+                    .tx
+                    .expect("Missing transaction on delta"),
                 BalanceChange {
                     token: hex::decode(token_id).expect("Token ID not valid hex"),
                     balance: big_endian_bytes_balance,
