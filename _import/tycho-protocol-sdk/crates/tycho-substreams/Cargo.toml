@@ -1,0 +1,11 @@
+[package]
+name = "tycho-substreams"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+substreams-ethereum = "0.9.9"
+substreams = "0.5"
+prost = "0.11"
+hex = "0.4.3"
+itertools = "0.12.0"

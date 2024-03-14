@@ -19,6 +19,7 @@ pub struct Block {
     pub ts: u64,
 }
 /// A struct describing a transaction.
+#[derive(Eq, Hash)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Transaction {
@@ -205,6 +206,93 @@ impl ImplementationType {
         }
     }
 }
+// This file contains the definition for the native integration of Substreams.
+
+/// A component is a set of attributes that are associated with a custom entity.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EntityChanges {
+    /// A unique identifier of the entity within the protocol.
+    #[prost(string, tag="1")]
+    pub component_id: ::prost::alloc::string::String,
+    /// The set of attributes that are associated with the entity.
+    #[prost(message, repeated, tag="2")]
+    pub attributes: ::prost::alloc::vec::Vec<Attribute>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionEntityChanges {
+    #[prost(message, optional, tag="1")]
+    pub tx: ::core::option::Option<Transaction>,
+    #[prost(message, repeated, tag="2")]
+    pub entity_changes: ::prost::alloc::vec::Vec<EntityChanges>,
+    /// An array of newly added components.
+    #[prost(message, repeated, tag="3")]
+    pub component_changes: ::prost::alloc::vec::Vec<ProtocolComponent>,
+    /// An array of balance changes to components.
+    #[prost(message, repeated, tag="4")]
+    pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
+}
+/// A set of transaction changes within a single block.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockEntityChanges {
+    /// The block for which these changes are collectively computed.
+    #[prost(message, optional, tag="1")]
+    pub block: ::core::option::Option<Block>,
+    /// The set of transaction changes observed in the specified block.
+    #[prost(message, repeated, tag="2")]
+    pub changes: ::prost::alloc::vec::Vec<TransactionEntityChanges>,
+}
+/// A message containing relative balance changes.
+///
+/// Used to track token balances of protocol components in case they are only
+/// available as relative values within a block.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BalanceDelta {
+    /// The ordinal of the balance change. Must be unique & deterministic over all balances
+    /// changes within a block.
+    #[prost(uint64, tag="1")]
+    pub ord: u64,
+    /// The tx hash of the transaction that caused the balance change.
+    #[prost(message, optional, tag="2")]
+    pub tx: ::core::option::Option<Transaction>,
+    /// The address of the ERC20 token whose balance changed.
+    #[prost(bytes="vec", tag="3")]
+    pub token: ::prost::alloc::vec::Vec<u8>,
+    /// The delta balance of the token.
+    #[prost(bytes="vec", tag="4")]
+    pub delta: ::prost::alloc::vec::Vec<u8>,
+    /// The id of the component whose TVL is tracked.
+    /// If the protocol component includes multiple contracts, the balance change must be
+    /// aggregated to reflect how much tokens can be traded.
+    #[prost(bytes="vec", tag="5")]
+    pub component_id: ::prost::alloc::vec::Vec<u8>,
+}
+/// A set of balances deltas, usually a group of changes within a single block.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockBalanceDeltas {
+    #[prost(message, repeated, tag="1")]
+    pub balance_deltas: ::prost::alloc::vec::Vec<BalanceDelta>,
+}
+/// A message containing protocol components that were created by a single tx.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionProtocolComponents {
+    #[prost(message, optional, tag="1")]
+    pub tx: ::core::option::Option<Transaction>,
+    #[prost(message, repeated, tag="2")]
+    pub components: ::prost::alloc::vec::Vec<ProtocolComponent>,
+}
+/// All protocol components that were created within a block with their corresponding tx.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockTransactionProtocolComponents {
+    #[prost(message, repeated, tag="1")]
+    pub tx_components: ::prost::alloc::vec::Vec<TransactionProtocolComponents>,
+}
 // This file contains proto definitions specific to the VM integration.
 
 /// A key value entry into contract storage.
@@ -266,54 +354,5 @@ pub struct BlockContractChanges {
     /// The set of transaction changes observed in the specified block.
     #[prost(message, repeated, tag="2")]
     pub changes: ::prost::alloc::vec::Vec<TransactionContractChanges>,
-}
-/// A message containing relative balance changes.
-///
-/// Used to track token balances of protocol components in case they are only
-/// available as relative values within a block.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BalanceDelta {
-    /// The ordinal of the balance change. Must be unique & deterministic over all balances
-    /// changes within a block.
-    #[prost(uint64, tag="1")]
-    pub ord: u64,
-    /// The tx hash of the transaction that caused the balance change.
-    #[prost(message, optional, tag="2")]
-    pub tx: ::core::option::Option<Transaction>,
-    /// The address of the ERC20 token whose balance changed.
-    #[prost(bytes="vec", tag="3")]
-    pub token: ::prost::alloc::vec::Vec<u8>,
-    /// The delta balance of the token.
-    #[prost(bytes="vec", tag="4")]
-    pub delta: ::prost::alloc::vec::Vec<u8>,
-    /// The id of the component whose TVL is tracked.
-    /// If the protocol component includes multiple contracts, the balance change must be
-    /// aggregated to reflect how much tokens can be traded.
-    #[prost(bytes="vec", tag="5")]
-    pub component_id: ::prost::alloc::vec::Vec<u8>,
-}
-/// A set of balances deltas, usually a group of changes within a single block.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlockBalanceDeltas {
-    #[prost(message, repeated, tag="1")]
-    pub balance_deltas: ::prost::alloc::vec::Vec<BalanceDelta>,
-}
-/// A message containing protocol components that were created by a single tx.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TransactionProtocolComponents {
-    #[prost(message, optional, tag="1")]
-    pub tx: ::core::option::Option<Transaction>,
-    #[prost(message, repeated, tag="2")]
-    pub components: ::prost::alloc::vec::Vec<ProtocolComponent>,
-}
-/// All protocol components that were created within a block with their corresponding tx.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlockTransactionProtocolComponents {
-    #[prost(message, repeated, tag="1")]
-    pub tx_components: ::prost::alloc::vec::Vec<TransactionProtocolComponents>,
 }
 // @@protoc_insertion_point(module)
