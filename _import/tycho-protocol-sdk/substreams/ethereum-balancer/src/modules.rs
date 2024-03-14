@@ -15,7 +15,7 @@ use tycho_substreams::{
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
 #[substreams::handlers::map]
-pub fn map_pools_created(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
+pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
     // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
     // We store these as a hashmap by tx hash since we need to agg by tx hash later
     Ok(BlockTransactionProtocolComponents {
@@ -47,7 +47,7 @@ pub fn map_pools_created(block: eth::v2::Block) -> Result<BlockTransactionProtoc
 
 /// Simply stores the `ProtocolComponent`s with the pool id as the key
 #[substreams::handlers::store]
-pub fn store_pools_created(map: BlockTransactionProtocolComponents, store: StoreAddInt64) {
+pub fn store_components(map: BlockTransactionProtocolComponents, store: StoreAddInt64) {
     store.add_many(
         0,
         &map.tx_components
@@ -62,7 +62,7 @@ pub fn store_pools_created(map: BlockTransactionProtocolComponents, store: Store
 /// Since the `PoolBalanceChanged` and `Swap` events administer only deltas, we need to leverage a
 /// map and a  store to be able to tally up final balances for tokens in a pool.
 #[substreams::handlers::map]
-pub fn map_balance_deltas(
+pub fn map_relative_balances(
     block: eth::v2::Block,
     store: StoreGetInt64,
 ) -> Result<BlockBalanceDeltas, anyhow::Error> {
@@ -133,7 +133,7 @@ pub fn map_balance_deltas(
 /// It's significant to include both the `pool_id` and the `token_id` for each balance delta as the
 ///  store key to ensure that there's a unique balance being tallied for each.
 #[substreams::handlers::store]
-pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
+pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
     tycho_substreams::balances::store_balance_changes(deltas, store);
 }
 
@@ -144,7 +144,7 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: StoreAddBigInt) 
 ///  At the very end, the map can easily be sorted by index to ensure the final
 /// `BlockContractChanges`  is ordered by transactions properly.
 #[substreams::handlers::map]
-pub fn map_changes(
+pub fn map_protocol_changes(
     block: eth::v2::Block,
     grouped_components: BlockTransactionProtocolComponents,
     deltas: BlockBalanceDeltas,
