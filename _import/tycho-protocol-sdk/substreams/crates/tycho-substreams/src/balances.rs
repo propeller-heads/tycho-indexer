@@ -1,15 +1,26 @@
-//! Utilities to handle relative balances.
+//! Module for Handling Relative Balance Changes.
 //!
+//! This module facilitates the conversion of relative balance changes into absolute balances,
+//! employing a structured approach to ensure the accurate representation of balance data.
 //!
-//! To aggregate relative balances changes to absolute balances the general approach is:
+//! Process Overview:
 //!
-//! 1. Use a map function that will extract a `BlockBalanceDeltas` message. BalanceDeltas within
-//!    this message are required to have increasing ordinals so that the order of relative balance
-//!    changes is unambiguous.
-//! 2. Store the balances changes with a store handler. You can use the `store_balance_changes`
-//!    library method directly for this.
-//! 3. In the output module, use aggregate_balance_changes to receive an aggregated map of absolute
-//!    balances.
+//! 1. **Mapping (User-Implemented)**: The initial step requires the user to implement a mapping
+//!    function that extracts `BlockBalanceDeltas` messages. It's crucial that `BalanceDelta`
+//!    messages within these messages have strictly increasing ordinals, which guarantees the order
+//!    of balance changes is preserved and unambiguous. This step is not provided by the SDK and
+//!    must be custom-implemented to suit the specific protocol.
+//!
+//! 2. **Storing Changes**: Utilize the `store_balance_changes` function to apply relative balance
+//!    changes. This function handles changes additively, preparing them for final aggregation.
+//!
+//! 3. **Aggregation**: Use the `aggregate_balance_changes` function to compile the processed
+//!    changes into a detailed map of absolute balances. This final step produces the comprehensive
+//!    balance data ready for output modules or further analysis.
+//!
+//! Through this sequence, the module ensures the transformation from relative to absolute
+//! balances is conducted with high fidelity, upholding the integrity of transactional data.
+
 use crate::pb::tycho::evm::v1::{BalanceChange, BlockBalanceDeltas, Transaction};
 use itertools::Itertools;
 use std::{collections::HashMap, str::FromStr};
@@ -19,20 +30,29 @@ use substreams::{
     prelude::{BigInt, StoreAdd},
 };
 
-/// Store relative balances changes in a additive manner.
+/// Stores relative balance changes in an additive manner.
 ///
-/// Effectively aggregates the relative balances changes into an absolute balances.
+/// Aggregates the relative balance changes from a `BlockBalanceDeltas` message into the store
+/// in an additive way. This function ensures that balance changes are applied correctly
+/// according to the order specified by their ordinal values. Each token's balance changes
+/// must have strictly increasing ordinals; otherwise, the function will panic.
+///
+/// This method is designed to work in conjunction with `aggregate_balances_changes`,
+/// which consumes the data stored by this function. The stored data is intended for use
+/// in a "deltas mode" processing pattern, as described in the
+/// [Substreams documentation](https://substreams.streamingfast.io/documentation/develop/manifest-modules/types#deltas-mode).
 ///
 /// ## Arguments
+/// * `deltas` - A `BlockBalanceDeltas` message containing the relative balance changes. It is
+///   crucial that the relative balance deltas for each token address have strictly increasing
+///   ordinals; the function will panic otherwise.
+/// * `store` - An implementation of the `StoreAdd` trait that will be used to add relative balance
+///   changes. This store should support the addition of `BigInt` values.
 ///
-/// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes. Note:
-///   relative balance deltas must have strictly increasing ordinals per token address, will panic
-///   otherwise.
-/// * `store` - An AddStore that will add relative balance changes.
-///
-/// This method is meant to be used in combination with `aggregate_balances_changes`
-/// which consumes the store filled with this methods in
-/// [deltas mode](https://substreams.streamingfast.io/documentation/develop/manifest-modules/types#deltas-mode).
+/// ## Panics
+/// This function will panic if:
+/// - The `component_id` of any delta is not valid UTF-8.
+/// - The ordinals for any given token address are not strictly increasing.
 pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<BigInt>) {
     let mut previous_ordinal = HashMap::<String, u64>::new();
     deltas
@@ -71,14 +91,23 @@ type TxAggregatedBalances = HashMap<Vec<u8>, (Transaction, HashMap<Vec<u8>, Bala
 /// * `balance_store` - A `StoreDeltas` with all changes that occured in the source store module.
 /// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes.
 ///
-/// Reads absolute balance values from the additive store (see `store_balance_changes`
-/// on how to create such a store), proceeds to zip them with the relative balance
-/// deltas to associate balance values to token and component.
+/// This function reads absolute balance values from an additive store (see `store_balance_changes`
+/// for how to create such a store). It zips these values with the relative balance deltas to
+/// associate balance values with tokens and components, ensuring the last balance change per token
+/// per transaction is kept if there are multiple changes. Negative balances are set to 0, adhering
+/// to the expectation that absolute balances must be non-negative.
 ///
 /// Will keep the last balance change per token per transaction if there are multiple
-/// changes.
+/// changes. In case a balance ends up being negative, it will be clipped to 0 since
+/// absolute balances are expected to be either zero or positive.
 ///
-/// Returns a map of transactions hashes to the full transaction and aggregated
+/// ## Panics
+/// May panic if the store deltas values are not in the correct format. Values are
+/// expected to be utf-8 encoded string integers, which is the default behaviour
+/// for substreams stores.
+///
+/// ## Returns
+/// A map of transactions hashes to a tuple of `Transaction` and aggregated
 /// absolute balance changes.
 pub fn aggregate_balances_changes(
     balance_store: StoreDeltas,
@@ -95,7 +124,13 @@ pub fn aggregate_balances_changes(
             let ascii_string =
                 String::from_utf8(store_delta.new_value.clone()).expect("Invalid UTF-8 sequence");
             let balance = BigInt::from_str(&ascii_string).expect("Failed to parse integer");
-            let big_endian_bytes_balance = balance.to_bytes_be().1;
+
+            // If the absolute balance is negative, we set it to zero.
+            let big_endian_bytes_balance = if balance < BigInt::zero() {
+                BigInt::zero().to_bytes_be().1
+            } else {
+                balance.to_bytes_be().1
+            };
 
             (
                 balance_delta

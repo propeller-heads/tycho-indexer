@@ -72,19 +72,33 @@ impl From<InterimContractChange> for tycho::ContractChange {
     }
 }
 
-/// Extracts relevant contract changes from the block.
+/// Extracts and aggregates contract changes from a block.
 ///
-/// Contract changes include changes in storage, code and native balance.
+/// This function identifies and collects changes to contract storage, code, and native balance for
+/// contracts of interest within a given block. It filters contracts based on a user-defined
+/// predicate and aggregates changes into a provided mutable map.
 ///
 /// ## Arguments
-///
-/// * `block` - The block to extract changes from. Must be the extended block model.
-/// * `inclusion_predicate` - A predicate function that determines if a contract address is
-///   relevant.
-/// * `transaction_contract_changes` - A mutable map to store the contract changes in.
+/// * `block` - The block from which to extract contract changes, expected to be an extended block
+///   model.
+/// * `inclusion_predicate` - A closure that determines if a contract's address is of interest for
+///   the collection of changes. Only contracts satisfying this predicate are included.
+/// * `transaction_contract_changes` - A mutable reference to a map where extracted contract changes
+///   are stored. Keyed by transaction index, it aggregates changes into
+///   `tycho::TransactionContractChanges`.
 ///
 /// ## Panics
-/// Will panic in case the detail level of the block is not extended.
+/// Panics if the provided block is not an extended block model, as indicated by its detail level.
+///
+/// ## Operation
+/// The function iterates over transactions and their calls within the block, collecting contract
+/// changes (storage, balance, code) that pass the inclusion predicate. Changes are then sorted by
+/// their ordinals to maintain the correct sequence of events. Aggregated changes for each contract
+/// are stored in `transaction_contract_changes`, categorized by transaction index.
+///
+/// Contracts created within the block are tracked to differentiate between new and existing
+/// contracts. The aggregation process respects transaction boundaries, ensuring that changes are
+/// mapped accurately to their originating transactions.
 pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
     block: &eth::v2::Block,
     inclusion_predicate: F,
