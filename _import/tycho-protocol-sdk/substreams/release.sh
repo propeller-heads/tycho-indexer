@@ -55,6 +55,6 @@ fi
 cargo build --target wasm32-unknown-unknown --release -p "$package"
 mkdir -p ./target/spkg/
 substreams pack $package/substreams.yaml -o ./target/spkg/$package-$version.spkg
-aws s3 cp ./target/spkg/$package-$version.spkg "s3://repository.propeller/substreams/$package/$version.spkg"
+# aws s3 cp ./target/spkg/$package-$version.spkg "s3://repository.propeller/substreams/$package/$version.spkg"
 
 echo "Released substreams package: "s3://repository.propeller/substreams/$package/$version.spkg""
