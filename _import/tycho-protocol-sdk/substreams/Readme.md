@@ -47,7 +47,7 @@ The example from the official docs will serve us just well:
 
 ```toml
 [package]
-name = "substreams_[CHAIN]_[PROTOCOL_SYSTEM]"
+name = "substreams-[CHAIN]-[PROTOCOL_SYSTEM]"
 version = "0.1.0"
 edition = "2021"
 
