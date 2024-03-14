@@ -3,21 +3,21 @@
 //!
 //! To aggregate relative balances changes to absolute balances the general approach is:
 //!
-//! 1. Use a map function that will extract a `BlockBalanceDeltas` message. BalanceDeltas
-//!     within this message are required to have increasing ordinals so that
-//!     the order of relative balance changes is unambiguous.
-//! 2. Store the balances changes with a store handler. You can use the
-//!     `store_balance_changes` library method directly for this.
-//! 3. In the output module, use aggregate_balance_changes to receive an
-//!     aggregated map of absolute balances.
-//!
+//! 1. Use a map function that will extract a `BlockBalanceDeltas` message. BalanceDeltas within
+//!    this message are required to have increasing ordinals so that the order of relative balance
+//!    changes is unambiguous.
+//! 2. Store the balances changes with a store handler. You can use the `store_balance_changes`
+//!    library method directly for this.
+//! 3. In the output module, use aggregate_balance_changes to receive an aggregated map of absolute
+//!    balances.
 use crate::pb::tycho::evm::v1::{BalanceChange, BlockBalanceDeltas, Transaction};
 use itertools::Itertools;
-use std::collections::HashMap;
-use std::str::FromStr;
-use substreams::key;
-use substreams::pb::substreams::StoreDeltas;
-use substreams::prelude::{BigInt, StoreAdd};
+use std::{collections::HashMap, str::FromStr};
+use substreams::{
+    key,
+    pb::substreams::StoreDeltas,
+    prelude::{BigInt, StoreAdd},
+};
 
 /// Store relative balances changes in a additive manner.
 ///
@@ -25,9 +25,9 @@ use substreams::prelude::{BigInt, StoreAdd};
 ///
 /// ## Arguments
 ///
-/// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes.
-///     Note: relative balance deltas must have strictly increasing ordinals per token
-///     address, will panic otherwise.
+/// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes. Note:
+///   relative balance deltas must have strictly increasing ordinals per token address, will panic
+///   otherwise.
 /// * `store` - An AddStore that will add relative balance changes.
 ///
 /// This method is meant to be used in combination with `aggregate_balances_changes`
@@ -63,11 +63,12 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
         });
 }
 
+type TxAggregatedBalances = HashMap<Vec<u8>, (Transaction, HashMap<Vec<u8>, BalanceChange>)>;
+
 /// Aggregates absolute balances per transaction and token.
 ///
 /// ## Arguments
-/// * `balance_store` - A `StoreDeltas` with all changes that occured in the source
-///     store module.
+/// * `balance_store` - A `StoreDeltas` with all changes that occured in the source store module.
 /// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes.
 ///
 /// Reads absolute balance values from the additive store (see `store_balance_changes`
@@ -82,7 +83,7 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
 pub fn aggregate_balances_changes(
     balance_store: StoreDeltas,
     deltas: BlockBalanceDeltas,
-) -> HashMap<Vec<u8>, (Transaction, HashMap<Vec<u8>, BalanceChange>)> {
+) -> TxAggregatedBalances {
     balance_store
         .deltas
         .into_iter()
@@ -125,10 +126,11 @@ pub fn aggregate_balances_changes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock_store::MockStore;
-    use crate::pb::tycho::evm::v1::{BalanceDelta, Transaction};
-    use substreams::pb::substreams::StoreDelta;
-    use substreams::prelude::{StoreGet, StoreNew};
+    use crate::{mock_store::MockStore, pb::tycho::evm::v1::BalanceDelta};
+    use substreams::{
+        pb::substreams::StoreDelta,
+        prelude::{StoreGet, StoreNew},
+    };
 
     fn block_balance_deltas() -> BlockBalanceDeltas {
         let comp_id = "0x42c0ffee"
@@ -207,9 +209,9 @@ mod tests {
         let token_1 = hex::decode("babe00").unwrap();
 
         let t0_key =
-            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(&token_0));
+            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(token_0));
         let t1_key =
-            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(&token_1));
+            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(token_1));
         StoreDeltas {
             deltas: vec![
                 StoreDelta {
@@ -283,12 +285,12 @@ mod tests {
         let res_0 = store.get_last(format!(
             "{}:{}",
             String::from_utf8(comp_id.clone()).unwrap(),
-            hex::encode(&token_0)
+            hex::encode(token_0)
         ));
         let res_1 = store.get_last(format!(
             "{}:{}",
             String::from_utf8(comp_id.clone()).unwrap(),
-            hex::encode(&token_1)
+            hex::encode(token_1)
         ));
 
         assert_eq!(res_0, Some(BigInt::from_str("+999").unwrap()));

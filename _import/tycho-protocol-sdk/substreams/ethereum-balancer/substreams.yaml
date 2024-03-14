@@ -1,20 +1,12 @@
 specVersion: v0.1.0
 package:
-  name: "substreams_ethereum_balancer"
+  name: "ethereum_balancer"
   version: v0.1.0
-
-protobuf:
-  files:
-    - tycho/evm/v1/vm.proto
-    - tycho/evm/v1/common.proto
-    - tycho/evm/v1/utils.proto
-  importPaths:
-    - ../../proto
 
 binaries:
   default:
     type: wasm/rust-v1
-    file: target/wasm32-unknown-unknown/release/substreams_ethereum_balancer.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_balancer.wasm
 
 modules:
   - name: map_pools_created
