@@ -1,0 +1,59 @@
+name: Substreams CI
+
+on:
+  push:
+    paths:
+      - "substreams/**"
+
+jobs:
+  lint:
+    name: Substreams Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: clippy, rustfmt
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run checks
+        run: |
+          cd substreams
+          cargo +nightly fmt -- --check
+          cargo +nightly clippy --all --all-features --all-targets -- -D warnings
+
+  test:
+    name: Substreams Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run checks
+        run: |
+          cd substreams
+          cargo build --target wasm32-unknown-unknown --all-targets --all-features
+          cargo test --workspace --all-targets --all-features

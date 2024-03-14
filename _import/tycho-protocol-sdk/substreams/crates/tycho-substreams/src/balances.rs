@@ -126,10 +126,7 @@ pub fn aggregate_balances_changes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        mock_store::MockStore,
-        pb::tycho::evm::v1::{BalanceDelta, Transaction},
-    };
+    use crate::{mock_store::MockStore, pb::tycho::evm::v1::BalanceDelta};
     use substreams::{
         pb::substreams::StoreDelta,
         prelude::{StoreGet, StoreNew},
