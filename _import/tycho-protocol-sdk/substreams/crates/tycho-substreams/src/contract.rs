@@ -49,11 +49,7 @@ impl InterimContractChange {
             balance: vec![],
             code: vec![],
             slots: Default::default(),
-            change: if creation {
-                tycho::ChangeType::Creation.into()
-            } else {
-                tycho::ChangeType::Update.into()
-            },
+            change: if creation { tycho::ChangeType::Creation } else { tycho::ChangeType::Update },
         }
     }
 }

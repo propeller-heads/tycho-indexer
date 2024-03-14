@@ -53,7 +53,7 @@ pub fn address_map(
                 abi::weighted_pool_factory::events::PoolCreated::match_and_decode(log)?;
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, &tx)
+                ProtocolComponent::at_contract(&pool_created.pool, tx)
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "WeightedPoolFactory".as_bytes()),
@@ -72,7 +72,7 @@ pub fn address_map(
                 abi::composable_stable_pool_factory::events::PoolCreated::match_and_decode(log)?;
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, &tx)
+                ProtocolComponent::at_contract(&pool_created.pool, tx)
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[("pool_type", "ComposableStablePoolFactory".as_bytes())])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -85,7 +85,7 @@ pub fn address_map(
                 abi::erc_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, &tx)
+                ProtocolComponent::at_contract(&pool_created.pool, tx)
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
@@ -104,7 +104,7 @@ pub fn address_map(
                 abi::euler_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, &tx)
+                ProtocolComponent::at_contract(&pool_created.pool, tx)
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "EulerLinearPoolFactory".as_bytes()),
@@ -170,7 +170,7 @@ pub fn address_map(
                 abi::silo_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, &tx)
+                ProtocolComponent::at_contract(&pool_created.pool, tx)
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "SiloLinearPoolFactory".as_bytes()),
@@ -189,7 +189,7 @@ pub fn address_map(
                 abi::yearn_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, &tx)
+                ProtocolComponent::at_contract(&pool_created.pool, tx)
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "YearnLinearPoolFactory".as_bytes()),
@@ -210,7 +210,7 @@ pub fn address_map(
                 abi::weighted_pool_tokens_factory::events::PoolCreated::match_and_decode(log)?;
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, &tx)
+                ProtocolComponent::at_contract(&pool_created.pool, tx)
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "WeightedPool2TokensFactory".as_bytes()),

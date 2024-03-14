@@ -63,6 +63,8 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
         });
 }
 
+type TxAggregatedBalances = HashMap<Vec<u8>, (Transaction, HashMap<Vec<u8>, BalanceChange>)>;
+
 /// Aggregates absolute balances per transaction and token.
 ///
 /// ## Arguments
@@ -82,7 +84,7 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
 pub fn aggregate_balances_changes(
     balance_store: StoreDeltas,
     deltas: BlockBalanceDeltas,
-) -> HashMap<Vec<u8>, (Transaction, HashMap<Vec<u8>, BalanceChange>)> {
+) -> TxAggregatedBalances {
     balance_store
         .deltas
         .into_iter()
@@ -207,9 +209,9 @@ mod tests {
         let token_1 = hex::decode("babe00").unwrap();
 
         let t0_key =
-            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(&token_0));
+            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(token_0));
         let t1_key =
-            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(&token_1));
+            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(token_1));
         StoreDeltas {
             deltas: vec![
                 StoreDelta {
@@ -283,12 +285,12 @@ mod tests {
         let res_0 = store.get_last(format!(
             "{}:{}",
             String::from_utf8(comp_id.clone()).unwrap(),
-            hex::encode(&token_0)
+            hex::encode(token_0)
         ));
         let res_1 = store.get_last(format!(
             "{}:{}",
             String::from_utf8(comp_id.clone()).unwrap(),
-            hex::encode(&token_1)
+            hex::encode(token_1)
         ));
 
         assert_eq!(res_0, Some(BigInt::from_str("+999").unwrap()));

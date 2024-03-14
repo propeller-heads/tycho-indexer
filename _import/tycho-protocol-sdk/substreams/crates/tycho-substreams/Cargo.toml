@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-substreams-ethereum = "0.9.9"
-substreams = "0.5"
-prost = "0.11"
-hex = "0.4.3"
+substreams-ethereum.workspace = true
+substreams.workspace = true
+prost.workspace = true
+hex.workspace = true
 itertools = "0.12.0"

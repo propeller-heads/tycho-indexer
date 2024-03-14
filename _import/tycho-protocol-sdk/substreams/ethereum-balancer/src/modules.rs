@@ -172,7 +172,7 @@ pub fn map_changes(
             let tx = tx_component.tx.as_ref().unwrap();
             transaction_contract_changes
                 .entry(tx.index)
-                .or_insert_with(|| TransactionContractChanges::new(&tx))
+                .or_insert_with(|| TransactionContractChanges::new(tx))
                 .component_changes
                 .extend_from_slice(&tx_component.components);
         });
@@ -188,7 +188,7 @@ pub fn map_changes(
                 .entry(tx.index)
                 .or_insert_with(|| TransactionContractChanges::new(&tx))
                 .balance_changes
-                .extend(balances.into_iter().map(|(_, change)| change));
+                .extend(balances.into_values());
         });
 
     // Extract and insert any storage changes that happened for any of the components.
@@ -196,7 +196,7 @@ pub fn map_changes(
         &block,
         |addr| {
             components_store
-                .get_last(format!("pool:{0}", hex::encode(&addr)))
+                .get_last(format!("pool:{0}", hex::encode(addr)))
                 .is_some()
         },
         &mut transaction_contract_changes,

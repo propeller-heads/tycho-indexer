@@ -1,0 +1,22 @@
+[workspace]
+members = [
+    "ethereum-balancer",
+    "crates/tycho-substreams",
+]
+resolver = "2"
+
+
+[workspace.dependencies]
+substreams-ethereum = "0.9.9"
+substreams = "0.5"
+prost = "0.11"
+prost-types = "0.12.3"
+hex-literal = "0.4.1"
+hex = "0.4.3"
+ethabi = "18.0.0"
+tycho-substreams = {path  ="crates/tycho-substreams"}
+
+[profile.release]
+lto = true
+opt-level = 's'
+strip = "debuginfo"

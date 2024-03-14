@@ -7,9 +7,11 @@ use std::rc::Rc;
 use substreams::prelude::{BigInt, StoreDelete, StoreGet, StoreNew};
 use substreams::store::StoreAdd;
 
+type BigIntStore = HashMap<String, Vec<(u64, BigInt)>>;
+
 #[derive(Debug, Clone)]
 pub struct MockStore {
-    data: Rc<RefCell<HashMap<String, Vec<(u64, BigInt)>>>>,
+    data: Rc<RefCell<BigIntStore>>,
 }
 
 impl StoreDelete for MockStore {
