@@ -2,16 +2,15 @@ use crate::{abi, pool_factories};
 use anyhow::Result;
 use itertools::Itertools;
 use std::collections::HashMap;
-use substreams::hex;
-use substreams::pb::substreams::StoreDeltas;
-use substreams::store::{
-    StoreAdd, StoreAddBigInt, StoreAddInt64, StoreGet, StoreGetInt64, StoreNew,
+use substreams::{
+    hex,
+    pb::substreams::StoreDeltas,
+    store::{StoreAdd, StoreAddBigInt, StoreAddInt64, StoreGet, StoreGetInt64, StoreNew},
 };
-use substreams_ethereum::pb::eth;
-use substreams_ethereum::Event;
-use tycho_substreams::balances::aggregate_balances_changes;
-use tycho_substreams::contract::extract_contract_changes;
-use tycho_substreams::prelude::*;
+use substreams_ethereum::{pb::eth, Event};
+use tycho_substreams::{
+    balances::aggregate_balances_changes, contract::extract_contract_changes, prelude::*,
+};
 
 const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
@@ -37,10 +36,7 @@ pub fn map_pools_created(block: eth::v2::Block) -> Result<BlockTransactionProtoc
                     .collect::<Vec<_>>();
 
                 if !components.is_empty() {
-                    Some(TransactionProtocolComponents {
-                        tx: Some(tx.into()),
-                        components,
-                    })
+                    Some(TransactionProtocolComponents { tx: Some(tx.into()), components })
                 } else {
                     None
                 }
@@ -63,8 +59,8 @@ pub fn store_pools_created(map: BlockTransactionProtocolComponents, store: Store
     );
 }
 
-/// Since the `PoolBalanceChanged` and `Swap` events administer only deltas, we need to leverage a map and a
-///  store to be able to tally up final balances for tokens in a pool.
+/// Since the `PoolBalanceChanged` and `Swap` events administer only deltas, we need to leverage a
+/// map and a  store to be able to tally up final balances for tokens in a pool.
 #[substreams::handlers::map]
 pub fn map_balance_deltas(
     block: eth::v2::Block,
@@ -79,12 +75,10 @@ pub fn map_balance_deltas(
             if let Some(ev) =
                 abi::vault::events::PoolBalanceChanged::match_and_decode(vault_log.log)
             {
-                let component_id = format!(
-                    "0x{}",
-                    String::from_utf8(ev.pool_id[..20].to_vec()).unwrap()
-                )
-                .as_bytes()
-                .to_vec();
+                let component_id =
+                    format!("0x{}", String::from_utf8(ev.pool_id[..20].to_vec()).unwrap())
+                        .as_bytes()
+                        .to_vec();
 
                 if store
                     .get_last(format!("pool:{}", hex::encode(&component_id)))
@@ -101,12 +95,10 @@ pub fn map_balance_deltas(
                     }
                 }
             } else if let Some(ev) = abi::vault::events::Swap::match_and_decode(vault_log.log) {
-                let component_id = format!(
-                    "0x{}",
-                    String::from_utf8(ev.pool_id[..20].to_vec()).unwrap()
-                )
-                .as_bytes()
-                .to_vec();
+                let component_id =
+                    format!("0x{}", String::from_utf8(ev.pool_id[..20].to_vec()).unwrap())
+                        .as_bytes()
+                        .to_vec();
 
                 if store
                     .get_last(format!("pool:{}", hex::encode(&component_id)))
@@ -149,8 +141,8 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: StoreAddBigInt) 
 /// Every contract change is grouped by transaction index via the `transaction_contract_changes`
 ///  map. Each block of code will extend the `TransactionContractChanges` struct with the
 ///  cooresponding changes (balance, component, contract), inserting a new one if it doesn't exist.
-///  At the very end, the map can easily be sorted by index to ensure the final `BlockContractChanges`
-///  is ordered by transactions properly.
+///  At the very end, the map can easily be sorted by index to ensure the final
+/// `BlockContractChanges`  is ordered by transactions properly.
 #[substreams::handlers::map]
 pub fn map_changes(
     block: eth::v2::Block,
@@ -178,9 +170,9 @@ pub fn map_changes(
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `PoolBalanceChanged` creating
-    //  `BlockBalanceDeltas`. We essentially just process the changes that occurred to the `store` this
-    //  block. Then, these balance changes are merged onto the existing map of tx contract changes,
-    //  inserting a new one if it doesn't exist.
+    //  `BlockBalanceDeltas`. We essentially just process the changes that occurred to the `store`
+    // this  block. Then, these balance changes are merged onto the existing map of tx contract
+    // changes,  inserting a new one if it doesn't exist.
     aggregate_balances_changes(balance_store, deltas)
         .into_iter()
         .for_each(|(_, (tx, balances))| {
@@ -210,9 +202,9 @@ pub fn map_changes(
             .drain()
             .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, change)| {
-                if change.contract_changes.is_empty()
-                    && change.component_changes.is_empty()
-                    && change.balance_changes.is_empty()
+                if change.contract_changes.is_empty() &&
+                    change.component_changes.is_empty() &&
+                    change.balance_changes.is_empty()
                 {
                     None
                 } else {

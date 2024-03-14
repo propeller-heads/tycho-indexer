@@ -9,6 +9,6 @@ trailing_semicolon = false
 use_field_init_shorthand = true
 chain_width = 40
 ignore = [
-    "*/pb",
-    "*/abi",
+    "crates/tycho-substreams/src/pb",
+    "ethereum-balancer/src/abi",
 ]

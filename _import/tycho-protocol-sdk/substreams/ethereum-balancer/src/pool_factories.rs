@@ -1,8 +1,9 @@
 use crate::abi;
-use substreams::hex;
-use substreams::scalar::BigInt;
-use substreams_ethereum::pb::eth::v2::{Call, Log};
-use substreams_ethereum::{Event, Function};
+use substreams::{hex, scalar::BigInt};
+use substreams_ethereum::{
+    pb::eth::v2::{Call, Log},
+    Event, Function,
+};
 use tycho_substreams::prelude::*;
 
 /// This trait defines some helpers for serializing and deserializing `Vec<BigInt` which is needed
@@ -59,7 +60,9 @@ pub fn address_map(
                         ("pool_type", "WeightedPoolFactory".as_bytes()),
                         (
                             "normalized_weights",
-                            &create_call.normalized_weights.serialize_bytes(),
+                            &create_call
+                                .normalized_weights
+                                .serialize_bytes(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -91,7 +94,9 @@ pub fn address_map(
                         ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
                         (
                             "upper_target",
-                            &create_call.upper_target.to_signed_bytes_be(),
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -110,7 +115,9 @@ pub fn address_map(
                         ("pool_type", "EulerLinearPoolFactory".as_bytes()),
                         (
                             "upper_target",
-                            &create_call.upper_target.to_signed_bytes_be(),
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -142,10 +149,11 @@ pub fn address_map(
         //         change: tycho::ChangeType::Creation.into(),
         //     })
         // }
-        // ❌ The `ManagedPoolFactory` is a bit ✨ unique ✨, so we'll leave it commented out for now
-        // Take a look at it's `Create` call to see how the params are structured.
+        // ❌ The `ManagedPoolFactory` is a bit ✨ unique ✨, so we'll leave it commented out for
+        // now Take a look at it's `Create` call to see how the params are structured.
         // hex!("BF904F9F340745B4f0c4702c7B6Ab1e808eA6b93") => {
-        //     let create_call = abi::managed_pool_factory::functions::Create::match_and_decode(call)?;
+        //     let create_call =
+        // abi::managed_pool_factory::functions::Create::match_and_decode(call)?;
         //     let pool_created =
         //         abi::managed_pool_factory::events::PoolCreated::match_and_decode(log)?;
 
@@ -176,7 +184,9 @@ pub fn address_map(
                         ("pool_type", "SiloLinearPoolFactory".as_bytes()),
                         (
                             "upper_target",
-                            &create_call.upper_target.to_signed_bytes_be(),
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -195,7 +205,9 @@ pub fn address_map(
                         ("pool_type", "YearnLinearPoolFactory".as_bytes()),
                         (
                             "upper_target",
-                            &create_call.upper_target.to_signed_bytes_be(),
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
