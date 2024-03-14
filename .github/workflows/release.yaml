@@ -60,5 +60,5 @@ jobs:
         run: |
           # Assuming the tar.gz file is named like 'tycho-client-<target>.tar.gz'
           FILE_NAME=tycho-client-${{ matrix.target }}.tar.gz
-          BUCKET_NAME=repo.propellerheads
+          BUCKET_NAME=repo.propellerheads/tycho-client
           aws s3 cp $FILE_NAME s3://$BUCKET_NAME/$FILE_NAME
