@@ -49,3 +49,15 @@ jobs:
           tar: all
           zip: none
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: 'arn:aws:iam::827659017777:role/github-actions'
+          audience: sts.amazonaws.com
+          aws-region: eu-central-1
+      - name: Upload binary to S3
+        run: |
+          # Assuming the tar.gz file is named like 'tycho-client-<target>.tar.gz'
+          FILE_NAME=tycho-client-${{ matrix.target }}.tar.gz
+          BUCKET_NAME=repo.propellerheads
+          aws s3 cp $FILE_NAME s3://$BUCKET_NAME/$FILE_NAME
