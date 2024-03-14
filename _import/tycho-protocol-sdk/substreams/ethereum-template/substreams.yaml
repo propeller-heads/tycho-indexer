@@ -1,22 +1,15 @@
 specVersion: v0.1.0
 package:
-  name: "substreams_ethereum_template"
+  name: "ethereum_template"
   version: v0.1.0
-
-protobuf:
-  files:
-    - vm.proto
-    - common.proto
-  importPaths:
-    - ../../proto/tycho/evm/v1/
 
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../../target/wasm32-unknown-unknown/substreams/substreams_ethereum_template.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_template.wasm
 
 modules:
-  - name: map_changes
+  - name: map_protocol_changes
     kind: map
     inputs:
       - source: sf.ethereum.type.v2.Block
