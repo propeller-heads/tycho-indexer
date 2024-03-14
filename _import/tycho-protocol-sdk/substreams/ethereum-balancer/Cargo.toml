@@ -1,10 +1,10 @@
 [package]
-name = "substreams-ethereum-balancer"
+name = "ethereum-balancer"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "substreams_ethereum_balancer"
+name = "ethereum_balancer"
 crate-type = ["cdylib"]
 
 [dependencies]
