@@ -15,7 +15,6 @@ if [ -n "$current_tag" ]; then
         package="${BASH_REMATCH[1]%?}"
         # Semantic version
         version="${BASH_REMATCH[2]}"
-        tag=$current_tag
 
         cargo_version=$(cargo pkgid -p ethereum-balancer | cut -d# -f2 | cut -d: -f2)
         if [[ "$cargo_version" != "$version" ]]; then
@@ -48,13 +47,14 @@ else
     # Get the short commit hash of the current HEAD
     commit_hash=$(git rev-parse --short HEAD)
     version="${version_prefix}-pre.${commit_hash}"
-    # Combine version prefix with commit hash
-    tag="${package}-${version}"
 fi
+
+REPOSITORY=${REPOSITORY:-"s3://repo.propellerheads/substreams"}
+repository_path="$REPOSITORY/$package/$package-$version.spkg"
 
 cargo build --target wasm32-unknown-unknown --release -p "$package"
 mkdir -p ./target/spkg/
 substreams pack $package/substreams.yaml -o ./target/spkg/$package-$version.spkg
-# aws s3 cp ./target/spkg/$package-$version.spkg "s3://repository.propeller/substreams/$package/$version.spkg"
+aws s3 cp ./target/spkg/$package-$version.spkg $repository_path
 
-echo "Released substreams package: "s3://repository.propeller/substreams/$package/$version.spkg""
+echo "Released substreams package: '$repository_path'"
