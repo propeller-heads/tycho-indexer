@@ -9,6 +9,7 @@ on:
       - v[0-9]+.*
 
 permissions:
+  id-token: write
   contents: write
 
 jobs:
@@ -28,12 +29,12 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             os: macos-latest
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-          - target: x86_64-apple-darwin
-            os: macos-latest
-          - target: universal-apple-darwin
-            os: macos-latest
+          # - target: x86_64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          # - target: x86_64-apple-darwin
+          #   os: macos-latest
+          # - target: universal-apple-darwin
+          #   os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
