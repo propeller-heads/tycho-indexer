@@ -3,6 +3,14 @@ package:
   name: "ethereum_template"
   version: v0.1.0
 
+protobuf:
+  files:
+    - tycho/evm/v1/vm.proto
+    - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
+  importPaths:
+    - ../../proto
+
 binaries:
   default:
     type: wasm/rust-v1

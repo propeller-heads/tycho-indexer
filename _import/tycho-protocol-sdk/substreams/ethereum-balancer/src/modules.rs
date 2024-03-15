@@ -75,13 +75,10 @@ pub fn map_relative_balances(
             if let Some(ev) =
                 abi::vault::events::PoolBalanceChanged::match_and_decode(vault_log.log)
             {
-                let component_id =
-                    format!("0x{}", String::from_utf8(ev.pool_id[..20].to_vec()).unwrap())
-                        .as_bytes()
-                        .to_vec();
+                let component_id = format!("0x{}", hex::encode(&ev.pool_id[..20]));
 
                 if store
-                    .get_last(format!("pool:{}", hex::encode(&component_id)))
+                    .get_last(format!("pool:{}", component_id))
                     .is_some()
                 {
                     for (token, delta) in ev.tokens.iter().zip(ev.deltas.iter()) {
@@ -90,18 +87,15 @@ pub fn map_relative_balances(
                             tx: Some(vault_log.receipt.transaction.into()),
                             token: token.to_vec(),
                             delta: delta.to_signed_bytes_be(),
-                            component_id: component_id.clone(),
+                            component_id: component_id.as_bytes().to_vec(),
                         });
                     }
                 }
             } else if let Some(ev) = abi::vault::events::Swap::match_and_decode(vault_log.log) {
-                let component_id =
-                    format!("0x{}", String::from_utf8(ev.pool_id[..20].to_vec()).unwrap())
-                        .as_bytes()
-                        .to_vec();
+                let component_id = format!("0x{}", hex::encode(&ev.pool_id[..20]));
 
                 if store
-                    .get_last(format!("pool:{}", hex::encode(&component_id)))
+                    .get_last(format!("pool:{}", component_id))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -110,14 +104,14 @@ pub fn map_relative_balances(
                             tx: Some(vault_log.receipt.transaction.into()),
                             token: ev.token_in.to_vec(),
                             delta: ev.amount_in.to_signed_bytes_be(),
-                            component_id: component_id.clone(),
+                            component_id: component_id.as_bytes().to_vec(),
                         },
                         BalanceDelta {
                             ord: vault_log.ordinal(),
                             tx: Some(vault_log.receipt.transaction.into()),
                             token: ev.token_out.to_vec(),
                             delta: ev.amount_out.neg().to_signed_bytes_be(),
-                            component_id,
+                            component_id: component_id.as_bytes().to_vec(),
                         },
                     ]);
                 }
@@ -188,7 +182,7 @@ pub fn map_protocol_changes(
         &block,
         |addr| {
             components_store
-                .get_last(format!("pool:{0}", hex::encode(addr)))
+                .get_last(format!("pool:0x{0}", hex::encode(addr)))
                 .is_some()
         },
         &mut transaction_contract_changes,
