@@ -1,0 +1,56 @@
+specVersion: v0.1.0
+package:
+  name: "ethereum_balancer"
+  version: v0.1.0
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../target/wasm32-unknown-unknown/release/ethereum_balancer.wasm
+
+modules:
+  - name: map_components
+    kind: map
+    initialBlock: 12369300
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.GroupedTransactionProtocolComponents
+
+  - name: store_components
+    kind: store
+    initialBlock: 12369300
+    updatePolicy: add
+    valueType: int64
+    inputs:
+      - map: map_components
+
+  - name: map_relative_balances
+    kind: map
+    initialBlock: 12369300 # An arbitrary block that should change based on your requirements
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: store_components
+    output:
+      type: proto:tycho.evm.v1.BalanceDeltas
+
+  - name: store_balances
+    kind: store
+    initialBlock: 12369300
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_relative_balances
+
+  - name: map_changes
+    kind: map
+    initialBlock: 12369300
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: map_components
+      - map: map_relative_balances
+      - store: store_components
+      - store: store_balances
+        mode: deltas # This is the key property that simplifies `BalanceChange` handling
+    output:
+      type: proto:tycho.evm.v1.BlockContractChanges
