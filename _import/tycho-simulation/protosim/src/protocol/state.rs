@@ -38,7 +38,7 @@
 use enum_dispatch::enum_dispatch;
 use ethers::types::U256;
 
-use tycho_types::dto::ProtocolStateDelta;
+use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
     models::ERC20Token,

@@ -1,6 +1,6 @@
 use ethers::types::U256;
 
-use tycho_types::dto::ProtocolStateDelta;
+use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
     models::ERC20Token,
@@ -162,7 +162,7 @@ mod tests {
         str::FromStr,
     };
 
-    use tycho_types::hex_bytes::Bytes;
+    use tycho_core::hex_bytes::Bytes;
 
     use super::*;
     use approx::assert_ulps_eq;

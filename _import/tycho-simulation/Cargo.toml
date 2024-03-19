@@ -19,7 +19,7 @@ redis = { version = "0.23.3", features = ["tokio-comp"] }
 futures = "0.3.25"
 serde_json = { version = "1.0.91", features = ["arbitrary_precision"] }
 serde = "1.0.152"
-clap = { version = "4.2.7", features = ["derive"] }
+clap = { version = "4.4.14", features = ["derive"] }
 reqwest = "0.11.14"
 async-trait = "0.1"
 tracing = "0.1.40"
@@ -27,8 +27,8 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
-tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "49aad53"}
-tycho-types = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-types", rev = "49aad53"}
+tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "056af2f"}
+tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", rev = "056af2f"}
 
 
 [dev-dependencies]

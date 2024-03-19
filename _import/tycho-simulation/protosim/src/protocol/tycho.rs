@@ -117,7 +117,7 @@ mod tests {
 
     use chrono::NaiveDateTime;
     use rstest::rstest;
-    use tycho_types::{
+    use tycho_core::{
         dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
         hex_bytes::Bytes,
     };
@@ -157,7 +157,7 @@ mod tests {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes,
-                modify_tx: Bytes::from_str("0x0000").unwrap(),
+                modify_tx: Some(Bytes::from_str("0x0000").unwrap()),
             },
             component: usv2_component(),
         };
@@ -180,7 +180,7 @@ mod tests {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes,
-                modify_tx: Bytes::from_str("0x0000").unwrap(),
+                modify_tx: Some(Bytes::from_str("0x0000").unwrap()),
             },
             component: usv2_component(),
         };
@@ -232,7 +232,7 @@ mod tests {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes: usv3_attributes(),
-                modify_tx: Bytes::from_str("0x0000").unwrap(),
+                modify_tx: Some(Bytes::from_str("0x0000").unwrap()),
             },
             component: usv3_component(),
         };
@@ -280,7 +280,7 @@ mod tests {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes,
-                modify_tx: Bytes::from_str("0x0000").unwrap(),
+                modify_tx: Some(Bytes::from_str("0x0000").unwrap()),
             },
             component,
         };
@@ -306,7 +306,7 @@ mod tests {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes: usv3_attributes(),
-                modify_tx: Bytes::from_str("0x0000").unwrap(),
+                modify_tx: Some(Bytes::from_str("0x0000").unwrap()),
             },
             component,
         };
