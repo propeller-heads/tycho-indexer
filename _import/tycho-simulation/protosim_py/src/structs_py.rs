@@ -404,13 +404,12 @@ impl TychoDB {
     /// Arguments
     ///
     /// * `tycho_http_url` - URL of the Tycho Indexer HTTP endpoint.
-    /// * `tycho_ws_url` - URL of the Tycho Indexer WebSocket endpoint.
     /// * `block` - Block header to use as a starting point for the database.
     #[new]
-    #[pyo3(signature = (tycho_http_url, tycho_ws_url))]
-    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> PyResult<Self> {
-        info!(?tycho_http_url, ?tycho_ws_url, "Creating python TychoDB wrapper instance");
-        let db = tycho_db::PreCachedDB::new(tycho_http_url, tycho_ws_url)
+    #[pyo3(signature = (tycho_http_url))]
+    pub fn new(tycho_http_url: &str) -> PyResult<Self> {
+        info!(?tycho_http_url, "Creating python TychoDB wrapper instance");
+        let db = tycho_db::PreCachedDB::new(tycho_http_url)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to create TychoDB: {}", e)))?;
         Ok(Self { inner: db })
     }
