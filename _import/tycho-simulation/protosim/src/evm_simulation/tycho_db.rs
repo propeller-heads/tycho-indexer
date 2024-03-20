@@ -127,58 +127,58 @@ impl PreCachedDB {
     }
 
     #[instrument(skip_all)]
-    async fn update(&self, account_update: &AccountUpdate) {
+    async fn update(&self, account_updates: Vec<&AccountUpdate>) {
         // Block the current thread until the future completes.
         self.block_on(async {
             // Hold the write lock for the duration of the function so that no other thread can
             // write to the storage.
             let mut write_guard = self.inner.write().await;
 
-            match account_update.change {
-                ChangeType::Update => {
-                    info!(%account_update.address, "Updating account");
+            for update in account_updates {
+                match update.change {
+                    ChangeType::Update => {
+                        info!(%update.address, "Updating account");
 
-                    // If the account is not present, the internal storage will handle throwing an
-                    // exception.
-                    write_guard.accounts.update_account(
-                        &account_update.address,
-                        &StateUpdate {
-                            storage: Some(account_update.slots.clone()),
-                            balance: account_update.balance,
-                        },
-                    );
-                }
-                ChangeType::Deletion => {
-                    info!(%account_update.address, "Deleting account");
+                        // If the account is not present, the internal storage will handle throwing
+                        // an exception.
+                        write_guard.accounts.update_account(
+                            &update.address,
+                            &StateUpdate {
+                                storage: Some(update.slots.clone()),
+                                balance: update.balance,
+                            },
+                        );
+                    }
+                    ChangeType::Deletion => {
+                        info!(%update.address, "Deleting account");
 
-                    // TODO: Implement deletion.
-                    warn!(%account_update.address, "Deletion not implemented");
-                }
-                ChangeType::Creation => {
-                    info!(%account_update.address, "Creating account");
+                        // TODO: Implement deletion.
+                        warn!(%update.address, "Deletion not implemented");
+                    }
+                    ChangeType::Creation => {
+                        info!(%update.address, "Creating account");
 
-                    // We expect the code and balance to be present.
-                    let code = Bytecode::new_raw(
-                        Bytes::from(
-                            account_update
-                                .code
-                                .clone()
-                                .expect("account code"),
-                        )
-                        .0,
-                    );
-                    let balance = account_update
-                        .balance
-                        .expect("account balance");
+                        // We expect the code and balance to be present.
+                        let code = Bytecode::new_raw(
+                            Bytes::from(
+                                update
+                                    .code
+                                    .clone()
+                                    .expect("account code"),
+                            )
+                            .0,
+                        );
+                        let balance = update.balance.expect("account balance");
 
-                    // Initialize the account.
-                    write_guard.accounts.init_account(
-                        account_update.address,
-                        AccountInfo::new(balance, 0, code.hash_slow(), code),
-                        Some(account_update.slots.clone()),
-                        true, /* Flag all accounts in TychoDB mocked to sign that we cannot call
-                               * an RPC provider for update */
-                    );
+                        // Initialize the account.
+                        write_guard.accounts.init_account(
+                            update.address,
+                            AccountInfo::new(balance, 0, code.hash_slow(), code),
+                            Some(update.slots.clone()),
+                            true, /* Flag all accounts in TychoDB mocked to sign that we cannot
+                                   * call an RPC provider for an update */
+                        );
+                    }
                 }
             }
         })
@@ -628,13 +628,14 @@ mod tests {
             ChangeType::Creation,
         );
 
-        mock_db.update(&account_update).await;
+        mock_db
+            .update(vec![&account_update])
+            .await;
 
         let account_info = mock_db
             .basic(B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap())
             .unwrap()
             .unwrap();
-        dbg!(&account_info);
 
         assert_eq!(
             account_info,
