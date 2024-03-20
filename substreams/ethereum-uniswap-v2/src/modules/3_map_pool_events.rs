@@ -172,7 +172,9 @@ fn merge_block(
             .entry(transaction.hash.clone())
             .and_modify(|c: &mut TransactionEntityChanges| {
                 c.component_changes
-                    .extend(change.component_changes.clone())
+                    .extend(change.component_changes.clone());
+                c.entity_changes
+                    .extend(change.entity_changes.clone());
             })
             .or_insert(change);
     }

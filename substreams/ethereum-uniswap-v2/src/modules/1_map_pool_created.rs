@@ -9,8 +9,7 @@ use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 use crate::{
     abi::factory::events::PairCreated,
     pb::tycho::evm::v1::{
-        Attribute, Block, BlockEntityChanges, ChangeType, FinancialType, ImplementationType,
-        ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges,
+        Attribute, Block, BlockEntityChanges, ChangeType, EntityChanges, FinancialType, ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges
     },
 };
 
@@ -41,7 +40,21 @@ fn get_pools(
 
         new_pools.push(TransactionEntityChanges {
             tx: Some(tycho_tx),
-            entity_changes: vec![],
+            entity_changes: vec![EntityChanges {
+                component_id: event.pair.to_hex(),
+                attributes: vec![
+                    Attribute {
+                        name: "reserve0".to_string(),
+                        value: BigInt::from(0).to_signed_bytes_le(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "reserve1".to_string(),
+                        value: BigInt::from(0).to_signed_bytes_le(),
+                        change: ChangeType::Creation.into(),
+                    },
+                ],
+            }],
             component_changes: vec![ProtocolComponent {
                 id: event.pair.to_hex(),
                 tokens: vec![event.token0, event.token1],

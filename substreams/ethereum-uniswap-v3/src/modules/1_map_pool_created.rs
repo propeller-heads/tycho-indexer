@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use ethabi::ethereum_types::Address;
+use substreams::scalar::BigInt;
 use substreams_ethereum::pb::eth::v2::{self as eth};
 
 use substreams_helper::{event_handler::EventHandler, hex::Hexable};
@@ -8,8 +9,8 @@ use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 use crate::{
     abi::factory::events::PoolCreated,
     pb::tycho::evm::v1::{
-        Attribute, BlockEntityChanges, ChangeType, FinancialType, ImplementationType,
-        ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges,
+        Attribute, BlockEntityChanges, ChangeType, EntityChanges, FinancialType,
+        ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges,
     },
 };
 
@@ -38,7 +39,26 @@ fn get_new_pools(
 
         new_pools.push(TransactionEntityChanges {
             tx: Option::from(tycho_tx),
-            entity_changes: vec![],
+            entity_changes: vec![EntityChanges {
+                component_id: event.pool.to_hex(),
+                attributes: vec![
+                    Attribute {
+                        name: "liquidity".to_string(),
+                        value: BigInt::from(0).to_signed_bytes_le(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "tick".to_string(),
+                        value: BigInt::from(0).to_signed_bytes_le(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "sqrt_price_x96".to_string(),
+                        value: BigInt::from(0).to_signed_bytes_le(),
+                        change: ChangeType::Creation.into(),
+                    },
+                ],
+            }],
             component_changes: vec![ProtocolComponent {
                 id: event.pool.to_hex(),
                 tokens: vec![event.token0, event.token1],
