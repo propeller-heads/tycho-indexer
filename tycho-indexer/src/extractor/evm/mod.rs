@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use tracing::log::warn;
 use tycho_core::{
+    dto::{self},
     models::{
         Address, AttrStoreKey, Chain, ChangeType, ComponentId, ExtractorIdentity,
         NormalisedMessage, ProtocolType, StoreVal,
@@ -533,6 +534,18 @@ pub struct ComponentBalance {
     pub component_id: ComponentId,
 }
 
+impl From<ComponentBalance> for dto::ComponentBalance {
+    fn from(value: ComponentBalance) -> Self {
+        Self {
+            token: value.token.into(),
+            balance: value.balance,
+            balance_float: value.balance_float,
+            modify_tx: value.modify_tx.into(),
+            component_id: value.component_id,
+        }
+    }
+}
+
 impl ComponentBalance {
     pub fn try_from_message(
         msg: substreams::BalanceChange,
@@ -894,9 +907,9 @@ impl ProtocolStateDelta {
 /// Updates grouped by their respective transaction.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProtocolChangesWithTx {
-    pub new_protocol_components: HashMap<String, ProtocolComponent>,
-    pub protocol_states: HashMap<String, ProtocolStateDelta>,
-    pub balance_changes: HashMap<String, HashMap<H160, ComponentBalance>>,
+    pub new_protocol_components: HashMap<ComponentId, ProtocolComponent>,
+    pub protocol_states: HashMap<ComponentId, ProtocolStateDelta>,
+    pub balance_changes: HashMap<ComponentId, HashMap<H160, ComponentBalance>>,
     pub tx: Transaction,
 }
 
@@ -1086,7 +1099,61 @@ pub struct BlockEntityChanges {
     chain: Chain,
     pub block: Block,
     pub revert: bool,
+    /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub txs_with_update: Vec<ProtocolChangesWithTx>,
+}
+
+impl BlockEntityChanges {
+    pub fn get_filtered_state_update(
+        &self,
+        keys: Vec<(&ComponentId, &AttrStoreKey)>,
+    ) -> HashMap<(ComponentId, AttrStoreKey), StoreVal> {
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (component_id, protocol_update) in update.protocol_states.iter() {
+                for (attr, val) in protocol_update
+                    .updated_attributes
+                    .iter()
+                {
+                    let key = (component_id, attr);
+                    if keys_set.contains(&key) {
+                        res.entry((component_id.clone(), attr.clone()))
+                            .or_insert(val.clone());
+                    }
+                }
+            }
+        }
+
+        res
+    }
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    pub fn get_filtered_balance_update(
+        &self,
+        keys: Vec<(&ComponentId, &Address)>,
+    ) -> HashMap<(String, Bytes), ComponentBalance> {
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&String, &Bytes)> = keys.into_iter().collect();
+
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (component_id, protocol_update) in update.balance_changes.iter() {
+                for (token, value) in protocol_update.iter() {
+                    let key: (&String, &Bytes) = (component_id, &token.as_bytes().into());
+                    if keys_set.contains(&key) {
+                        res.entry((component_id.clone(), token.as_bytes().into()))
+                            .or_insert(value.clone());
+                    }
+                }
+            }
+        }
+
+        res
+    }
 }
 
 impl BlockEntityChanges {
@@ -1099,7 +1166,6 @@ impl BlockEntityChanges {
     ) -> Self {
         BlockEntityChanges { extractor, chain, block, revert, txs_with_update }
     }
-
     /// Parse from tychos protobuf message
     pub fn try_from_message(
         msg: substreams::BlockEntityChanges,
@@ -2236,6 +2302,24 @@ mod test {
         )]
         .into_iter()
         .collect();
+        let new_balances = [(
+            "Component_with_balance_changes".to_string(),
+            [(
+                H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                ComponentBalance {
+                    token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                    balance: Bytes::from(1_i32.to_le_bytes()),
+                    modify_tx: tx.hash,
+                    component_id: "Component_with_balance_changes".to_string(),
+                    balance_float: 1.0,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
         BlockEntityChanges {
             extractor: "test".to_string(),
             chain: Chain::Ethereum,
@@ -2257,10 +2341,72 @@ mod test {
                     protocol_states: state_updates,
                     tx,
                     new_protocol_components: new_protocol_components.clone(),
-                    ..Default::default()
+                    balance_changes: new_balances,
                 },
             ],
         }
+    }
+
+    #[test]
+    fn test_block_entity_changes_state_filter() {
+        let block = block_entity_changes();
+
+        let state1_key = "State1".to_string();
+        let reserve_value = "reserve".to_string();
+        let missing = "missing".to_string();
+
+        let keys = vec![
+            (&state1_key, &reserve_value),
+            (&missing, &reserve_value),
+            (&state1_key, &missing),
+        ];
+
+        let filtered = block.get_filtered_state_update(keys);
+        assert_eq!(
+            filtered,
+            HashMap::from([(
+                (state1_key.clone(), reserve_value.clone()),
+                Bytes::from(600_u64.to_be_bytes().to_vec())
+            )])
+        );
+    }
+
+    #[test]
+    fn test_block_entity_changes_balance_filter() {
+        let block = block_entity_changes();
+
+        let c_id_key = "Component_with_balance_changes".to_string();
+        let token_key =
+            Bytes::from(H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap());
+        let missing_token =
+            Bytes::from(H160::from_str("0x0000000000000000000000000000000000000000").unwrap());
+        let missing_component = "missing".to_string();
+
+        let keys = vec![
+            (&c_id_key, &token_key),
+            (&c_id_key, &missing_token),
+            (&missing_component, &token_key),
+        ];
+
+        #[allow(clippy::mutable_key_type)]
+        // Clippy thinks that tuple with Bytes are a mutable type.
+        let filtered = block.get_filtered_balance_update(keys);
+
+        assert_eq!(
+            filtered,
+            HashMap::from([(
+                (c_id_key.clone(), token_key.clone()),
+                ComponentBalance {
+                    token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                    balance: Bytes::from(1_i32.to_le_bytes()),
+                    balance_float: 1.0,
+                    modify_tx: H256::from_low_u64_be(
+                        0x0000000000000000000000000000000000000000000000000000000011121314,
+                    ),
+                    component_id: c_id_key.clone()
+                }
+            )])
+        )
     }
 
     #[test]

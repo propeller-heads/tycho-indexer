@@ -211,7 +211,7 @@ async fn process_substreams_response(
             //     })
             //     .collect();
 
-            trace!("Progess {:?}", progress);
+            trace!("Progress {:?}", progress);
 
             BlockProcessedResult::Skip()
         }

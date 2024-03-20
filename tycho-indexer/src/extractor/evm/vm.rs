@@ -460,7 +460,7 @@ where
         &self,
         inp: BlockScopedData,
     ) -> Result<Option<ExtractorMsg>, ExtractionError> {
-        let _data = inp
+        let data = inp
             .output
             .as_ref()
             .unwrap()
@@ -468,7 +468,7 @@ where
             .as_ref()
             .unwrap();
 
-        let raw_msg = BlockContractChanges::decode(_data.value.as_slice())?;
+        let raw_msg = BlockContractChanges::decode(data.value.as_slice())?;
 
         trace!(?raw_msg, "Received message");
 

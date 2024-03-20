@@ -301,7 +301,7 @@ pub struct BlockAccountChanges {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct TokenBalances(#[serde(with = "hex_hashmap_key")] HashMap<Bytes, ComponentBalance>);
+pub struct TokenBalances(#[serde(with = "hex_hashmap_key")] pub HashMap<Bytes, ComponentBalance>);
 
 impl From<HashMap<Bytes, ComponentBalance>> for TokenBalances {
     fn from(value: HashMap<Bytes, ComponentBalance>) -> Self {
