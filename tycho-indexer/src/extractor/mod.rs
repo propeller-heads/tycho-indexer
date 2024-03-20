@@ -10,6 +10,7 @@ use tycho_core::{
 };
 
 pub mod evm;
+pub mod revert_buffer;
 pub mod runner;
 mod u256_num;
 
