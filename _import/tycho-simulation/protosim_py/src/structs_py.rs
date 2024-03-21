@@ -4,13 +4,13 @@ use ethers::{
 };
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Bytecode, U256 as rU256};
+use revm::primitives::{Bytecode, B160, U256 as rU256};
 use tokio::runtime::Runtime;
 use tracing::info;
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
+use protosim::evm_simulation::{account_storage, database, simulation, tycho_db, tycho_models};
 use std::fmt::Debug;
 
 /// Data needed to invoke a transaction simulation
@@ -180,6 +180,105 @@ impl From<StateUpdate> for account_storage::StateUpdate {
         }
 
         account_storage::StateUpdate { storage: Some(rust_storage), balance: rust_balance }
+    }
+}
+
+/// An update for an account
+///
+/// Attributes
+/// ----------
+/// address: str
+///     The account's address
+/// chain: str
+///     The chain name
+/// slots: dict[int, int]
+///    The updated storage slots
+/// balance: Optional[int]
+///    The updated native balance
+/// code: Optional[bytearray]
+///     The updated contract code
+/// change: str
+///     The ChangeType of the update
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct AccountUpdate {
+    #[pyo3(get)]
+    pub address: String,
+    #[pyo3(get)]
+    pub chain: String,
+    #[pyo3(get)]
+    pub slots: HashMap<BigUint, BigUint>,
+    #[pyo3(get)]
+    pub balance: Option<BigUint>,
+    #[pyo3(get)]
+    pub code: Option<Vec<u8>>,
+    #[pyo3(get)]
+    pub change: String,
+}
+
+#[pymethods]
+impl AccountUpdate {
+    #[new]
+    #[pyo3(signature = (address, chain, slots, change, balance=None, code=None))]
+    fn new(
+        address: String,
+        chain: String,
+        slots: HashMap<BigUint, BigUint>,
+        change: String,
+        balance: Option<BigUint>,
+        code: Option<Vec<u8>>,
+    ) -> Self {
+        Self { address, chain, slots, balance, code, change }
+    }
+}
+
+impl From<tycho_models::AccountUpdate> for AccountUpdate {
+    fn from(update: tycho_models::AccountUpdate) -> Self {
+        let mut py_slots = HashMap::new();
+        for (key, val) in update.slots {
+            py_slots.insert(
+                BigUint::from_bytes_le(key.as_le_slice()),
+                BigUint::from_bytes_le(val.as_le_slice()),
+            );
+        }
+
+        let py_balance = update
+            .balance
+            .map(|b| BigUint::from_bytes_le(b.as_le_slice()));
+
+        AccountUpdate {
+            address: update.address.to_string(),
+            chain: update.chain.to_string(),
+            slots: py_slots,
+            balance: py_balance,
+            code: update.code,
+            change: update.change.to_string(),
+        }
+    }
+}
+
+impl From<AccountUpdate> for tycho_models::AccountUpdate {
+    fn from(py_update: AccountUpdate) -> Self {
+        let mut rust_slots = HashMap::new();
+        for (key, val) in py_update.slots {
+            rust_slots.insert(
+                rU256::from_str(&key.to_string()).unwrap(),
+                rU256::from_str(&val.to_string()).unwrap(),
+            );
+        }
+
+        let rust_balance = py_update
+            .balance
+            .map(|b| rU256::from_str(&b.to_string()).unwrap());
+
+        tycho_models::AccountUpdate {
+            address: B160::from_str(py_update.address.as_str()).unwrap(),
+            chain: tycho_models::Chain::from_str(py_update.chain.as_str()).unwrap(),
+            slots: rust_slots,
+            balance: rust_balance,
+            code: py_update.code,
+            change: tycho_models::ChangeType::from_str(py_update.change.as_str()).unwrap(),
+        }
     }
 }
 
