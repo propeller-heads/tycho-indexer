@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use tycho_types::dto::ProtocolStateDelta;
+use tycho_core::dto::ProtocolStateDelta;
 
 use ethers::{
     prelude::BaseContract,
