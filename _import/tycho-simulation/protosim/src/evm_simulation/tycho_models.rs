@@ -121,7 +121,7 @@ pub enum Chain {
     ZkSync,
 }
 
-#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, Display, EnumString)]
 pub enum ChangeType {
     #[default]
     Update,
