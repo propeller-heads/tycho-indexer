@@ -2,7 +2,7 @@ use ethers::types::Bytes;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, info_span, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use revm::{
     db::DatabaseRef,
@@ -13,8 +13,7 @@ use crate::evm_simulation::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
     tycho_client::{
-        TychoClientError, TychoHttpClient, TychoHttpClientImpl, TychoWsClient, TychoWsClientImpl,
-        AMBIENT_ACCOUNT_ADDRESS,
+        TychoClientError, TychoHttpClient, TychoHttpClientImpl, AMBIENT_ACCOUNT_ADDRESS,
     },
     tycho_models::{AccountUpdate, ChangeType, StateRequestBody, StateRequestParameters, Version},
 };
@@ -59,7 +58,7 @@ pub struct PreCachedDB {
 
 impl PreCachedDB {
     /// Create a new PreCachedDB instance and run the update loop in a separate thread.
-    pub fn new(tycho_http_url: &str, tycho_ws_url: &str) -> Result<Self, PreCachedDBError> {
+    pub fn new(tycho_http_url: &str) -> Result<Self, PreCachedDBError> {
         info!(?tycho_http_url, "Creating new PreCachedDB instance");
 
         let tycho_db = PreCachedDB {
@@ -89,25 +88,6 @@ impl PreCachedDB {
         handle.join().unwrap()?;
 
         info!("Initialization thread finished");
-
-        let tycho_db_clone = tycho_db.clone();
-        let (_tx, rx) = tokio::sync::mpsc::channel::<()>(5); // TODO: Make this configurable
-
-        info!("Spawning update loop");
-        let ws_client =
-            TychoWsClientImpl::new(tycho_ws_url).map_err(PreCachedDBError::TychoClientError)?;
-
-        let tycho_ws_url = tycho_ws_url.to_owned();
-        std::thread::spawn(move || {
-            tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(async move {
-                    info_span!("update_loop", tycho_url = tycho_ws_url);
-                    tycho_db_clone
-                        .update_loop(ws_client, rx)
-                        .await
-                });
-        });
 
         Ok(tycho_db)
     }
@@ -146,87 +126,62 @@ impl PreCachedDB {
         Ok(())
     }
 
-    /// Start the update loop.
     #[instrument(skip_all)]
-    async fn update_loop(
-        &self,
-        client: impl TychoWsClient,
-        mut stop_signal: tokio::sync::mpsc::Receiver<()>,
-    ) {
-        // Start buffering messages
-        info!("Starting message stream");
-        let mut messages = client.realtime_messages().await;
+    async fn update(&self, account_updates: Vec<&AccountUpdate>) {
+        // Block the current thread until the future completes.
+        self.block_on(async {
+            // Hold the write lock for the duration of the function so that no other thread can
+            // write to the storage.
+            let mut write_guard = self.inner.write().await;
 
-        info!("Starting state update loop");
-        // Continuous loop to handle incoming messages.
-        loop {
-            // Check for the stop signal.
-            if stop_signal.try_recv().is_ok() {
-                break
-            }
+            for update in account_updates {
+                match update.change {
+                    ChangeType::Update => {
+                        info!(%update.address, "Updating account");
 
-            match messages.recv().await {
-                // None means the channel is closed.
-                None => break,
-                Some(msg) => {
-                    info!(%msg.block.number, "Received new block");
+                        // If the account is not present, the internal storage will handle throwing
+                        // an exception.
+                        write_guard.accounts.update_account(
+                            &update.address,
+                            &StateUpdate {
+                                storage: Some(update.slots.clone()),
+                                balance: update.balance,
+                            },
+                        );
+                    }
+                    ChangeType::Deletion => {
+                        info!(%update.address, "Deleting account");
 
-                    // Block the current thread until the future completes.
-                    self.block_on(async {
-                        // Hold the write lock for the duration of the function so that no other
-                        // thread can write to the storage.
-                        let mut write_guard = self.inner.write().await;
+                        // TODO: Implement deletion.
+                        warn!(%update.address, "Deletion not implemented");
+                    }
+                    ChangeType::Creation => {
+                        info!(%update.address, "Creating account");
 
-                        // Update the block header.
-                        write_guard.block = Some(msg.block.into());
+                        // We expect the code and balance to be present.
+                        let code = Bytecode::new_raw(
+                            Bytes::from(
+                                update
+                                    .code
+                                    .clone()
+                                    .expect("account code"),
+                            )
+                            .0,
+                        );
+                        let balance = update.balance.expect("account balance");
 
-                        // Update existing accounts.
-                        for (
-                            _address,
-                            AccountUpdate { address, chain: _, slots, balance, code, change },
-                        ) in msg.account_updates.into_iter()
-                        {
-                            match change {
-                                ChangeType::Update => {
-                                    info!(%address, "Updating account");
-
-                                    // If the account is not present, the internal storage will
-                                    // handle throwing an
-                                    // exception.
-                                    write_guard.accounts.update_account(
-                                        &address,
-                                        &StateUpdate { storage: Some(slots), balance },
-                                    );
-                                }
-                                ChangeType::Deletion => {
-                                    info!(%address, "Deleting account");
-
-                                    // TODO: Implement deletion.
-                                    warn!(%address, "Deletion not implemented");
-                                }
-                                ChangeType::Creation => {
-                                    info!(%address, "Creating account");
-
-                                    // We expect the code and balance to be present.
-                                    let code = Bytecode::new_raw(
-                                        Bytes::from(code.expect("account code")).0,
-                                    );
-                                    let balance = balance.expect("account balance");
-
-                                    // Initialize the account.
-                                    write_guard.accounts.init_account(
-                                        address,
-                                        AccountInfo::new(balance, 0, code.hash_slow(), code),
-                                        Some(slots),
-                                        true, // Flag all accounts in TychoDB mocked to sign that we cannot call and RPC provider for update
-                                    );
-                                }
-                            }
-                        }
-                    })
+                        // Initialize the account.
+                        write_guard.accounts.init_account(
+                            update.address,
+                            AccountInfo::new(balance, 0, code.hash_slow(), code),
+                            Some(update.slots.clone()),
+                            true, /* Flag all accounts in TychoDB mocked to sign that we cannot
+                                   * call an RPC provider for an update */
+                        );
+                    }
                 }
             }
-        }
+        })
     }
 
     /// Executes a future, blocking the current thread until the future completes.
@@ -262,8 +217,7 @@ impl PreCachedDB {
 
     /// Sets up a single account
     ///
-    /// Full control over setting up an accounts. Allows to set up EOAs as
-    /// well as smart contracts.
+    /// Full control over setting up an accounts. Allows to set up EOAs as well as smart contracts.
     ///
     /// # Arguments
     ///
@@ -454,13 +408,12 @@ mod tests {
     use revm::primitives::U256 as rU256;
     use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr};
-    use tokio::sync::mpsc::{self, Receiver};
 
     use crate::evm_simulation::{
         tycho_client::TychoClientError,
         tycho_models::{
-            AccountUpdate, Block, BlockAccountChanges, Chain, ChangeType, ResponseAccount,
-            StateRequestParameters, StateRequestResponse,
+            AccountUpdate, Block, Chain, ChangeType, ResponseAccount, StateRequestParameters,
+            StateRequestResponse,
         },
     };
 
@@ -656,108 +609,45 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl TychoWsClient for MockTychoClient {
-        async fn realtime_messages(&self) -> Receiver<BlockAccountChanges> {
-            let (tx, rx) = mpsc::channel::<BlockAccountChanges>(30);
-            let blk = Block {
-                number: 123,
-                hash: B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                parent_hash: B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                chain: Chain::Ethereum,
-                ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
-            };
-
-            let account_update = AccountUpdate::new(
-                B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-                Chain::Ethereum,
-                HashMap::new(),
-                Some(rU256::from(500)),
-                Some(Vec::<u8>::new()),
-                ChangeType::Update,
-            );
-            let account_updates: HashMap<B160, AccountUpdate> = vec![(
-                B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
-                account_update,
-            )]
-            .into_iter()
-            .collect();
-            let message = BlockAccountChanges::new(
-                "vm:ambient".to_owned(),
-                Chain::Ethereum,
-                blk,
-                account_updates,
-                HashMap::new(),
-            );
-            tx.send(message.clone()).await.unwrap();
-            tx.send(message).await.unwrap();
-            rx
-        }
-
-        #[allow(unused_variables)]
-        fn subscribe(
-            &self,
-            extractor_id: crate::evm_simulation::tycho_models::ExtractorIdentity,
-        ) -> Result<(), TychoClientError> {
-            panic!("Not implemented")
-        }
-
-        #[allow(unused_variables)]
-        fn unsubscribe(&self, subscription_id: uuid::Uuid) -> Result<(), TychoClientError> {
-            panic!("Not implemented")
-        }
-    }
-
     #[rstest]
     #[tokio::test]
-    async fn test_update_loop(mock_db: PreCachedDB, mock_client: MockTychoClient) {
-        let (_tx, rx) = mpsc::channel::<()>(1);
+    async fn test_update() {
+        let mock_db = PreCachedDB {
+            inner: Arc::new(RwLock::new(PreCachedDBInner {
+                accounts: AccountStorage::new(),
+                block: None,
+            })),
+        };
 
-        assert!(mock_db
-            .initialize_state(&mock_client)
-            .await
-            .is_ok());
+        let account_update = AccountUpdate::new(
+            B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+            Chain::Ethereum,
+            HashMap::new(),
+            Some(rU256::from(500)),
+            Some(Vec::<u8>::new()),
+            ChangeType::Creation,
+        );
 
         mock_db
-            .clone()
-            .update_loop(mock_client, rx)
+            .update(vec![&account_update])
             .await;
 
         let account_info = mock_db
-            .basic(B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap())
+            .basic(B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap())
             .unwrap()
             .unwrap();
-        dbg!(account_info);
-
-        let block = mock_db
-            .inner
-            .read()
-            .await
-            .block
-            .expect("block is Some");
 
         assert_eq!(
-            block,
-            Block {
-                number: 123,
-                hash: B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+            account_info,
+            AccountInfo {
+                nonce: 0,
+                balance: rU256::from(500),
+                code_hash: B256::from_str(
+                    "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
                 )
                 .unwrap(),
-                parent_hash: B256::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                chain: Chain::Ethereum,
-                ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
+                code: Some(Bytecode::default()),
             }
-            .into()
         );
     }
 
@@ -787,9 +677,8 @@ mod tests {
             B160::from_str("0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
 
         let tycho_http_url = "http://127.0.0.1:4242";
-        let tycho_ws_url = "ws://127.0.0.1:4242";
-        info!(tycho_http_url, tycho_ws_url, "Creating PreCachedDB");
-        let db = PreCachedDB::new(tycho_http_url, tycho_ws_url).expect("db should initialize");
+        info!(tycho_http_url, "Creating PreCachedDB");
+        let db = PreCachedDB::new(tycho_http_url).expect("db should initialize");
 
         info!("Fetching account info");
 
