@@ -235,7 +235,7 @@ mod tests {
         let block_number = 386000;
         let token0 = address_str(DAI_ADDRESS);
         let token1 = address_str(ETH_ADDRESS);
-        let tokens = vec![token0.clone(), token1.clone()];
+        let tokens = [token0.clone(), token1.clone()];
         let sell_amount = felt_str("0x2386f26fc10000");
         let expected_buy_amount = "18801973723146384196";
         let sell_token_index = 1;
