@@ -22,7 +22,7 @@ use substreams_ethereum::Event;
 
 use crate::{abi, contract_changes, pb};
 
-const FACTORY: [u8; 20] = hex!("5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f");
+const FACTORY: [u8; 20] = hex!("Eb6625D65a0553c9dBc64449e56abFe519bd9c9B");
 
 // struct BinDelta {
 //     delta_a: BigInt,
@@ -68,7 +68,7 @@ pub fn map_pools_created(
                     .logs_with_calls()
                     .filter(|(_, call)| !call.call.state_reverted)
                     .filter(|(log, _)| log.address == FACTORY)
-                    .filter_map(|(log, call)| {
+                    .filter_map(|(log, _)| {
                         let pool_added = abi::factory::events::PoolCreated::match_and_decode(log)?;
 
                         log::info!("tacos");
@@ -416,3 +416,36 @@ pub fn map_changes(
             .collect::<Vec<_>>(),
     })
 }
+
+// #[substreams::handlers::map]
+// pub fn debug_block_events(block: eth::v2::Block) -> Result<tycho::BlockContractChanges> {
+//     log::info!("Block: {:?}", block);
+
+//     Ok(tycho::BlockContractChanges {
+//         block: Some(tycho::Block {
+//             number: block.number,
+//             hash: block.hash.clone(),
+//             parent_hash: block
+//                 .header
+//                 .as_ref()
+//                 .expect("Block header not present")
+//                 .parent_hash
+//                 .clone(),
+//             ts: block.timestamp_seconds(),
+//         }),
+//         changes: transaction_contract_changes
+//             .drain()
+//             .sorted_unstable_by_key(|(index, _)| index.clone())
+//             .filter_map(|(_, change)| {
+//                 if change.contract_changes.is_empty()
+//                     && change.component_changes.is_empty()
+//                     && change.balance_changes.is_empty()
+//                 {
+//                     None
+//                 } else {
+//                     Some(change)
+//                 }
+//             })
+//             .collect::<Vec<_>>(),
+//     })
+// }

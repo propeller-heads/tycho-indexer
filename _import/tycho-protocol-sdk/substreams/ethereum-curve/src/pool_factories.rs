@@ -16,9 +16,9 @@ const MAIN_REGISTRY: [u8; 20] = hex!("90E00ACe148ca3b23Ac1bC8C240C2a7Dd9c2d7f5")
 const CRYPTO_POOL_FACTORY: [u8; 20] = hex!("F18056Bbd320E96A48e3Fbf8bC061322531aac99");
 const META_POOL_FACTORY: [u8; 20] = hex!("B9fC157394Af804a3578134A6585C0dc9cc990d4");
 
-/// This trait defines some helpers for serializing and deserializing `Vec<BigInt` which is needed
-///  to be able to encode the `normalized_weights` and `weights` `Attribute`s. This should also be
-///  handled by any downstream application.
+/// This trait defines some helpers for serializing and deserializing `Vec<BigInt>` which is needed
+///  to be able to encode some of the `Attribute`s. This should also be handled by any downstream
+///  application.
 trait SerializableVecBigInt {
     fn serialize_bytes(&self) -> Vec<u8>;
     fn deserialize_bytes(bytes: &[u8]) -> Vec<BigInt>;
