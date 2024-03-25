@@ -478,7 +478,78 @@ pub struct BlockContractChanges {
     chain: Chain,
     pub block: Block,
     pub revert: bool,
+    /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub tx_updates: Vec<TransactionVMUpdates>,
+}
+
+pub trait FilteredUpdates {
+    type IdType;
+    type KeyType;
+    type ValueType;
+
+    fn get_filtered_state_update(
+        &self,
+        keys: Vec<(&Self::IdType, &Self::KeyType)>,
+    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType>;
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    fn get_filtered_balance_update(
+        &self,
+        keys: Vec<(&String, &Bytes)>,
+    ) -> HashMap<(String, Bytes), ComponentBalance>;
+}
+
+impl FilteredUpdates for BlockContractChanges {
+    type IdType = H160;
+    type KeyType = U256;
+    type ValueType = U256;
+
+    fn get_filtered_state_update(
+        &self,
+        keys: Vec<(&Self::IdType, &Self::KeyType)>,
+    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
+        let keys_set: HashSet<_> = keys.into_iter().collect();
+        let mut res = HashMap::new();
+
+        for update in self.tx_updates.iter().rev() {
+            for (address, account_update) in update.account_updates.iter() {
+                for (attr, val) in account_update.slots.iter() {
+                    let key = (address, attr);
+                    if keys_set.contains(&key) {
+                        res.entry((*address, *attr))
+                            .or_insert(*val);
+                    }
+                }
+            }
+        }
+
+        res
+    }
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    fn get_filtered_balance_update(
+        &self,
+        keys: Vec<(&ComponentId, &Address)>,
+    ) -> HashMap<(String, Bytes), ComponentBalance> {
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&String, &Bytes)> = keys.into_iter().collect();
+
+        let mut res = HashMap::new();
+
+        for update in self.tx_updates.iter().rev() {
+            for (component_id, balance_update) in update.component_balances.iter() {
+                for (token, value) in balance_update.iter() {
+                    let key: (&String, &Bytes) = (component_id, &token.as_bytes().into());
+                    if keys_set.contains(&key) {
+                        res.entry((component_id.clone(), token.as_bytes().into()))
+                            .or_insert(value.clone());
+                    }
+                }
+            }
+        }
+
+        res
+    }
 }
 
 impl Block {
@@ -1123,11 +1194,15 @@ impl MessageWithBlock<Block> for BlockEntityChanges {
     }
 }
 
-impl BlockEntityChanges {
-    pub fn get_filtered_state_update(
+impl FilteredUpdates for BlockEntityChanges {
+    type IdType = ComponentId;
+    type KeyType = AttrStoreKey;
+    type ValueType = StoreVal;
+
+    fn get_filtered_state_update(
         &self,
-        keys: Vec<(&ComponentId, &AttrStoreKey)>,
-    ) -> HashMap<(ComponentId, AttrStoreKey), StoreVal> {
+        keys: Vec<(&Self::IdType, &Self::KeyType)>,
+    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
         // Convert keys to a HashSet for faster lookups
         let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
         let mut res = HashMap::new();
@@ -1151,7 +1226,7 @@ impl BlockEntityChanges {
     }
 
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
-    pub fn get_filtered_balance_update(
+    fn get_filtered_balance_update(
         &self,
         keys: Vec<(&ComponentId, &Address)>,
     ) -> HashMap<(String, Bytes), ComponentBalance> {
