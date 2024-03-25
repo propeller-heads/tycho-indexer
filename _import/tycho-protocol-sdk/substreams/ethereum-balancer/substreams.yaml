@@ -3,6 +3,14 @@ package:
   name: "ethereum_balancer"
   version: v0.1.0
 
+protobuf:
+  files:
+    - tycho/evm/v1/vm.proto
+    - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
+  importPaths:
+    - ../../proto
+
 binaries:
   default:
     type: wasm/rust-v1
@@ -42,7 +50,7 @@ modules:
     inputs:
       - map: map_relative_balances
 
-  - name: map_changes
+  - name: map_protocol_changes
     kind: map
     initialBlock: 12369300
     inputs:
