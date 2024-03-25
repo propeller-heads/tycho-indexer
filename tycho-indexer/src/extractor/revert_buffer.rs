@@ -3,11 +3,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use tycho_core::{
     dto::TokenBalances,
-    models::{AttrStoreKey, ComponentId, MessageWithBlock},
+    models::{ComponentId, MessageWithBlock},
     Bytes,
 };
 
-use super::evm::{Block, BlockContractChanges, BlockEntityChanges};
+use super::evm::{Block, FilteredUpdates};
 
 pub struct RevertBuffer<BM> {
     blocks: VecDeque<BM>,
@@ -44,18 +44,23 @@ impl<BM: MessageWithBlock<Block>> Default for RevertBuffer<BM> {
     }
 }
 
-type StateKey = (String, String);
-
-impl RevertBuffer<BlockEntityChanges> {
+impl<B> RevertBuffer<B>
+where
+    B: FilteredUpdates,
+{
     fn lookup_state(
         &self,
-        keys: &[(&ComponentId, &AttrStoreKey)],
-    ) -> (HashMap<StateKey, Bytes>, Vec<StateKey>) {
+        keys: &[(&B::IdType, &B::KeyType)],
+    ) -> (HashMap<(B::IdType, B::KeyType), B::ValueType>, Vec<(B::IdType, B::KeyType)>)
+    where
+        B::KeyType: std::hash::Hash + std::cmp::Eq + Clone,
+        B::IdType: std::hash::Hash + std::cmp::Eq + Clone,
+    {
         let mut res = HashMap::new();
-        let mut remaning_keys: HashSet<_> = keys
-            .iter()
-            .map(|(c_id, attr)| (c_id.to_string(), attr.to_string()))
-            .collect();
+        let mut remaning_keys: HashSet<(B::IdType, B::KeyType)> = HashSet::from_iter(
+            keys.iter()
+                .map(|(c_id, attr)| (c_id.to_owned().clone(), attr.to_owned().clone())),
+        );
 
         for block_change in self.blocks.iter().rev() {
             if remaning_keys.is_empty() {
@@ -111,8 +116,6 @@ impl RevertBuffer<BlockEntityChanges> {
         (results, remaning_keys.into_iter().collect())
     }
 }
-
-impl RevertBuffer<BlockContractChanges> {}
 
 #[cfg(test)]
 mod test {
