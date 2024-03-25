@@ -472,7 +472,7 @@ impl TransactionVMUpdates {
 ///
 /// Hold the detailed state changes for a block alongside with protocol
 /// component changes.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BlockContractChanges {
     extractor: String,
     chain: Chain,
@@ -1189,6 +1189,12 @@ impl<B: MessageWithBlock<Block>> MessageWithBlock<Block> for BlockMessageWithCur
 }
 
 impl MessageWithBlock<Block> for BlockEntityChanges {
+    fn block(&self) -> &Block {
+        &self.block
+    }
+}
+
+impl MessageWithBlock<Block> for BlockContractChanges {
     fn block(&self) -> &Block {
         &self.block
     }

@@ -1,11 +1,13 @@
 use super::{utils::format_duration, Block};
 use crate::{
     extractor::{
-        evm,
         evm::{
+            self,
             chain_state::ChainState,
             token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
+            BlockMessageWithCursor,
         },
+        revert_buffer::RevertBuffer,
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
@@ -59,6 +61,7 @@ pub struct VmContractExtractor<G> {
     post_processor: Option<fn(evm::BlockContractChanges) -> evm::BlockContractChanges>,
     /// The number of blocks behind the current block to be considered as syncing.
     sync_threshold: u64,
+    revert_buffer: Mutex<RevertBuffer<evm::BlockMessageWithCursor<evm::BlockContractChanges>>>,
 }
 
 impl<DB> VmContractExtractor<DB> {
@@ -388,6 +391,7 @@ where
                     protocol_types,
                     post_processor,
                     sync_threshold,
+                    revert_buffer: Mutex::new(RevertBuffer::new()),
                 }
             }
             Ok(cursor) => {
@@ -413,6 +417,7 @@ where
                     protocol_types,
                     post_processor,
                     sync_threshold,
+                    revert_buffer: Mutex::new(RevertBuffer::new()),
                 }
             }
             Err(err) => return Err(ExtractionError::Setup(err.to_string())),
@@ -493,11 +498,27 @@ where
         let msg =
             if let Some(post_process_f) = self.post_processor { post_process_f(msg) } else { msg };
 
-        let is_syncing = self.is_syncing(msg.block.number).await;
+        // Depending on how Substreams handle them, this condition could be problematic for single
+        // block finality blockchains.
+        let is_syncing = inp.final_block_height >= msg.block.number;
 
-        self.gateway
-            .upsert_contract(&msg, inp.cursor.as_ref(), is_syncing)
-            .await?;
+        match is_syncing {
+            true => {
+                self.gateway
+                    .upsert_contract(&msg, inp.cursor.as_ref(), is_syncing)
+                    .await?;
+            }
+            false => {
+                let mut revert_buffer = self.revert_buffer.lock().await;
+                revert_buffer
+                    .insert_block(BlockMessageWithCursor::new(msg.clone(), inp.cursor.clone()));
+                for msg in revert_buffer.drain_new_finalized_blocks(inp.final_block_height) {
+                    self.gateway
+                        .upsert_contract(&msg.0, &msg.1, is_syncing)
+                        .await?;
+                }
+            }
+        }
 
         self.update_last_processed_block(msg.block)
             .await;
@@ -506,8 +527,7 @@ where
 
         self.update_cursor(inp.cursor).await;
 
-        let msg = Arc::new(msg.aggregate_updates()?);
-        Ok(Some(msg))
+        return Ok(Some(Arc::new(msg.aggregate_updates()?)))
     }
 
     #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % inp.last_valid_block.as_ref().unwrap().number))]

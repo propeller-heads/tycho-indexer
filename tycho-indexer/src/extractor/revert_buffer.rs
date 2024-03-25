@@ -48,6 +48,7 @@ impl<B> RevertBuffer<B>
 where
     B: FilteredUpdates,
 {
+    #[allow(clippy::type_complexity)] //TODO: use type aliases
     fn lookup_state(
         &self,
         keys: &[(&B::IdType, &B::KeyType)],
