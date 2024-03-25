@@ -311,7 +311,7 @@ If your test does not require committing to the database there is no any other s
 If you have to change the database schema, please make sure the down migration is included and test it by executing:
 
 ```bash
-diesel migration redo --migration-dir ./tycho-indexer/migrations
+diesel migration redo --migration-dir ./tycho-storage/migrations
 ```
 
 If the schema.rs file does not automatically update after you've run a migration with table changes, you can trigger the update by executing:

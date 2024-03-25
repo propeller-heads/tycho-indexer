@@ -1,9 +1,10 @@
 //! Storage traits used by Tycho
 use crate::{
-    dto, models,
+    dto,
     models::{
+        self,
         blockchain::{Block, Transaction},
-        Address, BlockHash, Chain, ContractId, ExtractionState, TxHash,
+        Address, BlockHash, Chain, ContractId, ExtractionState, PaginationParams, TxHash,
     },
     Bytes,
 };
@@ -330,6 +331,7 @@ pub trait ProtocolGateway {
         &self,
         chain: Chain,
         address: Option<&[&Address]>,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<models::token::CurrencyToken>, StorageError>;
 
     /// Saves multiple component balances to storage.

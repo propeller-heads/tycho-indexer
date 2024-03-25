@@ -557,6 +557,7 @@ impl From<models::protocol::ProtocolComponentStateDelta> for ProtocolStateDelta 
         }
     }
 }
+
 impl ProtocolStateDelta {
     /// Merges 'other' into 'self'.
     ///
@@ -803,23 +804,44 @@ pub struct TokensRequestBody {
     #[serde(rename = "tokenAddresses")]
     #[schema(value_type=Option<Vec<String>>)]
     pub token_addresses: Option<Vec<Bytes>>,
-}
 
-impl TokensRequestBody {
-    pub fn new(token_addresses: Option<Vec<Bytes>>) -> Self {
-        Self { token_addresses }
-    }
+    #[serde(default)]
+    pub pagination: PaginationParams,
 }
 
 /// Response from Tycho server for a tokens request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct TokensRequestResponse {
     pub tokens: Vec<ResponseToken>,
+    pub pagination: PaginationParams,
 }
 
 impl TokensRequestResponse {
-    pub fn new(tokens: Vec<ResponseToken>) -> Self {
-        Self { tokens }
+    pub fn new(tokens: Vec<ResponseToken>, pagination_request: &PaginationParams) -> Self {
+        Self { tokens, pagination: pagination_request.clone() }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct PaginationParams {
+    #[serde(default)]
+    pub page: i64,
+    #[serde(default)]
+    pub page_size: i64,
+}
+
+impl PaginationParams {
+    pub fn new(page: i64, page_size: i64) -> Self {
+        Self { page, page_size }
+    }
+}
+
+impl Default for PaginationParams {
+    fn default() -> Self {
+        PaginationParams {
+            page: 0,       // Default page number
+            page_size: 20, // Default page size
+        }
     }
 }
 
@@ -1116,7 +1138,7 @@ mod test {
                 "number": 123,
                 "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                 "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "chain": "ethereum",             
+                "chain": "ethereum",
                 "ts": "2023-09-14T00:00:00"
             },
             "revert": false,
@@ -1130,7 +1152,7 @@ mod test {
                     "change": "Update"
                 }
             },
-            "new_protocol_components": 
+            "new_protocol_components":
                 { "protocol_1": {
                         "id": "protocol_1",
                         "protocol_system": "system_1",
@@ -1176,7 +1198,7 @@ mod test {
                 "number": 123,
                 "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                 "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "chain": "ethereum",             
+                "chain": "ethereum",
                 "ts": "2023-09-14T00:00:00"
             },
             "revert": false,

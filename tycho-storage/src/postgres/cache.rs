@@ -16,8 +16,8 @@ use tokio::{
 };
 use tracing::{debug, error, info, trace};
 use tycho_core::{
-    models,
     models::{
+        self,
         blockchain::{Block, Transaction},
         contract::{Contract, ContractDelta},
         protocol::{
@@ -25,7 +25,7 @@ use tycho_core::{
             ProtocolComponentStateDelta,
         },
         token::CurrencyToken,
-        Address, Chain, ContractId, ExtractionState, ProtocolType, TxHash,
+        Address, Chain, ContractId, ExtractionState, PaginationParams, ProtocolType, TxHash,
     },
     storage::{
         BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
@@ -824,13 +824,14 @@ impl ProtocolGateway for CachedGateway {
         &self,
         chain: Chain,
         address: Option<&[&Address]>,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<CurrencyToken>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_tokens(chain, address, &mut conn)
+            .get_tokens(chain, address, pagination_params, &mut conn)
             .await
     }
 

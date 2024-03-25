@@ -1,5 +1,6 @@
 /// Script to run only the RPC server
 /// Usage: cargo run --example rpc
+/// Access at http://0.0.0.0:4242/docs
 use futures03::future::select_all;
 
 use actix_web::dev::ServerHandle;

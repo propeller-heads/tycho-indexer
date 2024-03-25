@@ -14,7 +14,7 @@ use tycho_core::{
             ProtocolComponentStateDelta,
         },
         token::CurrencyToken,
-        Address, Chain, ContractId, ExtractionState, ProtocolType, TxHash,
+        Address, Chain, ContractId, ExtractionState, PaginationParams, ProtocolType, TxHash,
     },
     storage::{
         BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
@@ -269,10 +269,11 @@ mock! {
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn get_tokens<'life0, 'life1, 'life2, 'async_trait>(
+        fn get_tokens<'life0, 'life1, 'life2, 'life3, 'async_trait>(
             &'life0 self,
             chain: Chain,
             address: Option<&'life1 [&'life2 Address]>,
+            pagination_params: Option<&'life3 PaginationParams>,
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
@@ -284,6 +285,7 @@ mock! {
             'life0: 'async_trait,
             'life1: 'async_trait,
             'life2: 'async_trait,
+            'life3: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]

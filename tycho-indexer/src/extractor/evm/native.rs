@@ -176,7 +176,7 @@ where
 
         let db_tokens = self
             .state_gateway
-            .get_tokens(self.chain, addresses_option)
+            .get_tokens(self.chain, addresses_option, None)
             .await?;
 
         let db_token_addresses: HashSet<_> = db_tokens

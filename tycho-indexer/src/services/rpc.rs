@@ -7,9 +7,8 @@ use std::collections::HashSet;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument};
 use tycho_core::{
-    dto,
-    dto::{ProtocolComponentRequestParameters, ResponseToken, StateRequestParameters},
-    models::{Address, Chain},
+    dto::{self, ProtocolComponentRequestParameters, ResponseToken, StateRequestParameters},
+    models::{Address, Chain, PaginationParams},
     storage::{BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
     Bytes,
 };
@@ -133,6 +132,7 @@ impl From<evm::ProtocolComponent> for dto::ProtocolComponent {
         }
     }
 }
+
 pub struct RpcHandler<G> {
     db_gateway: G,
 }
@@ -334,9 +334,11 @@ where
         let addresses_slice = address_refs.as_deref();
         debug!(?addresses_slice, "Getting tokens.");
 
+        let converted_params: PaginationParams = (&request.pagination).into();
+
         match self
             .db_gateway
-            .get_tokens(*chain, addresses_slice)
+            .get_tokens(*chain, addresses_slice, Some(&converted_params))
             .await
         {
             Ok(tokens) => Ok(dto::TokensRequestResponse::new(
@@ -344,6 +346,7 @@ where
                     .into_iter()
                     .map(dto::ResponseToken::from)
                     .collect(),
+                &request.pagination,
             )),
             Err(err) => {
                 error!(error = %err, "Error while getting tokens.");
@@ -846,7 +849,7 @@ mod tests {
         let mut gw = MockGateway::new();
         let mock_response = Ok(expected.clone());
         gw.expect_get_tokens()
-            .return_once(|_, _| Box::pin(async move { mock_response }));
+            .return_once(|_, _, _| Box::pin(async move { mock_response }));
         let req_handler = RpcHandler::new(gw);
 
         // request for 2 tokens that are in the DB (WETH and USDC)
@@ -855,6 +858,7 @@ mod tests {
                 USDC.parse::<Bytes>().unwrap(),
                 WETH.parse::<Bytes>().unwrap(),
             ]),
+            pagination: dto::PaginationParams::default(),
         };
 
         let tokens = req_handler
