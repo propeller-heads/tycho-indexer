@@ -4,7 +4,8 @@ use super::{
 };
 use crate::{
     extractor::{
-        evm::{self, chain_state::ChainState, Block},
+        evm::{self, chain_state::ChainState, Block, BlockMessageWithCursor},
+        revert_buffer::RevertBuffer,
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
@@ -54,6 +55,7 @@ pub struct NativeContractExtractor<G> {
     post_processor: Option<fn(evm::BlockEntityChanges) -> evm::BlockEntityChanges>,
     /// The number of blocks behind the current block to be considered as syncing.
     sync_threshold: u64,
+    revert_buffer: Mutex<RevertBuffer<BlockMessageWithCursor<evm::BlockEntityChanges>>>,
 }
 
 impl<DB> NativeContractExtractor<DB> {
@@ -355,6 +357,7 @@ where
                     protocol_types,
                     post_processor,
                     sync_threshold,
+                    revert_buffer: Mutex::new(RevertBuffer::new()),
                 }
             }
             Ok(cursor) => {
@@ -380,6 +383,7 @@ where
                     protocol_types,
                     post_processor,
                     sync_threshold,
+                    revert_buffer: Mutex::new(RevertBuffer::new()),
                 }
             }
             Err(err) => return Err(ExtractionError::Setup(err.to_string())),
@@ -462,11 +466,27 @@ where
 
         trace!(?msg, "Processing message");
 
-        let is_syncing = self.is_syncing(msg.block.number).await;
+        // Depending on how Substreams handle them, this condition could be problematic for single
+        // block finality blockchains.
+        let is_syncing = inp.final_block_height >= msg.block.number;
 
-        self.gateway
-            .advance(&msg, inp.cursor.as_ref(), is_syncing)
-            .await?;
+        match is_syncing {
+            true => {
+                self.gateway
+                    .advance(&msg, inp.cursor.as_ref(), is_syncing)
+                    .await?;
+            }
+            false => {
+                let mut revert_buffer = self.revert_buffer.lock().await;
+                revert_buffer
+                    .insert_block(BlockMessageWithCursor::new(msg.clone(), inp.cursor.clone()));
+                for msg in revert_buffer.drain_new_finalized_blocks(inp.final_block_height) {
+                    self.gateway
+                        .advance(&msg.0, &msg.1, is_syncing)
+                        .await?;
+                }
+            }
+        }
 
         self.update_last_processed_block(msg.block)
             .await;
@@ -475,7 +495,7 @@ where
 
         self.update_cursor(inp.cursor).await;
 
-        Ok(Some(Arc::new(msg.aggregate_updates()?)))
+        return Ok(Some(Arc::new(msg.aggregate_updates()?)))
     }
 
     async fn handle_revert(

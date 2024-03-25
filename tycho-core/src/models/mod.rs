@@ -129,6 +129,10 @@ pub trait NormalisedMessage: std::fmt::Debug + std::fmt::Display + Send + Sync +
     fn source(&self) -> ExtractorIdentity;
 }
 
+pub trait MessageWithBlock<B> {
+    fn block(&self) -> &B;
+}
+
 #[derive(PartialEq, Debug, Clone, Default, Deserialize, Serialize)]
 pub enum ImplementationType {
     #[default]
