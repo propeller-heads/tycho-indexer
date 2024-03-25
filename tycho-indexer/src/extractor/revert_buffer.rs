@@ -3,23 +3,44 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use tycho_core::{
     dto::TokenBalances,
-    models::{AttrStoreKey, ComponentId},
+    models::{AttrStoreKey, ComponentId, MessageWithBlock},
     Bytes,
 };
 
-use super::evm::{BlockContractChanges, BlockEntityChanges};
+use super::evm::{Block, BlockContractChanges, BlockEntityChanges};
 
-struct RevertBuffer<B> {
-    blocks: VecDeque<B>,
+pub struct RevertBuffer<BM> {
+    blocks: VecDeque<BM>,
 }
 
-impl<B> RevertBuffer<B> {
+impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
     pub fn new() -> Self {
         Self { blocks: VecDeque::new() }
     }
 
-    pub fn insert_block(&mut self, new: B) {
-        self.blocks.push_front(new);
+    pub fn insert_block(&mut self, new: BM) {
+        self.blocks.push_back(new);
+    }
+
+    // Given a new chain finalized block height, retrieve and drain all finalized block messages
+    // from the buffer.
+    pub fn drain_new_finalized_blocks(&mut self, final_block_height: u64) -> Vec<BM> {
+        let mut res = Vec::new();
+
+        while let Some(block) = self.blocks.pop_front() {
+            if block.block().number > final_block_height {
+                // We expect blocks to be ordered by ascending block number order
+                break;
+            }
+            res.push(block);
+        }
+        res
+    }
+}
+
+impl<BM: MessageWithBlock<Block>> Default for RevertBuffer<BM> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -36,11 +57,10 @@ impl RevertBuffer<BlockEntityChanges> {
             .map(|(c_id, attr)| (c_id.to_string(), attr.to_string()))
             .collect();
 
-        for block_change in self.blocks.iter() {
+        for block_change in self.blocks.iter().rev() {
             if remaning_keys.is_empty() {
                 break;
             }
-            dbg!("going through {}", &block_change.block.number);
 
             for (key, val) in block_change.get_filtered_state_update(
                 remaning_keys
@@ -68,7 +88,7 @@ impl RevertBuffer<BlockEntityChanges> {
             .map(|(c_id, token)| (c_id.to_string(), token.to_owned().to_owned()))
             .collect();
 
-        for block_change in self.blocks.iter() {
+        for block_change in self.blocks.iter().rev() {
             if remaning_keys.is_empty() {
                 break;
             }

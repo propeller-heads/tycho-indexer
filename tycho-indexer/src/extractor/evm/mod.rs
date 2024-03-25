@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use tracing::log::warn;
 use tycho_core::{
-    dto::{self},
+    dto,
     models::{
-        Address, AttrStoreKey, Chain, ChangeType, ComponentId, ExtractorIdentity,
+        Address, AttrStoreKey, Chain, ChangeType, ComponentId, ExtractorIdentity, MessageWithBlock,
         NormalisedMessage, ProtocolType, StoreVal,
     },
     Bytes,
@@ -1101,6 +1101,26 @@ pub struct BlockEntityChanges {
     pub revert: bool,
     /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub txs_with_update: Vec<ProtocolChangesWithTx>,
+}
+
+struct BlockMessageWithCursor<B>(B, String);
+
+impl<B> BlockMessageWithCursor<B> {
+    fn new(block: B, cursor: String) -> Self {
+        Self(block, cursor)
+    }
+}
+
+impl<B: MessageWithBlock<Block>> MessageWithBlock<Block> for BlockMessageWithCursor<B> {
+    fn block(&self) -> &Block {
+        self.0.block()
+    }
+}
+
+impl MessageWithBlock<Block> for BlockEntityChanges {
+    fn block(&self) -> &Block {
+        &self.block
+    }
 }
 
 impl BlockEntityChanges {
