@@ -10,6 +10,14 @@ use tycho_core::{
 
 use super::evm::{Block, FilteredUpdates};
 
+/// This buffer temporarily stores blockchain blocks that are not yet finalized. It allows for
+/// efficient handling of block reverts without requiring database rollbacks.
+///
+/// Everytime a new block is received by an extractor, it's pushed here. Then the extractor should
+/// check if the revert buffer contains newly finalized blocks, and send them to the db if there are
+/// some.
+///
+/// In case of revert, we can just purge this buffer.
 pub struct RevertBuffer<BM> {
     blocks: VecDeque<BM>,
 }
@@ -19,6 +27,8 @@ impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
         Self { blocks: VecDeque::new() }
     }
 
+    /// Inserts a new block into the buffer. Ensures the new block is the expected next block,
+    /// otherwise panics.
     pub fn insert_block(&mut self, new: BM) {
         // Make sure the new block matches the one we expect, panic if not.
         if let Some(last_block) = self.blocks.back() {
@@ -28,8 +38,8 @@ impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
         self.blocks.push_back(new);
     }
 
-    // Given a new chain finalized block height, retrieve and drain all but the last finalized
-    // block messages from the buffer.
+    /// Drains blocks up to the specified finalized block height. The last finalized block is kept
+    /// in the buffer. Returns the drained blocks or an error if the specified block is not found.
     pub fn drain_new_finalized_blocks(
         &mut self,
         final_block_height: u64,
@@ -55,7 +65,8 @@ impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
         }
     }
 
-    // Remove all blocks after a given a target block hash.
+    /// Purges all blocks following the specified block hash from the buffer. Return an error if the
+    /// target hash is not found.
     pub fn purge(&mut self, target_hash: H256) -> Result<(), StorageError> {
         let mut target_index = None;
 
@@ -89,6 +100,8 @@ impl<B> RevertBuffer<B>
 where
     B: FilteredUpdates,
 {
+    /// Looks up buffered state updates for the provided keys. Returns a map of updates and a list
+    /// of keys for which updates were not found in the buffered blocks.
     #[allow(clippy::type_complexity)] //TODO: use type aliases
     fn lookup_state(
         &self,
@@ -124,6 +137,9 @@ where
         (res, remaning_keys.into_iter().collect())
     }
 
+    /// Looks up buffered balance updates for the provided component and token keys. Returns a map
+    /// where each key is a component ID associated with its token balances, and a list of
+    /// component-token pairs for which no updates were found.
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     fn lookup_balances(
         &self,
