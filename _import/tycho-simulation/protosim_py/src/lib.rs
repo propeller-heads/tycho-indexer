@@ -5,8 +5,8 @@ use starknet_structs_py::{
     StarknetContractOverride, StarknetSimulationParameters, StarknetSimulationResult,
 };
 use structs_py::{
-    AccountInfo, BlockHeader, SimulationDB, SimulationParameters, SimulationResult, StateUpdate,
-    TychoDB, AccountUpdate
+    AccountInfo, AccountUpdate, BlockHeader, SimulationDB, SimulationParameters, SimulationResult,
+    StateUpdate, TychoDB,
 };
 use tracing_subscriber::EnvFilter;
 
