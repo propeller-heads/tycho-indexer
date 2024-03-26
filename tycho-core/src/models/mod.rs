@@ -129,8 +129,8 @@ pub trait NormalisedMessage: std::fmt::Debug + std::fmt::Display + Send + Sync +
     fn source(&self) -> ExtractorIdentity;
 }
 
-pub trait MessageWithBlock<B> {
-    fn block(&self) -> &B;
+pub trait BlockScoped {
+    fn block(&self) -> blockchain::Block;
 }
 
 #[derive(PartialEq, Debug, Clone, Default, Deserialize, Serialize)]

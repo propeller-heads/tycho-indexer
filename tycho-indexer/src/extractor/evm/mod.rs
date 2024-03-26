@@ -12,7 +12,7 @@ use tracing::log::warn;
 use tycho_core::{
     dto,
     models::{
-        Address, AttrStoreKey, Chain, ChangeType, ComponentId, ExtractorIdentity, MessageWithBlock,
+        Address, AttrStoreKey, BlockScoped, Chain, ChangeType, ComponentId, ExtractorIdentity,
         NormalisedMessage, ProtocolType, StoreVal,
     },
     Bytes,
@@ -483,8 +483,8 @@ pub struct BlockContractChanges {
 }
 
 pub trait FilteredUpdates {
-    type IdType;
-    type KeyType;
+    type IdType: std::hash::Hash + std::cmp::Eq + Clone;
+    type KeyType: std::hash::Hash + std::cmp::Eq + Clone;
     type ValueType;
 
     fn get_filtered_state_update(
@@ -1156,29 +1156,32 @@ pub struct BlockEntityChanges {
     pub txs_with_update: Vec<ProtocolChangesWithTx>,
 }
 
-struct BlockMessageWithCursor<B>(B, String);
+struct BlockMessageWithCursor<B> {
+    block: B,
+    cursor: String,
+}
 
 impl<B> BlockMessageWithCursor<B> {
-    fn new(block: B, cursor: String) -> Self {
-        Self(block, cursor)
+    pub fn new(block: B, cursor: String) -> Self {
+        Self { block, cursor }
     }
 }
 
-impl<B: MessageWithBlock<Block>> MessageWithBlock<Block> for BlockMessageWithCursor<B> {
-    fn block(&self) -> &Block {
-        self.0.block()
+impl<B: BlockScoped> BlockScoped for BlockMessageWithCursor<B> {
+    fn block(&self) -> tycho_core::models::blockchain::Block {
+        self.block.block()
     }
 }
 
-impl MessageWithBlock<Block> for BlockEntityChanges {
-    fn block(&self) -> &Block {
-        &self.block
+impl BlockScoped for BlockEntityChanges {
+    fn block(&self) -> tycho_core::models::blockchain::Block {
+        (&self.block).into()
     }
 }
 
-impl MessageWithBlock<Block> for BlockContractChanges {
-    fn block(&self) -> &Block {
-        &self.block
+impl BlockScoped for BlockContractChanges {
+    fn block(&self) -> tycho_core::models::blockchain::Block {
+        (&self.block).into()
     }
 }
 
