@@ -539,12 +539,14 @@ impl FilteredUpdates for BlockContractChanges {
 
         for update in self.tx_updates.iter().rev() {
             for (component_id, balance_update) in update.component_balances.iter() {
-                for (token, value) in balance_update.iter() {
-                    let key: (&String, &Bytes) = (component_id, &token.as_bytes().into());
-                    if keys_set.contains(&key) {
-                        res.entry((component_id.clone(), token.as_bytes().into()))
-                            .or_insert(value.clone());
-                    }
+                for (token, value) in balance_update
+                    .iter()
+                    .filter(|(token, _)| {
+                        keys_set.contains(&(component_id, &token.as_bytes().into()))
+                    })
+                {
+                    res.entry((component_id.clone(), token.as_bytes().into()))
+                        .or_insert(value.clone());
                 }
             }
         }
@@ -1242,12 +1244,14 @@ impl FilteredUpdates for BlockEntityChanges {
 
         for update in self.txs_with_update.iter().rev() {
             for (component_id, protocol_update) in update.balance_changes.iter() {
-                for (token, value) in protocol_update.iter() {
-                    let key: (&String, &Bytes) = (component_id, &token.as_bytes().into());
-                    if keys_set.contains(&key) {
-                        res.entry((component_id.clone(), token.as_bytes().into()))
-                            .or_insert(value.clone());
-                    }
+                for (token, value) in protocol_update
+                    .iter()
+                    .filter(|(token, _)| {
+                        keys_set.contains(&(component_id, &token.as_bytes().into()))
+                    })
+                {
+                    res.entry((component_id.clone(), token.as_bytes().into()))
+                        .or_insert(value.clone());
                 }
             }
         }
