@@ -1,14 +1,13 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use ethers::types::H256;
 use tycho_core::{
     dto::TokenBalances,
-    models::{ComponentId, MessageWithBlock},
+    models::{BlockScoped, ComponentId},
     storage::StorageError,
     Bytes,
 };
 
-use super::evm::{Block, FilteredUpdates};
+use super::evm::FilteredUpdates;
 
 /// This buffer temporarily stores blockchain blocks that are not yet finalized. It allows for
 /// efficient handling of block reverts without requiring database rollbacks.
@@ -19,23 +18,29 @@ use super::evm::{Block, FilteredUpdates};
 ///
 /// In case of revert, we can just purge this buffer.
 pub struct RevertBuffer<BM> {
-    blocks: VecDeque<BM>,
+    block_messages: VecDeque<BM>,
 }
 
-impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
+impl<BM: BlockScoped> RevertBuffer<BM> {
     pub fn new() -> Self {
-        Self { blocks: VecDeque::new() }
+        Self { block_messages: VecDeque::new() }
     }
 
     /// Inserts a new block into the buffer. Ensures the new block is the expected next block,
     /// otherwise panics.
-    pub fn insert_block(&mut self, new: BM) {
+    pub fn insert_block(&mut self, new: BM) -> Result<(), StorageError> {
         // Make sure the new block matches the one we expect, panic if not.
-        if let Some(last_block) = self.blocks.back() {
-            assert_eq!(last_block.block().hash, new.block().parent_hash);
+        if let Some(last_message) = self.block_messages.back() {
+            if last_message.block().hash != new.block().parent_hash {
+                return Err(StorageError::Unexpected(
+                    "Unexpected block sequence received in revert buffer".to_string(),
+                ));
+            };
         }
 
-        self.blocks.push_back(new);
+        self.block_messages.push_back(new);
+
+        Ok(())
     }
 
     /// Drains blocks up to the specified finalized block height. The last finalized block is kept
@@ -46,16 +51,16 @@ impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
     ) -> Result<Vec<BM>, StorageError> {
         let mut target_index = None;
 
-        for (index, block) in self.blocks.iter().enumerate() {
-            if block.block().number == final_block_height {
+        for (index, block_message) in self.block_messages.iter().enumerate() {
+            if block_message.block().number == final_block_height {
                 target_index = Some(index);
             }
         }
 
         if let Some(idx) = target_index {
             // Drain and return every block before the target index.
-            let mut temp = self.blocks.split_off(idx);
-            std::mem::swap(&mut self.blocks, &mut temp);
+            let mut temp = self.block_messages.split_off(idx);
+            std::mem::swap(&mut self.block_messages, &mut temp);
             Ok(temp.into())
         } else {
             Err(StorageError::Unexpected(format!(
@@ -67,17 +72,22 @@ impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
 
     /// Purges all blocks following the specified block hash from the buffer. Return an error if the
     /// target hash is not found.
-    pub fn purge(&mut self, target_hash: H256) -> Result<(), StorageError> {
+    pub fn purge(&mut self, target_hash: Bytes) -> Result<(), StorageError> {
         let mut target_index = None;
 
-        for (index, block) in self.blocks.iter().rev().enumerate() {
-            if block.block().hash == target_hash {
-                target_index = Some(self.blocks.len() - index);
+        for (index, block_message) in self
+            .block_messages
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if block_message.block().hash == target_hash {
+                target_index = Some(self.block_messages.len() - index);
             }
         }
 
         if let Some(idx) = target_index {
-            self.blocks.truncate(idx);
+            self.block_messages.truncate(idx);
         } else {
             return Err(StorageError::Unexpected(format!(
                 "Couldnt find block with hash {} in revert buffer",
@@ -89,7 +99,7 @@ impl<BM: MessageWithBlock<Block>> RevertBuffer<BM> {
     }
 }
 
-impl<BM: MessageWithBlock<Block>> Default for RevertBuffer<BM> {
+impl<BM: BlockScoped> Default for RevertBuffer<BM> {
     fn default() -> Self {
         Self::new()
     }
@@ -106,35 +116,31 @@ where
     fn lookup_state(
         &self,
         keys: &[(&B::IdType, &B::KeyType)],
-    ) -> (HashMap<(B::IdType, B::KeyType), B::ValueType>, Vec<(B::IdType, B::KeyType)>)
-    where
-        B::KeyType: std::hash::Hash + std::cmp::Eq + Clone,
-        B::IdType: std::hash::Hash + std::cmp::Eq + Clone,
-    {
+    ) -> (HashMap<(B::IdType, B::KeyType), B::ValueType>, Vec<(B::IdType, B::KeyType)>) {
         let mut res = HashMap::new();
-        let mut remaning_keys: HashSet<(B::IdType, B::KeyType)> = HashSet::from_iter(
+        let mut remaining_keys: HashSet<(B::IdType, B::KeyType)> = HashSet::from_iter(
             keys.iter()
-                .map(|(c_id, attr)| (c_id.to_owned().clone(), attr.to_owned().clone())),
+                .map(|&(c_id, attr)| (c_id.clone(), attr.clone())),
         );
 
-        for block_change in self.blocks.iter().rev() {
-            if remaning_keys.is_empty() {
+        for block_message in self.block_messages.iter().rev() {
+            if remaining_keys.is_empty() {
                 break;
             }
 
-            for (key, val) in block_change.get_filtered_state_update(
-                remaning_keys
+            for (key, val) in block_message.get_filtered_state_update(
+                remaining_keys
                     .iter()
                     .map(|k| (&k.0, &k.1))
                     .collect(),
             ) {
-                if remaning_keys.remove(&(key.0.clone(), key.1.clone())) {
+                if remaining_keys.remove(&(key.0.clone(), key.1.clone())) {
                     res.insert(key, val);
                 }
             }
         }
 
-        (res, remaning_keys.into_iter().collect())
+        (res, remaining_keys.into_iter().collect())
     }
 
     /// Looks up buffered balance updates for the provided component and token keys. Returns a map
@@ -151,11 +157,11 @@ where
             .map(|(c_id, token)| (c_id.to_string(), token.to_owned().to_owned()))
             .collect();
 
-        for block_change in self.blocks.iter().rev() {
+        for block_message in self.block_messages.iter().rev() {
             if remaning_keys.is_empty() {
                 break;
             }
-            for (key, val) in block_change.get_filtered_balance_update(keys.to_vec().clone()) {
+            for (key, val) in block_message.get_filtered_balance_update(keys.to_vec().clone()) {
                 if remaning_keys.remove(&key) {
                     res.entry(key).or_insert(val);
                 }
@@ -373,8 +379,12 @@ mod test {
     #[test]
     fn test_revert_buffer_state_lookup() {
         let mut revert_buffer = RevertBuffer::new();
-        revert_buffer.insert_block(get_block_entity(1));
-        revert_buffer.insert_block(get_block_entity(2));
+        revert_buffer
+            .insert_block(get_block_entity(1))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(2))
+            .unwrap();
 
         let c_ids = ["State1".to_string(), "State2".to_string()];
         let new = "new".to_string();
@@ -410,9 +420,15 @@ mod test {
     #[test]
     fn test_revert_buffer_balance_lookup() {
         let mut revert_buffer = RevertBuffer::new();
-        revert_buffer.insert_block(get_block_entity(1));
-        revert_buffer.insert_block(get_block_entity(2));
-        revert_buffer.insert_block(get_block_entity(3));
+        revert_buffer
+            .insert_block(get_block_entity(1))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(2))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(3))
+            .unwrap();
 
         let c_ids = ["Balance1".to_string(), "Balance2".to_string()];
         let token_key =
@@ -475,13 +491,19 @@ mod test {
     #[test]
     fn test_drain_finalized_blocks() {
         let mut revert_buffer = RevertBuffer::new();
-        revert_buffer.insert_block(get_block_entity(1));
-        revert_buffer.insert_block(get_block_entity(2));
-        revert_buffer.insert_block(get_block_entity(3));
+        revert_buffer
+            .insert_block(get_block_entity(1))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(2))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(3))
+            .unwrap();
 
         let finalized = revert_buffer.drain_new_finalized_blocks(3);
 
-        assert_eq!(revert_buffer.blocks.len(), 1);
+        assert_eq!(revert_buffer.block_messages.len(), 1);
         assert_eq!(finalized, Ok(vec![get_block_entity(1), get_block_entity(2)]));
 
         let unknown = revert_buffer.drain_new_finalized_blocks(999);
@@ -492,20 +514,32 @@ mod test {
     #[test]
     fn test_purge() {
         let mut revert_buffer = RevertBuffer::new();
-        revert_buffer.insert_block(get_block_entity(1));
-        revert_buffer.insert_block(get_block_entity(2));
-        revert_buffer.insert_block(get_block_entity(3));
+        revert_buffer
+            .insert_block(get_block_entity(1))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(2))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(3))
+            .unwrap();
 
-        let res = revert_buffer.purge(H256::from_low_u64_be(
-            0x0000000000000000000000000000000000000000000000000000000000000001,
-        ));
+        let res = revert_buffer.purge(
+            H256::from_low_u64_be(
+                0x0000000000000000000000000000000000000000000000000000000000000001,
+            )
+            .into(),
+        );
 
-        assert_eq!(revert_buffer.blocks.len(), 1);
+        assert_eq!(revert_buffer.block_messages.len(), 1);
         assert!(res.is_ok());
 
-        let unknown = revert_buffer.purge(H256::from_low_u64_be(
-            0x0000000000000000000000000000000000000000000000000000000000000999,
-        ));
+        let unknown = revert_buffer.purge(
+            H256::from_low_u64_be(
+                0x0000000000000000000000000000000000000000000000000000000000000999,
+            )
+            .into(),
+        );
 
         assert!(unknown.is_err());
     }
@@ -514,7 +548,11 @@ mod test {
     #[should_panic]
     fn test_insert_wrong_block() {
         let mut revert_buffer = RevertBuffer::new();
-        revert_buffer.insert_block(get_block_entity(1));
-        revert_buffer.insert_block(get_block_entity(3));
+        revert_buffer
+            .insert_block(get_block_entity(1))
+            .unwrap();
+        revert_buffer
+            .insert_block(get_block_entity(3))
+            .unwrap();
     }
 }

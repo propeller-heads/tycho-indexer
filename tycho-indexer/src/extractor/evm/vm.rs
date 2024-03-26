@@ -511,13 +511,14 @@ where
             false => {
                 let mut revert_buffer = self.revert_buffer.lock().await;
                 revert_buffer
-                    .insert_block(BlockMessageWithCursor::new(msg.clone(), inp.cursor.clone()));
+                    .insert_block(BlockMessageWithCursor::new(msg.clone(), inp.cursor.clone()))
+                    .expect("Error while inserting a block into revert buffer");
                 for msg in revert_buffer
                     .drain_new_finalized_blocks(inp.final_block_height)
                     .expect("Final block height not found in revert buffer")
                 {
                     self.gateway
-                        .upsert_contract(&msg.0, &msg.1, is_syncing)
+                        .upsert_contract(&msg.block, &msg.cursor, is_syncing)
                         .await?;
                 }
             }
