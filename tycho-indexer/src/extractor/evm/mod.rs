@@ -1496,7 +1496,7 @@ pub mod fixtures {
                                 value: vec![0xa1, 0xa2, 0xa3, 0xa4],
                             },
                             ContractSlot {
-                                slot: vec![0xb1, 0xb2, 0xb3, 0xb4],
+                                slot: vec![0xa1, 0xa2, 0xa3, 0xa4],
                                 value: vec![0xc1, 0xc2, 0xc3, 0xc4],
                             },
                         ],
@@ -1973,7 +1973,7 @@ mod test {
                             H160::from_low_u64_be(0x0000000000000000000000000000000061626364),
                             Chain::Ethereum,
                             fixtures::evm_slots([
-                                (2981278644, 3250766788),
+                                (2711790500, 3250766788),
                                 (2442302356, 2711790500),
                             ]),
                             Some(U256::from(4059231220u64)),
@@ -2096,7 +2096,7 @@ mod test {
                     slots: fixtures::evm_slots([
                         (2711790500, 2981278644),
                         (3250766788, 3520254932),
-                        (2981278644, 3250766788),
+                        (2711790500, 3250766788),
                         (2442302356, 2711790500),
                     ]),
                     balance: Some(U256::from(4059231220u64)),
@@ -2210,6 +2210,73 @@ mod test {
         .into_iter()
         .collect();
         ProtocolChangesWithTx { protocol_states: states, tx: transaction01(), ..Default::default() }
+    }
+
+    #[test]
+    fn test_block_contract_changes_state_filter() {
+        let block = block_state_changes();
+
+        let account1 = H160::from_low_u64_be(0x0000000000000000000000000000000061626364);
+        let slot1 = U256::from(2711790500_u64);
+        let slot2 = U256::from(3250766788_u64);
+        let account_missing = H160::from_low_u64_be(0x000000000000000000000000000000000badbabe);
+        let slot_missing = U256::from(12345678_u64);
+
+        let keys = vec![
+            (&account1, &slot1),
+            (&account1, &slot2),
+            (&account_missing, &slot1),
+            (&account1, &slot_missing),
+        ];
+
+        let filtered = block.get_filtered_state_update(keys);
+
+        assert_eq!(
+            filtered,
+            HashMap::from([
+                ((account1, slot1), U256::from(3250766788_u64)),
+                ((account1, slot2), U256::from(3520254932_u64))
+            ])
+        );
+    }
+
+    #[test]
+    fn test_block_contract_changes_balance_filter() {
+        let block = block_state_changes();
+
+        let c_id_key =
+            "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902".to_string();
+        let token_key =
+            Bytes::from(H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap());
+        let missing_token =
+            Bytes::from(H160::from_str("0x0000000000000000000000000000000000000000").unwrap());
+        let missing_component = "missing".to_string();
+
+        let keys = vec![
+            (&c_id_key, &token_key),
+            (&c_id_key, &missing_token),
+            (&missing_component, &token_key),
+        ];
+
+        #[allow(clippy::mutable_key_type)]
+        // Clippy thinks that tuple with Bytes are a mutable type.
+        let filtered = block.get_filtered_balance_update(keys);
+
+        assert_eq!(
+            filtered,
+            HashMap::from([(
+                (c_id_key.clone(), token_key.clone()),
+                ComponentBalance {
+                    token: H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                    balance: Bytes::from(10.encode_to_vec()),
+                    balance_float: 2058.0,
+                    modify_tx: H256::from_low_u64_be(
+                        0x0000000000000000000000000000000000000000000000000000000000000001
+                    ),
+                    component_id: c_id_key.clone()
+                }
+            )])
+        )
     }
 
     #[test]
