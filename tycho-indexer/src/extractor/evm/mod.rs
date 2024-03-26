@@ -513,12 +513,13 @@ impl FilteredUpdates for BlockContractChanges {
 
         for update in self.tx_updates.iter().rev() {
             for (address, account_update) in update.account_updates.iter() {
-                for (attr, val) in account_update.slots.iter() {
-                    let key = (address, attr);
-                    if keys_set.contains(&key) {
-                        res.entry((*address, *attr))
-                            .or_insert(*val);
-                    }
+                for (attr, val) in account_update
+                    .slots
+                    .iter()
+                    .filter(|(attr, _)| keys_set.contains(&(address, attr)))
+                {
+                    res.entry((*address, *attr))
+                        .or_insert(*val);
                 }
             }
         }
@@ -1197,12 +1198,10 @@ impl FilteredUpdates for BlockEntityChanges {
                 for (attr, val) in protocol_update
                     .updated_attributes
                     .iter()
+                    .filter(|(attr, _)| keys_set.contains(&(component_id, attr)))
                 {
-                    let key = (component_id, attr);
-                    if keys_set.contains(&key) {
-                        res.entry((component_id.clone(), attr.clone()))
-                            .or_insert(val.clone());
-                    }
+                    res.entry((component_id.clone(), attr.clone()))
+                        .or_insert(val.clone());
                 }
             }
         }
@@ -1647,7 +1646,14 @@ pub mod fixtures {
                             implementation_type: 0,
                         }),
                     }],
-                    balance_changes: vec![],
+                    balance_changes: vec![BalanceChange {
+                        token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F")
+                            .unwrap()
+                            .0
+                            .to_vec(),
+                        balance: 1_i32.to_le_bytes().to_vec(),
+                        component_id: "Balance1".into(),
+                    }],
                 },
             ],
         }
@@ -2382,23 +2388,21 @@ mod test {
         )]
         .into_iter()
         .collect();
-        let new_balances = [(
-            "Component_with_balance_changes".to_string(),
+        let new_balances = HashMap::from([(
+            "Balance1".to_string(),
             [(
                 H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                 ComponentBalance {
                     token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                     balance: Bytes::from(1_i32.to_le_bytes()),
                     modify_tx: tx.hash,
-                    component_id: "Component_with_balance_changes".to_string(),
-                    balance_float: 1.0,
+                    component_id: "Balance1".to_string(),
+                    balance_float: 16777216.0,
                 },
             )]
             .into_iter()
             .collect(),
-        )]
-        .into_iter()
-        .collect();
+        )]);
 
         BlockEntityChanges {
             extractor: "test".to_string(),
@@ -2455,7 +2459,7 @@ mod test {
     fn test_block_entity_changes_balance_filter() {
         let block = block_entity_changes();
 
-        let c_id_key = "Component_with_balance_changes".to_string();
+        let c_id_key = "Balance1".to_string();
         let token_key =
             Bytes::from(H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap());
         let missing_token =
@@ -2479,7 +2483,7 @@ mod test {
                 ComponentBalance {
                     token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                     balance: Bytes::from(1_i32.to_le_bytes()),
-                    balance_float: 1.0,
+                    balance_float: 16777216.0,
                     modify_tx: H256::from_low_u64_be(
                         0x0000000000000000000000000000000000000000000000000000000011121314,
                     ),
@@ -2578,6 +2582,25 @@ mod test {
         )]
         .into_iter()
         .collect();
+
+        let new_balances = [(
+            "Balance1".to_string(),
+            [(
+                H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                ComponentBalance {
+                    token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                    balance: Bytes::from(1_i32.to_le_bytes()),
+                    modify_tx: tx.hash,
+                    component_id: "Balance1".to_string(),
+                    balance_float: 16777216.0,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
         BlockEntityChangesResult {
             extractor: "test".to_string(),
             chain: Chain::Ethereum,
@@ -2594,7 +2617,7 @@ mod test {
             state_updates,
             new_protocol_components,
             deleted_protocol_components: HashMap::new(),
-            component_balances: HashMap::new(),
+            component_balances: new_balances,
             component_tvl: HashMap::new(),
         }
     }
