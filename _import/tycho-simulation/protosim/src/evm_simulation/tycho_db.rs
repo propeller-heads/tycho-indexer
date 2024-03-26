@@ -127,7 +127,7 @@ impl PreCachedDB {
     }
 
     #[instrument(skip_all)]
-    async fn update(&self, account_updates: Vec<&AccountUpdate>) {
+    pub async fn update(&self, account_updates: Vec<AccountUpdate>) {
         // Block the current thread until the future completes.
         self.block_on(async {
             // Hold the write lock for the duration of the function so that no other thread can
@@ -629,7 +629,7 @@ mod tests {
         );
 
         mock_db
-            .update(vec![&account_update])
+            .update(vec![account_update])
             .await;
 
         let account_info = mock_db

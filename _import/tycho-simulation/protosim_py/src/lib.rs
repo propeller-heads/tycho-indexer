@@ -5,8 +5,8 @@ use starknet_structs_py::{
     StarknetContractOverride, StarknetSimulationParameters, StarknetSimulationResult,
 };
 use structs_py::{
-    AccountInfo, BlockHeader, SimulationDB, SimulationParameters, SimulationResult, StateUpdate,
-    TychoDB,
+    AccountInfo, AccountUpdate, BlockHeader, SimulationDB, SimulationParameters, SimulationResult,
+    StateUpdate, TychoDB,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -48,6 +48,7 @@ fn protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<AccountInfo>()?;
     m.add_class::<SimulationDB>()?;
     m.add_class::<TychoDB>()?;
+    m.add_class::<AccountUpdate>()?;
     m.add_class::<StarknetSimulationEngine>()?;
     m.add_class::<StarknetContractOverride>()?;
     m.add_class::<StarknetSimulationParameters>()?;

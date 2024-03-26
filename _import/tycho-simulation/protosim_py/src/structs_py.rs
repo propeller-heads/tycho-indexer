@@ -517,4 +517,20 @@ impl TychoDB {
     pub fn block_number(self_: PyRefMut<Self>) -> Option<u64> {
         self_.inner.block_number()
     }
+
+    // Apply a list of account updates to TychoDB instance.
+    #[pyo3(signature = (account_updates))]
+    pub fn update(self_: PyRefMut<Self>, account_updates: Vec<AccountUpdate>) {
+        let account_updates: Vec<tycho_models::AccountUpdate> = account_updates
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
+        runtime.block_on(async {
+            self_
+                .inner
+                .update(account_updates)
+                .await;
+        })
+    }
 }
