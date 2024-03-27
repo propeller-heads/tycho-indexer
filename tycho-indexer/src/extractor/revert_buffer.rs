@@ -44,7 +44,8 @@ impl<BM: BlockScoped> RevertBuffer<BM> {
     }
 
     /// Drains blocks up to the specified finalized block height. The last finalized block is kept
-    /// in the buffer. Returns the drained blocks or an error if the specified block is not found.
+    /// in the buffer. Returns the drained blocks ordered by ascending number or an error if the
+    /// specified block is not found.
     pub fn drain_new_finalized_blocks(
         &mut self,
         final_block_height: u64,
@@ -70,9 +71,9 @@ impl<BM: BlockScoped> RevertBuffer<BM> {
         }
     }
 
-    /// Purges all blocks following the specified block hash from the buffer. Return an error if the
-    /// target hash is not found.
-    pub fn purge(&mut self, target_hash: Bytes) -> Result<(), StorageError> {
+    /// Purges all blocks following the specified block hash from the buffer. Returns the purged
+    /// blocks ordered by ascending number or an error if the target hash is not found.
+    pub fn purge(&mut self, target_hash: Bytes) -> Result<Vec<BM>, StorageError> {
         let mut target_index = None;
 
         for (index, block_message) in self
@@ -87,15 +88,25 @@ impl<BM: BlockScoped> RevertBuffer<BM> {
         }
 
         if let Some(idx) = target_index {
-            self.block_messages.truncate(idx);
+            Ok(self
+                .block_messages
+                .split_off(idx)
+                .into())
         } else {
-            return Err(StorageError::Unexpected(format!(
+            Err(StorageError::Unexpected(format!(
                 "Couldnt find block with hash {} in revert buffer",
                 target_hash
-            )));
+            )))
         }
+    }
 
-        Ok(())
+    /// Returns an `Option` containing the most recent block in the buffer or `None` if the buffer
+    /// is empty
+    pub fn get_most_recent_block(&self) -> Option<tycho_core::models::blockchain::Block> {
+        if let Some(block_message) = self.block_messages.back() {
+            return Some(block_message.block());
+        }
+        None
     }
 }
 
@@ -113,7 +124,7 @@ where
     /// Looks up buffered state updates for the provided keys. Returns a map of updates and a list
     /// of keys for which updates were not found in the buffered blocks.
     #[allow(clippy::type_complexity)] //TODO: use type aliases
-    fn lookup_state(
+    pub fn lookup_state(
         &self,
         keys: &[(&B::IdType, &B::KeyType)],
     ) -> (HashMap<(B::IdType, B::KeyType), B::ValueType>, Vec<(B::IdType, B::KeyType)>) {
@@ -147,7 +158,7 @@ where
     /// where each key is a component ID associated with its token balances, and a list of
     /// component-token pairs for which no updates were found.
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
-    fn lookup_balances(
+    pub fn lookup_balances(
         &self,
         keys: &[(&ComponentId, &Bytes)],
     ) -> (HashMap<String, TokenBalances>, Vec<(ComponentId, Bytes)>) {
@@ -524,7 +535,7 @@ mod test {
             .insert_block(get_block_entity(3))
             .unwrap();
 
-        let res = revert_buffer.purge(
+        let purged = revert_buffer.purge(
             H256::from_low_u64_be(
                 0x0000000000000000000000000000000000000000000000000000000000000001,
             )
@@ -532,7 +543,8 @@ mod test {
         );
 
         assert_eq!(revert_buffer.block_messages.len(), 1);
-        assert!(res.is_ok());
+
+        assert_eq!(purged, Ok(vec![get_block_entity(2), get_block_entity(3)]));
 
         let unknown = revert_buffer.purge(
             H256::from_low_u64_be(

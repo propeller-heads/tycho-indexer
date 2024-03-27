@@ -1173,6 +1173,26 @@ impl<B: BlockScoped> BlockScoped for BlockMessageWithCursor<B> {
     }
 }
 
+impl<B: FilteredUpdates> FilteredUpdates for BlockMessageWithCursor<B> {
+    type IdType = B::IdType;
+    type KeyType = B::KeyType;
+    type ValueType = B::ValueType;
+
+    fn get_filtered_state_update(
+        &self,
+        keys: Vec<(&Self::IdType, &Self::KeyType)>,
+    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
+        B::get_filtered_state_update(&self.block, keys)
+    }
+
+    fn get_filtered_balance_update(
+        &self,
+        keys: Vec<(&String, &Bytes)>,
+    ) -> HashMap<(String, Bytes), ComponentBalance> {
+        B::get_filtered_balance_update(&self.block, keys)
+    }
+}
+
 impl BlockScoped for BlockEntityChanges {
     fn block(&self) -> tycho_core::models::blockchain::Block {
         (&self.block).into()

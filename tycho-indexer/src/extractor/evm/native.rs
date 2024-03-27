@@ -1,6 +1,7 @@
 use super::{
     token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
     utils::format_duration,
+    ProtocolStateDelta,
 };
 use crate::{
     extractor::{
@@ -26,8 +27,11 @@ use std::{
 use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, trace, warn};
 use tycho_core::{
-    models,
-    models::{Chain, ExtractionState, ExtractorIdentity, ProtocolType, TxHash},
+    models::{
+        self,
+        protocol::{ProtocolComponent, ProtocolComponentState},
+        Chain, ExtractionState, ExtractorIdentity, ProtocolType, TxHash,
+    },
     storage::{
         BlockIdentifier, ChainGateway, ExtractionStateGateway, ProtocolGateway, StorageError,
     },
@@ -138,6 +142,11 @@ pub trait NativeGateway: Send + Sync {
         to: &BlockIdentifier,
         new_cursor: &str,
     ) -> Result<evm::BlockEntityChangesResult, StorageError>;
+
+    async fn get_components_state<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<Vec<ProtocolComponentState>, StorageError>;
 }
 
 impl<T> NativePgGateway<T>
@@ -293,6 +302,15 @@ where
 impl NativeGateway for NativePgGateway<TokenPreProcessor> {
     async fn get_cursor(&self) -> Result<Vec<u8>, StorageError> {
         self.get_last_cursor().await
+    }
+
+    async fn get_components_state<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<Vec<ProtocolComponentState>, StorageError> {
+        self.state_gateway
+            .get_protocol_states(&self.chain, None, None, Some(component_ids))
+            .await
     }
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
@@ -517,32 +535,132 @@ where
             ))
         })?;
 
-        let current = self
-            .get_last_processed_block()
-            .await
-            .map(|block| BlockIdentifier::Hash(block.hash.into()));
+        let mut revert_buffer = self.revert_buffer.lock().await;
 
-        // Make sure we have a current block, otherwise it's not safe to revert.
-        // TODO: add last block to extraction state and get it when creating a new extractor.
-        if current.is_none() {
-            // ignore for now if we don't have the current block, just ignore the revert.
-            // This behaviour is not correct and we will have to rollback the database
-            // to a good state once the revert issue has been fixed.
-            return Ok(None);
+        // Purge the buffer and create a set of state that was reverted
+        let reverted_state = revert_buffer
+            .purge(block_hash.into())
+            .expect("Failed to purge revert buffer");
+
+        let reverted_keys: HashSet<_> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block
+                    .txs_with_update
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .protocol_states
+                            .iter()
+                            .flat_map(|(c_id, delta)| {
+                                delta
+                                    .updated_attributes
+                                    .keys()
+                                    .map(move |key| (c_id, key))
+                            })
+                    })
+            })
+            .collect();
+
+        // Fetch previous values for every reverted states
+        // First search in the buffer
+        let (buffered, missing) = revert_buffer.lookup_state(
+            &reverted_keys
+                .into_iter()
+                .collect::<Vec<_>>(),
+        );
+
+        let mut state_updates: HashMap<String, evm::ProtocolStateDelta> = buffered
+            .into_iter()
+            .fold(HashMap::new(), |mut acc, ((c_id, key), value)| {
+                acc.entry(c_id.clone())
+                    .or_insert_with(|| evm::ProtocolStateDelta {
+                        component_id: c_id.clone(),
+                        updated_attributes: HashMap::new(),
+                        deleted_attributes: HashSet::new(),
+                    })
+                    .updated_attributes
+                    .insert(key.clone(), value);
+                acc
+            });
+
+        // Then for every missing previous values in the buffer, get the data from our db
+        let missing_map: HashMap<String, Vec<String>> =
+            missing
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (c_id, key)| {
+                    acc.entry(c_id).or_default().push(key);
+                    acc
+                });
+
+        let missing_components_states = self
+            .gateway
+            .get_components_state(
+                &missing_map
+                    .keys()
+                    .map(AsRef::as_ref)
+                    .collect::<Vec<&str>>(),
+            )
+            .await
+            .expect("Failed to retrieve components states during revert");
+
+        for mut missing_state in missing_components_states {
+            if let Some(keys) = missing_map.get(&missing_state.component_id) {
+                for key in keys {
+                    if let Some(attr) = missing_state.attributes.remove(key) {
+                        state_updates
+                            .entry(missing_state.component_id.clone())
+                            .or_insert_with(|| evm::ProtocolStateDelta {
+                                component_id: missing_state.component_id.clone(),
+                                updated_attributes: HashMap::new(),
+                                deleted_attributes: HashSet::new(),
+                            })
+                            .updated_attributes
+                            .insert(key.clone(), attr);
+                    } else {
+                        // Return with error if we couldn't find a previous value here because it
+                        // means clients would have a wrong state.
+                        return Err(ExtractionError::Storage(StorageError::NotFound(
+                            "Attribute".to_string(),
+                            format!("component_id:{}, key:{}", missing_state.component_id, key),
+                        )))
+                    }
+                }
+            }
         }
 
-        let changes = self
-            .gateway
-            .revert(
-                current,
-                &BlockIdentifier::Hash(block_hash.into()),
-                inp.last_valid_cursor.as_ref(),
-            )
-            .await?;
+        let revert_message = evm::BlockEntityChangesResult {
+            extractor: self.name.clone(),
+            chain: self.chain,
+            block: revert_buffer
+                .get_most_recent_block()
+                .expect("Couldn't find most recent block in buffer during revert")
+                .into(),
+            revert: true,
+            state_updates,
+            new_protocol_components: HashMap::new(),
+            deleted_protocol_components: HashMap::new(),
+            component_balances: HashMap::new(),
+            component_tvl: HashMap::new(),
+        };
+
         self.update_cursor(inp.last_valid_cursor)
             .await;
 
-        Ok((!changes.state_updates.is_empty()).then_some(Arc::new(changes)))
+        let should_send = !revert_message.state_updates.is_empty() ||
+            !revert_message
+                .new_protocol_components
+                .is_empty() ||
+            !revert_message
+                .deleted_protocol_components
+                .is_empty() ||
+            !revert_message
+                .component_balances
+                .is_empty() ||
+            !revert_message.component_tvl.is_empty();
+
+        Ok(should_send.then_some(Arc::new(revert_message)))
     }
 
     async fn handle_progress(&self, _inp: ModulesProgress) -> Result<(), ExtractionError> {
