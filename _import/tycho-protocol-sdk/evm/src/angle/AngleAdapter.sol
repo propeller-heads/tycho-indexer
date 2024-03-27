@@ -12,9 +12,8 @@ uint256 constant STANDARD_TOKEN_DECIMALS = 10 ** 18;
 
 /// @title AngleAdapter
 /// @dev Information about prices: When swapping collateral to agEUR, the trade
-/// price will not decrease(amountOut);
-/// Instead, when swapping agEUR to collateral, it will, because agEUR is
-/// minted, and this mechanism is used to
+/// price will not decrease(amountOut). Instead, when swapping agEUR to
+/// collateral, it will, because agEUR is minted, and this mechanism is used to
 /// stabilize the agEUR price.
 contract AngleAdapter is ISwapAdapter {
     ITransmuter immutable transmuter;
