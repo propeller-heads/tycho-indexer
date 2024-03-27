@@ -1,13 +1,14 @@
 [package]
-name = "substreams-ethereum-template"
+name = "ethereum-template"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "substreams_ethereum_template"
+name = "ethereum_template"
 crate-type = ["cdylib"]
 
 [dependencies]
-substreams = "0.5"
-substreams-ethereum = "0.9"
-prost = "0.11"
+substreams.workspace = true
+substreams-ethereum.workspace = true
+prost.workspace = true
+tycho-substreams.workspace = true

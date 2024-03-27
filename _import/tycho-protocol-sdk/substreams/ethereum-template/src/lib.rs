@@ -1,9 +1,5 @@
-
 use substreams_ethereum::pb::eth;
-
-use pb::tycho::evm::v1::{self as tycho};
-
-mod pb;
+mod modules;
 
 #[substreams::handlers::map]
 fn map_changes(

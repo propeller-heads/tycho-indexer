@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 pub mod yearn_linear_pool_factory;
 pub mod composable_stable_pool_factory;
 pub mod vault;

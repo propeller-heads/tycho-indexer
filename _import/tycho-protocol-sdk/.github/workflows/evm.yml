@@ -1,6 +1,9 @@
-name: test
+name: test evm
 
-on: workflow_dispatch
+on:
+  push:
+    paths:
+      - "evm/**"
 
 env:
   FOUNDRY_PROFILE: ci
@@ -29,10 +32,16 @@ jobs:
           forge build --sizes
         id: build
 
+      - name: Run Forge format check
+        run:  |
+              forge --version
+              forge fmt --check
+        id:   format
+
       - name: Run Forge tests
         run: |
           cd evm
           forge test -vvv
         id: test
         env:
-          ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }} 
+          ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}

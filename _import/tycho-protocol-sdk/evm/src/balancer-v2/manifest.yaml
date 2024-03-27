@@ -1,6 +1,6 @@
 # information about the author helps us reach out in case of issues.
 author:
-  name: Propellerheads.xyz
+  name: Matt
   email: pistomat@propellerheads.xyz
 
 # Protocol Constants
@@ -19,7 +19,7 @@ contract: BalancerV2SwapAdapter.sol
 instances:
   - chain:
       name: mainnet
-      id: 0
+      id: 1
     arguments:
       - "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
 
@@ -27,10 +27,10 @@ instances:
 # getTokens are not implemented.
 tests:
   instances:
-    - pool_id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
-      sell_token: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-      buy_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    - pool_id: "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"
+      sell_token: "0xba100000625a3754423978a60c9317c58a424e3D"
+      buy_token: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
       block: 17000000
       chain:
-        id: 0
         name: mainnet
+        id: 1

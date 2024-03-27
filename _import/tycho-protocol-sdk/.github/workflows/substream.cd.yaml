@@ -1,0 +1,45 @@
+name: Substreams CD
+
+on:
+  push:
+    tags:
+      - "ethereum-*"
+  workflow_dispatch:
+    inputs:
+      package:
+        required: true
+        description: "Package to build"
+
+jobs:
+  Release:
+    name: Release ${{ inputs.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install Substreams CLI
+        run: |
+          # Use correct binary for your platform
+          LINK=$(curl -s https://api.github.com/repos/streamingfast/substreams/releases/latest | awk "/download.url.*linux_$(uname -m)/ {print \$2}" | sed 's/"//g')
+          curl -L "$LINK" | tar zxf - -C /usr/local/bin
+          chmod +x /usr/local/bin/substreams
+          substreams --version
+
+      - name: Run checks
+        run: |
+          cd substreams
+          ./release.sh ${{ inputs.package }}

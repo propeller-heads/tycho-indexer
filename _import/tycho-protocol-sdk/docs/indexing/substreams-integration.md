@@ -42,6 +42,18 @@ The models below are very similar to the vm integration models but have a few mo
 
 Once again changes must be aggregated on a transaction level, emitting these models with duplicated transaction as the final output would be considered an error.
 
+#### Integer Byte encoding
+
+Many of the types above are variable length bytes. This allows for flexibility across blockchains but require agreeing on an informal interface, so later applications know how to interpret these bytes.
+
+**Integers:** especially integers used to communicate balances, should always be encoded as unsigned big-endian integer. This is simply because balances serve multiple purposes within the system and need to be decoded in multiple location of the messages journey.
+
+**Strings**: If you need to store strings, please use utf-8 encoding to store them as bytes.
+
+**Attributes:** the value encoding for attributes in the native implementation messages is variable. It depends on the use case. Since the attributes are highly dynamic they are only used by the corresponding logic components, so the encoding can be tailored to the logic implementation: E.g. since Rust uses little endian one may choose to use little endian encoding for integers if the native logic module is written in Rust.
+
+
+
 ### Changes of interest
 
 PropellerHeads integration should at least communicate the following changes:

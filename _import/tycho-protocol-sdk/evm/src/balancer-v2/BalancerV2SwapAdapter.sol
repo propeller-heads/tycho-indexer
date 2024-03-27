@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.13;
 
 import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
@@ -478,9 +477,8 @@ interface IVault {
             uint256 lastChangeBlock
         );
 
-    enum SwapKind
-    /// The number of tokens to send to the Pool is known
-    {
+    enum SwapKind {
+        /// The number of tokens to send to the Pool is known
         GIVEN_IN,
         /// The number of tokens to take from the Pool is known
         GIVEN_OUT

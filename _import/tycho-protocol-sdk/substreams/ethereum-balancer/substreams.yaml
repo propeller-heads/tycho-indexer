@@ -1,23 +1,23 @@
 specVersion: v0.1.0
 package:
-  name: "substreams_balancer"
+  name: "ethereum_balancer"
   version: v0.1.0
 
 protobuf:
   files:
     - tycho/evm/v1/vm.proto
     - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
   importPaths:
-    - ../../proto/tycho/evm/v1/
-    - ./proto
+    - ../../proto
 
 binaries:
   default:
     type: wasm/rust-v1
-    file: target/wasm32-unknown-unknown/release/substreams_balancer.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_balancer.wasm
 
 modules:
-  - name: map_pools_created
+  - name: map_components
     kind: map
     initialBlock: 12369300
     inputs:
@@ -25,40 +25,40 @@ modules:
     output:
       type: proto:tycho.evm.v1.GroupedTransactionProtocolComponents
 
-  - name: store_pools_created
+  - name: store_components
     kind: store
     initialBlock: 12369300
     updatePolicy: add
     valueType: int64
     inputs:
-      - map: map_pools_created
+      - map: map_components
 
-  - name: map_balance_deltas
+  - name: map_relative_balances
     kind: map
-    initialBlock: 12369300  # An arbitrary block that should change based on your requirements
+    initialBlock: 12369300 # An arbitrary block that should change based on your requirements
     inputs:
       - source: sf.ethereum.type.v2.Block
-      - store: store_pools_created
+      - store: store_components
     output:
       type: proto:tycho.evm.v1.BalanceDeltas
 
-  - name: store_balance_changes
+  - name: store_balances
     kind: store
     initialBlock: 12369300
     updatePolicy: add
     valueType: bigint
     inputs:
-      - map: map_balance_deltas
+      - map: map_relative_balances
 
-  - name: map_changes
+  - name: map_protocol_changes
     kind: map
     initialBlock: 12369300
     inputs:
       - source: sf.ethereum.type.v2.Block
-      - map: map_pools_created
-      - map: map_balance_deltas
-      - store: store_pools_created
-      - store: store_balance_changes
-        mode: deltas  # This is the key property that simplifies `BalanceChange` handling
+      - map: map_components
+      - map: map_relative_balances
+      - store: store_components
+      - store: store_balances
+        mode: deltas # This is the key property that simplifies `BalanceChange` handling
     output:
       type: proto:tycho.evm.v1.BlockContractChanges
