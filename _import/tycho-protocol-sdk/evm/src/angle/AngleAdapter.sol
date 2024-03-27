@@ -122,8 +122,8 @@ contract AngleAdapter is ISwapAdapter {
 
     /// @inheritdoc ISwapAdapter
     /// @dev Since Angle has no pool IDs but supports 3 tokens(agToken and the
-    /// collaterals),
-    /// we return all the available collaterals and the agToken(agEUR)
+    /// collaterals), we return all the available collaterals and the
+    /// agToken(agEUR)
     function getTokens(bytes32)
         external
         view
