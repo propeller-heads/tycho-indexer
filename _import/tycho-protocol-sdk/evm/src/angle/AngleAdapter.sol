@@ -59,14 +59,13 @@ contract AngleAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
-    /// @dev mint may have no limits, but we underestimate them to make sure,
-    /// with the same amount of sellToken.
-    /// We use the quoteIn (incl. fee), because calculating fee requires a part
-    /// of the implementation of
-    /// the Angle Diamond Storage, and therefore redundant functions and
-    /// excessive contract size, with an high complexity.
-    /// In addition, we underestimate to / RESERVE_LIMIT_FACTOR to ensure swaps
-    /// with OrderSide.Buy won't fail anyway.
+    /// @dev Mint may have no limits, but we underestimate them to make sure,
+    /// with the same amount of sellToken. We use the quoteIn (incl. fee),
+    /// because calculating fee requires a part of the implementation of the
+    /// Angle Diamond Storage, and therefore redundant functions and excessive
+    /// contract size, with an high complexity. In addition, we underestimate to
+    /// RESERVE_LIMIT_FACTOR to ensure swaps with OrderSide.Buy won't fail
+    /// anyway.
     function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
         external
         view
