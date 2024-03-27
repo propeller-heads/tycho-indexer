@@ -10,7 +10,6 @@ constants:
   capabilities:
     - SellSide
     - BuySide
-    - PriceFunction
 
 # The file containing the adapter contract
 contract: AngleAdapter.sol
