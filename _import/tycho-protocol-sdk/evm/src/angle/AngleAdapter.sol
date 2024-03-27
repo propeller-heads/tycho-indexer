@@ -115,7 +115,7 @@ contract AngleAdapter is ISwapAdapter {
         override
         returns (Capability[] memory capabilities)
     {
-        capabilities = new Capability[](3);
+        capabilities = new Capability[](2);
         capabilities[0] = Capability.SellOrder;
         capabilities[1] = Capability.BuyOrder;
     }

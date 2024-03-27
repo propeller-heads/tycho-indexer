@@ -176,7 +176,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         Capability[] memory res =
             adapter.getCapabilities(pair, IERC20(t0), IERC20(t1));
 
-        assertEq(res.length, 3);
+        assertEq(res.length, 2);
     }
 
     function testGetTokensAngle() public {
