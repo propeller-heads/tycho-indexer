@@ -1,15 +1,17 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use tracing::{debug, trace};
 use tycho_core::{dto::TokenBalances, models::ComponentId, storage::StorageError, Bytes};
 
 use super::evm::ComponentBalance;
 
-pub(crate) struct RevertBufferEntry<B: RevertBufferBlock> {
+#[derive(Debug)]
+pub(crate) struct BlockUpdateWithCursor<B: RevertBufferEntity> {
     block_update: B,
     cursor: String,
 }
 
-impl<B: RevertBufferBlock> RevertBufferEntry<B> {
+impl<B: RevertBufferEntity> BlockUpdateWithCursor<B> {
     pub(crate) fn new(block_update: B, cursor: String) -> Self {
         Self { block_update, cursor }
     }
@@ -23,7 +25,7 @@ impl<B: RevertBufferBlock> RevertBufferEntry<B> {
     }
 }
 
-pub(crate) trait RevertBufferBlock {
+pub(crate) trait RevertBufferEntity: std::fmt::Debug {
     type IdType: std::hash::Hash + std::cmp::Eq + Clone;
     type KeyType: std::hash::Hash + std::cmp::Eq + Clone;
     type ValueType;
@@ -50,24 +52,26 @@ pub(crate) trait RevertBufferBlock {
 /// some.
 ///
 /// In case of revert, we can just purge this buffer.
-pub(crate) struct RevertBuffer<B: RevertBufferBlock> {
-    block_messages: VecDeque<RevertBufferEntry<B>>,
+pub(crate) struct RevertBuffer<B: RevertBufferEntity> {
+    block_messages: VecDeque<BlockUpdateWithCursor<B>>,
 }
 
-impl<B: RevertBufferBlock> RevertBuffer<B> {
+impl<B: RevertBufferEntity> RevertBuffer<B> {
     pub(crate) fn new() -> Self {
         Self { block_messages: VecDeque::new() }
     }
 
     /// Inserts a new block into the buffer. Ensures the new block is the expected next block,
     /// otherwise panics.
-    pub fn insert_block(&mut self, new: RevertBufferEntry<B>) -> Result<(), StorageError> {
+    pub fn insert_block(&mut self, new: BlockUpdateWithCursor<B>) -> Result<(), StorageError> {
         // Make sure the new block matches the one we expect, panic if not.
         if let Some(last_message) = self.block_messages.back() {
             if last_message.block_update.block().hash != new.block_update.block().parent_hash {
-                return Err(StorageError::Unexpected(
-                    "Unexpected block sequence received in revert buffer".to_string(),
-                ));
+                return Err(StorageError::Unexpected(format!(
+                    "Unexpected block sequence. Expected parent hash {} received {}",
+                    last_message.block_update.block().hash,
+                    new.block_update.block().parent_hash
+                )));
             };
         }
 
@@ -82,7 +86,11 @@ impl<B: RevertBufferBlock> RevertBuffer<B> {
     pub fn drain_new_finalized_blocks(
         &mut self,
         final_block_height: u64,
-    ) -> Result<Vec<RevertBufferEntry<B>>, StorageError> {
+    ) -> Result<Vec<BlockUpdateWithCursor<B>>, StorageError> {
+        debug!(
+            "Draining new finalized blocks from RevertBuffer... New chain height {}",
+            final_block_height.to_string()
+        );
         let mut target_index = None;
 
         for (index, block_message) in self.block_messages.iter().enumerate() {
@@ -100,18 +108,20 @@ impl<B: RevertBufferBlock> RevertBuffer<B> {
             // Drain and return every block before the target index.
             let mut temp = self.block_messages.split_off(idx);
             std::mem::swap(&mut self.block_messages, &mut temp);
+            trace!(?temp, "RevertBuffer drained blocks");
             Ok(temp.into())
         } else {
-            Err(StorageError::Unexpected(format!(
-                "Couldnt find block with number {} in revert buffer",
-                final_block_height
-            )))
+            Err(StorageError::NotFound("block".into(), final_block_height.to_string()))
         }
     }
 
     /// Purges all blocks following the specified block hash from the buffer. Returns the purged
     /// blocks ordered by ascending number or an error if the target hash is not found.
-    pub fn purge(&mut self, target_hash: Bytes) -> Result<Vec<RevertBufferEntry<B>>, StorageError> {
+    pub fn purge(
+        &mut self,
+        target_hash: Bytes,
+    ) -> Result<Vec<BlockUpdateWithCursor<B>>, StorageError> {
+        debug!("Purging revert buffer... Target hash {}", target_hash.to_string());
         let mut target_index = None;
 
         for (index, block_message) in self
@@ -126,15 +136,14 @@ impl<B: RevertBufferBlock> RevertBuffer<B> {
         }
 
         if let Some(idx) = target_index {
-            Ok(self
+            let purged = self
                 .block_messages
                 .split_off(idx)
-                .into())
+                .into();
+            trace!(?purged, "RevertBuffer purged blocks");
+            Ok(purged)
         } else {
-            Err(StorageError::Unexpected(format!(
-                "Couldnt find block with hash {} in revert buffer",
-                target_hash
-            )))
+            Err(StorageError::NotFound("block".into(), target_hash.to_string()))
         }
     }
 
@@ -241,7 +250,7 @@ mod test {
             Block, BlockEntityChanges, ComponentBalance, ProtocolChangesWithTx, ProtocolStateDelta,
             Transaction,
         },
-        revert_buffer::RevertBufferEntry,
+        revert_buffer::BlockUpdateWithCursor,
     };
 
     use super::RevertBuffer;
@@ -427,10 +436,10 @@ mod test {
     fn test_revert_buffer_state_lookup() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
 
         let c_ids = ["State1".to_string(), "State2".to_string()];
@@ -468,13 +477,13 @@ mod test {
     fn test_revert_buffer_balance_lookup() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
 
         let c_ids = ["Balance1".to_string(), "Balance2".to_string()];
@@ -539,13 +548,13 @@ mod test {
     fn test_drain_finalized_blocks() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
 
         let finalized = revert_buffer.drain_new_finalized_blocks(3);
@@ -569,13 +578,13 @@ mod test {
     fn test_purge() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
 
         let purged = revert_buffer.purge(
@@ -611,10 +620,10 @@ mod test {
     fn test_insert_wrong_block() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
+            .insert_block(BlockUpdateWithCursor::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
     }
 }

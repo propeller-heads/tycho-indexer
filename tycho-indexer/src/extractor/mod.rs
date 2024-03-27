@@ -34,8 +34,10 @@ pub enum ExtractionError {
     SubstreamsError(String),
     #[error("Service error: {0}")]
     ServiceError(String),
-    #[error("Merge errir: {0}")]
+    #[error("Merge error: {0}")]
     MergeError(String),
+    #[error("Revert buffer error: {0}")]
+    RevertBufferError(String),
 }
 
 pub type ExtractorMsg = Arc<dyn NormalisedMessage>;

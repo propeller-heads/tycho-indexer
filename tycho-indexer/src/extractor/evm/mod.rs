@@ -1,5 +1,5 @@
 use self::utils::TryDecode;
-use super::{revert_buffer::RevertBufferBlock, u256_num::bytes_to_f64, ExtractionError};
+use super::{revert_buffer::RevertBufferEntity, u256_num::bytes_to_f64, ExtractionError};
 use crate::pb::tycho::evm::v1 as substreams;
 use chrono::NaiveDateTime;
 use ethers::{
@@ -482,7 +482,7 @@ pub struct BlockContractChanges {
     pub tx_updates: Vec<TransactionVMUpdates>,
 }
 
-impl RevertBufferBlock for BlockContractChanges {
+impl RevertBufferEntity for BlockContractChanges {
     type IdType = H160;
     type KeyType = U256;
     type ValueType = U256;
@@ -1143,7 +1143,7 @@ pub struct BlockEntityChanges {
     pub txs_with_update: Vec<ProtocolChangesWithTx>,
 }
 
-impl RevertBufferBlock for BlockEntityChanges {
+impl RevertBufferEntity for BlockEntityChanges {
     type IdType = ComponentId;
     type KeyType = AttrStoreKey;
     type ValueType = StoreVal;

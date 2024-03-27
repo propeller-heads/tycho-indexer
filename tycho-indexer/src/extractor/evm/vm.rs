@@ -6,7 +6,7 @@ use crate::{
             chain_state::ChainState,
             token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
         },
-        revert_buffer::{RevertBuffer, RevertBufferEntry},
+        revert_buffer::{BlockUpdateWithCursor, RevertBuffer},
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
@@ -510,7 +510,7 @@ where
             false => {
                 let mut revert_buffer = self.revert_buffer.lock().await;
                 revert_buffer
-                    .insert_block(RevertBufferEntry::new(msg.clone(), inp.cursor.clone()))
+                    .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                     .expect("Error while inserting a block into revert buffer");
                 for msg in revert_buffer
                     .drain_new_finalized_blocks(inp.final_block_height)

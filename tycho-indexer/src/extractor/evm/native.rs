@@ -5,7 +5,7 @@ use super::{
 use crate::{
     extractor::{
         evm::{self, chain_state::ChainState, Block},
-        revert_buffer::{RevertBuffer, RevertBufferEntry},
+        revert_buffer::{BlockUpdateWithCursor, RevertBuffer},
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
@@ -495,7 +495,7 @@ where
             false => {
                 let mut revert_buffer = self.revert_buffer.lock().await;
                 revert_buffer
-                    .insert_block(RevertBufferEntry::new(msg.clone(), inp.cursor.clone()))
+                    .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                     .expect("Error while inserting a block into revert buffer");
                 for msg in revert_buffer
                     .drain_new_finalized_blocks(inp.final_block_height)
@@ -538,7 +538,7 @@ where
         // Purge the buffer and create a set of state that was reverted
         let reverted_state = revert_buffer
             .purge(block_hash.into())
-            .expect("Failed to purge revert buffer");
+            .map_err(|e| ExtractionError::RevertBufferError(e.to_string()))?;
 
         let reverted_keys: HashSet<_> = reverted_state
             .iter()
@@ -561,13 +561,15 @@ where
             })
             .collect();
 
+        let reverted_keys_vec = reverted_keys
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        trace!("Reverted keys {:?}", reverted_keys_vec);
+
         // Fetch previous values for every reverted states
         // First search in the buffer
-        let (buffered, missing) = revert_buffer.lookup_state(
-            &reverted_keys
-                .into_iter()
-                .collect::<Vec<_>>(),
-        );
+        let (buffered, missing) = revert_buffer.lookup_state(&reverted_keys_vec);
 
         let mut state_updates: HashMap<String, evm::ProtocolStateDelta> = buffered
             .into_iter()
@@ -591,6 +593,8 @@ where
                     acc.entry(c_id).or_default().push(key);
                     acc
                 });
+
+        trace!("Missing keys after buffer lookup {:?}", missing_map);
 
         let missing_components_states = self
             .gateway
@@ -642,6 +646,8 @@ where
             component_balances: HashMap::new(),
             component_tvl: HashMap::new(),
         };
+
+        debug!("Succesfully retrieved all previous states during revert!");
 
         self.update_cursor(inp.last_valid_cursor)
             .await;
