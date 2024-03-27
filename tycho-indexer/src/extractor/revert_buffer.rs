@@ -1,13 +1,46 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use tycho_core::{
-    dto::TokenBalances,
-    models::{BlockScoped, ComponentId},
-    storage::StorageError,
-    Bytes,
-};
+use tycho_core::{dto::TokenBalances, models::ComponentId, storage::StorageError, Bytes};
 
-use super::evm::FilteredUpdates;
+use super::evm::ComponentBalance;
+
+pub(crate) struct RevertBufferEntry<B: RevertBufferBlock> {
+    block_update: B,
+    cursor: String,
+}
+
+impl<B: RevertBufferBlock> RevertBufferEntry<B> {
+    pub(crate) fn new(block_update: B, cursor: String) -> Self {
+        Self { block_update, cursor }
+    }
+
+    pub(crate) fn block_update(&self) -> &B {
+        &self.block_update
+    }
+
+    pub(crate) fn cursor(&self) -> &String {
+        &self.cursor
+    }
+}
+
+pub(crate) trait RevertBufferBlock {
+    type IdType: std::hash::Hash + std::cmp::Eq + Clone;
+    type KeyType: std::hash::Hash + std::cmp::Eq + Clone;
+    type ValueType;
+
+    fn block(&self) -> tycho_core::models::blockchain::Block;
+
+    fn get_filtered_state_update(
+        &self,
+        keys: Vec<(&Self::IdType, &Self::KeyType)>,
+    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType>;
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    fn get_filtered_balance_update(
+        &self,
+        keys: Vec<(&String, &Bytes)>,
+    ) -> HashMap<(String, Bytes), ComponentBalance>;
+}
 
 /// This buffer temporarily stores blockchain blocks that are not yet finalized. It allows for
 /// efficient handling of block reverts without requiring database rollbacks.
@@ -17,21 +50,21 @@ use super::evm::FilteredUpdates;
 /// some.
 ///
 /// In case of revert, we can just purge this buffer.
-pub struct RevertBuffer<BM> {
-    block_messages: VecDeque<BM>,
+pub(crate) struct RevertBuffer<B: RevertBufferBlock> {
+    block_messages: VecDeque<RevertBufferEntry<B>>,
 }
 
-impl<BM: BlockScoped> RevertBuffer<BM> {
-    pub fn new() -> Self {
+impl<B: RevertBufferBlock> RevertBuffer<B> {
+    pub(crate) fn new() -> Self {
         Self { block_messages: VecDeque::new() }
     }
 
     /// Inserts a new block into the buffer. Ensures the new block is the expected next block,
     /// otherwise panics.
-    pub fn insert_block(&mut self, new: BM) -> Result<(), StorageError> {
+    pub fn insert_block(&mut self, new: RevertBufferEntry<B>) -> Result<(), StorageError> {
         // Make sure the new block matches the one we expect, panic if not.
         if let Some(last_message) = self.block_messages.back() {
-            if last_message.block().hash != new.block().parent_hash {
+            if last_message.block_update.block().hash != new.block_update.block().parent_hash {
                 return Err(StorageError::Unexpected(
                     "Unexpected block sequence received in revert buffer".to_string(),
                 ));
@@ -49,11 +82,16 @@ impl<BM: BlockScoped> RevertBuffer<BM> {
     pub fn drain_new_finalized_blocks(
         &mut self,
         final_block_height: u64,
-    ) -> Result<Vec<BM>, StorageError> {
+    ) -> Result<Vec<RevertBufferEntry<B>>, StorageError> {
         let mut target_index = None;
 
         for (index, block_message) in self.block_messages.iter().enumerate() {
-            if block_message.block().number == final_block_height {
+            if block_message
+                .block_update
+                .block()
+                .number ==
+                final_block_height
+            {
                 target_index = Some(index);
             }
         }
@@ -73,7 +111,7 @@ impl<BM: BlockScoped> RevertBuffer<BM> {
 
     /// Purges all blocks following the specified block hash from the buffer. Returns the purged
     /// blocks ordered by ascending number or an error if the target hash is not found.
-    pub fn purge(&mut self, target_hash: Bytes) -> Result<Vec<BM>, StorageError> {
+    pub fn purge(&mut self, target_hash: Bytes) -> Result<Vec<RevertBufferEntry<B>>, StorageError> {
         let mut target_index = None;
 
         for (index, block_message) in self
@@ -82,7 +120,7 @@ impl<BM: BlockScoped> RevertBuffer<BM> {
             .rev()
             .enumerate()
         {
-            if block_message.block().hash == target_hash {
+            if block_message.block_update.block().hash == target_hash {
                 target_index = Some(self.block_messages.len() - index);
             }
         }
@@ -104,23 +142,11 @@ impl<BM: BlockScoped> RevertBuffer<BM> {
     /// is empty
     pub fn get_most_recent_block(&self) -> Option<tycho_core::models::blockchain::Block> {
         if let Some(block_message) = self.block_messages.back() {
-            return Some(block_message.block());
+            return Some(block_message.block_update.block());
         }
         None
     }
-}
 
-impl<BM: BlockScoped> Default for RevertBuffer<BM> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[allow(dead_code)]
-impl<B> RevertBuffer<B>
-where
-    B: FilteredUpdates,
-{
     /// Looks up buffered state updates for the provided keys. Returns a map of updates and a list
     /// of keys for which updates were not found in the buffered blocks.
     #[allow(clippy::type_complexity)] //TODO: use type aliases
@@ -139,12 +165,15 @@ where
                 break;
             }
 
-            for (key, val) in block_message.get_filtered_state_update(
-                remaining_keys
-                    .iter()
-                    .map(|k| (&k.0, &k.1))
-                    .collect(),
-            ) {
+            for (key, val) in block_message
+                .block_update
+                .get_filtered_state_update(
+                    remaining_keys
+                        .iter()
+                        .map(|k| (&k.0, &k.1))
+                        .collect(),
+                )
+            {
                 if remaining_keys.remove(&(key.0.clone(), key.1.clone())) {
                     res.insert(key, val);
                 }
@@ -158,6 +187,7 @@ where
     /// where each key is a component ID associated with its token balances, and a list of
     /// component-token pairs for which no updates were found.
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    #[allow(dead_code)] // Clippy thinks that tuple with Bytes are a mutable type.
     pub fn lookup_balances(
         &self,
         keys: &[(&ComponentId, &Bytes)],
@@ -172,7 +202,10 @@ where
             if remaning_keys.is_empty() {
                 break;
             }
-            for (key, val) in block_message.get_filtered_balance_update(keys.to_vec().clone()) {
+            for (key, val) in block_message
+                .block_update
+                .get_filtered_balance_update(keys.to_vec().clone())
+            {
                 if remaning_keys.remove(&key) {
                     res.entry(key).or_insert(val);
                 }
@@ -203,9 +236,12 @@ mod test {
     use ethers::types::{H160, H256};
     use tycho_core::{dto::TokenBalances, models::Chain, Bytes};
 
-    use crate::extractor::evm::{
-        Block, BlockEntityChanges, ComponentBalance, ProtocolChangesWithTx, ProtocolStateDelta,
-        Transaction,
+    use crate::extractor::{
+        evm::{
+            Block, BlockEntityChanges, ComponentBalance, ProtocolChangesWithTx, ProtocolStateDelta,
+            Transaction,
+        },
+        revert_buffer::RevertBufferEntry,
     };
 
     use super::RevertBuffer;
@@ -391,10 +427,10 @@ mod test {
     fn test_revert_buffer_state_lookup() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(get_block_entity(1))
+            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(2))
+            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
 
         let c_ids = ["State1".to_string(), "State2".to_string()];
@@ -432,13 +468,13 @@ mod test {
     fn test_revert_buffer_balance_lookup() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(get_block_entity(1))
+            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(2))
+            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(3))
+            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
 
         let c_ids = ["Balance1".to_string(), "Balance2".to_string()];
@@ -503,19 +539,26 @@ mod test {
     fn test_drain_finalized_blocks() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(get_block_entity(1))
+            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(2))
+            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(3))
+            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
 
         let finalized = revert_buffer.drain_new_finalized_blocks(3);
 
         assert_eq!(revert_buffer.block_messages.len(), 1);
-        assert_eq!(finalized, Ok(vec![get_block_entity(1), get_block_entity(2)]));
+        assert_eq!(
+            finalized
+                .unwrap()
+                .into_iter()
+                .map(|entry| entry.block_update)
+                .collect::<Vec<_>>(),
+            vec![get_block_entity(1), get_block_entity(2)]
+        );
 
         let unknown = revert_buffer.drain_new_finalized_blocks(999);
 
@@ -526,13 +569,13 @@ mod test {
     fn test_purge() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(get_block_entity(1))
+            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(2))
+            .insert_block(RevertBufferEntry::new(get_block_entity(2), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(3))
+            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
 
         let purged = revert_buffer.purge(
@@ -544,7 +587,14 @@ mod test {
 
         assert_eq!(revert_buffer.block_messages.len(), 1);
 
-        assert_eq!(purged, Ok(vec![get_block_entity(2), get_block_entity(3)]));
+        assert_eq!(
+            purged
+                .unwrap()
+                .into_iter()
+                .map(|entry| entry.block_update)
+                .collect::<Vec<_>>(),
+            vec![get_block_entity(2), get_block_entity(3)]
+        );
 
         let unknown = revert_buffer.purge(
             H256::from_low_u64_be(
@@ -561,10 +611,10 @@ mod test {
     fn test_insert_wrong_block() {
         let mut revert_buffer = RevertBuffer::new();
         revert_buffer
-            .insert_block(get_block_entity(1))
+            .insert_block(RevertBufferEntry::new(get_block_entity(1), "cursor".to_string()))
             .unwrap();
         revert_buffer
-            .insert_block(get_block_entity(3))
+            .insert_block(RevertBufferEntry::new(get_block_entity(3), "cursor".to_string()))
             .unwrap();
     }
 }

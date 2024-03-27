@@ -5,9 +5,8 @@ use crate::{
             self,
             chain_state::ChainState,
             token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
-            BlockMessageWithCursor,
         },
-        revert_buffer::RevertBuffer,
+        revert_buffer::{RevertBuffer, RevertBufferEntry},
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
@@ -61,7 +60,7 @@ pub struct VmContractExtractor<G> {
     post_processor: Option<fn(evm::BlockContractChanges) -> evm::BlockContractChanges>,
     /// The number of blocks behind the current block to be considered as syncing.
     sync_threshold: u64,
-    revert_buffer: Mutex<RevertBuffer<evm::BlockMessageWithCursor<evm::BlockContractChanges>>>,
+    revert_buffer: Mutex<RevertBuffer<evm::BlockContractChanges>>,
 }
 
 impl<DB> VmContractExtractor<DB> {
@@ -511,14 +510,14 @@ where
             false => {
                 let mut revert_buffer = self.revert_buffer.lock().await;
                 revert_buffer
-                    .insert_block(BlockMessageWithCursor::new(msg.clone(), inp.cursor.clone()))
+                    .insert_block(RevertBufferEntry::new(msg.clone(), inp.cursor.clone()))
                     .expect("Error while inserting a block into revert buffer");
                 for msg in revert_buffer
                     .drain_new_finalized_blocks(inp.final_block_height)
                     .expect("Final block height not found in revert buffer")
                 {
                     self.gateway
-                        .upsert_contract(&msg.block, &msg.cursor, is_syncing)
+                        .upsert_contract(msg.block_update(), msg.cursor(), is_syncing)
                         .await?;
                 }
             }

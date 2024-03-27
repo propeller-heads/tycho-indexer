@@ -1,5 +1,5 @@
 use self::utils::TryDecode;
-use super::{u256_num::bytes_to_f64, ExtractionError};
+use super::{revert_buffer::RevertBufferBlock, u256_num::bytes_to_f64, ExtractionError};
 use crate::pb::tycho::evm::v1 as substreams;
 use chrono::NaiveDateTime;
 use ethers::{
@@ -12,7 +12,7 @@ use tracing::log::warn;
 use tycho_core::{
     dto,
     models::{
-        Address, AttrStoreKey, BlockScoped, Chain, ChangeType, ComponentId, ExtractorIdentity,
+        Address, AttrStoreKey, Chain, ChangeType, ComponentId, ExtractorIdentity,
         NormalisedMessage, ProtocolType, StoreVal,
     },
     Bytes,
@@ -482,24 +482,7 @@ pub struct BlockContractChanges {
     pub tx_updates: Vec<TransactionVMUpdates>,
 }
 
-pub trait FilteredUpdates {
-    type IdType: std::hash::Hash + std::cmp::Eq + Clone;
-    type KeyType: std::hash::Hash + std::cmp::Eq + Clone;
-    type ValueType;
-
-    fn get_filtered_state_update(
-        &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType>;
-
-    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
-    fn get_filtered_balance_update(
-        &self,
-        keys: Vec<(&String, &Bytes)>,
-    ) -> HashMap<(String, Bytes), ComponentBalance>;
-}
-
-impl FilteredUpdates for BlockContractChanges {
+impl RevertBufferBlock for BlockContractChanges {
     type IdType = H160;
     type KeyType = U256;
     type ValueType = U256;
@@ -552,6 +535,10 @@ impl FilteredUpdates for BlockContractChanges {
         }
 
         res
+    }
+
+    fn block(&self) -> tycho_core::models::blockchain::Block {
+        (&self.block).into()
     }
 }
 
@@ -1156,56 +1143,7 @@ pub struct BlockEntityChanges {
     pub txs_with_update: Vec<ProtocolChangesWithTx>,
 }
 
-struct BlockMessageWithCursor<B> {
-    block: B,
-    cursor: String,
-}
-
-impl<B> BlockMessageWithCursor<B> {
-    pub fn new(block: B, cursor: String) -> Self {
-        Self { block, cursor }
-    }
-}
-
-impl<B: BlockScoped> BlockScoped for BlockMessageWithCursor<B> {
-    fn block(&self) -> tycho_core::models::blockchain::Block {
-        self.block.block()
-    }
-}
-
-impl<B: FilteredUpdates> FilteredUpdates for BlockMessageWithCursor<B> {
-    type IdType = B::IdType;
-    type KeyType = B::KeyType;
-    type ValueType = B::ValueType;
-
-    fn get_filtered_state_update(
-        &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
-        B::get_filtered_state_update(&self.block, keys)
-    }
-
-    fn get_filtered_balance_update(
-        &self,
-        keys: Vec<(&String, &Bytes)>,
-    ) -> HashMap<(String, Bytes), ComponentBalance> {
-        B::get_filtered_balance_update(&self.block, keys)
-    }
-}
-
-impl BlockScoped for BlockEntityChanges {
-    fn block(&self) -> tycho_core::models::blockchain::Block {
-        (&self.block).into()
-    }
-}
-
-impl BlockScoped for BlockContractChanges {
-    fn block(&self) -> tycho_core::models::blockchain::Block {
-        (&self.block).into()
-    }
-}
-
-impl FilteredUpdates for BlockEntityChanges {
+impl RevertBufferBlock for BlockEntityChanges {
     type IdType = ComponentId;
     type KeyType = AttrStoreKey;
     type ValueType = StoreVal;
@@ -1259,6 +1197,10 @@ impl FilteredUpdates for BlockEntityChanges {
         }
 
         res
+    }
+
+    fn block(&self) -> tycho_core::models::blockchain::Block {
+        (&self.block).into()
     }
 }
 

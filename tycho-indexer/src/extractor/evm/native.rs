@@ -1,12 +1,11 @@
 use super::{
     token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
     utils::format_duration,
-    ProtocolStateDelta,
 };
 use crate::{
     extractor::{
-        evm::{self, chain_state::ChainState, Block, BlockMessageWithCursor},
-        revert_buffer::RevertBuffer,
+        evm::{self, chain_state::ChainState, Block},
+        revert_buffer::{RevertBuffer, RevertBufferEntry},
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
@@ -28,9 +27,8 @@ use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, trace, warn};
 use tycho_core::{
     models::{
-        self,
-        protocol::{ProtocolComponent, ProtocolComponentState},
-        Chain, ExtractionState, ExtractorIdentity, ProtocolType, TxHash,
+        self, protocol::ProtocolComponentState, Chain, ExtractionState, ExtractorIdentity,
+        ProtocolType, TxHash,
     },
     storage::{
         BlockIdentifier, ChainGateway, ExtractionStateGateway, ProtocolGateway, StorageError,
@@ -59,7 +57,7 @@ pub struct NativeContractExtractor<G> {
     post_processor: Option<fn(evm::BlockEntityChanges) -> evm::BlockEntityChanges>,
     /// The number of blocks behind the current block to be considered as syncing.
     sync_threshold: u64,
-    revert_buffer: Mutex<RevertBuffer<BlockMessageWithCursor<evm::BlockEntityChanges>>>,
+    revert_buffer: Mutex<RevertBuffer<evm::BlockEntityChanges>>,
 }
 
 impl<DB> NativeContractExtractor<DB> {
@@ -497,14 +495,14 @@ where
             false => {
                 let mut revert_buffer = self.revert_buffer.lock().await;
                 revert_buffer
-                    .insert_block(BlockMessageWithCursor::new(msg.clone(), inp.cursor.clone()))
+                    .insert_block(RevertBufferEntry::new(msg.clone(), inp.cursor.clone()))
                     .expect("Error while inserting a block into revert buffer");
                 for msg in revert_buffer
                     .drain_new_finalized_blocks(inp.final_block_height)
                     .expect("Final block height not found in revert buffer")
                 {
                     self.gateway
-                        .advance(&msg.block, &msg.cursor, is_syncing)
+                        .advance(msg.block_update(), msg.cursor(), is_syncing)
                         .await?;
                 }
             }
@@ -546,7 +544,7 @@ where
             .iter()
             .flat_map(|block_msg| {
                 block_msg
-                    .block
+                    .block_update()
                     .txs_with_update
                     .iter()
                     .flat_map(|update| {
