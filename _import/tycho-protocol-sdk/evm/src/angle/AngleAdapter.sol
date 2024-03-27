@@ -183,12 +183,10 @@ contract AngleAdapter is ISwapAdapter {
     {
         address sellTokenAddress = address(sellToken);
         address buyTokenAddress = address(buyToken);
-        calculatedAmount =
-            transmuter.quoteIn(amount, sellTokenAddress, buyTokenAddress);
 
         sellToken.transferFrom(msg.sender, address(this), amount);
         sellToken.approve(address(transmuter), amount);
-        transmuter.swapExactInput(
+        calculatedAmount = transmuter.swapExactInput(
             amount, 0, sellTokenAddress, buyTokenAddress, msg.sender, 0
         );
     }
