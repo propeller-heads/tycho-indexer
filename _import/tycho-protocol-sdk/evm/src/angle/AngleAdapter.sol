@@ -23,6 +23,13 @@ contract AngleAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
+    /**
+     * @dev It is not possible to reproduce the swap in a view mode (like
+     * Bancor, Uniswap v2, etc..) as the swap produce a change of storage in
+     * the Angle protocol, that impacts the price post trade. Due to the
+     * architecture of Angle, it's not possible to calculate the storage
+     * modifications of Angle inside the adapter.
+     */
     function price(bytes32, IERC20, IERC20, uint256[] memory)
         external
         pure
@@ -33,6 +40,12 @@ contract AngleAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
+    /**
+     * @dev The price post trade is indipendent by the amount, since is the
+     * price with minimal fees with 0 slippage. In Angle there is no price with
+     * 0 slippage, so we use the PRECISE_UNIT (10^18, that is a small value) as
+     * input amount to have a slippage ---> 0.
+     */
     function swap(
         bytes32,
         IERC20 sellToken,
