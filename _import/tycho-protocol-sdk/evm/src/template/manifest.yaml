@@ -19,7 +19,7 @@ contract: TemplateSwapAdapter.sol
 instances:
   - chain:
       name: mainnet
-      id: 0
+      id: 1
     arguments:
       - "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
 
@@ -32,5 +32,5 @@ tests:
       buy_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
       block: 17000000
       chain:
-        id: 0
         name: mainnet
+        id: 1

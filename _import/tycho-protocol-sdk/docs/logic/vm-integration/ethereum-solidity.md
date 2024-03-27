@@ -43,7 +43,7 @@ contract:
 instances:
   - chain:
       name: mainnet
-      id: 0
+      id: 1
     # Arguments passed to the constructor when building the contract
     arguments:
       - "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
@@ -57,8 +57,8 @@ tests:
       buy_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
       block: 17000000
       chain:
-        id: 0
         name: mainnet
+        id: 1
 ```
 
 #### Price (optional)

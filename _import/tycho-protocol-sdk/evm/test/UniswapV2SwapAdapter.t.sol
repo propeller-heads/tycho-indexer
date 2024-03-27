@@ -20,8 +20,8 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     function setUp() public {
         uint256 forkBlock = 17000000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        adapter = new
-            UniswapV2SwapAdapter(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+        adapter =
+            new UniswapV2SwapAdapter(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
 
         vm.label(address(adapter), "UniswapV2SwapAdapter");
         vm.label(address(WETH), "WETH");
