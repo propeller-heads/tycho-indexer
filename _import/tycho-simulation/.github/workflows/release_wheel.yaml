@@ -29,6 +29,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup git to use https
+        run: |
+            git config --global credential.helper store
+            echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+            git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
+            
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
