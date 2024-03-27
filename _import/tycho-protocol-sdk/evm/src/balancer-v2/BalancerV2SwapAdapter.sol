@@ -477,9 +477,8 @@ interface IVault {
             uint256 lastChangeBlock
         );
 
-    enum SwapKind
-    /// The number of tokens to send to the Pool is known
-    {
+    enum SwapKind {
+        /// The number of tokens to send to the Pool is known
         GIVEN_IN,
         /// The number of tokens to take from the Pool is known
         GIVEN_OUT

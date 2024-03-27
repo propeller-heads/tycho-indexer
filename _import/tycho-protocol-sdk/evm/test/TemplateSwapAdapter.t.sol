@@ -7,8 +7,10 @@ import "src/libraries/FractionMath.sol";
 
 /// @title TemplateSwapAdapterTest
 /// @dev This is a template for a swap adapter test.
-/// Test all functions that are implemented in your swap adapter, the two test included here are just an example.
-/// Feel free to use UniswapV2SwapAdapterTest and BalancerV2SwapAdapterTest as a reference.
+/// Test all functions that are implemented in your swap adapter, the two test
+/// included here are just an example.
+/// Feel free to use UniswapV2SwapAdapterTest and BalancerV2SwapAdapterTest as a
+/// reference.
 contract TemplateSwapAdapterTest is Test, ISwapAdapterTypes {
     using FractionMath for Fraction;
 
