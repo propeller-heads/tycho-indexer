@@ -22,11 +22,17 @@ pub mod optimize;
 pub mod protocol;
 pub mod safe_math;
 pub mod serde_helpers;
+
+#[cfg(feature = "starknet")]
 pub mod starknet_simulation;
 mod u256_num;
 
 // Reexports
 pub use num_traits;
+#[cfg(feature = "starknet")]
 pub use rpc_state_reader;
+#[cfg(feature = "starknet")]
 pub use starknet_api;
+#[cfg(feature = "starknet")]
 pub use starknet_in_rust;
+

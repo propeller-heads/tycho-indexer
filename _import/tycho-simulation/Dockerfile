@@ -1,6 +1,12 @@
 FROM rust:1.74 AS build
 WORKDIR /build
+ENV CARGO_HOME=/build/.cargo
+RUN cargo new --lib protosim_py
+RUN apt-get update && apt-get install -y \
+    clang \
+    libclang-dev
 RUN echo "fn main() {}" > dummy.rs
+COPY ./.cargo ./.cargo
 COPY protosim protosim
 COPY Cargo.toml .
 COPY Cargo.lock .
