@@ -45,7 +45,8 @@ impl From<models::contract::Contract> for ResponseAccount {
             value.address,
             value.title,
             value.slots,
-            value.balance,
+            value.native_balance,
+            value.balances,
             value.code,
             value.code_hash,
             value.balance_modify_tx,
@@ -664,7 +665,10 @@ pub struct ResponseAccount {
     pub slots: HashMap<Bytes, Bytes>,
     #[schema(value_type=HashMap<String, String>, example="0x00")]
     #[serde(with = "hex_bytes")]
-    pub balance: Bytes,
+    pub native_balance: Bytes,
+    #[schema(value_type=HashMap<String, String>)]
+    #[serde(with = "hex_hashmap_key_value")]
+    pub balances: HashMap<Bytes, Bytes>,
     #[schema(value_type=HashMap<String, String>, example="0xBADBABE")]
     #[serde(with = "hex_bytes")]
     pub code: Bytes,
@@ -689,7 +693,8 @@ impl ResponseAccount {
         address: Bytes,
         title: String,
         slots: HashMap<Bytes, Bytes>,
-        balance: Bytes,
+        native_balance: Bytes,
+        balances: HashMap<Bytes, Bytes>,
         code: Bytes,
         code_hash: Bytes,
         balance_modify_tx: Bytes,
@@ -701,7 +706,8 @@ impl ResponseAccount {
             address,
             title,
             slots,
-            balance,
+            native_balance,
+            balances,
             code,
             code_hash,
             balance_modify_tx,
@@ -719,7 +725,8 @@ impl std::fmt::Debug for ResponseAccount {
             .field("address", &self.address)
             .field("title", &self.title)
             .field("slots", &self.slots)
-            .field("balance", &self.balance)
+            .field("native_balance", &self.native_balance)
+            .field("balances", &self.balances)
             .field("code", &format!("[{} bytes]", self.code.len()))
             .field("code_hash", &self.code_hash)
             .field("balance_modify_tx", &self.balance_modify_tx)
@@ -771,17 +778,27 @@ impl Default for VersionParam {
     }
 }
 
+fn default_include_balances_flag() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Default, Debug, IntoParams)]
 pub struct StateRequestParameters {
     #[param(default = 0)]
     pub tvl_gt: Option<u64>,
     #[param(default = 0)]
     pub inertia_min_gt: Option<u64>,
+    #[serde(default = "default_include_balances_flag")]
+    pub include_balances: bool,
 }
 
 impl StateRequestParameters {
+    pub fn new(include_balances: bool) -> Self {
+        Self { tvl_gt: None, inertia_min_gt: None, include_balances }
+    }
+
     pub fn to_query_string(&self) -> String {
-        let mut parts = vec![];
+        let mut parts = vec![format!("include_balances={}", self.include_balances)];
 
         if let Some(tvl_gt) = self.tvl_gt {
             parts.push(format!("tvl_gt={}", tvl_gt));
@@ -964,9 +981,9 @@ pub struct ResponseProtocolState {
     #[schema(value_type=HashMap<String, String>)]
     #[serde(with = "hex_hashmap_value")]
     pub attributes: HashMap<String, Bytes>,
-    #[schema(value_type=String)]
-    #[serde(with = "hex_bytes_option")]
-    pub modify_tx: Option<Bytes>,
+    #[schema(value_type=HashMap<String, String>)]
+    #[serde(with = "hex_hashmap_key_value")]
+    pub balances: HashMap<Bytes, Bytes>,
 }
 
 impl From<models::protocol::ProtocolComponentState> for ResponseProtocolState {
@@ -974,7 +991,7 @@ impl From<models::protocol::ProtocolComponentState> for ResponseProtocolState {
         Self {
             component_id: value.component_id,
             attributes: value.attributes,
-            modify_tx: value.modify_tx,
+            balances: value.balances,
         }
     }
 }

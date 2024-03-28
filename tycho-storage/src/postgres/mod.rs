@@ -146,7 +146,7 @@ use tycho_core::{
 pub mod builder;
 pub mod cache;
 mod chain;
-mod contract_state;
+mod contract;
 mod extraction_state;
 mod orm;
 mod protocol;

@@ -766,7 +766,11 @@ impl ProtocolState {
     /// Retrieves all state updates applied after start_ts and still valid by end_ts, filtered by
     /// chain. Please note - this function is intended to be used to fetch forward changes/deltas.
     /// The results are grouped by component id to allow for easy state reconstruction. It can be
-    /// trusted that all state updates for a given component are together.
+    /// trusted that all state updates for a given component are together and only one update per
+    /// component's attribute is returned.
+    ///
+    /// Note: If the attribute was updated twice within the timeframe, only the one that is still
+    /// valid at end is returned.
     pub async fn forward_deltas_by_chain(
         chain_id: i64,
         start_ts: NaiveDateTime,
@@ -776,13 +780,15 @@ impl ProtocolState {
         protocol_state::table
             .inner_join(protocol_component::table)
             .filter(protocol_component::chain_id.eq(chain_id))
+            // only consider attributes that were updated after start_ts and before end_ts
+            .filter(protocol_state::valid_from.gt(start_ts))
+            .filter(protocol_state::valid_from.le(end_ts))
+            // only consider attributes that are still valid by end_ts
             .filter(
                 protocol_state::valid_to
                     .gt(end_ts)
                     .or(protocol_state::valid_to.is_null()),
             )
-            .filter(protocol_state::valid_from.le(end_ts))
-            .filter(protocol_state::valid_from.gt(start_ts))
             .order_by(protocol_state::protocol_component_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
@@ -811,7 +817,8 @@ impl ProtocolState {
                             )", end_ts, end_ts);
 
         // query for all state updates that have a valid_to between start_ts and end_ts (potentially
-        // have been deleted) and filter it by the subquery for not deleted attributes.
+        // have been deleted) and filter it by the subquery for attributes that exist at end_ts
+        // (were therefore not deleted)
         // i.e. potentially_deleted - not_deleted = deleted
         protocol_state::table
             .inner_join(protocol_component::table)
@@ -851,8 +858,7 @@ impl ProtocolState {
         // taking the first row per group. This gives us the first state update for each
         // component-attribute pair. Finally, we return the component id, attribute name and
         // previous value for each component-attribute pair. Note, previous values are null for
-        // state updates where they are the first update of that attribute (attribute
-        // creation).
+        // state updates where they are the first update of that attribute (attribute creation).
         let reverted_query = query
             .filter(protocol_state::valid_from.gt(target_ts))
             .filter(protocol_state::valid_from.le(start_ts))
@@ -890,12 +896,7 @@ impl ProtocolState {
             .filter(protocol_state::valid_from.le(target_ts))
             // subquery to remove those that weren't deleted (valid version exists at start_ts)
             .filter(sql::<Bool>(&sub_query))
-            .order_by((
-                protocol_state::protocol_component_id,
-                protocol_state::attribute_name,
-                transaction::block_id,
-                transaction::index,
-            ))
+            .order_by((protocol_state::protocol_component_id, protocol_state::attribute_name))
             .select(
                 sql::<(sql_types::Text, sql_types::Text, sql_types::Nullable<sql_types::Bytea>)>(
                     "external_id, attribute_name, attribute_value AS value",

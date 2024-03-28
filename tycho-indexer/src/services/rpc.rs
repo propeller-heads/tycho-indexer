@@ -31,37 +31,6 @@ impl From<anyhow::Error> for RpcError {
     }
 }
 
-impl From<evm::Account> for dto::ResponseAccount {
-    fn from(value: evm::Account) -> Self {
-        dto::ResponseAccount::new(
-            value.chain.into(),
-            value.address.into(),
-            value.title.clone(),
-            value
-                .slots
-                .into_iter()
-                .map(|(k, v)| (Bytes::from(k), Bytes::from(v)))
-                .collect(),
-            Bytes::from(value.balance),
-            value.code,
-            Bytes::from(value.code_hash),
-            Bytes::from(value.balance_modify_tx),
-            Bytes::from(value.code_modify_tx),
-            value.creation_tx.map(Bytes::from),
-        )
-    }
-}
-
-impl From<evm::ProtocolState> for dto::ResponseProtocolState {
-    fn from(protocol_state: evm::ProtocolState) -> Self {
-        Self {
-            component_id: protocol_state.component_id,
-            attributes: protocol_state.attributes,
-            modify_tx: Some(protocol_state.modify_tx.into()),
-        }
-    }
-}
-
 impl From<evm::ProtocolStateDelta> for dto::ProtocolStateDelta {
     fn from(protocol_state: evm::ProtocolStateDelta) -> Self {
         Self {
@@ -183,7 +152,7 @@ where
         // TODO support additional tvl_gt and intertia_min_gt filters
         match self
             .db_gateway
-            .get_contracts(chain, addresses, Some(&version), true)
+            .get_contracts(chain, addresses, Some(&version), true, params.include_balances)
             .await
         {
             Ok(accounts) => Ok(dto::StateRequestResponse::new(
@@ -270,7 +239,6 @@ where
             .await
     }
 
-    // params is currently not used.
     #[allow(unused_variables)]
     async fn get_protocol_state_inner(
         &self,
@@ -296,7 +264,13 @@ where
         // Get the protocol states from the database
         match self
             .db_gateway
-            .get_protocol_states(chain, Some(version), request.protocol_system.clone(), ids)
+            .get_protocol_states(
+                chain,
+                Some(version),
+                request.protocol_system.clone(),
+                ids,
+                params.include_balances,
+            )
             .await
         {
             Ok(accounts) => Ok(dto::ProtocolStateRequestResponse::new(
@@ -772,6 +746,7 @@ mod tests {
             "account0".to_owned(),
             evm_contract_slots([(6, 30), (5, 25), (1, 3), (2, 1), (0, 2)]),
             Bytes::from(U256::from(101)),
+            HashMap::new(),
             Bytes::from("C0C0C0"),
             "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                 .parse()
@@ -791,7 +766,7 @@ mod tests {
         let mut gw = MockGateway::new();
         let mock_response = Ok(vec![expected.clone()]);
         gw.expect_get_contracts()
-            .return_once(|_, _, _, _| Box::pin(async move { mock_response }));
+            .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         let req_handler = RpcHandler::new(gw);
 
         let request = dto::StateRequestBody {
@@ -877,15 +852,11 @@ mod tests {
         let expected = ProtocolComponentState::new(
             "state1",
             protocol_attributes([("reserve1", 1000), ("reserve2", 500)]),
-            Some(
-                "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
-                    .parse()
-                    .unwrap(),
-            ),
+            HashMap::new(),
         );
         let mock_response = Ok(vec![expected.clone()]);
         gw.expect_get_protocol_states()
-            .return_once(|_, _, _, _| Box::pin(async move { mock_response }));
+            .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         let req_handler = RpcHandler::new(gw);
 
         let request = dto::ProtocolStateRequestBody {
@@ -896,12 +867,10 @@ mod tests {
             protocol_system: None,
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
         };
+        let params =
+            StateRequestParameters { tvl_gt: None, inertia_min_gt: None, include_balances: true };
         let res = req_handler
-            .get_protocol_state_inner(
-                &Chain::Ethereum,
-                &request,
-                &StateRequestParameters::default(),
-            )
+            .get_protocol_state_inner(&Chain::Ethereum, &request, &params)
             .await
             .unwrap();
 

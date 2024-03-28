@@ -297,7 +297,7 @@ mod tests {
 
     use mockito::Server;
 
-    use std::collections::HashMap;
+    use std::{collections::HashMap, str::FromStr};
 
     #[tokio::test]
     async fn test_get_contract_state() {
@@ -310,7 +310,10 @@ mod tests {
                     "address": "0x0000000000000000000000000000000000000000",
                     "title": "",
                     "slots": {},
-                    "balance": "0x01f4",
+                    "native_balance": "0x01f4",
+                    "balances": {
+                        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"
+                    },
                     "code": "0x00",
                     "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
                     "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -324,7 +327,7 @@ mod tests {
         serde_json::from_str::<StateRequestResponse>(server_resp).expect("deserialize");
 
         let mocked_server = server
-            .mock("POST", "/v1/ethereum/contract_state")
+            .mock("POST", "/v1/ethereum/contract_state?include_balances=false")
             .expect(1)
             .with_body(server_resp)
             .create_async()
@@ -341,12 +344,19 @@ mod tests {
         mocked_server.assert();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].slots, HashMap::new());
-        assert_eq!(accounts[0].balance, Bytes::from(500u16.to_be_bytes()));
+        assert_eq!(accounts[0].native_balance, Bytes::from(500u16.to_be_bytes()));
         assert_eq!(accounts[0].code, [0].to_vec());
         assert_eq!(
             accounts[0].code_hash,
             hex::decode("5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e")
                 .unwrap()
+        );
+        assert_eq!(
+            accounts[0].balances.get(
+                &Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+                    .expect("Missing balance!")
+            ),
+            Some(&Bytes::from_str("0x01f4").unwrap())
         );
     }
 
@@ -421,7 +431,9 @@ mod tests {
                     "attributes": {
                         "attribute_1": "0xe803000000000000"
                     },
-                    "modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                    "balances": {
+                        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"
+                    }
                 }
             ]
         }
@@ -430,7 +442,7 @@ mod tests {
         serde_json::from_str::<ProtocolStateRequestResponse>(server_resp).expect("deserialize");
 
         let mocked_server = server
-            .mock("POST", "/v1/ethereum/protocol_state")
+            .mock("POST", "/v1/ethereum/protocol_state?include_balances=false")
             .expect(1)
             .with_body(server_resp)
             .create_async()
@@ -452,5 +464,14 @@ mod tests {
                 .cloned()
                 .collect::<HashMap<String, Bytes>>();
         assert_eq!(states[0].attributes, expected_attributes);
+        let expected_balances = [(
+            Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+                .expect("Unsupported address format"),
+            Bytes::from_str("0x01f4").unwrap(),
+        )]
+        .iter()
+        .cloned()
+        .collect::<HashMap<Bytes, Bytes>>();
+        assert_eq!(states[0].balances, expected_balances);
     }
 }

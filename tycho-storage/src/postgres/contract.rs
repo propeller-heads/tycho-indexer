@@ -393,7 +393,7 @@ impl PostgresGateway {
             // Restore full state delta at from target version for accounts that were deleted
             let version = Some(Version::from_ts(*target_version_ts));
             let restored: HashMap<Address, models::contract::ContractDelta> = self
-                .get_contracts(chain, Some(&deleted_addresses), version.as_ref(), true, conn)
+                .get_contracts(chain, Some(&deleted_addresses), version.as_ref(), true, false, conn)
                 .await
                 .map_err(PostgresError::from)?
                 .into_iter()
@@ -709,6 +709,7 @@ impl PostgresGateway {
             account_orm.title,
             HashMap::new(),
             balance_orm.balance,
+            HashMap::new(),
             code_orm.code,
             code_orm.hash,
             balance_tx,
@@ -736,6 +737,7 @@ impl PostgresGateway {
         ids: Option<&[Address]>,
         version: Option<&Version>,
         include_slots: bool,
+        retrieve_balances: bool,
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<models::contract::Contract>, StorageError> {
         let chain_db_id = self.get_chain_id(chain);
@@ -780,7 +782,7 @@ impl PostgresGateway {
             .map(|a| a.id)
             .collect::<HashSet<_>>();
 
-        let balances = {
+        let native_balances = {
             use schema::account_balance::dsl::*;
             account_balance
                 .inner_join(schema::transaction::table)
@@ -832,19 +834,56 @@ impl PostgresGateway {
             None
         };
 
-        if !(accounts.len() == balances.len() && balances.len() == codes.len()) {
+        if !(accounts.len() == native_balances.len() && native_balances.len() == codes.len()) {
             return Err(StorageError::Unexpected(format!(
-                "Some accounts were missing either code or balance entities. \
-                    Got {} accounts {} balances and {} code entries.",
+                "Some accounts were missing either code or account balance entities. \
+                    Got {} accounts {} account balances and {} code entries.",
                 accounts.len(),
-                balances.len(),
+                native_balances.len(),
                 codes.len(),
             )));
         }
 
+        // get token balances
+        let (components, token_balances) = if retrieve_balances {
+            // note: balances are retrived by component, not by contract. Therefore, each contract
+            // linked to a component will show all balances for that component.
+            let code_ids = codes
+                .iter()
+                .map(|c| c.id)
+                .collect::<HashSet<_>>();
+            let mut components: HashMap<i64, String> =
+                schema::protocol_component_holds_contract::table
+                    .inner_join(schema::protocol_component::table)
+                    .filter(
+                        schema::protocol_component_holds_contract::contract_code_id
+                            .eq_any(code_ids),
+                    )
+                    .select((
+                        schema::protocol_component_holds_contract::contract_code_id,
+                        schema::protocol_component::external_id,
+                    ))
+                    .get_results::<(i64, String)>(conn)
+                    .await
+                    .map_err(PostgresError::from)?
+                    .into_iter()
+                    .collect();
+            let component_ids: Vec<&str> = components
+                .values_mut()
+                .map(|s| s.as_str())
+                .collect();
+            let token_balances = self
+                .get_balances(chain, Some(&component_ids[..]), version, conn)
+                .await?;
+
+            (components, token_balances)
+        } else {
+            (HashMap::new(), HashMap::new())
+        };
+
         accounts
             .into_iter()
-            .zip(balances.into_iter().zip(codes))
+            .zip(native_balances.into_iter().zip(codes))
             .map(|(account, (balance, code))| -> Result<models::contract::Contract, StorageError> {
                 if !(account.id == balance.account_id && balance.account_id == code.account_id) {
                     return Err(StorageError::Unexpected(format!(
@@ -854,11 +893,29 @@ impl PostgresGateway {
                     )));
                 }
 
-                // Note: it is safe to call unwrap here, as above we always
-                // wrap it into Some
+                // Note: it is safe to call unwrap here, as above we always wrap it into Some
                 let balance_tx = balance.tx.unwrap();
-                let code_tx = code.tx.unwrap();
-                let creation_tx = account.tx;
+                let code_tx = code.tx.clone().unwrap();
+                let creation_tx = account.tx.clone();
+
+                let balances = if retrieve_balances {
+                    let component_id = components
+                        .get(&code.id)
+                        .ok_or_else(|| {
+                            StorageError::NoRelatedEntity(
+                                "ComponentBalance".to_string(),
+                                "Account".to_string(),
+                                account.title.clone(),
+                            )
+                        })?;
+
+                    token_balances
+                        .get(component_id)
+                        .unwrap_or(&HashMap::new())
+                        .clone()
+                } else {
+                    HashMap::new()
+                };
 
                 let mut contract = models::contract::Contract::new(
                     *chain,
@@ -866,6 +923,7 @@ impl PostgresGateway {
                     account.entity.title.clone(),
                     HashMap::new(),
                     balance.entity.balance.clone(),
+                    balances,
                     code.entity.code.clone(),
                     code.entity.hash.clone(),
                     balance_tx,
@@ -922,7 +980,7 @@ impl PostgresGateway {
             creation_tx: creation_tx_id,
             created_at: Some(created_ts),
             deleted_at: None,
-            balance: new.balance.clone(),
+            balance: new.native_balance.clone(),
             code: new.code.clone(),
             code_hash: new.code_hash.clone(),
         };
@@ -1302,34 +1360,24 @@ mod test {
     async fn setup_data(conn: &mut AsyncPgConnection) {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
+        let tx_hashes = [
+            "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
+            "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54".to_string(),
+            "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7".to_string(),
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388".to_string(),
+        ];
         let txn = db_fixtures::insert_txns(
             conn,
             &[
-                (
-                    // deploy c0
-                    blk[0],
-                    1i64,
-                    "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945",
-                ),
-                (
-                    // change c0 state, deploy c2
-                    blk[0],
-                    2i64,
-                    "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54",
-                ),
+                // deploy c0
+                (blk[0], 1i64, &tx_hashes[0]),
+                // change c0 state, deploy c2
+                (blk[0], 2i64, &tx_hashes[1]),
                 // ----- Block 01 LAST
-                (
-                    // deploy c1, delete c2
-                    blk[1],
-                    1i64,
-                    "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7",
-                ),
-                (
-                    // change c0 and c1 state
-                    blk[1],
-                    2i64,
-                    "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388",
-                ),
+                // deploy c1, delete c2
+                (blk[1], 1i64, &tx_hashes[2]),
+                // change c0 and c1 state
+                (blk[1], 2i64, &tx_hashes[3]),
                 // ----- Block 02 LAST
             ],
         )
@@ -1345,7 +1393,8 @@ mod test {
         )
         .await;
         db_fixtures::insert_account_balance(conn, 0, txn[0], Some("2020-01-01T00:00:00"), c0).await;
-        db_fixtures::insert_contract_code(conn, c0, txn[0], Bytes::from("C0C0C0")).await;
+        let c0_code =
+            db_fixtures::insert_contract_code(conn, c0, txn[0], Bytes::from("C0C0C0")).await;
         db_fixtures::insert_account_balance(conn, 100, txn[1], Some("2020-01-01T01:00:00"), c0)
             .await;
         // Slot 2 is never modified again
@@ -1383,7 +1432,8 @@ mod test {
         )
         .await;
         db_fixtures::insert_account_balance(conn, 50, txn[2], None, c1).await;
-        db_fixtures::insert_contract_code(conn, c1, txn[2], Bytes::from("C1C1C1")).await;
+        let c1_code =
+            db_fixtures::insert_contract_code(conn, c1, txn[2], Bytes::from("C1C1C1")).await;
         db_fixtures::insert_slots(
             conn,
             c1,
@@ -1404,7 +1454,8 @@ mod test {
         )
         .await;
         db_fixtures::insert_account_balance(conn, 25, txn[1], None, c2).await;
-        db_fixtures::insert_contract_code(conn, c2, txn[1], Bytes::from("C2C2C2")).await;
+        let c2_code =
+            db_fixtures::insert_contract_code(conn, c2, txn[1], Bytes::from("C2C2C2")).await;
         db_fixtures::insert_slots(
             conn,
             c2,
@@ -1415,6 +1466,29 @@ mod test {
         )
         .await;
         db_fixtures::delete_account(conn, c2, "2020-01-01T01:00:00").await;
+
+        // linked protocol components
+        let protocol_system_id =
+            db_fixtures::insert_protocol_system(conn, "ambient".to_owned()).await;
+        let protocol_type_id = db_fixtures::insert_protocol_type(
+            conn,
+            "Pool",
+            Some(models::FinancialType::Swap),
+            None,
+            Some(models::ImplementationType::Custom),
+        )
+        .await;
+        let _ = db_fixtures::insert_protocol_component(
+            conn,
+            "component1",
+            chain_id,
+            protocol_system_id,
+            protocol_type_id,
+            txn[0],
+            None,
+            Some(vec![c0_code, c1_code, c2_code]),
+        )
+        .await;
     }
 
     fn account_c0(version: u64) -> models::contract::Contract {
@@ -1430,6 +1504,7 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(U256::from(100)),
+                HashMap::new(),
                 Bytes::from("C0C0C0"),
                 "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                     .parse()
@@ -1457,6 +1532,7 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(U256::from(101)),
+                HashMap::new(),
                 Bytes::from("C0C0C0"),
                 "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                     .parse()
@@ -1499,6 +1575,7 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(U256::from(50)),
+                HashMap::new(),
                 Bytes::from("C1C1C1"),
                 "0xa04b84acdf586a694085997f32c4aa11c2726a7f7e0b677a27d44d180c08e07f"
                     .parse()
@@ -1532,6 +1609,7 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(U256::from(25)),
+                HashMap::new(),
                 Bytes::from("C2C2C2"),
                 "0x7eb1e0ed9d018991eed6077f5be45b52347f6e5870728809d368ead5b96a1e96"
                     .parse()
@@ -1623,7 +1701,7 @@ mod test {
         let addresses = ids.as_deref();
 
         let results = gw
-            .get_contracts(&Chain::Ethereum, addresses, version.as_ref(), true, &mut conn)
+            .get_contracts(&Chain::Ethereum, addresses, version.as_ref(), true, false, &mut conn)
             .await
             .unwrap();
 
@@ -1681,6 +1759,7 @@ mod test {
             "NewAccount".to_owned(),
             HashMap::new(),
             Bytes::from("0x64"),
+            HashMap::new(),
             code,
             code_hash,
             "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"

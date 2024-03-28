@@ -888,27 +888,6 @@ impl BlockContractChanges {
 }
 
 #[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize)]
-/// Represents the dynamic data of `ProtocolComponent`.
-pub struct ProtocolState {
-    // associates back to a component, which has metadata like type, tokens, etc.
-    pub component_id: ComponentId,
-    // the protocol specific attributes, validated by the components schema
-    pub attributes: HashMap<AttrStoreKey, StoreVal>,
-    // via transaction, we can trace back when this state became valid
-    pub modify_tx: H256,
-}
-
-impl ProtocolState {
-    pub fn new(
-        component_id: ComponentId,
-        attributes: HashMap<AttrStoreKey, StoreVal>,
-        modify_tx: H256,
-    ) -> Self {
-        Self { component_id, attributes, modify_tx }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize)]
 /// Represents a change in protocol state.
 pub struct ProtocolStateDelta {
     // associates back to a component, which has metadata like type, tokens, etc.
@@ -948,7 +927,7 @@ impl ProtocolStateDelta {
 
     /// Merges this update with another one.
     ///
-    /// The method combines two `ProtocolState` instances if they are for the same
+    /// The method combines two `ProtocolStateDelta` instances if they are for the same
     /// protocol component.
     ///
     /// NB: It is assumed that `other` is a more recent update than `self` is and the two are
@@ -1320,9 +1299,9 @@ impl BlockEntityChanges {
 
     /// Aggregates state updates.
     ///
-    /// This function aggregates the state updates (`ProtocolState`) for
-    /// different protocol components into a `BlockEntityChangesResult` object.
-    /// This new object should have only one final ProtocolState per component_id.
+    /// This function aggregates the protocol updates (`ProtocolStateDelta` and `ComponentBalance`)
+    /// for different protocol components into a `BlockEntityChangesResult` object.
+    /// This new object should have only one final ProtocolStateDelta per component_id.
     ///
     /// After merging all updates, a `BlockEntityChangesResult` object is returned
     /// which contains, amongst other data, the compacted state updates.

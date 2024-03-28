@@ -15,7 +15,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_core::{
     dto::{
         BlockParam, Deltas, ExtractorIdentity, ProtocolComponent, ResponseAccount,
-        ResponseProtocolState, StateRequestBody, VersionParam,
+        ResponseProtocolState, StateRequestBody, StateRequestParameters, VersionParam,
     },
     Bytes,
 };
@@ -33,6 +33,7 @@ pub type SyncResult<T> = anyhow::Result<T>;
 pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     extractor_id: ExtractorIdentity,
     is_native: bool,
+    retrieve_balances: bool,
     rpc_client: R,
     deltas_client: D,
     max_retries: u64,
@@ -131,6 +132,7 @@ where
     pub fn new(
         extractor_id: ExtractorIdentity,
         is_native: bool,
+        retrieve_balances: bool,
         component_filter: ComponentFilter,
         max_retries: u64,
         rpc_client: R,
@@ -139,6 +141,7 @@ where
         Self {
             extractor_id,
             is_native,
+            retrieve_balances,
             rpc_client,
             deltas_client,
             component_filter,
@@ -180,7 +183,7 @@ where
                 .rpc_client
                 .get_contract_state(
                     self.extractor_id.chain,
-                    &Default::default(),
+                    &StateRequestParameters::new(self.retrieve_balances),
                     &StateRequestBody::new(
                         Some(
                             contract_ids
@@ -638,6 +641,7 @@ mod test {
         ProtocolStateSynchronizer::new(
             ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
             native,
+            false,
             ComponentFilter::MinimumTVL(50.0),
             1,
             rpc_client,

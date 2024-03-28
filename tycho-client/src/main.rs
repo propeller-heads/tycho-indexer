@@ -112,6 +112,7 @@ async fn run(tycho_url: String, exchanges: Vec<(String, String)>, block_time: u6
         let sync = ProtocolStateSynchronizer::new(
             id.clone(),
             true,
+            true,
             ComponentFilter::Ids(vec![address]),
             1,
             HttpRPCClient::new(&tycho_rpc_url).unwrap(),
