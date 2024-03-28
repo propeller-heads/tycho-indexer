@@ -4,6 +4,7 @@ use crate::{
     models::{
         self,
         blockchain::{Block, Transaction},
+        protocol::ComponentBalance,
         Address, BlockHash, Chain, ContractId, ExtractionState, PaginationParams, TxHash,
     },
     Bytes,
@@ -405,7 +406,7 @@ pub trait ProtocolGateway {
         chain: &Chain,
         ids: Option<&[&str]>,
         at: Option<&Version>,
-    ) -> Result<HashMap<String, HashMap<Bytes, Bytes>>, StorageError>;
+    ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
 
     async fn get_token_prices(&self, chain: &Chain) -> Result<HashMap<Bytes, f64>, StorageError>;
 

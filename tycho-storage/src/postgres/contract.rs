@@ -913,6 +913,9 @@ impl PostgresGateway {
                         .get(component_id)
                         .unwrap_or(&HashMap::new())
                         .clone()
+                        .into_iter()
+                        .map(|(key, balance)| (key, balance.new_balance))
+                        .collect()
                 } else {
                     HashMap::new()
                 };

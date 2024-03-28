@@ -38,7 +38,7 @@ impl PostgresGateway {
     /// - A Result containing a vector of `ProtocolState`, otherwise, it will return a StorageError.
     fn _decode_protocol_states(
         &self,
-        balances: HashMap<ComponentId, HashMap<Address, Balance>>,
+        balances: HashMap<ComponentId, HashMap<Address, models::protocol::ComponentBalance>>,
         states_result: Result<Vec<(orm::ProtocolState, ComponentId)>, diesel::result::Error>,
         context: &str,
     ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError> {
@@ -62,10 +62,13 @@ impl PostgresGateway {
                     }
 
                     let states_slice = &data_vec[component_start..index];
-                    let protocol_balances = balances
+                    let protocol_balances: HashMap<Address, Balance> = balances
                         .get(current_component_id)
                         .cloned()
-                        .unwrap_or_else(HashMap::new);
+                        .unwrap_or_else(HashMap::new)
+                        .into_iter()
+                        .map(|(key, balance)| (key, balance.new_balance))
+                        .collect();
 
                     let protocol_state = models::protocol::ProtocolComponentState::new(
                         current_component_id,
@@ -1037,7 +1040,14 @@ impl PostgresGateway {
         ids: Option<&[&str]>,
         at: Option<&Version>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<ComponentId, HashMap<Address, Balance>>, StorageError> {
+    ) -> Result<
+        HashMap<ComponentId, HashMap<Address, models::protocol::ComponentBalance>>,
+        StorageError,
+    > {
+        // NOTE: the returned ComponentBalances have a default value for tx_hash as it is assumed
+        // the caller does not need them. It is planned for `modify_tx` to be removed from
+        // the ComponentBalance
+
         let version_ts = match &at {
             Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),
             None => None,
@@ -1078,13 +1088,14 @@ impl PostgresGateway {
         if let Some(ts) = version_ts {
             balance_query = balance_query.filter(schema::component_balance::valid_from.le(ts));
         }
-        let balances_map: HashMap<String, HashMap<i64, Balance>> = balance_query
+        let balances_map: HashMap<String, HashMap<i64, (Balance, f64)>> = balance_query
             .select((
                 schema::component_balance::protocol_component_id,
                 schema::component_balance::token_id,
                 schema::component_balance::new_balance,
+                schema::component_balance::balance_float,
             ))
-            .get_results::<(i64, i64, Balance)>(conn)
+            .get_results::<(i64, i64, Balance, f64)>(conn)
             .await
             .map_err(PostgresError::from)?
             .into_iter()
@@ -1097,8 +1108,8 @@ impl PostgresGateway {
                         .expect("Component ID not found")
                         .clone(),
                     group
-                        .map(|(_, tid, bal)| (tid, bal))
-                        .collect::<HashMap<i64, Balance>>(),
+                        .map(|(_, tid, bal, balf)| (tid, (bal, balf)))
+                        .collect::<HashMap<i64, (Balance, f64)>>(),
                 )
             })
             .collect();
@@ -1127,10 +1138,17 @@ impl PostgresGateway {
         for (component_id, balance_map) in balances_map {
             let mut new_balance_map = HashMap::new();
 
-            for (tid, bal) in balance_map {
+            for (tid, bals) in balance_map {
                 match tokens.get(&tid) {
                     Some(address) => {
-                        new_balance_map.insert(address.clone(), bal);
+                        let balance = models::protocol::ComponentBalance::new(
+                            address.clone(),
+                            bals.0,
+                            bals.1,
+                            TxHash::default(),
+                            component_id.as_str(),
+                        );
+                        new_balance_map.insert(address.clone(), balance);
                     }
                     None => {
                         Err(StorageError::NotFound("Token".to_string(), tid.to_string()))?;
@@ -2861,8 +2879,28 @@ mod test {
         let _ = setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
         let exp: HashMap<_, _> = [
-            ("state1", Bytes::from(WETH), Balance::from(U256::exp10(18))),
-            ("state1", Bytes::from(USDC), Balance::from(U256::from(2000) * U256::exp10(6))),
+            (
+                "state1",
+                Bytes::from(WETH),
+                models::protocol::ComponentBalance::new(
+                    Bytes::from(WETH),
+                    Balance::from(U256::exp10(18)),
+                    1e18,
+                    TxHash::default(),
+                    "state1",
+                ),
+            ),
+            (
+                "state1",
+                Bytes::from(USDC),
+                models::protocol::ComponentBalance::new(
+                    Bytes::from(USDC),
+                    Balance::from(U256::from(2000) * U256::exp10(6)),
+                    2000000000.0,
+                    TxHash::default(),
+                    "state1",
+                ),
+            ),
         ]
         .into_iter()
         .group_by(|e| e.0)
@@ -2956,8 +2994,28 @@ mod test {
         .await;
 
         let exp: HashMap<_, _> = [
-            ("state3", Bytes::from(WETH), Balance::from(U256::exp10(18))),
-            ("state3", Bytes::from(DAI), Balance::from(U256::from(2000) * U256::exp10(18))),
+            (
+                "state3",
+                Bytes::from(WETH),
+                models::protocol::ComponentBalance::new(
+                    Bytes::from(WETH),
+                    Balance::from(U256::exp10(18)),
+                    1e18,
+                    TxHash::default(),
+                    "state3",
+                ),
+            ),
+            (
+                "state3",
+                Bytes::from(DAI),
+                models::protocol::ComponentBalance::new(
+                    Bytes::from(DAI),
+                    Balance::from(U256::from(2000) * U256::exp10(18)),
+                    2000e18,
+                    TxHash::default(),
+                    "state3",
+                ),
+            ),
         ]
         .into_iter()
         .group_by(|e| e.0)
