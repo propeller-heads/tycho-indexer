@@ -14,7 +14,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: target/wasm32-unknown-unknown/release/substreams_curve.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_curve.wasm
 
 modules:
   - name: map_components
@@ -57,7 +57,7 @@ modules:
     updatePolicy: add
     valueType: bigint
     inputs:
-      - map: map_balance_deltas
+      - map: map_relative_balances
 
   - name: map_protocol_changes
     kind: map

@@ -246,7 +246,7 @@ pub fn store_balance(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
 ///  map. Each block of code will extend the `TransactionContractChanges` struct with the
 ///  cooresponding changes (balance, component, contract), inserting a new one if it doesn't exist.
 ///  At the very end, the map can easily be sorted by index to ensure the final
-/// `BlockContractChanges`  is ordered by transactions properly.
+/// `BlockContractChanges` is ordered by transactions properly.
 #[substreams::handlers::map]
 pub fn map_protocol_changes(
     block: eth::v2::Block,
@@ -260,7 +260,7 @@ pub fn map_protocol_changes(
     let mut transaction_contract_changes: HashMap<_, TransactionContractChanges> = HashMap::new();
 
     // `ProtocolComponents` are gathered from `map_pools_created` which just need a bit of work to
-    //   convert into `TransactionContractChanges`
+    //  convert into `TransactionContractChanges`
     grouped_components
         .tx_components
         .iter()
