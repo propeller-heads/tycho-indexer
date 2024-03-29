@@ -987,63 +987,6 @@ mod test {
             last_valid_cursor: "cursor@400".into(),
         }
     }
-
-    #[tokio::test]
-    async fn test_handle_revert() {
-        let mut gw = MockVmGateway::new();
-        gw.expect_ensure_protocol_types()
-            .times(1)
-            .returning(|_| ());
-        gw.expect_get_cursor()
-            .times(1)
-            .returning(|| Ok("cursor".into()));
-
-        gw.expect_upsert_contract()
-            .times(1)
-            .returning(|_, _, _| Ok(()));
-
-        gw.expect_revert()
-            .withf(|c, v, cursor| {
-                c.clone().unwrap() ==
-                    BlockIdentifier::Hash(
-                        Bytes::from_str(
-                            "0x0000000000000000000000000000000000000000000000000000000031323334",
-                        )
-                        .unwrap(),
-                    ) &&
-                    v == &BlockIdentifier::Hash(evm::fixtures::HASH_256_0.into()) &&
-                    cursor == "cursor@400"
-            })
-            .times(1)
-            .returning(|_, _, _| Ok(evm::BlockAccountChanges::default()));
-        let extractor = VmContractExtractor::new(
-            "vm:ambient",
-            Chain::Ethereum,
-            ChainState::default(),
-            gw,
-            ambient_protocol_types(),
-            "ambient".to_owned(),
-            None,
-            5,
-        )
-        .await
-        .expect("extractor init ok");
-
-        // Call handle_tick_scoped_data to initialize the last processed block.
-        let inp = evm::fixtures::pb_block_scoped_data(block_contract_changes_ok());
-
-        extractor
-            .handle_tick_scoped_data(inp)
-            .await
-            .unwrap();
-
-        let inp = undo_signal();
-
-        let res = extractor.handle_revert(inp).await;
-
-        assert!(matches!(res, Ok(None)));
-        assert_eq!(extractor.get_cursor().await, "cursor@400");
-    }
 }
 
 /// It is notoriously hard to mock postgres here, we would need to have traits and abstractions

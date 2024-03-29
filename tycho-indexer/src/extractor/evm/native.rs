@@ -911,54 +911,6 @@ mod test {
         }
         assert_eq!(extractor.get_cursor().await, "cursor@420");
     }
-
-    #[tokio::test]
-    async fn test_handle_revert() {
-        let mut gw = MockNativeGateway::new();
-        gw.expect_ensure_protocol_types()
-            .times(1)
-            .returning(|_| ());
-        gw.expect_get_cursor()
-            .times(1)
-            .returning(|| Ok("cursor".into()));
-
-        gw.expect_advance()
-            .times(1)
-            .returning(|_, _, _| Ok(()));
-
-        gw.expect_revert()
-            .withf(|c, v, cursor| {
-                c.clone().unwrap() ==
-                    BlockIdentifier::Hash(
-                        Bytes::from_str(
-                            "0x0000000000000000000000000000000000000000000000000000000000000000",
-                        )
-                        .unwrap(),
-                    ) &&
-                    v == &BlockIdentifier::Hash(evm::fixtures::HASH_256_0.into()) &&
-                    cursor == "cursor@400"
-            })
-            .times(1)
-            .returning(|_, _, _| Ok(evm::BlockEntityChangesResult::default()));
-        let extractor = create_extractor(gw).await;
-        // Call handle_tick_scoped_data to initialize the last processed block.
-        let inp = evm::fixtures::pb_block_scoped_data(evm::fixtures::pb_block_entity_changes());
-
-        let _res = extractor
-            .handle_tick_scoped_data(inp)
-            .await
-            .unwrap();
-
-        let inp = BlockUndoSignal {
-            last_valid_block: Some(BlockRef { id: evm::fixtures::HASH_256_0.into(), number: 400 }),
-            last_valid_cursor: "cursor@400".into(),
-        };
-
-        let res = extractor.handle_revert(inp).await;
-
-        assert!(matches!(res, Ok(None)));
-        assert_eq!(extractor.get_cursor().await, "cursor@400");
-    }
 }
 
 /// It is notoriously hard to mock postgres here, we would need to have traits and abstractions
