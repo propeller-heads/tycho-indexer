@@ -8,7 +8,7 @@ protobuf:
     - tycho/evm/v1/vm.proto
     - tycho/evm/v1/common.proto
   importPaths:
-    - ../../proto/tycho/evm/v1/
+    - ../../proto
     - ./proto
 
 binaries:

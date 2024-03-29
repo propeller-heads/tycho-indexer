@@ -1,10 +1,11 @@
-use substreams_ethereum::pb::eth::v2::{Call, Log};
-use substreams_ethereum::{Event, Function};
+use substreams_ethereum::{
+    pb::eth::v2::{Call, Log, TransactionTrace},
+    Event, Function,
+};
 
 use crate::abi;
-use crate::pb;
-use pb::tycho::evm::v1::{self as tycho};
 use substreams::hex;
+use tycho_substreams::prelude::*;
 
 use substreams::scalar::BigInt;
 
@@ -42,7 +43,8 @@ pub fn address_map(
     call_address: &[u8; 20],
     log: &Log,
     call: &Call,
-) -> Option<tycho::ProtocolComponent> {
+    tx: &TransactionTrace,
+) -> Option<ProtocolComponent> {
     match *call_address {
         CRYPTO_SWAP_REGISTRY => {
             let pool_added = abi::crypto_swap_registry::events::PoolAdded::match_and_decode(log)?;
@@ -77,9 +79,8 @@ pub fn address_map(
                 })?;
 
             // We need to perform an eth_call in order to actually get the pool's tokens
-            let coins_function = abi::crypto_swap_registry::functions::GetCoins {
-                pool: add_pool.pool,
-            };
+            let coins_function =
+                abi::crypto_swap_registry::functions::GetCoins { pool: add_pool.pool };
 
             let coins = coins_function.call(CRYPTO_SWAP_REGISTRY.to_vec())?;
             let trimmed_coins: Vec<_> = coins
@@ -87,29 +88,35 @@ pub fn address_map(
                 .unwrap_or(&[])
                 .to_vec();
 
-            Some(tycho::ProtocolComponent {
+            Some(ProtocolComponent {
                 id: hex::encode(&pool_added.pool),
+                tx: Some(Transaction {
+                    to: tx.to.clone(),
+                    from: tx.from.clone(),
+                    hash: tx.hash.clone(),
+                    index: tx.index.into(),
+                }),
                 tokens: trimmed_coins,
                 contracts: vec![call_address.into(), pool_added.pool],
                 static_att: vec![
-                    tycho::Attribute {
+                    Attribute {
                         name: "pool_type".into(),
                         value: "CryptoSwap".into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "name".into(),
                         value: add_pool.name.into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "lp_token".into(),
                         value: add_pool.lp_token.into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
                 ],
-
-                change: tycho::ChangeType::Creation.into(),
+                change: ChangeType::Creation.into(),
+                ..Default::default()
             })
         }
         MAIN_REGISTRY => {
@@ -160,9 +167,8 @@ pub fn address_map(
                     .or_else(|| abi::main_registry::functions::AddPool::match_and_decode(call))?;
 
             // We need to perform an eth_call in order to actually get the pool's tokens
-            let coins_function = abi::crypto_swap_registry::functions::GetCoins {
-                pool: add_pool.pool,
-            };
+            let coins_function =
+                abi::crypto_swap_registry::functions::GetCoins { pool: add_pool.pool };
 
             let coins = coins_function.call(CRYPTO_SWAP_REGISTRY.to_vec())?;
             let trimmed_coins: Vec<_> = coins
@@ -170,28 +176,35 @@ pub fn address_map(
                 .unwrap_or(&[])
                 .to_vec();
 
-            Some(tycho::ProtocolComponent {
+            Some(ProtocolComponent {
                 id: hex::encode(&pool_created.pool),
+                tx: Some(Transaction {
+                    to: tx.to.clone(),
+                    from: tx.from.clone(),
+                    hash: tx.hash.clone(),
+                    index: tx.index.into(),
+                }),
                 tokens: trimmed_coins,
                 contracts: vec![call_address.into(), pool_created.pool],
                 static_att: vec![
-                    tycho::Attribute {
+                    Attribute {
                         name: "pool_type".into(),
                         value: "MainRegistry".into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "name".into(),
                         value: add_pool.name.into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "lp_token".into(),
                         value: add_pool.lp_token.into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
                 ],
-                change: tycho::ChangeType::Creation.into(),
+                change: ChangeType::Creation.into(),
+                ..Default::default()
             })
         }
         CRYPTO_POOL_FACTORY => {
@@ -200,68 +213,87 @@ pub fn address_map(
             let deploy_call =
                 abi::crypto_pool_factory::functions::DeployPool::match_and_decode(call)?;
 
-            Some(tycho::ProtocolComponent {
+            Some(ProtocolComponent {
                 id: hex::encode(&call.return_data),
+                tx: Some(Transaction {
+                    to: tx.to.clone(),
+                    from: tx.from.clone(),
+                    hash: tx.hash.clone(),
+                    index: tx.index.into(),
+                }),
                 tokens: pool_added.coins.into(),
                 contracts: vec![call_address.into(), call.return_data.clone()],
                 static_att: vec![
-                    tycho::Attribute {
+                    Attribute {
                         name: "pool_type".into(),
                         value: "CryptoPool".into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "name".into(),
                         value: pool_added.a.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "lp_token".into(),
                         value: pool_added.gamma.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "mid_fee".into(),
                         value: deploy_call.mid_fee.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "out_fee".into(),
                         value: deploy_call.out_fee.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "allowed_extra_profit".into(),
-                        value: deploy_call.allowed_extra_profit.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        value: deploy_call
+                            .allowed_extra_profit
+                            .to_string()
+                            .into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "fee_gamma".into(),
                         value: deploy_call.fee_gamma.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "adjustment_step".into(),
-                        value: deploy_call.adjustment_step.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        value: deploy_call
+                            .adjustment_step
+                            .to_string()
+                            .into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "admin_fee".into(),
                         value: deploy_call.admin_fee.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "ma_half_time".into(),
-                        value: deploy_call.ma_half_time.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        value: deploy_call
+                            .ma_half_time
+                            .to_string()
+                            .into(),
+                        change: ChangeType::Creation.into(),
                     },
-                    tycho::Attribute {
+                    Attribute {
                         name: "initial_price".into(),
-                        value: deploy_call.initial_price.to_string().into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        value: deploy_call
+                            .initial_price
+                            .to_string()
+                            .into(),
+                        change: ChangeType::Creation.into(),
                     },
                 ],
-                change: tycho::ChangeType::Creation.into(),
+                change: ChangeType::Creation.into(),
+                ..Default::default()
             })
         }
         META_POOL_FACTORY => {
@@ -270,17 +302,15 @@ pub fn address_map(
             {
                 let add_pool =
                     abi::meta_pool_factory::functions::DeployPlainPool1::match_and_decode(call)
-                        .map(
-                            |add_pool| abi::meta_pool_factory::functions::DeployPlainPool3 {
-                                name: add_pool.name,
-                                symbol: add_pool.symbol,
-                                coins: add_pool.coins,
-                                a: add_pool.a,
-                                fee: add_pool.fee,
-                                asset_type: BigInt::from(0),
-                                implementation_idx: BigInt::from(0),
-                            },
-                        )
+                        .map(|add_pool| abi::meta_pool_factory::functions::DeployPlainPool3 {
+                            name: add_pool.name,
+                            symbol: add_pool.symbol,
+                            coins: add_pool.coins,
+                            a: add_pool.a,
+                            fee: add_pool.fee,
+                            asset_type: BigInt::from(0),
+                            implementation_idx: BigInt::from(0),
+                        })
                         .or_else(|| {
                             abi::meta_pool_factory::functions::DeployPlainPool2::match_and_decode(
                                 call,
@@ -302,69 +332,81 @@ pub fn address_map(
                                 call,
                             )
                         })?;
-                Some(tycho::ProtocolComponent {
+                Some(ProtocolComponent {
                     id: hex::encode(&call.return_data),
+                    tx: Some(Transaction {
+                        to: tx.to.clone(),
+                        from: tx.from.clone(),
+                        hash: tx.hash.clone(),
+                        index: tx.index.into(),
+                    }),
                     tokens: pool_added.coins.into(),
                     contracts: vec![call_address.into(), call.return_data.clone()],
                     static_att: vec![
-                        tycho::Attribute {
+                        Attribute {
                             name: "pool_type".into(),
                             value: "PlainPool".into(),
-                            change: tycho::ChangeType::Creation.into(),
+                            change: ChangeType::Creation.into(),
                         },
-                        tycho::Attribute {
+                        Attribute {
                             name: "name".into(),
                             value: add_pool.name.into(),
-                            change: tycho::ChangeType::Creation.into(),
+                            change: ChangeType::Creation.into(),
                         },
-                        tycho::Attribute {
+                        Attribute {
                             name: "fee".into(),
                             value: add_pool.fee.to_string().into(),
-                            change: tycho::ChangeType::Creation.into(),
+                            change: ChangeType::Creation.into(),
                         },
-                        tycho::Attribute {
+                        Attribute {
                             name: "a".into(),
                             value: add_pool.a.to_string().into(),
-                            change: tycho::ChangeType::Creation.into(),
+                            change: ChangeType::Creation.into(),
                         },
                     ],
-                    change: tycho::ChangeType::Creation.into(),
+                    change: ChangeType::Creation.into(),
+                    ..Default::default()
                 })
             } else if let Some(pool_added) =
                 abi::meta_pool_factory::events::MetaPoolDeployed::match_and_decode(log)
             {
                 let add_pool =
                     abi::meta_pool_factory::functions::DeployMetapool1::match_and_decode(call)
-                        .map(
-                            |add_pool| abi::meta_pool_factory::functions::DeployMetapool2 {
-                                base_pool: add_pool.base_pool,
-                                name: add_pool.name,
-                                symbol: add_pool.symbol,
-                                coin: add_pool.coin,
-                                a: add_pool.a,
-                                fee: add_pool.fee,
-                                implementation_idx: BigInt::from(0),
-                            },
-                        )
+                        .map(|add_pool| abi::meta_pool_factory::functions::DeployMetapool2 {
+                            base_pool: add_pool.base_pool,
+                            name: add_pool.name,
+                            symbol: add_pool.symbol,
+                            coin: add_pool.coin,
+                            a: add_pool.a,
+                            fee: add_pool.fee,
+                            implementation_idx: BigInt::from(0),
+                        })
                         .or_else(|| {
                             abi::meta_pool_factory::functions::DeployMetapool2::match_and_decode(
                                 call,
                             )
                         })?;
-                Some(tycho::ProtocolComponent {
+                Some(ProtocolComponent {
                     id: hex::encode(&call.return_data),
+                    tx: Some(Transaction {
+                        to: tx.to.clone(),
+                        from: tx.from.clone(),
+                        hash: tx.hash.clone(),
+                        index: tx.index.into(),
+                    }),
                     tokens: vec![pool_added.coin, add_pool.base_pool.clone()],
                     contracts: vec![
                         call_address.into(),
                         call.return_data.clone(),
                         add_pool.base_pool.clone(),
                     ],
-                    static_att: vec![tycho::Attribute {
+                    static_att: vec![Attribute {
                         name: "pool_type".into(),
                         value: "MetaPool".into(),
-                        change: tycho::ChangeType::Creation.into(),
+                        change: ChangeType::Creation.into(),
                     }],
-                    change: tycho::ChangeType::Creation.into(),
+                    change: ChangeType::Creation.into(),
+                    ..Default::default()
                 })
             } else {
                 None
