@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use tracing::{debug, trace};
-use tycho_core::{dto::TokenBalances, models::ComponentId, storage::StorageError, Bytes};
-
-use super::evm::ComponentBalance;
+use tycho_core::{
+    models::{protocol::ComponentBalance, ComponentId},
+    storage::StorageError,
+    Bytes,
+};
 
 #[derive(Debug)]
 pub(crate) struct BlockUpdateWithCursor<B: RevertBufferEntity> {
@@ -196,11 +198,11 @@ impl<B: RevertBufferEntity> RevertBuffer<B> {
     /// where each key is a component ID associated with its token balances, and a list of
     /// component-token pairs for which no updates were found.
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
-    #[allow(dead_code)] // Clippy thinks that tuple with Bytes are a mutable type.
+    #[allow(clippy::type_complexity)]
     pub fn lookup_balances(
         &self,
         keys: &[(&ComponentId, &Bytes)],
-    ) -> (HashMap<String, TokenBalances>, Vec<(ComponentId, Bytes)>) {
+    ) -> (HashMap<String, HashMap<Bytes, ComponentBalance>>, Vec<(ComponentId, Bytes)>) {
         let mut res = HashMap::new();
         let mut remaning_keys: HashSet<_> = keys
             .iter()
@@ -221,13 +223,12 @@ impl<B: RevertBufferEntity> RevertBuffer<B> {
             }
         }
 
-        let mut results: HashMap<String, TokenBalances> = HashMap::new();
+        let mut results: HashMap<String, HashMap<Bytes, ComponentBalance>> = HashMap::new();
         for ((component_id, address), val) in res {
             results
                 .entry(component_id)
-                .or_insert(TokenBalances(HashMap::new()))
-                .0
-                .insert(address, val.into());
+                .or_default()
+                .insert(address, val);
         }
 
         (results, remaning_keys.into_iter().collect())
@@ -243,7 +244,7 @@ mod test {
 
     use chrono::NaiveDateTime;
     use ethers::types::{H160, H256};
-    use tycho_core::{dto::TokenBalances, models::Chain, Bytes};
+    use tycho_core::{models::Chain, Bytes};
 
     use crate::extractor::{
         evm::{
@@ -516,29 +517,29 @@ mod test {
             HashMap::from([
                 (
                     c_ids[0].clone(),
-                    TokenBalances(HashMap::from([(
+                    HashMap::from([(
                         token_key.clone(),
-                        tycho_core::dto::ComponentBalance {
+                        tycho_core::models::protocol::ComponentBalance {
                             token: token_key.clone(),
-                            balance: Bytes::from(3_i32.to_le_bytes()),
+                            new_balance: Bytes::from(3_i32.to_le_bytes()),
                             modify_tx: transaction().hash.into(),
                             component_id: c_ids[0].clone(),
                             balance_float: 3.0,
                         }
-                    )]))
+                    )])
                 ),
                 (
                     c_ids[1].clone(),
-                    TokenBalances(HashMap::from([(
+                    HashMap::from([(
                         token_key.clone(),
-                        tycho_core::dto::ComponentBalance {
+                        tycho_core::models::protocol::ComponentBalance {
                             token: token_key.clone(),
-                            balance: Bytes::from(30_i32.to_le_bytes()),
+                            new_balance: Bytes::from(30_i32.to_le_bytes()),
                             modify_tx: transaction().hash.into(),
                             component_id: c_ids[1].clone(),
                             balance_float: 30.0,
                         }
-                    )]))
+                    )])
                 )
             ])
         );

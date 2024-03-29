@@ -339,6 +339,15 @@ impl BlockAccountChanges {
             component_tvl: HashMap::new(),
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.account_updates.is_empty() &&
+            self.new_protocol_components.is_empty() &&
+            self.deleted_protocol_components
+                .is_empty() &&
+            self.component_balances.is_empty() &&
+            self.component_tvl.is_empty()
+    }
 }
 
 impl std::fmt::Display for BlockAccountChanges {
@@ -514,7 +523,7 @@ impl RevertBufferEntity for BlockContractChanges {
     fn get_filtered_balance_update(
         &self,
         keys: Vec<(&ComponentId, &Address)>,
-    ) -> HashMap<(String, Bytes), ComponentBalance> {
+    ) -> HashMap<(String, Bytes), tycho_core::models::protocol::ComponentBalance> {
         // Convert keys to a HashSet for faster lookups
         let keys_set: HashSet<(&String, &Bytes)> = keys.into_iter().collect();
 
@@ -529,7 +538,7 @@ impl RevertBufferEntity for BlockContractChanges {
                     })
                 {
                     res.entry((component_id.clone(), token.as_bytes().into()))
-                        .or_insert(value.clone());
+                        .or_insert(value.into());
                 }
             }
         }
@@ -1129,6 +1138,17 @@ pub struct BlockEntityChangesResult {
     pub component_tvl: HashMap<String, f64>,
 }
 
+impl BlockEntityChangesResult {
+    fn is_empty(&self) -> bool {
+        self.state_updates.is_empty() &&
+            self.new_protocol_components.is_empty() &&
+            self.deleted_protocol_components
+                .is_empty() &&
+            self.component_balances.is_empty() &&
+            self.component_tvl.is_empty()
+    }
+}
+
 /// A container for state updates grouped by transaction
 ///
 /// Hold the detailed state changes for a block alongside with protocol
@@ -1176,7 +1196,7 @@ impl RevertBufferEntity for BlockEntityChanges {
     fn get_filtered_balance_update(
         &self,
         keys: Vec<(&ComponentId, &Address)>,
-    ) -> HashMap<(String, Bytes), ComponentBalance> {
+    ) -> HashMap<(String, Bytes), tycho_core::models::protocol::ComponentBalance> {
         // Convert keys to a HashSet for faster lookups
         let keys_set: HashSet<(&String, &Bytes)> = keys.into_iter().collect();
 
@@ -1191,7 +1211,7 @@ impl RevertBufferEntity for BlockEntityChanges {
                     })
                 {
                     res.entry((component_id.clone(), token.as_bytes().into()))
-                        .or_insert(value.clone());
+                        .or_insert(value.into());
                 }
             }
         }
@@ -2235,12 +2255,14 @@ mod test {
             filtered,
             HashMap::from([(
                 (c_id_key.clone(), token_key.clone()),
-                ComponentBalance {
-                    token: H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
-                    balance: Bytes::from(10.encode_to_vec()),
+                tycho_core::models::protocol::ComponentBalance {
+                    token: H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+                        .unwrap()
+                        .into(),
+                    new_balance: Bytes::from(10.encode_to_vec()),
                     balance_float: 2058.0,
-                    modify_tx: H256::from_low_u64_be(
-                        0x0000000000000000000000000000000000000000000000000000000000000001
+                    modify_tx: Bytes::from(
+                        "0x0000000000000000000000000000000000000000000000000000000000000001"
                     ),
                     component_id: c_id_key.clone()
                 }
@@ -2516,12 +2538,14 @@ mod test {
             filtered,
             HashMap::from([(
                 (c_id_key.clone(), token_key.clone()),
-                ComponentBalance {
-                    token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    balance: Bytes::from(1_i32.to_le_bytes()),
+                tycho_core::models::protocol::ComponentBalance {
+                    token: H160::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F")
+                        .unwrap()
+                        .into(),
+                    new_balance: Bytes::from(1_i32.to_le_bytes()),
                     balance_float: 16777216.0,
-                    modify_tx: H256::from_low_u64_be(
-                        0x0000000000000000000000000000000000000000000000000000000011121314,
+                    modify_tx: Bytes::from(
+                        "0x0000000000000000000000000000000000000000000000000000000011121314"
                     ),
                     component_id: c_id_key.clone()
                 }

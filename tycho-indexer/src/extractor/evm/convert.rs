@@ -175,6 +175,18 @@ impl From<&evm::ComponentBalance> for ComponentBalance {
     }
 }
 
+impl From<&ComponentBalance> for evm::ComponentBalance {
+    fn from(value: &ComponentBalance) -> Self {
+        Self {
+            token: value.token.clone().into(),
+            balance: value.new_balance.clone(),
+            balance_float: value.balance_float,
+            modify_tx: value.modify_tx.clone().into(),
+            component_id: value.component_id.clone(),
+        }
+    }
+}
+
 impl From<&evm::ERC20Token> for CurrencyToken {
     fn from(value: &ERC20Token) -> Self {
         Self {

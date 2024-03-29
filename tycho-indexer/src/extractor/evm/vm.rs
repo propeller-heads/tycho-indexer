@@ -28,8 +28,10 @@ use std::{
 use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, trace, warn};
 use tycho_core::{
-    models,
-    models::{Chain, ExtractionState, ExtractorIdentity, ProtocolType},
+    models::{
+        self, contract::Contract, protocol::ComponentBalance, Address, Chain, ChangeType,
+        ExtractionState, ExtractorIdentity, ProtocolType,
+    },
     storage::{
         BlockIdentifier, ChainGateway, ContractStateGateway, ExtractionStateGateway,
         ProtocolGateway, StorageError,
@@ -144,6 +146,16 @@ pub trait VmGateway: Send + Sync {
         to: &BlockIdentifier,
         new_cursor: &str,
     ) -> Result<evm::BlockAccountChanges, StorageError>;
+
+    async fn get_contracts(
+        &self,
+        component_ids: &[models::Address],
+    ) -> Result<Vec<Contract>, StorageError>;
+
+    async fn get_components_balances<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
 }
 
 impl<T> VmPgGateway<T>
@@ -323,6 +335,24 @@ where
 impl VmGateway for VmPgGateway<TokenPreProcessor> {
     async fn get_cursor(&self) -> Result<Vec<u8>, StorageError> {
         self.get_last_cursor().await
+    }
+
+    async fn get_contracts(
+        &self,
+        component_ids: &[Address],
+    ) -> Result<Vec<Contract>, StorageError> {
+        self.state_gateway
+            .get_contracts(&self.chain, Some(component_ids), None, true, false)
+            .await
+    }
+
+    async fn get_components_balances<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError> {
+        self.state_gateway
+            .get_balances(&self.chain, Some(component_ids), None)
+            .await
     }
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
@@ -534,6 +564,8 @@ where
     }
 
     #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % inp.last_valid_block.as_ref().unwrap().number))]
+    #[allow(clippy::mutable_key_type)]
+    // Clippy thinks that tuple with Bytes are a mutable type.
     async fn handle_revert(
         &self,
         inp: BlockUndoSignal,
@@ -541,6 +573,7 @@ where
         let block_ref = inp
             .last_valid_block
             .ok_or_else(|| ExtractionError::DecodeError("Revert without block ref".into()))?;
+
         let block_hash = H256::from_str(&block_ref.id).map_err(|err| {
             ExtractionError::DecodeError(format!(
                 "Failed to parse {} as block hash: {}",
@@ -548,33 +581,271 @@ where
             ))
         })?;
 
-        let current = self
-            .get_last_processed_block()
-            .await
-            .map(|block| BlockIdentifier::Hash(block.hash.into()));
+        let mut revert_buffer = self.revert_buffer.lock().await;
 
-        // Make sure we have a current block, otherwise it's not safe to revert.
-        // TODO: add last block to extraction state and get it when creating a new extractor.
-        // assert!(current.is_some(), "Revert without current block");
-        if current.is_none() {
-            // ignore for now if we don't have the current block, just ignore the revert.
-            // This behaviour is not correct and we will have to rollback the database
-            // to a good state once the revert issue has been fixed.
-            return Ok(None);
-        }
+        // Purge the buffer and create a set of state that was reverted
+        let reverted_state = revert_buffer
+            .purge(block_hash.into())
+            .map_err(|e| ExtractionError::RevertBufferError(e.to_string()))?;
 
-        let changes = self
+        let reverted_state_keys: HashSet<_> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .tx_updates
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .account_updates
+                            .iter()
+                            .flat_map(|(c_id, delta)| {
+                                delta
+                                    .slots
+                                    .keys()
+                                    .map(move |key| (c_id, key))
+                            })
+                    })
+            })
+            .collect();
+
+        let reverted_state_keys_vec = reverted_state_keys
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        trace!("Reverted state keys {:?}", reverted_state_keys_vec);
+
+        // Fetch previous values for every reverted states
+        // First search in the buffer
+        let (buffered_state, missing) = revert_buffer.lookup_state(&reverted_state_keys_vec);
+
+        // Then for every missing previous values in the buffer, get the data from our db
+        let missing_map: HashMap<Bytes, Vec<Bytes>> =
+            missing
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (addr, key)| {
+                    acc.entry(addr.into())
+                        .or_default()
+                        .push(key.into());
+                    acc
+                });
+
+        trace!("Missing state keys after buffer lookup {:?}", missing_map);
+
+        let missing_contracts = self
             .gateway
-            .revert(
-                current,
-                &BlockIdentifier::Hash(block_hash.into()),
-                inp.last_valid_cursor.as_ref(),
+            .get_contracts(
+                &missing_map
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<Address>>(),
+            )
+            .await
+            .map_err(ExtractionError::Storage)?;
+
+        // Then merge the two and cast it to the expected struct
+        let combined_states = buffered_state
+            .into_iter()
+            .chain(
+                missing_contracts
+                    .iter()
+                    .flat_map(|missing_state| {
+                        missing_map
+                            .get(&missing_state.address)
+                            .into_iter()
+                            .flat_map(move |keys| {
+                                keys.iter().filter_map(move |key| {
+                                    missing_state
+                                        .slots
+                                        .get(key)
+                                        .map(|value| {
+                                            (
+                                                (
+                                                    missing_state.address.clone().into(),
+                                                    key.clone().into(),
+                                                ),
+                                                value.clone().into(),
+                                            )
+                                        })
+                                })
+                            })
+                    }),
+            )
+            .collect::<Vec<_>>();
+
+        let account_updates =
+            combined_states
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, ((addr, key), value)| {
+                    acc.entry(addr)
+                        .or_insert_with(|| evm::AccountUpdate {
+                            address: addr,
+                            chain: self.chain,
+                            slots: HashMap::new(),
+                            balance: None, //TODO: handle balance changes
+                            code: None,    //TODO: handle code changes
+                            change: ChangeType::Update,
+                        })
+                        .slots
+                        .insert(key, value);
+                    acc
+                });
+
+        // Handle token balance changes
+        let reverted_balances_keys: HashSet<(&String, Bytes)> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .tx_updates
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .component_balances
+                            .iter()
+                            .flat_map(|(id, balance_change)| {
+                                balance_change
+                                    .iter()
+                                    .map(move |(token, _)| (id, Bytes::from(token.as_bytes())))
+                            })
+                    })
+            })
+            .collect();
+
+        let reverted_balances_keys_vec = reverted_balances_keys
+            .iter()
+            .map(|(id, token)| (*id, token))
+            .collect::<Vec<_>>();
+
+        trace!("Reverted balance keys {:?}", reverted_balances_keys_vec);
+
+        // First search in the buffer
+        let (buffered_balances, missing_balances_keys) =
+            revert_buffer.lookup_balances(&reverted_balances_keys_vec);
+
+        let missing_balances_map: HashMap<String, Vec<Bytes>> = missing_balances_keys
+            .into_iter()
+            .fold(HashMap::new(), |mut map, (c_id, token)| {
+                map.entry(c_id).or_default().push(token);
+                map
+            });
+
+        trace!("Missing balance keys after buffer lookup {:?}", missing_balances_map);
+
+        // Then get the missing balances from db
+        let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
+            .gateway
+            .get_components_balances(
+                &missing_balances_map
+                    .keys()
+                    .map(AsRef::as_ref)
+                    .collect::<Vec<&str>>(),
             )
             .await?;
+
+        let combined_balances = buffered_balances
+            .into_iter()
+            .chain(
+                missing_balances
+                    .into_iter()
+                    .flat_map(|(id, missing_balance)| {
+                        missing_balances_map
+                            .get(&id)
+                            .into_iter()
+                            .map(move |keys| {
+                                let key_set: HashSet<_> = keys.iter().collect();
+                                let filtered = missing_balance
+                                    .iter()
+                                    .filter(|(k, _)| key_set.contains(k))
+                                    .map(|(k, v)| (k.clone(), v.clone()))
+                                    .collect();
+                                (id.clone(), filtered)
+                            })
+                    }),
+            )
+            .map(|(id, balances)| {
+                (
+                    id,
+                    balances
+                        .into_iter()
+                        .map(|(token, value)| (H160::from(token), (&value).into()))
+                        .collect(),
+                )
+            })
+            .collect();
+
+        // Handle created and deleted components
+        let (reverted_components_creations, reverted_components_deletions) =
+            reverted_state.iter().fold(
+                (HashMap::new(), HashMap::new()),
+                |(mut reverted_creations, mut reverted_deletions), block_msg| {
+                    block_msg
+                        .block_update()
+                        .tx_updates
+                        .iter()
+                        .for_each(|update| {
+                            update
+                                .protocol_components
+                                .iter()
+                                .for_each(|(id, new_component)| {
+                                    /*
+                                    For each component, only the oldest creation/deletion needs to be reverted. For example, if a component is created then deleted within the reverted
+                                    range of blocks, we only want to remove it (so undo its creation).
+                                    As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
+                                    */
+                                    if !reverted_deletions.contains_key(id) &&
+                                        !reverted_creations.contains_key(id)
+                                    {
+                                        match new_component.change {
+                                            ChangeType::Update => {}
+                                            ChangeType::Deletion => {
+                                                let mut reverted_deletion = new_component.clone();
+                                                reverted_deletion.change = ChangeType::Creation;
+                                                reverted_deletions
+                                                    .insert(id.clone(), reverted_deletion);
+                                            }
+                                            ChangeType::Creation => {
+                                                let mut reverted_creation = new_component.clone();
+                                                reverted_creation.change = ChangeType::Deletion;
+                                                reverted_creations
+                                                    .insert(id.clone(), reverted_creation);
+                                            }
+                                        }
+                                    }
+                                });
+                        });
+                    (reverted_creations, reverted_deletions)
+                },
+            );
+
+        trace!("Reverted components creations {:?}", reverted_components_creations);
+        // TODO: For these reverted deletions we need to fetch the whole state (so get it from the
+        // db and apply buffer update)
+        trace!("Reverted components deletions {:?}", reverted_components_deletions);
+
+        let revert_message = evm::BlockAccountChanges {
+            extractor: self.name.clone(),
+            chain: self.chain,
+            block: revert_buffer
+                .get_most_recent_block()
+                .expect("Couldn't find most recent block in buffer during revert")
+                .into(),
+            revert: true,
+            account_updates,
+            new_protocol_components: reverted_components_deletions,
+            deleted_protocol_components: reverted_components_creations,
+            component_balances: combined_balances,
+            component_tvl: HashMap::new(),
+        };
+
+        debug!("Succesfully retrieved all previous states during revert!");
+
         self.update_cursor(inp.last_valid_cursor)
             .await;
 
-        Ok((!changes.account_updates.is_empty()).then_some(Arc::new(changes)))
+        let should_send = !revert_message.is_empty();
+
+        Ok(should_send.then_some(Arc::new(revert_message)))
     }
 
     #[instrument(skip_all)]

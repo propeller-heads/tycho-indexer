@@ -27,8 +27,9 @@ use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, trace, warn};
 use tycho_core::{
     models::{
-        self, protocol::ProtocolComponentState, Chain, ExtractionState, ExtractorIdentity,
-        ProtocolType, TxHash,
+        self,
+        protocol::{ComponentBalance, ProtocolComponentState},
+        Chain, ChangeType, ExtractionState, ExtractorIdentity, ProtocolType, TxHash,
     },
     storage::{
         BlockIdentifier, ChainGateway, ExtractionStateGateway, ProtocolGateway, StorageError,
@@ -141,10 +142,15 @@ pub trait NativeGateway: Send + Sync {
         new_cursor: &str,
     ) -> Result<evm::BlockEntityChangesResult, StorageError>;
 
-    async fn get_components_state<'a>(
+    async fn get_protocol_states<'a>(
         &self,
         component_ids: &[&'a str],
     ) -> Result<Vec<ProtocolComponentState>, StorageError>;
+
+    async fn get_components_balances<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
 }
 
 impl<T> NativePgGateway<T>
@@ -302,12 +308,21 @@ impl NativeGateway for NativePgGateway<TokenPreProcessor> {
         self.get_last_cursor().await
     }
 
-    async fn get_components_state<'a>(
+    async fn get_protocol_states<'a>(
         &self,
         component_ids: &[&'a str],
     ) -> Result<Vec<ProtocolComponentState>, StorageError> {
         self.state_gateway
-            .get_protocol_states(&self.chain, None, None, Some(component_ids))
+            .get_protocol_states(&self.chain, None, None, Some(component_ids), false)
+            .await
+    }
+
+    async fn get_components_balances<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError> {
+        self.state_gateway
+            .get_balances(&self.chain, Some(component_ids), None)
             .await
     }
 
@@ -496,10 +511,10 @@ where
                 let mut revert_buffer = self.revert_buffer.lock().await;
                 revert_buffer
                     .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-                    .expect("Error while inserting a block into revert buffer");
+                    .map_err(ExtractionError::Storage)?;
                 for msg in revert_buffer
                     .drain_new_finalized_blocks(inp.final_block_height)
-                    .expect("Final block height not found in revert buffer")
+                    .map_err(ExtractionError::Storage)?
                 {
                     self.gateway
                         .advance(msg.block_update(), msg.cursor(), is_syncing)
@@ -518,6 +533,8 @@ where
         return Ok(Some(Arc::new(msg.aggregate_updates()?)))
     }
 
+    // Clippy thinks that tuple with Bytes are a mutable type.
+    #[allow(clippy::mutable_key_type)]
     async fn handle_revert(
         &self,
         inp: BlockUndoSignal,
@@ -540,7 +557,7 @@ where
             .purge(block_hash.into())
             .map_err(|e| ExtractionError::RevertBufferError(e.to_string()))?;
 
-        let reverted_keys: HashSet<_> = reverted_state
+        let reverted_state_keys: HashSet<_> = reverted_state
             .iter()
             .flat_map(|block_msg| {
                 block_msg
@@ -555,23 +572,73 @@ where
                                 delta
                                     .updated_attributes
                                     .keys()
+                                    .chain(delta.deleted_attributes.iter())
                                     .map(move |key| (c_id, key))
                             })
                     })
             })
             .collect();
 
-        let reverted_keys_vec = reverted_keys
+        let reverted_state_keys_vec = reverted_state_keys
             .into_iter()
             .collect::<Vec<_>>();
 
-        trace!("Reverted keys {:?}", reverted_keys_vec);
+        trace!("Reverted state keys {:?}", reverted_state_keys_vec);
 
         // Fetch previous values for every reverted states
         // First search in the buffer
-        let (buffered, missing) = revert_buffer.lookup_state(&reverted_keys_vec);
+        let (buffered_state, missing) = revert_buffer.lookup_state(&reverted_state_keys_vec);
 
-        let mut state_updates: HashMap<String, evm::ProtocolStateDelta> = buffered
+        // Then for every missing previous values in the buffer, get the data from our db
+        let missing_map: HashMap<String, Vec<String>> =
+            missing
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (c_id, key)| {
+                    acc.entry(c_id).or_default().push(key);
+                    acc
+                });
+
+        trace!("Missing state keys after buffer lookup {:?}", missing_map);
+
+        let missing_components_states = self
+            .gateway
+            .get_protocol_states(
+                &missing_map
+                    .keys()
+                    .map(AsRef::as_ref)
+                    .collect::<Vec<&str>>(),
+            )
+            .await
+            .map_err(ExtractionError::Storage)?;
+
+        // Then merge the two and cast it to the expected struct
+        let combined_states = buffered_state
+            .into_iter()
+            .chain(
+                missing_components_states
+                    .iter()
+                    .flat_map(|missing_state| {
+                        missing_map
+                            .get(&missing_state.component_id)
+                            .into_iter()
+                            .flat_map(move |keys| {
+                                keys.iter().filter_map(move |key| {
+                                    missing_state
+                                        .attributes
+                                        .get(key)
+                                        .map(|value| {
+                                            (
+                                                (missing_state.component_id.clone(), key.clone()),
+                                                value.clone(),
+                                            )
+                                        })
+                                })
+                            })
+                    }),
+            )
+            .collect::<Vec<_>>();
+
+        let state_updates: HashMap<String, evm::ProtocolStateDelta> = combined_states
             .into_iter()
             .fold(HashMap::new(), |mut acc, ((c_id, key), value)| {
                 acc.entry(c_id.clone())
@@ -585,52 +652,137 @@ where
                 acc
             });
 
-        // Then for every missing previous values in the buffer, get the data from our db
-        let missing_map: HashMap<String, Vec<String>> =
-            missing
-                .into_iter()
-                .fold(HashMap::new(), |mut acc, (c_id, key)| {
-                    acc.entry(c_id).or_default().push(key);
-                    acc
-                });
+        // Handle token balance changes
+        let reverted_balances_keys: HashSet<(&String, Bytes)> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .txs_with_update
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .balance_changes
+                            .iter()
+                            .flat_map(|(id, balance_change)| {
+                                balance_change
+                                    .iter()
+                                    .map(move |(token, _)| (id, Bytes::from(token.as_bytes())))
+                            })
+                    })
+            })
+            .collect();
 
-        trace!("Missing keys after buffer lookup {:?}", missing_map);
+        let reverted_balances_keys_vec = reverted_balances_keys
+            .iter()
+            .map(|(id, token)| (*id, token))
+            .collect::<Vec<_>>();
 
-        let missing_components_states = self
+        trace!("Reverted balance keys {:?}", reverted_balances_keys_vec);
+
+        // First search in the buffer
+        let (buffered_balances, missing_balances_keys) =
+            revert_buffer.lookup_balances(&reverted_balances_keys_vec);
+
+        let missing_balances_map: HashMap<String, Vec<Bytes>> = missing_balances_keys
+            .into_iter()
+            .fold(HashMap::new(), |mut map, (c_id, token)| {
+                map.entry(c_id).or_default().push(token);
+                map
+            });
+
+        trace!("Missing balance keys after buffer lookup {:?}", missing_balances_map);
+
+        // Then get the missing balances from db
+        let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
             .gateway
-            .get_components_state(
-                &missing_map
+            .get_components_balances(
+                &missing_balances_map
                     .keys()
                     .map(AsRef::as_ref)
                     .collect::<Vec<&str>>(),
             )
-            .await
-            .expect("Failed to retrieve components states during revert");
+            .await?;
 
-        for mut missing_state in missing_components_states {
-            if let Some(keys) = missing_map.get(&missing_state.component_id) {
-                for key in keys {
-                    if let Some(attr) = missing_state.attributes.remove(key) {
-                        state_updates
-                            .entry(missing_state.component_id.clone())
-                            .or_insert_with(|| evm::ProtocolStateDelta {
-                                component_id: missing_state.component_id.clone(),
-                                updated_attributes: HashMap::new(),
-                                deleted_attributes: HashSet::new(),
+        let combined_balances = buffered_balances
+            .into_iter()
+            .chain(
+                missing_balances
+                    .into_iter()
+                    .flat_map(|(id, missing_balance)| {
+                        missing_balances_map
+                            .get(&id)
+                            .into_iter()
+                            .map(move |keys| {
+                                let key_set: HashSet<_> = keys.iter().collect();
+                                let filtered = missing_balance
+                                    .iter()
+                                    .filter(|(k, _)| key_set.contains(k))
+                                    .map(|(k, v)| (k.clone(), v.clone()))
+                                    .collect();
+                                (id.clone(), filtered)
                             })
-                            .updated_attributes
-                            .insert(key.clone(), attr);
-                    } else {
-                        // Return with error if we couldn't find a previous value here because it
-                        // means clients would have a wrong state.
-                        return Err(ExtractionError::Storage(StorageError::NotFound(
-                            "Attribute".to_string(),
-                            format!("component_id:{}, key:{}", missing_state.component_id, key),
-                        )))
-                    }
-                }
-            }
-        }
+                    }),
+            )
+            .map(|(id, balances)| {
+                (
+                    id,
+                    balances
+                        .into_iter()
+                        .map(|(token, value)| (H160::from(token), (&value).into()))
+                        .collect(),
+                )
+            })
+            .collect();
+
+        // Handle created and deleted components
+        let (reverted_components_creations, reverted_components_deletions) =
+            reverted_state.iter().fold(
+                (HashMap::new(), HashMap::new()),
+                |(mut reverted_creations, mut reverted_deletions), block_msg| {
+                    block_msg
+                        .block_update()
+                        .txs_with_update
+                        .iter()
+                        .for_each(|update| {
+                            update
+                                .new_protocol_components
+                                .iter()
+                                .for_each(|(id, new_component)| {
+                                    /*
+                                    For each component, only the oldest creation/deletion needs to be reverted. For example, if a component is created then deleted within the reverted
+                                    range of blocks, we only want to remove it (so undo its creation).
+                                    As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
+                                    */
+                                    if !reverted_deletions.contains_key(id) &&
+                                        !reverted_creations.contains_key(id)
+                                    {
+                                        match new_component.change {
+                                            ChangeType::Update => {}
+                                            ChangeType::Deletion => {
+                                                let mut reverted_deletion = new_component.clone();
+                                                reverted_deletion.change = ChangeType::Creation;
+                                                reverted_deletions
+                                                    .insert(id.clone(), reverted_deletion);
+                                            }
+                                            ChangeType::Creation => {
+                                                let mut reverted_creation = new_component.clone();
+                                                reverted_creation.change = ChangeType::Deletion;
+                                                reverted_creations
+                                                    .insert(id.clone(), reverted_creation);
+                                            }
+                                        }
+                                    }
+                                });
+                        });
+                    (reverted_creations, reverted_deletions)
+                },
+            );
+
+        trace!("Reverted components creations {:?}", reverted_components_creations);
+        // TODO: For these components we need to fetch the whole state (so get it from the db and
+        // apply buffer update)
+        trace!("Reverted components deletions {:?}", reverted_components_deletions);
 
         let revert_message = evm::BlockEntityChangesResult {
             extractor: self.name.clone(),
@@ -641,9 +793,9 @@ where
                 .into(),
             revert: true,
             state_updates,
-            new_protocol_components: HashMap::new(),
-            deleted_protocol_components: HashMap::new(),
-            component_balances: HashMap::new(),
+            new_protocol_components: reverted_components_deletions,
+            deleted_protocol_components: reverted_components_creations,
+            component_balances: combined_balances,
             component_tvl: HashMap::new(),
         };
 
@@ -652,17 +804,7 @@ where
         self.update_cursor(inp.last_valid_cursor)
             .await;
 
-        let should_send = !revert_message.state_updates.is_empty() ||
-            !revert_message
-                .new_protocol_components
-                .is_empty() ||
-            !revert_message
-                .deleted_protocol_components
-                .is_empty() ||
-            !revert_message
-                .component_balances
-                .is_empty() ||
-            !revert_message.component_tvl.is_empty();
+        let should_send = !revert_message.is_empty();
 
         Ok(should_send.then_some(Arc::new(revert_message)))
     }
@@ -1072,4 +1214,44 @@ mod test_serial_db {
         })
         .await;
     }
+
+    // #[tokio::test]
+    // async fn test_handle_revert() {
+    //     run_against_db(|_| async move {
+    //         let database_url =
+    //             std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
+
+    //         let (cached_gw, gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
+    //             .set_chains(&[Chain::Ethereum])
+    //             .set_protocol_systems(&["test".to_string()])
+    //             .build()
+    //             .await
+    //             .unwrap();
+
+    //         let gw = NativePgGateway::new(
+    //             "native_name",
+    //             Chain::Ethereum,
+    //             0,
+    //             cached_gw,
+    //             get_mocked_token_pre_processor(),
+    //         );
+
+    //         let protocol_types =
+    //             HashMap::from([("WeightedPool".to_string(), ProtocolType::default())]);
+
+    //         let extractor = NativeContractExtractor::new(
+    //             "native_name",
+    //             Chain::Ethereum,
+    //             ChainState::default(),
+    //             gw,
+    //             protocol_types,
+    //             "native_protocol_system".to_string(),
+    //             None,
+    //             5,
+    //         )
+    //         .await
+    //         .expect("Failed to create extractor");
+    //     })
+    //     .await;
+    // }
 }
