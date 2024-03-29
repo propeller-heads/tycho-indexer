@@ -857,7 +857,6 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::pb::sf::substreams::v1::BlockRef;
     use tycho_core::models::{FinancialType, ImplementationType};
 
     fn ambient_protocol_types() -> HashMap<String, ProtocolType> {
@@ -979,13 +978,6 @@ mod test {
         }
 
         assert_eq!(extractor.get_cursor().await, "cursor@420");
-    }
-
-    fn undo_signal() -> BlockUndoSignal {
-        BlockUndoSignal {
-            last_valid_block: Some(BlockRef { id: evm::fixtures::HASH_256_0.into(), number: 400 }),
-            last_valid_cursor: "cursor@400".into(),
-        }
     }
 }
 

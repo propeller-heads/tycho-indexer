@@ -816,9 +816,6 @@ where
 
 #[cfg(test)]
 mod test {
-
-    use crate::pb::sf::substreams::v1::BlockRef;
-
     use super::*;
 
     const EXTRACTOR_NAME: &str = "TestExtractor";
