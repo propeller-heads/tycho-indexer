@@ -164,18 +164,16 @@ pub fn map_relative_balances(
                 let event = abi::pool::events::AddLiquidity::match_and_decode(log)?;
                 Some((log, event))
             })
-            .filter(|(log, _)| {
-                pools_store
-                    .get_last(format!("pool:{0}", hex::encode(&log.address())))
-                    .is_none()
-            })
-            .flat_map(|(log, event)| {
+            .filter_map(|(log, event)| {
                 let tokens = tokens_store
-                    .get_last(format!("pool:{}", hex::encode(log.address())))
-                    .unwrap()
+                    .get_last(format!("pool:{0}", hex::encode(log.address())))?
                     .split(":")
                     .map(|token| token.to_owned()) // Clone the tokens
                     .collect::<Vec<_>>();
+
+                Some((tokens, log, event))
+            })
+            .flat_map(|(tokens, log, event)| {
                 event
                     .token_amounts
                     .iter()

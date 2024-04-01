@@ -20,6 +20,7 @@ const META_POOL_FACTORY: [u8; 20] = hex!("B9fC157394Af804a3578134A6585C0dc9cc990
 /// This trait defines some helpers for serializing and deserializing `Vec<BigInt>` which is needed
 ///  to be able to encode some of the `Attribute`s. This should also be handled by any downstream
 ///  application.
+#[allow(dead_code)]
 trait SerializableVecBigInt {
     fn serialize_bytes(&self) -> Vec<u8>;
     fn deserialize_bytes(bytes: &[u8]) -> Vec<BigInt>;

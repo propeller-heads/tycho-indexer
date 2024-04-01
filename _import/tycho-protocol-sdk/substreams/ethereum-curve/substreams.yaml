@@ -23,7 +23,7 @@ modules:
     inputs:
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:tycho.evm.v1.GroupedTransactionProtocolComponents
+      type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
 
   - name: store_components
     kind: store
