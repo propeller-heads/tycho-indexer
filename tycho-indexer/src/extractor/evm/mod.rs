@@ -1,5 +1,5 @@
 use self::utils::TryDecode;
-use super::{revert_buffer::RevertBufferEntity, u256_num::bytes_to_f64, ExtractionError};
+use super::{revert_buffer::StateUpdateBufferEntry, u256_num::bytes_to_f64, ExtractionError};
 use crate::pb::tycho::evm::v1 as substreams;
 use chrono::NaiveDateTime;
 use ethers::{
@@ -12,8 +12,8 @@ use tracing::log::warn;
 use tycho_core::{
     dto,
     models::{
-        Address, AttrStoreKey, Chain, ChangeType, ComponentId, ExtractorIdentity,
-        NormalisedMessage, ProtocolType, StoreVal,
+        blockchain::BlockScoped, Address, AttrStoreKey, Chain, ChangeType, ComponentId,
+        ExtractorIdentity, NormalisedMessage, ProtocolType, StoreVal,
     },
     Bytes,
 };
@@ -491,7 +491,7 @@ pub struct BlockContractChanges {
     pub tx_updates: Vec<TransactionVMUpdates>,
 }
 
-impl RevertBufferEntity for BlockContractChanges {
+impl StateUpdateBufferEntry for BlockContractChanges {
     type IdType = H160;
     type KeyType = U256;
     type ValueType = U256;
@@ -545,7 +545,9 @@ impl RevertBufferEntity for BlockContractChanges {
 
         res
     }
+}
 
+impl BlockScoped for BlockContractChanges {
     fn block(&self) -> tycho_core::models::blockchain::Block {
         (&self.block).into()
     }
@@ -1163,7 +1165,7 @@ pub struct BlockEntityChanges {
     pub txs_with_update: Vec<ProtocolChangesWithTx>,
 }
 
-impl RevertBufferEntity for BlockEntityChanges {
+impl StateUpdateBufferEntry for BlockEntityChanges {
     type IdType = ComponentId;
     type KeyType = AttrStoreKey;
     type ValueType = StoreVal;
@@ -1218,7 +1220,9 @@ impl RevertBufferEntity for BlockEntityChanges {
 
         res
     }
+}
 
+impl BlockScoped for BlockEntityChanges {
     fn block(&self) -> tycho_core::models::blockchain::Block {
         (&self.block).into()
     }

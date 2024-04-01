@@ -6,7 +6,7 @@ use crate::{
             chain_state::ChainState,
             token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
         },
-        revert_buffer::{BlockUpdateWithCursor, RevertBuffer},
+        revert_buffer::RevertBuffer,
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
@@ -17,6 +17,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 
+use crate::extractor::BlockUpdateWithCursor;
 use ethers::types::{H160, H256};
 use mockall::automock;
 use prost::Message;
@@ -62,7 +63,7 @@ pub struct VmContractExtractor<G> {
     post_processor: Option<fn(evm::BlockContractChanges) -> evm::BlockContractChanges>,
     /// The number of blocks behind the current block to be considered as syncing.
     sync_threshold: u64,
-    revert_buffer: Mutex<RevertBuffer<evm::BlockContractChanges>>,
+    revert_buffer: Mutex<RevertBuffer<BlockUpdateWithCursor<evm::BlockContractChanges>>>,
 }
 
 impl<DB> VmContractExtractor<DB> {
@@ -1002,10 +1003,7 @@ mod test_serial_db {
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
     use ethers::types::U256;
     use test_log::test;
-    use tycho_core::{
-        models::{ChangeType, ContractId},
-        storage::BlockOrTimestamp,
-    };
+    use tycho_core::{models::ContractId, storage::BlockOrTimestamp};
     use tycho_storage::{
         postgres,
         postgres::{builder::GatewayBuilder, db_fixtures, testing::run_against_db},

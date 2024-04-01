@@ -55,3 +55,7 @@ pub struct BlockAggregatedDeltas<T> {
     #[allow(dead_code)]
     component_tvl: HashMap<String, f64>,
 }
+
+pub trait BlockScoped {
+    fn block(&self) -> Block;
+}

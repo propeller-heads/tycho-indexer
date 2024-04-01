@@ -2,8 +2,8 @@ use super::{token_pre_processor::TokenPreProcessorTrait, utils::format_duration}
 use crate::{
     extractor::{
         evm::{self, chain_state::ChainState, Block},
-        revert_buffer::{BlockUpdateWithCursor, RevertBuffer},
-        ExtractionError, Extractor, ExtractorMsg,
+        revert_buffer::RevertBuffer,
+        BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorMsg,
     },
     pb::{
         sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
@@ -55,7 +55,7 @@ pub struct NativeContractExtractor<G> {
     post_processor: Option<fn(evm::BlockEntityChanges) -> evm::BlockEntityChanges>,
     /// The number of blocks behind the current block to be considered as syncing.
     sync_threshold: u64,
-    revert_buffer: Mutex<RevertBuffer<evm::BlockEntityChanges>>,
+    revert_buffer: Mutex<RevertBuffer<BlockUpdateWithCursor<evm::BlockEntityChanges>>>,
 }
 
 impl<DB> NativeContractExtractor<DB> {
