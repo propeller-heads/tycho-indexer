@@ -93,6 +93,7 @@ impl<B: RevertBufferEntity> RevertBuffer<B> {
             "Draining new finalized blocks from RevertBuffer... New chain height {}",
             final_block_height.to_string()
         );
+
         let mut target_index = None;
 
         for (index, block_message) in self.block_messages.iter().enumerate() {
@@ -260,42 +261,17 @@ mod test {
         Transaction::new(H256::zero(), H256::zero(), H160::zero(), Some(H160::zero()), 10)
     }
 
-    fn blocks(version: u8) -> Block {
-        match version {
-            1 => Block {
-                number: 1,
-                hash: H256::from_low_u64_be(
-                    0x0000000000000000000000000000000000000000000000000000000000000001,
-                ),
-                parent_hash: H256::from_low_u64_be(
-                    0x0000000000000000000000000000000000000000000000000000000000000000,
-                ),
-                chain: Chain::Ethereum,
-                ts: NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            },
-            2 => Block {
-                number: 2,
-                hash: H256::from_low_u64_be(
-                    0x0000000000000000000000000000000000000000000000000000000000000002,
-                ),
-                parent_hash: H256::from_low_u64_be(
-                    0x0000000000000000000000000000000000000000000000000000000000000001,
-                ),
-                chain: Chain::Ethereum,
-                ts: NaiveDateTime::from_timestamp_opt(2000, 0).unwrap(),
-            },
-            3 => Block {
-                number: 3,
-                hash: H256::from_low_u64_be(
-                    0x0000000000000000000000000000000000000000000000000000000000000003,
-                ),
-                parent_hash: H256::from_low_u64_be(
-                    0x0000000000000000000000000000000000000000000000000000000000000002,
-                ),
-                chain: Chain::Ethereum,
-                ts: NaiveDateTime::from_timestamp_opt(3000, 0).unwrap(),
-            },
-            _ => panic!("transaction version not implemented"),
+    pub fn blocks(version: u64) -> Block {
+        if version == 0 {
+            panic!("Block version 0 doesn't exist. Smallest version is 1");
+        }
+
+        Block {
+            number: version,
+            hash: H256::from_low_u64_be(version),
+            parent_hash: H256::from_low_u64_be(version - 1),
+            chain: Chain::Ethereum,
+            ts: NaiveDateTime::from_timestamp_opt((version as i64) * 1000, 0).unwrap(),
         }
     }
 

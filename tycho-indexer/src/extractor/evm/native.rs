@@ -1,7 +1,4 @@
-use super::{
-    token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
-    utils::format_duration,
-};
+use super::{token_pre_processor::TokenPreProcessorTrait, utils::format_duration};
 use crate::{
     extractor::{
         evm::{self, chain_state::ChainState, Block},
@@ -185,11 +182,9 @@ where
             .collect();
         let address_refs: Vec<&Bytes> = addresses.iter().collect();
 
-        let addresses_option = Some(address_refs.as_slice());
-
         let db_tokens = self
             .state_gateway
-            .get_tokens(self.chain, addresses_option, None)
+            .get_tokens(self.chain, Some(address_refs.as_slice()), None)
             .await?;
 
         let db_token_addresses: HashSet<_> = db_tokens
@@ -303,7 +298,7 @@ where
 }
 
 #[async_trait]
-impl NativeGateway for NativePgGateway<TokenPreProcessor> {
+impl<T: TokenPreProcessorTrait> NativeGateway for NativePgGateway<T> {
     async fn get_cursor(&self) -> Result<Vec<u8>, StorageError> {
         self.get_last_cursor().await
     }
@@ -509,9 +504,7 @@ where
             }
             false => {
                 let mut revert_buffer = self.revert_buffer.lock().await;
-                revert_buffer
-                    .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-                    .map_err(ExtractionError::Storage)?;
+
                 for msg in revert_buffer
                     .drain_new_finalized_blocks(inp.final_block_height)
                     .map_err(ExtractionError::Storage)?
@@ -520,6 +513,9 @@ where
                         .advance(msg.block_update(), msg.cursor(), is_syncing)
                         .await?;
                 }
+                revert_buffer
+                    .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
+                    .map_err(ExtractionError::Storage)?;
             }
         }
 
@@ -869,7 +865,11 @@ mod test {
 
         let extractor = create_extractor(gw).await;
 
-        let inp = evm::fixtures::pb_block_scoped_data(evm::fixtures::pb_block_entity_changes());
+        let inp = evm::fixtures::pb_block_scoped_data(
+            evm::fixtures::pb_block_entity_changes(0),
+            None,
+            None,
+        );
         let exp = Ok(Some(()));
 
         let res = extractor
@@ -896,7 +896,7 @@ mod test {
 
         let extractor = create_extractor(gw).await;
 
-        let inp = evm::fixtures::pb_block_scoped_data(());
+        let inp = evm::fixtures::pb_block_scoped_data((), None, None);
         let res = extractor
             .handle_tick_scoped_data(inp)
             .await;
@@ -928,11 +928,12 @@ mod test_serial_db {
         token_pre_processor::MockTokenPreProcessorTrait, ProtocolComponent, Transaction,
     };
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
+    use futures03::{stream, StreamExt};
     use test_serial_db::evm::ProtocolChangesWithTx;
 
-    use tycho_storage::{
-        postgres,
-        postgres::{builder::GatewayBuilder, testing::run_against_db},
+    use tycho_core::models::{FinancialType, ImplementationType};
+    use tycho_storage::postgres::{
+        self, builder::GatewayBuilder, db_fixtures, testing::run_against_db,
     };
 
     use super::*;
@@ -958,6 +959,16 @@ mod test_serial_db {
                     .expect("Invalid H160 address"),
                 "USDC".to_string(),
                 6,
+                0,
+                vec![],
+                Default::default(),
+                100,
+            ),
+            evm::ERC20Token::new(
+                H160::from_str("0x6b175474e89094c44da98b954eedeac495271d0f")
+                    .expect("Invalid H160 address"),
+                "DAI".to_string(),
+                18,
                 0,
                 vec![],
                 Default::default(),
@@ -1164,43 +1175,110 @@ mod test_serial_db {
         .await;
     }
 
-    // #[tokio::test]
-    // async fn test_handle_revert() {
-    //     run_against_db(|_| async move {
-    //         let database_url =
-    //             std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
+    #[tokio::test]
+    async fn test_handle_revert() {
+        run_against_db(|pool| async move {
+            let mut conn = pool
+                .get()
+                .await
+                .expect("pool should get a connection");
 
-    //         let (cached_gw, gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
-    //             .set_chains(&[Chain::Ethereum])
-    //             .set_protocol_systems(&["test".to_string()])
-    //             .build()
-    //             .await
-    //             .unwrap();
+            let database_url =
+                std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
 
-    //         let gw = NativePgGateway::new(
-    //             "native_name",
-    //             Chain::Ethereum,
-    //             0,
-    //             cached_gw,
-    //             get_mocked_token_pre_processor(),
-    //         );
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_1",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Custom),
+            )
+            .await;
 
-    //         let protocol_types =
-    //             HashMap::from([("WeightedPool".to_string(), ProtocolType::default())]);
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_2",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Custom),
+            )
+            .await;
 
-    //         let extractor = NativeContractExtractor::new(
-    //             "native_name",
-    //             Chain::Ethereum,
-    //             ChainState::default(),
-    //             gw,
-    //             protocol_types,
-    //             "native_protocol_system".to_string(),
-    //             None,
-    //             5,
-    //         )
-    //         .await
-    //         .expect("Failed to create extractor");
-    //     })
-    //     .await;
-    // }
+            let (cached_gw, _gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
+                .set_chains(&[Chain::Ethereum])
+                .set_protocol_systems(&["native_protocol_system".to_string()])
+                .build()
+                .await
+                .unwrap();
+
+            let gw = NativePgGateway::new(
+                "native_name",
+                Chain::Ethereum,
+                0,
+                cached_gw,
+                get_mocked_token_pre_processor(),
+            );
+
+            let protocol_types = HashMap::from([
+                ("pt_1".to_string(), ProtocolType::default()),
+                ("pt_2".to_string(), ProtocolType::default()),
+            ]);
+
+            let extractor = NativeContractExtractor::new(
+                "native_name",
+                Chain::Ethereum,
+                ChainState::default(),
+                gw,
+                protocol_types,
+                "native_protocol_system".to_string(),
+                None,
+                5,
+            )
+            .await
+            .expect("Failed to create extractor");
+
+            // Send a sequence of block scoped data.
+            stream::iter(get_inp_sequence())
+                .for_each(|inp| async {
+                    extractor
+                        .handle_tick_scoped_data(inp)
+                        .await
+                        .unwrap();
+                })
+                .await;
+        })
+        .await;
+    }
+
+    fn get_inp_sequence(
+    ) -> impl Iterator<Item = crate::pb::sf::substreams::rpc::v2::BlockScopedData> {
+        vec![
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_entity_changes(1),
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1), // Syncing
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_entity_changes(2),
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(1), // Buffered
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_entity_changes(3),
+                Some(format!("cursor@{}", 3).as_str()),
+                Some(1), // Buffered again
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_entity_changes(4),
+                Some(format!("cursor@{}", 4).as_str()),
+                Some(2), // Buffered + flush 2
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                (),
+                Some(format!("cursor@{}", 5).as_str()),
+                Some(4), // Empty + flush 3 + 4
+            ),
+        ]
+        .into_iter()
+    }
 }

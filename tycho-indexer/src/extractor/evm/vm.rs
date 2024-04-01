@@ -929,7 +929,7 @@ mod test {
         )
         .await
         .expect("extractor init ok");
-        let inp = evm::fixtures::pb_block_scoped_data(block_contract_changes_ok());
+        let inp = evm::fixtures::pb_block_scoped_data(block_contract_changes_ok(), None, None);
         let exp = Ok(Some(()));
 
         let res = extractor
@@ -965,7 +965,7 @@ mod test {
         )
         .await
         .expect("extractor init ok");
-        let inp = evm::fixtures::pb_block_scoped_data(());
+        let inp = evm::fixtures::pb_block_scoped_data((), None, None);
 
         let res = extractor
             .handle_tick_scoped_data(inp)
