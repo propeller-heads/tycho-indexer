@@ -66,22 +66,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Setup clippy toolchain - stable
-        uses: dtolnay/rust-toolchain@v1
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: stable
-          components: clippy
+          components: rustfmt, clippy
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - run: cargo clippy --workspace --all-targets --all-features
+
+      - run: cargo +nightly clippy --workspace --all-targets --all-features
         env:
           RUSTFLAGS: -Dwarnings
-      - name: Setup rustfmt toolchain - nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
+
       - run: cargo +nightly fmt --all --check
 
   buf_formatting:

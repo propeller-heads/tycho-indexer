@@ -930,10 +930,6 @@ mod test {
         assert_eq!(res, "cursor");
     }
 
-    fn block_contract_changes_ok() -> BlockContractChanges {
-        evm::fixtures::pb_block_contract_changes(0)
-    }
-
     #[tokio::test]
     async fn test_handle_tick_scoped_data() {
         let mut gw = MockVmGateway::new();
@@ -1062,12 +1058,11 @@ mod test_serial_db {
         pb::sf::substreams::v1::BlockRef,
     };
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
-    use ethers::types::U256;
     use futures03::{stream, StreamExt};
     use hex::ToHex;
     use test_log::test;
     use tycho_core::{
-        models::{ChangeType, ContractId, FinancialType, ImplementationType},
+        models::{ContractId, FinancialType, ImplementationType},
         storage::BlockOrTimestamp,
     };
     use tycho_storage::{

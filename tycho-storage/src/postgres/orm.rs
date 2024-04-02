@@ -1381,6 +1381,7 @@ pub struct NewContract {
     pub chain_id: i64,
     pub creation_tx: Option<i64>,
     pub created_at: Option<NaiveDateTime>,
+    #[allow(dead_code)]
     pub deleted_at: Option<NaiveDateTime>,
     pub balance: Balance,
     pub code: Code,
