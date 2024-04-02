@@ -1,11 +1,7 @@
 use super::{utils::format_duration, Block};
 use crate::{
     extractor::{
-        evm::{
-            self,
-            chain_state::ChainState,
-            token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
-        },
+        evm::{self, chain_state::ChainState, token_pre_processor::TokenPreProcessorTrait},
         revert_buffer::{BlockUpdateWithCursor, RevertBuffer},
         ExtractionError, Extractor, ExtractorMsg,
     },
@@ -17,7 +13,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 
-use ethers::types::{H160, H256};
+use ethers::types::{H160, H256, U256};
 use mockall::automock;
 use prost::Message;
 use std::{
@@ -332,7 +328,7 @@ where
 }
 
 #[async_trait]
-impl VmGateway for VmPgGateway<TokenPreProcessor> {
+impl<T: TokenPreProcessorTrait> VmGateway for VmPgGateway<T> {
     async fn get_cursor(&self) -> Result<Vec<u8>, StorageError> {
         self.get_last_cursor().await
     }
@@ -531,26 +527,17 @@ where
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
 
-        match is_syncing {
-            true => {
-                self.gateway
-                    .upsert_contract(&msg, inp.cursor.as_ref(), is_syncing)
-                    .await?;
-            }
-            false => {
-                let mut revert_buffer = self.revert_buffer.lock().await;
-                revert_buffer
-                    .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-                    .expect("Error while inserting a block into revert buffer");
-                for msg in revert_buffer
-                    .drain_new_finalized_blocks(inp.final_block_height)
-                    .expect("Final block height not found in revert buffer")
-                {
-                    self.gateway
-                        .upsert_contract(msg.block_update(), msg.cursor(), is_syncing)
-                        .await?;
-                }
-            }
+        let mut revert_buffer = self.revert_buffer.lock().await;
+        revert_buffer
+            .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
+            .expect("Error while inserting a block into revert buffer");
+        for msg in revert_buffer
+            .drain_new_finalized_blocks(inp.final_block_height)
+            .expect("Final block height not found in revert buffer")
+        {
+            self.gateway
+                .upsert_contract(msg.block_update(), msg.cursor(), is_syncing)
+                .await?;
         }
 
         self.update_last_processed_block(msg.block)
@@ -560,7 +547,7 @@ where
 
         self.update_cursor(inp.cursor).await;
 
-        return Ok(Some(Arc::new(msg.aggregate_updates()?)))
+        return Ok(Some(Arc::new(msg.aggregate_updates()?)));
     }
 
     #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % inp.last_valid_block.as_ref().unwrap().number))]
@@ -583,196 +570,10 @@ where
 
         let mut revert_buffer = self.revert_buffer.lock().await;
 
-        // Purge the buffer and create a set of state that was reverted
+        // Purge the buffer
         let reverted_state = revert_buffer
             .purge(block_hash.into())
             .map_err(|e| ExtractionError::RevertBufferError(e.to_string()))?;
-
-        let reverted_state_keys: HashSet<_> = reverted_state
-            .iter()
-            .flat_map(|block_msg| {
-                block_msg
-                    .block_update()
-                    .tx_updates
-                    .iter()
-                    .flat_map(|update| {
-                        update
-                            .account_updates
-                            .iter()
-                            .flat_map(|(c_id, delta)| {
-                                delta
-                                    .slots
-                                    .keys()
-                                    .map(move |key| (c_id, key))
-                            })
-                    })
-            })
-            .collect();
-
-        let reverted_state_keys_vec = reverted_state_keys
-            .into_iter()
-            .collect::<Vec<_>>();
-
-        trace!("Reverted state keys {:?}", reverted_state_keys_vec);
-
-        // Fetch previous values for every reverted states
-        // First search in the buffer
-        let (buffered_state, missing) = revert_buffer.lookup_state(&reverted_state_keys_vec);
-
-        // Then for every missing previous values in the buffer, get the data from our db
-        let missing_map: HashMap<Bytes, Vec<Bytes>> =
-            missing
-                .into_iter()
-                .fold(HashMap::new(), |mut acc, (addr, key)| {
-                    acc.entry(addr.into())
-                        .or_default()
-                        .push(key.into());
-                    acc
-                });
-
-        trace!("Missing state keys after buffer lookup {:?}", missing_map);
-
-        let missing_contracts = self
-            .gateway
-            .get_contracts(
-                &missing_map
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<Address>>(),
-            )
-            .await
-            .map_err(ExtractionError::Storage)?;
-
-        // Then merge the two and cast it to the expected struct
-        let combined_states = buffered_state
-            .into_iter()
-            .chain(
-                missing_contracts
-                    .iter()
-                    .flat_map(|missing_state| {
-                        missing_map
-                            .get(&missing_state.address)
-                            .into_iter()
-                            .flat_map(move |keys| {
-                                keys.iter().filter_map(move |key| {
-                                    missing_state
-                                        .slots
-                                        .get(key)
-                                        .map(|value| {
-                                            (
-                                                (
-                                                    missing_state.address.clone().into(),
-                                                    key.clone().into(),
-                                                ),
-                                                value.clone().into(),
-                                            )
-                                        })
-                                })
-                            })
-                    }),
-            )
-            .collect::<Vec<_>>();
-
-        let account_updates =
-            combined_states
-                .into_iter()
-                .fold(HashMap::new(), |mut acc, ((addr, key), value)| {
-                    acc.entry(addr)
-                        .or_insert_with(|| evm::AccountUpdate {
-                            address: addr,
-                            chain: self.chain,
-                            slots: HashMap::new(),
-                            balance: None, //TODO: handle balance changes
-                            code: None,    //TODO: handle code changes
-                            change: ChangeType::Update,
-                        })
-                        .slots
-                        .insert(key, value);
-                    acc
-                });
-
-        // Handle token balance changes
-        let reverted_balances_keys: HashSet<(&String, Bytes)> = reverted_state
-            .iter()
-            .flat_map(|block_msg| {
-                block_msg
-                    .block_update()
-                    .tx_updates
-                    .iter()
-                    .flat_map(|update| {
-                        update
-                            .component_balances
-                            .iter()
-                            .flat_map(|(id, balance_change)| {
-                                balance_change
-                                    .iter()
-                                    .map(move |(token, _)| (id, Bytes::from(token.as_bytes())))
-                            })
-                    })
-            })
-            .collect();
-
-        let reverted_balances_keys_vec = reverted_balances_keys
-            .iter()
-            .map(|(id, token)| (*id, token))
-            .collect::<Vec<_>>();
-
-        trace!("Reverted balance keys {:?}", reverted_balances_keys_vec);
-
-        // First search in the buffer
-        let (buffered_balances, missing_balances_keys) =
-            revert_buffer.lookup_balances(&reverted_balances_keys_vec);
-
-        let missing_balances_map: HashMap<String, Vec<Bytes>> = missing_balances_keys
-            .into_iter()
-            .fold(HashMap::new(), |mut map, (c_id, token)| {
-                map.entry(c_id).or_default().push(token);
-                map
-            });
-
-        trace!("Missing balance keys after buffer lookup {:?}", missing_balances_map);
-
-        // Then get the missing balances from db
-        let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
-            .gateway
-            .get_components_balances(
-                &missing_balances_map
-                    .keys()
-                    .map(AsRef::as_ref)
-                    .collect::<Vec<&str>>(),
-            )
-            .await?;
-
-        let combined_balances = buffered_balances
-            .into_iter()
-            .chain(
-                missing_balances
-                    .into_iter()
-                    .flat_map(|(id, missing_balance)| {
-                        missing_balances_map
-                            .get(&id)
-                            .into_iter()
-                            .map(move |keys| {
-                                let key_set: HashSet<_> = keys.iter().collect();
-                                let filtered = missing_balance
-                                    .iter()
-                                    .filter(|(k, _)| key_set.contains(k))
-                                    .map(|(k, v)| (k.clone(), v.clone()))
-                                    .collect();
-                                (id.clone(), filtered)
-                            })
-                    }),
-            )
-            .map(|(id, balances)| {
-                (
-                    id,
-                    balances
-                        .into_iter()
-                        .map(|(token, value)| (H160::from(token), (&value).into()))
-                        .collect(),
-                )
-            })
-            .collect();
 
         // Handle created and deleted components
         let (reverted_components_creations, reverted_components_deletions) =
@@ -818,10 +619,235 @@ where
                 },
             );
 
-        trace!("Reverted components creations {:?}", reverted_components_creations);
+        trace!(?reverted_components_creations, "Reverted components creations");
         // TODO: For these reverted deletions we need to fetch the whole state (so get it from the
         // db and apply buffer update)
-        trace!("Reverted components deletions {:?}", reverted_components_deletions);
+        trace!(?reverted_components_deletions, "Reverted components deletions");
+
+        // Handle reverted state
+        let reverted_state_keys: HashSet<_> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .tx_updates
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .account_updates
+                            .iter()
+                            .filter(|(c_id, _)| {
+                                !reverted_components_creations.contains_key(&c_id.to_string())
+                            })
+                            .flat_map(|(c_id, delta)| {
+                                delta
+                                    .slots
+                                    .keys()
+                                    .map(move |key| (c_id, key))
+                            })
+                    })
+            })
+            .collect();
+
+        let reverted_state_keys_vec = reverted_state_keys
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        trace!(?reverted_state_keys_vec, "Reverted state keys");
+
+        // Fetch previous values for every reverted states
+        // First search in the buffer
+        let (buffered_state, missing) = revert_buffer.lookup_state(&reverted_state_keys_vec);
+
+        // Then for every missing previous values in the buffer, get the data from our db
+        let missing_map: HashMap<Bytes, Vec<Bytes>> =
+            missing
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (addr, key)| {
+                    acc.entry(addr.into())
+                        .or_default()
+                        .push(key.into());
+                    acc
+                });
+
+        trace!(?missing_map, "Missing state keys after buffer lookup");
+
+        let missing_contracts = self
+            .gateway
+            .get_contracts(
+                &missing_map
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<Address>>(),
+            )
+            .await
+            .map_err(ExtractionError::Storage)?;
+
+        // Then merge the two and cast it to the expected struct
+        let combined_states = buffered_state
+            .into_iter()
+            .chain(
+                missing_map
+                    .iter()
+                    .flat_map(|(address, keys)| {
+                        let missing_state = missing_contracts
+                            .iter()
+                            .find(|state| &state.address == address);
+                        keys.iter().map(move |key| {
+                            match missing_state {
+                                Some(state) => {
+                                    // If the state is found, attempt to get the value for the key
+                                    state.slots.get(key).map_or_else(
+                                        // If the key is not found, return 0
+                                        || {
+                                            (
+                                                (state.address.clone().into(), key.clone().into()),
+                                                0.into(),
+                                            )
+                                        },
+                                        // If the key is found, return its value
+                                        |value| {
+                                            (
+                                                (
+                                                    state.address.clone().into(),
+                                                    U256::from_big_endian(&key.clone().to_vec()),
+                                                ),
+                                                U256::from_big_endian(&value.clone().to_vec()),
+                                            )
+                                        },
+                                    )
+                                }
+                                None => {
+                                    // If the state is not found, return 0 for the key
+                                    (((*address).clone().into(), key.clone().into()), 0.into())
+                                }
+                            }
+                        })
+                    }),
+            )
+            .collect::<Vec<_>>();
+
+        let account_updates =
+            combined_states
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, ((addr, key), value)| {
+                    acc.entry(addr)
+                        .or_insert_with(|| evm::AccountUpdate {
+                            address: addr,
+                            chain: self.chain,
+                            slots: HashMap::new(),
+                            balance: None, //TODO: handle balance changes
+                            code: None,    //TODO: handle code changes
+                            change: ChangeType::Update,
+                        })
+                        .slots
+                        .insert(key, value);
+                    acc
+                });
+
+        // Handle token balance changes
+        let reverted_balances_keys: HashSet<(&String, Bytes)> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .tx_updates
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .component_balances
+                            .iter()
+                            .filter(|(c_id, _)| !reverted_components_creations.contains_key(*c_id))
+                            .flat_map(|(id, balance_change)| {
+                                balance_change
+                                    .iter()
+                                    .map(move |(token, _)| (id, Bytes::from(token.as_bytes())))
+                            })
+                    })
+            })
+            .collect();
+
+        let reverted_balances_keys_vec = reverted_balances_keys
+            .iter()
+            .map(|(id, token)| (*id, token))
+            .collect::<Vec<_>>();
+
+        trace!(?reverted_balances_keys_vec, "Reverted balance keys");
+
+        // First search in the buffer
+        let (buffered_balances, missing_balances_keys) =
+            revert_buffer.lookup_balances(&reverted_balances_keys_vec);
+
+        let missing_balances_map: HashMap<String, Vec<Bytes>> = missing_balances_keys
+            .into_iter()
+            .fold(HashMap::new(), |mut map, (c_id, token)| {
+                map.entry(c_id).or_default().push(token);
+                map
+            });
+
+        trace!(?missing_balances_map, "Missing balance keys after buffer lookup");
+
+        // Then get the missing balances from db
+        let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
+            .gateway
+            .get_components_balances(
+                &missing_balances_map
+                    .keys()
+                    .map(AsRef::as_ref)
+                    .collect::<Vec<&str>>(),
+            )
+            .await?;
+
+        let empty = HashMap::<Bytes, ComponentBalance>::new();
+
+        let combined_balances: HashMap<
+            String,
+            HashMap<H160, crate::extractor::evm::ComponentBalance>,
+        > = missing_balances_map
+            .iter()
+            .map(|(id, tokens)| {
+                let balances_for_id = missing_balances
+                    .get(id)
+                    .unwrap_or(&empty);
+                let filtered_balances: HashMap<_, _> = tokens
+                    .iter()
+                    .map(|token| {
+                        let balance = balances_for_id
+                            .get(token)
+                            .cloned()
+                            .unwrap_or_else(|| ComponentBalance {
+                                token: token.clone(),
+                                new_balance: Bytes::from(H256::zero()),
+                                balance_float: 0.0,
+                                modify_tx: H256::zero().into(),
+                                component_id: id.to_string(),
+                            });
+                        (token.clone(), balance)
+                    })
+                    .collect();
+                (id.clone(), filtered_balances)
+            })
+            .chain(buffered_balances)
+            .map(|(id, balances)| {
+                (
+                    id,
+                    balances
+                        .into_iter()
+                        .map(|(token, value)| {
+                            (
+                                H160::from(token),
+                                crate::extractor::evm::ComponentBalance::from(&value),
+                            )
+                        })
+                        .collect::<HashMap<_, _>>(),
+                )
+            })
+            .fold(HashMap::new(), |mut acc, (c_id, b_changes)| {
+                acc.entry(c_id)
+                    .or_default()
+                    .extend(b_changes);
+                acc
+            });
 
         let revert_message = evm::BlockAccountChanges {
             extractor: self.name.clone(),
@@ -902,7 +928,7 @@ mod test {
     }
 
     fn block_contract_changes_ok() -> BlockContractChanges {
-        evm::fixtures::pb_block_contract_changes()
+        evm::fixtures::pb_block_contract_changes(0)
     }
 
     #[tokio::test]
@@ -995,15 +1021,20 @@ mod test {
 #[cfg(test)]
 mod test_serial_db {
 
-    use crate::extractor::evm::{
-        token_pre_processor::MockTokenPreProcessorTrait, AccountUpdate, ComponentBalance,
-        ProtocolComponent,
+    use crate::{
+        extractor::evm::{
+            token_pre_processor::MockTokenPreProcessorTrait, AccountUpdate, ComponentBalance,
+            ProtocolComponent,
+        },
+        pb::sf::substreams::v1::BlockRef,
     };
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
     use ethers::types::U256;
+    use futures03::{stream, StreamExt};
+    use hex::ToHex;
     use test_log::test;
     use tycho_core::{
-        models::{ChangeType, ContractId},
+        models::{ChangeType, ContractId, FinancialType, ImplementationType},
         storage::BlockOrTimestamp,
     };
     use tycho_storage::{
@@ -1042,6 +1073,26 @@ mod test_serial_db {
                 H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
                     .expect("Invalid H160 address"),
                 "USDC".to_string(),
+                6,
+                0,
+                vec![],
+                Default::default(),
+                100,
+            ),
+            evm::ERC20Token::new(
+                H160::from_str("0x6b175474e89094c44da98b954eedeac495271d0f")
+                    .expect("Invalid H160 address"),
+                "DAI".to_string(),
+                18,
+                0,
+                vec![],
+                Default::default(),
+                100,
+            ),
+            evm::ERC20Token::new(
+                H160::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7")
+                    .expect("Invalid H160 address"),
+                "USDT".to_string(),
                 6,
                 0,
                 vec![],
@@ -1315,7 +1366,6 @@ mod test_serial_db {
 
             // TODO: improve asserts
             assert_eq!(component_balances.len(), 1);
-            dbg!(&component_balances);
             assert_eq!(component_balances[0].component_id, "ambient_USDC_ETH");
         })
         .await;
@@ -1372,5 +1422,210 @@ mod test_serial_db {
             assert_eq!(new_tokens[0], H160::from_str(USDT_ADDRESS).expect("Invalid H160 address"));
         })
         .await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_revert() {
+        run_against_db(|pool| async move {
+            let mut conn = pool
+                .get()
+                .await
+                .expect("pool should get a connection");
+
+            let database_url =
+                std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
+
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_1",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Vm),
+            )
+            .await;
+
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_2",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Vm),
+            )
+            .await;
+
+            let (cached_gw, _gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
+                .set_chains(&[Chain::Ethereum])
+                .set_protocol_systems(&["vm_protocol_system".to_string()])
+                .build()
+                .await
+                .unwrap();
+
+            let gw = VmPgGateway::new(
+                "vm_name",
+                Chain::Ethereum,
+                0,
+                cached_gw,
+                get_mocked_token_pre_processor(),
+            );
+
+            let protocol_types = HashMap::from([
+                ("pt_1".to_string(), ProtocolType::default()),
+                ("pt_2".to_string(), ProtocolType::default()),
+            ]);
+
+            let extractor = VmContractExtractor::new(
+                "vm_name",
+                Chain::Ethereum,
+                ChainState::default(),
+                gw,
+                protocol_types,
+                "vm_protocol_system".to_string(),
+                None,
+                5,
+            )
+            .await
+            .expect("Failed to create extractor");
+
+            // Send a sequence of block scoped data.
+            stream::iter(get_inp_sequence())
+                .for_each(|inp| async {
+                    extractor
+                        .handle_tick_scoped_data(inp)
+                        .await
+                        .unwrap();
+                })
+                .await;
+
+            let client_msg = extractor
+                .handle_revert(BlockUndoSignal {
+                    last_valid_block: Some(BlockRef {
+                        id: H256::from_low_u64_be(3).encode_hex(),
+                        number: 3,
+                    }),
+                    last_valid_cursor: "cursor@3".into(),
+                })
+                .await
+                .unwrap()
+                .unwrap();
+
+            let res = client_msg
+                .as_any()
+                .downcast_ref::<evm::BlockAccountChanges>()
+                .expect("not good type");
+
+
+            let block_account_expected = evm::BlockAccountChanges {
+                extractor: "vm_name".to_string(),
+                chain: Chain::Ethereum,
+                block: Block {
+                    number: 3,
+                    hash: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+                    parent_hash: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
+                    chain: Chain::Ethereum,
+                    ts: NaiveDateTime::parse_from_str("1970-01-01T00:50:00", "%Y-%m-%dT%H:%M:%S").unwrap(),
+                },
+                revert: true,
+                account_updates: HashMap::from([
+                    (H160::from_str("0x0000000000000000000000000000000000000001").unwrap(), AccountUpdate {
+                        address: H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                        chain: Chain::Ethereum,
+                        slots: HashMap::from([
+                            (U256::from_dec_str("1356938545749799165119972480570561420155507632800475359837393562592731987968").unwrap(), 0.into()),
+                            (1.into(), 1.into()),
+                        ]),
+                        balance: None,
+                        code: None,
+                        change: ChangeType::Update,
+                    }),
+                    (H160::from_str("0x0000000000000000000000000000000000000002").unwrap(), AccountUpdate {
+                        address: H160::from_str("0x0000000000000000000000000000000000000002").unwrap(),
+                        chain: Chain::Ethereum,
+                        slots: HashMap::from([
+                            (1.into(), 2.into()),
+                        ]),
+                        balance: None,
+                        code: None,
+                        change: ChangeType::Update,
+                    }),
+                ]),
+                new_protocol_components: HashMap::new(),
+                deleted_protocol_components: HashMap::from([
+                    ("pc_3".to_string(), ProtocolComponent {
+                        id: "pc_3".to_string(),
+                        protocol_system: "vm_protocol_system".to_string(),
+                        protocol_type_name: "pt_1".to_string(),
+                        chain: Chain::Ethereum,
+                        tokens: vec![
+                            H160::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+                            H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                        ],
+                        contract_ids: vec![
+                            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                        ],
+                        static_attributes: HashMap::new(),
+                        change: ChangeType::Deletion,
+                        creation_tx: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
+                        created_at: NaiveDateTime::parse_from_str("1970-01-01T01:06:40", "%Y-%m-%dT%H:%M:%S").unwrap(),
+                    }),
+                ]),
+                component_balances: HashMap::from([
+                    ("pc_1".to_string(), HashMap::from([
+                        (H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), ComponentBalance {
+                            token: H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                            balance: Bytes::from("0x00000064"),
+                            balance_float: 100.0,
+                            modify_tx: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000007532").unwrap(),
+                            component_id: "pc_1".to_string(),
+                        }),
+                        (H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), ComponentBalance {
+                            token: H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                            balance: Bytes::from("0x00000001"),
+                            balance_float: 1.0,
+                            modify_tx: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+                            component_id: "pc_1".to_string(),
+                        }),
+                    ])),
+                ]),
+                component_tvl: HashMap::new(),
+            };
+
+            assert_eq!(
+                res,
+                &block_account_expected
+            );
+        })
+        .await;
+    }
+
+    fn get_inp_sequence(
+    ) -> impl Iterator<Item = crate::pb::sf::substreams::rpc::v2::BlockScopedData> {
+        vec![
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_contract_changes(1),
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1), // Syncing (buffered)
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_contract_changes(2),
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(1), // Buffered
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_contract_changes(3),
+                Some(format!("cursor@{}", 3).as_str()),
+                Some(1), // Buffered
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_contract_changes(4),
+                Some(format!("cursor@{}", 4).as_str()),
+                Some(1), // Buffered
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_block_contract_changes(5),
+                Some(format!("cursor@{}", 5).as_str()),
+                Some(3), // Buffered + flush 1 + 2
+            ),
+        ]
+        .into_iter()
     }
 }

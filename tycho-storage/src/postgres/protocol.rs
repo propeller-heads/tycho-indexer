@@ -1145,7 +1145,7 @@ impl PostgresGateway {
                             address.clone(),
                             bals.0,
                             bals.1,
-                            TxHash::default(),
+                            TxHash::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
                             component_id.as_str(),
                         );
                         new_balance_map.insert(address.clone(), balance);
