@@ -884,20 +884,45 @@ mod test {
 
         let extractor = create_extractor(gw).await;
 
-        let inp = evm::fixtures::pb_block_scoped_data(
-            evm::fixtures::pb_block_entity_changes(0),
-            None,
-            None,
-        );
-        let exp = Ok(Some(()));
-
-        let res = extractor
-            .handle_tick_scoped_data(inp)
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockEntityChanges {
+                    block: Some(evm::fixtures::pb_blocks(1)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                        tx: Some(evm::fixtures::pb_transactions(1, 1)),
+                        entity_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1),
+            ))
             .await
-            .map(|o| o.map(|_| ()));
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(res, exp);
-        assert_eq!(extractor.get_cursor().await, "cursor@420");
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockEntityChanges {
+                    block: Some(evm::fixtures::pb_blocks(2)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                        tx: Some(evm::fixtures::pb_transactions(2, 1)),
+                        entity_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(2),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@2");
     }
 
     #[tokio::test]

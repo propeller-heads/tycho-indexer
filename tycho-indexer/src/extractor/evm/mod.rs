@@ -1383,7 +1383,7 @@ pub mod fixtures {
             cursor: cursor
                 .unwrap_or("cursor@420")
                 .to_owned(),
-            final_block_height: final_block_height.unwrap_or(405),
+            final_block_height: final_block_height.unwrap_or(420),
             debug_map_outputs: vec![],
             debug_store_outputs: vec![],
         }

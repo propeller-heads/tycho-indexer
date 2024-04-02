@@ -1,11 +1,7 @@
 use super::{utils::format_duration, Block};
 use crate::{
     extractor::{
-        evm::{
-            self,
-            chain_state::ChainState,
-            token_pre_processor::{TokenPreProcessor, TokenPreProcessorTrait},
-        },
+        evm::{self, chain_state::ChainState, token_pre_processor::TokenPreProcessorTrait},
         revert_buffer::RevertBuffer,
         ExtractionError, Extractor, ExtractorMsg,
     },
@@ -887,6 +883,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::pb::tycho::evm::v1::BlockEntityChanges;
+
     use super::*;
     use tycho_core::models::{FinancialType, ImplementationType};
 
@@ -960,16 +958,46 @@ mod test {
         )
         .await
         .expect("extractor init ok");
-        let inp = evm::fixtures::pb_block_scoped_data(block_contract_changes_ok(), None, None);
-        let exp = Ok(Some(()));
 
-        let res = extractor
-            .handle_tick_scoped_data(inp)
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockEntityChanges {
+                    block: Some(evm::fixtures::pb_blocks(1)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                        tx: Some(evm::fixtures::pb_transactions(1, 1)),
+                        entity_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1),
+            ))
             .await
-            .map(|o| o.map(|_| ()));
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(res, exp);
-        assert_eq!(extractor.get_cursor().await, "cursor@420");
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockEntityChanges {
+                    block: Some(evm::fixtures::pb_blocks(2)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                        tx: Some(evm::fixtures::pb_transactions(2, 1)),
+                        entity_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(2),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@2");
     }
 
     #[tokio::test]
