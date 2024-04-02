@@ -236,7 +236,7 @@ where
     <N as VersionedRow>::EntityId: Clone,
 {
     if new_data.is_empty() {
-        return Ok(())
+        return Ok(());
     }
 
     let end_versions = set_versioning_attributes(new_data);
@@ -272,7 +272,7 @@ where
     <N as VersionedRow>::EntityId: Clone,
 {
     if new_data.is_empty() {
-        return Ok(())
+        return Ok(());
     }
     let end_versions = set_delta_versioning_attributes(new_data);
     let db_rows = S::latest_versions_by_ids(end_versions.keys().cloned(), conn)

@@ -125,8 +125,11 @@ impl ExtractionState {
 
 // TODO: replace with types from dto on extractor
 #[typetag::serde(tag = "type")]
-pub trait NormalisedMessage: std::fmt::Debug + std::fmt::Display + Send + Sync + 'static {
+pub trait NormalisedMessage:
+    std::any::Any + std::fmt::Debug + std::fmt::Display + Send + Sync + 'static
+{
     fn source(&self) -> ExtractorIdentity;
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 #[derive(PartialEq, Debug, Clone, Default, Deserialize, Serialize)]

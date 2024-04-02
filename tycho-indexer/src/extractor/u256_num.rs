@@ -39,7 +39,7 @@ pub fn bytes_to_f64(data: &[u8]) -> Option<f64> {
     let x = U256::from(data);
     let res = panic::catch_unwind(|| {
         if x == U256::zero() {
-            return Some(0.0)
+            return Some(0.0);
         }
 
         let x_bits = x.bits();

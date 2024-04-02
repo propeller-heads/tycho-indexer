@@ -21,7 +21,7 @@ impl PostgresGateway {
         use super::schema::block::dsl::*;
         if blocks.is_empty() {
             warn!("Upsert blocks called with empty blocks!");
-            return Ok(())
+            return Ok(());
         }
         let block_chain_id = self.get_chain_id(&blocks[0].chain);
         let new_blocks = blocks
@@ -90,7 +90,7 @@ impl PostgresGateway {
         use super::schema::transaction::dsl::*;
         if new.is_empty() {
             warn!("Upsert tx called with empty transactions!");
-            return Ok(())
+            return Ok(());
         }
 
         let block_hashes = new
