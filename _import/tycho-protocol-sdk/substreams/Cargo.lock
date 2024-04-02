@@ -982,6 +982,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "substreams-maverick"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "ethabi 18.0.0",
+ "getrandom",
+ "hex",
+ "hex-literal 0.4.1",
+ "itertools 0.12.1",
+ "num-bigint",
+ "prost 0.11.9",
+ "prost-types 0.12.3",
+ "substreams",
+ "substreams-ethereum",
+ "tycho-substreams",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"

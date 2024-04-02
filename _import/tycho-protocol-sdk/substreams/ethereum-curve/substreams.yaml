@@ -51,7 +51,7 @@ modules:
     output:
       type: proto:tycho.evm.v1.BalanceDeltas
 
-  - name: store_balance
+  - name: store_balances
     kind: store
     initialBlock: 19128828
     updatePolicy: add
@@ -67,7 +67,7 @@ modules:
       - map: map_components
       - map: map_relative_balances
       - store: store_components
-      - store: store_balance
+      - store: store_balances
         mode: deltas  # This is the key property that simplifies `BalanceChange` handling
     output:
       type: proto:tycho.evm.v1.BlockContractChanges

@@ -1,26 +1,27 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use substreams::pb::substreams::StoreDeltas;
-use substreams::store::{
-    StoreAdd, StoreAddBigInt, StoreAddInt64, StoreGet, StoreGetInt64, StoreGetString, StoreNew,
-    StoreSet, StoreSetString,
+use substreams::{
+    pb::substreams::StoreDeltas,
+    store::{
+        StoreAdd, StoreAddBigInt, StoreAddInt64, StoreGet, StoreGetInt64, StoreGetString, StoreNew,
+        StoreSet, StoreSetString,
+    },
 };
 
-use substreams::key;
-use substreams::scalar::BigInt;
-use substreams::{hex, log};
+use substreams::{hex, key, scalar::BigInt};
 
-use substreams_ethereum::block_view::LogView;
-use substreams_ethereum::pb::eth;
+use substreams_ethereum::{block_view::LogView, pb::eth};
 
 use itertools::Itertools;
-use pb::tycho::evm::v1::{self as tycho};
 
-use contract_changes::extract_contract_changes;
 use substreams_ethereum::Event;
 
-use crate::{abi, contract_changes, pb};
+use crate::{abi, pb};
+
+use tycho_substreams::{
+    balances::store_balance_changes, contract::extract_contract_changes, prelude::*,
+};
 
 const FACTORY: [u8; 20] = hex!("Eb6625D65a0553c9dBc64449e56abFe519bd9c9B");
 
@@ -37,7 +38,7 @@ const FACTORY: [u8; 20] = hex!("Eb6625D65a0553c9dBc64449e56abFe519bd9c9B");
 /// This struct purely exists to spoof the `PartialEq` trait for `Transaction` so we can use it in
 ///  a later groupby operation.
 #[derive(Debug)]
-struct TransactionWrapper(tycho::Transaction);
+struct TransactionWrapper(Transaction);
 
 impl PartialEq for TransactionWrapper {
     fn eq(&self, other: &Self) -> bool {
@@ -45,8 +46,8 @@ impl PartialEq for TransactionWrapper {
     }
 }
 
-fn tx_from_log(log: &LogView) -> tycho::Transaction {
-    tycho::Transaction {
+fn tx_from_log(log: &LogView) -> Transaction {
+    Transaction {
         hash: log.receipt.transaction.hash.clone(),
         from: log.receipt.transaction.from.clone(),
         to: log.receipt.transaction.to.clone(),
@@ -55,49 +56,53 @@ fn tx_from_log(log: &LogView) -> tycho::Transaction {
 }
 
 #[substreams::handlers::map]
-pub fn map_pools_created(
-    block: eth::v2::Block,
-) -> Result<tycho::GroupedTransactionProtocolComponents> {
+pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
     // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
     // We store these as a hashmap by tx hash since we need to agg by tx hash later
-    Ok(tycho::GroupedTransactionProtocolComponents {
+    Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
             .filter_map(|tx| {
-                let components: Vec<tycho::ProtocolComponent> = tx
+                let components: Vec<ProtocolComponent> = tx
                     .logs_with_calls()
                     .filter(|(_, call)| !call.call.state_reverted)
                     .filter(|(log, _)| log.address == FACTORY)
                     .filter_map(|(log, _)| {
                         let pool_added = abi::factory::events::PoolCreated::match_and_decode(log)?;
 
-                        log::info!("tacos");
-
-                        Some(tycho::ProtocolComponent {
+                        Some(ProtocolComponent {
                             id: hex::encode(&pool_added.pool_address),
+                            tx: Some(Transaction {
+                                hash: tx.hash.clone(),
+                                from: tx.from.clone(),
+                                to: tx.to.clone(),
+                                index: Into::<u64>::into(tx.index),
+                            }),
                             tokens: vec![pool_added.token_a, pool_added.token_b],
                             contracts: vec![FACTORY.into(), pool_added.pool_address],
                             static_att: vec![
-                                tycho::Attribute {
+                                Attribute {
                                     name: "activeTick".into(),
-                                    value: pool_added.active_tick.to_signed_bytes_be(),
-                                    change: tycho::ChangeType::Creation.into(),
+                                    value: pool_added
+                                        .active_tick
+                                        .to_signed_bytes_be(),
+                                    change: ChangeType::Creation.into(),
                                 },
-                                tycho::Attribute {
+                                Attribute {
                                     name: "lookback".into(),
                                     value: pool_added.lookback.to_signed_bytes_be(),
-                                    change: tycho::ChangeType::Creation.into(),
+                                    change: ChangeType::Creation.into(),
                                 },
                             ],
-
-                            change: tycho::ChangeType::Creation.into(),
+                            change: ChangeType::Creation.into(),
+                            ..Default::default()
                         })
                     })
                     .collect::<Vec<_>>();
 
                 if !components.is_empty() {
-                    Some(tycho::TransactionProtocolComponents {
-                        tx: Some(tycho::Transaction {
+                    Some(TransactionProtocolComponents {
+                        tx: Some(Transaction {
                             hash: tx.hash.clone(),
                             from: tx.from.clone(),
                             to: tx.to.clone(),
@@ -115,7 +120,7 @@ pub fn map_pools_created(
 
 /// Simply stores the `ProtocolComponent`s with the pool id as the key
 #[substreams::handlers::store]
-pub fn store_pools_created(map: tycho::GroupedTransactionProtocolComponents, store: StoreAddInt64) {
+pub fn store_components(map: BlockTransactionProtocolComponents, store: StoreAddInt64) {
     store.add_many(
         0,
         &map.tx_components
@@ -129,7 +134,7 @@ pub fn store_pools_created(map: tycho::GroupedTransactionProtocolComponents, sto
 
 /// Simply stores the `ProtocolComponent`s with the pool id as the key
 #[substreams::handlers::store]
-pub fn store_pools_tokens(map: tycho::GroupedTransactionProtocolComponents, store: StoreSetString) {
+pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: StoreSetString) {
     map.tx_components
         .iter()
         .flat_map(|tx_components| &tx_components.components)
@@ -149,11 +154,11 @@ pub fn store_pools_tokens(map: tycho::GroupedTransactionProtocolComponents, stor
 /// Since the `Swap`, `AddLiquidity`, `RemoveLiuidity` events administer only deltas, we need to
 /// leverage a map and a store to be able to tally up final balances for tokens in a pool.
 #[substreams::handlers::map]
-pub fn map_balance_deltas(
+pub fn map_relative_balances(
     block: eth::v2::Block,
     pools_store: StoreGetInt64,
     tokens_store: StoreGetString,
-) -> Result<tycho::BalanceDeltas, anyhow::Error> {
+) -> Result<BlockBalanceDeltas, anyhow::Error> {
     let deltas = block
         .logs()
         .filter(|log| {
@@ -181,14 +186,14 @@ pub fn map_balance_deltas(
                     )
                 };
                 vec![
-                    tycho::BalanceDelta {
+                    BalanceDelta {
                         ord: log.log.ordinal,
                         tx: Some(tx_from_log(&log)),
                         token: token_a,
                         delta: event.amount_in.to_signed_bytes_be(),
                         component_id: log.address().into(),
                     },
-                    tycho::BalanceDelta {
+                    BalanceDelta {
                         ord: log.log.ordinal,
                         tx: Some(tx_from_log(&log)),
                         token: token_b,
@@ -217,14 +222,14 @@ pub fn map_balance_deltas(
                                 .map(|token| token.to_owned()) // Clone the tokens
                                 .collect::<Vec<_>>();
                             vec![
-                                tycho::BalanceDelta {
+                                BalanceDelta {
                                     ord: log.log.ordinal,
                                     tx: Some(tx_from_log(&log)),
                                     token: hex::decode(tokens[0].clone()).unwrap(),
                                     delta: delta_a.to_signed_bytes_be(),
                                     component_id: log.address().into(),
                                 },
-                                tycho::BalanceDelta {
+                                BalanceDelta {
                                     ord: log.log.ordinal,
                                     tx: Some(tx_from_log(&log)),
                                     token: hex::decode(tokens[1].clone()).unwrap(),
@@ -258,14 +263,14 @@ pub fn map_balance_deltas(
                             let neg_delta_a: BigInt = delta_a * -1;
                             let neg_delta_b: BigInt = delta_b * -1;
                             vec![
-                                tycho::BalanceDelta {
+                                BalanceDelta {
                                     ord: log.log.ordinal,
                                     tx: Some(tx_from_log(&log)),
                                     token: hex::decode(tokens[0].clone()).unwrap(),
                                     delta: neg_delta_a.to_signed_bytes_be(),
                                     component_id: log.address().into(),
                                 },
-                                tycho::BalanceDelta {
+                                BalanceDelta {
                                     ord: log.log.ordinal,
                                     tx: Some(tx_from_log(&log)),
                                     token: hex::decode(tokens[1].clone()).unwrap(),
@@ -282,46 +287,33 @@ pub fn map_balance_deltas(
         })
         .collect::<Vec<_>>();
 
-    Ok(tycho::BalanceDeltas {
-        balance_deltas: deltas,
-    })
+    Ok(BlockBalanceDeltas { balance_deltas: deltas })
 }
 
 /// It's significant to include both the `pool_id` and the `token_id` for each balance delta as the
 ///  store key to ensure that there's a unique balance being tallied for each.
 #[substreams::handlers::store]
-pub fn store_balance_changes(deltas: tycho::BalanceDeltas, store: StoreAddBigInt) {
-    deltas.balance_deltas.iter().for_each(|delta| {
-        store.add(
-            delta.ord,
-            format!(
-                "pool:{0}:token:{1}",
-                hex::encode(&delta.component_id),
-                hex::encode(&delta.token)
-            ),
-            BigInt::from_signed_bytes_be(&delta.delta),
-        );
-    });
+pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
+    store_balance_changes(deltas, store)
 }
 
 /// This is the main map that handles most of the indexing of this substream.
 /// Every contract change is grouped by transaction index via the `transaction_contract_changes`
 ///  map. Each block of code will extend the `TransactionContractChanges` struct with the
 ///  cooresponding changes (balance, component, contract), inserting a new one if it doesn't exist.
-///  At the very end, the map can easily be sorted by index to ensure the final `BlockContractChanges`
-///  is ordered by transactions properly.
+///  At the very end, the map can easily be sorted by index to ensure the final
+/// `BlockContractChanges`  is ordered by transactions properly.
 #[substreams::handlers::map]
-pub fn map_changes(
+pub fn map_protocol_changes(
     block: eth::v2::Block,
-    grouped_components: tycho::GroupedTransactionProtocolComponents,
-    deltas: tycho::BalanceDeltas,
+    grouped_components: BlockTransactionProtocolComponents,
+    deltas: BlockBalanceDeltas,
     components_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
-) -> Result<tycho::BlockContractChanges> {
+) -> Result<BlockContractChanges> {
     // We merge contract changes by transaction (identified by transaction index) making it easy to
     //  sort them at the very end.
-    let mut transaction_contract_changes: HashMap<_, tycho::TransactionContractChanges> =
-        HashMap::new();
+    let mut transaction_contract_changes: HashMap<_, TransactionContractChanges> = HashMap::new();
 
     // `ProtocolComponents` are gathered from `map_pools_created` which just need a bit of work to
     //   convert into `TransactionContractChanges`
@@ -333,7 +325,7 @@ pub fn map_changes(
 
             transaction_contract_changes
                 .entry(tx.index)
-                .or_insert_with(|| tycho::TransactionContractChanges {
+                .or_insert_with(|| TransactionContractChanges {
                     tx: Some(tx.clone()),
                     contract_changes: vec![],
                     component_changes: vec![],
@@ -356,7 +348,7 @@ pub fn map_changes(
             let token_id = key::segment_at(&store_delta.key, 3);
             (
                 balance_delta.tx.unwrap(),
-                tycho::BalanceChange {
+                BalanceChange {
                     token: hex::decode(token_id).expect("Token ID not valid hex"),
                     balance: store_delta.new_value,
                     component_id: hex::decode(pool_id).expect("Token ID not valid hex"),
@@ -371,7 +363,7 @@ pub fn map_changes(
 
             transaction_contract_changes
                 .entry(tx.index)
-                .or_insert_with(|| tycho::TransactionContractChanges {
+                .or_insert_with(|| TransactionContractChanges {
                     tx: Some(tx.clone()),
                     contract_changes: vec![],
                     component_changes: vec![],
@@ -384,12 +376,20 @@ pub fn map_changes(
     // General helper for extracting contract changes. Uses block, our component store which holds
     //  all of our tracked deployed pool addresses, and the map of tx contract changes which we
     //  output into for final processing later.
-    extract_contract_changes(&block, components_store, &mut transaction_contract_changes);
+    extract_contract_changes(
+        &block,
+        |addr| {
+            components_store
+                .get_last(format!("pool:0x{0}", hex::encode(addr)))
+                .is_some()
+        },
+        &mut transaction_contract_changes,
+    );
 
     // Process all `transaction_contract_changes` for final output in the `BlockContractChanges`,
     //  sorted by transaction index (the key).
-    Ok(tycho::BlockContractChanges {
-        block: Some(tycho::Block {
+    Ok(BlockContractChanges {
+        block: Some(Block {
             number: block.number,
             hash: block.hash.clone(),
             parent_hash: block
@@ -404,9 +404,9 @@ pub fn map_changes(
             .drain()
             .sorted_unstable_by_key(|(index, _)| index.clone())
             .filter_map(|(_, change)| {
-                if change.contract_changes.is_empty()
-                    && change.component_changes.is_empty()
-                    && change.balance_changes.is_empty()
+                if change.contract_changes.is_empty() &&
+                    change.component_changes.is_empty() &&
+                    change.balance_changes.is_empty()
                 {
                     None
                 } else {
@@ -418,11 +418,11 @@ pub fn map_changes(
 }
 
 // #[substreams::handlers::map]
-// pub fn debug_block_events(block: eth::v2::Block) -> Result<tycho::BlockContractChanges> {
+// pub fn debug_block_events(block: eth::v2::Block) -> Result<BlockContractChanges> {
 //     log::info!("Block: {:?}", block);
 
-//     Ok(tycho::BlockContractChanges {
-//         block: Some(tycho::Block {
+//     Ok(BlockContractChanges {
+//         block: Some(Block {
 //             number: block.number,
 //             hash: block.hash.clone(),
 //             parent_hash: block

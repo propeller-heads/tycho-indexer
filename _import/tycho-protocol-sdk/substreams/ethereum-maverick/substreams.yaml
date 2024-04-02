@@ -8,7 +8,7 @@ protobuf:
     - tycho/evm/v1/vm.proto
     - tycho/evm/v1/common.proto
   importPaths:
-    - ../../proto/tycho/evm/v1/
+    - ../../proto
     - ./proto
 
 binaries:
@@ -31,7 +31,7 @@ modules:
     updatePolicy: add
     valueType: int64
     inputs:
-      - map: map_pools_created
+      - map: map_pools_created  
 
   - name: store_pools_tokens
     kind: store

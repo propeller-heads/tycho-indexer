@@ -235,7 +235,7 @@ pub fn map_relative_balances(
 /// It's significant to include both the `pool_id` and the `token_id` for each balance delta as the
 ///  store key to ensure that there's a unique balance being tallied for each.
 #[substreams::handlers::store]
-pub fn store_balance(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
+pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
     store_balance_changes(deltas, store)
 }
 
