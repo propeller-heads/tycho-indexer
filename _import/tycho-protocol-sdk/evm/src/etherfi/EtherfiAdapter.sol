@@ -16,7 +16,7 @@ contract EtherfiAdapter is ISwapAdapter {
 
     IWeEth immutable weEth;
     IeEth immutable eEth;
-    ILiquidityPool public liquidityPool;
+    ILiquidityPool immutable liquidityPool;
 
     constructor(address _weEth) {
         weEth = IWeEth(_weEth);
@@ -24,19 +24,26 @@ contract EtherfiAdapter is ISwapAdapter {
         liquidityPool = eEth.liquidityPool();
     }
 
-    /// @dev Check if tokens in input are supported by this adapter
+    /// @dev Check if swap between provided sellToken and buyToken are supported
+    /// by this adapter
     modifier checkInputTokens(address sellToken, address buyToken) {
         if (sellToken == buyToken) {
-            revert Unavailable("This pool only supports eETH, weEth and ETH");
+            revert Unavailable(
+                "This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps"
+            );
         }
         if (
             sellToken != address(weEth) && sellToken != address(eEth)
                 && sellToken != address(0)
         ) {
-            revert Unavailable("This pool only supports eETH, weEth and ETH");
+            revert Unavailable(
+                "This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps"
+            );
         }
         if (buyToken != address(weEth) && buyToken != address(eEth)) {
-            revert Unavailable("This pool only supports eETH, weEth and ETH");
+            revert Unavailable(
+                "This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps"
+            );
         }
         _;
     }
@@ -75,14 +82,15 @@ contract EtherfiAdapter is ISwapAdapter {
                     totalPooledEther + _specifiedAmounts[i],
                     eEthTotalShares + sharesForDepositAmount
                 );
+            } else {
+                _prices[i] = getPriceAt(
+                    sellTokenAddress,
+                    buyTokenAddress,
+                    _specifiedAmounts[i],
+                    totalPooledEther,
+                    eEthTotalShares
+                );
             }
-            _prices[i] = getPriceAt(
-                sellTokenAddress,
-                buyTokenAddress,
-                _specifiedAmounts[i],
-                totalPooledEther,
-                eEthTotalShares
-            );
         }
     }
 
@@ -120,6 +128,11 @@ contract EtherfiAdapter is ISwapAdapter {
             }
         }
         trade.gasUsed = gasBefore - gasleft();
+
+        /// @dev as the price is constant for all the traded amounts and depends
+        /// only on the totalPooledEther and totalShares, we can use a standard
+        /// amount(PRECISE_UNIT) to render a well-formatted price without
+        /// precisions loss
         trade.price = getPriceAt(
             sellTokenAddress,
             buyTokenAddress,
