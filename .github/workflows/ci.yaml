@@ -9,6 +9,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   compile_and_test:
@@ -20,21 +22,21 @@ jobs:
         toolchain:
           - stable
     services:
-        postgres: 
-            image: postgres
-            env:
-                POSTGRES_PASSWORD: mypassword
-                POSTGRES_DB: tycho_indexer_0
-                POSTGRES_USER: postgres
-            options: >-
-                --health-cmd pg_isready
-                --health-interval 10s
-                --health-timeout 5s
-                --health-retries 5
-            ports:
-                - 5432:5432
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: mypassword
+          POSTGRES_DB: tycho_indexer_0
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     env:
-        DATABASE_URL: postgres://postgres:mypassword@localhost:5432/tycho_indexer_0
+      DATABASE_URL: postgres://postgres:mypassword@localhost:5432/tycho_indexer_0
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -77,11 +79,11 @@ jobs:
         with:
           cache-on-failure: true
 
-      - run: cargo +${{steps.toolchain.outputs.name}} clippy --workspace --all-targets --all-features
-        env:
-          RUSTFLAGS: -Dwarnings
+      - name: Clippy
+        run: cargo +${{steps.toolchain.outputs.name}} clippy --workspace --all-targets --all-features
 
-      - run: cargo +${{steps.toolchain.outputs.name}} fmt --all --check
+      - name: Rustfmt
+        run: cargo +${{steps.toolchain.outputs.name}} fmt --all --check
 
   buf_formatting:
     name: Protobuf Files Formatting
