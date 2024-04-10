@@ -8,33 +8,35 @@ permissions:
   contents: read
 
 env:
-  CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR:  always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS:         "-D warnings"
 
 jobs:
   compile_and_test:
-    name: Compile & Test
-    runs-on: ubuntu-latest
+    name:            Compile & Test
+    runs-on:         ubuntu-latest
     timeout-minutes: 30
     strategy:
       matrix:
         toolchain:
           - stable
     services:
-        postgres: 
-            image: postgres
-            env:
-                POSTGRES_PASSWORD: mypassword
-                POSTGRES_DB: tycho_indexer_0
-                POSTGRES_USER: postgres
-            options: >-
-                --health-cmd pg_isready
-                --health-interval 10s
-                --health-timeout 5s
-                --health-retries 5
-            ports:
-                - 5432:5432
+      postgres:
+        image:   postgres
+        env:
+          POSTGRES_PASSWORD: mypassword
+          POSTGRES_DB:       tycho_indexer_0
+          POSTGRES_USER:     postgres
+        options: >-
+                 --health-cmd pg_isready
+                 --health-interval 10s
+                 --health-timeout 5s
+                 --health-retries 5
+        ports:
+          - 5432:5432
     env:
-        DATABASE_URL: postgres://postgres:mypassword@localhost:5432/tycho_indexer_0
+      DATABASE_URL: postgres://postgres:mypassword@localhost:5432/tycho_indexer_0
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -49,43 +51,45 @@ jobs:
       - name: Install diesel cli
         uses: baptiste0928/cargo-install@v2
         with:
-          crate: diesel_cli
+          crate:    diesel_cli
           features: postgres
       - name: DB Setup
-        run: cd tycho-storage && diesel migration run
+        run:  cd tycho-storage && diesel migration run
       - name: Install latest nextest release
         uses: taiki-e/install-action@nextest
+      - name: Compile
+        run:  cargo nextest run --workspace --all-targets --all-features --no-run --locked
       - name: Test
-        run: cargo nextest run --workspace --all-targets --all-features -E 'not test(serial_db)'
+        run:  cargo nextest run --workspace --all-targets --all-features -E 'not test(serial_db)'
       - name: Test (Serial)
-        run: cargo nextest run --workspace --all-targets --all-features -E 'test(serial_db)'
+        run:  cargo nextest run --workspace --all-targets --all-features -E 'test(serial_db)'
 
   lint:
-    name: Code Lint
+    name:    Code Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Setup toolchain
-        id: toolchain
+        id:   toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2024-04-03
+          toolchain:  nightly-2024-04-03
           components: rustfmt, clippy
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
-      - run: cargo +${{steps.toolchain.outputs.name}} clippy --workspace --all-targets --all-features
-        env:
-          RUSTFLAGS: -Dwarnings
+      - name: Clippy
+        run:  cargo +${{steps.toolchain.outputs.name}} clippy --workspace --all-targets --all-features
 
-      - run: cargo +${{steps.toolchain.outputs.name}} fmt --all --check
+      - name: Rustfmt
+        run:  cargo +${{steps.toolchain.outputs.name}} fmt --all --check
 
   buf_formatting:
-    name: Protobuf Files Formatting
-    runs-on: ubuntu-latest
+    name:            Protobuf Files Formatting
+    runs-on:         ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -97,8 +101,8 @@ jobs:
 
 
   sql_formatting:
-    name: SQL files formatting
-    runs-on: ubuntu-latest
+    name:            SQL files formatting
+    runs-on:         ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -107,9 +111,9 @@ jobs:
       - name: pg-formatter-action
         uses: kayibal/pg-formatter-action@master
         with:
-          pattern: "tycho-indexer/migrations/**/*.sql"
+          pattern:    "tycho-indexer/migrations/**/*.sql"
           extra-args: "--no-space-function -i"
 
       - name: Check diffs
-        run: git diff --exit-code
+        run:  git diff --exit-code
           
