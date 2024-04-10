@@ -12,9 +12,7 @@ use revm::{
 use crate::evm_simulation::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
-    tycho_client::{
-        TychoClientError, TychoHttpClient, TychoHttpClientImpl, AMBIENT_ACCOUNT_ADDRESS,
-    },
+    tycho_client::{TychoClientError, TychoHttpClient, AMBIENT_ACCOUNT_ADDRESS},
     tycho_models::{AccountUpdate, ChangeType, StateRequestBody, StateRequestParameters, Version},
 };
 
@@ -57,39 +55,14 @@ pub struct PreCachedDB {
 }
 
 impl PreCachedDB {
-    /// Create a new PreCachedDB instance and run the update loop in a separate thread.
-    pub fn new(tycho_http_url: &str) -> Result<Self, PreCachedDBError> {
-        info!(?tycho_http_url, "Creating new PreCachedDB instance");
-
-        let tycho_db = PreCachedDB {
+    /// Create a new PreCachedDB instance
+    pub fn new() -> Result<Self, PreCachedDBError> {
+        Ok(PreCachedDB {
             inner: Arc::new(RwLock::new(PreCachedDBInner {
                 accounts: AccountStorage::new(),
                 block: None,
             })),
-        };
-
-        // let client = TychoClient::new(tycho_url).unwrap();
-        let http_client =
-            TychoHttpClientImpl::new(tycho_http_url).map_err(PreCachedDBError::TychoClientError)?;
-        // Run the async get state initialization
-        // Create a channel to send the result of the async block.
-        let tycho_db_clone = tycho_db.clone();
-
-        info!("Spawning initialization thread");
-        // We need to spawn a new thread to run the async block in a sync context.
-        let handle = std::thread::spawn(move || -> Result<(), PreCachedDBError> {
-            let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
-            runtime.block_on(async {
-                tycho_db_clone
-                    .initialize_state(&http_client)
-                    .await
-            })
-        });
-        handle.join().unwrap()?;
-
-        info!("Initialization thread finished");
-
-        Ok(tycho_db)
+        })
     }
 
     /// Initialize the state of the database.
@@ -660,7 +633,7 @@ mod tests {
     //     --module map_changes \
     //     --spkg substreams/ethereum-ambient/substreams-ethereum-ambient-v0.3.0.spkg
     /// ```
-    /// 
+    ///
     /// Then run the test with:
     /// ```bash
     /// cargo test --package protosim --lib -- --ignored --exact --nocapture
@@ -678,7 +651,7 @@ mod tests {
 
         let tycho_http_url = "http://127.0.0.1:4242";
         info!(tycho_http_url, "Creating PreCachedDB");
-        let db = PreCachedDB::new(tycho_http_url).expect("db should initialize");
+        let db = PreCachedDB::new().expect("db should initialize");
 
         info!("Fetching account info");
 
