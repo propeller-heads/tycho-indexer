@@ -17,7 +17,7 @@ use itertools::Itertools;
 
 use substreams_ethereum::Event;
 
-use crate::{abi, pb};
+use crate::abi;
 
 use tycho_substreams::{
     balances::store_balance_changes, contract::extract_contract_changes, prelude::*,
@@ -95,7 +95,12 @@ pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolC
                                 },
                             ],
                             change: ChangeType::Creation.into(),
-                            ..Default::default()
+                            protocol_type: Some(ProtocolType {
+                                name: "maverick_pool".into(),
+                                financial_type: FinancialType::Swap.into(),
+                                attribute_schema: Vec::new(),
+                                implementation_type: ImplementationType::Vm.into(),
+                            }),
                         })
                     })
                     .collect::<Vec<_>>();

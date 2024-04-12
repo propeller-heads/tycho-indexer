@@ -16,7 +16,7 @@ use substreams_ethereum::{block_view::LogView, pb::eth};
 
 use substreams_ethereum::Event;
 
-use crate::{abi, pool_factories};
+use crate::{abi, pool_factories, pools::emit_specific_pools};
 use tycho_substreams::{
     balances::store_balance_changes, contract::extract_contract_changes, prelude::*,
 };
@@ -42,14 +42,17 @@ fn tx_from_log(log: &LogView) -> Transaction {
 }
 
 #[substreams::handlers::map]
-pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
+pub fn map_components(
+    params: String,
+    block: eth::v2::Block,
+) -> Result<BlockTransactionProtocolComponents> {
     // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
     // We store these as a hashmap by tx hash since we need to agg by tx hash later
     Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
             .filter_map(|tx| {
-                let components = tx
+                let mut components = tx
                     .logs_with_calls()
                     .filter(|(_, call)| !call.call.state_reverted)
                     .filter_map(|(log, call)| {
@@ -65,6 +68,8 @@ pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolC
                         )?)
                     })
                     .collect::<Vec<_>>();
+
+                components.extend(emit_specific_pools(&params, &block).expect("yur"));
 
                 if !components.is_empty() {
                     Some(TransactionProtocolComponents {
