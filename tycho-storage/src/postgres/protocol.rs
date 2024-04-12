@@ -18,9 +18,9 @@ use tycho_core::{
 use super::{
     maybe_lookup_block_ts, maybe_lookup_version_ts, orm,
     orm::{Account, ComponentTVL, NewAccount},
-    schema, storage_error_from_diesel,
-    versioning::apply_delta_versioning,
-    PostgresError, PostgresGateway, WithTxHash,
+    PostgresError, PostgresGateway,
+    schema,
+    storage_error_from_diesel, versioning::apply_delta_versioning, WithTxHash,
 };
 
 // Private methods
@@ -742,7 +742,7 @@ impl PostgresGateway {
         }
 
         let results = query
-            .order(schema::token::symbol.asc())
+            .order(schema::token::id.asc())
             .load::<(orm::Token, Address)>(conn)
             .await
             .map_err(|err| storage_error_from_diesel(err, "Token", &chain.to_string(), None))?;
@@ -1428,7 +1428,7 @@ mod test {
     use rstest::rstest;
     use serde_json::json;
 
-    use tycho_core::{storage::BlockIdentifier, Bytes};
+    use tycho_core::{Bytes, storage::BlockIdentifier};
 
     use crate::postgres::db_fixtures;
 
