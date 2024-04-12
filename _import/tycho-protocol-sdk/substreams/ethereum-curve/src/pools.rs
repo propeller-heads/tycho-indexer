@@ -1,14 +1,8 @@
 use std::collections::HashMap;
 
-use crate::abi::pool;
-use anyhow::{self, Context, Result};
-use ethabi::token;
+use anyhow::{Context, Result};
 use serde::Deserialize;
-use serde_qs;
-use substreams_ethereum::{
-    block_view::LogView,
-    pb::{eth, eth::v2::Block},
-};
+use substreams_ethereum::pb::eth;
 use tycho_substreams::prelude::*;
 
 const PARAMS_SEPERATOR: &str = ",";
@@ -21,6 +15,19 @@ struct PoolQueryParams {
     attributes: Vec<(String, String)>,
 }
 
+/// This function parses the `params` string and extracts the pool query parameters. `params` are
+///  comma-separated, URL-encoded (defined by `serde-qs`) strings, with each component defining the
+///  pool query parameters defined in the struct above. We then iterate through the transactions in
+///  a block, and then if the transaction hash matches our parameter, we emit a `ProtocolComponent`
+///  defined by the metadata from above alongside some basic defaults that we know for Curve.
+///
+/// Static attributes are defined as a vector of tuples with the name and value of the attribute.
+///  These contain things like the pool type, specific pool fees, etc. You can see
+///  `pool_factories.rs` for an example of the modern curve pool attributes and also the ones chosen
+///  for 3pool, etc.
+///
+/// This function can error based on some basic parsing errors and deeper down hex decoding errors
+///  if various addresses are not formatted properly.
 pub fn emit_specific_pools(
     params: &String,
     block: &eth::v2::Block,
@@ -29,10 +36,12 @@ pub fn emit_specific_pools(
         .split(PARAMS_SEPERATOR)
         .map(|param| {
             // TODO UNSAFE
-            let pool: PoolQueryParams = serde_qs::from_str(&param).unwrap();
-            (pool.tx_hash.clone(), pool)
+            let pool: PoolQueryParams = serde_qs::from_str(&param)
+                .with_context(|| format!("Failed to parse pool query params: {0}", param))?;
+            Ok((pool.tx_hash.clone(), pool))
         })
-        .collect::<HashMap<_, _>>();
+        .collect::<Result<HashMap<_, _>>>()
+        .with_context(|| "Failed to parse all pool query params")?;
 
     let mut components: Vec<ProtocolComponent> = vec![];
 
@@ -53,7 +62,7 @@ pub fn emit_specific_pools(
                     .into_iter()
                     .map(|token| Result::Ok(hex::decode(token)?))
                     .collect::<Result<Vec<_>>>()
-                    .with_context(|| "")?,
+                    .with_context(|| "Token addresses were not formatted properly")?,
                 static_att: pool
                     .attributes
                     .clone()
@@ -64,7 +73,8 @@ pub fn emit_specific_pools(
                         change: ChangeType::Creation.into(),
                     })
                     .collect::<Vec<_>>(),
-                contracts: vec![hex::decode(pool.address.clone()).with_context(|| "")?],
+                contracts: vec![hex::decode(pool.address.clone())
+                    .with_context(|| "Pool address was not formatted properly")?],
                 change: ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
                     name: "curve_pool".into(),

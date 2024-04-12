@@ -69,7 +69,9 @@ pub fn map_components(
                     })
                     .collect::<Vec<_>>();
 
-                components.extend(emit_specific_pools(&params, &block).expect("yur"));
+                components.extend(emit_specific_pools(&params, &block).expect(
+                    "An unexpected error occured when parsing params for emitting specific pools",
+                ));
 
                 if !components.is_empty() {
                     Some(TransactionProtocolComponents {
