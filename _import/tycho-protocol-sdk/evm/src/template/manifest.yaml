@@ -5,8 +5,9 @@ author:
 
 # Protocol Constants
 constants:
+  # The expected average gas cost of a swap
   protocol_gas: 30000
-  # minimum capabilities we can expect, individual pools may extend these
+  # Minimum capabilities we can expect, individual pools may extend these
   capabilities:
     - SellSide
     - BuySide
