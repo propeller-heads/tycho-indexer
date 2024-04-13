@@ -58,7 +58,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         IERC20 eEth_ = IERC20(address(eEth));
         IERC20 weEth_ = IERC20(address(weEth));
         bytes32 pair = bytes32(0);
-        uint256[] memory limits = adapter.getLimits(pair, address(eEth_), address(weEth_));
+        uint256[] memory limits =
+            adapter.getLimits(pair, address(eEth_), address(weEth_));
 
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1] && specifiedAmount > 100);
@@ -67,7 +68,11 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
             /// work(balance is shares)
             deal(address(adapter), type(uint256).max);
             adapter.swap(
-                pair, address(address(0)), address(eEth_), OrderSide.Buy, limits[0]
+                pair,
+                address(address(0)),
+                address(eEth_),
+                OrderSide.Buy,
+                limits[0]
             );
 
             eEth_.approve(address(adapter), type(uint256).max);
@@ -78,7 +83,11 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
             /// work(balance is shares)
             deal(address(adapter), type(uint128).max);
             adapter.swap(
-                pair, address(address(0)), address(eEth_), OrderSide.Buy, specifiedAmount
+                pair,
+                address(address(0)),
+                address(eEth_),
+                OrderSide.Buy,
+                specifiedAmount
             );
 
             eEth_.approve(address(adapter), specifiedAmount);
@@ -87,8 +96,9 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         uint256 eEth_balance = eEth_.balanceOf(address(this));
         uint256 weEth_balance = weEth_.balanceOf(address(this));
 
-        Trade memory trade =
-            adapter.swap(pair, address(eEth_), address(weEth_), side, specifiedAmount);
+        Trade memory trade = adapter.swap(
+            pair, address(eEth_), address(weEth_), side, specifiedAmount
+        );
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -140,7 +150,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         IERC20 weEth_ = IERC20(address(weEth));
         uint256 weEth_bal_before = weEth_.balanceOf(address(this));
         bytes32 pair = bytes32(0);
-        uint256[] memory limits = adapter.getLimits(pair, address(weEth_), address(eEth_));
+        uint256[] memory limits =
+            adapter.getLimits(pair, address(weEth_), address(eEth_));
 
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1] && specifiedAmount > 100);
@@ -149,7 +160,11 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
             /// work(balance is shares)
             deal(address(adapter), type(uint256).max);
             adapter.swap(
-                pair, address(address(0)), address(weEth_), OrderSide.Buy, limits[0]
+                pair,
+                address(address(0)),
+                address(weEth_),
+                OrderSide.Buy,
+                limits[0]
             );
 
             weEth_.approve(address(adapter), type(uint256).max);
@@ -160,7 +175,11 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
             /// work(balance is shares)
             deal(address(adapter), type(uint128).max);
             adapter.swap(
-                pair, address(address(0)), address(weEth_), OrderSide.Buy, specifiedAmount
+                pair,
+                address(address(0)),
+                address(weEth_),
+                OrderSide.Buy,
+                specifiedAmount
             );
 
             weEth_.approve(address(adapter), specifiedAmount);
@@ -174,8 +193,9 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         /// therefore we use weEth_balance - weEth_bal_before as specifiedAmount
         uint256 realAmountWeEth_ = weEth_balance - weEth_bal_before;
 
-        Trade memory trade =
-            adapter.swap(pair, address(weEth_), address(eEth_), side, realAmountWeEth_);
+        Trade memory trade = adapter.swap(
+            pair, address(weEth_), address(eEth_), side, realAmountWeEth_
+        );
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -386,9 +406,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
 
     function testGetLimitsEtherfi() public {
         bytes32 pair = bytes32(0);
-        uint256[] memory limits = adapter.getLimits(
-            pair, address(eEth), address(weEth)
-        );
+        uint256[] memory limits =
+            adapter.getLimits(pair, address(eEth), address(weEth));
 
         assertEq(limits.length, 2);
     }

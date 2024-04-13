@@ -72,8 +72,7 @@ contract AngleAdapter is ISwapAdapter {
         uint8 decimals = side == OrderSide.Sell
             ? IERC20Metadata(sellToken).decimals()
             : IERC20Metadata(buyToken).decimals();
-        trade.price =
-            getPriceAt(sellToken, buyToken, side, decimals);
+        trade.price = getPriceAt(sellToken, buyToken, side, decimals);
     }
 
     /// @inheritdoc ISwapAdapter
@@ -103,8 +102,7 @@ contract AngleAdapter is ISwapAdapter {
             } else {
                 limits[0] = IERC20(sellToken).balanceOf(transmuterAddress);
             }
-            limits[1] =
-                transmuter.quoteIn(limits[0], sellToken, buyToken);
+            limits[1] = transmuter.quoteIn(limits[0], sellToken, buyToken);
             limits[1] = limits[1] / RESERVE_LIMIT_FACTOR;
             limits[0] = limits[0] / RESERVE_LIMIT_FACTOR;
         } else {
@@ -117,8 +115,7 @@ contract AngleAdapter is ISwapAdapter {
             } else {
                 limits[1] = IERC20(buyToken).balanceOf(transmuterAddress);
             }
-            limits[0] =
-                transmuter.quoteIn(limits[1], buyToken, sellToken);
+            limits[0] = transmuter.quoteIn(limits[1], buyToken, sellToken);
             limits[1] = limits[1] / RESERVE_LIMIT_FACTOR;
             limits[0] = limits[0] / RESERVE_LIMIT_FACTOR;
         }
@@ -212,18 +209,14 @@ contract AngleAdapter is ISwapAdapter {
         internal
         returns (uint256 calculatedAmount)
     {
-        calculatedAmount =
-            transmuter.quoteOut(amountOut, sellToken, buyToken);
+        calculatedAmount = transmuter.quoteOut(amountOut, sellToken, buyToken);
 
-        IERC20(sellToken).safeTransferFrom(msg.sender, address(this), calculatedAmount);
+        IERC20(sellToken).safeTransferFrom(
+            msg.sender, address(this), calculatedAmount
+        );
         IERC20(sellToken).approve(address(transmuter), calculatedAmount);
         transmuter.swapExactOutput(
-            amountOut,
-            type(uint256).max,
-            sellToken,
-            buyToken,
-            msg.sender,
-            0
+            amountOut, type(uint256).max, sellToken, buyToken, msg.sender, 0
         );
     }
 }

@@ -150,10 +150,7 @@ contract EtherfiAdapter is ISwapAdapter {
 
         /// @dev Limits are underestimated to 90% of totalSupply as both weEth
         /// and eEth have no limits but revert in some cases
-        if (
-            sellToken == address(weEth)
-                || buyToken == address(weEth)
-        ) {
+        if (sellToken == address(weEth) || buyToken == address(weEth)) {
             limits[0] = IERC20(address(weEth)).totalSupply() * 90 / 100;
         } else {
             limits[0] = IERC20(address(eEth)).totalSupply() * 90 / 100;
