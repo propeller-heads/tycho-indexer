@@ -12,8 +12,8 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
 
     IntegralSwapAdapter adapter;
     ITwapRelayer relayer;
-    IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant USDC_WETH_PAIR = 0x2fe16Dd18bba26e457B7dD2080d5674312b026a2;
     address constant relayerAddress = 0xd17b3c9784510E33cD5B87b490E79253BcD81e2E;
 
@@ -26,7 +26,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         relayer = ITwapRelayer(relayerAddress);
 
         vm.label(address(WETH), "WETH");
-        vm.label(address(USDC), "USDC");
+        vm.label(USDC, "USDC");
         vm.label(address(USDC_WETH_PAIR), "USDC_WETH_PAIR");
     }
 
@@ -66,8 +66,8 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             limitsMin = getMinLimits(USDC, WETH);
             vm.assume(specifiedAmount > limitsMin[1] * 115 / 100);
 
-            deal(address(USDC), address(this), type(uint256).max);
-            USDC.approve(address(adapter), type(uint256).max);
+            deal(USDC, address(this), type(uint256).max);
+            IERC20(USDC).approve(address(adapter), type(uint256).max);
         } else {
             limits = adapter.getLimits(pair, USDC, WETH);
             vm.assume(specifiedAmount < limits[0]);
@@ -75,12 +75,12 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             limitsMin = getMinLimits(USDC, WETH);
             vm.assume(specifiedAmount > limitsMin[0] * 115 / 100);
 
-            deal(address(USDC), address(this), type(uint256).max);
-            USDC.approve(address(adapter), specifiedAmount);
+            deal(USDC, address(this), type(uint256).max);
+            IERC20(USDC).approve(address(adapter), specifiedAmount);
         }
 
-        uint256 usdc_balance_before = USDC.balanceOf(address(this));
-        uint256 weth_balance_before = WETH.balanceOf(address(this));
+        uint256 usdc_balance_before = IERC20(USDC).balanceOf(address(this));
+        uint256 weth_balance_before = IERC20(WETH).balanceOf(address(this));
 
         Trade memory trade =
             adapter.swap(pair, USDC, WETH, side, specifiedAmount);
@@ -89,22 +89,22 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             if (side == OrderSide.Buy) {
                 assertEq(
                     specifiedAmount,
-                    WETH.balanceOf(address(this)) - weth_balance_before
+                    IERC20(WETH).balanceOf(address(this)) - weth_balance_before
                 );
 
                 assertEq(
                     trade.calculatedAmount,
-                    usdc_balance_before - USDC.balanceOf(address(this))
+                    usdc_balance_before - IERC20(USDC).balanceOf(address(this))
                 );
             } else {
                 assertEq(
                     specifiedAmount,
-                    usdc_balance_before - USDC.balanceOf(address(this))
+                    usdc_balance_before - IERC20(USDC).balanceOf(address(this))
                 );
 
                 assertEq(
                     trade.calculatedAmount,
-                    WETH.balanceOf(address(this)) - weth_balance_before
+                    IERC20(WETH).balanceOf(address(this)) - weth_balance_before
                 );
             }
         }
@@ -135,8 +135,8 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         for (uint256 i = 1; i < TEST_ITERATIONS; i++) {
             beforeSwap = vm.snapshot();
 
-            deal(address(USDC), address(this), amounts[i]);
-            USDC.approve(address(adapter), amounts[i]);
+            deal(USDC, address(this), amounts[i]);
+            IERC20(USDC).approve(address(adapter), amounts[i]);
 
             trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
             vm.revertTo(beforeSwap);
@@ -152,15 +152,14 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
     function testGetCapabilitiesIntegral(bytes32 pair, address t0, address t1)
         public
     {
-        Capability[] memory res =
-            adapter.getCapabilities(pair, IERC20(t0), IERC20(t1));
+        Capability[] memory res = adapter.getCapabilities(pair, t0, t1);
 
         assertEq(res.length, 4);
     }
 
     function testGetTokensIntegral() public {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
-        IERC20[] memory tokens = adapter.getTokens(pair);
+        address[] memory tokens = adapter.getTokens(pair);
 
         assertEq(tokens.length, 2);
     }
@@ -172,7 +171,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         assertEq(limits.length, 2);
     }
 
-    function getMinLimits(IERC20 sellToken, IERC20 buyToken)
+    function getMinLimits(address sellToken, address buyToken)
         public
         view
         returns (uint256[] memory limits)

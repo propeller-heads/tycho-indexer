@@ -11,8 +11,8 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     using FractionMath for Fraction;
 
     UniswapV2SwapAdapter adapter;
-    IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant USDC_WETH_PAIR = 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
 
     uint256 constant TEST_ITERATIONS = 100;
@@ -24,9 +24,9 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
             new UniswapV2SwapAdapter(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
 
         vm.label(address(adapter), "UniswapV2SwapAdapter");
-        vm.label(address(WETH), "WETH");
-        vm.label(address(USDC), "USDC");
-        vm.label(address(USDC_WETH_PAIR), "USDC_WETH_PAIR");
+        vm.label(WETH, "WETH");
+        vm.label(USDC, "USDC");
+        vm.label(USDC_WETH_PAIR, "USDC_WETH_PAIR");
     }
 
     function testPriceFuzz(uint256 amount0, uint256 amount1) public {
@@ -75,17 +75,17 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
 
             // TODO calculate the amountIn by using price function as in
             // BalancerV2 testPriceDecreasing
-            deal(address(USDC), address(this), type(uint256).max);
-            USDC.approve(address(adapter), type(uint256).max);
+            deal(USDC, address(this), type(uint256).max);
+            IERC20(USDC).approve(address(adapter), type(uint256).max);
         } else {
             vm.assume(specifiedAmount < limits[0]);
 
-            deal(address(USDC), address(this), specifiedAmount);
-            USDC.approve(address(adapter), specifiedAmount);
+            deal(USDC, address(this), specifiedAmount);
+            IERC20(USDC).approve(address(adapter), specifiedAmount);
         }
 
-        uint256 usdc_balance = USDC.balanceOf(address(this));
-        uint256 weth_balance = WETH.balanceOf(address(this));
+        uint256 usdc_balance = IERC20(USDC).balanceOf(address(this));
+        uint256 weth_balance = IERC20(WETH).balanceOf(address(this));
 
         Trade memory trade =
             adapter.swap(pair, USDC, WETH, side, specifiedAmount);
@@ -94,20 +94,20 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
             if (side == OrderSide.Buy) {
                 assertEq(
                     specifiedAmount,
-                    WETH.balanceOf(address(this)) - weth_balance
+                    IERC20(WETH).balanceOf(address(this)) - weth_balance
                 );
                 assertEq(
                     trade.calculatedAmount,
-                    usdc_balance - USDC.balanceOf(address(this))
+                    usdc_balance - IERC20(USDC).balanceOf(address(this))
                 );
             } else {
                 assertEq(
                     specifiedAmount,
-                    usdc_balance - USDC.balanceOf(address(this))
+                    usdc_balance - IERC20(USDC).balanceOf(address(this))
                 );
                 assertEq(
                     trade.calculatedAmount,
-                    WETH.balanceOf(address(this)) - weth_balance
+                    IERC20(WETH).balanceOf(address(this)) - weth_balance
                 );
             }
         }
@@ -130,8 +130,8 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         for (uint256 i = 0; i < TEST_ITERATIONS; i++) {
             beforeSwap = vm.snapshot();
 
-            deal(address(USDC), address(this), amounts[i]);
-            USDC.approve(address(adapter), amounts[i]);
+            deal(USDC, address(this), amounts[i]);
+            IERC20(USDC).approve(address(adapter), amounts[i]);
 
             trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
             vm.revertTo(beforeSwap);
@@ -149,8 +149,7 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
     }
 
     function testGetCapabilities(bytes32 pair, address t0, address t1) public {
-        Capability[] memory res =
-            adapter.getCapabilities(pair, IERC20(t0), IERC20(t1));
+        Capability[] memory res = adapter.getCapabilities(pair, t0, t1);
 
         assertEq(res.length, 3);
     }

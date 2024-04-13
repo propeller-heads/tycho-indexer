@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {
+    IERC20,
+    SafeERC20
+} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // Maximum Swap In/Out Ratio - 0.3
 // https://balancer.gitbook.io/balancer/core-concepts/protocol/limitations#v2-limits
@@ -9,6 +13,8 @@ uint256 constant RESERVE_LIMIT_FACTOR = 4;
 uint256 constant SWAP_DEADLINE_SEC = 1000;
 
 contract BalancerV2SwapAdapter is ISwapAdapter {
+    using SafeERC20 for IERC20;
+
     IVault immutable vault;
 
     constructor(address payable vault_) {
@@ -27,8 +33,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
     /// as a Fraction struct.
     function priceSingle(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         uint256 sellAmount
     ) public returns (Fraction memory calculatedPrice) {
         IVault.BatchSwapStep[] memory swapSteps = new IVault.BatchSwapStep[](1);
@@ -40,8 +46,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             userData: ""
         });
         address[] memory assets = new address[](2);
-        assets[0] = address(sellToken);
-        assets[1] = address(buyToken);
+        assets[0] = sellToken;
+        assets[1] = buyToken;
         IVault.FundManagement memory funds = IVault.FundManagement({
             sender: msg.sender,
             fromInternalBalance: false,
@@ -63,8 +69,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
 
     function getSellAmount(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         uint256 buyAmount
     ) public returns (uint256 sellAmount) {
         IVault.BatchSwapStep[] memory swapSteps = new IVault.BatchSwapStep[](1);
@@ -76,8 +82,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             userData: ""
         });
         address[] memory assets = new address[](2);
-        assets[0] = address(sellToken);
-        assets[1] = address(buyToken);
+        assets[0] = sellToken;
+        assets[1] = buyToken;
         IVault.FundManagement memory funds = IVault.FundManagement({
             sender: msg.sender,
             fromInternalBalance: false,
@@ -96,8 +102,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
 
     function priceBatch(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         uint256[] memory specifiedAmounts
     ) external returns (Fraction[] memory calculatedPrices) {
         for (uint256 i = 0; i < specifiedAmounts.length; i++) {
@@ -106,7 +112,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         }
     }
 
-    function price(bytes32, IERC20, IERC20, uint256[] memory)
+    function price(bytes32, address, address, uint256[] memory)
         external
         pure
         override
@@ -117,8 +123,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
 
     function swap(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         OrderSide side,
         uint256 specifiedAmount
     ) external override returns (Trade memory trade) {
@@ -136,16 +142,18 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             limit = type(uint256).max;
         }
 
-        sellToken.transferFrom(msg.sender, address(this), sellAmount);
-        sellToken.approve(address(vault), sellAmount);
+        IERC20(sellToken).safeTransferFrom(
+            msg.sender, address(this), sellAmount
+        );
+        IERC20(sellToken).safeIncreaseAllowance(address(vault), sellAmount);
 
         uint256 gasBefore = gasleft();
         trade.calculatedAmount = vault.swap(
             IVault.SingleSwap({
                 poolId: poolId,
                 kind: kind,
-                assetIn: address(sellToken),
-                assetOut: address(buyToken),
+                assetIn: sellToken,
+                assetOut: buyToken,
                 amount: specifiedAmount,
                 userData: ""
             }),
@@ -162,14 +170,14 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         trade.price = priceSingle(poolId, sellToken, buyToken, specifiedAmount);
     }
 
-    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32 poolId, address sellToken, address buyToken)
         external
         view
         override
         returns (uint256[] memory limits)
     {
         limits = new uint256[](2);
-        (IERC20[] memory tokens, uint256[] memory balances,) =
+        (address[] memory tokens, uint256[] memory balances,) =
             vault.getPoolTokens(poolId);
 
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -182,7 +190,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         }
     }
 
-    function getCapabilities(bytes32, IERC20, IERC20)
+    function getCapabilities(bytes32, address, address)
         external
         pure
         override
@@ -197,7 +205,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         external
         view
         override
-        returns (IERC20[] memory tokens)
+        returns (address[] memory tokens)
     {
         (tokens,,) = vault.getPoolTokens(poolId);
     }
@@ -472,7 +480,7 @@ interface IVault {
         external
         view
         returns (
-            IERC20[] memory tokens,
+            address[] memory tokens,
             uint256[] memory balances,
             uint256 lastChangeBlock
         );

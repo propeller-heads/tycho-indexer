@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 
 /// @title ISwapAdapter
@@ -35,8 +34,8 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// provided amounts.
     function price(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         uint256[] memory specifiedAmounts
     ) external view returns (Fraction[] memory prices);
 
@@ -59,8 +58,8 @@ interface ISwapAdapter is ISwapAdapterTypes {
      */
     function swap(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         OrderSide side,
         uint256 specifiedAmount
     ) external returns (Trade memory trade);
@@ -76,25 +75,27 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
     /// @return limits An array of limits.
-    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32 poolId, address sellToken, address buyToken)
         external
         returns (uint256[] memory limits);
 
     /// @notice Retrieves the capabilities of the selected pool.
     /// @param poolId The ID of the trading pool.
     /// @return capabilities An array of Capability.
-    function getCapabilities(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
-        external
-        returns (Capability[] memory capabilities);
+    function getCapabilities(
+        bytes32 poolId,
+        address sellToken,
+        address buyToken
+    ) external returns (Capability[] memory capabilities);
 
     /// @notice Retrieves the tokens in the selected pool.
     /// @dev Mainly used for testing as this is redundant with the required
     /// substreams implementation.
     /// @param poolId The ID of the trading pool.
-    /// @return tokens An array of IERC20 contracts.
+    /// @return tokens An array of address contracts.
     function getTokens(bytes32 poolId)
         external
-        returns (IERC20[] memory tokens);
+        returns (address[] memory tokens);
 
     /// @notice Retrieves a range of pool IDs.
     /// @dev Mainly used for testing. It is alright to not return all available

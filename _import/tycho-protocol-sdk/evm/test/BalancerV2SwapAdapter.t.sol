@@ -17,8 +17,8 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
         IVault(payable(0xBA12222222228d8Ba445958a75a0704d566BF2C8));
     BalancerV2SwapAdapter adapter;
 
-    IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 constant BAL = IERC20(0xba100000625a3754423978a60c9317c58a424e3D);
+    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant BAL = 0xba100000625a3754423978a60c9317c58a424e3D;
     address constant B_80BAL_20WETH = 0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56;
     bytes32 constant B_80BAL_20WETH_POOL_ID =
         0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
@@ -34,7 +34,7 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
         vm.label(address(balancerV2Vault), "IVault");
         vm.label(address(adapter), "BalancerV2SwapAdapter");
         vm.label(address(WETH), "WETH");
-        vm.label(address(BAL), "BAL");
+        vm.label(BAL, "BAL");
         vm.label(address(B_80BAL_20WETH), "B_80BAL_20WETH");
     }
 
@@ -97,17 +97,17 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
 
             // TODO calculate the amountIn by using price function as in
             // testPriceDecreasing
-            deal(address(BAL), address(this), type(uint256).max);
-            BAL.approve(address(adapter), type(uint256).max);
+            deal(BAL, address(this), type(uint256).max);
+            IERC20(BAL).approve(address(adapter), type(uint256).max);
         } else {
             vm.assume(specifiedAmount < limits[0]);
 
-            deal(address(BAL), address(this), specifiedAmount);
-            BAL.approve(address(adapter), specifiedAmount);
+            deal(BAL, address(this), specifiedAmount);
+            IERC20(BAL).approve(address(adapter), specifiedAmount);
         }
 
-        uint256 bal_balance = BAL.balanceOf(address(this));
-        uint256 weth_balance = WETH.balanceOf(address(this));
+        uint256 bal_balance = IERC20(BAL).balanceOf(address(this));
+        uint256 weth_balance = IERC20(WETH).balanceOf(address(this));
 
         Trade memory trade = adapter.swap(
             B_80BAL_20WETH_POOL_ID, BAL, WETH, side, specifiedAmount
@@ -117,19 +117,20 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
             if (side == OrderSide.Buy) {
                 assertEq(
                     specifiedAmount,
-                    WETH.balanceOf(address(this)) - weth_balance
+                    IERC20(WETH).balanceOf(address(this)) - weth_balance
                 );
                 assertEq(
                     trade.calculatedAmount,
-                    bal_balance - BAL.balanceOf(address(this))
+                    bal_balance - IERC20(BAL).balanceOf(address(this))
                 );
             } else {
                 assertEq(
-                    specifiedAmount, bal_balance - BAL.balanceOf(address(this))
+                    specifiedAmount,
+                    bal_balance - IERC20(BAL).balanceOf(address(this))
                 );
                 assertEq(
                     trade.calculatedAmount,
-                    WETH.balanceOf(address(this)) - weth_balance
+                    IERC20(WETH).balanceOf(address(this)) - weth_balance
                 );
             }
         }
@@ -144,8 +145,8 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
 
             uint256 beforeSwap = vm.snapshot();
 
-            deal(address(BAL), address(this), amounts[i]);
-            BAL.approve(address(adapter), amounts[i]);
+            deal(BAL, address(this), amounts[i]);
+            IERC20(BAL).approve(address(adapter), amounts[i]);
             trades[i] = adapter.swap(
                 B_80BAL_20WETH_POOL_ID, BAL, WETH, OrderSide.Sell, amounts[i]
             );
@@ -175,8 +176,8 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
             uint256 amountIn =
                 (amounts[i] * price.denominator / price.numerator) * 2;
 
-            deal(address(BAL), address(this), amountIn);
-            BAL.approve(address(adapter), amountIn);
+            deal(BAL, address(this), amountIn);
+            IERC20(BAL).approve(address(adapter), amountIn);
             trades[i] = adapter.swap(
                 B_80BAL_20WETH_POOL_ID, BAL, WETH, OrderSide.Buy, amounts[i]
             );
@@ -203,8 +204,7 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
     function testGetCapabilitiesFuzz(bytes32 pool, address t0, address t1)
         public
     {
-        Capability[] memory res =
-            adapter.getCapabilities(pool, IERC20(t0), IERC20(t1));
+        Capability[] memory res = adapter.getCapabilities(pool, t0, t1);
 
         assertEq(res.length, 2);
         assertEq(uint256(res[0]), uint256(Capability.SellOrder));
@@ -212,10 +212,10 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
     }
 
     function testGetTokens() public {
-        IERC20[] memory tokens = adapter.getTokens(B_80BAL_20WETH_POOL_ID);
+        address[] memory tokens = adapter.getTokens(B_80BAL_20WETH_POOL_ID);
 
-        assertEq(address(tokens[0]), address(BAL));
-        assertEq(address(tokens[1]), address(WETH));
+        assertEq(tokens[0], BAL);
+        assertEq(tokens[1], address(WETH));
     }
 
     function testGetPoolIds() public {

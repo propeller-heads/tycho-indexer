@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {
+    IERC20,
+    SafeERC20
+} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // Uniswap handles arbirary amounts, but we limit the amount to 10x just in case
 uint256 constant RESERVE_LIMIT_FACTOR = 10;
 
 contract UniswapV2SwapAdapter is ISwapAdapter {
+    using SafeERC20 for IERC20;
+
     IUniswapV2Factory immutable factory;
 
     constructor(address factory_) {
@@ -16,8 +22,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function price(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         uint256[] memory specifiedAmounts
     ) external view override returns (Fraction[] memory prices) {
         prices = new Fraction[](specifiedAmounts.length);
@@ -60,8 +66,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function swap(
         bytes32 poolId,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         OrderSide side,
         uint256 specifiedAmount
     ) external override returns (Trade memory trade) {
@@ -104,7 +110,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     /// @return calculatedAmount The amount of tokens received.
     function sell(
         IUniswapV2Pair pair,
-        IERC20 sellToken,
+        address sellToken,
         bool zero2one,
         uint112 reserveIn,
         uint112 reserveOut,
@@ -113,8 +119,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         address swapper = msg.sender;
         uint256 amountOut = getAmountOut(amount, reserveIn, reserveOut);
 
-        // TODO: use safeTransferFrom
-        sellToken.transferFrom(swapper, address(pair), amount);
+        IERC20(sellToken).safeTransferFrom(swapper, address(pair), amount);
         if (zero2one) {
             pair.swap(0, amountOut, swapper, "");
         } else {
@@ -156,7 +161,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     /// @return calculatedAmount The amount of tokens sold.
     function buy(
         IUniswapV2Pair pair,
-        IERC20 sellToken,
+        address sellToken,
         bool zero2one,
         uint112 reserveIn,
         uint112 reserveOut,
@@ -168,8 +173,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         if (amount == 0) {
             return 0;
         }
-        // TODO: use safeTransferFrom
-        sellToken.transferFrom(swapper, address(pair), amount);
+
+        IERC20(sellToken).safeTransferFrom(swapper, address(pair), amount);
         if (zero2one) {
             pair.swap(0, amountOut, swapper, "");
         } else {
@@ -203,7 +208,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
-    function getLimits(bytes32 poolId, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32 poolId, address sellToken, address buyToken)
         external
         view
         override
@@ -222,7 +227,7 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
-    function getCapabilities(bytes32, IERC20, IERC20)
+    function getCapabilities(bytes32, address, address)
         external
         pure
         override
@@ -239,12 +244,12 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         external
         view
         override
-        returns (IERC20[] memory tokens)
+        returns (address[] memory tokens)
     {
-        tokens = new IERC20[](2);
+        tokens = new address[](2);
         IUniswapV2Pair pair = IUniswapV2Pair(address(bytes20(poolId)));
-        tokens[0] = IERC20(pair.token0());
-        tokens[1] = IERC20(pair.token1());
+        tokens[0] = address(pair.token0());
+        tokens[1] = address(pair.token1());
     }
 
     /// @inheritdoc ISwapAdapter
