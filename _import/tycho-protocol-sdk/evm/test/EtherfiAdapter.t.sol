@@ -380,10 +380,6 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
 
         for (uint256 i = 1; i < TEST_ITERATIONS - 1; i++) {
             assertLe(trades[i].calculatedAmount, trades[i + 1].calculatedAmount);
-            console.log(
-                "Prices", trades[i].price.numerator, trades[i].price.denominator
-            );
-            console.log("Amounts", trades[i].calculatedAmount, amounts[i]);
             assertLe(trades[i].gasUsed, trades[i + 1].gasUsed);
         }
     }
