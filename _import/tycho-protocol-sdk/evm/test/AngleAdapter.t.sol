@@ -36,7 +36,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
 
         bytes32 pair = bytes32(0);
-        uint256[] memory limits = adapter.getLimits(pair, EURC, agEUR);
+        uint256[] memory limits = adapter.getLimits(pair, address(EURC), address(agEUR));
 
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1] && specifiedAmount > 0);
@@ -54,7 +54,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         uint256 agEUR_balance = agEUR.balanceOf(address(this));
 
         Trade memory trade =
-            adapter.swap(pair, EURC, agEUR, side, specifiedAmount);
+            adapter.swap(pair, address(EURC), address(agEUR), side, specifiedAmount);
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -85,7 +85,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
 
         bytes32 pair = bytes32(0);
-        uint256[] memory limits = adapter.getLimits(pair, agEUR, EURC);
+        uint256[] memory limits = adapter.getLimits(pair, address(agEUR), address(EURC));
 
         if (side == OrderSide.Buy) {
             vm.assume(specifiedAmount < limits[1] && specifiedAmount > 0);
@@ -103,7 +103,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         uint256 agEUR_balance = agEUR.balanceOf(address(this));
 
         Trade memory trade =
-            adapter.swap(pair, agEUR, EURC, side, specifiedAmount);
+            adapter.swap(pair, address(agEUR), address(EURC), side, specifiedAmount);
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -154,7 +154,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
                 deal(address(agEUR), address(this), type(uint256).max);
                 agEUR.approve(address(adapter), type(uint256).max);
             }
-            trades[i] = adapter.swap(pair, agEUR, EURC, side, amounts[i]);
+            trades[i] = adapter.swap(pair, address(agEUR), address(EURC), side, amounts[i]);
             vm.revertTo(beforeSwap);
         }
 
@@ -174,20 +174,20 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         public
     {
         Capability[] memory res =
-            adapter.getCapabilities(pair, IERC20(t0), IERC20(t1));
+            adapter.getCapabilities(pair, t0, t1);
 
         assertEq(res.length, 2);
     }
 
     function testGetTokensAngle() public {
-        IERC20[] memory tokens = adapter.getTokens(bytes32(0));
+        address[] memory tokens = adapter.getTokens(bytes32(0));
 
         assertGe(tokens.length, 2);
     }
 
     function testGetLimitsAngle() public {
         bytes32 pair = bytes32(0);
-        uint256[] memory limits = adapter.getLimits(pair, agEUR, EURC);
+        uint256[] memory limits = adapter.getLimits(pair, address(agEUR), address(EURC));
 
         assertEq(limits.length, 2);
     }

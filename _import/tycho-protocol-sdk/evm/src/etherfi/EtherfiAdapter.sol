@@ -2,7 +2,8 @@
 pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.13;
 
-import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from
     "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -54,39 +55,37 @@ contract EtherfiAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function price(
         bytes32,
-        IERC20 _sellToken,
-        IERC20 _buyToken,
-        uint256[] memory _specifiedAmounts
+        address sellToken,
+        address buyToken,
+        uint256[] memory specifiedAmounts
     )
         external
         view
         override
-        checkInputTokens(address(_sellToken), address(_buyToken))
-        returns (Fraction[] memory _prices)
+        checkInputTokens(sellToken, buyToken)
+        returns (Fraction[] memory prices)
     {
-        _prices = new Fraction[](_specifiedAmounts.length);
-        address sellTokenAddress = address(_sellToken);
-        address buyTokenAddress = address(_buyToken);
+        prices = new Fraction[](specifiedAmounts.length);
         uint256 totalPooledEther = liquidityPool.getTotalPooledEther();
         uint256 eEthTotalShares = eEth.totalShares();
 
-        for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            if (sellTokenAddress == address(0)) {
+        for (uint256 i = 0; i < specifiedAmounts.length; i++) {
+            if (sellToken == address(0)) {
                 uint256 sharesForDepositAmount = _sharesForDepositAmount(
-                    _specifiedAmounts[i], totalPooledEther, eEthTotalShares
+                    specifiedAmounts[i], totalPooledEther, eEthTotalShares
                 );
-                _prices[i] = getPriceAt(
-                    sellTokenAddress,
-                    buyTokenAddress,
-                    _specifiedAmounts[i],
-                    totalPooledEther + _specifiedAmounts[i],
+                prices[i] = getPriceAt(
+                    sellToken,
+                    buyToken,
+                    specifiedAmounts[i],
+                    totalPooledEther + specifiedAmounts[i],
                     eEthTotalShares + sharesForDepositAmount
                 );
             } else {
-                _prices[i] = getPriceAt(
-                    sellTokenAddress,
-                    buyTokenAddress,
-                    _specifiedAmounts[i],
+                prices[i] = getPriceAt(
+                    sellToken,
+                    buyToken,
+                    specifiedAmounts[i],
                     totalPooledEther,
                     eEthTotalShares
                 );
@@ -97,31 +96,28 @@ contract EtherfiAdapter is ISwapAdapter {
     /// @inheritdoc ISwapAdapter
     function swap(
         bytes32,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         OrderSide side,
         uint256 specifiedAmount
     )
         external
         override
-        checkInputTokens(address(sellToken), address(buyToken))
+        checkInputTokens(sellToken, buyToken)
         returns (Trade memory trade)
     {
         if (specifiedAmount == 0) {
             return trade;
         }
-
-        address sellTokenAddress = address(sellToken);
-        address buyTokenAddress = address(buyToken);
         uint256 gasBefore = gasleft();
-        if (sellTokenAddress == address(0)) {
-            if (buyTokenAddress == address(eEth)) {
+        if (sellToken == address(0)) {
+            if (buyToken == address(eEth)) {
                 trade.calculatedAmount = swapEthForEeth(specifiedAmount, side);
             } else {
                 trade.calculatedAmount = swapEthForWeEth(specifiedAmount, side);
             }
         } else {
-            if (sellTokenAddress == address(eEth)) {
+            if (sellToken == address(eEth)) {
                 trade.calculatedAmount = swapEethForWeEth(specifiedAmount, side);
             } else {
                 trade.calculatedAmount = swapWeEthForEeth(specifiedAmount, side);
@@ -134,8 +130,8 @@ contract EtherfiAdapter is ISwapAdapter {
         /// amount(PRECISE_UNIT) to render a well-formatted price without
         /// precisions loss
         trade.price = getPriceAt(
-            sellTokenAddress,
-            buyTokenAddress,
+            sellToken,
+            buyToken,
             PRECISE_UNIT,
             liquidityPool.getTotalPooledEther(),
             eEth.totalShares()
@@ -143,11 +139,11 @@ contract EtherfiAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
-    function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32, address sellToken, address buyToken)
         external
         view
         override
-        checkInputTokens(address(sellToken), address(buyToken))
+        checkInputTokens(sellToken, buyToken)
         returns (uint256[] memory limits)
     {
         limits = new uint256[](2);
@@ -155,8 +151,8 @@ contract EtherfiAdapter is ISwapAdapter {
         /// @dev Limits are underestimated to 90% of totalSupply as both weEth
         /// and eEth have no limits but revert in some cases
         if (
-            address(sellToken) == address(weEth)
-                || address(buyToken) == address(weEth)
+            sellToken == address(weEth)
+                || buyToken == address(weEth)
         ) {
             limits[0] = IERC20(address(weEth)).totalSupply() * 90 / 100;
         } else {
@@ -166,7 +162,7 @@ contract EtherfiAdapter is ISwapAdapter {
     }
 
     /// @inheritdoc ISwapAdapter
-    function getCapabilities(bytes32, IERC20, IERC20)
+    function getCapabilities(bytes32, address, address)
         external
         pure
         override
@@ -183,12 +179,12 @@ contract EtherfiAdapter is ISwapAdapter {
         external
         view
         override
-        returns (IERC20[] memory tokens)
+        returns (address[] memory tokens)
     {
-        tokens = new IERC20[](3);
-        tokens[0] = IERC20(address(0));
-        tokens[1] = IERC20(address(eEth));
-        tokens[2] = IERC20(address(weEth));
+        tokens = new address[](3);
+        tokens[0] = address(0);
+        tokens[1] = address(eEth);
+        tokens[2] = address(weEth);
     }
 
     /// @inheritdoc ISwapAdapter
@@ -217,7 +213,7 @@ contract EtherfiAdapter is ISwapAdapter {
             uint256 receivedAmount = liquidityPool.deposit{value: amount}();
             uint256 balBeforeUser =
                 IERC20(address(eEth)).balanceOf(address(msg.sender));
-            IERC20(address(eEth)).transfer(msg.sender, receivedAmount);
+            IERC20(address(eEth)).safeTransfer(msg.sender, receivedAmount);
             return IERC20(address(eEth)).balanceOf(address(msg.sender))
                 - balBeforeUser;
         }
@@ -317,7 +313,7 @@ contract EtherfiAdapter is ISwapAdapter {
             uint256 receivedAmount = weEth.unwrap(amount);
             uint256 balBeforeUser =
                 IERC20(address(eEth)).balanceOf(address(msg.sender));
-            IERC20(address(eEth)).transfer(msg.sender, receivedAmount);
+            IERC20(address(eEth)).safeTransfer(msg.sender, receivedAmount);
             return IERC20(address(eEth)).balanceOf(address(msg.sender))
                 - balBeforeUser;
         }

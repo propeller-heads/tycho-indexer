@@ -2,9 +2,12 @@
 pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.13;
 
-import {IERC20, ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from
     "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from
+    "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @dev custom reserve limit factor to prevent revert errors in OrderSide.Buy
 uint256 constant RESERVE_LIMIT_FACTOR = 10;
@@ -16,6 +19,8 @@ uint256 constant STANDARD_TOKEN_DECIMALS = 10 ** 18;
 /// collateral, it will, because agEUR is minted, and this mechanism is used to
 /// stabilize the agEUR price.
 contract AngleAdapter is ISwapAdapter {
+    using SafeERC20 for IERC20;
+
     ITransmuter immutable transmuter;
 
     constructor(ITransmuter _transmuter) {
@@ -30,7 +35,7 @@ contract AngleAdapter is ISwapAdapter {
      * architecture of Angle, it's not possible to calculate the storage
      * modifications of Angle inside the adapter.
      */
-    function price(bytes32, IERC20, IERC20, uint256[] memory)
+    function price(bytes32, address, address, uint256[] memory)
         external
         pure
         override
@@ -48,8 +53,8 @@ contract AngleAdapter is ISwapAdapter {
      */
     function swap(
         bytes32,
-        IERC20 sellToken,
-        IERC20 buyToken,
+        address sellToken,
+        address buyToken,
         OrderSide side,
         uint256 specifiedAmount
     ) external returns (Trade memory trade) {
@@ -65,10 +70,10 @@ contract AngleAdapter is ISwapAdapter {
         }
         trade.gasUsed = gasBefore - gasleft();
         uint8 decimals = side == OrderSide.Sell
-            ? IERC20Metadata(address(sellToken)).decimals()
-            : IERC20Metadata(address(buyToken)).decimals();
+            ? IERC20Metadata(sellToken).decimals()
+            : IERC20Metadata(buyToken).decimals();
         trade.price =
-            getPriceAt(address(sellToken), address(buyToken), side, decimals);
+            getPriceAt(sellToken, buyToken, side, decimals);
     }
 
     /// @inheritdoc ISwapAdapter
@@ -79,50 +84,48 @@ contract AngleAdapter is ISwapAdapter {
     /// contract size, with an high complexity. In addition, we underestimate to
     /// RESERVE_LIMIT_FACTOR to ensure swaps with OrderSide.Buy won't fail
     /// anyway.
-    function getLimits(bytes32, IERC20 sellToken, IERC20 buyToken)
+    function getLimits(bytes32, address sellToken, address buyToken)
         external
         view
         override
         returns (uint256[] memory limits)
     {
         limits = new uint256[](2);
-        address sellTokenAddress = address(sellToken);
-        address buyTokenAddress = address(buyToken);
         address transmuterAddress = address(transmuter);
 
-        if (buyTokenAddress == transmuter.agToken()) {
+        if (buyToken == transmuter.agToken()) {
             // mint(buy agToken)
             Collateral memory collatInfo =
-                transmuter.getCollateralInfo(sellTokenAddress);
+                transmuter.getCollateralInfo(sellToken);
             if (collatInfo.isManaged > 0) {
                 limits[0] =
                     LibManager.maxAvailable(collatInfo.managerData.config);
             } else {
-                limits[0] = sellToken.balanceOf(transmuterAddress);
+                limits[0] = IERC20(sellToken).balanceOf(transmuterAddress);
             }
             limits[1] =
-                transmuter.quoteIn(limits[0], sellTokenAddress, buyTokenAddress);
+                transmuter.quoteIn(limits[0], sellToken, buyToken);
             limits[1] = limits[1] / RESERVE_LIMIT_FACTOR;
             limits[0] = limits[0] / RESERVE_LIMIT_FACTOR;
         } else {
             // burn(sell agToken)
             Collateral memory collatInfo =
-                transmuter.getCollateralInfo(buyTokenAddress);
+                transmuter.getCollateralInfo(buyToken);
             if (collatInfo.isManaged > 0) {
                 limits[1] =
                     LibManager.maxAvailable(collatInfo.managerData.config);
             } else {
-                limits[1] = buyToken.balanceOf(transmuterAddress);
+                limits[1] = IERC20(buyToken).balanceOf(transmuterAddress);
             }
             limits[0] =
-                transmuter.quoteIn(limits[1], buyTokenAddress, sellTokenAddress);
+                transmuter.quoteIn(limits[1], buyToken, sellToken);
             limits[1] = limits[1] / RESERVE_LIMIT_FACTOR;
             limits[0] = limits[0] / RESERVE_LIMIT_FACTOR;
         }
     }
 
     /// @inheritdoc ISwapAdapter
-    function getCapabilities(bytes32, IERC20, IERC20)
+    function getCapabilities(bytes32, address, address)
         external
         pure
         override
@@ -141,14 +144,14 @@ contract AngleAdapter is ISwapAdapter {
         external
         view
         override
-        returns (IERC20[] memory tokens)
+        returns (address[] memory tokens)
     {
         address[] memory collateralsAddresses = transmuter.getCollateralList();
-        tokens = new IERC20[](collateralsAddresses.length + 1);
+        tokens = new address[](collateralsAddresses.length + 1);
         for (uint256 i = 0; i < collateralsAddresses.length; i++) {
-            tokens[i] = IERC20(collateralsAddresses[i]);
+            tokens[i] = address(collateralsAddresses[i]);
         }
-        tokens[collateralsAddresses.length] = IERC20(transmuter.agToken());
+        tokens[collateralsAddresses.length] = transmuter.agToken();
     }
 
     function getPoolIds(uint256, uint256)
@@ -189,17 +192,14 @@ contract AngleAdapter is ISwapAdapter {
     /// @param buyToken The token being bought.
     /// @param amount The amount to be traded.
     /// @return calculatedAmount The amount of tokens received.
-    function sell(IERC20 sellToken, IERC20 buyToken, uint256 amount)
+    function sell(address sellToken, address buyToken, uint256 amount)
         internal
         returns (uint256 calculatedAmount)
     {
-        address sellTokenAddress = address(sellToken);
-        address buyTokenAddress = address(buyToken);
-
-        sellToken.transferFrom(msg.sender, address(this), amount);
-        sellToken.approve(address(transmuter), amount);
+        IERC20(sellToken).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(sellToken).approve(address(transmuter), amount);
         calculatedAmount = transmuter.swapExactInput(
-            amount, 0, sellTokenAddress, buyTokenAddress, msg.sender, 0
+            amount, 0, sellToken, buyToken, msg.sender, 0
         );
     }
 
@@ -208,22 +208,20 @@ contract AngleAdapter is ISwapAdapter {
     /// @param buyToken The token being bought.
     /// @param amountOut The amount of buyToken to receive.
     /// @return calculatedAmount The amount of tokens received.
-    function buy(IERC20 sellToken, IERC20 buyToken, uint256 amountOut)
+    function buy(address sellToken, address buyToken, uint256 amountOut)
         internal
         returns (uint256 calculatedAmount)
     {
-        address sellTokenAddress = address(sellToken);
-        address buyTokenAddress = address(buyToken);
         calculatedAmount =
-            transmuter.quoteOut(amountOut, sellTokenAddress, buyTokenAddress);
+            transmuter.quoteOut(amountOut, sellToken, buyToken);
 
-        sellToken.transferFrom(msg.sender, address(this), calculatedAmount);
-        sellToken.approve(address(transmuter), calculatedAmount);
+        IERC20(sellToken).safeTransferFrom(msg.sender, address(this), calculatedAmount);
+        IERC20(sellToken).approve(address(transmuter), calculatedAmount);
         transmuter.swapExactOutput(
             amountOut,
             type(uint256).max,
-            sellTokenAddress,
-            buyTokenAddress,
+            sellToken,
+            buyToken,
             msg.sender,
             0
         );
