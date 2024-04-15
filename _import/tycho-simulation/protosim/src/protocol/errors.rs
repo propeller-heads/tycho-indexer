@@ -1,4 +1,6 @@
 //! Protocol generic errors
+use thiserror::Error;
+
 use super::models::GetAmountOutResult;
 
 /// Enumeration of possible errors that can occur during a trade simulation.
@@ -39,8 +41,10 @@ pub enum TransitionError<T> {
     DecodeError(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub enum InvalidSnapshotError {
+    #[error("Missing attributes {0}")]
     MissingAttribute(String),
+    #[error("Value error {0}")]
     ValueError(String),
 }

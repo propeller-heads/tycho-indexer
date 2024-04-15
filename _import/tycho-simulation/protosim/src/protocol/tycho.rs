@@ -1,5 +1,6 @@
-use ethers::types::U256;
-use tycho_client::feed::synchronizer::NativeSnapshot;
+use ethers::types::{H256, U256};
+use tycho_client::feed::synchronizer::ComponentWithState;
+use tycho_core::Bytes;
 
 use crate::protocol::{
     errors::InvalidSnapshotError,
@@ -9,12 +10,12 @@ use crate::protocol::{
 
 use super::uniswap_v3::tick_list::TickInfo;
 
-impl TryFrom<NativeSnapshot> for UniswapV2State {
+impl TryFrom<ComponentWithState> for UniswapV2State {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `NativeSnapshot` into a `UniswapV2State`. Errors with a `InvalidSnapshotError`
+    /// Decodes a `ComponentWithState` into a `UniswapV2State`. Errors with a `InvalidSnapshotError`
     /// if either reserve0 or reserve1 attributes are missing.
-    fn try_from(snapshot: NativeSnapshot) -> Result<Self, Self::Error> {
+    fn try_from(snapshot: ComponentWithState) -> Result<Self, Self::Error> {
         let reserve0 = U256::from(
             snapshot
                 .state
@@ -37,20 +38,36 @@ impl TryFrom<NativeSnapshot> for UniswapV2State {
     }
 }
 
-impl TryFrom<NativeSnapshot> for UniswapV3State {
+impl TryFrom<ComponentWithState> for UniswapV3State {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `NativeSnapshot` into a `UniswapV3State`. Errors with a `InvalidSnapshotError`
+    /// Decodes a `ComponentWithState` into a `UniswapV3State`. Errors with a `InvalidSnapshotError`
     /// if the snapshot is missing any required attributes or if the fee amount is not supported.
-    fn try_from(snapshot: NativeSnapshot) -> Result<Self, Self::Error> {
-        let liquidity = u128::from(
-            snapshot
-                .state
-                .attributes
-                .get("liquidity")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
-                .clone(),
-        );
+    fn try_from(snapshot: ComponentWithState) -> Result<Self, Self::Error> {
+        let liq = snapshot
+            .state
+            .attributes
+            .get("liquidity")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
+            .clone();
+
+        // This is a hotfix because if the liquidity has never been updated after creation, it's currently encoded as H256::zero(), therefore, we can't decode this as u128.
+        // We can remove this this will be fixed on the tycho side.
+        let liq_16_bytes = if liq.len() == 32 {
+            // Make sure it only happens for 0 values, otherwise error.
+            if liq == Bytes::from(H256::zero()) {
+                Bytes::from([0; 16])
+            } else {
+                return Err(InvalidSnapshotError::ValueError(format!(
+                    "Liquidity bytes too long for {}, expected 16",
+                    liq
+                )));
+            }
+        } else {
+            liq.clone()
+        };
+
+        let liquidity = u128::from(liq_16_bytes);
 
         let sqrt_price = U256::from(
             snapshot
@@ -72,14 +89,29 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
         let fee = FeeAmount::try_from(fee_value)
             .map_err(|_| InvalidSnapshotError::ValueError("Unsupported fee amount".to_string()))?;
 
-        let tick = i32::from(
-            snapshot
-                .state
-                .attributes
-                .get("tick")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
-                .clone(),
-        );
+        let tick = snapshot
+            .component
+            .static_attributes
+            .get("fee")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
+            .clone();
+
+        // This is a hotfix because if the tick has never been updated after creation, it's currently encoded as H256::zero(), therefore, we can't decode this as i32.
+        // We can remove this this will be fixed on the tycho side.
+        let ticks_4_bytes = if tick.len() == 32 {
+            // Make sure it only happens for 0 values, otherwise error.
+            if tick == Bytes::from(H256::zero()) {
+                Bytes::from([0; 4])
+            } else {
+                return Err(InvalidSnapshotError::ValueError(format!(
+                    "Tick bytes too long for {}, expected 4",
+                    tick
+                )));
+            }
+        } else {
+            tick.clone()
+        };
+        let tick = i32::from(ticks_4_bytes);
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
@@ -102,7 +134,9 @@ impl TryFrom<NativeSnapshot> for UniswapV3State {
 
         let mut ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks,
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            _ => {
+                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);
@@ -153,7 +187,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        let snapshot = NativeSnapshot {
+        let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes,
@@ -176,7 +210,7 @@ mod tests {
             vec![("reserve0".to_string(), Bytes::from(100_u64.to_le_bytes().to_vec()))]
                 .into_iter()
                 .collect();
-        let snapshot = NativeSnapshot {
+        let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes,
@@ -228,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_usv3_try_from() {
-        let snapshot = NativeSnapshot {
+        let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes: usv3_attributes(),
@@ -276,7 +310,7 @@ mod tests {
                 .remove("fee");
         }
 
-        let snapshot = NativeSnapshot {
+        let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes,
@@ -302,7 +336,7 @@ mod tests {
             .static_attributes
             .insert("fee".to_string(), Bytes::from(4000_i32.to_le_bytes().to_vec()));
 
-        let snapshot = NativeSnapshot {
+        let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
                 attributes: usv3_attributes(),
