@@ -40,8 +40,8 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
 
     function testPrice() public {
         uint256[] memory amounts = new uint256[](2);
-        amounts[0] = amount0;
-        amounts[1] = amount1;
+        amounts[0] = 1e18;
+        amounts[1] = 2e18;
 
         Fraction[] memory prices = adapter.price(B_80BAL_20WETH_POOL_ID, BAL, WETH, amounts);
 

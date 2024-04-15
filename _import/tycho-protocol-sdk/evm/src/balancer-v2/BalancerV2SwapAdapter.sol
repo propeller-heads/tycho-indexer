@@ -106,6 +106,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         address buyToken,
         uint256[] memory specifiedAmounts
     ) external returns (Fraction[] memory calculatedPrices) {
+        calculatedPrices = new Fraction[](specifiedAmounts.length);
         for (uint256 i = 0; i < specifiedAmounts.length; i++) {
             calculatedPrices[i] =
                 priceSingle(poolId, sellToken, buyToken, specifiedAmounts[i]);
