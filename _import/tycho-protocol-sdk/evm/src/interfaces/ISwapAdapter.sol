@@ -37,7 +37,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
         address sellToken,
         address buyToken,
         uint256[] memory specifiedAmounts
-    ) external view returns (Fraction[] memory prices);
+    ) external returns (Fraction[] memory prices);
 
     /**
      * @notice Simulates swapping tokens on a given pool.

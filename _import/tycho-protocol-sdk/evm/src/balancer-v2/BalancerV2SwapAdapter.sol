@@ -100,7 +100,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         sellAmount = uint256(assetDeltas[0]);
     }
 
-    function priceBatch(
+    function price(
         bytes32 poolId,
         address sellToken,
         address buyToken,
@@ -110,15 +110,6 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             calculatedPrices[i] =
                 priceSingle(poolId, sellToken, buyToken, specifiedAmounts[i]);
         }
-    }
-
-    function price(bytes32, address, address, uint256[] memory)
-        external
-        pure
-        override
-        returns (Fraction[] memory)
-    {
-        revert NotImplemented("BalancerV2SwapAdapter.price");
     }
 
     function swap(
@@ -199,6 +190,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         capabilities = new Capability[](2);
         capabilities[0] = Capability.SellOrder;
         capabilities[1] = Capability.BuyOrder;
+        capabilities[2] = Capability.PriceFunction;
     }
 
     function getTokens(bytes32 poolId)
