@@ -43,7 +43,8 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
         amounts[0] = 1e18;
         amounts[1] = 2e18;
 
-        Fraction[] memory prices = adapter.price(B_80BAL_20WETH_POOL_ID, BAL, WETH, amounts);
+        Fraction[] memory prices =
+            adapter.price(B_80BAL_20WETH_POOL_ID, BAL, WETH, amounts);
 
         for (uint256 i = 0; i < prices.length; i++) {
             assertGt(prices[i].numerator, 0);
