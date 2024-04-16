@@ -1,6 +1,6 @@
-use ethers::types::{Sign, I256, U256};
+use ethers::types::{Sign, H256, I256, U256};
 
-use tycho_core::dto::ProtocolStateDelta;
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     models::ERC20Token,
@@ -310,7 +310,24 @@ impl ProtocolSim for UniswapV3State {
             .updated_attributes
             .get("liquidity")
         {
-            self.liquidity = u128::from(liquidity.clone());
+            // This is a hotfix because if the liquidity has never been updated after creation, it's
+            // currently encoded as H256::zero(), therefore, we can't decode this as u128.
+            // We can remove this once it has been fixed on the tycho side.
+            let liq_16_bytes = if liquidity.len() == 32 {
+                // Make sure it only happens for 0 values, otherwise error.
+                if liquidity == &Bytes::from(H256::zero()) {
+                    Bytes::from([0; 16])
+                } else {
+                    return Err(TransitionError::DecodeError(format!(
+                        "Liquidity bytes too long for {}, expected 16",
+                        liquidity
+                    )));
+                }
+            } else {
+                liquidity.clone()
+            };
+
+            self.liquidity = u128::from(liq_16_bytes);
         }
         if let Some(sqrt_price) = delta
             .updated_attributes
@@ -319,7 +336,23 @@ impl ProtocolSim for UniswapV3State {
             self.sqrt_price = U256::from(sqrt_price.clone());
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
-            self.tick = i32::from(tick.clone());
+            // This is a hotfix because if the tick has never been updated after creation, it's
+            // currently encoded as H256::zero(), therefore, we can't decode this as i32.
+            // We can remove this once it has been fixed on the tycho side.
+            let ticks_4_bytes = if tick.len() == 32 {
+                // Make sure it only happens for 0 values, otherwise error.
+                if tick == &Bytes::from(H256::zero()) {
+                    Bytes::from([0; 4])
+                } else {
+                    return Err(TransitionError::DecodeError(format!(
+                        "Tick bytes too long for {}, expected 4",
+                        tick
+                    )));
+                }
+            } else {
+                tick.clone()
+            };
+            self.tick = i32::from(ticks_4_bytes);
         }
 
         // apply tick changes
