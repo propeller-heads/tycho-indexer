@@ -40,14 +40,16 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
 
     function testPrice() public {
         uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 100;
-        amounts[1] = 200;
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                NotImplemented.selector, "BalancerV2SwapAdapter.price"
-            )
-        );
-        adapter.price(B_80BAL_20WETH_POOL_ID, BAL, WETH, amounts);
+        amounts[0] = 1e18;
+        amounts[1] = 2e18;
+
+        Fraction[] memory prices =
+            adapter.price(B_80BAL_20WETH_POOL_ID, BAL, WETH, amounts);
+
+        for (uint256 i = 0; i < prices.length; i++) {
+            assertGt(prices[i].numerator, 0);
+            assertGt(prices[i].denominator, 0);
+        }
     }
 
     function testPriceSingleFuzz() public {
@@ -206,9 +208,10 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
     {
         Capability[] memory res = adapter.getCapabilities(pool, t0, t1);
 
-        assertEq(res.length, 2);
+        assertEq(res.length, 3);
         assertEq(uint256(res[0]), uint256(Capability.SellOrder));
         assertEq(uint256(res[1]), uint256(Capability.BuyOrder));
+        assertEq(uint256(res[2]), uint256(Capability.PriceFunction));
     }
 
     function testGetTokens() public {
