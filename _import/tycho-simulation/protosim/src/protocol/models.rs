@@ -42,6 +42,12 @@ pub struct PairProperties {
     pub tokens: Vec<ERC20Token>,
 }
 
+impl PairProperties {
+    pub fn new(address: H160, tokens: Vec<ERC20Token>) -> Self {
+        PairProperties { address, tokens }
+    }
+}
+
 /// Pair struct represents a trading pair with its properties and state
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pair(pub PairProperties, pub ProtocolState);

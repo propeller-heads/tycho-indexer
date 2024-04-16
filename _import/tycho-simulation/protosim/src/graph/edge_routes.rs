@@ -73,7 +73,7 @@ where
                                 .cloned()
                                 .chain(Some(edge.id()))
                                 .collect::<TargetColl>();
-                            return Some(route)
+                            return Some(route);
                         }
                     } else if !visited_nodes.contains(&edge.target()) &&
                         !visited.contains(&edge.id())
@@ -94,7 +94,7 @@ where
                                     .cloned()
                                     .chain(Some(edge.id()))
                                     .collect::<TargetColl>();
-                                return Some(route)
+                                return Some(route);
                             }
                         }
                     }
