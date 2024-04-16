@@ -59,7 +59,7 @@ pub struct SimulationParameters {
 impl SimulationParameters {
     #[new]
     #[pyo3(
-        text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
+    text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -520,18 +520,19 @@ impl TychoDB {
 
     // Apply a list of account updates to TychoDB instance.
     #[pyo3(signature = (account_updates, block))]
-    pub fn update(self_: PyRefMut<Self>, account_updates: Vec<AccountUpdate>, block: BlockHeader) {
+    pub fn update(self_: PyRefMut<Self>, account_updates: Vec<AccountUpdate>, block: Option<BlockHeader>) {
         let account_updates: Vec<tycho_models::AccountUpdate> = account_updates
             .into_iter()
             .map(Into::into)
             .collect();
 
-        let block = protosim::evm_simulation::database::BlockHeader::from(block);
+        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
+
         let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
         runtime.block_on(async {
             self_
                 .inner
-                .update(account_updates, Some(block))
+                .update(account_updates, block)
                 .await;
         })
     }
