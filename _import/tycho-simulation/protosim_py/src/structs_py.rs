@@ -135,7 +135,7 @@ pub struct StateUpdate {
 #[pymethods]
 impl StateUpdate {
     #[new]
-    #[pyo3(signature = (storage=None, balance=None))]
+    #[pyo3(signature = (storage = None, balance = None))]
     fn new(storage: Option<HashMap<BigUint, BigUint>>, balance: Option<BigUint>) -> Self {
         Self { storage, balance }
     }
@@ -219,7 +219,7 @@ pub struct AccountUpdate {
 #[pymethods]
 impl AccountUpdate {
     #[new]
-    #[pyo3(signature = (address, chain, slots, change, balance=None, code=None))]
+    #[pyo3(signature = (address, chain, slots, change, balance = None, code = None))]
     fn new(
         address: String,
         chain: String,
@@ -351,7 +351,7 @@ pub struct AccountInfo {
 #[pymethods]
 impl AccountInfo {
     #[new]
-    #[pyo3(signature = (balance, nonce, code=None))]
+    #[pyo3(signature = (balance, nonce, code = None))]
     fn new(balance: BigUint, nonce: u64, code: Option<Vec<u8>>) -> Self {
         Self { balance, nonce, code }
     }
@@ -519,17 +519,24 @@ impl TychoDB {
     }
 
     // Apply a list of account updates to TychoDB instance.
-    #[pyo3(signature = (account_updates))]
-    pub fn update(self_: PyRefMut<Self>, account_updates: Vec<AccountUpdate>) {
+    #[pyo3(signature = (account_updates, block))]
+    pub fn update(
+        self_: PyRefMut<Self>,
+        account_updates: Vec<AccountUpdate>,
+        block: Option<BlockHeader>,
+    ) {
         let account_updates: Vec<tycho_models::AccountUpdate> = account_updates
             .into_iter()
             .map(Into::into)
             .collect();
+
+        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
+
         let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
         runtime.block_on(async {
             self_
                 .inner
-                .update(account_updates)
+                .update(account_updates, block)
                 .await;
         })
     }
