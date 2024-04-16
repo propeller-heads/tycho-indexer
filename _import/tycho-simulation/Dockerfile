@@ -19,7 +19,7 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim
 
-#RUN apt-get update && apt-get install -y libssl1.1 && apt clean && rm -rf /var/lib/apt/lists/*
+RUN apt update && apt install openssl
 
 COPY --from=build /build/target/release/prop-builder ./target/release/prop-builder
 ENTRYPOINT ["./target/release/prop-builder"]
