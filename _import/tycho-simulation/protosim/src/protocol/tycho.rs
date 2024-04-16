@@ -53,7 +53,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
 
         // This is a hotfix because if the liquidity has never been updated after creation, it's
         // currently encoded as H256::zero(), therefore, we can't decode this as u128.
-        // We can remove this this will be fixed on the tycho side.
+        // We can remove this once it has been fixed on the tycho side.
         let liq_16_bytes = if liq.len() == 32 {
             // Make sure it only happens for 0 values, otherwise error.
             if liq == Bytes::from(H256::zero()) {
@@ -272,7 +272,6 @@ mod tests {
         };
 
         let result = UniswapV3State::try_from(snapshot);
-        dbg!(&result);
 
         assert!(result.is_ok());
         let expected = UniswapV3State::new(
