@@ -51,7 +51,8 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
             .clone();
 
-        // This is a hotfix because if the liquidity has never been updated after creation, it's currently encoded as H256::zero(), therefore, we can't decode this as u128.
+        // This is a hotfix because if the liquidity has never been updated after creation, it's
+        // currently encoded as H256::zero(), therefore, we can't decode this as u128.
         // We can remove this this will be fixed on the tycho side.
         let liq_16_bytes = if liq.len() == 32 {
             // Make sure it only happens for 0 values, otherwise error.
@@ -90,14 +91,15 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
             .map_err(|_| InvalidSnapshotError::ValueError("Unsupported fee amount".to_string()))?;
 
         let tick = snapshot
-            .component
-            .static_attributes
-            .get("fee")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
+            .state
+            .attributes
+            .get("tick")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
             .clone();
 
-        // This is a hotfix because if the tick has never been updated after creation, it's currently encoded as H256::zero(), therefore, we can't decode this as i32.
-        // We can remove this this will be fixed on the tycho side.
+        // This is a hotfix because if the tick has never been updated after creation, it's
+        // currently encoded as H256::zero(), therefore, we can't decode this as i32. We can
+        // remove this this will be fixed on the tycho side.
         let ticks_4_bytes = if tick.len() == 32 {
             // Make sure it only happens for 0 values, otherwise error.
             if tick == Bytes::from(H256::zero()) {
@@ -134,9 +136,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
 
         let mut ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks,
-            _ => {
-                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
-            }
+            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
         };
 
         ticks.sort_by_key(|tick| tick.index);
@@ -272,6 +272,7 @@ mod tests {
         };
 
         let result = UniswapV3State::try_from(snapshot);
+        dbg!(&result);
 
         assert!(result.is_ok());
         let expected = UniswapV3State::new(

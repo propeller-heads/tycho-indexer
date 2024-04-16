@@ -311,7 +311,8 @@ impl ProtocolSim for UniswapV3State {
             .updated_attributes
             .get("liquidity")
         {
-            // This is a hotfix because if the liquidity has never been updated after creation, it's currently encoded as H256::zero(), therefore, we can't decode this as u128.
+            // This is a hotfix because if the liquidity has never been updated after creation, it's
+            // currently encoded as H256::zero(), therefore, we can't decode this as u128.
             // We can remove this this will be fixed on the tycho side.
             let liq_16_bytes = if liquidity.len() == 32 {
                 // Make sure it only happens for 0 values, otherwise error.
@@ -336,7 +337,8 @@ impl ProtocolSim for UniswapV3State {
             self.sqrt_price = U256::from(sqrt_price.clone());
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
-            // This is a hotfix because if the tick has never been updated after creation, it's currently encoded as H256::zero(), therefore, we can't decode this as i32.
+            // This is a hotfix because if the tick has never been updated after creation, it's
+            // currently encoded as H256::zero(), therefore, we can't decode this as i32.
             // We can remove this this will be fixed on the tycho side.
             let ticks_4_bytes = if tick.len() == 32 {
                 // Make sure it only happens for 0 values, otherwise error.
