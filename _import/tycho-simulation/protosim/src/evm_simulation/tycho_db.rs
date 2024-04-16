@@ -100,14 +100,16 @@ impl PreCachedDB {
     }
 
     #[instrument(skip_all)]
-    pub async fn update(&self, account_updates: Vec<AccountUpdate>, block: BlockHeader) {
+    pub async fn update(&self, account_updates: Vec<AccountUpdate>, block: Option<BlockHeader>) {
         // Block the current thread until the future completes.
         self.block_on(async {
             // Hold the write lock for the duration of the function so that no other thread can
             // write to the storage.
             let mut write_guard = self.inner.write().await;
 
-            write_guard.block = Some(block);
+            if let Some(block) = block {
+                write_guard.block = Some(block);
+            };
 
             for update in account_updates {
                 match update.change {
@@ -612,7 +614,7 @@ mod tests {
         };
 
         mock_db
-            .update(vec![account_update], new_block.into())
+            .update(vec![account_update], Some(new_block.into()))
             .await;
 
         let account_info = mock_db

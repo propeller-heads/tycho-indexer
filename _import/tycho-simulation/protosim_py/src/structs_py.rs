@@ -531,7 +531,7 @@ impl TychoDB {
         runtime.block_on(async {
             self_
                 .inner
-                .update(account_updates, block)
+                .update(account_updates, Some(block))
                 .await;
         })
     }
