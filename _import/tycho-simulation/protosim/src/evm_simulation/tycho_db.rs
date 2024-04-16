@@ -107,9 +107,7 @@ impl PreCachedDB {
             // write to the storage.
             let mut write_guard = self.inner.write().await;
 
-            if let Some(block) = block {
-                write_guard.block = Some(block);
-            };
+            write_guard.block = block;
 
             for update in account_updates {
                 match update.change {
