@@ -65,7 +65,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
                 )));
             }
         } else {
-            liq.clone()
+            liq
         };
 
         let liquidity = u128::from(liq_16_bytes);
@@ -111,7 +111,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
                 )));
             }
         } else {
-            tick.clone()
+            tick
         };
         let tick = i32::from(ticks_4_bytes);
 
