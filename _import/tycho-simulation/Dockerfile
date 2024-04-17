@@ -1,5 +1,6 @@
 FROM rust:1.74 AS build
 WORKDIR /build
+
 ENV CARGO_HOME=/build/.cargo
 RUN cargo new --lib protosim_py
 RUN apt-get update && apt-get install -y \
@@ -17,6 +18,9 @@ COPY . .
 RUN cargo build --release
 
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install openssl -y
+
 COPY --from=build /build/target/release/prop-builder ./target/release/prop-builder
 ENTRYPOINT ["./target/release/prop-builder"]
