@@ -1,13 +1,13 @@
 //! Pair Properties and ProtocolState
 //!
-//! This module contains the `PairProperties` struct, which represents the
+//! This module contains the `ProtocolComponent` struct, which represents the
 //! properties of a trading pair. It also contains the `Pair` struct, which
 //! represents a trading pair with its properties and corresponding state.
 //!
 //! Additionally, it contains the `GetAmountOutResult` struct, which
 //! represents the result of getting the amount out of a trading pair.
 //!
-//! The `PairProperties` struct has two fields: `address` and `tokens`.
+//! The `ProtocolComponent` struct has two fields: `address` and `tokens`.
 //! `address` is the address of the trading pair and `tokens` is a vector
 //! of `ERC20Token` representing the tokens of the trading pair.
 //!
@@ -17,7 +17,7 @@
 //! This is in contrast to `ProtocolState`, which includes ideally only
 //! attributes that can change.
 //!
-//! The `Pair` struct combines the former two: `PairProperties` and
+//! The `Pair` struct combines the former two: `ProtocolComponent` and
 //! `ProtocolState` into a single struct.
 //!
 //! # Note:
@@ -30,21 +30,27 @@ use crate::models::ERC20Token;
 
 use super::state::ProtocolState;
 
-/// PairProperties struct represents the properties of a trading pair
+/// ProtocolComponent struct represents the properties of a trading pair
 ///
 /// # Fields
 ///
 /// * `address`: H160, the address of the trading pair
 /// * `tokens`: `Vec<ERC20Token>`, the tokens of the trading pair
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PairProperties {
+pub struct ProtocolComponent {
     pub address: H160,
     pub tokens: Vec<ERC20Token>,
 }
 
+impl ProtocolComponent {
+    pub fn new(address: H160, tokens: Vec<ERC20Token>) -> Self {
+        ProtocolComponent { address, tokens }
+    }
+}
+
 /// Pair struct represents a trading pair with its properties and state
 #[derive(Clone, Debug, PartialEq)]
-pub struct Pair(pub PairProperties, pub ProtocolState);
+pub struct Pair(pub ProtocolComponent, pub ProtocolState);
 
 /// GetAmountOutResult struct represents the result of getting the amount out of a trading pair
 ///

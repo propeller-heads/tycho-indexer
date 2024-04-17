@@ -1010,7 +1010,7 @@ pub mod tests {
         let result = engine
             .simulate(&params)
             .expect("should simulate");
-        dbg!(&result);
+
         assert!(result.gas_used > 0, "Gas used should be positive");
     }
 

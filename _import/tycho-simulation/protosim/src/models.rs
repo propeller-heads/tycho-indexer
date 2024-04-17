@@ -8,8 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use tycho_core::dto::ResponseToken;
 
 use ethers::types::{H160, U256};
+use std::convert::TryFrom;
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
@@ -64,6 +66,17 @@ impl PartialEq for ERC20Token {
     }
 }
 
+impl TryFrom<ResponseToken> for ERC20Token {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
+        Ok(Self {
+            address: value.address.into(),
+            decimals: value.decimals.try_into()?,
+            symbol: value.symbol,
+        })
+    }
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Swap {
     token_in: H160,
