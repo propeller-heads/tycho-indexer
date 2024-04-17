@@ -136,9 +136,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
 
         let mut ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks,
-            _ => {
-                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
-            }
+            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
         };
 
         ticks.sort_by_key(|tick| tick.index);
