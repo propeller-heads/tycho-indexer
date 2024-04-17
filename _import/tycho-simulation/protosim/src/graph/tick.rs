@@ -12,20 +12,20 @@ use std::collections::HashMap;
 
 use ethers::types::H160;
 
-use crate::protocol::{models::PairProperties, state::ProtocolState};
+use crate::protocol::{models::ProtocolComponent, state::ProtocolState};
 
 #[derive(Debug, Clone)]
 pub struct Tick {
     pub time: u64,
     pub states: HashMap<H160, ProtocolState>,
-    pub new_pairs: HashMap<H160, PairProperties>,
+    pub new_pairs: HashMap<H160, ProtocolComponent>,
 }
 
 impl Tick {
     pub fn new(
         time: u64,
         states: HashMap<H160, ProtocolState>,
-        new_pairs: HashMap<H160, PairProperties>,
+        new_pairs: HashMap<H160, ProtocolComponent>,
     ) -> Self {
         Tick { time, states, new_pairs }
     }
