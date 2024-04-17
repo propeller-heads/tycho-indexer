@@ -11,6 +11,7 @@ use std::str::FromStr;
 use tycho_core::dto::ResponseToken;
 
 use ethers::types::{H160, U256};
+use std::convert::TryFrom;
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
@@ -65,16 +66,15 @@ impl PartialEq for ERC20Token {
     }
 }
 
-impl From<ResponseToken> for ERC20Token {
-    fn from(value: ResponseToken) -> Self {
-        Self {
+impl TryFrom<ResponseToken> for ERC20Token {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
+        Ok(Self {
             address: value.address.into(),
-            decimals: value
-                .decimals
-                .try_into()
-                .expect("Failed to convert ResponseToken into ERC20Token"),
+            decimals: value.decimals.try_into()?,
             symbol: value.symbol,
-        }
+        })
     }
 }
 #[derive(Debug, Serialize, Deserialize)]
