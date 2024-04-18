@@ -689,7 +689,7 @@ mod tests {
         let attributes: HashMap<String, Bytes> = [
             ("liquidity".to_string(), Bytes::from(2000_u64.to_le_bytes().to_vec())),
             ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
-            ("tick".to_string(), Bytes::from(120_u64.to_le_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(120_i32.to_le_bytes().to_vec())),
             (
                 "ticks/-255760/net_liquidity".to_string(),
                 Bytes::from(10200_u64.to_le_bytes().to_vec()),
