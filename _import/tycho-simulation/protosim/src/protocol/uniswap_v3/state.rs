@@ -9,6 +9,7 @@ use crate::{
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::ProtocolSim,
+        tycho::i24_le_bytes_to_i32,
     },
     safe_math::{safe_add_u256, safe_sub_u256},
 };
@@ -352,7 +353,7 @@ impl ProtocolSim for UniswapV3State {
             } else {
                 tick.clone()
             };
-            self.tick = i32::from(ticks_4_bytes);
+            self.tick = i24_le_bytes_to_i32(&ticks_4_bytes);
         }
 
         // apply tick changes
@@ -688,7 +689,7 @@ mod tests {
         let attributes: HashMap<String, Bytes> = [
             ("liquidity".to_string(), Bytes::from(2000_u64.to_le_bytes().to_vec())),
             ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
-            ("tick".to_string(), Bytes::from(120_u64.to_le_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(120_i32.to_le_bytes().to_vec())),
             (
                 "ticks/-255760/net_liquidity".to_string(),
                 Bytes::from(10200_u64.to_le_bytes().to_vec()),
