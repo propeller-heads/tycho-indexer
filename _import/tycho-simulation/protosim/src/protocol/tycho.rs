@@ -113,7 +113,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
         } else {
             tick
         };
-        let tick = i32::from(ticks_4_bytes);
+        let tick = i24_le_bytes_to_i32(&ticks_4_bytes);
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
@@ -136,13 +136,40 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
 
         let mut ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks,
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            _ => {
+                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);
 
         Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
     }
+}
+
+/// Converts a slice of bytes representing a little-endian 24-bit signed integer
+/// to a 32-bit signed integer.
+///
+/// # Arguments
+/// * `val` - A reference to a `Bytes` type, which should contain at most three bytes.
+///
+/// # Returns
+/// * The 32-bit signed integer representation of the input bytes.
+pub fn i24_le_bytes_to_i32(val: &Bytes) -> i32 {
+    let bytes_slice = val.as_ref();
+    let bytes_len = bytes_slice.len();
+    let mut result = 0i32;
+
+    for (i, &byte) in bytes_slice.iter().enumerate() {
+        result |= (byte as i32) << (8 * i);
+    }
+
+    // If the last byte is in the input and its most significant bit is set (0x80),
+    // perform sign extension. This is for handling negative numbers.
+    if bytes_len > 0 && bytes_slice[bytes_len - 1] & 0x80 != 0 {
+        result |= -1i32 << (8 * bytes_len);
+    }
+    result
 }
 
 #[cfg(test)]
@@ -352,5 +379,18 @@ mod tests {
             result.err().unwrap(),
             InvalidSnapshotError::ValueError("Unsupported fee amount".to_string())
         );
+    }
+
+    #[test]
+    fn test_i24_le_bytes_to_i32() {
+        let val = Bytes::from_str("0xc6affe").unwrap();
+        let converted = i24_le_bytes_to_i32(&val);
+        assert_eq!(converted, -86074);
+        let val = Bytes::from_str("0xdd02").unwrap();
+        let converted = i24_le_bytes_to_i32(&val);
+        assert_eq!(converted, 733);
+        let val = Bytes::from_str("0xbbe2").unwrap();
+        let converted = i24_le_bytes_to_i32(&val);
+        assert_eq!(converted, -7493);
     }
 }
