@@ -135,7 +135,15 @@ impl<'a> Route<'a> {
             let st = self.tokens[i];
             let et = self.tokens[i + 1];
             let Pair(_, state) = self.pairs[i];
-            res.aggregate(&state.get_amount_out(res.amount, st, et)?);
+            let amount_out = state.get_amount_out(res.amount, st, et)?;
+            trace!(
+                amount_in = ?res.amount,
+                amount_out = ?amount_out,
+                token_in = ?st,
+                token_out = ?et,
+                "ROUTE SWAP"
+            );
+            res.aggregate(&amount_out);
         }
         Ok(res)
     }
@@ -898,8 +906,7 @@ mod tests {
     fn make_pair(pair: &str, t0: &str, t1: &str, r0: u64, r1: u64) -> Pair {
         let t0 = ERC20Token::new(t0, 3, "T0");
         let t1 = ERC20Token::new(t1, 3, "T1");
-        let props =
-            ProtocolComponent { address: H160::from_str(pair).unwrap(), tokens: vec![t0, t1] };
+        let props = ProtocolComponent::new(H160::from_str(pair).unwrap(), vec![t0, t1]);
         let state = UniswapV2State::new(U256::from(r0), U256::from(r1)).into();
         Pair(props, state)
     }

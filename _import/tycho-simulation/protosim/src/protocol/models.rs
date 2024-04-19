@@ -43,7 +43,8 @@ pub struct ProtocolComponent {
 }
 
 impl ProtocolComponent {
-    pub fn new(address: H160, tokens: Vec<ERC20Token>) -> Self {
+    pub fn new(address: H160, mut tokens: Vec<ERC20Token>) -> Self {
+        tokens.sort_unstable_by_key(|t| t.address);
         ProtocolComponent { address, tokens }
     }
 }

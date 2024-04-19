@@ -1,5 +1,6 @@
 use ethers::types::{Sign, H256, I256, U256};
 
+use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
@@ -56,6 +57,7 @@ struct StepComputation {
 
 // TODO: these attributes allow updating the state after a swap
 #[allow(dead_code)]
+#[derive(Debug)]
 struct SwapResults {
     amount_calculated: I256,
     sqrt_price: U256,
@@ -292,6 +294,8 @@ impl ProtocolSim for UniswapV3State {
         let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
 
         let result = self.swap(zero_for_one, amount_specified, None)?;
+
+        trace!(?amount_in, ?token_a, ?token_b, ?zero_for_one, ?result, "V3 SWAP");
 
         Ok(GetAmountOutResult::new(
             result
