@@ -125,7 +125,9 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
                         key.split('/')
                             .nth(1)?
                             .parse::<i32>()
-                            .map(|tick_index| TickInfo::new(tick_index, i128::from(value.clone())))
+                            .map(|tick_index| {
+                                TickInfo::new(tick_index, decode_le_bytes_as_i128(value))
+                            })
                             .map_err(|err| InvalidSnapshotError::ValueError(err.to_string())),
                     )
                 } else {
@@ -135,8 +137,13 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
             .collect();
 
         let mut ticks = match ticks {
-            Ok(ticks) if !ticks.is_empty() => ticks,
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            Ok(ticks) if !ticks.is_empty() => ticks
+                .into_iter()
+                .filter(|t| t.net_liquidity != 0)
+                .collect::<Vec<_>>(),
+            _ => {
+                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);
@@ -168,6 +175,21 @@ pub fn i24_le_bytes_to_i32(val: &Bytes) -> i32 {
         result |= -1i32 << (8 * bytes_len);
     }
     result
+}
+
+fn decode_le_bytes_as_i128(src: &Bytes) -> i128 {
+    let bytes_slice = src.as_ref();
+    let bytes_len = bytes_slice.len();
+    let msb = bytes_slice[bytes_len - 1] & 0x80 != 0;
+
+    // Create an array with zeros.
+    let mut u128_bytes: [u8; 16] = if msb { [0xFF; 16] } else { [0x00; 16] };
+
+    // Copy bytes from bytes_slice to u128_bytes.
+    u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
+
+    // Convert to i128 using little-endian
+    i128::from_le_bytes(u128_bytes)
 }
 
 #[cfg(test)]
@@ -390,5 +412,12 @@ mod tests {
         let val = Bytes::from_str("0xbbe2").unwrap();
         let converted = i24_le_bytes_to_i32(&val);
         assert_eq!(converted, -7493);
+    }
+
+    #[test]
+    fn test_i24_le_bytes_to() {
+        let val = Bytes::from_str("0xe0629dfd41bec2e5").unwrap();
+        let converted = decode_le_bytes_as_i128(&val);
+        assert_eq!(converted, -1890739702905085216);
     }
 }
