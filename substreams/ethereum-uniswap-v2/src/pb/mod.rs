@@ -1,4 +1,3 @@
-#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 // @generated
 pub mod tycho {
     pub mod evm {
