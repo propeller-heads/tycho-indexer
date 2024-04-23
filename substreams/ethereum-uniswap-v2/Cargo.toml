@@ -17,6 +17,8 @@ hex-literal.workspace = true
 substreams-helper = { path = "../substreams-helper" }
 num-bigint = "0.4.4"
 itertools = "0.12.1"
+serde_qs = "0.13.0"
+serde.workspace = true
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.2", features = ["custom"] }

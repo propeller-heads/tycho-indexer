@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use ethabi::ethereum_types::Address;
+use serde::Deserialize;
 use substreams::prelude::BigInt;
 use substreams_ethereum::pb::eth::v2::{self as eth};
 
@@ -9,9 +10,16 @@ use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 use crate::{
     abi::factory::events::PairCreated,
     pb::tycho::evm::v1::{
-        Attribute, Block, BlockEntityChanges, ChangeType, EntityChanges, FinancialType, ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges
+        Attribute, Block, BlockEntityChanges, ChangeType, EntityChanges, FinancialType,
+        ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges,
     },
 };
+
+#[derive(Debug, Deserialize)]
+struct Params {
+    factory_address: String,
+    protocol_type_name: String,
+}
 
 #[substreams::handlers::map]
 pub fn map_pools_created(
@@ -20,26 +28,22 @@ pub fn map_pools_created(
 ) -> Result<BlockEntityChanges, substreams::errors::Error> {
     let mut new_pools: Vec<TransactionEntityChanges> = vec![];
 
-    let factory_address = params.as_str();
+    let params: Params = serde_qs::from_str(params.as_str()).expect("Unable to deserialize params");
 
-    get_pools(&block, &mut new_pools, factory_address);
+    get_pools(&block, &mut new_pools, &params);
 
     let tycho_block: Block = block.into();
 
     Ok(BlockEntityChanges { block: Some(tycho_block), changes: new_pools })
 }
 
-fn get_pools(
-    block: &eth::Block,
-    new_pools: &mut Vec<TransactionEntityChanges>,
-    factory_address: &str,
-) {
+fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionEntityChanges>, params: &Params) {
     // Extract new pools from PairCreated events
     let mut on_pair_created = |event: PairCreated, _tx: &eth::TransactionTrace, _log: &eth::Log| {
         let tycho_tx: Transaction = _tx.into();
 
         new_pools.push(TransactionEntityChanges {
-            tx: Some(tycho_tx),
+            tx: Some(tycho_tx.clone()),
             entity_changes: vec![EntityChanges {
                 component_id: event.pair.to_hex(),
                 attributes: vec![
@@ -74,11 +78,12 @@ fn get_pools(
                 ],
                 change: i32::from(ChangeType::Creation),
                 protocol_type: Some(ProtocolType {
-                    name: "uniswap_v2_pool".to_string(),
+                    name: params.protocol_type_name.to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Custom.into(),
                 }),
+                tx: Some(tycho_tx),
             }],
             balance_changes: vec![],
         })
@@ -86,7 +91,7 @@ fn get_pools(
 
     let mut eh = EventHandler::new(block);
 
-    eh.filter_by_address(vec![Address::from_str(factory_address).unwrap()]);
+    eh.filter_by_address(vec![Address::from_str(&params.factory_address).unwrap()]);
 
     eh.on::<PairCreated, _>(&mut on_pair_created);
     eh.handle_events();
