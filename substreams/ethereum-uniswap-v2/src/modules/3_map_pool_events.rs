@@ -94,8 +94,7 @@ fn handle_sync(
         let pool =
             store.must_get_last(StoreKey::Pool.get_unique_pool_key(pool_address_hex.as_str()));
         // Convert reserves to bytes
-        let reserves_bytes =
-            [event.reserve0.to_signed_bytes_le(), event.reserve1.to_signed_bytes_le()];
+        let reserves_bytes = [event.reserve0, event.reserve1];
 
         let tx_change = tx_changes
             .entry(_tx.hash.clone())
@@ -113,7 +112,9 @@ fn handle_sync(
                 ComponentKey::new(pool_address_hex.clone(), attribute_name.clone()),
                 Attribute {
                     name: attribute_name,
-                    value: reserve_bytes.clone(),
+                    value: reserve_bytes
+                        .clone()
+                        .to_signed_bytes_le(), //TODO: Unify bytes encoding (either be or le)
                     change: ChangeType::Update.into(),
                 },
             );
@@ -127,7 +128,7 @@ fn handle_sync(
                 ComponentKey::new(pool_address_hex.clone(), token.clone()),
                 BalanceChange {
                     token: token.clone(),
-                    balance: balance.clone(),
+                    balance: balance.clone().to_signed_bytes_be(),
                     component_id: pool_address_hex.as_bytes().to_vec(),
                 },
             );
