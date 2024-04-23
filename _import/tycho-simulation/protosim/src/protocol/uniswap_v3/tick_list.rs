@@ -73,11 +73,13 @@ impl TickList {
                 ));
             }
         }
-        for i in 0..self.ticks.len() - 1 {
-            let t = self.ticks.get(i).unwrap();
-            if i != self.ticks.len() && t > self.ticks.get(i + 1).unwrap() {
-                let msg = format!("Ticks are not ordered at position {}", t.index);
-                return Err(msg);
+        if !self.ticks.is_empty() {
+            for i in 0..self.ticks.len() - 1 {
+                let t = self.ticks.get(i).unwrap();
+                if i != self.ticks.len() && t > self.ticks.get(i + 1).unwrap() {
+                    let msg = format!("Ticks are not ordered at position {}", t.index);
+                    return Err(msg);
+                }
             }
         }
 
