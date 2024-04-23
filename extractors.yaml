@@ -23,6 +23,18 @@ extractors:
     spkg: "substreams/ethereum-uniswap-v2/ethereum-uniswap-v2-v0.1.0.spkg"
     module_name: "map_pool_events"
 
+  sushiswap_v2:
+    name: "sushiswap_v2"
+    chain: "ethereum"
+    implementation_type: "Custom"
+    sync_batch_size: 1000
+    start_block: 10794229
+    protocol_types:
+      - name: "sushiswap_v2_pool"
+        financial_type: "Swap"
+    spkg: "substreams/ethereum-uniswap-v2/ethereum-sushiswap-v2-v0.2.0.spkg"
+    module_name: "map_pool_events"
+
   uniswap_v3:
     name: "uniswap_v3"
     chain: "ethereum"
