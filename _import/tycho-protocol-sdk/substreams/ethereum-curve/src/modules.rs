@@ -123,7 +123,15 @@ pub fn map_relative_balances(
     pools_store: StoreGetInt64,
     tokens_store: StoreGetString,
 ) -> Result<BlockBalanceDeltas, anyhow::Error> {
-    Ok(BlockBalanceDeltas { balance_deltas: emit_deltas(block, pools_store, tokens_store) })
+    Ok(BlockBalanceDeltas {
+        balance_deltas: {
+            block
+                .logs()
+                .filter_map(|log| emit_deltas(log, &pools_store, &tokens_store))
+                .flat_map(|deltas| deltas.into_iter())
+                .collect::<Vec<_>>()
+        },
+    })
 }
 
 /// It's significant to include both the `pool_id` and the `token_id` for each balance delta as the
