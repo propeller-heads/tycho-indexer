@@ -7,14 +7,6 @@ use tycho_substreams::prelude::*;
 
 use crate::abi;
 
-struct GenericAddLiquidity {
-    token_amounts: Vec<BigInt>,
-    provider: String,
-    fees: BigInt,
-    invariant: BigInt,
-    token_supply: BigInt,
-}
-
 fn tx_from_log(log: &LogView) -> Transaction {
     Transaction {
         hash: log.receipt.transaction.hash.clone(),
@@ -88,14 +80,14 @@ pub fn emit_deltas(
     } else if let Some(event) = abi::pool_tricrypto::events::AddLiquidity::match_and_decode(log) {
         return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool::events::RemoveLiquidity::match_and_decode(log) {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_3pool::events::RemoveLiquidity::match_and_decode(log) {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_steth::events::RemoveLiquidity::match_and_decode(log) {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_tricrypto::events::RemoveLiquidity::match_and_decode(log)
     {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else {
         None
     }
