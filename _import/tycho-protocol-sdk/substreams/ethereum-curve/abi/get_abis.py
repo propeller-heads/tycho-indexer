@@ -15,6 +15,7 @@ abis = {
     "CryptoPoolFactory": "0xF18056Bbd320E96A48e3Fbf8bC061322531aac99",
     # pool
     "Pool": "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+    "3Pool": "0x5F890841f657d90E081bAbdB532A05996Af79Fe6",
 }
 
 ABI_ENDPOINT = (

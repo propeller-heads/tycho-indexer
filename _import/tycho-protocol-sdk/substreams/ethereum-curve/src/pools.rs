@@ -1,18 +1,18 @@
-use std::collections::HashMap;
-
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::{collections::HashMap, iter::zip};
 use substreams_ethereum::pb::eth;
 use tycho_substreams::prelude::*;
 
 const PARAMS_SEPERATOR: &str = ",";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 struct PoolQueryParams {
     address: String,
     tx_hash: String,
     tokens: Vec<String>,
-    attributes: Vec<(String, String)>,
+    attribute_keys: Vec<String>,
+    attribute_vals: Vec<String>,
 }
 
 /// This function parses the `params` string and extracts the pool query parameters. `params` are
@@ -32,19 +32,15 @@ pub fn emit_specific_pools(
     params: &String,
     block: &eth::v2::Block,
 ) -> Result<Vec<ProtocolComponent>> {
-    let pools: HashMap<String, PoolQueryParams> = params
-        .split(PARAMS_SEPERATOR)
-        .map(|param| {
-            // TODO UNSAFE
-            let pool: PoolQueryParams = serde_qs::from_str(&param)
-                .with_context(|| format!("Failed to parse pool query params: {0}", param))?;
-            Ok((pool.tx_hash.clone(), pool))
-        })
-        .collect::<Result<HashMap<_, _>>>()
-        .with_context(|| "Failed to parse all pool query params")?;
+    let pools = parse_params(params)?;
+    create_components(block, pools)
+}
 
+fn create_components(
+    block: &eth::v2::Block,
+    pools: HashMap<String, PoolQueryParams>,
+) -> Result<Vec<ProtocolComponent>, anyhow::Error> {
     let mut components: Vec<ProtocolComponent> = vec![];
-
     for tx in block.transactions() {
         let encoded_hash = hex::encode(tx.hash.clone());
         if let Some(pool) = pools.get(&encoded_hash) {
@@ -63,16 +59,18 @@ pub fn emit_specific_pools(
                     .map(|token| Result::Ok(hex::decode(token)?))
                     .collect::<Result<Vec<_>>>()
                     .with_context(|| "Token addresses were not formatted properly")?,
-                static_att: pool
-                    .attributes
-                    .clone()
-                    .into_iter()
-                    .map(|attr| Attribute {
-                        name: attr.0,
-                        value: attr.1.into(),
-                        change: ChangeType::Creation.into(),
-                    })
-                    .collect::<Vec<_>>(),
+                static_att: zip(
+                    pool.attribute_keys.clone().into_iter(),
+                    pool.attribute_vals.clone().into_iter(),
+                )
+                .clone()
+                .into_iter()
+                .map(|(key, value)| Attribute {
+                    name: key,
+                    value: value.into(),
+                    change: ChangeType::Creation.into(),
+                })
+                .collect::<Vec<_>>(),
                 contracts: vec![hex::decode(pool.address.clone())
                     .with_context(|| "Pool address was not formatted properly")?],
                 change: ChangeType::Creation.into(),
@@ -87,4 +85,47 @@ pub fn emit_specific_pools(
         }
     }
     Ok(components)
+}
+
+fn parse_params(params: &String) -> Result<HashMap<String, PoolQueryParams>, anyhow::Error> {
+    let pools: HashMap<String, PoolQueryParams> = params
+        .split(PARAMS_SEPERATOR)
+        .map(|param| {
+            let pool: PoolQueryParams = serde_qs::from_str(&param)
+                .with_context(|| format!("Failed to parse pool query params: {0}", param))?;
+            Ok((pool.tx_hash.clone(), pool))
+        })
+        .collect::<Result<HashMap<_, _>>>()
+        .with_context(|| "Failed to parse all pool query params")?;
+    Ok(pools)
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_params() {
+        // Existing test case
+        let params = "address=0x5F890841f657d90E081bAbdB532A05996Af79Fe6&tx_hash=0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a&tokens[]=0x6b175474e89094c44da98b954eedeac495271d0f&tokens[]=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48&tokens[]=0xdac17f958d2ee523a2206206994597c13d831ec7&attribute_keys[]=key1&attribute_vals[]=val1".to_string();
+        let expected_result = {
+            let mut map = HashMap::new();
+            map.insert(
+                "0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a".to_string(),
+                PoolQueryParams {
+                    address: "0x5F890841f657d90E081bAbdB532A05996Af79Fe6".to_string(),
+                    tx_hash: "0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a"
+                        .to_string(),
+                    tokens: vec![
+                        "0x6b175474e89094c44da98b954eedeac495271d0f".to_string(),
+                        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
+                        "0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(),
+                    ],
+                    attribute_keys: vec!["key1".to_string()],
+                    attribute_vals: vec!["val1".to_string()],
+                },
+            );
+            map
+        };
+        assert_eq!(parse_params(&params).unwrap(), expected_result);
+    }
 }
