@@ -10,13 +10,11 @@ use substreams::{
     },
 };
 
-use substreams::{key, scalar::BigInt};
+use substreams::key;
 
-use substreams_ethereum::{block_view::LogView, pb::eth};
+use substreams_ethereum::pb::eth;
 
-use substreams_ethereum::Event;
-
-use crate::{abi, pool_changes::emit_deltas, pool_factories, pools::emit_specific_pools};
+use crate::{pool_changes::emit_deltas, pool_factories, pools::emit_specific_pools};
 use tycho_substreams::{
     balances::store_balance_changes, contract::extract_contract_changes, prelude::*,
 };

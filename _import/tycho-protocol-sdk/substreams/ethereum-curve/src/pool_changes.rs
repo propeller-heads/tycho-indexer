@@ -37,9 +37,9 @@ pub fn emit_deltas(
         .collect::<Vec<_>>();
 
     if let Some(event) = abi::pool::events::TokenExchange::match_and_decode(log) {
-        return token_change_deltas(event, log);
+        token_change_deltas(event, log)
     } else if let Some(event) = abi::pool_3pool::events::TokenExchange::match_and_decode(log) {
-        return token_change_deltas(
+        token_change_deltas(
             abi::pool::events::TokenExchange {
                 sold_id: event.sold_id,
                 bought_id: event.bought_id,
@@ -48,9 +48,9 @@ pub fn emit_deltas(
                 buyer: event.buyer,
             },
             log,
-        );
+        )
     } else if let Some(event) = abi::pool_steth::events::TokenExchange::match_and_decode(log) {
-        return token_change_deltas(
+        token_change_deltas(
             abi::pool::events::TokenExchange {
                 sold_id: event.sold_id,
                 bought_id: event.bought_id,
@@ -59,9 +59,9 @@ pub fn emit_deltas(
                 buyer: event.buyer,
             },
             log,
-        );
+        )
     } else if let Some(event) = abi::pool_tricrypto::events::TokenExchange::match_and_decode(log) {
-        return token_change_deltas(
+        token_change_deltas(
             abi::pool::events::TokenExchange {
                 sold_id: event.sold_id,
                 bought_id: event.bought_id,
@@ -70,24 +70,24 @@ pub fn emit_deltas(
                 buyer: event.buyer,
             },
             log,
-        );
+        )
     } else if let Some(event) = abi::pool::events::AddLiquidity::match_and_decode(log) {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log);
+        add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_3pool::events::AddLiquidity::match_and_decode(log) {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_steth::events::AddLiquidity::match_and_decode(log) {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_tricrypto::events::AddLiquidity::match_and_decode(log) {
-        return add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool::events::RemoveLiquidity::match_and_decode(log) {
-        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_3pool::events::RemoveLiquidity::match_and_decode(log) {
-        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_steth::events::RemoveLiquidity::match_and_decode(log) {
-        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_tricrypto::events::RemoveLiquidity::match_and_decode(log)
     {
-        return remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+        remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else {
         None
     }

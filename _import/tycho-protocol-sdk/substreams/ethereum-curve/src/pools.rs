@@ -64,7 +64,6 @@ fn create_components(
                     pool.attribute_vals.clone().into_iter(),
                 )
                 .clone()
-                .into_iter()
                 .map(|(key, value)| Attribute {
                     name: key,
                     value: value.into(),
@@ -101,10 +100,10 @@ fn parse_params(params: &String) -> Result<HashMap<String, PoolQueryParams>, any
 }
 
 mod tests {
-    use super::*;
-
     #[test]
     fn test_parse_params() {
+        use crate::pools::{parse_params, PoolQueryParams};
+        use std::collections::HashMap;
         // Existing test case
         let params = "address=0x5F890841f657d90E081bAbdB532A05996Af79Fe6&tx_hash=0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a&tokens[]=0x6b175474e89094c44da98b954eedeac495271d0f&tokens[]=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48&tokens[]=0xdac17f958d2ee523a2206206994597c13d831ec7&attribute_keys[]=key1&attribute_vals[]=val1".to_string();
         let expected_result = {
