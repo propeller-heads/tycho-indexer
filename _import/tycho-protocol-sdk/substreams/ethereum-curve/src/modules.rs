@@ -58,9 +58,11 @@ pub fn map_components(
                     })
                     .collect::<Vec<_>>();
 
-                components.extend(emit_specific_pools(&params, &block).expect(
+                if let Some(component) = emit_specific_pools(&params, &tx).expect(
                     "An unexpected error occured when parsing params for emitting specific pools",
-                ));
+                ) {
+                    components.push(component)
+                }
 
                 if !components.is_empty() {
                     Some(TransactionProtocolComponents {

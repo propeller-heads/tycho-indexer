@@ -47,7 +47,7 @@ def encode_json_to_query_params(params: list[dict[str, Any]]):
 def main():
     with open(PARAMETERS, "r") as f:
         params = json.load(f)
-    print('"', encode_json_to_query_params(params), '"', sep="")
+    print(encode_json_to_query_params(params))
 
 
 if __name__ == "__main__":

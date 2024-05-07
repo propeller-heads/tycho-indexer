@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{collections::HashMap, iter::zip};
-use substreams_ethereum::pb::eth;
+use substreams_ethereum::pb::eth::v2::TransactionTrace;
 use tycho_substreams::prelude::*;
 
 const PARAMS_SEPERATOR: &str = ",";
@@ -11,8 +11,8 @@ struct PoolQueryParams {
     address: String,
     tx_hash: String,
     tokens: Vec<String>,
-    attribute_keys: Vec<String>,
-    attribute_vals: Vec<String>,
+    attribute_keys: Option<Vec<String>>,
+    attribute_vals: Option<Vec<String>>,
 }
 
 /// This function parses the `params` string and extracts the pool query parameters. `params` are
@@ -30,60 +30,63 @@ struct PoolQueryParams {
 ///  if various addresses are not formatted properly.
 pub fn emit_specific_pools(
     params: &String,
-    block: &eth::v2::Block,
-) -> Result<Vec<ProtocolComponent>> {
+    tx: &TransactionTrace,
+) -> Result<Option<ProtocolComponent>> {
     let pools = parse_params(params)?;
-    create_components(block, pools)
+    create_component(tx, pools)
 }
 
-fn create_components(
-    block: &eth::v2::Block,
+fn create_component(
+    tx: &TransactionTrace,
     pools: HashMap<String, PoolQueryParams>,
-) -> Result<Vec<ProtocolComponent>, anyhow::Error> {
-    let mut components: Vec<ProtocolComponent> = vec![];
-    for tx in block.transactions() {
-        let encoded_hash = hex::encode(tx.hash.clone());
-        if let Some(pool) = pools.get(&encoded_hash) {
-            let component = ProtocolComponent {
-                id: pool.address.clone(),
-                tx: Some(Transaction {
-                    to: tx.to.clone(),
-                    from: tx.from.clone(),
-                    hash: tx.hash.clone(),
-                    index: tx.index.into(),
-                }),
-                tokens: pool
-                    .tokens
-                    .clone()
-                    .into_iter()
-                    .map(|token| Result::Ok(hex::decode(token)?))
-                    .collect::<Result<Vec<_>>>()
-                    .with_context(|| "Token addresses were not formatted properly")?,
-                static_att: zip(
-                    pool.attribute_keys.clone().into_iter(),
-                    pool.attribute_vals.clone().into_iter(),
-                )
+) -> Result<Option<ProtocolComponent>> {
+    let encoded_hash = hex::encode(tx.hash.clone());
+    if let Some(pool) = pools.get(&encoded_hash) {
+        Ok(Some(ProtocolComponent {
+            id: pool.address.clone(),
+            tx: Some(Transaction {
+                to: tx.to.clone(),
+                from: tx.from.clone(),
+                hash: tx.hash.clone(),
+                index: tx.index.into(),
+            }),
+            tokens: pool
+                .tokens
                 .clone()
-                .map(|(key, value)| Attribute {
-                    name: key,
-                    value: value.into(),
-                    change: ChangeType::Creation.into(),
-                })
-                .collect::<Vec<_>>(),
-                contracts: vec![hex::decode(pool.address.clone())
-                    .with_context(|| "Pool address was not formatted properly")?],
+                .into_iter()
+                .map(|token| Result::Ok(hex::decode(token)?))
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| "Token addresses were not formatted properly")?,
+            static_att: zip(
+                pool.attribute_keys
+                    .clone()
+                    .unwrap_or(vec![])
+                    .into_iter(),
+                pool.attribute_vals
+                    .clone()
+                    .unwrap_or(vec![])
+                    .into_iter(),
+            )
+            .clone()
+            .map(|(key, value)| Attribute {
+                name: key,
+                value: value.into(),
                 change: ChangeType::Creation.into(),
-                protocol_type: Some(ProtocolType {
-                    name: "curve_pool".into(),
-                    financial_type: FinancialType::Swap.into(),
-                    attribute_schema: Vec::new(),
-                    implementation_type: ImplementationType::Vm.into(),
-                }),
-            };
-            components.push(component);
-        }
+            })
+            .collect::<Vec<_>>(),
+            contracts: vec![hex::decode(pool.address.clone())
+                .with_context(|| "Pool address was not formatted properly")?],
+            change: ChangeType::Creation.into(),
+            protocol_type: Some(ProtocolType {
+                name: "curve_pool".into(),
+                financial_type: FinancialType::Swap.into(),
+                attribute_schema: Vec::new(),
+                implementation_type: ImplementationType::Vm.into(),
+            }),
+        }))
+    } else {
+        Ok(None)
     }
-    Ok(components)
 }
 
 fn parse_params(params: &String) -> Result<HashMap<String, PoolQueryParams>, anyhow::Error> {
@@ -119,8 +122,8 @@ mod tests {
                         "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
                         "0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(),
                     ],
-                    attribute_keys: vec!["key1".to_string()],
-                    attribute_vals: vec!["val1".to_string()],
+                    attribute_keys: Some(vec!["key1".to_string()]),
+                    attribute_vals: Some(vec!["val1".to_string()]),
                 },
             );
             map
