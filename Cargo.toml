@@ -5,6 +5,7 @@ members = [
     "tycho-core",
     "tycho-storage",
     "token-analyzer",
+    "substreams/ethereum-uniswap-v3",
 ]
 resolver = "2"
 
@@ -57,7 +58,7 @@ utoipa = { version = "4.2.0", features = ["chrono"] }
 ethers = "^2.0.2"
 diesel = { version = "2.1.0", features = ["postgres", "chrono", "serde_json"] }
 diesel-async = { version = "0.4.1", features = ["postgres", "deadpool"] }
-substreams = "0.5"
+substreams = "0.5.19"
 substreams-ethereum = "0.9"
 regex = "1.6.0"
 prost = "0.11"

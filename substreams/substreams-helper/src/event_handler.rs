@@ -83,10 +83,6 @@ impl<'a> EventHandler<'a> {
     /// filters. You'll likely want to run this just once.
     pub fn handle_events(&mut self) {
         for log in self.block.logs() {
-            if is_log_from_reverted_call(log.log) {
-                continue;
-            }
-
             if self.addresses.is_some() &&
                 !&self
                     .addresses
@@ -102,8 +98,4 @@ impl<'a> EventHandler<'a> {
             }
         }
     }
-}
-
-fn is_log_from_reverted_call(log: &eth::Log) -> bool {
-    log.block_index == 0
 }

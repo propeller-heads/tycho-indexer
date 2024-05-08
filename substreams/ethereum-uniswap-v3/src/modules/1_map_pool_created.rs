@@ -37,7 +37,7 @@ fn get_new_pools(
         let tycho_tx: Transaction = _tx.into();
 
         new_pools.push(TransactionEntityChanges {
-            tx: Option::from(tycho_tx),
+            tx: Some(tycho_tx.clone()),
             entity_changes: vec![],
             component_changes: vec![ProtocolComponent {
                 id: event.pool.to_hex(),
@@ -67,6 +67,7 @@ fn get_new_pools(
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Custom.into(),
                 }),
+                tx: Some(tycho_tx),
             }],
             balance_changes: vec![],
         })

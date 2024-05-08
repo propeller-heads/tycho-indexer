@@ -82,9 +82,12 @@ pub struct ProtocolComponent {
     /// Type of change the component underwent.
     #[prost(enumeration="ChangeType", tag="5")]
     pub change: i32,
-    /// / Represents the functionality of the component.
+    /// Represents the functionality of the component.
     #[prost(message, optional, tag="6")]
     pub protocol_type: ::core::option::Option<ProtocolType>,
+    /// Transaction where this component was created
+    #[prost(message, optional, tag="7")]
+    pub tx: ::core::option::Option<Transaction>,
 }
 /// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
 /// Note that if the ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
@@ -97,7 +100,7 @@ pub struct BalanceChange {
     /// The new balance of the token.
     #[prost(bytes="vec", tag="2")]
     pub balance: ::prost::alloc::vec::Vec<u8>,
-    /// The id of the component whose TVL is tracked.
+    /// The id of the component whose TVL is tracked. Note: This MUST be utf8 encoded.
     #[prost(bytes="vec", tag="3")]
     pub component_id: ::prost::alloc::vec::Vec<u8>,
 }

@@ -1,150 +1,145 @@
-use substreams_ethereum::{
-    pb::eth::v2::{Log, StorageChange},
-    Event,
-};
+// use substreams::Hex;
+// use substreams_ethereum::{
+//     pb::eth::v2::{Log, TransactionTrace},
+//     Event,
+// };
 
-use crate::{
-    abi::pool::events::{
-        Burn, Collect, CollectProtocol, Flash, Initialize, Mint, SetFeeProtocol, Swap,
-    },
-    pb::{
-        tycho::evm::v1::Attribute,
-        uniswap::v3::{BalanceDelta, Pool},
-    },
-};
-
-pub mod burn;
-pub mod collect;
-pub mod collect_fee_protocol;
-pub mod flash;
-pub mod initialize;
-pub mod mint;
-pub mod set_fee_protocol;
-pub mod swap;
-
-/// A trait for extracting changed attributes and balance from an event.
-pub trait EventTrait {
-    /// Get all relevant changed attributes from the `[StorageChange]`.
-    /// If an attribute is changed multiple times, only the last state will be returned.
-    ///
-    /// # Arguments
-    ///
-    /// * `storage_changes` - A slice of `StorageChange` that indicates the changes in storage.
-    /// * `pool` - Reference to the `Pool`.
-    ///
-    /// # Returns
-    ///
-    /// A vector of `Attribute` that represents the changed attributes.
-    fn get_changed_attributes(
-        &self,
-        storage_changes: &[StorageChange],
-        pool_address: &[u8; 20],
-    ) -> Vec<Attribute>;
-
-    /// Get all balance deltas from the event.
-    ///
-    /// # Arguments
-    ///
-    /// * `pool` - Reference to the `Pool`.
-    /// * `ordinal` - The ordinal number of the event. This is used by the balance store to sort the
-    ///   balance deltas in the correct order.
-    ///
-    /// # Returns
-    ///
-    /// A vector of `BalanceDelta` that represents the balance deltas.
-    fn get_balance_delta(&self, pool: &Pool, ordinal: u64) -> Vec<BalanceDelta>;
-}
-
-/// Represent every events of a UniswapV3 pool.
-pub enum EventType {
-    Initialize(Initialize),
-    Swap(Swap),
-    Flash(Flash),
-    Mint(Mint),
-    Burn(Burn),
-    Collect(Collect),
-    SetFeeProtocol(SetFeeProtocol),
-    CollectProtocol(CollectProtocol),
-}
-
-impl EventType {
-    fn as_event_trait(&self) -> &dyn EventTrait {
-        match self {
-            EventType::Initialize(e) => e,
-            EventType::Swap(e) => e,
-            EventType::Flash(e) => e,
-            EventType::Mint(e) => e,
-            EventType::Burn(e) => e,
-            EventType::Collect(e) => e,
-            EventType::SetFeeProtocol(e) => e,
-            EventType::CollectProtocol(e) => e,
-        }
-    }
-}
-
-/// Decodes a given log into an `EventType`.
-///
-/// # Arguments
-///
-/// * `event` - A reference to the `Log`.
-///
-/// # Returns
-///
-/// An `Option<EventType>` that represents the decoded event type.
-pub fn decode_event(event: &Log) -> Option<EventType> {
-    [
-        Initialize::match_and_decode(event).map(EventType::Initialize),
-        Swap::match_and_decode(event).map(EventType::Swap),
-        Flash::match_and_decode(event).map(EventType::Flash),
-        Mint::match_and_decode(event).map(EventType::Mint),
-        Burn::match_and_decode(event).map(EventType::Burn),
-        Collect::match_and_decode(event).map(EventType::Collect),
-        SetFeeProtocol::match_and_decode(event).map(EventType::SetFeeProtocol),
-        CollectProtocol::match_and_decode(event).map(EventType::CollectProtocol),
-    ]
-    .into_iter()
-    .find_map(std::convert::identity)
-}
-
-/// Gets the changed attributes from the log.
-///
-/// # Arguments
-///
-/// * `event` - A reference to the `Log`.
-/// * `storage_changes` - A slice of `StorageChange` that indicates the changes in storage.
-/// * `pool` - Reference to the `Pool` structure.
-///
-/// # Returns
-///
-/// A vector of `Attribute` that represents the changed attributes.
-pub fn get_log_changed_attributes(
-    event: &Log,
-    storage_changes: &[StorageChange],
-    pool_address: &[u8; 20],
-) -> Vec<Attribute> {
-    decode_event(event)
-        .map(|e| {
-            e.as_event_trait()
-                .get_changed_attributes(storage_changes, pool_address)
-        })
-        .unwrap_or_default()
-}
-
-/// Gets the changed balances from the log.
-///
-/// # Arguments
-///
-/// * `event` - A reference to the `Log`.
-/// * `pool` - Reference to the `Pool` structure.
-///
-/// # Returns
-///
-/// A vector of `BalanceDelta` that represents
-pub fn get_log_changed_balances(event: &Log, pool: &Pool) -> Vec<BalanceDelta> {
-    decode_event(event)
-        .map(|e| {
-            e.as_event_trait()
-                .get_balance_delta(pool, event.ordinal)
-        })
-        .unwrap_or_default()
-}
+// use crate::{
+//     abi::pool::events::{
+//         Burn, Collect, CollectProtocol, Flash, Initialize, Mint, SetFeeProtocol, Swap,
+//     },
+//     pb::uniswap::v3::{
+//         events::{
+//             pool_event::{self, Type},
+//             PoolEvent,
+//         },
+//         Pool,
+//     },
+// };
+// pub fn decode_proto_event(event: &Log, pool: Pool, tx: TransactionTrace) -> Option<PoolEvent> {
+//     if let Some(init) = Initialize::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::Initialize(pool_event::Initialize {
+//                 sqrt_price: init.sqrt_price_x96.to_string(),
+//                 tick: init.tick.to_string(),
+//             })),
+//         })
+//     } else if let Some(swap) = Swap::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::Swap(pool_event::Swap {
+//                 sender: Hex(swap.sender).to_string(),
+//                 recipient: Hex(swap.recipient).to_string(),
+//                 amount_0: swap.amount0.to_string(),
+//                 amount_1: swap.amount1.to_string(),
+//                 sqrt_price: swap.sqrt_price_x96.to_string(),
+//                 liquidity: swap.liquidity.to_string(),
+//                 tick: swap.tick.into(),
+//             })),
+//         })
+//     } else if let Some(flash) = Flash::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::Flash(pool_event::Flash {
+//                 sender: Hex(flash.sender).to_string(),
+//                 recipient: Hex(flash.recipient).to_string(),
+//                 amount_0: flash.amount0.to_string(),
+//                 amount_1: flash.amount1.to_string(),
+//                 paid_0: flash.paid0.to_string(),
+//                 paid_1: flash.paid1.to_string(),
+//             })),
+//         })
+//     } else if let Some(mint) = Mint::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::Mint(pool_event::Mint {
+//                 sender: Hex(mint.sender).to_string(),
+//                 owner: Hex(mint.owner).to_string(),
+//                 tick_lower: mint.tick_lower.into(),
+//                 tick_upper: mint.tick_upper.into(),
+//                 amount: mint.amount.to_string(),
+//                 amount_0: mint.amount0.to_string(),
+//                 amount_1: mint.amount1.to_string(),
+//             })),
+//         })
+//     } else if let Some(burn) = Burn::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::Burn(pool_event::Burn {
+//                 owner: Hex(burn.owner).to_string(),
+//                 tick_lower: burn.tick_lower.into(),
+//                 tick_upper: burn.tick_upper.into(),
+//                 amount: burn.amount.to_string(),
+//                 amount_0: burn.amount0.to_string(),
+//                 amount_1: burn.amount1.to_string(),
+//             })),
+//         })
+//     } else if let Some(collect) = Collect::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::Collect(pool_event::Collect {
+//                 owner: Hex(collect.owner).to_string(),
+//                 recipient: Hex(collect.recipient).to_string(),
+//                 tick_lower: collect.tick_lower.into(),
+//                 tick_upper: collect.tick_upper.into(),
+//                 amount_0: collect.amount0.to_string(),
+//                 amount_1: collect.amount1.to_string(),
+//             })),
+//         })
+//     } else if let Some(set_fp) = SetFeeProtocol::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::SetFeeProtocol(pool_event::SetFeeProtocol {
+//                 fee_protocol_0_old: set_fp.fee_protocol0_old.to_u64(),
+//                 fee_protocol_1_old: set_fp.fee_protocol1_old.to_u64(),
+//                 fee_protocol_0_new: set_fp.fee_protocol0_new.to_u64(),
+//                 fee_protocol_1_new: set_fp.fee_protocol1_new.to_u64(),
+//             })),
+//         })
+//     } else if let Some(cp) = CollectProtocol::match_and_decode(event) {
+//         Some(PoolEvent {
+//             log_ordinal: event.ordinal,
+//             pool_address: Hex(pool.address).to_string(),
+//             token0: Hex(pool.token0).to_string(),
+//             token1: Hex(pool.token1).to_string(),
+//             transaction: Some(tx.into()),
+//             r#type: Some(Type::CollectProtocol(pool_event::CollectProtocol {
+//                 sender: Hex(cp.sender).to_string(),
+//                 recipient: Hex(cp.recipient).to_string(),
+//                 amount_0: cp.amount0.to_string(),
+//                 amount_1: cp.amount1.to_string(),
+//             })),
+//         })
+//     } else {
+//         None
+//     }
+// }
