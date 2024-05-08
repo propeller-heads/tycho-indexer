@@ -4,6 +4,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use substreams::{
     pb::substreams::StoreDeltas,
+    scalar::BigInt,
     store::{
         StoreAdd, StoreAddBigInt, StoreAddInt64, StoreGet, StoreGetInt64, StoreGetString, StoreNew,
         StoreSet, StoreSetString,
@@ -179,7 +180,7 @@ pub fn map_protocol_changes(
                 .extend_from_slice(&tx_component.components);
         });
 
-    // Balance changes are gathered by the `StoreDelta` based on `PoolBalanceChanged` creating
+    // Balance changes are gathered by the `StoreDelta` based on `TokenExchange`, etc. creating
     //  `BalanceDeltas`. We essentially just process the changes that occured to the `store` this
     //  block. Then, these balance changes are merged onto the existing map of tx contract changes,
     //  inserting a new one if it doesn't exist.
@@ -188,14 +189,16 @@ pub fn map_protocol_changes(
         .into_iter()
         .zip(deltas.balance_deltas)
         .map(|(store_delta, balance_delta)| {
-            let pool_id = key::segment_at(&store_delta.key, 1);
-            let token_id = key::segment_at(&store_delta.key, 3);
+            let new_value_string = String::from_utf8_lossy(&store_delta.new_value).to_string();
             (
                 balance_delta.tx.unwrap(),
                 BalanceChange {
-                    token: hex::decode(token_id).expect("Token ID not valid hex"),
-                    balance: store_delta.new_value,
-                    component_id: hex::decode(pool_id).expect("Token ID not valid hex"),
+                    token: balance_delta.token,
+                    balance: BigInt::try_from(new_value_string)
+                        .unwrap()
+                        .to_signed_bytes_be(),
+                    component_id: hex::decode(balance_delta.component_id)
+                        .expect("Pool ID not valid hex"),
                 },
             )
         })

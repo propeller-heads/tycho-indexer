@@ -24,7 +24,7 @@ struct PoolQueryParams {
 /// Static attributes are defined as a vector of tuples with the name and value of the attribute.
 ///  These contain things like the pool type, specific pool fees, etc. You can see
 ///  `pool_factories.rs` for an example of the modern curve pool attributes and also the ones chosen
-///  for 3pool, etc.
+///  for 3pool, etc. 
 ///
 /// This function can error based on some basic parsing errors and deeper down hex decoding errors
 ///  if various addresses are not formatted properly.
