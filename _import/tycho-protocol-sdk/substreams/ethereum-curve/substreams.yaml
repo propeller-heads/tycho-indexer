@@ -7,6 +7,7 @@ protobuf:
   files:
     - tycho/evm/v1/vm.proto
     - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
   importPaths:
     - ../../proto
     - ./proto
@@ -50,7 +51,7 @@ modules:
       - store: store_components
       - store: store_component_tokens
     output:
-      type: proto:tycho.evm.v1.BalanceDeltas
+      type: proto:tycho.evm.v1.BlockBalanceDeltas
 
   - name: store_balances
     kind: store

@@ -12,7 +12,7 @@ use substreams::scalar::BigInt;
 const EMPTY_BYTES32: [u8; 32] = [0; 32];
 const EMPTY_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000000");
 
-const CRYPTO_SWAP_REGISTRY: [u8; 20] = hex!("897888115Ada5773E02aA29F775430BFB5F34c51");
+const CRYPTO_SWAP_REGISTRY: [u8; 20] = hex!("9a32aF1A11D9c937aEa61A3790C2983257eA8Bc0");
 const MAIN_REGISTRY: [u8; 20] = hex!("90E00ACe148ca3b23Ac1bC8C240C2a7Dd9c2d7f5");
 const CRYPTO_POOL_FACTORY: [u8; 20] = hex!("F18056Bbd320E96A48e3Fbf8bC061322531aac99");
 const META_POOL_FACTORY: [u8; 20] = hex!("B9fC157394Af804a3578134A6585C0dc9cc990d4");
@@ -88,7 +88,7 @@ pub fn address_map(
             let coins = coins_function.call(CRYPTO_SWAP_REGISTRY.to_vec())?;
             let trimmed_coins: Vec<_> = coins
                 .get(0..add_pool.n_coins.to_i32() as usize)
-                .unwrap_or(&[])
+                .unwrap()
                 .to_vec();
 
             Some(ProtocolComponent {
@@ -175,8 +175,7 @@ pub fn address_map(
                     .or_else(|| abi::main_registry::functions::AddPool::match_and_decode(call))?;
 
             // We need to perform an eth_call in order to actually get the pool's tokens
-            let coins_function =
-                abi::main_registry::functions::GetCoins { pool: add_pool.pool };
+            let coins_function = abi::main_registry::functions::GetCoins { pool: add_pool.pool };
 
             let coins = coins_function.call(MAIN_REGISTRY.to_vec())?;
             let trimmed_coins: Vec<_> = coins

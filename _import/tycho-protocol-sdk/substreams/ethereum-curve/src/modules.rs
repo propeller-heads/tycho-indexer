@@ -11,8 +11,6 @@ use substreams::{
     },
 };
 
-use substreams::key;
-
 use substreams_ethereum::pb::eth;
 
 use crate::{pool_changes::emit_deltas, pool_factories, pools::emit_specific_pools};
@@ -164,10 +162,9 @@ pub fn map_protocol_changes(
     //  convert into `TransactionContractChanges`
     grouped_components
         .tx_components
-        .iter()
+        .into_iter()
         .for_each(|tx_component| {
             let tx = tx_component.tx.as_ref().unwrap();
-
             transaction_contract_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionContractChanges {
@@ -177,7 +174,16 @@ pub fn map_protocol_changes(
                     balance_changes: vec![],
                 })
                 .component_changes
-                .extend_from_slice(&tx_component.components);
+                .extend_from_slice(
+                    &(tx_component
+                        .components
+                        .into_iter()
+                        .map(|mut component| {
+                            component.id = format!("0x{}", component.id);
+                            component
+                        })
+                        .collect::<Vec<_>>()),
+                );
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `TokenExchange`, etc. creating
@@ -189,7 +195,9 @@ pub fn map_protocol_changes(
         .into_iter()
         .zip(deltas.balance_deltas)
         .map(|(store_delta, balance_delta)| {
-            let new_value_string = String::from_utf8_lossy(&store_delta.new_value).to_string();
+            let new_value_string = String::from_utf8(store_delta.new_value)
+                .unwrap()
+                .to_string();
             (
                 balance_delta.tx.unwrap(),
                 BalanceChange {
@@ -197,8 +205,11 @@ pub fn map_protocol_changes(
                     balance: BigInt::try_from(new_value_string)
                         .unwrap()
                         .to_signed_bytes_be(),
-                    component_id: hex::decode(balance_delta.component_id)
-                        .expect("Pool ID not valid hex"),
+                    component_id: format!(
+                        "0x{}",
+                        String::from_utf8(balance_delta.component_id).unwrap()
+                    )
+                    .into(),
                 },
             )
         })
