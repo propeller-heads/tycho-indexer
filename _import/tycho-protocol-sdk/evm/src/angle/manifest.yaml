@@ -1,28 +1,26 @@
 # information about the author helps us reach out in case of issues.
 author:
-  name: YourCompany
-  email: developer@yourcompany.xyz
+  name: shadowycoders.dev
+  email: hello@shadowycreators.com
 
 # Protocol Constants
 constants:
-  # The expected average gas cost of a swap
   protocol_gas: 30000
-  # Minimum capabilities we can expect, individual pools may extend these
+  # minimum capabilities we can expect, individual pools may extend these
   capabilities:
     - SellSide
     - BuySide
-    - PriceFunction
 
 # The file containing the adapter contract
-contract: TemplateSwapAdapter.sol
+contract: AngleAdapter.sol
 
 # Deployment instances used to generate chain specific bytecode.
 instances:
   - chain:
       name: mainnet
-      id: 1
+      id: 0
     arguments:
-      - "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+      - "0x00253582b2a3FE112feEC532221d9708c64cEFAb"
 
 # Specify some automatic test cases in case getPoolIds and
 # getTokens are not implemented.
@@ -33,5 +31,5 @@ tests:
       buy_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
       block: 17000000
       chain:
+        id: 0
         name: mainnet
-        id: 1
