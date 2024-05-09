@@ -75,6 +75,46 @@ pub fn emit_deltas(
             },
             log,
         )
+    } else if let Some(event) = abi::pool_tricrypto2::events::TokenExchange::match_and_decode(log) {
+        token_change_deltas(
+            tokens,
+            abi::pool::events::TokenExchange {
+                sold_id: event.sold_id,
+                bought_id: event.bought_id,
+                tokens_sold: event.tokens_sold,
+                tokens_bought: event.tokens_bought,
+                buyer: event.buyer,
+            },
+            log,
+        )
+    } else if let Some(event) =
+        abi::pool_crypto_swap_ng::events::TokenExchange::match_and_decode(log)
+    {
+        token_change_deltas(
+            tokens,
+            abi::pool::events::TokenExchange {
+                sold_id: event.sold_id,
+                bought_id: event.bought_id,
+                tokens_sold: event.tokens_sold,
+                tokens_bought: event.tokens_bought,
+                buyer: event.buyer,
+            },
+            log,
+        )
+    } else if let Some(event) =
+        abi::pool_crypto_swap_ng::events::TokenExchangeUnderlying::match_and_decode(log)
+    {
+        token_change_deltas(
+            tokens,
+            abi::pool::events::TokenExchange {
+                sold_id: event.sold_id,
+                bought_id: event.bought_id,
+                tokens_sold: event.tokens_sold,
+                tokens_bought: event.tokens_bought,
+                buyer: event.buyer,
+            },
+            log,
+        )
     } else if let Some(event) = abi::pool::events::AddLiquidity::match_and_decode(log) {
         add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_3pool::events::AddLiquidity::match_and_decode(log) {
@@ -82,6 +122,12 @@ pub fn emit_deltas(
     } else if let Some(event) = abi::pool_steth::events::AddLiquidity::match_and_decode(log) {
         add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool_tricrypto::events::AddLiquidity::match_and_decode(log) {
+        add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+    } else if let Some(event) = abi::pool_tricrypto2::events::AddLiquidity::match_and_decode(log) {
+        add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+    } else if let Some(event) =
+        abi::pool_crypto_swap_ng::events::AddLiquidity::match_and_decode(log)
+    {
         add_liquidity_deltas(event.token_amounts.into(), &tokens, log)
     } else if let Some(event) = abi::pool::events::RemoveLiquidity::match_and_decode(log) {
         remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
@@ -92,6 +138,36 @@ pub fn emit_deltas(
     } else if let Some(event) = abi::pool_tricrypto::events::RemoveLiquidity::match_and_decode(log)
     {
         remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+    } else if let Some(event) = abi::pool_tricrypto2::events::RemoveLiquidity::match_and_decode(log)
+    {
+        remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+    } else if let Some(event) =
+        abi::pool_crypto_swap_ng::events::RemoveLiquidity::match_and_decode(log)
+    {
+        remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+    // } else if let Some(event) =
+    //     abi::pool_crypto_swap_ng::events::RemoveLiquidityImbalance::match_and_decode(log)
+    // {
+    //     remove_liquidity_deltas(event.token_amounts.into(), &tokens, log)
+    // } else if let Some(event) =
+    //     abi::pool_crypto_swap_ng::events::RemoveLiquidityOne::match_and_decode(log)
+    // {
+    //     Some(vec![
+    //         BalanceDelta {
+    //             ord: log.log.ordinal,
+    //             tx: Some(tx_from_log(&log)),
+    //             token: hex::decode(sold_token_id.clone()).unwrap(),
+    //             delta: event.tokens_sold.to_signed_bytes_be(),
+    //             component_id: hex::encode(log.address()).into(),
+    //         },
+    //         BalanceDelta {
+    //             ord: log.log.ordinal,
+    //             tx: Some(tx_from_log(&log)),
+    //             token: hex::decode(sold_token_id.clone()).unwrap(),
+    //             delta: event.tokens_sold.to_signed_bytes_be(),
+    //             component_id: hex::encode(log.address()).into(),
+    //         },
+    //     ])
     } else {
         None
     }
@@ -152,12 +228,15 @@ fn remove_liquidity_deltas(
         amounts
             .iter()
             .zip(tokens)
-            .map(move |(token_amount, token_id)| BalanceDelta {
-                ord: log.log.ordinal,
-                tx: Some(tx_from_log(&log)),
-                token: hex::decode(token_id).unwrap(),
-                delta: token_amount.to_signed_bytes_be(),
-                component_id: hex::encode(log.address()).into(),
+            .map(move |(token_amount, token_id)| {
+                let token_amount_neg: BigInt = token_amount.clone() * -1;
+                BalanceDelta {
+                    ord: log.log.ordinal,
+                    tx: Some(tx_from_log(&log)),
+                    token: hex::decode(token_id).unwrap(),
+                    delta: token_amount_neg.to_signed_bytes_be(),
+                    component_id: hex::encode(log.address()).into(),
+                }
             })
             .collect::<Vec<_>>(),
     )

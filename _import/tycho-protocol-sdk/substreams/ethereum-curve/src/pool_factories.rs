@@ -16,6 +16,8 @@ const CRYPTO_SWAP_REGISTRY: [u8; 20] = hex!("897888115Ada5773E02aA29F775430BFB5F
 const MAIN_REGISTRY: [u8; 20] = hex!("90E00ACe148ca3b23Ac1bC8C240C2a7Dd9c2d7f5");
 const CRYPTO_POOL_FACTORY: [u8; 20] = hex!("F18056Bbd320E96A48e3Fbf8bC061322531aac99");
 const META_POOL_FACTORY: [u8; 20] = hex!("B9fC157394Af804a3578134A6585C0dc9cc990d4");
+const CRYPTO_SWAP_NG_FACTORY: [u8; 20] = hex!("6A8cbed756804B16E05E741eDaBd5cB544AE21bf");
+const TRICRYPTO_FACTORY: [u8; 20] = hex!("0c0e5f2fF0ff18a3be9b835635039256dC4B4963");
 
 /// This trait defines some helpers for serializing and deserializing `Vec<BigInt>` which is needed
 ///  to be able to encode some of the `Attribute`s. This should also be handled by any downstream
@@ -174,9 +176,9 @@ pub fn address_map(
 
             // We need to perform an eth_call in order to actually get the pool's tokens
             let coins_function =
-                abi::crypto_swap_registry::functions::GetCoins { pool: add_pool.pool };
+                abi::main_registry::functions::GetCoins { pool: add_pool.pool };
 
-            let coins = coins_function.call(CRYPTO_SWAP_REGISTRY.to_vec())?;
+            let coins = coins_function.call(MAIN_REGISTRY.to_vec())?;
             let trimmed_coins: Vec<_> = coins
                 .get(0..add_pool.n_coins.to_i32() as usize)
                 .unwrap_or(&[])
@@ -227,7 +229,7 @@ pub fn address_map(
             let component_id = &call.return_data[12..];
 
             Some(ProtocolComponent {
-                id: format!("0x{0}", hex::encode(component_id)),
+                id: hex::encode(component_id),
                 tx: Some(Transaction {
                     to: tx.to.clone(),
                     from: tx.from.clone(),
@@ -354,7 +356,7 @@ pub fn address_map(
                 let component_id = &call.return_data[12..];
 
                 Some(ProtocolComponent {
-                    id: format!("0x{0}", hex::encode(component_id)),
+                    id: hex::encode(component_id),
                     tx: Some(Transaction {
                         to: tx.to.clone(),
                         from: tx.from.clone(),
@@ -433,6 +435,143 @@ pub fn address_map(
                     change: ChangeType::Creation.into(),
                     protocol_type: Some(ProtocolType {
                         name: "curve_pool".into(),
+                        financial_type: FinancialType::Swap.into(),
+                        attribute_schema: Vec::new(),
+                        implementation_type: ImplementationType::Vm.into(),
+                    }),
+                })
+            } else {
+                None
+            }
+        }
+        CRYPTO_SWAP_NG_FACTORY => {
+            if let Some(pool_added) =
+                abi::crypto_swap_ng_factory::events::PlainPoolDeployed::match_and_decode(log)
+            {
+                let add_pool =
+                    abi::crypto_swap_ng_factory::functions::DeployPlainPool::match_and_decode(
+                        call,
+                    )?;
+                let component_id = &call.return_data[12..];
+                Some(ProtocolComponent {
+                    id: hex::encode(component_id),
+                    tx: Some(Transaction {
+                        to: tx.to.clone(),
+                        from: tx.from.clone(),
+                        hash: tx.hash.clone(),
+                        index: tx.index.into(),
+                    }),
+                    tokens: pool_added.coins.into(),
+                    contracts: vec![component_id.into()],
+                    static_att: vec![
+                        Attribute {
+                            name: "pool_type".into(),
+                            value: "Pool".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "name".into(),
+                            value: add_pool.name.into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "fee".into(),
+                            value: pool_added.fee.to_string().into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "a".into(),
+                            value: pool_added.a.to_string().into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                    ],
+                    change: ChangeType::Creation.into(),
+                    protocol_type: Some(ProtocolType {
+                        name: "crypto_swap_ng".into(),
+                        financial_type: FinancialType::Swap.into(),
+                        attribute_schema: Vec::new(),
+                        implementation_type: ImplementationType::Vm.into(),
+                    }),
+                })
+            } else if let Some(pool_added) =
+                abi::crypto_swap_ng_factory::events::MetaPoolDeployed::match_and_decode(log)
+            {
+                let add_pool =
+                    abi::crypto_swap_ng_factory::functions::DeployMetapool::match_and_decode(call)?;
+                let component_id = &call.return_data[12..];
+                Some(ProtocolComponent {
+                    id: hex::encode(component_id),
+                    tx: Some(Transaction {
+                        to: tx.to.clone(),
+                        from: tx.from.clone(),
+                        hash: tx.hash.clone(),
+                        index: tx.index.into(),
+                    }),
+                    tokens: vec![pool_added.coin, pool_added.base_pool],
+                    contracts: vec![component_id.into()],
+                    static_att: vec![
+                        Attribute {
+                            name: "pool_type".into(),
+                            value: "Pool".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "name".into(),
+                            value: add_pool.name.into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "fee".into(),
+                            value: pool_added.fee.to_string().into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "a".into(),
+                            value: pool_added.a.to_string().into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                    ],
+                    change: ChangeType::Creation.into(),
+                    protocol_type: Some(ProtocolType {
+                        name: "crypto_swap_ng".into(),
+                        financial_type: FinancialType::Swap.into(),
+                        attribute_schema: Vec::new(),
+                        implementation_type: ImplementationType::Vm.into(),
+                    }),
+                })
+            } else {
+                None
+            }
+        }
+        TRICRYPTO_FACTORY => {
+            if let Some(pool_added) =
+                abi::tricrypto_factory::events::TricryptoPoolDeployed::match_and_decode(log)
+            {
+                Some(ProtocolComponent {
+                    id: hex::encode(&pool_added.pool),
+                    tx: Some(Transaction {
+                        to: tx.to.clone(),
+                        from: tx.from.clone(),
+                        hash: tx.hash.clone(),
+                        index: tx.index.into(),
+                    }),
+                    tokens: pool_added.coins.into(),
+                    contracts: vec![pool_added.pool.into()],
+                    static_att: vec![
+                        Attribute {
+                            name: "pool_type".into(),
+                            value: "Pool".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "name".into(),
+                            value: pool_added.name.into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                    ],
+                    change: ChangeType::Creation.into(),
+                    protocol_type: Some(ProtocolType {
+                        name: "tricrypto".into(),
                         financial_type: FinancialType::Swap.into(),
                         attribute_schema: Vec::new(),
                         implementation_type: ImplementationType::Vm.into(),

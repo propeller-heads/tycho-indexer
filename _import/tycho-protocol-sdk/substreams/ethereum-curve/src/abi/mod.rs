@@ -1,7 +1,11 @@
 pub mod crypto_pool_factory;
 pub mod pool_tricrypto;
+pub mod pool_crypto_swap_ng;
+pub mod pool_tricrypto2;
+pub mod crypto_swap_ng_factory;
 pub mod pool_steth;
 pub mod pool;
+pub mod tricrypto_factory;
 pub mod main_registry;
 pub mod pool_3pool;
 pub mod meta_pool_factory;

@@ -227,7 +227,7 @@ pub fn map_protocol_changes(
         &block,
         |addr| {
             components_store
-                .get_last(format!("pool:0x{0}", hex::encode(addr)))
+                .get_last(format!("pool:{0}", hex::encode(addr)))
                 .is_some()
         },
         &mut transaction_contract_changes,

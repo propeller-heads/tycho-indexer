@@ -1,11 +1,3 @@
-"""
-This script could be changed to used `jq` and bash. Usage:
-
-```bash
-python params.py | substreams run -e mainnet.eth.streamingfast.io:443 substreams.yaml map_protocol_changes --start-block 11942410 --stop-block +100 -p map_components=
-```
-"""
-
 import json
 from typing import Any
 
