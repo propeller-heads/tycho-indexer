@@ -108,6 +108,7 @@ message EntityChanges {
 }
 
 // VM entities
+
 // A key value entry into contract storage.
 message ContractSlot {
   // A contract's storage slot.
