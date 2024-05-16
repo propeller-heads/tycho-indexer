@@ -5880,6 +5880,7 @@ dependencies = [
  "signal-hook-registry",
  "socket2 0.5.3",
  "tokio-macros",
+ "tracing",
  "windows-sys 0.48.0",
 ]
 
@@ -6148,8 +6149,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.4.1"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.4.1-pre.f344f9a#f344f9ae8c9539c554457be926506589b35fbd8d"
+version = "0.5.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.6.0-pre.1#4284cccf73638e125439c7ce7c02b631532d8587"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6174,7 +6175,7 @@ dependencies = [
 [[package]]
 name = "tycho-core"
 version = "0.3.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.4.1-pre.f344f9a#f344f9ae8c9539c554457be926506589b35fbd8d"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.6.0-pre.1#4284cccf73638e125439c7ce7c02b631532d8587"
 dependencies = [
  "anyhow",
  "async-trait",
