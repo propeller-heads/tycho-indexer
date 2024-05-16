@@ -131,6 +131,8 @@ message ContractChange {
   ChangeType change = 5;
 }
 
+// Aggregate entities
+
 // A set of changes aggregated by transaction.
 message TransactionChanges {
   // The transaction instance that results in the changes.
