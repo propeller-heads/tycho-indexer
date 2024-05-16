@@ -1,0 +1,108 @@
+substreams_yaml_path: ./substreams.yaml
+protocol_type_names:
+  - "curve_pool"
+  - "crypto_swap_ng"
+  - "tricrypto"
+tests:
+  - name: test_3pool_creation
+    start_block: 10809470
+    stop_block: 10809480
+    expected_state:
+      protocol_components:
+        - id: "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7"
+          tokens:
+            - "0xdac17f958d2ee523a2206206994597c13d831ec7"
+            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            - "0x6b175474e89094c44da98b954eedeac495271d0f"
+          static_attributes:
+          creation_tx: "0x20793bbf260912aae189d5d261ff003c9b9166da8191d8f9d63ff1c7722f3ac6"
+  - name: test_steth_creation
+    start_block: 11592550
+    stop_block: 11592553
+    expected_state:
+      protocol_components:
+        - id: "0xdc24316b9ae028f1497c275eb9192a3ea0f67022"
+          tokens:
+            - "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+            - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
+          static_attributes:
+          creation_tx: "0xfac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa"
+  - name: test_crypto_swap_ng_factory_plain_pool_creation
+    start_block: 19355220
+    stop_block: 19355225
+    expected_state:
+      protocol_components:
+        - id: "0xeeda34a377dd0ca676b9511ee1324974fa8d980d"
+          tokens:
+            - "0xd9a442856c234a39a81a089c06451ebaa4306a72"
+            - "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
+          static_attributes:
+          creation_tx: "0x0e2bad5695d4ff8ebbaf668674a24bdcc4843da44933d947f2a454fd731da3c1"
+  - name: test_crypto_swap_ng_factory_meta_pool_creation
+    start_block: 19216042
+    stop_block: 19216045
+    expected_state:
+      protocol_components:
+        - id: "0xef484de8C07B6e2d732A92B5F78e81B38f99f95E"
+          tokens:
+            - "0x865377367054516e17014CcdED1e7d814EDC9ce4"
+            - "0xA5588F7cdf560811710A2D82D3C9c99769DB1Dcb"
+          static_attributes:
+          creation_tx: "0x3cfeecae1b43086ee5705f89b803e21eb0492d7d5db06c229586db8fc72f5665"
+  - name: test_metapool_factory_metapool_creation
+    start_block: 18028600
+    stop_block: 18028610
+    expected_state:
+      protocol_components:
+        - id: "0x61fA2c947e523F9ABfb8d7e2903A5D5218C119a7"
+          tokens:
+            - "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+            - "0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC"
+          static_attributes:
+          creation_tx: "0x78454fd29fad021842288092aaeee5eff9ab877e006ac372d084e5e95ca2bd2c"
+  - name: test_metapool_factory_plainpool_creation
+    start_block: 18808555
+    stop_block: 18808577
+    expected_state:
+      protocol_components:
+        - id: "0xf2DCf6336D8250754B4527f57b275b19c8D5CF88"
+          tokens:
+            - "0xe9633C52f4c8B7BDeb08c4A7fE8a5c1B84AFCf67"
+            - "0x77E06c9eCCf2E797fd462A92B6D7642EF85b0A44"
+          static_attributes:
+          creation_tx: "0xeb34c90d352f18ffcfe78b7e393e155f0314acf06c54d1ac9996e4ee5a9b4742"
+        - id: "0x3f67dc2AdBA4B1beB6A48c30AB3AFb1c1440d35B"
+          tokens:
+            - "0xe9633C52f4c8B7BDeb08c4A7fE8a5c1B84AFCf67"
+            - "0x77E06c9eCCf2E797fd462A92B6D7642EF85b0A44"
+          static_attributes:
+          creation_tx: "0x455559b43afaf429c15c1d807fd7f5dd47be30f6411a854499f719b944f4c024"
+  - name: test_cryptopool_factory_creation
+    start_block: 19162590
+    stop_block: 19162633
+    expected_state:
+      protocol_components:
+        - id: "0x71db3764d6841d8b01dc27c0fd4a66a8a34b2be0"
+          tokens:
+            - "0x04c154b66cb340f3ae24111cc767e0184ed00cc6"
+            - "0x4591dbff62656e7859afe5e45f6f47d3669fbb28"
+          static_attributes:
+          creation_tx: "0xa89c09a7e0dfd84f3a294b8df4f33cc4a623e6d52deee357457afe2591ea596f"
+        - id: "0x6c9Fe53cC13b125d6476E5Ce2b76983bd5b7A112"
+          tokens:
+            - "0x35fA164735182de50811E8e2E824cFb9B6118ac2"
+            - "0xf951E335afb289353dc249e82926178EaC7DEd78"
+          static_attributes:
+          creation_tx: "0xa5b13d50c56242f7994b8e1339032bb4c6f9ac3af3054d4eae3ce9e32e3c1a50"
+  - name: test_tricrypto_factory_creation
+    start_block: 17371455
+    stop_block: 17371457
+    expected_state:
+      protocol_components:
+        - id: "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B"
+          tokens:
+            - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            - "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+            - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" #TODO: NEEDS TO BE NATIVE
+          static_attributes:
+          creation_tx: "0x2bd59c19f993b83729fb23498f897a58567c6f0b3ee2f00613ba515a7b19fe23"

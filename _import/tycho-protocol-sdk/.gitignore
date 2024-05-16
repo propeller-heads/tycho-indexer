@@ -12,6 +12,8 @@ target/
 .idea
 *.log
 
+__pycache__
+
 substreams/ethereum-template/Cargo.lock
 
 .DS_Store

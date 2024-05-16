@@ -37,7 +37,7 @@ modules:
 
   - name: map_relative_balances
     kind: map
-    initialBlock: 9906598  # An arbitrary block that should change based on your requirements
+    initialBlock: 9906598 # An arbitrary block that should change based on your requirements
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_component_tokens
@@ -61,6 +61,9 @@ modules:
       - map: map_relative_balances
       - store: store_component_tokens
       - store: store_balances
-        mode: deltas  # This is the key property that simplifies `BalanceChange` handling
+        mode: deltas # This is the key property that simplifies `BalanceChange` handling
     output:
       type: proto:tycho.evm.v1.BlockContractChanges
+
+params:
+  map_components: "address=bebc44782c7db0a1a60cb6fe97d0b483032ff1c7&tx_hash=20793bbf260912aae189d5d261ff003c9b9166da8191d8f9d63ff1c7722f3ac6&tokens[]=6b175474e89094c44da98b954eedeac495271d0f&tokens[]=a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48&tokens[]=dac17f958d2ee523a2206206994597c13d831ec7,address=dc24316b9ae028f1497c275eb9192a3ea0f67022&tx_hash=fac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa&tokens[]=EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&tokens[]=ae7ab96520DE3A18E5e111B5EaAb095312D7fE84,address=d51a44d3fae010294c616388b506acda1bfaae46&tx_hash=dafb6385ed988ce8aacecfe1d97b38ea5e60b1ebce74d2423f71ddd621680138&tokens[]=dAC17F958D2ee523a2206206994597C13D831ec7&tokens[]=2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599&tokens[]=C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
