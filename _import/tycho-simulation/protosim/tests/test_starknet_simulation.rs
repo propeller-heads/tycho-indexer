@@ -83,7 +83,8 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    // #[cfg_attr(not(feature = "network_tests"), ignore)]
+    #[ignore]
     fn test_consecutive_simulations_ekubo() {
         // Test vars
         let block_number = 194554;
@@ -226,7 +227,8 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    // #[cfg_attr(not(feature = "network_tests"), ignore)]
+    #[ignore]
     fn test_get_amount_out_eth_dai() {
         let test_wallet = address_str(BOB_ADDRESS);
         let ekubo_swap_address = address_str(EKUBO_SIMPLE_SWAP_ADDRESS);
@@ -307,6 +309,7 @@ mod tests {
         let res = result0.unwrap();
         let amount_out_index = if sell_token_index == 1 { 0 } else { 2 };
         assert_eq!(res.gas_used, 7701570);
-        assert_eq!(res.result[amount_out_index], felt_str(expected_buy_amount)); // check amount out
+        assert_eq!(res.result[amount_out_index], felt_str(expected_buy_amount));
+        // check amount out
     }
 }

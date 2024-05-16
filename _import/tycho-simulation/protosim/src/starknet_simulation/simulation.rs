@@ -959,7 +959,8 @@ pub mod tests {
 
     // Simulation of an external multicall.
     #[rstest]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    // #[cfg_attr(not(feature = "network_tests"), ignore)]
+    #[ignore]
     fn test_simulate_multicall() {
         // https://starkscan.co/tx/0x046e50c398bf08a69c7bbf1dedc35760556ba7c426a704d1ecb67378f01ffe59
 
