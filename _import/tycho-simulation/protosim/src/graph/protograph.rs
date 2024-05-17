@@ -46,22 +46,22 @@
 use ethers::types::{H160, U256};
 use itertools::Itertools;
 
-use petgraph::prelude::EdgeRef;
 use petgraph::{
-    prelude::UnGraph,
+    prelude::{EdgeRef, UnGraph},
     stable_graph::{EdgeIndex, NodeIndex},
 };
-use std::collections::hash_map::Entry;
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt,
+};
 use tracing::{debug, info, trace, warn};
 
-use crate::protocol::models::ProtocolComponent;
 use crate::{
     models::{ERC20Token, Swap},
     protocol::{
         errors::{TradeSimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
-        models::{GetAmountOutResult, Pair},
+        models::{GetAmountOutResult, Pair, ProtocolComponent},
         state::{ProtocolEvent, ProtocolSim, ProtocolState},
     },
 };
@@ -567,7 +567,6 @@ impl ProtoGraph {
                 let references = self
                     .graph
                     .edges_connecting(t0, t1)
-                    .into_iter()
                     .filter_map(|edge| {
                         if edge.weight() == &component.address {
                             let e = edge.id();
@@ -608,6 +607,11 @@ impl ProtoGraph {
         None
     }
 
+    pub fn clear_route_caches(&mut self) {
+        self.routes.clear();
+        self.route_memberships.clear();
+    }
+
     /// Builds the internal route cache for the token graph.
     ///
     /// This function should be called whenever the graphs topology changes
@@ -628,8 +632,6 @@ impl ProtoGraph {
         start_token: H160,
         end_token: H160,
     ) -> Result<(), UnknownTokenError> {
-        self.routes.clear();
-        self.route_memberships.clear();
         let start_node_idx = self
             .tokens
             .get(&start_token)
@@ -880,6 +882,7 @@ mod tests {
 
         g.remove_pair(&component);
 
+        g.clear_route_caches();
         g.build_routes(
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),

@@ -19,7 +19,7 @@ pub struct Tick {
     pub time: u64,
     pub states: HashMap<H160, ProtocolState>,
     pub new_pairs: HashMap<H160, ProtocolComponent>,
-    pub removed_pairs: HashMap<H160, ProtocolComponent>
+    pub removed_pairs: HashMap<H160, ProtocolComponent>,
 }
 
 impl Tick {
