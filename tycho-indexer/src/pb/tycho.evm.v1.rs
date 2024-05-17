@@ -6,16 +6,16 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Block {
     /// The blocks hash.
-    #[prost(bytes="vec", tag="1")]
+    #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
     /// The parent blocks hash.
-    #[prost(bytes="vec", tag="2")]
+    #[prost(bytes = "vec", tag = "2")]
     pub parent_hash: ::prost::alloc::vec::Vec<u8>,
     /// The block number.
-    #[prost(uint64, tag="3")]
+    #[prost(uint64, tag = "3")]
     pub number: u64,
     /// The block timestamp.
-    #[prost(uint64, tag="4")]
+    #[prost(uint64, tag = "4")]
     pub ts: u64,
 }
 /// A struct describing a transaction.
@@ -23,16 +23,16 @@ pub struct Block {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Transaction {
     /// The transaction hash.
-    #[prost(bytes="vec", tag="1")]
+    #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
     /// The sender of the transaction.
-    #[prost(bytes="vec", tag="2")]
+    #[prost(bytes = "vec", tag = "2")]
     pub from: ::prost::alloc::vec::Vec<u8>,
     /// The receiver of the transaction.
-    #[prost(bytes="vec", tag="3")]
+    #[prost(bytes = "vec", tag = "3")]
     pub to: ::prost::alloc::vec::Vec<u8>,
     /// The transactions index within the block.
-    #[prost(uint64, tag="4")]
+    #[prost(uint64, tag = "4")]
     pub index: u64,
 }
 /// A custom struct representing an arbitrary attribute of a protocol component.
@@ -40,25 +40,25 @@ pub struct Transaction {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Attribute {
     /// The name of the attribute.
-    #[prost(string, tag="1")]
+    #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
     /// The value of the attribute.
-    #[prost(bytes="vec", tag="2")]
+    #[prost(bytes = "vec", tag = "2")]
     pub value: ::prost::alloc::vec::Vec<u8>,
     /// The type of change the attribute underwent.
-    #[prost(enumeration="ChangeType", tag="3")]
+    #[prost(enumeration = "ChangeType", tag = "3")]
     pub change: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProtocolType {
-    #[prost(string, tag="1")]
+    #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(enumeration="FinancialType", tag="2")]
+    #[prost(enumeration = "FinancialType", tag = "2")]
     pub financial_type: i32,
-    #[prost(message, repeated, tag="3")]
+    #[prost(message, repeated, tag = "3")]
     pub attribute_schema: ::prost::alloc::vec::Vec<Attribute>,
-    #[prost(enumeration="ImplementationType", tag="4")]
+    #[prost(enumeration = "ImplementationType", tag = "4")]
     pub implementation_type: i32,
 }
 /// A struct describing a part of the protocol.
@@ -67,41 +67,42 @@ pub struct ProtocolType {
 pub struct ProtocolComponent {
     /// A unique identifier for the component within the protocol.
     /// Can be a stringified address or a string describing the trading pair.
-    #[prost(string, tag="1")]
+    #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
     /// Addresses of the ERC20 tokens used by the component.
-    #[prost(bytes="vec", repeated, tag="2")]
+    #[prost(bytes = "vec", repeated, tag = "2")]
     pub tokens: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Addresses of the contracts used by the component.
-    #[prost(bytes="vec", repeated, tag="3")]
+    #[prost(bytes = "vec", repeated, tag = "3")]
     pub contracts: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Attributes of the component.
     /// The inner ChangeType of the attribute has to match the ChangeType of the ProtocolComponent.
-    #[prost(message, repeated, tag="4")]
+    #[prost(message, repeated, tag = "4")]
     pub static_att: ::prost::alloc::vec::Vec<Attribute>,
     /// Type of change the component underwent.
-    #[prost(enumeration="ChangeType", tag="5")]
+    #[prost(enumeration = "ChangeType", tag = "5")]
     pub change: i32,
     /// / Represents the functionality of the component.
-    #[prost(message, optional, tag="6")]
+    #[prost(message, optional, tag = "6")]
     pub protocol_type: ::core::option::Option<ProtocolType>,
     /// Transaction where this component was created
-    #[prost(message, optional, tag="7")]
+    #[prost(message, optional, tag = "7")]
     pub tx: ::core::option::Option<Transaction>,
 }
 /// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
-/// Note that if the ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
+/// Note that if the ProtocolComponent contains multiple contracts, the TVL is tracked for the
+/// component as a whole.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BalanceChange {
     /// The address of the ERC20 token whose balance changed.
-    #[prost(bytes="vec", tag="1")]
+    #[prost(bytes = "vec", tag = "1")]
     pub token: ::prost::alloc::vec::Vec<u8>,
     /// The new balance of the token.
-    #[prost(bytes="vec", tag="2")]
+    #[prost(bytes = "vec", tag = "2")]
     pub balance: ::prost::alloc::vec::Vec<u8>,
     /// The id of the component whose TVL is tracked. Note: This MUST be utf8 encoded.
-    #[prost(bytes="vec", tag="3")]
+    #[prost(bytes = "vec", tag = "3")]
     pub component_id: ::prost::alloc::vec::Vec<u8>,
 }
 // Native entities
@@ -111,10 +112,10 @@ pub struct BalanceChange {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EntityChanges {
     /// A unique identifier of the entity within the protocol.
-    #[prost(string, tag="1")]
+    #[prost(string, tag = "1")]
     pub component_id: ::prost::alloc::string::String,
     /// The set of attributes that are associated with the entity.
-    #[prost(message, repeated, tag="2")]
+    #[prost(message, repeated, tag = "2")]
     pub attributes: ::prost::alloc::vec::Vec<Attribute>,
 }
 // VM entities
@@ -124,10 +125,10 @@ pub struct EntityChanges {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContractSlot {
     /// A contract's storage slot.
-    #[prost(bytes="vec", tag="2")]
+    #[prost(bytes = "vec", tag = "2")]
     pub slot: ::prost::alloc::vec::Vec<u8>,
     /// The new value for this storage slot.
-    #[prost(bytes="vec", tag="3")]
+    #[prost(bytes = "vec", tag = "3")]
     pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// Changes made to a single contract's state.
@@ -135,19 +136,19 @@ pub struct ContractSlot {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContractChange {
     /// The contract's address
-    #[prost(bytes="vec", tag="1")]
+    #[prost(bytes = "vec", tag = "1")]
     pub address: ::prost::alloc::vec::Vec<u8>,
     /// The new balance of the contract, empty bytes indicates no change.
-    #[prost(bytes="vec", tag="2")]
+    #[prost(bytes = "vec", tag = "2")]
     pub balance: ::prost::alloc::vec::Vec<u8>,
     /// The new code of the contract, empty bytes indicates no change.
-    #[prost(bytes="vec", tag="3")]
+    #[prost(bytes = "vec", tag = "3")]
     pub code: ::prost::alloc::vec::Vec<u8>,
     /// The changes to this contract's slots, empty sequence indicates no change.
-    #[prost(message, repeated, tag="4")]
+    #[prost(message, repeated, tag = "4")]
     pub slots: ::prost::alloc::vec::Vec<ContractSlot>,
     /// Whether this is an update, a creation or a deletion.
-    #[prost(enumeration="ChangeType", tag="5")]
+    #[prost(enumeration = "ChangeType", tag = "5")]
     pub change: i32,
 }
 // Aggregate entities
@@ -157,21 +158,22 @@ pub struct ContractChange {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionChanges {
     /// The transaction instance that results in the changes.
-    #[prost(message, optional, tag="1")]
+    #[prost(message, optional, tag = "1")]
     pub tx: ::core::option::Option<Transaction>,
     /// Contains the changes induced by the above transaction, aggregated on a per-contract basis.
-    /// Contains the contract changes induced by the above transaction, usually for tracking VM components.
-    #[prost(message, repeated, tag="2")]
+    /// Contains the contract changes induced by the above transaction, usually for tracking VM
+    /// components.
+    #[prost(message, repeated, tag = "2")]
     pub contract_changes: ::prost::alloc::vec::Vec<ContractChange>,
     /// Contains the entity changes induced by the above transaction.
     /// Usually for tracking native components or used for VM extensions (plugins).
-    #[prost(message, repeated, tag="3")]
+    #[prost(message, repeated, tag = "3")]
     pub entity_changes: ::prost::alloc::vec::Vec<EntityChanges>,
     /// An array of newly added components.
-    #[prost(message, repeated, tag="4")]
+    #[prost(message, repeated, tag = "4")]
     pub component_changes: ::prost::alloc::vec::Vec<ProtocolComponent>,
     /// An array of balance changes to components.
-    #[prost(message, repeated, tag="5")]
+    #[prost(message, repeated, tag = "5")]
     pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
 }
 /// A set of transaction changes within a single block.
@@ -179,10 +181,10 @@ pub struct TransactionChanges {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockChanges {
     /// The block for which these changes are collectively computed.
-    #[prost(message, optional, tag="1")]
+    #[prost(message, optional, tag = "1")]
     pub block: ::core::option::Option<Block>,
     /// The set of transaction changes observed in the specified block.
-    #[prost(message, repeated, tag="2")]
+    #[prost(message, repeated, tag = "2")]
     pub changes: ::prost::alloc::vec::Vec<TransactionChanges>,
 }
 /// Enum to specify the type of a change.
@@ -282,15 +284,15 @@ impl ImplementationType {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionEntityChanges {
-    #[prost(message, optional, tag="1")]
+    #[prost(message, optional, tag = "1")]
     pub tx: ::core::option::Option<Transaction>,
-    #[prost(message, repeated, tag="2")]
+    #[prost(message, repeated, tag = "2")]
     pub entity_changes: ::prost::alloc::vec::Vec<EntityChanges>,
     /// An array of newly added components.
-    #[prost(message, repeated, tag="3")]
+    #[prost(message, repeated, tag = "3")]
     pub component_changes: ::prost::alloc::vec::Vec<ProtocolComponent>,
     /// An array of balance changes to components.
-    #[prost(message, repeated, tag="4")]
+    #[prost(message, repeated, tag = "4")]
     pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
 }
 /// A set of transaction changes within a single block.
@@ -298,10 +300,10 @@ pub struct TransactionEntityChanges {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockEntityChanges {
     /// The block for which these changes are collectively computed.
-    #[prost(message, optional, tag="1")]
+    #[prost(message, optional, tag = "1")]
     pub block: ::core::option::Option<Block>,
     /// The set of transaction changes observed in the specified block.
-    #[prost(message, repeated, tag="2")]
+    #[prost(message, repeated, tag = "2")]
     pub changes: ::prost::alloc::vec::Vec<TransactionEntityChanges>,
 }
 // WARNING: DEPRECATED. Please use common.proto's TransactionChanges and BlockChanges instead.
@@ -312,16 +314,16 @@ pub struct BlockEntityChanges {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionContractChanges {
     /// The transaction instance that results in the changes.
-    #[prost(message, optional, tag="1")]
+    #[prost(message, optional, tag = "1")]
     pub tx: ::core::option::Option<Transaction>,
     /// Contains the changes induced by the above transaction, aggregated on a per-contract basis.
-    #[prost(message, repeated, tag="2")]
+    #[prost(message, repeated, tag = "2")]
     pub contract_changes: ::prost::alloc::vec::Vec<ContractChange>,
     /// An array of newly added components.
-    #[prost(message, repeated, tag="3")]
+    #[prost(message, repeated, tag = "3")]
     pub component_changes: ::prost::alloc::vec::Vec<ProtocolComponent>,
     /// An array of balance changes to components.
-    #[prost(message, repeated, tag="4")]
+    #[prost(message, repeated, tag = "4")]
     pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
 }
 /// A set of transaction changes within a single block.
@@ -329,10 +331,10 @@ pub struct TransactionContractChanges {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockContractChanges {
     /// The block for which these changes are collectively computed.
-    #[prost(message, optional, tag="1")]
+    #[prost(message, optional, tag = "1")]
     pub block: ::core::option::Option<Block>,
     /// The set of transaction changes observed in the specified block.
-    #[prost(message, repeated, tag="2")]
+    #[prost(message, repeated, tag = "2")]
     pub changes: ::prost::alloc::vec::Vec<TransactionContractChanges>,
 }
 // @@protoc_insertion_point(module)
