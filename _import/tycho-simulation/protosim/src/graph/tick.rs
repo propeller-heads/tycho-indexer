@@ -19,6 +19,7 @@ pub struct Tick {
     pub time: u64,
     pub states: HashMap<H160, ProtocolState>,
     pub new_pairs: HashMap<H160, ProtocolComponent>,
+    pub removed_pairs: HashMap<H160, ProtocolComponent>
 }
 
 impl Tick {
@@ -27,6 +28,11 @@ impl Tick {
         states: HashMap<H160, ProtocolState>,
         new_pairs: HashMap<H160, ProtocolComponent>,
     ) -> Self {
-        Tick { time, states, new_pairs }
+        Tick { time, states, new_pairs, removed_pairs: HashMap::new() }
+    }
+
+    pub fn set_removed_pairs(mut self, pairs: HashMap<H160, ProtocolComponent>) -> Self {
+        self.removed_pairs = pairs;
+        self
     }
 }

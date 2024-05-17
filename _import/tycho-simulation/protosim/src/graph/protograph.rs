@@ -46,13 +46,16 @@
 use ethers::types::{H160, U256};
 use itertools::Itertools;
 
+use petgraph::prelude::EdgeRef;
 use petgraph::{
     prelude::UnGraph,
     stable_graph::{EdgeIndex, NodeIndex},
 };
+use std::collections::hash_map::Entry;
 use std::{collections::HashMap, fmt};
 use tracing::{debug, info, trace, warn};
 
+use crate::protocol::models::ProtocolComponent;
 use crate::{
     models::{ERC20Token, Swap},
     protocol::{
@@ -357,6 +360,7 @@ pub struct ProtoGraph {
     /// A cache of all routes with length < n_hops in the graph.
     routes: Vec<RouteEntry>,
     /// A cache of the membership of each address in the graph to routes.
+    //TODO: make the values a HashSet?
     route_memberships: HashMap<H160, Vec<usize>>,
     /// "workhorse collection" for state overrides
     original_states: HashMap<H160, ProtocolState>,
@@ -440,7 +444,7 @@ impl ProtoGraph {
     /// Transition states in a revertible manner
     ///
     /// This method will transition states given a collection of events. Previous states are
-    /// recorded separately such that the transition can later be reverted using: `rever_states`
+    /// recorded separately such that the transition can later be reverted using: `revert_states`
     /// This is slower but safer in case transition errors need to handled gracefully or
     /// if the events are not yet fully settled.
     ///
@@ -520,7 +524,7 @@ impl ProtoGraph {
     pub fn insert_pair(&mut self, Pair(properties, state): Pair) -> Option<Pair> {
         // add missing tokens to graph
         for token in properties.tokens.iter() {
-            if let std::collections::hash_map::Entry::Vacant(e) = self.tokens.entry(token.address) {
+            if let Entry::Vacant(e) = self.tokens.entry(token.address) {
                 let node_idx = self.graph.add_node(token.address);
                 e.insert(TokenEntry(node_idx, token.clone()));
             }
@@ -544,6 +548,41 @@ impl ProtoGraph {
         // record pair
         self.states
             .insert(properties.address, Pair(properties, state))
+    }
+
+    pub fn remove_pair(&mut self, component: &ProtocolComponent) -> Option<Pair> {
+        // remove edges
+        let removed = self.states.remove(&component.address);
+        if removed.is_some() {
+            for tpair in component.tokens.iter().combinations(2) {
+                let &TokenEntry(t0, _) = self
+                    .tokens
+                    .get(&tpair[0].address)
+                    .expect("token missing");
+                let &TokenEntry(t1, _) = self
+                    .tokens
+                    .get(&tpair[1].address)
+                    .expect("token missing");
+
+                let references = self
+                    .graph
+                    .edges_connecting(t0, t1)
+                    .into_iter()
+                    .filter_map(|edge| {
+                        if edge.weight() == &component.address {
+                            let e = edge.id();
+                            Some(e)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                for edge in references {
+                    self.graph.remove_edge(edge);
+                }
+            }
+        }
+        removed
     }
 
     /// Update a pairs state
@@ -589,6 +628,8 @@ impl ProtoGraph {
         start_token: H160,
         end_token: H160,
     ) -> Result<(), UnknownTokenError> {
+        self.routes.clear();
+        self.route_memberships.clear();
         let start_node_idx = self
             .tokens
             .get(&start_token)
@@ -824,6 +865,32 @@ mod tests {
             .unwrap(),
             log_index: log_idx.1,
         }
+    }
+
+    #[test]
+    fn test_remove_pair() {
+        let mut g = construct_graph();
+        let Pair(component, _) = make_pair(
+            "0x0000000000000000000000000000000000000002",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            0,
+            0,
+        );
+
+        g.remove_pair(&component);
+
+        g.build_routes(
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        )
+        .expect("building routes failed");
+        assert_eq!(g.tokens.len(), 2);
+        assert_eq!(g.states.len(), 1);
+        assert_eq!(g.graph.edge_count(), 1);
+        assert_eq!(g.graph.node_count(), 2);
+        assert_eq!(g.routes.len(), 0);
+        assert_eq!(g.route_memberships.len(), 0);
     }
 
     #[test]
