@@ -131,106 +131,11 @@ pub enum Response {
     SubscriptionEnded { subscription_id: Uuid },
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
-#[serde(untagged)]
-pub enum Deltas {
-    VM(BlockAccountChanges),
-    Native(BlockEntityChangesResult),
-}
-
-impl Deltas {
-    pub fn get_block(&self) -> &Block {
-        match self {
-            Deltas::VM(data) => &data.block,
-            Deltas::Native(data) => &data.block,
-        }
-    }
-
-    pub fn is_revert(&self) -> bool {
-        match self {
-            Deltas::VM(data) => data.revert,
-            Deltas::Native(data) => data.revert,
-        }
-    }
-
-    pub fn component_tvl(&self) -> &HashMap<String, f64> {
-        match self {
-            Deltas::VM(data) => &data.component_tvl,
-            Deltas::Native(data) => &data.component_tvl,
-        }
-    }
-
-    pub fn filter_by_component<F: Fn(&str) -> bool>(&mut self, keep: F) {
-        match self {
-            Deltas::Native(data) => {
-                data.state_updates
-                    .retain(|k, _| keep(k));
-                data.component_balances
-                    .retain(|k, _| keep(k));
-                data.component_tvl
-                    .retain(|k, _| keep(k));
-            }
-            Deltas::VM(data) => {
-                data.component_balances
-                    .retain(|k, _| keep(k));
-                data.component_tvl
-                    .retain(|k, _| keep(k));
-            }
-        }
-    }
-
-    pub fn filter_by_contract<F: Fn(&Bytes) -> bool>(&mut self, keep: F) {
-        match self {
-            Deltas::VM(data) => {
-                data.account_updates
-                    .retain(|k, _| keep(k));
-            }
-            Deltas::Native(_) => panic!("Can't filter native deltas by contract!"),
-        }
-    }
-
-    pub fn merge(self, other: Self) -> Self {
-        match (self, other) {
-            (Deltas::VM(left), Deltas::VM(right)) => Deltas::VM(left.merge(right)),
-            (Deltas::Native(left), Deltas::Native(right)) => Deltas::Native(left.merge(right)),
-            _ => panic!("Not allowed to merge deltas of different types"),
-        }
-    }
-
-    pub fn n_changes(&self) -> usize {
-        match self {
-            Deltas::VM(deltas) => deltas.account_updates.len(),
-            Deltas::Native(deltas) => deltas.state_updates.len(),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for Deltas {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let json: serde_json::Value = serde_json::Value::deserialize(deserializer)?;
-        if json.get("account_updates").is_some() {
-            return BlockAccountChanges::deserialize(json)
-                .map(Deltas::VM)
-                .map_err(serde::de::Error::custom);
-        }
-        if json.get("state_updates").is_some() {
-            return BlockEntityChangesResult::deserialize(json)
-                .map(Deltas::Native)
-                .map_err(serde::de::Error::custom);
-        }
-
-        Err(serde::de::Error::custom("data did not match any variant of untagged enum Deltas"))
-    }
-}
-
 /// A message sent from the server to the client
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum WebSocketMessage {
-    BlockChanges { subscription_id: Uuid, deltas: Deltas },
+    BlockChanges { subscription_id: Uuid, deltas: BlockChanges },
     Response(Response),
 }
 
@@ -263,6 +168,15 @@ impl From<&Block> for BlockParam {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct TokenBalances(#[serde(with = "hex_hashmap_key")] pub HashMap<Bytes, ComponentBalance>);
+
+impl From<HashMap<Bytes, ComponentBalance>> for TokenBalances {
+    fn from(value: HashMap<Bytes, ComponentBalance>) -> Self {
+        TokenBalances(value)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Default, Deserialize, Serialize)]
 pub struct Transaction {
     #[serde(with = "hex_bytes")]
@@ -283,38 +197,28 @@ impl Transaction {
     }
 }
 
-/// A container for account updates grouped by account.
+/// A container for updates grouped by account/component.
 ///
-/// Hold a single update per account. This is a condensed form of
-/// [BlockStateChanges].
-///
-/// TODO - update once new structure is merged
+/// Hold a single update per account/component. This is a condensed form of
+/// [BlockChanges].
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct BlockAccountChanges {
-    extractor: String,
-    chain: Chain,
+pub struct BlockChanges {
+    pub extractor: String,
+    pub chain: Chain,
     pub block: Block,
     pub revert: bool,
     #[serde(with = "hex_hashmap_key", default)]
     pub new_tokens: HashMap<Bytes, ResponseToken>,
     #[serde(with = "hex_hashmap_key")]
     pub account_updates: HashMap<Bytes, AccountUpdate>,
+    pub state_updates: HashMap<String, ProtocolStateDelta>,
     pub new_protocol_components: HashMap<String, ProtocolComponent>,
     pub deleted_protocol_components: HashMap<String, ProtocolComponent>,
     pub component_balances: HashMap<String, TokenBalances>,
     pub component_tvl: HashMap<String, f64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct TokenBalances(#[serde(with = "hex_hashmap_key")] pub HashMap<Bytes, ComponentBalance>);
-
-impl From<HashMap<Bytes, ComponentBalance>> for TokenBalances {
-    fn from(value: HashMap<Bytes, ComponentBalance>) -> Self {
-        TokenBalances(value)
-    }
-}
-
-impl BlockAccountChanges {
+impl BlockChanges {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor: &str,
@@ -322,17 +226,19 @@ impl BlockAccountChanges {
         block: Block,
         revert: bool,
         account_updates: HashMap<Bytes, AccountUpdate>,
+        state_updates: HashMap<String, ProtocolStateDelta>,
         new_protocol_components: HashMap<String, ProtocolComponent>,
         deleted_protocol_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>>,
     ) -> Self {
-        BlockAccountChanges {
+        BlockChanges {
             extractor: extractor.to_owned(),
             chain,
             block,
             revert,
             new_tokens: HashMap::new(),
             account_updates,
+            state_updates,
             new_protocol_components,
             deleted_protocol_components,
             component_balances: component_balances
@@ -357,6 +263,18 @@ impl BlockAccountChanges {
             });
 
         other
+            .state_updates
+            .into_iter()
+            .for_each(|(k, v)| {
+                self.state_updates
+                    .entry(k)
+                    .and_modify(|e| {
+                        e.merge(&v);
+                    })
+                    .or_insert(v);
+            });
+
+        other
             .component_balances
             .into_iter()
             .for_each(|(k, v)| {
@@ -366,6 +284,8 @@ impl BlockAccountChanges {
                     .or_insert_with(|| v);
             });
 
+        self.component_tvl
+            .extend(other.component_tvl);
         self.new_protocol_components
             .extend(other.new_protocol_components);
         self.deleted_protocol_components
@@ -374,6 +294,32 @@ impl BlockAccountChanges {
         self.block = other.block;
 
         self
+    }
+
+    pub fn get_block(&self) -> &Block {
+        &self.block
+    }
+
+    pub fn is_revert(&self) -> bool {
+        self.revert
+    }
+
+    pub fn filter_by_component<F: Fn(&str) -> bool>(&mut self, keep: F) {
+        self.state_updates
+            .retain(|k, _| keep(k));
+        self.component_balances
+            .retain(|k, _| keep(k));
+        self.component_tvl
+            .retain(|k, _| keep(k));
+    }
+
+    pub fn filter_by_contract<F: Fn(&Bytes) -> bool>(&mut self, keep: F) {
+        self.account_updates
+            .retain(|k, _| keep(k));
+    }
+
+    pub fn n_changes(&self) -> usize {
+        self.account_updates.len() + self.state_updates.len()
     }
 }
 
@@ -487,64 +433,6 @@ pub struct ComponentBalance {
     #[serde(with = "hex_bytes")]
     pub modify_tx: Bytes,
     pub component_id: String,
-}
-
-/// A container for state updates grouped by protocol component.
-///
-/// Hold a single update per component. This is a condensed form of
-/// [BlockEntityChanges].
-///
-/// TODO - update once new structure is merged
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct BlockEntityChangesResult {
-    pub extractor: String,
-    pub chain: Chain,
-    pub block: Block,
-    pub revert: bool,
-    #[serde(with = "hex_hashmap_key", default)]
-    pub new_tokens: HashMap<Bytes, ResponseToken>,
-    pub state_updates: HashMap<String, ProtocolStateDelta>,
-    pub new_protocol_components: HashMap<String, ProtocolComponent>,
-    pub deleted_protocol_components: HashMap<String, ProtocolComponent>,
-    pub component_balances: HashMap<String, TokenBalances>,
-    pub component_tvl: HashMap<String, f64>,
-}
-
-impl BlockEntityChangesResult {
-    pub fn merge(mut self, other: Self) -> Self {
-        other
-            .state_updates
-            .into_iter()
-            .for_each(|(k, v)| {
-                self.state_updates
-                    .entry(k)
-                    .and_modify(|e| {
-                        e.merge(&v);
-                    })
-                    .or_insert(v);
-            });
-
-        other
-            .component_balances
-            .into_iter()
-            .for_each(|(k, v)| {
-                self.component_balances
-                    .entry(k)
-                    .and_modify(|e| e.0.extend(v.0.clone()))
-                    .or_insert_with(|| v);
-            });
-
-        self.component_tvl
-            .extend(other.component_tvl);
-        self.new_protocol_components
-            .extend(other.new_protocol_components);
-        self.deleted_protocol_components
-            .extend(other.deleted_protocol_components);
-        self.revert = other.revert;
-        self.block = other.block;
-
-        self
-    }
 }
 
 #[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize, ToSchema)]
