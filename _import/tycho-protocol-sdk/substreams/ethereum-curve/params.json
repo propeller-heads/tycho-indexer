@@ -7,8 +7,7 @@
             "6b175474e89094c44da98b954eedeac495271d0f",
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             "dac17f958d2ee523a2206206994597c13d831ec7"
-        ],
-        "attributes": {}
+        ]
     },
     {
         "name": "steth",
@@ -17,8 +16,7 @@
         "tokens": [
             "EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
             "ae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
-        ],
-        "attributes": {}
+        ]
     },
     {
         "name": "tricrypto2",
@@ -28,7 +26,35 @@
             "dAC17F958D2ee523a2206206994597C13D831ec7",
             "2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
             "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        ],
-        "attributes": {}
+        ]
+    },
+    {
+        "name": "crvUSD/USDC",
+        "address": "4dece678ceceb27446b35c672dc7d61f30bad69e",
+        "tx_hash": "4b288a16fe2f1c556752478989d88ef6e7a2c9a0cd258a12b11b232a112dc279",
+        "tokens": [
+            "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "f939e0a03fb07f59a73314e73794be0e57ac1b4e"
+        ]
+    },
+    {
+        "name": "susd",
+        "address": "A5407eAE9Ba41422680e2e00537571bcC53efBfD",
+        "tx_hash": "51aca4a03a395de8855fa2ca59b7febe520c2a223e69c502066162f7c1a95ec2",
+        "tokens": [
+            "6B175474E89094C44Da98b954EedeAC495271d0F",
+            "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "dAC17F958D2ee523a2206206994597C13D831ec7",
+            "57Ab1ec28D129707052df4dF418D58a2D46d5f51"
+        ]
+    },
+    {
+        "name": "fraxusdc",
+        "address": "DcEF968d416a41Cdac0ED8702fAC8128A64241A2",
+        "tx_hash": "1f4254004ce9e19d4eb742ee5a69d30f29085902d976f73e97c44150225ef775",
+        "tokens": [
+            "853d955aCEf822Db058eb8505911ED77F175b99e",
+            "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        ]
     }
 ]

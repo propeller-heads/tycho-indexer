@@ -1,5 +1,4 @@
 use substreams::{
-    hex,
     scalar::BigInt,
     store::{StoreGet, StoreGetInt64, StoreGetString},
 };
@@ -21,18 +20,10 @@ fn tx_from_log(log: &LogView) -> Transaction {
 ///  pools contain differing ABIs, we load in several examples of abis in order to best match the
 ///  topic ID to the correct event. The repetition in this function is dervived from the fact that
 ///  most of these events have similar structures, but the specific topic id differs.
-pub fn emit_deltas(
-    log: LogView,
-    pools_store: &StoreGetInt64,
-    tokens_store: &StoreGetString,
-) -> Option<Vec<BalanceDelta>> {
+pub fn emit_deltas(log: LogView, tokens_store: &StoreGetString) -> Option<Vec<BalanceDelta>> {
     let pool_key = format!("pool:{}", hex::encode(&log.address()));
-    if pools_store.get_last(pool_key).is_none() {
-        return None;
-    }
-
     let tokens = tokens_store
-        .get_last(format!("pool:{}", hex::encode(log.address())))?
+        .get_last(pool_key)?
         .split(":")
         .map(|token| token.to_owned())
         .collect::<Vec<_>>();

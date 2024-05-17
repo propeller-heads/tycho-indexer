@@ -81,21 +81,7 @@ pub fn map_components(
     })
 }
 
-/// Simply stores the `ProtocolComponent`s with the pool id as the key
-#[substreams::handlers::store]
-pub fn store_components(map: BlockTransactionProtocolComponents, store: StoreAddInt64) {
-    store.add_many(
-        0,
-        &map.tx_components
-            .iter()
-            .flat_map(|tx_components| &tx_components.components)
-            .map(|component| format!("pool:{0}", component.id))
-            .collect::<Vec<_>>(),
-        1,
-    );
-}
-
-/// Simply stores the `ProtocolComponent`s with the pool id as the key
+/// Simply stores the `ProtocolComponent`s with the pool id as the key and tokens as the value
 #[substreams::handlers::store]
 pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: StoreSetString) {
     map.tx_components
@@ -119,14 +105,13 @@ pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: St
 #[substreams::handlers::map]
 pub fn map_relative_balances(
     block: eth::v2::Block,
-    pools_store: StoreGetInt64,
     tokens_store: StoreGetString,
 ) -> Result<BlockBalanceDeltas, anyhow::Error> {
     Ok(BlockBalanceDeltas {
         balance_deltas: {
             block
                 .logs()
-                .filter_map(|log| emit_deltas(log, &pools_store, &tokens_store))
+                .filter_map(|log| emit_deltas(log, &tokens_store))
                 .flat_map(|deltas| deltas.into_iter())
                 .collect::<Vec<_>>()
         },
@@ -151,7 +136,7 @@ pub fn map_protocol_changes(
     block: eth::v2::Block,
     grouped_components: BlockTransactionProtocolComponents,
     deltas: BlockBalanceDeltas,
-    components_store: StoreGetInt64,
+    components_store: StoreGetString,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
 ) -> Result<BlockContractChanges> {
     // We merge contract changes by transaction (identified by transaction index) making it easy to

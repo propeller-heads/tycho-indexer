@@ -27,14 +27,6 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
 
-  - name: store_components
-    kind: store
-    initialBlock: 18830232
-    updatePolicy: add
-    valueType: int64
-    inputs:
-      - map: map_components
-
   - name: store_component_tokens
     kind: store
     initialBlock: 18830232
@@ -68,7 +60,7 @@ modules:
       - source: sf.ethereum.type.v2.Block
       - map: map_components
       - map: map_relative_balances
-      - store: store_components
+      - store: store_component_tokens
       - store: store_balances
         mode: deltas  # This is the key property that simplifies `BalanceChange` handling
     output:

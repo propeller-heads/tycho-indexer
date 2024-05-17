@@ -2,7 +2,7 @@ import json
 from typing import Any
 
 PARAMETERS = "params.json"
-
+EMPTY = "0x0000000000000000000000000000000000000000"
 
 def encode_json_to_query_params(params: list[dict[str, Any]]):
     encoded_params = []
@@ -12,6 +12,8 @@ def encode_json_to_query_params(params: list[dict[str, Any]]):
             tx_hash: str = param["tx_hash"]
             tokens: list[str] = param["tokens"]
             attributes: dict[str, str] = param["attributes"]
+            attributes["name"] = param["name"]
+            attributes["factory"] = EMPTY
 
             encoded_address = f"address={address}"
             encoded_tx_hash = f"tx_hash={tx_hash}"
