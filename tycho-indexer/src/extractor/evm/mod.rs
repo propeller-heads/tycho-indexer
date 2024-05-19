@@ -25,6 +25,7 @@ use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
 pub mod chain_state;
 mod convert;
+mod hybrid;
 pub mod native;
 pub mod protocol_cache;
 pub mod token_analysis_cron;
@@ -1480,6 +1481,134 @@ impl BlockEntityChanges {
             })
             .collect()
     }
+}
+
+/// Changes grouped by their respective transaction.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ChangesWithTx {
+    pub protocol_components: HashMap<ComponentId, ProtocolComponent>,
+    pub account_updates: HashMap<H160, AccountUpdate>,
+    pub protocol_states: HashMap<ComponentId, ProtocolStateDelta>,
+    pub balance_changes: HashMap<ComponentId, HashMap<H160, ComponentBalance>>,
+    pub tx: Transaction,
+}
+
+impl ChangesWithTx {
+    pub fn new(
+        protocol_components: HashMap<ComponentId, ProtocolComponent>,
+        account_updates: HashMap<H160, AccountUpdate>,
+        protocol_states: HashMap<ComponentId, ProtocolStateDelta>,
+        balance_changes: HashMap<ComponentId, HashMap<H160, ComponentBalance>>,
+        tx: Transaction,
+    ) -> Self {
+        Self { account_updates, protocol_components, protocol_states, balance_changes, tx }
+    }
+
+    /// Merges this update with another one.
+    ///
+    /// The method combines two `ChangesWithTx` instances if they are for the same
+    /// transaction.
+    ///
+    /// NB: It is assumed that `other` is a more recent update than `self` is and the two are
+    /// combined accordingly.
+    ///
+    /// # Errors
+    /// This method will return `ExtractionError::MergeError` if any of the above
+    /// conditions is violated.
+    pub fn merge(&mut self, other: ChangesWithTx) -> Result<(), ExtractionError> {
+        if self.tx.block_hash != other.tx.block_hash {
+            return Err(ExtractionError::MergeError(format!(
+                "Can't merge ProtocolStates from different blocks: 0x{:x} != 0x{:x}",
+                self.tx.block_hash, other.tx.block_hash,
+            )));
+        }
+        if self.tx.hash != other.tx.hash {
+            return Err(ExtractionError::MergeError(format!(
+                "Can't merge ChangesWithTx from different transactions: 0x{:x} != 0x{:x}",
+                self.tx.hash, other.tx.hash,
+            )));
+        }
+        if self.tx.index > other.tx.index {
+            return Err(ExtractionError::MergeError(format!(
+                "Can't merge ProtocolStates with lower transaction index: {} > {}",
+                self.tx.index, other.tx.index
+            )));
+        }
+
+        self.tx = other.tx;
+
+        // Merge new protocol components
+        // Log a warning if a new protocol component for the same id already exists, because this
+        // should never happen.
+        for (key, value) in other.protocol_components {
+            match self.protocol_components.entry(key) {
+                Entry::Occupied(mut entry) => {
+                    warn!(
+                        "Overwriting new protocol component for id {} with a new one. This should never happen! Please check logic",
+                        entry.get().id
+                    );
+                    entry.insert(value);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(value);
+                }
+            }
+        }
+
+        // Merge Account Updates
+        for (address, update) in other
+            .account_updates
+            .clone()
+            .into_iter()
+        {
+            match self.account_updates.entry(address) {
+                Entry::Occupied(mut e) => {
+                    e.get_mut().merge(update)?;
+                }
+                Entry::Vacant(e) => {
+                    e.insert(update);
+                }
+            }
+        }
+
+        // Merge Protocol States
+        for (key, value) in other.protocol_states {
+            match self.protocol_states.entry(key) {
+                Entry::Occupied(mut entry) => {
+                    entry.get_mut().merge(value)?;
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(value);
+                }
+            }
+        }
+
+        // Merge Balance Changes
+        for (component_id, balance_changes) in other.balance_changes {
+            let token_balances = self
+                .balance_changes
+                .entry(component_id)
+                .or_default();
+            for (token, balance) in balance_changes {
+                token_balances.insert(token, balance);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct BlockChanges {
+    extractor: String,
+    chain: Chain,
+    pub block: Block,
+    pub finalized_block_height: u64,
+    pub revert: bool,
+    /// Required here, so it is part of the revert buffer and thus inserted into storage once
+    /// finalized.
+    pub new_tokens: HashMap<Address, CurrencyToken>,
+    /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
+    pub txs_with_update: Vec<ChangesWithTx>,
 }
 
 #[cfg(test)]
