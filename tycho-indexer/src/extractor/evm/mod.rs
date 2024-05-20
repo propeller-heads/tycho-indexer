@@ -1502,7 +1502,72 @@ impl TxWithChanges {
         protocol_system: &str,
         protocol_types: &HashMap<String, ProtocolType>,
     ) -> Result<Self, ExtractionError> {
-        todo!()
+        let tx = Transaction::try_from_message(
+            msg.tx
+                .expect("TransactionChanges should have a transaction"),
+            &block.hash,
+        )?;
+
+        let mut new_protocol_components: HashMap<String, ProtocolComponent> = HashMap::new();
+        let mut account_updates: HashMap<H160, AccountUpdate> = HashMap::new();
+        let mut state_updates: HashMap<String, ProtocolStateDelta> = HashMap::new();
+        let mut balance_changes: HashMap<String, HashMap<H160, ComponentBalance>> = HashMap::new();
+
+        // First, parse the new protocol components
+        for change in msg.component_changes.into_iter() {
+            let component = ProtocolComponent::try_from_message(
+                change,
+                block.chain,
+                protocol_system,
+                protocol_types,
+                tx.hash,
+                block.ts,
+            )?;
+            new_protocol_components.insert(component.id.clone(), component);
+        }
+
+        // Then, parse the account updates
+        for el in msg.contract_changes.into_iter() {
+            let update = AccountUpdate::try_from_message(el, block.chain)?;
+            account_updates.insert(update.address, update);
+        }
+
+        // Then, parse the state updates
+        for state_msg in msg.entity_changes.into_iter() {
+            let state = ProtocolStateDelta::try_from_message(state_msg)?;
+            // Check if a state update for the same component already exists
+            // If it exists, overwrite the existing state update with the new one and log a warning
+            match state_updates.entry(state.component_id.clone()) {
+                Entry::Vacant(e) => {
+                    e.insert(state);
+                }
+                Entry::Occupied(mut e) => {
+                    warn!("Received two state updates for the same component. Overwriting state for component {}", e.key());
+                    e.insert(state);
+                }
+            }
+        }
+
+        // Finally, parse the balance changes
+        for balance_change in msg.balance_changes.into_iter() {
+            let component_id = String::from_utf8(balance_change.component_id.clone())
+                .map_err(|error| ExtractionError::DecodeError(error.to_string()))?;
+            let token_address = H160::from_slice(balance_change.token.as_slice());
+            let balance = ComponentBalance::try_from_message(balance_change, &tx)?;
+
+            balance_changes
+                .entry(component_id)
+                .or_default()
+                .insert(token_address, balance);
+        }
+
+        Ok(Self {
+            protocol_components: new_protocol_components,
+            account_updates,
+            protocol_states: state_updates,
+            balance_changes,
+            tx,
+        })
     }
 
     /// Merges this update with another one.
@@ -1596,6 +1661,26 @@ impl TxWithChanges {
         }
         Ok(())
     }
+}
+
+/// A container for updates grouped by protocol component.
+///
+/// Hold a single update per component. This is a condensed form of
+/// [BlockChanges].
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct BlockChangesResult {
+    extractor: String,
+    chain: Chain,
+    pub block: Block,
+    pub finalized_block_height: u64,
+    pub revert: bool,
+    pub new_protocol_components: HashMap<ComponentId, ProtocolComponent>,
+    pub new_tokens: HashMap<Address, CurrencyToken>,
+    pub deleted_protocol_components: HashMap<ComponentId, ProtocolComponent>,
+    pub protocol_states: HashMap<ComponentId, ProtocolStateDelta>,
+    pub account_updates: HashMap<H160, AccountUpdate>,
+    pub component_balances: HashMap<ComponentId, HashMap<H160, ComponentBalance>>,
+    pub component_tvl: HashMap<ComponentId, f64>,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -1700,6 +1785,60 @@ impl BlockChanges {
         } else {
             Err(ExtractionError::Empty)
         }
+    }
+
+    /// Aggregates state updates.
+    ///
+    /// This function aggregates the protocol updates
+    /// for different protocol components into a `BlockChangesResult` object.
+    /// This new object should have only one final ProtocolStateDelta and a HashMap to hold
+    /// `AccountUpdate` per component_id.
+    ///
+    /// After merging all updates, a `BlockChangesResult` object is returned
+    /// which contains, amongst other data, the compacted state updates.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if there was a problem during merge. The error
+    /// type is `ExtractionError`.
+    pub fn aggregate_updates(self) -> Result<BlockChangesResult, ExtractionError> {
+        let mut iter = self.txs_with_update.into_iter();
+
+        // Use unwrap_or_else to provide a default state if iter.next() is None
+        let first_state = iter.next().unwrap_or_default();
+
+        let aggregated_changes = iter
+            .try_fold(first_state, |mut acc_state, new_state| {
+                acc_state.merge(new_state.clone())?;
+                Ok::<_, ExtractionError>(acc_state.clone())
+            })
+            .unwrap();
+
+        Ok(BlockChangesResult {
+            extractor: self.extractor,
+            chain: self.chain,
+            block: self.block,
+            finalized_block_height: self.finalized_block_height,
+            revert: self.revert,
+            new_protocol_components: aggregated_changes.protocol_components,
+            new_tokens: self.new_tokens,
+            deleted_protocol_components: HashMap::new(),
+            protocol_states: aggregated_changes.protocol_states,
+            account_updates: aggregated_changes.account_updates,
+            component_balances: aggregated_changes.balance_changes,
+            component_tvl: HashMap::new(),
+        })
+    }
+
+    pub fn protocol_components(&self) -> Vec<ProtocolComponent> {
+        self.txs_with_update
+            .iter()
+            .flat_map(|tx_u| {
+                tx_u.protocol_components
+                    .values()
+                    .cloned()
+            })
+            .collect()
     }
 }
 
