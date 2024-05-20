@@ -1485,7 +1485,7 @@ impl BlockEntityChanges {
 
 /// Changes grouped by their respective transaction.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ChangesWithTx {
+pub struct TxWithChanges {
     pub protocol_components: HashMap<ComponentId, ProtocolComponent>,
     pub account_updates: HashMap<H160, AccountUpdate>,
     pub protocol_states: HashMap<ComponentId, ProtocolStateDelta>,
@@ -1493,7 +1493,7 @@ pub struct ChangesWithTx {
     pub tx: Transaction,
 }
 
-impl ChangesWithTx {
+impl TxWithChanges {
     pub fn new(
         protocol_components: HashMap<ComponentId, ProtocolComponent>,
         account_updates: HashMap<H160, AccountUpdate>,
@@ -1502,6 +1502,15 @@ impl ChangesWithTx {
         tx: Transaction,
     ) -> Self {
         Self { account_updates, protocol_components, protocol_states, balance_changes, tx }
+    }
+
+    fn try_from_message(
+        msg: substreams::TransactionChanges,
+        block: &Block,
+        protocol_system: &str,
+        protocol_types: &HashMap<String, ProtocolType>,
+    ) -> Result<Self, ExtractionError> {
+        todo!()
     }
 
     /// Merges this update with another one.
@@ -1515,7 +1524,7 @@ impl ChangesWithTx {
     /// # Errors
     /// This method will return `ExtractionError::MergeError` if any of the above
     /// conditions is violated.
-    pub fn merge(&mut self, other: ChangesWithTx) -> Result<(), ExtractionError> {
+    pub fn merge(&mut self, other: TxWithChanges) -> Result<(), ExtractionError> {
         if self.tx.block_hash != other.tx.block_hash {
             return Err(ExtractionError::MergeError(format!(
                 "Can't merge ProtocolStates from different blocks: 0x{:x} != 0x{:x}",
@@ -1608,7 +1617,98 @@ pub struct BlockChanges {
     /// finalized.
     pub new_tokens: HashMap<Address, CurrencyToken>,
     /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
-    pub txs_with_update: Vec<ChangesWithTx>,
+    pub txs_with_update: Vec<TxWithChanges>,
+}
+
+impl StateUpdateBufferEntry for BlockChanges {
+    type IdType = ();
+    type KeyType = ();
+    type ValueType = ();
+
+    fn get_filtered_state_update(
+        &self,
+        keys: Vec<(&Self::IdType, &Self::KeyType)>,
+    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
+        todo!()
+    }
+
+    fn get_filtered_balance_update(
+        &self,
+        keys: Vec<(&String, &Bytes)>,
+    ) -> HashMap<(String, Bytes), tycho_core_protocol::ComponentBalance> {
+        todo!()
+    }
+}
+
+impl BlockScoped for BlockChanges {
+    fn block(&self) -> tycho_core::models::blockchain::Block {
+        (&self.block).into()
+    }
+}
+
+impl BlockChanges {
+    pub fn new(
+        extractor: String,
+        chain: Chain,
+        block: Block,
+        finalized_block_height: u64,
+        revert: bool,
+        txs_with_update: Vec<TxWithChanges>,
+    ) -> Self {
+        BlockChanges {
+            extractor,
+            chain,
+            block,
+            finalized_block_height,
+            revert,
+            new_tokens: HashMap::new(),
+            txs_with_update,
+        }
+    }
+
+    /// Parse from Tycho's protobuf message
+    pub fn try_from_message(
+        msg: substreams::BlockChanges,
+        extractor: &str,
+        chain: Chain,
+        protocol_system: &str,
+        protocol_types: &HashMap<String, ProtocolType>,
+        finalized_block_height: u64,
+    ) -> Result<Self, ExtractionError> {
+        if let Some(block) = msg.block {
+            let block = Block::try_from_message(block, chain)?;
+
+            let txs_with_update = msg
+                .changes
+                .into_iter()
+                .map(|change| {
+                    change.tx.as_ref().ok_or_else(|| {
+                        ExtractionError::DecodeError(
+                            "TransactionEntityChanges misses a transaction".to_owned(),
+                        )
+                    })?;
+
+                    TxWithChanges::try_from_message(change, &block, protocol_system, protocol_types)
+                })
+                .collect::<Result<Vec<TxWithChanges>, ExtractionError>>()?;
+
+            // Sort updates by transaction index
+            let mut txs_with_update = txs_with_update;
+            txs_with_update.sort_unstable_by_key(|update| update.tx.index);
+
+            Ok(Self {
+                extractor: extractor.to_string(),
+                chain,
+                block,
+                finalized_block_height,
+                revert: false,
+                new_tokens: HashMap::new(),
+                txs_with_update,
+            })
+        } else {
+            Err(ExtractionError::Empty)
+        }
+    }
 }
 
 #[cfg(test)]
