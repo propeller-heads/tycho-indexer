@@ -5,6 +5,7 @@ import subprocess
 
 import yaml
 
+from evm import get_token_balance
 from tycho import TychoRunner
 
 
@@ -51,7 +52,7 @@ class TestRunner:
             )
 
             result = self.tycho_runner.run_with_rpc_server(
-                self.validate_state, test["expected_state"]
+                self.validate_state, test["expected_state"], test["stop_block"]
             )
 
             if result.success:
@@ -63,9 +64,10 @@ class TestRunner:
                 "postgres://postgres:mypassword@localhost:5432"
             )
 
-    def validate_state(self, expected_state: dict) -> TestResult:
+    def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
         """Validate the current protocol state against the expected state."""
         protocol_components = self.tycho_runner.get_protocol_components()
+        protocol_states = self.tycho_runner.get_protocol_state()
         components = {
             component["id"]: component
             for component in protocol_components["protocol_components"]
@@ -96,6 +98,12 @@ class TestRunner:
                         return TestResult.Failed(
                             f"Value mismatch for key '{key}': {value} != {component[key]}"
                         )
+                for state in protocol_states["states"]:
+                    for token, balance in state["balances"].items():
+                        node_balance = get_token_balance(token,comp_id,stop_block)
+                        tycho_balance = int(balance,16)
+                        if node_balance != tycho_balance:
+                            return TestResult.Failed(f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} from rpc call and {tycho_balance} from Substreams")
             return TestResult.Passed()
 
         except Exception as e:

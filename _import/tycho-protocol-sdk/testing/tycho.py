@@ -141,10 +141,7 @@ class TychoRunner:
         """Retrieve protocol state from the RPC server."""
         url = "http://0.0.0.0:4242/v1/ethereum/protocol_state"
         headers = {"accept": "application/json", "Content-Type": "application/json"}
-        data = {
-            "protocolSystem": "string",
-            "version": {"block": {"chain": "ethereum", "number": 0}},
-        }
+        data = {}
 
         response = requests.post(url, headers=headers, json=data)
         return response.json()
