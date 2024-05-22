@@ -1,5 +1,8 @@
 use crate::{
-    extractor::revert_buffer::StateUpdateBufferEntry,
+    extractor::revert_buffer::{
+        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
+        ProtocolStateKeyType, ProtocolStateValueType, StateUpdateBufferEntry,
+    },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 use async_trait::async_trait;
@@ -108,14 +111,6 @@ impl<B> StateUpdateBufferEntry for BlockUpdateWithCursor<B>
 where
     B: StateUpdateBufferEntry,
 {
-    type ProtocolStateIdType = B::ProtocolStateIdType;
-    type ProtocolStateKeyType = B::ProtocolStateKeyType;
-    type ProtocolStateValueType = B::ProtocolStateValueType;
-
-    type AccountStateIdType = B::AccountStateIdType;
-    type AccountStateKeyType = B::AccountStateKeyType;
-    type AccountStateValueType = B::AccountStateValueType;
-
     fn get_filtered_balance_update(
         &self,
         keys: Vec<(&String, &Bytes)>,
@@ -126,20 +121,16 @@ where
 
     fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
-    ) -> HashMap<
-        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
-        Self::ProtocolStateValueType,
-    > {
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
         self.block_update
             .get_filtered_protocol_state_update(keys)
     }
 
     fn get_filtered_account_state_update(
         &self,
-        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
-    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
-    {
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
         self.block_update
             .get_filtered_account_state_update(keys)
     }
