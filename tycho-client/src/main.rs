@@ -71,7 +71,8 @@ async fn main() {
         tracing_appender::non_blocking(rolling::never(&args.log_folder, "dev_logs.log"));
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().expect("Bad env filter"),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .with_writer(non_blocking)
         .finish();
@@ -156,10 +157,8 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
         } else {
             ComponentFilter::MinimumTVL(args.min_tvl as f64)
         };
-        let is_native: bool = !name.starts_with("vm:");
         let sync = ProtocolStateSynchronizer::new(
             id.clone(),
-            is_native,
             true,
             filter,
             3,
