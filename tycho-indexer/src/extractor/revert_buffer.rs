@@ -1,4 +1,5 @@
 use chrono::NaiveDateTime;
+use ethers::prelude::{H160, U256};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use tracing::{debug, trace, warn};
@@ -6,7 +7,7 @@ use tycho_core::{
     models::{
         blockchain::{Block, BlockScoped},
         protocol::ComponentBalance,
-        ComponentId,
+        AttrStoreKey, ComponentId, StoreVal,
     },
     storage::{BlockIdentifier, BlockOrTimestamp, StorageError},
     Bytes,
@@ -236,18 +237,26 @@ where
     }
 }
 
+pub type ProtocolStateIdType = ComponentId;
+pub type ProtocolStateKeyType = AttrStoreKey;
+pub type ProtocolStateValueType = StoreVal;
+pub type AccountStateIdType = H160;
+pub type AccountStateKeyType = U256;
+pub type AccountStateValueType = U256;
+
 /// A RevertBuffer entry containing state updates.
 ///
-/// Enables additional state lookuop methods within the buffer.
+/// Enables additional state lookup methods within the buffer.
 pub(crate) trait StateUpdateBufferEntry: std::fmt::Debug {
-    type IdType: std::hash::Hash + std::cmp::Eq + Clone;
-    type KeyType: std::hash::Hash + std::cmp::Eq + Clone;
-    type ValueType;
-
-    fn get_filtered_state_update(
+    fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType>;
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType>;
+
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType>;
 
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     fn get_filtered_balance_update(
@@ -260,13 +269,15 @@ impl<B> RevertBuffer<B>
 where
     B: BlockScoped + StateUpdateBufferEntry,
 {
-    /// Looks up buffered state updates for the provided keys. Returns a map of updates and a list
-    /// of keys for which updates were not found in the buffered blocks.
-    #[allow(clippy::type_complexity)] //TODO: use type aliases
-    pub fn lookup_state(
+    /// Looks up buffered protocol state updates for the provided keys. Returns a map of updates and
+    /// a list of keys for which updates were not found in the buffered blocks.
+    pub fn lookup_protocol_state(
         &self,
-        keys: &[(&B::IdType, &B::KeyType)],
-    ) -> (HashMap<(B::IdType, B::KeyType), B::ValueType>, Vec<(B::IdType, B::KeyType)>) {
+        keys: &[(&B::ProtocolStateIdType, &B::ProtocolStateKeyType)],
+    ) -> (
+        HashMap<(B::ProtocolStateIdType, B::ProtocolStateKeyType), B::ProtocolStateValueType>,
+        Vec<(B::ProtocolStateIdType, B::ProtocolStateKeyType)>,
+    ) {
         let mut res = HashMap::new();
         let mut remaining_keys: HashSet<(B::IdType, B::KeyType)> = HashSet::from_iter(
             keys.iter()
@@ -278,7 +289,42 @@ where
                 break;
             }
 
-            for (key, val) in block_message.get_filtered_state_update(
+            for (key, val) in block_message.get_filtered_protocol_state_update(
+                remaining_keys
+                    .iter()
+                    .map(|k| (&k.0, &k.1))
+                    .collect(),
+            ) {
+                if remaining_keys.remove(&(key.0.clone(), key.1.clone())) {
+                    res.insert(key, val);
+                }
+            }
+        }
+
+        (res, remaining_keys.into_iter().collect())
+    }
+
+    /// Looks up buffered account state updates for the provided keys. Returns a map of updates and
+    /// a list of keys for which updates were not found in the buffered blocks.
+    pub fn lookup_account_state(
+        &self,
+        keys: &[(&B::AccountStateIdType, &B::AccountStateKeyType)],
+    ) -> (
+        HashMap<(B::AccountStateIdType, B::AccountStateKeyType), B::AccountStateValueType>,
+        Vec<(B::AccountStateIdType, B::AccountStateKeyType)>,
+    ) {
+        let mut res = HashMap::new();
+        let mut remaining_keys: HashSet<(B::IdType, B::KeyType)> = HashSet::from_iter(
+            keys.iter()
+                .map(|&(c_id, attr)| (c_id.clone(), attr.clone())),
+        );
+
+        for block_message in self.block_messages.iter().rev() {
+            if remaining_keys.is_empty() {
+                break;
+            }
+
+            for (key, val) in block_message.get_filtered_account_state_update(
                 remaining_keys
                     .iter()
                     .map(|k| (&k.0, &k.1))

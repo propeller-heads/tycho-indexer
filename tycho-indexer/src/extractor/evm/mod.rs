@@ -1,6 +1,12 @@
 use self::utils::TryDecode;
 use super::{revert_buffer::StateUpdateBufferEntry, u256_num::bytes_to_f64, ExtractionError};
-use crate::pb::tycho::evm::v1 as substreams;
+use crate::{
+    extractor::revert_buffer::{
+        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
+        ProtocolStateKeyType, ProtocolStateValueType,
+    },
+    pb::tycho::evm::v1 as substreams,
+};
 use chrono::NaiveDateTime;
 use ethers::{
     types::{H160, H256, U256},
@@ -26,7 +32,6 @@ use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
 pub mod chain_state;
 mod convert;
-mod hybrid;
 pub mod native;
 pub mod protocol_cache;
 pub mod token_analysis_cron;
@@ -550,14 +555,17 @@ pub struct BlockContractChanges {
 }
 
 impl StateUpdateBufferEntry for BlockContractChanges {
-    type IdType = H160;
-    type KeyType = U256;
-    type ValueType = U256;
-
-    fn get_filtered_state_update(
+    fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
+        _: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
+        todo!()
+    }
+
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
         let keys_set: HashSet<_> = keys.into_iter().collect();
         let mut res = HashMap::new();
 
@@ -1294,14 +1302,10 @@ pub struct BlockEntityChanges {
 }
 
 impl StateUpdateBufferEntry for BlockEntityChanges {
-    type IdType = ComponentId;
-    type KeyType = AttrStoreKey;
-    type ValueType = StoreVal;
-
-    fn get_filtered_state_update(
+    fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
         // Convert keys to a HashSet for faster lookups
         let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
         let mut res = HashMap::new();
@@ -1320,6 +1324,13 @@ impl StateUpdateBufferEntry for BlockEntityChanges {
         }
 
         res
+    }
+
+    fn get_filtered_account_state_update(
+        &self,
+        _: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
+        todo!()
     }
 
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
@@ -1776,22 +1787,78 @@ pub struct BlockChanges {
 }
 
 impl StateUpdateBufferEntry for BlockChanges {
-    type IdType = ();
-    type KeyType = ();
-    type ValueType = ();
-
-    fn get_filtered_state_update(
+    fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
-        todo!()
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (component_id, protocol_update) in update.protocol_states.iter() {
+                for (attr, val) in protocol_update
+                    .updated_attributes
+                    .iter()
+                    .filter(|(attr, _)| keys_set.contains(&(component_id, attr)))
+                {
+                    res.entry((component_id.clone(), attr.clone()))
+                        .or_insert(val.clone());
+                }
+            }
+        }
+
+        res
     }
 
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
+        let keys_set: HashSet<_> = keys.into_iter().collect();
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (address, account_update) in update.account_updates.iter() {
+                for (attr, val) in account_update
+                    .slots
+                    .iter()
+                    .filter(|(attr, _)| keys_set.contains(&(address, attr)))
+                {
+                    res.entry((*address, *attr))
+                        .or_insert(*val);
+                }
+            }
+        }
+
+        res
+    }
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     fn get_filtered_balance_update(
         &self,
-        keys: Vec<(&String, &Bytes)>,
+        keys: Vec<(&ComponentId, &Address)>,
     ) -> HashMap<(String, Bytes), tycho_core_protocol::ComponentBalance> {
-        todo!()
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&String, &Bytes)> = keys.into_iter().collect();
+
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (component_id, balance_update) in update.balance_changes.iter() {
+                for (token, value) in balance_update
+                    .iter()
+                    .filter(|(token, _)| {
+                        keys_set.contains(&(component_id, &token.as_bytes().into()))
+                    })
+                {
+                    res.entry((component_id.clone(), token.as_bytes().into()))
+                        .or_insert(value.into());
+                }
+            }
+        }
+
+        res
     }
 }
 
