@@ -32,6 +32,7 @@ use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
 pub mod chain_state;
 mod convert;
+mod hybrid;
 pub mod native;
 pub mod protocol_cache;
 pub mod token_analysis_cron;
