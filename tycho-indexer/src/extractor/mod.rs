@@ -108,17 +108,13 @@ impl<B> StateUpdateBufferEntry for BlockUpdateWithCursor<B>
 where
     B: StateUpdateBufferEntry,
 {
-    type IdType = B::IdType;
-    type KeyType = B::KeyType;
-    type ValueType = B::ValueType;
+    type ProtocolStateIdType = B::ProtocolStateIdType;
+    type ProtocolStateKeyType = B::ProtocolStateKeyType;
+    type ProtocolStateValueType = B::ProtocolStateValueType;
 
-    fn get_filtered_state_update(
-        &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
-        self.block_update
-            .get_filtered_state_update(keys)
-    }
+    type AccountStateIdType = B::AccountStateIdType;
+    type AccountStateKeyType = B::AccountStateKeyType;
+    type AccountStateValueType = B::AccountStateValueType;
 
     fn get_filtered_balance_update(
         &self,
@@ -126,5 +122,25 @@ where
     ) -> HashMap<(String, Bytes), ComponentBalance> {
         self.block_update
             .get_filtered_balance_update(keys)
+    }
+
+    fn get_filtered_protocol_state_update(
+        &self,
+        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
+    ) -> HashMap<
+        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
+        Self::ProtocolStateValueType,
+    > {
+        self.block_update
+            .get_filtered_protocol_state_update(keys)
+    }
+
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
+    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
+    {
+        self.block_update
+            .get_filtered_account_state_update(keys)
     }
 }

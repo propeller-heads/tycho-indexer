@@ -880,7 +880,8 @@ where
 
         // Fetch previous values for every reverted states
         // First search in the buffer
-        let (buffered_state, missing) = revert_buffer.lookup_state(&reverted_state_keys_vec);
+        let (buffered_state, missing) =
+            revert_buffer.lookup_protocol_state(&reverted_state_keys_vec);
 
         // Then for every missing previous values in the buffer, get the data from our db
         let missing_map: HashMap<String, Vec<String>> =
