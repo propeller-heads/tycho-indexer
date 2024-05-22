@@ -550,14 +550,28 @@ pub struct BlockContractChanges {
 }
 
 impl StateUpdateBufferEntry for BlockContractChanges {
-    type IdType = H160;
-    type KeyType = U256;
-    type ValueType = U256;
+    type ProtocolStateIdType = ();
+    type ProtocolStateKeyType = ();
+    type ProtocolStateValueType = ();
+    type AccountStateIdType = H160;
+    type AccountStateKeyType = U256;
+    type AccountStateValueType = U256;
 
-    fn get_filtered_state_update(
+    fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
+        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
+    ) -> HashMap<
+        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
+        Self::ProtocolStateValueType,
+    > {
+        todo!()
+    }
+
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
+    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
+    {
         let keys_set: HashSet<_> = keys.into_iter().collect();
         let mut res = HashMap::new();
 
@@ -1294,14 +1308,21 @@ pub struct BlockEntityChanges {
 }
 
 impl StateUpdateBufferEntry for BlockEntityChanges {
-    type IdType = ComponentId;
-    type KeyType = AttrStoreKey;
-    type ValueType = StoreVal;
+    type ProtocolStateIdType = ComponentId;
+    type ProtocolStateKeyType = AttrStoreKey;
+    type ProtocolStateValueType = StoreVal;
 
-    fn get_filtered_state_update(
+    type AccountStateIdType = ();
+    type AccountStateKeyType = ();
+    type AccountStateValueType = ();
+
+    fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
+        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
+    ) -> HashMap<
+        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
+        Self::ProtocolStateValueType,
+    > {
         // Convert keys to a HashSet for faster lookups
         let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
         let mut res = HashMap::new();
@@ -1320,6 +1341,14 @@ impl StateUpdateBufferEntry for BlockEntityChanges {
         }
 
         res
+    }
+
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
+    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
+    {
+        todo!()
     }
 
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
@@ -1776,22 +1805,92 @@ pub struct BlockChanges {
 }
 
 impl StateUpdateBufferEntry for BlockChanges {
-    type IdType = ();
-    type KeyType = ();
-    type ValueType = ();
+    type ProtocolStateIdType = ComponentId;
+    type ProtocolStateKeyType = AttrStoreKey;
+    type ProtocolStateValueType = StoreVal;
 
-    fn get_filtered_state_update(
+    type AccountStateIdType = H160;
+
+    type AccountStateKeyType = U256;
+
+    type AccountStateValueType = U256;
+
+    fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
-        todo!()
+        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
+    ) -> HashMap<
+        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
+        Self::ProtocolStateValueType,
+    > {
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (component_id, protocol_update) in update.protocol_states.iter() {
+                for (attr, val) in protocol_update
+                    .updated_attributes
+                    .iter()
+                    .filter(|(attr, _)| keys_set.contains(&(component_id, attr)))
+                {
+                    res.entry((component_id.clone(), attr.clone()))
+                        .or_insert(val.clone());
+                }
+            }
+        }
+
+        res
     }
 
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
+    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
+    {
+        let keys_set: HashSet<_> = keys.into_iter().collect();
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (address, account_update) in update.account_updates.iter() {
+                for (attr, val) in account_update
+                    .slots
+                    .iter()
+                    .filter(|(attr, _)| keys_set.contains(&(address, attr)))
+                {
+                    res.entry((*address, *attr))
+                        .or_insert(*val);
+                }
+            }
+        }
+
+        res
+    }
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     fn get_filtered_balance_update(
         &self,
-        keys: Vec<(&String, &Bytes)>,
+        keys: Vec<(&ComponentId, &Address)>,
     ) -> HashMap<(String, Bytes), tycho_core_protocol::ComponentBalance> {
-        todo!()
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&String, &Bytes)> = keys.into_iter().collect();
+
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (component_id, balance_update) in update.balance_changes.iter() {
+                for (token, value) in balance_update
+                    .iter()
+                    .filter(|(token, _)| {
+                        keys_set.contains(&(component_id, &token.as_bytes().into()))
+                    })
+                {
+                    res.entry((component_id.clone(), token.as_bytes().into()))
+                        .or_insert(value.into());
+                }
+            }
+        }
+
+        res
     }
 }
 
