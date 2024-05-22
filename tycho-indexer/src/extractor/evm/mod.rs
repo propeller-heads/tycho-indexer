@@ -1,6 +1,12 @@
 use self::utils::TryDecode;
 use super::{revert_buffer::StateUpdateBufferEntry, u256_num::bytes_to_f64, ExtractionError};
-use crate::pb::tycho::evm::v1 as substreams;
+use crate::{
+    extractor::revert_buffer::{
+        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
+        ProtocolStateKeyType, ProtocolStateValueType,
+    },
+    pb::tycho::evm::v1 as substreams,
+};
 use chrono::NaiveDateTime;
 use ethers::{
     types::{H160, H256, U256},
@@ -26,7 +32,6 @@ use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
 pub mod chain_state;
 mod convert;
-mod hybrid;
 pub mod native;
 pub mod protocol_cache;
 pub mod token_analysis_cron;
@@ -550,28 +555,17 @@ pub struct BlockContractChanges {
 }
 
 impl StateUpdateBufferEntry for BlockContractChanges {
-    type ProtocolStateIdType = ();
-    type ProtocolStateKeyType = ();
-    type ProtocolStateValueType = ();
-    type AccountStateIdType = H160;
-    type AccountStateKeyType = U256;
-    type AccountStateValueType = U256;
-
     fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
-    ) -> HashMap<
-        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
-        Self::ProtocolStateValueType,
-    > {
+        _: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
         todo!()
     }
 
     fn get_filtered_account_state_update(
         &self,
-        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
-    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
-    {
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
         let keys_set: HashSet<_> = keys.into_iter().collect();
         let mut res = HashMap::new();
 
@@ -1308,21 +1302,10 @@ pub struct BlockEntityChanges {
 }
 
 impl StateUpdateBufferEntry for BlockEntityChanges {
-    type ProtocolStateIdType = ComponentId;
-    type ProtocolStateKeyType = AttrStoreKey;
-    type ProtocolStateValueType = StoreVal;
-
-    type AccountStateIdType = ();
-    type AccountStateKeyType = ();
-    type AccountStateValueType = ();
-
     fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
-    ) -> HashMap<
-        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
-        Self::ProtocolStateValueType,
-    > {
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
         // Convert keys to a HashSet for faster lookups
         let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
         let mut res = HashMap::new();
@@ -1345,9 +1328,8 @@ impl StateUpdateBufferEntry for BlockEntityChanges {
 
     fn get_filtered_account_state_update(
         &self,
-        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
-    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
-    {
+        _: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
         todo!()
     }
 
@@ -1805,23 +1787,10 @@ pub struct BlockChanges {
 }
 
 impl StateUpdateBufferEntry for BlockChanges {
-    type ProtocolStateIdType = ComponentId;
-    type ProtocolStateKeyType = AttrStoreKey;
-    type ProtocolStateValueType = StoreVal;
-
-    type AccountStateIdType = H160;
-
-    type AccountStateKeyType = U256;
-
-    type AccountStateValueType = U256;
-
     fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
-    ) -> HashMap<
-        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
-        Self::ProtocolStateValueType,
-    > {
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
         // Convert keys to a HashSet for faster lookups
         let keys_set: HashSet<(&ComponentId, &AttrStoreKey)> = keys.into_iter().collect();
         let mut res = HashMap::new();
@@ -1844,9 +1813,8 @@ impl StateUpdateBufferEntry for BlockChanges {
 
     fn get_filtered_account_state_update(
         &self,
-        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
-    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>
-    {
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
         let keys_set: HashSet<_> = keys.into_iter().collect();
         let mut res = HashMap::new();
 
