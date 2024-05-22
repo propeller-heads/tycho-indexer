@@ -18,7 +18,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_core::{
     dto::{
-        BlockParam, ContractId, Deltas, ExtractorIdentity, ProtocolComponent, ProtocolId,
+        BlockChanges, BlockParam, ContractId, ExtractorIdentity, ProtocolComponent, ProtocolId,
         ResponseAccount, ResponseProtocolState, StateRequestBody, StateRequestParameters,
         VersionParam,
     },
@@ -37,7 +37,6 @@ pub type SyncResult<T> = anyhow::Result<T>;
 #[derive(Clone)]
 pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     extractor_id: ExtractorIdentity,
-    is_native: bool,
     #[allow(dead_code)]
     retrieve_balances: bool,
     rpc_client: R,
@@ -86,7 +85,7 @@ pub struct StateSyncMessage {
     /// A single delta contains state updates for all tracked components, as well as additional
     /// information about the system components e.g. newly added components (even below tvl), tvl
     /// updates, balance updates.
-    pub deltas: Option<Deltas>,
+    pub deltas: Option<BlockChanges>,
     /// Components that stopped being tracked.
     pub removed_components: HashMap<String, ProtocolComponent>,
 }
@@ -145,7 +144,6 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor_id: ExtractorIdentity,
-        is_native: bool,
         retrieve_balances: bool,
         component_filter: ComponentFilter,
         max_retries: u64,
@@ -155,7 +153,6 @@ where
     ) -> Self {
         Self {
             extractor_id,
-            is_native,
             retrieve_balances,
             rpc_client,
             include_snapshots,
@@ -381,7 +378,7 @@ where
                             // 1. Remove components based on tvl changes
                             // 2. Add components based on tvl changes, query those for snapshots
                             let (to_add, to_remove): (Vec<_>, Vec<_>) = deltas
-                                .component_tvl()
+                                .component_tvl
                                 .iter()
                                 .partition(|(_, &tvl)| tvl > *min_tvl);
 
@@ -442,13 +439,9 @@ where
         }
     }
 
-    fn filter_deltas(&self, second_msg: &mut Deltas, tracker: &ComponentTracker<R>) {
-        if self.is_native {
-            second_msg.filter_by_component(|id| tracker.components.contains_key(id));
-        } else {
-            second_msg.filter_by_component(|id| tracker.components.contains_key(id));
-            second_msg.filter_by_contract(|id| tracker.contracts.contains(id));
-        }
+    fn filter_deltas(&self, second_msg: &mut BlockChanges, tracker: &ComponentTracker<R>) {
+        second_msg.filter_by_component(|id| tracker.components.contains_key(id));
+        second_msg.filter_by_contract(|id| tracker.contracts.contains(id));
     }
 }
 
@@ -547,7 +540,7 @@ mod test {
     };
     use tycho_core::{
         dto::{
-            Block, BlockEntityChangesResult, Chain, Deltas, ExtractorIdentity, ProtocolComponent,
+            Block, BlockChanges, Chain, ExtractorIdentity, ProtocolComponent,
             ProtocolComponentRequestParameters, ProtocolComponentRequestResponse,
             ProtocolComponentsRequestBody, ProtocolId, ProtocolStateRequestBody,
             ProtocolStateRequestResponse, ResponseAccount, ResponseProtocolState, StateRequestBody,
@@ -633,7 +626,7 @@ mod test {
             &self,
             extractor_id: ExtractorIdentity,
             options: SubscriptionOptions,
-        ) -> Result<(Uuid, Receiver<Deltas>), DeltasError> {
+        ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError> {
             self.0
                 .subscribe(extractor_id, options)
                 .await
@@ -666,7 +659,6 @@ mod test {
         ProtocolStateSynchronizer::new(
             ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
             native,
-            false,
             ComponentFilter::MinimumTVL(50.0),
             1,
             true,
@@ -795,7 +787,7 @@ mod test {
         assert_eq!(snap, exp);
     }
 
-    fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<Deltas>) {
+    fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<BlockChanges>) {
         let mut rpc_client = MockRPCClient::new();
         // Mocks for the start_tracking call, these need to come first because they are more
         // specific, see: https://docs.rs/mockall/latest/mockall/#matching-multiple-calls
@@ -902,7 +894,7 @@ mod test {
     async fn test_state_sync() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let deltas = [
-            Deltas::Native(BlockEntityChangesResult {
+            BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -914,8 +906,8 @@ mod test {
                 },
                 revert: false,
                 ..Default::default()
-            }),
-            Deltas::Native(BlockEntityChangesResult {
+            },
+            BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -927,8 +919,8 @@ mod test {
                 },
                 revert: false,
                 ..Default::default()
-            }),
-            Deltas::Native(BlockEntityChangesResult {
+            },
+            BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -947,7 +939,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            }),
+            },
         ];
         let mut state_sync = with_mocked_clients(true, Some(rpc_client), Some(deltas_client));
 
@@ -1053,7 +1045,7 @@ mod test {
             },
             // Our deltas are empty and since merge methods are
             // tested in tycho-core we don't have much to do here.
-            deltas: Some(Deltas::Native(BlockEntityChangesResult {
+            deltas: Some(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1072,7 +1064,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            })),
+            }),
             // "Component2" was removed, because it's tvl changed to 0.
             removed_components: [(
                 "Component2".to_string(),
