@@ -1,4 +1,5 @@
 use chrono::NaiveDateTime;
+use ethers::prelude::{H160, U256};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use tracing::{debug, trace, warn};
@@ -6,7 +7,7 @@ use tycho_core::{
     models::{
         blockchain::{Block, BlockScoped},
         protocol::ComponentBalance,
-        ComponentId,
+        AttrStoreKey, ComponentId, StoreVal,
     },
     storage::{BlockIdentifier, BlockOrTimestamp, StorageError},
     Bytes,
@@ -236,29 +237,26 @@ where
     }
 }
 
+pub type ProtocolStateIdType = ComponentId;
+pub type ProtocolStateKeyType = AttrStoreKey;
+pub type ProtocolStateValueType = StoreVal;
+pub type AccountStateIdType = H160;
+pub type AccountStateKeyType = U256;
+pub type AccountStateValueType = U256;
+
 /// A RevertBuffer entry containing state updates.
 ///
 /// Enables additional state lookup methods within the buffer.
 pub(crate) trait StateUpdateBufferEntry: std::fmt::Debug {
-    type ProtocolStateIdType: std::hash::Hash + std::cmp::Eq + Clone;
-    type ProtocolStateKeyType: std::hash::Hash + std::cmp::Eq + Clone;
-    type ProtocolStateValueType;
-    type AccountStateIdType: std::hash::Hash + std::cmp::Eq + Clone;
-    type AccountStateKeyType: std::hash::Hash + std::cmp::Eq + Clone;
-    type AccountStateValueType;
-
     fn get_filtered_protocol_state_update(
         &self,
-        keys: Vec<(&Self::ProtocolStateIdType, &Self::ProtocolStateKeyType)>,
-    ) -> HashMap<
-        (Self::ProtocolStateIdType, Self::ProtocolStateKeyType),
-        Self::ProtocolStateValueType,
-    >;
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType>;
 
     fn get_filtered_account_state_update(
         &self,
-        keys: Vec<(&Self::AccountStateIdType, &Self::AccountStateKeyType)>,
-    ) -> HashMap<(Self::AccountStateIdType, Self::AccountStateKeyType), Self::AccountStateValueType>;
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType>;
 
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     fn get_filtered_balance_update(
