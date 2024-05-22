@@ -41,7 +41,7 @@ use tokio::{
 };
 use tokio_tungstenite::{connect_async, tungstenite, MaybeTlsStream, WebSocketStream};
 use tracing::{debug, error, info, instrument, trace, warn};
-use tycho_core::dto::{Command, Deltas, ExtractorIdentity, Response, WebSocketMessage};
+use tycho_core::dto::{BlockChanges, Command, ExtractorIdentity, Response, WebSocketMessage};
 use uuid::Uuid;
 
 use crate::TYCHO_SERVER_VERSION;
@@ -119,7 +119,7 @@ pub trait DeltasClient {
         &self,
         extractor_id: ExtractorIdentity,
         options: SubscriptionOptions,
-    ) -> Result<(Uuid, Receiver<Deltas>), DeltasError>;
+    ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError>;
 
     /// Unsubscribe from an subscription
     async fn unsubscribe(&self, subscription_id: Uuid) -> Result<(), DeltasError>;
@@ -166,7 +166,7 @@ type WebSocketSink =
 #[derive(Debug)]
 enum SubscriptionInfo {
     /// Subscription was requested we wait for server confirmation and uuid assignment.
-    RequestedSubscription(oneshot::Sender<(Uuid, Receiver<Deltas>)>),
+    RequestedSubscription(oneshot::Sender<(Uuid, Receiver<BlockChanges>)>),
     /// Subscription is active.
     Active,
     /// Unsubscription was requested, we wait for server confirmation.
@@ -185,7 +185,7 @@ struct Inner {
     subscriptions: HashMap<Uuid, SubscriptionInfo>,
     /// For eachs subscription we keep a sender handle, the receiver is returned to the caller of
     /// subscribe.
-    sender: HashMap<Uuid, Sender<Deltas>>,
+    sender: HashMap<Uuid, Sender<BlockChanges>>,
     /// How many messages to buffer per subscription before starting to drop new messages.
     buffer_size: usize,
 }
@@ -209,7 +209,7 @@ impl Inner {
     fn new_subscription(
         &mut self,
         id: &ExtractorIdentity,
-        ready_tx: oneshot::Sender<(Uuid, Receiver<Deltas>)>,
+        ready_tx: oneshot::Sender<(Uuid, Receiver<BlockChanges>)>,
     ) -> Result<(), DeltasError> {
         if self.pending.contains_key(id) {
             return Err(DeltasError::SubscriptionAlreadyPending);
@@ -256,7 +256,7 @@ impl Inner {
     }
 
     /// Sends a message to a subscription's receiver.
-    fn send(&mut self, id: &Uuid, msg: Deltas) -> Result<(), DeltasError> {
+    fn send(&mut self, id: &Uuid, msg: BlockChanges) -> Result<(), DeltasError> {
         if let Some(sender) = self.sender.get_mut(id) {
             sender
                 .try_send(msg)
@@ -508,7 +508,7 @@ impl DeltasClient for WsDeltasClient {
         &self,
         extractor_id: ExtractorIdentity,
         options: SubscriptionOptions,
-    ) -> Result<(Uuid, Receiver<Deltas>), DeltasError> {
+    ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError> {
         trace!("Starting subscribe");
         self.ensure_connection().await;
         let (ready_tx, ready_rx) = oneshot::channel();

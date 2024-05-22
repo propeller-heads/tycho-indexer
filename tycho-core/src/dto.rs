@@ -10,7 +10,7 @@ use std::{
 };
 
 use chrono::{NaiveDateTime, Utc};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -200,9 +200,6 @@ impl Transaction {
 }
 
 /// A container for updates grouped by account/component.
-///
-/// Hold a single update per account/component. This is a condensed form of
-/// [BlockChanges].
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub struct BlockChanges {
     pub extractor: String,
@@ -1114,7 +1111,7 @@ mod test {
         }
         "#;
 
-        serde_json::from_str::<BlockAccountChanges>(json_data).expect("parsing failed");
+        serde_json::from_str::<BlockChanges>(json_data).expect("parsing failed");
     }
 
     #[test]
@@ -1171,7 +1168,7 @@ mod test {
         }
         "#;
 
-        serde_json::from_str::<BlockEntityChangesResult>(json_data).expect("parsing failed");
+        serde_json::from_str::<BlockChanges>(json_data).expect("parsing failed");
     }
 
     #[test]
@@ -1180,7 +1177,7 @@ mod test {
         {
             "subscription_id": "5d23bfbe-89ad-4ea3-8672-dc9e973ac9dc",
             "deltas": {
-                "type": "BlockEntityChangesResult",
+                "type": "BlockChanges",
                 "extractor": "uniswap_v2",
                 "chain": "ethereum",
                 "block": {
@@ -1393,7 +1390,7 @@ mod test {
         .into_iter()
         .collect();
         // Create initial and new BlockAccountChanges instances
-        let block_account_changes_initial = BlockAccountChanges::new(
+        let block_account_changes_initial = BlockChanges::new(
             "extractor1",
             Chain::Ethereum,
             Block::default(),
@@ -1402,9 +1399,10 @@ mod test {
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
         );
 
-        let block_account_changes_new = BlockAccountChanges::new(
+        let block_account_changes_new = BlockChanges::new(
             "extractor2",
             Chain::Ethereum,
             Block::default(),
@@ -1413,9 +1411,10 @@ mod test {
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
         );
 
-        // Merge the new BlockAccountChanges into the initial one
+        // Merge the new BlockChanges into the initial one
         let res = block_account_changes_initial.merge(block_account_changes_new);
 
         // Create the expected result of the merge operation
@@ -1437,12 +1436,13 @@ mod test {
         )]
         .into_iter()
         .collect();
-        let block_account_changes_expected = BlockAccountChanges::new(
+        let block_account_changes_expected = BlockChanges::new(
             "extractor1",
             Chain::Ethereum,
             Block::default(),
             true,
             expected_account_updates,
+            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
@@ -1452,8 +1452,8 @@ mod test {
 
     #[test]
     fn test_block_entity_changes_merge() {
-        // Initialize two BlockEntityChangesResult instances with different details
-        let block_entity_changes_result1 = BlockEntityChangesResult {
+        // Initialize two BlockChanges instances with different details
+        let block_entity_changes_result1 = BlockChanges {
             extractor: String::from("extractor1"),
             chain: Chain::Ethereum,
             block: Block::default(),
@@ -1482,8 +1482,9 @@ mod test {
 
             },
             component_tvl: hashmap! { "tvl1".to_string() => 1000.0 },
+            ..Default::default()
         };
-        let block_entity_changes_result2 = BlockEntityChangesResult {
+        let block_entity_changes_result2 = BlockChanges {
             extractor: String::from("extractor2"),
             chain: Chain::Ethereum,
             block: Block::default(),
@@ -1497,11 +1498,12 @@ mod test {
                 "component2".to_string() => TokenBalances::default()
             },
             component_tvl: hashmap! { "tvl2".to_string() => 2000.0 },
+            ..Default::default()
         };
 
         let res = block_entity_changes_result1.merge(block_entity_changes_result2);
 
-        let expected_block_entity_changes_result = BlockEntityChangesResult {
+        let expected_block_entity_changes_result = BlockChanges {
             extractor: String::from("extractor1"),
             chain: Chain::Ethereum,
             block: Block::default(),
@@ -1541,6 +1543,7 @@ mod test {
                 "tvl1".to_string() => 1000.0,
                 "tvl2".to_string() => 2000.0
             },
+            ..Default::default()
         };
 
         assert_eq!(res, expected_block_entity_changes_result);
