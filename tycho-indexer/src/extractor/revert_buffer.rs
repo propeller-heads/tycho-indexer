@@ -271,18 +271,22 @@ where
 {
     /// Looks up buffered protocol state updates for the provided keys. Returns a map of updates and
     /// a list of keys for which updates were not found in the buffered blocks.
+    ///
+    /// Clippy thinks it is a complex type that is difficult to read
+    #[allow(clippy::type_complexity)]
     pub fn lookup_protocol_state(
         &self,
-        keys: &[(&B::ProtocolStateIdType, &B::ProtocolStateKeyType)],
+        keys: &[(&ProtocolStateIdType, &ProtocolStateKeyType)],
     ) -> (
-        HashMap<(B::ProtocolStateIdType, B::ProtocolStateKeyType), B::ProtocolStateValueType>,
-        Vec<(B::ProtocolStateIdType, B::ProtocolStateKeyType)>,
+        HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType>,
+        Vec<(ProtocolStateIdType, ProtocolStateKeyType)>,
     ) {
         let mut res = HashMap::new();
-        let mut remaining_keys: HashSet<(B::IdType, B::KeyType)> = HashSet::from_iter(
-            keys.iter()
-                .map(|&(c_id, attr)| (c_id.clone(), attr.clone())),
-        );
+        let mut remaining_keys: HashSet<(ProtocolStateIdType, ProtocolStateKeyType)> =
+            HashSet::from_iter(
+                keys.iter()
+                    .map(|&(c_id, attr)| (c_id.clone(), attr.clone())),
+            );
 
         for block_message in self.block_messages.iter().rev() {
             if remaining_keys.is_empty() {
@@ -306,18 +310,22 @@ where
 
     /// Looks up buffered account state updates for the provided keys. Returns a map of updates and
     /// a list of keys for which updates were not found in the buffered blocks.
+    ///
+    /// Clippy thinks it is a complex type that is difficult to read
+    #[allow(clippy::type_complexity)]
     pub fn lookup_account_state(
         &self,
-        keys: &[(&B::AccountStateIdType, &B::AccountStateKeyType)],
+        keys: &[(&AccountStateIdType, &AccountStateKeyType)],
     ) -> (
-        HashMap<(B::AccountStateIdType, B::AccountStateKeyType), B::AccountStateValueType>,
-        Vec<(B::AccountStateIdType, B::AccountStateKeyType)>,
+        HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType>,
+        Vec<(AccountStateIdType, AccountStateKeyType)>,
     ) {
         let mut res = HashMap::new();
-        let mut remaining_keys: HashSet<(B::IdType, B::KeyType)> = HashSet::from_iter(
-            keys.iter()
-                .map(|&(c_id, attr)| (c_id.clone(), attr.clone())),
-        );
+        let mut remaining_keys: HashSet<(AccountStateIdType, AccountStateKeyType)> =
+            HashSet::from_iter(
+                keys.iter()
+                    .map(|&(c_id, attr)| (*c_id, *attr)),
+            );
 
         for block_message in self.block_messages.iter().rev() {
             if remaining_keys.is_empty() {
@@ -330,7 +338,7 @@ where
                     .map(|k| (&k.0, &k.1))
                     .collect(),
             ) {
-                if remaining_keys.remove(&(key.0.clone(), key.1.clone())) {
+                if remaining_keys.remove(&(key.0, key.1)) {
                     res.insert(key, val);
                 }
             }
@@ -563,7 +571,7 @@ mod test {
             (&c_ids[0], &missing),
         ];
 
-        let (res, mut missing_keys) = revert_buffer.lookup_state(&keys);
+        let (res, mut missing_keys) = revert_buffer.lookup_protocol_state(&keys);
 
         // Need to sort because collecting a HashSet is unstable.
         missing_keys.sort();
