@@ -26,7 +26,6 @@ use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
 pub mod chain_state;
 mod convert;
-mod hybrid;
 pub mod native;
 pub mod protocol_cache;
 pub mod token_analysis_cron;
@@ -1782,14 +1781,14 @@ impl StateUpdateBufferEntry for BlockChanges {
 
     fn get_filtered_state_update(
         &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
+        _: Vec<(&Self::IdType, &Self::KeyType)>,
     ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
         todo!()
     }
 
     fn get_filtered_balance_update(
         &self,
-        keys: Vec<(&String, &Bytes)>,
+        _: Vec<(&String, &Bytes)>,
     ) -> HashMap<(String, Bytes), tycho_core_protocol::ComponentBalance> {
         todo!()
     }
