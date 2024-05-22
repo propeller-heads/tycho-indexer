@@ -3462,7 +3462,7 @@ mod test {
             (&account1, &slot_missing),
         ];
 
-        let filtered = block.get_filtered_state_update(keys);
+        let filtered = block.get_filtered_account_state_update(keys);
 
         assert_eq!(
             filtered,
@@ -3748,7 +3748,7 @@ mod test {
             (&state1_key, &missing),
         ];
 
-        let filtered = block.get_filtered_state_update(keys);
+        let filtered = block.get_filtered_protocol_state_update(keys);
         assert_eq!(
             filtered,
             HashMap::from([(
