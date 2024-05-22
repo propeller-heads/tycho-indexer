@@ -707,7 +707,7 @@ where
         // Fetch previous values for every reverted states
         // First search in the buffer
         let (buffered_state, missing) =
-            revert_buffer.lookup_state(&reverted_account_state_keys_vec);
+            revert_buffer.lookup_account_state(&reverted_account_state_keys_vec);
 
         // Then for every missing previous values in the buffer, get the data from our db
         let missing_map: HashMap<Bytes, Vec<Bytes>> =
@@ -796,7 +796,7 @@ where
                 });
 
         // Handle reverted protocol state
-        let reverted_state_keys: HashSet<_> = reverted_state
+        let reverted_protocol_state_keys: HashSet<_> = reverted_state
             .iter()
             .flat_map(|block_msg| {
                 block_msg
@@ -819,15 +819,16 @@ where
             })
             .collect();
 
-        let reverted_state_keys_vec = reverted_state_keys
+        let reverted_protocol_state_keys_vec = reverted_protocol_state_keys
             .into_iter()
             .collect::<Vec<_>>();
 
-        trace!("Reverted state keys {:?}", &reverted_state_keys_vec);
+        trace!("Reverted state keys {:?}", &reverted_protocol_state_keys_vec);
 
         // Fetch previous values for every reverted states
         // First search in the buffer
-        let (buffered_state, missing) = revert_buffer.lookup_state(&reverted_state_keys_vec);
+        let (buffered_state, missing) =
+            revert_buffer.lookup_protocol_state(&reverted_protocol_state_keys_vec);
 
         // Then for every missing previous values in the buffer, get the data from our db
         let missing_map: HashMap<String, Vec<String>> =
@@ -964,7 +965,7 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn handle_progress(&self, inp: ModulesProgress) -> Result<(), ExtractionError> {
+    async fn handle_progress(&self, _inp: ModulesProgress) -> Result<(), ExtractionError> {
         todo!()
     }
 }
@@ -1069,7 +1070,7 @@ impl HybridPgGateway {
 
             // Insert transaction
             self.state_gateway
-                .upsert_tx(&[(tx_update).into()])
+                .upsert_tx(&[(&tx_update.tx).into()])
                 .await?;
 
             let hash: TxHash = tx_update.tx.hash.into();
