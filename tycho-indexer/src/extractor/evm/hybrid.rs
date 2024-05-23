@@ -1231,3 +1231,379 @@ impl HybridGateway for HybridPgGateway {
             .await
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{
+        extractor::evm::{
+            token_pre_processor::MockTokenPreProcessorTrait,
+            vm::{MockVmGateway, VmContractExtractor},
+            BlockAccountChanges,
+        },
+        pb::tycho::evm::v1::BlockChanges,
+        testing::MockGateway,
+    };
+    use float_eq::assert_float_eq;
+    use tycho_core::models::protocol::ProtocolComponent;
+
+    const EXTRACTOR_NAME: &str = "TestExtractor";
+    const TEST_PROTOCOL: &str = "TestProtocol";
+    async fn create_extractor(
+        gw: MockHybridGateway,
+    ) -> HybridContractExtractor<MockHybridGateway, MockTokenPreProcessorTrait> {
+        let protocol_types = HashMap::from([("pt_1".to_string(), ProtocolType::default())]);
+        let protocol_cache = ProtocolMemoryCache::new(
+            Chain::Ethereum,
+            chrono::Duration::seconds(900),
+            Arc::new(MockGateway::new()),
+        );
+        let mut preprocessor = MockTokenPreProcessorTrait::new();
+        preprocessor
+            .expect_get_tokens()
+            .returning(|_, _, _| Vec::new());
+        HybridContractExtractor::new(
+            gw,
+            EXTRACTOR_NAME,
+            Chain::Ethereum,
+            ChainState::default(),
+            TEST_PROTOCOL.to_string(),
+            protocol_cache,
+            protocol_types,
+            preprocessor,
+            None,
+            5,
+        )
+        .await
+        .expect("Failed to create extractor")
+    }
+
+    #[tokio::test]
+    async fn test_get_cursor() {
+        let mut gw = MockHybridGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+
+        let extractor = create_extractor(gw).await;
+        let res = extractor.get_cursor().await;
+
+        assert_eq!(res, "cursor");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data() {
+        let mut gw = MockHybridGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+        gw.expect_advance()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        let mut extractor = create_extractor(gw).await;
+
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockChanges { block: Some(evm::fixtures::pb_blocks(1)), changes: vec![] },
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockChanges { block: Some(evm::fixtures::pb_blocks(2)), changes: vec![] },
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(2),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@2");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data_skip() {
+        let mut gw = MockHybridGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        let inp = evm::fixtures::pb_block_scoped_data((), None, None);
+        let res = extractor
+            .handle_tick_scoped_data(inp)
+            .await;
+
+        match res {
+            Ok(Some(_)) => panic!("Expected Ok(None) but got Ok(Some(..))"),
+            Ok(None) => (), // This is the expected case
+            Err(_) => panic!("Expected Ok(None) but got Err(..)"),
+        }
+        assert_eq!(extractor.get_cursor().await, "cursor@420");
+    }
+
+    fn token_prices() -> HashMap<Bytes, f64> {
+        HashMap::from([
+            (
+                Bytes::from("0x0000000000000000000000000000000000000001"),
+                344101538937875300000000000.0,
+            ),
+            (Bytes::from("0x0000000000000000000000000000000000000002"), 2980881444.0),
+        ])
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_construct_tokens() {
+        let msg = evm::BlockChanges {
+            extractor: "ex".to_string(),
+            block: evm::Block::default(),
+            chain: Chain::Ethereum,
+            finalized_block_height: 0,
+            revert: false,
+            new_tokens: HashMap::new(),
+            txs_with_update: vec![evm::TxWithChanges {
+                protocol_components: HashMap::from([(
+                    "TestProtocol".to_string(),
+                    evm::ProtocolComponent {
+                        tokens: vec![
+                            "0x0000000000000000000000000000000000000001"
+                                .parse()
+                                .unwrap(),
+                            "0x0000000000000000000000000000000000000003"
+                                .parse()
+                                .unwrap(),
+                        ],
+                        ..Default::default()
+                    },
+                )]),
+                account_updates: HashMap::new(),
+                protocol_states: Default::default(),
+                balance_changes: HashMap::new(),
+                tx: evm::Transaction::default(),
+            }],
+        };
+
+        let protocol_gw = MockGateway::new();
+        let protocol_cache = ProtocolMemoryCache::new(
+            Chain::Ethereum,
+            chrono::Duration::seconds(1),
+            Arc::new(protocol_gw),
+        );
+        let t1 = CurrencyToken::new(
+            &Bytes::from("0x0000000000000000000000000000000000000001"),
+            "TOK1",
+            18,
+            0,
+            &[],
+            Chain::Ethereum,
+            100,
+        );
+        protocol_cache
+            .add_tokens([t1.clone()])
+            .await
+            .expect("adding tokens failed");
+
+        let mut preprocessor = MockTokenPreProcessorTrait::new();
+        let t3 = evm::ERC20Token::new(
+            "0x0000000000000000000000000000000000000003"
+                .parse()
+                .unwrap(),
+            "TOK3".to_string(),
+            18,
+            0,
+            Vec::new(),
+            Chain::Ethereum,
+            100,
+        );
+        let ret = vec![t3.clone()];
+        preprocessor
+            .expect_get_tokens()
+            .return_once(|_, _, _| ret);
+        let mut extractor_gw = MockHybridGateway::new();
+        extractor_gw
+            .expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        extractor_gw
+            .expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+        let extractor = HybridContractExtractor::new(
+            extractor_gw,
+            EXTRACTOR_NAME,
+            Chain::Ethereum,
+            ChainState::default(),
+            TEST_PROTOCOL.to_string(),
+            protocol_cache,
+            HashMap::from([("pt_1".to_string(), ProtocolType::default())]),
+            preprocessor,
+            None,
+            5,
+        )
+        .await
+        .expect("Extractor init failed");
+        let exp = HashMap::from([
+            (t1.address.clone(), t1),
+            (Bytes::from(t3.address.as_bytes()), (&t3).into()),
+        ]);
+
+        let res = extractor
+            .construct_currency_tokens(&msg)
+            .await
+            .expect("construct_currency_tokens failed");
+
+        assert_eq!(res, exp);
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_handle_tvl_changes() {
+        let mut msg = evm::BlockChangesResult {
+            component_balances: HashMap::from([(
+                "comp1".to_string(),
+                HashMap::from([(
+                    H160::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                    evm::ComponentBalance {
+                        token: H160::from_str("0x0000000000000000000000000000000000000001")
+                            .unwrap(),
+                        balance: Bytes::from(
+                            "0x00000000000000000000000000000000000000000000003635c9adc5dea00000",
+                        ),
+                        balance_float: 11_304_207_639.4e18,
+                        modify_tx: H256::default(),
+                        component_id: "comp1".to_string(),
+                    },
+                ),
+                    (
+                        H160::from_str("0x0000000000000000000000000000000000000002").unwrap(),
+                        evm::ComponentBalance {
+                            token: H160::from_str("0x0000000000000000000000000000000000000002")
+                                .unwrap(),
+                            balance: Bytes::from(
+                                "0x00000000000000000000000000000000000000000000003635c9adc5dea00000",
+                            ),
+                            balance_float: 100_000e6,
+                            modify_tx: H256::default(),
+                            component_id: "comp1".to_string(),
+                        },
+                    )
+
+                ]),
+            )]),
+            ..Default::default()
+        };
+
+        let mut protocol_gw = MockGateway::new();
+        protocol_gw
+            .expect_get_token_prices()
+            .return_once(|_| Box::pin(async { Ok(token_prices()) }));
+        let protocol_cache = ProtocolMemoryCache::new(
+            Chain::Ethereum,
+            chrono::Duration::seconds(1),
+            Arc::new(protocol_gw),
+        );
+        protocol_cache
+            .add_components([ProtocolComponent::new(
+                "comp1",
+                "system1",
+                "pt_1",
+                Chain::Ethereum,
+                vec![
+                    Bytes::from("0x0000000000000000000000000000000000000001"),
+                    Bytes::from("0x0000000000000000000000000000000000000002"),
+                ],
+                Vec::new(),
+                HashMap::new(),
+                ChangeType::Creation,
+                Bytes::default(),
+                NaiveDateTime::default(),
+            )])
+            .await
+            .expect("adding components failed");
+        protocol_cache
+            .add_tokens([
+                CurrencyToken::new(
+                    &Bytes::from("0x0000000000000000000000000000000000000001"),
+                    "PEPE",
+                    18,
+                    0,
+                    &[],
+                    Chain::Ethereum,
+                    100,
+                ),
+                CurrencyToken::new(
+                    &Bytes::from("0x0000000000000000000000000000000000000002"),
+                    "USDC",
+                    6,
+                    0,
+                    &[],
+                    Chain::Ethereum,
+                    100,
+                ),
+            ])
+            .await
+            .expect("adding tokens failed");
+
+        let preprocessor = MockTokenPreProcessorTrait::new();
+        let mut extractor_gw = MockHybridGateway::new();
+        extractor_gw
+            .expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        extractor_gw
+            .expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+        extractor_gw
+            .expect_get_components_balances()
+            .return_once(|_| Ok(HashMap::new()));
+        let extractor = create_extractor(extractor_gw).await;
+
+        let exp_tvl = 66.39849612683253;
+
+        extractor
+            .handle_tvl_changes(&mut msg)
+            .await
+            .expect("handle_tvl_call failed");
+        let res = msg
+            .component_tvl
+            .get("comp1")
+            .expect("comp1 tvl not present");
+
+        assert_eq!(msg.component_tvl.len(), 1);
+        assert_float_eq!(*res, exp_tvl, rmax <= 0.000_001);
+    }
+}
+
+/// It is notoriously hard to mock postgres here, we would need to have traits and abstractions
+/// for the connection pooling as well as for transaction handling so the easiest way
+/// forward is to just run these tests against a real postgres instance.
+///
+/// The challenge here is to leave the database empty. So we need to initiate a test transaction
+/// and should avoid calling the trait methods which start a transaction of their own. So we do
+/// that by moving the main logic of each trait method into a private method and test this
+/// method instead.
+///
+/// Note that it is ok to use higher level db methods here as there is a layer of abstraction
+/// between this component and the actual db interactions
+#[cfg(test)]
+mod test_serial_db {}
