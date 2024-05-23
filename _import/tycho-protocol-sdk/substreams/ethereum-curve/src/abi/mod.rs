@@ -6,6 +6,7 @@ pub mod pool_crypto_swap_ng;
 pub mod pool_tricrypto2;
 pub mod crypto_swap_ng_factory;
 pub mod test;
+pub mod meta_registry;
 pub mod pool_steth;
 pub mod pool;
 pub mod tricrypto_factory;

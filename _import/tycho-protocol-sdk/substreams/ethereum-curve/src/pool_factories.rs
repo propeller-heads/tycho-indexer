@@ -9,8 +9,7 @@ use tycho_substreams::prelude::*;
 
 use substreams::scalar::BigInt;
 
-const EMPTY_BYTES32: [u8; 32] = [0; 32];
-const EMPTY_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000000");
+const META_REGISTRY: [u8; 20] = hex!("F98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC");
 
 const CRYPTO_POOL_FACTORY: [u8; 20] = hex!("F18056Bbd320E96A48e3Fbf8bC061322531aac99");
 const META_POOL_FACTORY: [u8; 20] = hex!("B9fC157394Af804a3578134A6585C0dc9cc990d4");
@@ -42,10 +41,28 @@ impl SerializableVecBigInt for Vec<BigInt> {
     }
 }
 
+/// Converts address bytes into a string containing a leading `0x`.
 fn address_to_bytes_with_0x(address: &[u8; 20]) -> Vec<u8> {
     format!("0x{}", hex::encode(address)).into_bytes()
 }
 
+/// This massive function matches factory address to specific logic to construct
+///  `ProtocolComponent`s. While, most of the logic is readily replicable, several factories differ
+///  in information density resulting in needing other information sources such as decoding calls
+///  or even making RPC calls to provide extra details.
+///
+/// Each `ProtocolComponent` contains the following static attributes:
+/// - `pool_type`: The type of pool, such as `crypto_pool`, `plain_pool`, `metapool`, etc.
+/// - `name`: The name of the pool.
+/// - `factory_name`: The name of the factory that created the pool.
+/// - `factory`: The address of the factory that created the pool.
+///
+/// The basic flow of this function is as follows:
+/// - Match the factory address
+/// - Decode the relevant event from the log
+/// - Attempt to decode the cooresponding function call (based on the permutation of the ABI)
+/// - Optionally make an RPC call to produce further information (see metapools)
+/// - Construct the cooresponding `ProtocolComponent`
 pub fn address_map(
     call_address: &[u8; 20],
     log: &Log,
@@ -137,6 +154,7 @@ pub fn address_map(
                             )
                         })?;
 
+                // The return data of several of these calls contain the actual component id
                 let component_id = &call.return_data[12..];
 
                 Some(ProtocolComponent {
@@ -201,6 +219,13 @@ pub fn address_map(
 
                 let component_id = &call.return_data[12..];
 
+                // The `add_pool.base_pool` may only refer to the contract of the base pool and not
+                //  the token itself. This means we **have** to make an RPC call to the
+                //  `meta_registry` in order to get the real LP token address.
+                let get_lp_token =
+                    abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
+                let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
+
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
                     tx: Some(Transaction {
@@ -209,8 +234,8 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: vec![pool_added.coin, add_pool.base_pool.clone()],
-                    contracts: vec![component_id.into(), add_pool.base_pool.clone()],
+                    tokens: vec![pool_added.coin, lp_token],
+                    contracts: vec![component_id.into(), add_pool.base_pool],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -268,6 +293,10 @@ pub fn address_map(
 
                 let component_id = &call.return_data[12..];
 
+                let get_lp_token =
+                    abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
+                let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
+
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
                     tx: Some(Transaction {
@@ -276,8 +305,8 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: vec![pool_added.coin, add_pool.base_pool.clone()],
-                    contracts: vec![component_id.into(), add_pool.base_pool.clone()],
+                    tokens: vec![pool_added.coin, lp_token],
+                    contracts: vec![component_id.into(), add_pool.base_pool],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -367,6 +396,11 @@ pub fn address_map(
                 let add_pool =
                     abi::crypto_swap_ng_factory::functions::DeployMetapool::match_and_decode(call)?;
                 let component_id = &call.return_data[12..];
+
+                let get_lp_token =
+                    abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
+                let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
+
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
                     tx: Some(Transaction {
@@ -375,8 +409,8 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: vec![pool_added.coin, pool_added.base_pool],
-                    contracts: vec![component_id.into()],
+                    tokens: vec![pool_added.coin, lp_token],
+                    contracts: vec![component_id.into(), pool_added.base_pool],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -558,6 +592,11 @@ pub fn address_map(
                     return None;
                 };
                 let component_id = &call.return_data[12..];
+
+                let get_lp_token =
+                    abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
+                let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
+
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
                     tx: Some(Transaction {
@@ -566,8 +605,8 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: vec![pool_added.coin, pool_added.base_pool],
-                    contracts: vec![component_id.into()],
+                    tokens: vec![pool_added.coin, lp_token],
+                    contracts: vec![component_id.into(), pool_added.base_pool],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),

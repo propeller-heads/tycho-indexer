@@ -29,15 +29,6 @@
         ]
     },
     {
-        "name": "crvUSD/USDC",
-        "address": "4dece678ceceb27446b35c672dc7d61f30bad69e",
-        "tx_hash": "4b288a16fe2f1c556752478989d88ef6e7a2c9a0cd258a12b11b232a112dc279",
-        "tokens": [
-            "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-            "f939e0a03fb07f59a73314e73794be0e57ac1b4e"
-        ]
-    },
-    {
         "name": "susd",
         "address": "A5407eAE9Ba41422680e2e00537571bcC53efBfD",
         "tx_hash": "51aca4a03a395de8855fa2ca59b7febe520c2a223e69c502066162f7c1a95ec2",

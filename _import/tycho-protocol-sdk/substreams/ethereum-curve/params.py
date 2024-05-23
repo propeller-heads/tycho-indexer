@@ -3,6 +3,8 @@ from typing import Any
 
 PARAMETERS = "params.json"
 EMPTY = "0x0000000000000000000000000000000000000000"
+INITIAL_BLOCK = 17258001
+
 
 def encode_json_to_query_params(params: list[dict[str, Any]]):
     encoded_params = []
@@ -11,8 +13,9 @@ def encode_json_to_query_params(params: list[dict[str, Any]]):
             address: str = param["address"]
             tx_hash: str = param["tx_hash"]
             tokens: list[str] = param["tokens"]
-            attributes: dict[str, str] = param["attributes"]
+            attributes: dict[str, str] = param.get("attributes", {})
             attributes["name"] = param["name"]
+            attributes["factory_name"] = "NA"
             attributes["factory"] = EMPTY
 
             encoded_address = f"address={address}"

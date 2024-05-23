@@ -5,10 +5,7 @@ use itertools::Itertools;
 use substreams::{
     pb::substreams::StoreDeltas,
     scalar::BigInt,
-    store::{
-        StoreAdd, StoreAddBigInt, StoreAddInt64, StoreGet, StoreGetInt64, StoreGetString, StoreNew,
-        StoreSet, StoreSetString,
-    },
+    store::{StoreAddBigInt, StoreGet, StoreGetString, StoreNew, StoreSet, StoreSetString},
 };
 
 use substreams_ethereum::pb::eth;
@@ -112,7 +109,6 @@ pub fn map_relative_balances(
             block
                 .logs()
                 .filter_map(|log| emit_deltas(log, &tokens_store))
-                .flat_map(|deltas| deltas.into_iter())
                 .collect::<Vec<_>>()
         },
     })
