@@ -18,6 +18,9 @@ const CRYPTO_SWAP_NG_FACTORY: [u8; 20] = hex!("6A8cbed756804B16E05E741eDaBd5cB54
 const TRICRYPTO_FACTORY: [u8; 20] = hex!("0c0e5f2fF0ff18a3be9b835635039256dC4B4963");
 const STABLESWAP_FACTORY: [u8; 20] = hex!("4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d");
 
+const WETH_ADDRESS: [u8; 20] = hex!("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
+const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
+
 /// This trait defines some helpers for serializing and deserializing `Vec<BigInt>` which is needed
 ///  to be able to encode some of the `Attribute`s. This should also be handled by any downstream
 ///  application.
@@ -44,6 +47,20 @@ impl SerializableVecBigInt for Vec<BigInt> {
 /// Converts address bytes into a string containing a leading `0x`.
 fn address_to_bytes_with_0x(address: &[u8; 20]) -> Vec<u8> {
     format!("0x{}", hex::encode(address)).into_bytes()
+}
+
+/// Function that swaps `WETH` addresses for `ETH` address for specific factory types that decide
+///  to use `WETH` address even though native `ETH` is stored. This is also extra weird bc ETH
+///  doesn't even have a real address, so we use the standard `0xEEEee...`.
+fn swap_weth_for_eth(tokens: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    if tokens.contains(&WETH_ADDRESS.into()) {
+        tokens
+            .into_iter()
+            .map(|token| if token == WETH_ADDRESS { ETH_ADDRESS.into() } else { token })
+            .collect::<Vec<_>>()
+    } else {
+        tokens
+    }
 }
 
 /// This massive function matches factory address to specific logic to construct
@@ -74,6 +91,8 @@ pub fn address_map(
             let pool_added =
                 abi::crypto_pool_factory::events::CryptoPoolDeployed::match_and_decode(log)?;
 
+            let tokens = swap_weth_for_eth(pool_added.coins.into());
+
             let component_id = &call.return_data[12..];
 
             Some(ProtocolComponent {
@@ -84,7 +103,7 @@ pub fn address_map(
                     hash: tx.hash.clone(),
                     index: tx.index.into(),
                 }),
-                tokens: pool_added.coins.into(),
+                tokens,
                 contracts: vec![component_id.into()],
                 static_att: vec![
                     Attribute {
@@ -449,6 +468,8 @@ pub fn address_map(
             if let Some(pool_added) =
                 abi::tricrypto_factory::events::TricryptoPoolDeployed::match_and_decode(log)
             {
+                let tokens = swap_weth_for_eth(pool_added.coins.into());
+
                 Some(ProtocolComponent {
                     id: hex::encode(&pool_added.pool),
                     tx: Some(Transaction {
@@ -457,7 +478,7 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: pool_added.coins.into(),
+                    tokens,
                     contracts: vec![pool_added.pool.into()],
                     static_att: vec![
                         Attribute {
