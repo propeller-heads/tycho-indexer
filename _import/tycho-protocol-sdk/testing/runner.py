@@ -61,7 +61,7 @@ class TestRunner:
                 print(f"❗️ {test['name']} failed: {result.message}")
 
             self.tycho_runner.empty_database(
-                "postgres://postgres:mypassword@localhost:5432"
+                "postgres://postgres:mypassword@localhost:5431"
             )
 
     def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
