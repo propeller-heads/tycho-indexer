@@ -6,15 +6,13 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-
-use token_analyzer::TokenFinder;
-
 use ethers::types::{H160, H256, U256};
 use mockall::automock;
 use prost::Message;
 use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, trace, warn};
 
+use token_analyzer::TokenFinder;
 use tycho_core::{
     models::{
         self, contract::Contract, protocol::ComponentBalance, token::CurrencyToken, Address, Chain,
