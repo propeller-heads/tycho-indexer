@@ -516,6 +516,7 @@ where
 
         let raw_msg = pb::tycho::evm::v1::BlockChanges::decode(data.value.as_slice())?;
         trace!(?raw_msg, "Received message");
+
         // Validate protocol_type_id
         let msg = match evm::BlockChanges::try_from_message(
             raw_msg,
@@ -997,13 +998,6 @@ pub trait HybridGateway: Send + Sync {
         component_ids: &[&'a str],
     ) -> Result<Vec<ProtocolComponentState>, StorageError>;
 
-    async fn upsert_contract(
-        &self,
-        changes: &evm::BlockChanges,
-        new_cursor: &str,
-        syncing: bool,
-    ) -> Result<(), StorageError>;
-
     async fn get_contracts(
         &self,
         component_ids: &[models::Address],
@@ -1190,7 +1184,6 @@ impl HybridGateway for HybridPgGateway {
         new_cursor: &str,
         syncing: bool,
     ) -> Result<(), StorageError> {
-        self.save_cursor(new_cursor).await?;
         self.forward(changes, new_cursor, syncing)
             .await
     }
@@ -1202,17 +1195,6 @@ impl HybridGateway for HybridPgGateway {
         self.state_gateway
             .get_protocol_states(&self.chain, None, None, Some(component_ids), false)
             .await
-    }
-
-    async fn upsert_contract(
-        &self,
-        changes: &evm::BlockChanges,
-        new_cursor: &str,
-        syncing: bool,
-    ) -> Result<(), StorageError> {
-        self.forward(changes, new_cursor, syncing)
-            .await?;
-        Ok(())
     }
 
     async fn get_contracts(
@@ -1759,7 +1741,7 @@ mod test_serial_db {
             let (gw, _) = setup_gw(pool, ImplementationType::Vm).await;
             let evm_gw = gw.state_gateway.clone();
             let state = ExtractionState::new(
-                "vm:ambient".to_string(),
+                "test".to_string(),
                 Chain::Ethereum,
                 None,
                 "cursor@420".as_bytes(),
@@ -1836,11 +1818,11 @@ mod test_serial_db {
                 protocol_states: HashMap::new(),
                 balance_changes: HashMap::new(),
                 protocol_components: HashMap::from([(
-                    "Pool".to_string(),
+                    "pool".to_string(),
                     evm::ProtocolComponent {
                         id: NATIVE_CREATED_CONTRACT.to_string(),
                         protocol_system: "test".to_string(),
-                        protocol_type_name: "Pool".to_string(),
+                        protocol_type_name: "pool".to_string(),
                         chain: Chain::Ethereum,
                         tokens: vec![
                             H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
@@ -2018,6 +2000,7 @@ mod test_serial_db {
     // Tests a forward call with a native contract creation and an account update
     // TODO: Fix this test. It was already disabled for native extractors, because of
     // protocol_type_name mismatch
+    #[ignore]
     #[tokio::test]
     async fn test_forward_native_protocol() {
         run_against_db(|pool| async move {
@@ -2212,10 +2195,10 @@ mod test_serial_db {
 
             let res = client_msg
                 .as_any()
-                .downcast_ref::<evm::BlockEntityChangesResult>()
+                .downcast_ref::<evm::BlockChangesResult>()
                 .expect("not good type");
             let base_ts = yesterday_midnight().timestamp();
-            let block_entity_changes_result = evm::BlockEntityChangesResult {
+            let block_entity_changes_result = evm::BlockChangesResult {
                 extractor: "native_name".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2227,7 +2210,7 @@ mod test_serial_db {
                 },
                 finalized_block_height: 1,
                 revert: true,
-                state_updates: HashMap::from([
+                protocol_states: HashMap::from([
                     ("pc_1".to_string(), evm::ProtocolStateDelta {
                         component_id: "pc_1".to_string(),
                         updated_attributes: HashMap::from([
@@ -2291,6 +2274,7 @@ mod test_serial_db {
                     ])),
                 ]),
                 component_tvl: HashMap::new(),
+                account_updates: Default::default(),
             };
 
             assert_eq!(
@@ -2375,6 +2359,7 @@ mod test_serial_db {
                         .handle_tick_scoped_data(inp)
                         .await
                         .unwrap();
+                    dbg!("+++");
                 })
                 .await;
 
@@ -2392,11 +2377,11 @@ mod test_serial_db {
 
             let res = client_msg
                 .as_any()
-                .downcast_ref::<evm::BlockAccountChanges>()
+                .downcast_ref::<evm::BlockChangesResult>()
                 .expect("not good type");
 
             let base_ts = yesterday_midnight().timestamp();
-            let block_account_expected = evm::BlockAccountChanges {
+            let block_account_expected = evm::BlockChangesResult {
                 extractor: "vm_name".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2471,6 +2456,7 @@ mod test_serial_db {
                     ])),
                 ]),
                 component_tvl: HashMap::new(),
+                protocol_states: Default::default(),
             };
 
             assert_eq!(

@@ -1160,7 +1160,6 @@ impl ProtocolChangesWithTx {
     /// This method will return `ExtractionError::MergeError` if any of the above
     /// conditions is violated.
     pub fn merge(&mut self, other: ProtocolChangesWithTx) -> Result<(), ExtractionError> {
-        dbg!("Called merge");
         if self.tx.block_hash != other.tx.block_hash {
             return Err(ExtractionError::MergeError(format!(
                 "Can't merge ProtocolStates from different blocks: 0x{:x} != 0x{:x}",
@@ -1596,23 +1595,21 @@ impl TxWithChanges {
     /// This method will return `ExtractionError::MergeError` if any of the above
     /// conditions is violated.
     pub fn merge(&mut self, other: TxWithChanges) -> Result<(), ExtractionError> {
-        dbg!("Called merge");
-
         if self.tx.block_hash != other.tx.block_hash {
             return Err(ExtractionError::MergeError(format!(
-                "Can't merge ProtocolStates from different blocks: 0x{:x} != 0x{:x}",
+                "Can't merge TxWithChanges from different blocks: 0x{:x} != 0x{:x}",
                 self.tx.block_hash, other.tx.block_hash,
             )));
         }
-        if self.tx.hash != other.tx.hash {
+        if self.tx.hash == other.tx.hash {
             return Err(ExtractionError::MergeError(format!(
-                "Can't merge ChangesWithTx from different transactions: 0x{:x} != 0x{:x}",
-                self.tx.hash, other.tx.hash,
+                "Can't merge TxWithChanges from the same transaction: 0x{:x}",
+                self.tx.hash
             )));
         }
         if self.tx.index > other.tx.index {
             return Err(ExtractionError::MergeError(format!(
-                "Can't merge ProtocolStates with lower transaction index: {} > {}",
+                "Can't merge TxWithChanges with lower transaction index: {} > {}",
                 self.tx.index, other.tx.index
             )));
         }
