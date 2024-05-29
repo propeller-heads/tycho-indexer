@@ -1,31 +1,11 @@
-use super::{
-    compat::{
-        add_default_attributes_uniswapv2, add_default_attributes_uniswapv3, ignore_self_balances,
-        transcode_ambient_balances, transcode_usv2_balances,
-    },
-    evm::{
-        chain_state::ChainState,
-        native::{NativeContractExtractor, NativePgGateway},
-        token_pre_processor::TokenPreProcessor,
-        vm::{VmContractExtractor, VmPgGateway},
-    },
-    Extractor, ExtractorMsg,
-};
-use crate::{
-    extractor::{evm::protocol_cache::ProtocolMemoryCache, ExtractionError},
-    pb::sf::substreams::v1::Package,
-    substreams::{
-        stream::{BlockResponse, SubstreamsStream},
-        SubstreamsEndpoint,
-    },
-};
+use std::{collections::HashMap, env, path::Path, sync::Arc};
+
 use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::Client;
 use prost::Message;
 use serde::Deserialize;
-use std::{collections::HashMap, env, path::Path, sync::Arc};
 use tokio::{
     sync::{
         mpsc::{self, error::SendError, Receiver, Sender},
@@ -35,10 +15,35 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info, instrument, trace, warn, Instrument};
+
 use tycho_core::models::{
     Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType,
 };
 use tycho_storage::postgres::cache::CachedGateway;
+
+use crate::{
+    extractor::{
+        evm::{
+            hybrid::{HybridContractExtractor, HybridPgGateway},
+            protocol_cache::ProtocolMemoryCache,
+        },
+        ExtractionError,
+    },
+    pb::sf::substreams::v1::Package,
+    substreams::{
+        stream::{BlockResponse, SubstreamsStream},
+        SubstreamsEndpoint,
+    },
+};
+
+use super::{
+    compat::{
+        add_default_attributes_uniswapv2, add_default_attributes_uniswapv3, ignore_self_balances,
+        transcode_ambient_balances, transcode_usv2_balances,
+    },
+    evm::{chain_state::ChainState, token_pre_processor::TokenPreProcessor},
+    Extractor, ExtractorMsg,
+};
 
 pub enum ControlMessage {
     Stop,
@@ -388,68 +393,37 @@ impl ExtractorBuilder {
             })
             .collect();
 
-        match self.config.implementation_type {
-            ImplementationType::Vm => {
-                let gw = VmPgGateway::new(
-                    &self.config.name,
-                    self.config.chain,
-                    self.config.sync_batch_size,
-                    cached_gw.clone(),
-                );
+        let gw = HybridPgGateway::new(
+            &self.config.name,
+            self.config.chain,
+            self.config.sync_batch_size,
+            cached_gw.clone(),
+        );
 
-                self.extractor = Some(Arc::new(
-                    VmContractExtractor::new(
-                        &self.config.name,
-                        self.config.chain,
-                        chain_state,
-                        gw,
-                        protocol_types,
-                        self.config.name.clone(),
-                        protocol_cache.clone(),
-                        token_pre_processor.clone(),
-                        if self.config.name == "vm:ambient" {
-                            Some(transcode_ambient_balances)
-                        } else if self.config.name == "vm:balancer" {
-                            Some(ignore_self_balances)
-                        } else {
-                            None
-                        },
-                        128,
-                    )
-                    .await?,
-                ));
-            }
-            ImplementationType::Custom => {
-                let gw = NativePgGateway::new(
-                    &self.config.name,
-                    self.config.chain,
-                    self.config.sync_batch_size,
-                    cached_gw.clone(),
-                );
+        self.extractor = Some(Arc::new(
+            HybridContractExtractor::new(
+                gw,
+                &self.config.name,
+                self.config.chain,
+                chain_state,
+                self.config.name.clone(),
+                protocol_cache.clone(),
+                protocol_types,
+                token_pre_processor.clone(),
+                match self.config.name.as_str() {
+                    "uniswap_v2" => {
+                        Some(|b| transcode_usv2_balances(add_default_attributes_uniswapv2(b)))
+                    }
+                    "uniswap_v3" => Some(add_default_attributes_uniswapv3),
+                    "vm:ambient" => Some(transcode_ambient_balances),
+                    "vm:balancer" => Some(ignore_self_balances),
+                    _ => None,
+                },
+                128,
+            )
+            .await?,
+        ));
 
-                self.extractor = Some(Arc::new(
-                    NativeContractExtractor::new(
-                        &self.config.name,
-                        self.config.chain,
-                        chain_state,
-                        gw,
-                        protocol_types,
-                        self.config.name.clone(),
-                        protocol_cache.clone(),
-                        token_pre_processor.clone(),
-                        if self.config.name == "uniswap_v2" {
-                            Some(|b| transcode_usv2_balances(add_default_attributes_uniswapv2(b)))
-                        } else if self.config.name == "uniswap_v3" {
-                            Some(add_default_attributes_uniswapv3)
-                        } else {
-                            None
-                        },
-                        128,
-                    )
-                    .await?,
-                ));
-            }
-        }
         Ok(self)
     }
 
@@ -535,11 +509,14 @@ async fn download_file_from_s3(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::extractor::MockExtractor;
     use serde::{Deserialize, Serialize};
     use tracing::info_span;
+
     use tycho_core::models::NormalisedMessage;
+
+    use crate::extractor::MockExtractor;
+
+    use super::*;
 
     #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
     struct DummyMessage {
