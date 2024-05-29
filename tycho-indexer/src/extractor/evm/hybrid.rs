@@ -76,7 +76,6 @@ where
     T: TokenPreProcessorTrait,
 {
     #[allow(clippy::too_many_arguments)]
-    #[allow(dead_code)]
     pub async fn new(
         gateway: G,
         name: &str,
@@ -983,7 +982,6 @@ pub struct HybridPgGateway {
 #[automock]
 #[async_trait]
 pub trait HybridGateway: Send + Sync {
-    #[allow(dead_code)]
     async fn get_cursor(&self) -> Result<Vec<u8>, StorageError>;
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]);
@@ -1012,7 +1010,6 @@ pub trait HybridGateway: Send + Sync {
 }
 
 impl HybridPgGateway {
-    #[allow(dead_code)]
     pub fn new(
         name: &str,
         chain: Chain,
