@@ -12,7 +12,7 @@ const USV2_MANDATORY_ATTRIBUTES: [&str; 2] = ["reserve0", "reserve1"];
 pub fn add_default_attributes(mut changes: BlockChanges, attributes: &[&str]) -> BlockChanges {
     for tx in &mut changes.txs_with_update {
         for c_id in tx.protocol_components.keys() {
-            if let Some(state) = tx.protocol_states.get_mut(c_id) {
+            if let Some(state) = tx.state_updates.get_mut(c_id) {
                 for mandatory_attr in attributes {
                     if !state
                         .updated_attributes
@@ -28,7 +28,7 @@ pub fn add_default_attributes(mut changes: BlockChanges, attributes: &[&str]) ->
                 for mandatory_attr in attributes {
                     default_attr.insert(mandatory_attr.to_string(), Bytes::from(U256::zero()));
                 }
-                tx.protocol_states.insert(
+                tx.state_updates.insert(
                     c_id.clone(),
                     ProtocolStateDelta {
                         component_id: c_id.clone(),
@@ -96,7 +96,7 @@ mod test {
                     Some(H160::zero()),
                     10,
                 ),
-                protocol_states: HashMap::from([(
+                state_updates: HashMap::from([(
                     CREATED_CONTRACT.to_string(),
                     evm::ProtocolStateDelta {
                         component_id: CREATED_CONTRACT.to_string(),
@@ -142,7 +142,7 @@ mod test {
                     .first()
                     .unwrap()
                     .tx,
-                protocol_states: HashMap::from([(
+                state_updates: HashMap::from([(
                     CREATED_CONTRACT.to_string(),
                     evm::ProtocolStateDelta {
                         component_id: CREATED_CONTRACT.to_string(),
@@ -193,7 +193,7 @@ mod test {
                     Some(H160::zero()),
                     10,
                 ),
-                protocol_states: HashMap::from([(
+                state_updates: HashMap::from([(
                     CREATED_CONTRACT.to_string(),
                     evm::ProtocolStateDelta {
                         component_id: CREATED_CONTRACT.to_string(),
