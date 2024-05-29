@@ -1506,7 +1506,7 @@ impl BlockEntityChanges {
 pub struct TxWithChanges {
     pub protocol_components: HashMap<ComponentId, ProtocolComponent>,
     pub account_updates: HashMap<H160, AccountUpdate>,
-    pub protocol_states: HashMap<ComponentId, ProtocolStateDelta>,
+    pub state_updates: HashMap<ComponentId, ProtocolStateDelta>,
     pub balance_changes: HashMap<ComponentId, HashMap<H160, ComponentBalance>>,
     pub tx: Transaction,
 }
@@ -1519,7 +1519,13 @@ impl TxWithChanges {
         balance_changes: HashMap<ComponentId, HashMap<H160, ComponentBalance>>,
         tx: Transaction,
     ) -> Self {
-        Self { account_updates, protocol_components, protocol_states, balance_changes, tx }
+        Self {
+            account_updates,
+            protocol_components,
+            state_updates: protocol_states,
+            balance_changes,
+            tx,
+        }
     }
 
     fn try_from_message(
@@ -1590,7 +1596,7 @@ impl TxWithChanges {
         Ok(Self {
             protocol_components: new_protocol_components,
             account_updates,
-            protocol_states: state_updates,
+            state_updates,
             balance_changes,
             tx,
         })
@@ -1664,8 +1670,8 @@ impl TxWithChanges {
         }
 
         // Merge Protocol States
-        for (key, value) in other.protocol_states {
-            match self.protocol_states.entry(key) {
+        for (key, value) in other.state_updates {
+            match self.state_updates.entry(key) {
                 Entry::Occupied(mut entry) => {
                     entry.get_mut().merge(value)?;
                 }
@@ -1694,7 +1700,7 @@ impl TxWithChanges {
 /// Hold a single update per component. This is a condensed form of
 /// [BlockChanges].
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct BlockChangesResult {
+pub struct AggregatedBlockChanges {
     extractor: String,
     chain: Chain,
     pub block: Block,
@@ -1709,7 +1715,7 @@ pub struct BlockChangesResult {
     pub component_tvl: HashMap<ComponentId, f64>,
 }
 
-impl BlockChangesResult {
+impl AggregatedBlockChanges {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor: &str,
@@ -1752,14 +1758,14 @@ impl BlockChangesResult {
     }
 }
 
-impl std::fmt::Display for BlockChangesResult {
+impl std::fmt::Display for AggregatedBlockChanges {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "block_number: {}, extractor: {}", self.block.number, self.extractor)
     }
 }
 
 #[typetag::serde]
-impl NormalisedMessage for BlockChangesResult {
+impl NormalisedMessage for AggregatedBlockChanges {
     fn source(&self) -> ExtractorIdentity {
         ExtractorIdentity::new(self.chain, &self.extractor)
     }
@@ -1810,7 +1816,7 @@ impl StateUpdateBufferEntry for BlockChanges {
         let mut res = HashMap::new();
 
         for update in self.txs_with_update.iter().rev() {
-            for (component_id, protocol_update) in update.protocol_states.iter() {
+            for (component_id, protocol_update) in update.state_updates.iter() {
                 for (attr, val) in protocol_update
                     .updated_attributes
                     .iter()
@@ -1949,18 +1955,18 @@ impl BlockChanges {
     /// Aggregates state updates.
     ///
     /// This function aggregates the protocol updates
-    /// for different protocol components into a `BlockChangesResult` object.
+    /// for different protocol components into a [`AggregatedBlockChanges`] object.
     /// This new object should have only one final ProtocolStateDelta and a HashMap to hold
     /// `AccountUpdate` per component_id.
     ///
-    /// After merging all updates, a `BlockChangesResult` object is returned
+    /// After merging all updates, a [`AggregatedBlockChanges`] object is returned
     /// which contains, amongst other data, the compacted state updates.
     ///
     /// # Errors
     ///
     /// This returns an error if there was a problem during merge. The error
     /// type is `ExtractionError`.
-    pub fn aggregate_updates(self) -> Result<BlockChangesResult, ExtractionError> {
+    pub fn aggregate_updates(self) -> Result<AggregatedBlockChanges, ExtractionError> {
         let mut iter = self.txs_with_update.into_iter();
 
         // Use unwrap_or_else to provide a default state if iter.next() is None
@@ -1973,7 +1979,7 @@ impl BlockChanges {
             })
             .unwrap();
 
-        Ok(BlockChangesResult {
+        Ok(AggregatedBlockChanges {
             extractor: self.extractor,
             chain: self.chain,
             block: self.block,
@@ -1982,7 +1988,7 @@ impl BlockChanges {
             new_protocol_components: aggregated_changes.protocol_components,
             new_tokens: self.new_tokens,
             deleted_protocol_components: HashMap::new(),
-            protocol_states: aggregated_changes.protocol_states,
+            protocol_states: aggregated_changes.state_updates,
             account_updates: aggregated_changes.account_updates,
             component_balances: aggregated_changes.balance_changes,
             component_tvl: HashMap::new(),
