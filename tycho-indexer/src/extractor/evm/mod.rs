@@ -1,24 +1,17 @@
-use self::utils::TryDecode;
-use super::{revert_buffer::StateUpdateBufferEntry, u256_num::bytes_to_f64, ExtractionError};
-use crate::{
-    extractor::revert_buffer::{
-        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
-        ProtocolStateKeyType, ProtocolStateValueType,
-    },
-    pb::tycho::evm::v1 as substreams,
+use std::{
+    any::Any,
+    collections::{hash_map::Entry, HashMap, HashSet},
+    sync::Arc,
 };
+
 use chrono::NaiveDateTime;
 use ethers::{
     types::{H160, H256, U256},
     utils::keccak256,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    any::Any,
-    collections::{hash_map::Entry, HashMap, HashSet},
-    sync::Arc,
-};
 use tracing::log::warn;
+
 use tycho_core::{
     dto,
     models::{
@@ -30,9 +23,21 @@ use tycho_core::{
 };
 use utils::{pad_and_parse_32bytes, pad_and_parse_h160};
 
+use crate::{
+    extractor::revert_buffer::{
+        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
+        ProtocolStateKeyType, ProtocolStateValueType,
+    },
+    pb::tycho::evm::v1 as substreams,
+};
+
+use super::{revert_buffer::StateUpdateBufferEntry, u256_num::bytes_to_f64, ExtractionError};
+
+use self::utils::TryDecode;
+
 pub mod chain_state;
 mod convert;
-mod hybrid;
+pub mod hybrid;
 pub mod native;
 pub mod protocol_cache;
 pub mod token_analysis_cron;
@@ -1990,8 +1995,10 @@ impl BlockChanges {
 
 #[cfg(test)]
 pub mod fixtures {
-    use prost::Message;
     use std::str::FromStr;
+
+    use prost::Message;
+
     use tycho_storage::postgres::db_fixtures::yesterday_midnight;
 
     use super::*;
@@ -3726,8 +3733,8 @@ mod test {
     use std::str::FromStr;
 
     use prost::Message;
-
     use rstest::rstest;
+
     use tycho_storage::postgres::db_fixtures::yesterday_midnight;
 
     use crate::extractor::evm::fixtures::transaction01;
