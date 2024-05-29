@@ -1709,7 +1709,7 @@ pub struct AggregatedBlockChanges {
     pub new_protocol_components: HashMap<ComponentId, ProtocolComponent>,
     pub new_tokens: HashMap<Address, CurrencyToken>,
     pub deleted_protocol_components: HashMap<ComponentId, ProtocolComponent>,
-    pub protocol_states: HashMap<ComponentId, ProtocolStateDelta>,
+    pub state_updates: HashMap<ComponentId, ProtocolStateDelta>,
     pub account_updates: HashMap<H160, AccountUpdate>,
     pub component_balances: HashMap<ComponentId, HashMap<H160, ComponentBalance>>,
     pub component_tvl: HashMap<ComponentId, f64>,
@@ -1739,7 +1739,7 @@ impl AggregatedBlockChanges {
             new_protocol_components,
             new_tokens,
             deleted_protocol_components,
-            protocol_states,
+            state_updates: protocol_states,
             account_updates,
             component_balances,
             component_tvl: HashMap::new(),
@@ -1751,7 +1751,7 @@ impl AggregatedBlockChanges {
         self.new_protocol_components.is_empty() &&
             self.deleted_protocol_components
                 .is_empty() &&
-            self.protocol_states.is_empty() &&
+            self.state_updates.is_empty() &&
             self.account_updates.is_empty() &&
             self.component_balances.is_empty() &&
             self.component_tvl.is_empty()
@@ -1778,7 +1778,7 @@ impl NormalisedMessage for AggregatedBlockChanges {
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
             account_updates: HashMap::new(),
-            protocol_states: HashMap::new(),
+            state_updates: HashMap::new(),
             new_tokens: self.new_tokens.clone(),
             new_protocol_components: self.new_protocol_components.clone(),
             deleted_protocol_components: self.deleted_protocol_components.clone(),
@@ -1988,7 +1988,7 @@ impl BlockChanges {
             new_protocol_components: aggregated_changes.protocol_components,
             new_tokens: self.new_tokens,
             deleted_protocol_components: HashMap::new(),
-            protocol_states: aggregated_changes.state_updates,
+            state_updates: aggregated_changes.state_updates,
             account_updates: aggregated_changes.account_updates,
             component_balances: aggregated_changes.balance_changes,
             component_tvl: HashMap::new(),
