@@ -1,7 +1,4 @@
-use crate::extractor::{
-    evm::{BlockContractChanges, BlockEntityChanges},
-    u256_num::bytes_to_f64,
-};
+use crate::extractor::{evm::BlockChanges, u256_num::bytes_to_f64};
 use ethers::types::U256;
 use tycho_core::Bytes;
 
@@ -25,13 +22,13 @@ fn transcode_le_balance_to_be(le_encoded: &Bytes) -> anyhow::Result<Bytes> {
     Ok(Bytes::from(be_encoded))
 }
 
-pub fn transcode_ambient_balances(mut changes: BlockContractChanges) -> BlockContractChanges {
+pub fn transcode_ambient_balances(mut changes: BlockChanges) -> BlockChanges {
     changes
-        .tx_updates
+        .txs_with_update
         .iter_mut()
         .for_each(|tx_changes| {
             tx_changes
-                .component_balances
+                .balance_changes
                 .iter_mut()
                 .for_each(|(_, balance)| {
                     balance
@@ -51,13 +48,13 @@ pub fn transcode_ambient_balances(mut changes: BlockContractChanges) -> BlockCon
 /// the same. We had to add this for Balancer because when a EulerLinearPool is created it returns
 /// the minted pool tokens in the balance changes.
 /// TODO: look into this and see if we can fix it on the substreams side.
-pub fn ignore_self_balances(mut changes: BlockContractChanges) -> BlockContractChanges {
+pub fn ignore_self_balances(mut changes: BlockChanges) -> BlockChanges {
     changes
-        .tx_updates
+        .txs_with_update
         .iter_mut()
         .for_each(|tx_changes| {
             tx_changes
-                .component_balances
+                .balance_changes
                 .iter_mut()
                 .for_each(|(_, balance)| {
                     balance
@@ -67,7 +64,7 @@ pub fn ignore_self_balances(mut changes: BlockContractChanges) -> BlockContractC
     changes
 }
 
-pub fn transcode_usv2_balances(mut changes: BlockEntityChanges) -> BlockEntityChanges {
+pub fn transcode_usv2_balances(mut changes: BlockChanges) -> BlockChanges {
     changes
         .txs_with_update
         .iter_mut()
@@ -96,7 +93,7 @@ mod tests {
     use tycho_core::models::Chain;
 
     use crate::{
-        extractor::evm::{ComponentBalance, Transaction, TransactionVMUpdates},
+        extractor::evm::{ComponentBalance, Transaction, TxWithChanges},
         testing::evm_block,
     };
 
@@ -123,10 +120,10 @@ mod tests {
     #[test]
     fn test_ignore_self_balances() {
         let txs_with_update =
-            vec![TransactionVMUpdates {
+            vec![TxWithChanges {
             account_updates: HashMap::new(),
             protocol_components: HashMap::new(),
-            component_balances: HashMap::from([(
+            balance_changes: HashMap::from([(
                 "0xabc".to_string(),
                 HashMap::from([(
                     H160::from_str("0xeb91861f8a4e1c12333f42dce8fb0ecdc28da716").unwrap(),
@@ -155,9 +152,10 @@ mod tests {
                 )]),
             )]),
             tx: Transaction::new(H256::zero(), H256::zero(), H160::zero(), Some(H160::zero()), 10),
-        }];
+                protocol_states: Default::default(),
+            }];
 
-        let changes = BlockContractChanges::new(
+        let changes = BlockChanges::new(
             "test".to_string(),
             Chain::Ethereum,
             evm_block(1),
@@ -166,16 +164,16 @@ mod tests {
             txs_with_update.clone(),
         );
 
-        let expected = BlockContractChanges::new(
+        let expected = BlockChanges::new(
             "test".to_string(),
             Chain::Ethereum,
             evm_block(1),
             0,
             false,
-            vec![TransactionVMUpdates {
+            vec![TxWithChanges {
                 account_updates: HashMap::new(),
                 protocol_components: HashMap::new(),
-                component_balances: HashMap::from([(
+                balance_changes: HashMap::from([(
                     "0xabc".to_string(),
                     HashMap::from([(
                         H160::from_str("0xeb91861f8a4e1c12333f42dce8fb0ecdc28da716").unwrap(),
@@ -198,6 +196,7 @@ mod tests {
                     Some(H160::zero()),
                     10,
                 ),
+                protocol_states: Default::default(),
             }],
         );
 
