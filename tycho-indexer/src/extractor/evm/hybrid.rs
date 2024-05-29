@@ -6,17 +6,20 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use ethers::types::{H160, H256, U256};
+use ethers::prelude::{H160, H256, U256};
 use mockall::automock;
 use prost::Message;
 use tokio::sync::Mutex;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use token_analyzer::TokenFinder;
 use tycho_core::{
+    models,
     models::{
-        self, contract::Contract, protocol::ComponentBalance, token::CurrencyToken, Address, Chain,
-        ChangeType, ExtractionState, ExtractorIdentity, ProtocolType,
+        contract::Contract,
+        protocol::{ComponentBalance, ProtocolComponentState},
+        token::CurrencyToken,
+        Address, Chain, ChangeType, ExtractionState, ExtractorIdentity, ProtocolType, TxHash,
     },
     storage::{
         ChainGateway, ContractStateGateway, ExtractionStateGateway, ProtocolGateway, StorageError,
@@ -27,24 +30,22 @@ use tycho_storage::postgres::cache::CachedGateway;
 
 use crate::{
     extractor::{
+        evm,
         evm::{
-            self,
             chain_state::ChainState,
             protocol_cache::{ProtocolDataCache, ProtocolMemoryCache},
             token_pre_processor::{map_vault, TokenPreProcessorTrait},
+            utils::format_duration,
+            Block,
         },
         revert_buffer::RevertBuffer,
         BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorMsg,
     },
-    pb::{
-        sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
-        tycho::evm::v1::BlockContractChanges,
-    },
+    pb,
+    pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 
-use super::{utils::format_duration, Block, BlockAccountChanges};
-
-struct Inner {
+pub struct Inner {
     cursor: Vec<u8>,
     last_processed_block: Option<Block>,
     /// Used to give more informative logs
@@ -52,7 +53,7 @@ struct Inner {
     last_report_block_number: u64,
 }
 
-pub struct VmContractExtractor<G, T> {
+pub struct HybridContractExtractor<G, T> {
     gateway: G,
     name: String,
     chain: Chain,
@@ -60,53 +61,51 @@ pub struct VmContractExtractor<G, T> {
     protocol_system: String,
     token_pre_processor: T,
     protocol_cache: ProtocolMemoryCache,
-    // TODO: There is not reason this needs to be shared
-    //  try removing the Mutex
     inner: Arc<Mutex<Inner>>,
     protocol_types: HashMap<String, ProtocolType>,
-    /// Allows to attach some custom logic, e.g. to fix encoding bugs without re-sync.
-    post_processor: Option<fn(evm::BlockContractChanges) -> evm::BlockContractChanges>,
+    /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
+    post_processor: Option<fn(evm::BlockChanges) -> evm::BlockChanges>,
     /// The number of blocks behind the current block to be considered as syncing.
     sync_threshold: u64,
-    revert_buffer: Mutex<RevertBuffer<BlockUpdateWithCursor<evm::BlockContractChanges>>>,
+    revert_buffer: Mutex<RevertBuffer<BlockUpdateWithCursor<evm::BlockChanges>>>,
 }
 
-impl<G, T> VmContractExtractor<G, T>
+impl<G, T> HybridContractExtractor<G, T>
 where
-    G: VmGateway,
+    G: HybridGateway,
     T: TokenPreProcessorTrait,
 {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
+        gateway: G,
         name: &str,
         chain: Chain,
         chain_state: ChainState,
-        gateway: G,
-        protocol_types: HashMap<String, ProtocolType>,
         protocol_system: String,
         protocol_cache: ProtocolMemoryCache,
+        protocol_types: HashMap<String, ProtocolType>,
         token_pre_processor: T,
-        post_processor: Option<fn(evm::BlockContractChanges) -> evm::BlockContractChanges>,
+        post_processor: Option<fn(evm::BlockChanges) -> evm::BlockChanges>,
         sync_threshold: u64,
     ) -> Result<Self, ExtractionError> {
         // check if this extractor has state
         let res = match gateway.get_cursor().await {
             Err(StorageError::NotFound(_, _)) => {
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
-                VmContractExtractor {
+                HybridContractExtractor {
                     gateway,
-                    name: name.to_owned(),
+                    name: name.to_string(),
                     chain,
                     chain_state,
-                    protocol_cache,
+                    protocol_system,
                     token_pre_processor,
+                    protocol_cache,
                     inner: Arc::new(Mutex::new(Inner {
-                        cursor: Vec::new(),
+                        cursor: vec![],
                         last_processed_block: None,
-                        last_report_ts: chrono::Local::now().naive_utc(),
+                        last_report_ts: chrono::Utc::now().naive_utc(),
                         last_report_block_number: 0,
                     })),
-                    protocol_system,
                     protocol_types,
                     post_processor,
                     sync_threshold,
@@ -121,13 +120,11 @@ where
                     cursor = &cursor_hex,
                     "Found existing cursor! Resuming extractor.."
                 );
-                VmContractExtractor {
+                HybridContractExtractor {
                     gateway,
-                    name: name.to_owned(),
+                    name: name.to_string(),
                     chain,
                     chain_state,
-                    protocol_cache,
-                    token_pre_processor,
                     inner: Arc::new(Mutex::new(Inner {
                         cursor,
                         last_processed_block: None,
@@ -135,6 +132,8 @@ where
                         last_report_block_number: 0,
                     })),
                     protocol_system,
+                    protocol_cache,
+                    token_pre_processor,
                     protocol_types,
                     post_processor,
                     sync_threshold,
@@ -149,9 +148,8 @@ where
     }
 
     async fn update_cursor(&self, cursor: String) {
-        let cursor_bytes: Vec<u8> = cursor.into();
         let mut state = self.inner.lock().await;
-        state.cursor = cursor_bytes;
+        state.cursor = cursor.into();
     }
 
     async fn update_last_processed_block(&self, block: Block) {
@@ -200,7 +198,7 @@ where
     #[allow(clippy::mutable_key_type)]
     async fn handle_tvl_changes(
         &self,
-        msg: &mut BlockAccountChanges,
+        msg: &mut evm::BlockChangesResult,
     ) -> Result<(), ExtractionError> {
         trace!("Calculating tvl changes");
         if msg.component_balances.is_empty() {
@@ -252,6 +250,7 @@ where
             .flat_map(|b| b.keys())
             .map(|addr| Bytes::from(addr.as_bytes()))
             .collect::<Vec<_>>();
+
         let prices = self
             .protocol_cache
             .get_token_prices(&addresses)
@@ -296,7 +295,7 @@ where
     /// to go to storage to retrieve balances that are not stored within the buffer.
     async fn get_balances(
         &self,
-        revert_buffer: &RevertBuffer<BlockUpdateWithCursor<evm::BlockContractChanges>>,
+        revert_buffer: &RevertBuffer<BlockUpdateWithCursor<evm::BlockChanges>>,
         reverted_balances_keys: &[(&String, &Bytes)],
     ) -> Result<HashMap<String, HashMap<H160, evm::ComponentBalance>>, ExtractionError> {
         // First search in the buffer
@@ -376,13 +375,9 @@ where
         Ok(combined_balances)
     }
 
-    /// Constructs any newly witnessed currency tokens in this block.
-    ///
-    /// Fetches token metadata such as symbol and decimals, then proceeds to analyze
-    /// the token to add additional metadata such as gas usage any transfer fees etc.
     async fn construct_currency_tokens(
         &self,
-        msg: &evm::BlockContractChanges,
+        msg: &evm::BlockChanges,
     ) -> Result<HashMap<Address, CurrencyToken>, StorageError> {
         let new_token_addresses = msg
             .protocol_components()
@@ -408,10 +403,9 @@ where
             .into_iter()
             .map(|(addr, _)| H160::from(addr))
             .collect::<Vec<_>>();
-
         // Construct unkown tokens using rpc
         let balance_map: HashMap<H160, (H160, U256)> = msg
-            .tx_updates
+            .txs_with_update
             .iter()
             .flat_map(|tx| {
                 tx.protocol_components
@@ -435,7 +429,7 @@ where
                             .map(|owner| (c_id, owner))
                     })
                     .filter_map(|(c_id, addr)| {
-                        tx.component_balances
+                        tx.balance_changes
                             .get(c_id)
                             .map(|balances| {
                                 balances
@@ -475,9 +469,9 @@ where
 }
 
 #[async_trait]
-impl<G, T> Extractor for VmContractExtractor<G, T>
+impl<G, T> Extractor for HybridContractExtractor<G, T>
 where
-    G: VmGateway,
+    G: HybridGateway,
     T: TokenPreProcessorTrait,
 {
     fn get_id(&self) -> ExtractorIdentity {
@@ -520,15 +514,15 @@ where
             .as_ref()
             .unwrap();
 
-        let raw_msg = BlockContractChanges::decode(data.value.as_slice())?;
-
+        let raw_msg = pb::tycho::evm::v1::BlockChanges::decode(data.value.as_slice())?;
         trace!(?raw_msg, "Received message");
 
-        let msg = match evm::BlockContractChanges::try_from_message(
+        // Validate protocol_type_id
+        let msg = match evm::BlockChanges::try_from_message(
             raw_msg,
             &self.name,
             self.chain,
-            self.protocol_system.clone(),
+            &self.protocol_system,
             &self.protocol_types,
             inp.final_block_height,
         ) {
@@ -560,6 +554,8 @@ where
             )
             .await?;
 
+        trace!(?msg, "Processing message");
+
         // Depending on how Substreams handle them, this condition could be problematic for single
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
@@ -569,13 +565,14 @@ where
             let mut revert_buffer = self.revert_buffer.lock().await;
             revert_buffer
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-                .expect("Error while inserting a block into revert buffer");
+                .map_err(ExtractionError::Storage)?;
+
             for msg in revert_buffer
                 .drain_new_finalized_blocks(inp.final_block_height)
-                .expect("Final block height not found in revert buffer")
+                .map_err(ExtractionError::Storage)?
             {
                 self.gateway
-                    .upsert_contract(msg.block_update(), msg.cursor(), is_syncing)
+                    .advance(msg.block_update(), msg.cursor(), is_syncing)
                     .await?;
             }
         }
@@ -594,7 +591,8 @@ where
             debug!(
                 new_components = changes.new_protocol_components.len(),
                 new_tokens = changes.new_tokens.len(),
-                update = changes.account_updates.len(),
+                account_update = changes.account_updates.len(),
+                state_update = changes.protocol_states.len(),
                 tvl_changes = changes.component_tvl.len(),
                 "ProcessedMessage"
             );
@@ -637,7 +635,7 @@ where
                 |(mut reverted_creations, mut reverted_deletions), block_msg| {
                     block_msg
                         .block_update()
-                        .tx_updates
+                        .txs_with_update
                         .iter()
                         .for_each(|update| {
                             update
@@ -673,19 +671,18 @@ where
                     (reverted_creations, reverted_deletions)
                 },
             );
-
         trace!(?reverted_components_creations, "Reverted components creations");
         // TODO: For these reverted deletions we need to fetch the whole state (so get it from the
         //  db and apply buffer update)
         trace!(?reverted_components_deletions, "Reverted components deletions");
 
-        // Handle reverted state
-        let reverted_state_keys: HashSet<_> = reverted_state
+        // Handle reverted account state
+        let reverted_account_state_keys: HashSet<_> = reverted_state
             .iter()
             .flat_map(|block_msg| {
                 block_msg
                     .block_update()
-                    .tx_updates
+                    .txs_with_update
                     .iter()
                     .flat_map(|update| {
                         update
@@ -704,16 +701,16 @@ where
             })
             .collect();
 
-        let reverted_state_keys_vec = reverted_state_keys
+        let reverted_account_state_keys_vec = reverted_account_state_keys
             .into_iter()
             .collect::<Vec<_>>();
 
-        trace!(?reverted_state_keys_vec, "Reverted state keys");
+        trace!(?reverted_account_state_keys_vec, "Reverted account state keys");
 
         // Fetch previous values for every reverted states
         // First search in the buffer
         let (buffered_state, missing) =
-            revert_buffer.lookup_account_state(&reverted_state_keys_vec);
+            revert_buffer.lookup_account_state(&reverted_account_state_keys_vec);
 
         // Then for every missing previous values in the buffer, get the data from our db
         let missing_map: HashMap<Bytes, Vec<Bytes>> =
@@ -801,17 +798,125 @@ where
                     acc
                 });
 
+        // Handle reverted protocol state
+        let reverted_protocol_state_keys: HashSet<_> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .txs_with_update
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .protocol_states
+                            .iter()
+                            .filter(|(c_id, _)| !reverted_components_creations.contains_key(*c_id))
+                            .flat_map(|(c_id, delta)| {
+                                delta
+                                    .updated_attributes
+                                    .keys()
+                                    .chain(delta.deleted_attributes.iter())
+                                    .map(move |key| (c_id, key))
+                            })
+                    })
+            })
+            .collect();
+
+        let reverted_protocol_state_keys_vec = reverted_protocol_state_keys
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        trace!("Reverted state keys {:?}", &reverted_protocol_state_keys_vec);
+
+        // Fetch previous values for every reverted states
+        // First search in the buffer
+        let (buffered_state, missing) =
+            revert_buffer.lookup_protocol_state(&reverted_protocol_state_keys_vec);
+
+        // Then for every missing previous values in the buffer, get the data from our db
+        let missing_map: HashMap<String, Vec<String>> =
+            missing
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (c_id, key)| {
+                    acc.entry(c_id).or_default().push(key);
+                    acc
+                });
+
+        trace!("Missing state keys after buffer lookup {:?}", &missing_map);
+
+        let missing_components_states = self
+            .gateway
+            .get_protocol_states(
+                &missing_map
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<&str>>(),
+            )
+            .await
+            .map_err(ExtractionError::Storage)?;
+
+        // Then merge the two and cast it to the expected struct
+        let missing_components_states_map = missing_map
+            .into_iter()
+            .map(|(component_id, keys)| {
+                missing_components_states
+                    .iter()
+                    .find(|comp| comp.component_id == component_id)
+                    .map(|state| (state.clone(), keys))
+                    .ok_or(ExtractionError::Storage(StorageError::NotFound(
+                        "Component".to_owned(),
+                        component_id.to_string(),
+                    )))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut not_found: HashMap<_, HashSet<_>> = HashMap::new();
+        let mut db_states: HashMap<(String, String), Bytes> = HashMap::new();
+
+        for (state, keys) in missing_components_states_map {
+            for key in keys {
+                if let Some(value) = state.attributes.get(&key) {
+                    db_states.insert((state.component_id.clone(), key.clone()), value.clone());
+                } else {
+                    not_found
+                        .entry(state.component_id.clone())
+                        .or_default()
+                        .insert(key);
+                }
+            }
+        }
+
+        let empty = HashSet::<String>::new();
+
+        let state_updates: HashMap<String, evm::ProtocolStateDelta> = db_states
+            .into_iter()
+            .chain(buffered_state)
+            .fold(HashMap::new(), |mut acc, ((c_id, key), value)| {
+                acc.entry(c_id.clone())
+                    .or_insert_with(|| evm::ProtocolStateDelta {
+                        component_id: c_id.clone(),
+                        updated_attributes: HashMap::new(),
+                        deleted_attributes: not_found
+                            .get(&c_id)
+                            .unwrap_or(&empty)
+                            .clone(),
+                    })
+                    .updated_attributes
+                    .insert(key.clone(), value);
+                acc
+            });
+
         // Handle token balance changes
         let reverted_balances_keys: HashSet<(&String, Bytes)> = reverted_state
             .iter()
             .flat_map(|block_msg| {
                 block_msg
                     .block_update()
-                    .tx_updates
+                    .txs_with_update
                     .iter()
                     .flat_map(|update| {
                         update
-                            .component_balances
+                            .balance_changes
                             .iter()
                             .filter(|(c_id, _)| !reverted_components_creations.contains_key(*c_id))
                             .flat_map(|(id, balance_change)| {
@@ -828,13 +933,13 @@ where
             .map(|(id, token)| (*id, token))
             .collect::<Vec<_>>();
 
-        trace!(?reverted_balances_keys_vec, "Reverted balance keys");
+        trace!("Reverted balance keys {:?}", &reverted_balances_keys_vec);
 
         let combined_balances = self
             .get_balances(&revert_buffer, &reverted_balances_keys_vec)
             .await?;
 
-        let revert_message = evm::BlockAccountChanges {
+        let revert_message = evm::BlockChangesResult {
             extractor: self.name.clone(),
             chain: self.chain,
             block: revert_buffer
@@ -845,6 +950,7 @@ where
                 .block_update
                 .finalized_block_height,
             revert: true,
+            protocol_states: state_updates,
             account_updates,
             new_tokens: HashMap::new(),
             new_protocol_components: reverted_components_deletions,
@@ -866,8 +972,7 @@ where
         todo!()
     }
 }
-
-pub struct VmPgGateway {
+pub struct HybridPgGateway {
     name: String,
     chain: Chain,
     sync_batch_size: usize,
@@ -876,17 +981,22 @@ pub struct VmPgGateway {
 
 #[automock]
 #[async_trait]
-pub trait VmGateway: Send + Sync {
+pub trait HybridGateway: Send + Sync {
     async fn get_cursor(&self) -> Result<Vec<u8>, StorageError>;
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]);
 
-    async fn upsert_contract(
+    async fn advance(
         &self,
-        changes: &evm::BlockContractChanges,
+        changes: &evm::BlockChanges,
         new_cursor: &str,
         syncing: bool,
     ) -> Result<(), StorageError>;
+
+    async fn get_protocol_states<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<Vec<ProtocolComponentState>, StorageError>;
 
     async fn get_contracts(
         &self,
@@ -899,9 +1009,14 @@ pub trait VmGateway: Send + Sync {
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
 }
 
-impl VmPgGateway {
-    pub fn new(name: &str, chain: Chain, sync_batch_size: usize, gw: CachedGateway) -> Self {
-        VmPgGateway { name: name.to_owned(), chain, sync_batch_size, state_gateway: gw }
+impl HybridPgGateway {
+    pub fn new(
+        name: &str,
+        chain: Chain,
+        sync_batch_size: usize,
+        state_gateway: CachedGateway,
+    ) -> Self {
+        Self { name: name.to_owned(), chain, sync_batch_size, state_gateway }
     }
 
     #[instrument(skip_all)]
@@ -916,7 +1031,7 @@ impl VmPgGateway {
 
     async fn forward(
         &self,
-        changes: &evm::BlockContractChanges,
+        changes: &evm::BlockChanges,
         new_cursor: &str,
         syncing: bool,
     ) -> Result<(), StorageError> {
@@ -929,72 +1044,110 @@ impl VmPgGateway {
                 .values()
                 .cloned()
                 .collect::<Vec<_>>();
+            debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), "NewTokens");
             self.state_gateway
                 .add_tokens(&new_tokens)
                 .await?;
         }
-
         self.state_gateway
             .upsert_block(&[(&changes.block).into()])
             .await?;
-        for update in changes.tx_updates.iter() {
-            trace!(tx_hash = ?update.tx.hash, "Processing transaction");
+
+        let mut new_protocol_components: Vec<models::protocol::ProtocolComponent> = vec![];
+        let mut state_updates: Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)> =
+            vec![];
+        let mut account_changes: Vec<(Bytes, models::contract::ContractDelta)> = vec![];
+
+        let mut balance_changes: Vec<models::protocol::ComponentBalance> = vec![];
+        let mut protocol_tokens: HashSet<H160> = HashSet::new();
+
+        for tx_update in changes.txs_with_update.iter() {
+            trace!(tx_hash = ?tx_update.tx.hash, "Processing tx");
+
+            // Insert transaction
             self.state_gateway
-                .upsert_tx(&[(&update.tx).into()])
+                .upsert_tx(&[(&tx_update.tx).into()])
                 .await?;
-            for (_, acc_update) in update.account_updates.iter() {
-                if acc_update.is_creation() {
-                    let new: evm::Account = acc_update.ref_into_account(&update.tx);
+
+            let hash: TxHash = tx_update.tx.hash.into();
+
+            // Map new protocol components
+            for (_component_id, new_protocol_component) in tx_update.protocol_components.iter() {
+                new_protocol_components.push(new_protocol_component.into());
+                protocol_tokens.extend(new_protocol_component.tokens.iter());
+            }
+
+            // Map new account / contracts
+            for (_, account_update) in tx_update.account_updates.iter() {
+                if account_update.is_creation() {
+                    let new: evm::Account = account_update.ref_into_account(&tx_update.tx);
                     info!(block_number = ?changes.block.number, contract_address = ?new.address, "NewContract");
+
+                    // Insert new accounts
                     self.state_gateway
                         .upsert_contract(&(&new).into())
                         .await?;
+                } else if account_update.is_update() {
+                    account_changes
+                        .push((tycho_core::Bytes::from(tx_update.tx.hash), account_update.into()));
+                } else {
+                    // log error
+                    error!(?account_update, "Invalid account update type");
                 }
             }
-            if !update.protocol_components.is_empty() {
-                let protocol_components: Vec<models::protocol::ProtocolComponent> = update
-                    .protocol_components
+
+            // Map protocol state changes
+            state_updates.extend(
+                tx_update
+                    .protocol_states
                     .values()
-                    .map(Into::into)
-                    .collect();
-                self.state_gateway
-                    .add_protocol_components(&protocol_components)
-                    .await?;
-            }
-            if !update.component_balances.is_empty() {
-                let mut component_balances_vec: Vec<models::protocol::ComponentBalance> =
-                    Vec::new();
-                for inner_map in update.component_balances.values() {
-                    for balance in inner_map.values() {
-                        component_balances_vec.push(balance.into());
-                    }
-                }
-                self.state_gateway
-                    .add_component_balances(&component_balances_vec)
-                    .await?;
-            }
+                    .map(|state_change| (hash.clone(), state_change.into())),
+            );
+
+            // Map balance changes
+            balance_changes.extend(
+                tx_update
+                    .balance_changes
+                    .iter()
+                    .flat_map(|(_, tokens)| tokens.values().map(Into::into)),
+            );
         }
-        let collected_changes: Vec<(Bytes, models::contract::ContractDelta)> = changes
-            .tx_updates
-            .iter()
-            .flat_map(|u| {
-                let a: Vec<(Bytes, models::contract::ContractDelta)> = u
-                    .account_updates
-                    .clone()
-                    .into_iter()
-                    .filter(|(_, acc_u)| acc_u.is_update())
-                    .map(|(_, acc_u)| (tycho_core::Bytes::from(u.tx.hash), (&acc_u).into()))
-                    .collect();
-                a
-            })
-            .collect();
 
-        let changes_slice: &[(Bytes, models::contract::ContractDelta)] =
-            collected_changes.as_slice();
+        // Insert new protocol components
+        if !new_protocol_components.is_empty() {
+            debug!(
+                protocol_components = ?new_protocol_components
+                    .iter()
+                    .map(|pc| &pc.id)
+                    .collect::<Vec<_>>(),
+                "NewProtocolComponents"
+            );
+            self.state_gateway
+                .add_protocol_components(new_protocol_components.as_slice())
+                .await?;
+        }
 
-        self.state_gateway
-            .update_contracts(changes_slice)
-            .await?;
+        // Insert changed accounts
+        if !account_changes.is_empty() {
+            self.state_gateway
+                .update_contracts(account_changes.as_slice())
+                .await?;
+        }
+
+        // Insert protocol state changes
+        if !state_updates.is_empty() {
+            self.state_gateway
+                .update_protocol_states(state_updates.as_slice())
+                .await?;
+        }
+
+        // Insert balance changes
+        if !balance_changes.is_empty() {
+            self.state_gateway
+                .add_component_balances(balance_changes.as_slice())
+                .await?;
+        }
+
         self.save_cursor(new_cursor).await?;
 
         let batch_size: usize = if syncing { self.sync_batch_size } else { 0 };
@@ -1013,14 +1166,40 @@ impl VmPgGateway {
 }
 
 #[async_trait]
-impl VmGateway for VmPgGateway {
+impl HybridGateway for HybridPgGateway {
     async fn get_cursor(&self) -> Result<Vec<u8>, StorageError> {
         self.get_last_cursor().await
     }
 
+    async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
+        self.state_gateway
+            .add_protocol_types(new_protocol_types)
+            .await
+            .expect("Couldn't insert protocol types");
+    }
+
+    async fn advance(
+        &self,
+        changes: &evm::BlockChanges,
+        new_cursor: &str,
+        syncing: bool,
+    ) -> Result<(), StorageError> {
+        self.forward(changes, new_cursor, syncing)
+            .await
+    }
+
+    async fn get_protocol_states<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<Vec<ProtocolComponentState>, StorageError> {
+        self.state_gateway
+            .get_protocol_states(&self.chain, None, None, Some(component_ids), false)
+            .await
+    }
+
     async fn get_contracts(
         &self,
-        component_ids: &[Address],
+        component_ids: &[models::Address],
     ) -> Result<Vec<Contract>, StorageError> {
         self.state_gateway
             .get_contracts(&self.chain, Some(component_ids), None, true, false)
@@ -1035,99 +1214,24 @@ impl VmGateway for VmPgGateway {
             .get_balances(&self.chain, Some(component_ids), None)
             .await
     }
-
-    async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
-        self.state_gateway
-            .add_protocol_types(new_protocol_types)
-            .await
-            .expect("Couldn't insert protocol types");
-    }
-
-    #[instrument(skip_all)]
-    async fn upsert_contract(
-        &self,
-        changes: &evm::BlockContractChanges,
-        new_cursor: &str,
-        syncing: bool,
-    ) -> Result<(), StorageError> {
-        self.forward(changes, new_cursor, syncing)
-            .await?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use float_eq::assert_float_eq;
-    use tycho_core::models::{protocol::ProtocolComponent, FinancialType, ImplementationType};
-
+    use super::*;
     use crate::{
         extractor::evm::token_pre_processor::MockTokenPreProcessorTrait,
-        pb::tycho::evm::v1::BlockEntityChanges, testing::MockGateway,
+        pb::tycho::evm::v1::BlockChanges, testing::MockGateway,
     };
+    use float_eq::assert_float_eq;
+    use tycho_core::models::protocol::ProtocolComponent;
 
-    use super::*;
-
-    fn ambient_protocol_types() -> HashMap<String, ProtocolType> {
-        let mut ambient_protocol_types = HashMap::new();
-        ambient_protocol_types.insert(
-            "WeightedPool".to_string(),
-            ProtocolType::new(
-                "WeightedPool".to_string(),
-                FinancialType::Swap,
-                None,
-                ImplementationType::Vm,
-            ),
-        );
-        ambient_protocol_types
-    }
-
-    #[tokio::test]
-    async fn test_get_cursor() {
-        let mut gw = MockVmGateway::new();
-        gw.expect_ensure_protocol_types()
-            .times(1)
-            .returning(|_| ());
-        gw.expect_get_cursor()
-            .times(1)
-            .returning(|| Ok("cursor".into()));
-        let protocol_cache = ProtocolMemoryCache::new(
-            Chain::Ethereum,
-            chrono::Duration::seconds(900),
-            Arc::new(MockGateway::new()),
-        );
-        let extractor = VmContractExtractor::new(
-            "vm:ambient",
-            Chain::Ethereum,
-            ChainState::default(),
-            gw,
-            ambient_protocol_types(),
-            "ambient".into(),
-            protocol_cache,
-            MockTokenPreProcessorTrait::new(),
-            None,
-            5,
-        )
-        .await
-        .expect("extractor init ok");
-
-        let res = extractor.get_cursor().await;
-
-        assert_eq!(res, "cursor");
-    }
-
-    #[tokio::test]
-    async fn test_handle_tick_scoped_data() {
-        let mut gw = MockVmGateway::new();
-        gw.expect_ensure_protocol_types()
-            .times(1)
-            .returning(|_| ());
-        gw.expect_get_cursor()
-            .times(1)
-            .returning(|| Ok("cursor".into()));
-        gw.expect_upsert_contract()
-            .times(1)
-            .returning(|_, _, _| Ok(()));
+    const EXTRACTOR_NAME: &str = "TestExtractor";
+    const TEST_PROTOCOL: &str = "TestProtocol";
+    async fn create_extractor(
+        gw: MockHybridGateway,
+    ) -> HybridContractExtractor<MockHybridGateway, MockTokenPreProcessorTrait> {
+        let protocol_types = HashMap::from([("pt_1".to_string(), ProtocolType::default())]);
         let protocol_cache = ProtocolMemoryCache::new(
             Chain::Ethereum,
             chrono::Duration::seconds(900),
@@ -1137,32 +1241,56 @@ mod test {
         preprocessor
             .expect_get_tokens()
             .returning(|_, _, _| Vec::new());
-        let extractor = VmContractExtractor::new(
-            "vm:ambient",
+        HybridContractExtractor::new(
+            gw,
+            EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
-            gw,
-            ambient_protocol_types(),
-            "ambient".to_owned(),
+            TEST_PROTOCOL.to_string(),
             protocol_cache,
+            protocol_types,
             preprocessor,
             None,
             5,
         )
         .await
-        .expect("extractor init ok");
+        .expect("Failed to create extractor")
+    }
+
+    #[tokio::test]
+    async fn test_get_cursor() {
+        let mut gw = MockHybridGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+
+        let extractor = create_extractor(gw).await;
+        let res = extractor.get_cursor().await;
+
+        assert_eq!(res, "cursor");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data() {
+        let mut gw = MockHybridGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+        gw.expect_advance()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
 
         extractor
             .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
-                BlockEntityChanges {
-                    block: Some(evm::fixtures::pb_blocks(1)),
-                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
-                        tx: Some(evm::fixtures::pb_transactions(1, 1)),
-                        entity_changes: vec![],
-                        component_changes: vec![],
-                        balance_changes: vec![],
-                    }],
-                },
+                BlockChanges { block: Some(evm::fixtures::pb_blocks(1)), changes: vec![] },
                 Some(format!("cursor@{}", 1).as_str()),
                 Some(1),
             ))
@@ -1173,15 +1301,7 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
-                BlockEntityChanges {
-                    block: Some(evm::fixtures::pb_blocks(2)),
-                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
-                        tx: Some(evm::fixtures::pb_transactions(2, 1)),
-                        entity_changes: vec![],
-                        component_changes: vec![],
-                        balance_changes: vec![],
-                    }],
-                },
+                BlockChanges { block: Some(evm::fixtures::pb_blocks(2)), changes: vec![] },
                 Some(format!("cursor@{}", 2).as_str()),
                 Some(2),
             ))
@@ -1195,37 +1315,20 @@ mod test {
 
     #[tokio::test]
     async fn test_handle_tick_scoped_data_skip() {
-        let mut gw = MockVmGateway::new();
+        let mut gw = MockHybridGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok("cursor".into()));
-        gw.expect_upsert_contract()
+        gw.expect_advance()
             .times(0)
             .returning(|_, _, _| Ok(()));
-        let protocol_cache = ProtocolMemoryCache::new(
-            Chain::Ethereum,
-            chrono::Duration::seconds(900),
-            Arc::new(MockGateway::new()),
-        );
-        let extractor = VmContractExtractor::new(
-            "vm:ambient",
-            Chain::Ethereum,
-            ChainState::default(),
-            gw,
-            ambient_protocol_types(),
-            "ambient".to_owned(),
-            protocol_cache,
-            MockTokenPreProcessorTrait::new(),
-            None,
-            5,
-        )
-        .await
-        .expect("extractor init ok");
-        let inp = evm::fixtures::pb_block_scoped_data((), None, None);
 
+        let extractor = create_extractor(gw).await;
+
+        let inp = evm::fixtures::pb_block_scoped_data((), None, None);
         let res = extractor
             .handle_tick_scoped_data(inp)
             .await;
@@ -1235,7 +1338,6 @@ mod test {
             Ok(None) => (), // This is the expected case
             Err(_) => panic!("Expected Ok(None) but got Err(..)"),
         }
-
         assert_eq!(extractor.get_cursor().await, "cursor@420");
     }
 
@@ -1251,17 +1353,16 @@ mod test {
 
     #[test_log::test(tokio::test)]
     async fn test_construct_tokens() {
-        let msg = evm::BlockContractChanges {
+        let msg = evm::BlockChanges {
             extractor: "ex".to_string(),
             block: evm::Block::default(),
             chain: Chain::Ethereum,
             finalized_block_height: 0,
             revert: false,
             new_tokens: HashMap::new(),
-            tx_updates: vec![evm::TransactionVMUpdates {
-                account_updates: HashMap::new(),
+            txs_with_update: vec![evm::TxWithChanges {
                 protocol_components: HashMap::from([(
-                    "comp1".to_string(),
+                    "TestProtocol".to_string(),
                     evm::ProtocolComponent {
                         tokens: vec![
                             "0x0000000000000000000000000000000000000001"
@@ -1274,7 +1375,9 @@ mod test {
                         ..Default::default()
                     },
                 )]),
-                component_balances: HashMap::new(),
+                account_updates: HashMap::new(),
+                protocol_states: Default::default(),
+                balance_changes: HashMap::new(),
                 tx: evm::Transaction::default(),
             }],
         };
@@ -1315,7 +1418,7 @@ mod test {
         preprocessor
             .expect_get_tokens()
             .return_once(|_, _, _| ret);
-        let mut extractor_gw = MockVmGateway::new();
+        let mut extractor_gw = MockHybridGateway::new();
         extractor_gw
             .expect_ensure_protocol_types()
             .times(1)
@@ -1324,20 +1427,20 @@ mod test {
             .expect_get_cursor()
             .times(1)
             .returning(|| Ok("cursor".into()));
-        let extractor = VmContractExtractor::new(
-            "vm_name",
+        let extractor = HybridContractExtractor::new(
+            extractor_gw,
+            EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
-            extractor_gw,
-            HashMap::from([("pt_1".to_string(), ProtocolType::default())]),
-            "system1".to_string(),
+            TEST_PROTOCOL.to_string(),
             protocol_cache,
+            HashMap::from([("pt_1".to_string(), ProtocolType::default())]),
             preprocessor,
             None,
             5,
         )
         .await
-        .expect("extractor init failed");
+        .expect("Extractor init failed");
         let exp = HashMap::from([
             (t1.address.clone(), t1),
             (Bytes::from(t3.address.as_bytes()), (&t3).into()),
@@ -1353,7 +1456,7 @@ mod test {
 
     #[test_log::test(tokio::test)]
     async fn test_handle_tvl_changes() {
-        let mut msg = BlockAccountChanges {
+        let mut msg = evm::BlockChangesResult {
             component_balances: HashMap::from([(
                 "comp1".to_string(),
                 HashMap::from([(
@@ -1440,7 +1543,7 @@ mod test {
             .expect("adding tokens failed");
 
         let preprocessor = MockTokenPreProcessorTrait::new();
-        let mut extractor_gw = MockVmGateway::new();
+        let mut extractor_gw = MockHybridGateway::new();
         extractor_gw
             .expect_ensure_protocol_types()
             .times(1)
@@ -1452,20 +1555,22 @@ mod test {
         extractor_gw
             .expect_get_components_balances()
             .return_once(|_| Ok(HashMap::new()));
-        let extractor = VmContractExtractor::new(
+
+        let extractor = HybridContractExtractor::new(
+            extractor_gw,
             "vm_name",
             Chain::Ethereum,
             ChainState::default(),
-            extractor_gw,
-            HashMap::from([("pt_1".to_string(), ProtocolType::default())]),
             "system1".to_string(),
             protocol_cache,
+            HashMap::from([("pt_1".to_string(), ProtocolType::default())]),
             preprocessor,
             None,
             5,
         )
         .await
         .expect("extractor init failed");
+
         let exp_tvl = 66.39849612683253;
 
         extractor
@@ -1495,10 +1600,17 @@ mod test {
 /// between this component and the actual db interactions
 #[cfg(test)]
 mod test_serial_db {
+    use super::*;
+    use crate::{
+        extractor::evm::{
+            token_pre_processor::MockTokenPreProcessorTrait, AccountUpdate, ProtocolComponent,
+            Transaction, TxWithChanges,
+        },
+        pb::sf::substreams::v1::BlockRef,
+    };
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
+    use ethers::abi::AbiEncode;
     use futures03::{stream, StreamExt};
-    use hex::ToHex;
-    use test_log::test;
 
     use tycho_core::{
         models::{ContractId, FinancialType, ImplementationType},
@@ -1512,27 +1624,24 @@ mod test_serial_db {
         },
     };
 
-    use crate::{
-        extractor::evm::{
-            token_pre_processor::MockTokenPreProcessorTrait, AccountUpdate, ComponentBalance,
-            ProtocolComponent,
-        },
-        pb::sf::substreams::v1::BlockRef,
-    };
-
-    use super::*;
-
-    const TX_HASH_0: &str = "0x2f6350a292c0fc918afe67cb893744a080dacb507b0cea4cc07437b8aff23cdb";
-    const TX_HASH_1: &str = "0x0d9e0da36cf9f305a189965b248fc79c923619801e8ab5ef158d4fd528a291ad";
-    const TX_HASH_2: &str = "0xcf574444be25450fe26d16b85102b241e964a6e01d75dd962203d4888269be3d";
-    const BLOCK_HASH_0: &str = "0x98b4a4fef932b1862be52de218cc32b714a295fae48b775202361a6fa09b66eb";
-
     const WETH_ADDRESS: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const USDC_ADDRESS: &str = "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
-    const AMBIENT_CONTRACT: [u8; 20] =
-        hex_literal::hex!("aaaaaaaaa24eeeb8d57d431224f73832bc34f688");
+    // Native contract creation fixtures
+    const NATIVE_BLOCK_HASH_0: &str =
+        "0xc520bd7f8d7b964b1a6017a3d747375fcefea0f85994e3cc1810c2523b139da8";
+    const NATIVE_CREATED_CONTRACT: &str = "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc";
 
+    // VM contract creation fixtures
+    const VM_TX_HASH_0: &str = "0x2f6350a292c0fc918afe67cb893744a080dacb507b0cea4cc07437b8aff23cdb";
+    const VM_TX_HASH_1: &str = "0x0d9e0da36cf9f305a189965b248fc79c923619801e8ab5ef158d4fd528a291ad";
+    const VM_TX_HASH_2: &str = "0xcf574444be25450fe26d16b85102b241e964a6e01d75dd962203d4888269be3d";
+    const VM_BLOCK_HASH_0: &str =
+        "0x98b4a4fef932b1862be52de218cc32b714a295fae48b775202361a6fa09b66eb";
+    // Ambient Contract
+    const VM_CONTRACT: [u8; 20] = hex_literal::hex!("aaaaaaaaa24eeeb8d57d431224f73832bc34f688");
+
+    // SETUP
     fn get_mocked_token_pre_processor() -> MockTokenPreProcessorTrait {
         let mut mock_processor = MockTokenPreProcessorTrait::new();
         let new_tokens = vec![
@@ -1584,34 +1693,55 @@ mod test_serial_db {
         mock_processor
     }
 
-    async fn setup_gw(pool: Pool<AsyncPgConnection>) -> VmPgGateway {
+    async fn setup_gw(
+        pool: Pool<AsyncPgConnection>,
+        implementation_type: ImplementationType,
+    ) -> (HybridPgGateway, i64) {
         let mut conn = pool
             .get()
             .await
             .expect("pool should get a connection");
-
-        postgres::db_fixtures::insert_protocol_type(&mut conn, "vm:pool", None, None, None).await;
         let chain_id = postgres::db_fixtures::insert_chain(&mut conn, "ethereum").await;
+
+        match implementation_type {
+            ImplementationType::Custom => {
+                postgres::db_fixtures::insert_protocol_type(
+                    &mut conn,
+                    "pool",
+                    Some(models::FinancialType::Swap),
+                    None,
+                    Some(models::ImplementationType::Custom),
+                )
+                .await;
+            }
+            ImplementationType::Vm => {
+                postgres::db_fixtures::insert_protocol_type(&mut conn, "vm:pool", None, None, None)
+                    .await;
+            }
+        }
+
         db_fixtures::insert_token(&mut conn, chain_id, WETH_ADDRESS, "WETH", 18, None).await;
         db_fixtures::insert_token(&mut conn, chain_id, USDC_ADDRESS, "USDC", 6, None).await;
 
         let db_url = std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
         let (cached_gw, _jh) = GatewayBuilder::new(db_url.as_str())
             .set_chains(&[Chain::Ethereum])
-            .set_protocol_systems(&["ambient".to_string()])
+            .set_protocol_systems(&["test".to_string()])
             .build()
             .await
             .expect("failed to build postgres gateway");
-        VmPgGateway::new("vm:ambient", Chain::Ethereum, 1000, cached_gw)
+
+        let gw = HybridPgGateway::new("test", Chain::Ethereum, 1000, cached_gw);
+        (gw, chain_id)
     }
 
     #[tokio::test]
     async fn test_get_cursor() {
         run_against_db(|pool| async move {
-            let gw = setup_gw(pool).await;
+            let (gw, _) = setup_gw(pool, ImplementationType::Vm).await;
             let evm_gw = gw.state_gateway.clone();
             let state = ExtractionState::new(
-                "vm:ambient".to_string(),
+                "test".to_string(),
                 Chain::Ethereum,
                 None,
                 "cursor@420".as_bytes(),
@@ -1638,7 +1768,79 @@ mod test_serial_db {
         .await;
     }
 
-    fn ambient_account(at_version: u64) -> models::contract::Contract {
+    fn native_pool_creation() -> evm::BlockChanges {
+        evm::BlockChanges {
+            extractor: "native:test".to_owned(),
+            chain: Chain::Ethereum,
+            block: evm::Block {
+                number: 0,
+                chain: Chain::Ethereum,
+                hash: NATIVE_BLOCK_HASH_0.parse().unwrap(),
+                parent_hash: NATIVE_BLOCK_HASH_0.parse().unwrap(),
+                ts: "2020-01-01T01:00:00".parse().unwrap(),
+            },
+            finalized_block_height: 0,
+            revert: false,
+            new_tokens: HashMap::from([
+                (
+                    Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+                    CurrencyToken::new(
+                        &Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+                        "USDC",
+                        6,
+                        0,
+                        &[],
+                        Default::default(),
+                        100,
+                    ),
+                ),
+                (
+                    Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+                    CurrencyToken::new(
+                        &Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+                        "WETH",
+                        18,
+                        0,
+                        &[],
+                        Default::default(),
+                        100,
+                    ),
+                ),
+            ]),
+            txs_with_update: vec![TxWithChanges {
+                tx: Transaction::new(
+                    H256::zero(),
+                    NATIVE_BLOCK_HASH_0.parse().unwrap(),
+                    H160::zero(),
+                    Some(H160::zero()),
+                    10,
+                ),
+                protocol_states: HashMap::new(),
+                balance_changes: HashMap::new(),
+                protocol_components: HashMap::from([(
+                    "pool".to_string(),
+                    evm::ProtocolComponent {
+                        id: NATIVE_CREATED_CONTRACT.to_string(),
+                        protocol_system: "test".to_string(),
+                        protocol_type_name: "pool".to_string(),
+                        chain: Chain::Ethereum,
+                        tokens: vec![
+                            H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                            H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+                        ],
+                        contract_ids: vec![],
+                        creation_tx: Default::default(),
+                        static_attributes: Default::default(),
+                        created_at: Default::default(),
+                        change: Default::default(),
+                    },
+                )]),
+                account_updates: HashMap::new(),
+            }],
+        }
+    }
+
+    fn vm_account(at_version: u64) -> models::contract::Contract {
         match at_version {
             0 => (&evm::Account::new(
                 Chain::Ethereum,
@@ -1652,34 +1854,51 @@ mod test_serial_db {
                 "0xe8e77626586f73b955364c7b4bbf0bb7f7685ebd40e852b164633a4acbd3244c"
                     .parse()
                     .unwrap(),
-                TX_HASH_1.parse().unwrap(),
-                TX_HASH_0.parse().unwrap(),
-                Some(TX_HASH_0.parse().unwrap()),
+                VM_TX_HASH_1.parse().unwrap(),
+                VM_TX_HASH_0.parse().unwrap(),
+                Some(VM_TX_HASH_0.parse().unwrap()),
             ))
                 .into(),
             _ => panic!("Unkown version"),
         }
     }
 
-    fn ambient_creation_and_update() -> evm::BlockContractChanges {
+    // Creates a BlockChanges object with a VM contract creation and an account update. Based on an
+    // Ambient pool creation
+    fn vm_creation_and_update() -> evm::BlockChanges {
         let base_token = H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
             .expect("Invalid H160 address");
         let quote_token = H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
             .expect("Invalid H160 address");
         let component_id = "ambient_USDC_ETH".to_string();
-        evm::BlockContractChanges {
+        evm::BlockChanges {
             extractor: "vm:ambient".to_owned(),
             chain: Chain::Ethereum,
             block: evm::Block::default(),
             finalized_block_height: 0,
             revert: false,
             new_tokens: HashMap::new(),
-            tx_updates: vec![
-                evm::TransactionVMUpdates::new(
+            txs_with_update: vec![
+                TxWithChanges::new(
+                    HashMap::from([(
+                        component_id.clone(),
+                        ProtocolComponent {
+                            id: component_id.clone(),
+                            protocol_system: "test".to_string(),
+                            protocol_type_name: "vm:pool".to_string(),
+                            chain: Chain::Ethereum,
+                            tokens: vec![base_token, quote_token],
+                            contract_ids: vec![H160(VM_CONTRACT)],
+                            static_attributes: Default::default(),
+                            change: Default::default(),
+                            creation_tx: VM_TX_HASH_0.parse().unwrap(),
+                            created_at: Default::default(),
+                        },
+                    )]),
                     [(
-                        H160(AMBIENT_CONTRACT),
+                        H160(VM_CONTRACT),
                         AccountUpdate::new(
-                            H160(AMBIENT_CONTRACT),
+                            H160(VM_CONTRACT),
                             Chain::Ethereum,
                             HashMap::new(),
                             None,
@@ -1689,41 +1908,28 @@ mod test_serial_db {
                     )]
                     .into_iter()
                     .collect(),
-                    HashMap::from([(
-                        component_id.clone(),
-                        ProtocolComponent {
-                            id: component_id.clone(),
-                            protocol_system: "ambient".to_string(),
-                            protocol_type_name: "vm:pool".to_string(),
-                            chain: Chain::Ethereum,
-                            tokens: vec![base_token, quote_token],
-                            contract_ids: vec![H160(AMBIENT_CONTRACT)],
-                            static_attributes: Default::default(),
-                            change: Default::default(),
-                            creation_tx: TX_HASH_0.parse().unwrap(),
-                            created_at: Default::default(),
-                        },
-                    )]),
+                    HashMap::new(),
                     HashMap::from([(
                         component_id.clone(),
                         HashMap::from([(
                             base_token,
-                            ComponentBalance {
+                            crate::extractor::evm::ComponentBalance {
                                 token: base_token,
                                 balance: Bytes::from(&[0u8]),
                                 balance_float: 10.0,
-                                modify_tx: TX_HASH_0.parse().unwrap(),
+                                modify_tx: VM_TX_HASH_0.parse().unwrap(),
                                 component_id: component_id.clone(),
                             },
                         )]),
                     )]),
-                    evm::fixtures::transaction02(TX_HASH_0, evm::fixtures::HASH_256_0, 1),
+                    evm::fixtures::transaction02(VM_TX_HASH_0, evm::fixtures::HASH_256_0, 1),
                 ),
-                evm::TransactionVMUpdates::new(
+                TxWithChanges::new(
+                    HashMap::new(),
                     [(
-                        H160(AMBIENT_CONTRACT),
+                        H160(VM_CONTRACT),
                         AccountUpdate::new(
-                            H160(AMBIENT_CONTRACT),
+                            H160(VM_CONTRACT),
                             Chain::Ethereum,
                             evm::fixtures::evm_slots([(1, 200)]),
                             Some(U256::from(1000)),
@@ -1738,16 +1944,16 @@ mod test_serial_db {
                         component_id.clone(),
                         HashMap::from([(
                             base_token,
-                            ComponentBalance {
+                            crate::extractor::evm::ComponentBalance {
                                 token: base_token,
                                 balance: Bytes::from(&[0u8]),
                                 balance_float: 10.0,
-                                modify_tx: TX_HASH_1.parse().unwrap(),
+                                modify_tx: VM_TX_HASH_1.parse().unwrap(),
                                 component_id: component_id.clone(),
                             },
                         )]),
                     )]),
-                    evm::fixtures::transaction02(TX_HASH_1, evm::fixtures::HASH_256_0, 2),
+                    evm::fixtures::transaction02(VM_TX_HASH_1, evm::fixtures::HASH_256_0, 2),
                 ),
             ],
         }
@@ -1755,11 +1961,11 @@ mod test_serial_db {
 
     // Allow dead code until reverts are supported again
     #[allow(dead_code)]
-    fn ambient_update02() -> evm::BlockContractChanges {
+    fn vm_update02() -> evm::BlockContractChanges {
         let block = evm::Block {
             number: 1,
             chain: Chain::Ethereum,
-            hash: BLOCK_HASH_0.parse().unwrap(),
+            hash: VM_BLOCK_HASH_0.parse().unwrap(),
             parent_hash: H256::zero(),
             ts: "2020-01-01T01:00:00".parse().unwrap(),
         };
@@ -1772,9 +1978,9 @@ mod test_serial_db {
             new_tokens: HashMap::new(),
             tx_updates: vec![evm::TransactionVMUpdates::new(
                 [(
-                    H160(AMBIENT_CONTRACT),
+                    H160(VM_CONTRACT),
                     AccountUpdate::new(
-                        H160(AMBIENT_CONTRACT),
+                        H160(VM_CONTRACT),
                         Chain::Ethereum,
                         evm::fixtures::evm_slots([(42, 0xbadbabe)]),
                         Some(U256::from(2000)),
@@ -1786,17 +1992,69 @@ mod test_serial_db {
                 .collect(),
                 HashMap::new(),
                 HashMap::new(),
-                evm::fixtures::transaction02(TX_HASH_2, BLOCK_HASH_0, 1),
+                evm::fixtures::transaction02(VM_TX_HASH_2, VM_BLOCK_HASH_0, 1),
             )],
         }
     }
 
-    #[test(tokio::test)]
-    async fn test_upsert_contract() {
+    // Tests a forward call with a native contract creation and an account update
+    // TODO: Fix this test. It was already disabled for native extractors, because of
+    // protocol_type_name mismatch
+    #[ignore]
+    #[tokio::test]
+    async fn test_forward_native_protocol() {
         run_against_db(|pool| async move {
-            let gw = setup_gw(pool).await;
-            let msg = ambient_creation_and_update();
-            let exp = ambient_account(0);
+            let (gw, _) = setup_gw(pool, ImplementationType::Custom).await;
+            let msg = native_pool_creation();
+
+            let _exp = [ProtocolComponent {
+                id: NATIVE_CREATED_CONTRACT.to_string(),
+                protocol_system: "test".to_string(),
+                protocol_type_name: "pool".to_string(),
+                chain: Chain::Ethereum,
+                tokens: vec![
+                    H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                    H160::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+                ],
+                contract_ids: vec![],
+                creation_tx: H256::from_str(
+                    "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
+                )
+                .unwrap(),
+                static_attributes: Default::default(),
+                created_at: Default::default(),
+                change: Default::default(),
+            }];
+
+            gw.forward(&msg, "cursor@500", false)
+                .await
+                .expect("upsert should succeed");
+
+            let cached_gw: CachedGateway = gw.state_gateway;
+            let res = cached_gw
+                .get_protocol_components(
+                    &Chain::Ethereum,
+                    None,
+                    Some([NATIVE_CREATED_CONTRACT].as_slice()),
+                    None,
+                )
+                .await
+                .expect("test successfully inserted native contract");
+            println!("{:?}", res);
+
+            // TODO: This is failing because protocol_type_name is wrong in the gateway - waiting
+            // assert_eq!(res, exp);
+        })
+        .await;
+    }
+
+    // Tests processing a new block where a new pool is created and its balances get updated
+    #[tokio::test]
+    async fn test_forward_vm_protocol() {
+        run_against_db(|pool| async move {
+            let (gw, _) = setup_gw(pool, ImplementationType::Vm).await;
+            let msg = vm_creation_and_update();
+            let exp = vm_account(0);
 
             gw.forward(&msg, "cursor@500", false)
                 .await
@@ -1805,11 +2063,7 @@ mod test_serial_db {
             let cached_gw: CachedGateway = gw.state_gateway;
 
             let res = cached_gw
-                .get_contract(
-                    &ContractId::new(Chain::Ethereum, AMBIENT_CONTRACT.into()),
-                    None,
-                    true,
-                )
+                .get_contract(&ContractId::new(Chain::Ethereum, VM_CONTRACT.into()), None, true)
                 .await
                 .expect("test successfully inserted ambient contract");
             assert_eq!(res, exp);
@@ -1825,7 +2079,7 @@ mod test_serial_db {
                 .await
                 .unwrap();
             assert_eq!(protocol_components.len(), 1);
-            assert_eq!(protocol_components[0].creation_tx, Bytes::from(TX_HASH_0));
+            assert_eq!(protocol_components[0].creation_tx, Bytes::from(VM_TX_HASH_0));
 
             let component_balances = cached_gw
                 .get_balance_deltas(
@@ -1847,7 +2101,191 @@ mod test_serial_db {
     }
 
     #[test_log::test(tokio::test)]
-    async fn test_handle_revert() {
+    async fn test_handle_native_revert() {
+        run_against_db(|pool| async move {
+            let mut conn = pool
+                .get()
+                .await
+                .expect("pool should get a connection");
+
+            let database_url =
+                std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
+
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_1",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Custom),
+            )
+                .await;
+
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_2",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Custom),
+            )
+                .await;
+
+            let (cached_gw, _gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
+                .set_chains(&[Chain::Ethereum])
+                .set_protocol_systems(&["native_protocol_system".to_string()])
+                .build()
+                .await
+                .unwrap();
+
+            let gw = HybridPgGateway::new(
+                "native_name",
+                Chain::Ethereum,
+                0,
+                cached_gw.clone(),
+            );
+
+            let protocol_types = HashMap::from([
+                ("pt_1".to_string(), ProtocolType::default()),
+                ("pt_2".to_string(), ProtocolType::default()),
+            ]);
+            let protocol_cache = ProtocolMemoryCache::new(
+                Chain::Ethereum,
+                chrono::Duration::seconds(900),
+                Arc::new(cached_gw),
+            );
+            let extractor = HybridContractExtractor::new(
+                gw,
+                "native_name",
+                Chain::Ethereum,
+                ChainState::default(),
+                "native_protocol_system".to_string(),
+                protocol_cache,
+                protocol_types,
+                get_mocked_token_pre_processor(),
+                None,
+                5,
+            )
+                .await
+                .expect("Failed to create extractor");
+
+            dbg!("Sending block scoped data");
+
+            // Send a sequence of block scoped data.
+            stream::iter(get_native_inp_sequence())
+                .for_each(|inp| async {
+                    extractor
+                        .handle_tick_scoped_data(inp)
+                        .await
+                        .unwrap();
+                    dbg!("+++");
+                })
+                .await;
+
+            let client_msg = extractor
+                .handle_revert(BlockUndoSignal {
+                    last_valid_block: Some(BlockRef {
+                        id: H256::from_low_u64_be(3).encode_hex(),
+                        number: 3,
+                    }),
+                    last_valid_cursor: "cursor@3".into(),
+                })
+                .await
+                .unwrap()
+                .unwrap();
+
+
+            let res = client_msg
+                .as_any()
+                .downcast_ref::<evm::BlockChangesResult>()
+                .expect("not good type");
+            let base_ts = yesterday_midnight().timestamp();
+            let block_entity_changes_result = evm::BlockChangesResult {
+                extractor: "native_name".to_string(),
+                chain: Chain::Ethereum,
+                block: Block {
+                    number: 3,
+                    hash: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+                    parent_hash: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
+                    chain: Chain::Ethereum,
+                    ts: NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                },
+                finalized_block_height: 1,
+                revert: true,
+                protocol_states: HashMap::from([
+                    ("pc_1".to_string(), evm::ProtocolStateDelta {
+                        component_id: "pc_1".to_string(),
+                        updated_attributes: HashMap::from([
+                            ("attr_2".to_string(), Bytes::from("0x0000000000000002")),
+                            ("attr_1".to_string(), Bytes::from("0x00000000000003e8")),
+                        ]),
+                        deleted_attributes: HashSet::new(),
+                    }),
+                ]),
+                new_tokens: HashMap::new(),
+                new_protocol_components: HashMap::from([
+                    ("pc_2".to_string(), ProtocolComponent {
+                        id: "pc_2".to_string(),
+                        protocol_system: "native_protocol_system".to_string(),
+                        protocol_type_name: "pt_1".to_string(),
+                        chain: Chain::Ethereum,
+                        tokens: vec![
+                            H160::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+                            H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                        ],
+                        contract_ids: vec![],
+                        static_attributes: HashMap::new(),
+                        change: ChangeType::Creation,
+                        creation_tx: H256::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
+                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                    }),
+                ]),
+                deleted_protocol_components: HashMap::from([
+                    ("pc_3".to_string(), ProtocolComponent {
+                        id: "pc_3".to_string(),
+                        protocol_system: "native_protocol_system".to_string(),
+                        protocol_type_name: "pt_2".to_string(),
+                        chain: Chain::Ethereum,
+                        tokens: vec![
+                            H160::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+                            H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                        ],
+                        contract_ids: vec![],
+                        static_attributes: HashMap::new(),
+                        change: ChangeType::Deletion,
+                        creation_tx: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
+                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                    }),
+                ]),
+                component_balances: HashMap::from([
+                    ("pc_1".to_string(), HashMap::from([
+                        (H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), evm::ComponentBalance {
+                            token: H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                            balance: Bytes::from("0x00000001"),
+                            balance_float: 1.0,
+                            modify_tx: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+                            component_id: "pc_1".to_string(),
+                        }),
+                        (H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), evm::ComponentBalance {
+                            token: H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                            balance: Bytes::from("0x000003e8"),
+                            balance_float: 1000.0,
+                            modify_tx: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000007531").unwrap(),
+                            component_id: "pc_1".to_string(),
+                        }),
+                    ])),
+                ]),
+                component_tvl: HashMap::new(),
+                account_updates: Default::default(),
+            };
+
+            assert_eq!(
+                res,
+                &block_entity_changes_result
+            );
+        })
+            .await;
+    }
+    #[test_log::test(tokio::test)]
+    async fn test_handle_vm_revert() {
         run_against_db(|pool| async move {
             let mut conn = pool
                 .get()
@@ -1882,7 +2320,7 @@ mod test_serial_db {
                 .await
                 .unwrap();
 
-            let gw = VmPgGateway::new(
+            let gw = HybridPgGateway::new(
                 "vm_name",
                 Chain::Ethereum,
                 0,
@@ -1898,14 +2336,14 @@ mod test_serial_db {
                 Arc::new(cached_gw),
             );
             let preprocessor = get_mocked_token_pre_processor();
-            let extractor = VmContractExtractor::new(
+            let extractor = HybridContractExtractor::new(
+                gw,
                 "vm_name",
                 Chain::Ethereum,
                 ChainState::default(),
-                gw,
-                protocol_types,
                 "vm_protocol_system".to_string(),
                 protocol_cache,
+                protocol_types,
                 preprocessor,
                 None,
                 5,
@@ -1915,12 +2353,13 @@ mod test_serial_db {
 
             dbg!("starting input seq");
             // Send a sequence of block scoped data.
-            stream::iter(get_inp_sequence())
+            stream::iter(get_vm_inp_sequence())
                 .for_each(|inp| async {
                     extractor
                         .handle_tick_scoped_data(inp)
                         .await
                         .unwrap();
+                    dbg!("+++");
                 })
                 .await;
 
@@ -1938,11 +2377,11 @@ mod test_serial_db {
 
             let res = client_msg
                 .as_any()
-                .downcast_ref::<evm::BlockAccountChanges>()
+                .downcast_ref::<evm::BlockChangesResult>()
                 .expect("not good type");
 
             let base_ts = yesterday_midnight().timestamp();
-            let block_account_expected = evm::BlockAccountChanges {
+            let block_account_expected = evm::BlockChangesResult {
                 extractor: "vm_name".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2000,14 +2439,14 @@ mod test_serial_db {
                 ]),
                 component_balances: HashMap::from([
                     ("pc_1".to_string(), HashMap::from([
-                        (H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), ComponentBalance {
+                        (H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), crate::extractor::evm::ComponentBalance {
                             token: H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
                             balance: Bytes::from("0x00000064"),
                             balance_float: 100.0,
                             modify_tx: H256::from_str("0x0000000000000000000000000000000000000000000000000000000000007532").unwrap(),
                             component_id: "pc_1".to_string(),
                         }),
-                        (H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), ComponentBalance {
+                        (H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), crate::extractor::evm::ComponentBalance {
                             token: H160::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
                             balance: Bytes::from("0x00000001"),
                             balance_float: 1.0,
@@ -2017,6 +2456,7 @@ mod test_serial_db {
                     ])),
                 ]),
                 component_tvl: HashMap::new(),
+                protocol_states: Default::default(),
             };
 
             assert_eq!(
@@ -2027,31 +2467,63 @@ mod test_serial_db {
             .await;
     }
 
-    fn get_inp_sequence(
+    fn get_native_inp_sequence(
     ) -> impl Iterator<Item = crate::pb::sf::substreams::rpc::v2::BlockScopedData> {
         vec![
             evm::fixtures::pb_block_scoped_data(
-                evm::fixtures::pb_block_contract_changes(1),
+                evm::fixtures::pb_native_block_changes(1),
                 Some(format!("cursor@{}", 1).as_str()),
                 Some(1), // Syncing (buffered)
             ),
             evm::fixtures::pb_block_scoped_data(
-                evm::fixtures::pb_block_contract_changes(2),
+                evm::fixtures::pb_native_block_changes(2),
                 Some(format!("cursor@{}", 2).as_str()),
                 Some(1), // Buffered
             ),
             evm::fixtures::pb_block_scoped_data(
-                evm::fixtures::pb_block_contract_changes(3),
+                evm::fixtures::pb_native_block_changes(3),
                 Some(format!("cursor@{}", 3).as_str()),
                 Some(1), // Buffered
             ),
             evm::fixtures::pb_block_scoped_data(
-                evm::fixtures::pb_block_contract_changes(4),
+                evm::fixtures::pb_native_block_changes(4),
                 Some(format!("cursor@{}", 4).as_str()),
                 Some(1), // Buffered
             ),
             evm::fixtures::pb_block_scoped_data(
-                evm::fixtures::pb_block_contract_changes(5),
+                evm::fixtures::pb_native_block_changes(5),
+                Some(format!("cursor@{}", 5).as_str()),
+                Some(3), // Buffered + flush 1 + 2
+            ),
+        ]
+        .into_iter()
+    }
+
+    fn get_vm_inp_sequence(
+    ) -> impl Iterator<Item = crate::pb::sf::substreams::rpc::v2::BlockScopedData> {
+        vec![
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_vm_block_changes(1),
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1), // Syncing (buffered)
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_vm_block_changes(2),
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(1), // Buffered
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_vm_block_changes(3),
+                Some(format!("cursor@{}", 3).as_str()),
+                Some(1), // Buffered
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_vm_block_changes(4),
+                Some(format!("cursor@{}", 4).as_str()),
+                Some(1), // Buffered
+            ),
+            evm::fixtures::pb_block_scoped_data(
+                evm::fixtures::pb_vm_block_changes(5),
                 Some(format!("cursor@{}", 5).as_str()),
                 Some(3), // Buffered + flush 1 + 2
             ),

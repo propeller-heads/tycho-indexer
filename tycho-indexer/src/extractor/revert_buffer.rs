@@ -271,8 +271,7 @@ where
 {
     /// Looks up buffered protocol state updates for the provided keys. Returns a map of updates and
     /// a list of keys for which updates were not found in the buffered blocks.
-    ///
-    /// Clippy thinks it is a complex type that is difficult to read
+    // Clippy thinks it is a complex type that is difficult to read
     #[allow(clippy::type_complexity)]
     pub fn lookup_protocol_state(
         &self,
