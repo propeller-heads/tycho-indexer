@@ -1054,7 +1054,7 @@ mod test {
     }
 
     #[test]
-    fn test_parse_block_account_changes() {
+    fn test_parse_block_changes() {
         let json_data = r#"
         {
             "extractor": "vm:ambient",
@@ -1076,6 +1076,13 @@ mod test {
                     "balance": "0x01f4",
                     "code": "",
                     "change": "Update"
+                }
+            },
+            "state_updates": {
+                "component_1": {
+                    "component_id": "component_1",
+                    "updated_attributes": {"attr1": "0x01"},
+                    "deleted_attributes": ["attr2"]
                 }
             },
             "new_protocol_components":
@@ -1115,63 +1122,6 @@ mod test {
     }
 
     #[test]
-    fn test_parse_block_entity_changes() {
-        let json_data = r#"
-        {
-            "extractor": "vm:ambient",
-            "chain": "ethereum",
-            "block": {
-                "number": 123,
-                "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "chain": "ethereum",
-                "ts": "2023-09-14T00:00:00"
-            },
-            "revert": false,
-            "new_tokens": {},
-            "state_updates": {
-                "component_1": {
-                    "component_id": "component_1",
-                    "updated_attributes": {"attr1": "0x01"},
-                    "deleted_attributes": ["attr2"]
-                }
-            },
-            "new_protocol_components": {
-                "protocol_1": {
-                    "id": "protocol_1",
-                    "protocol_system": "system_1",
-                    "protocol_type_name": "type_1",
-                    "chain": "ethereum",
-                    "tokens": ["0x01", "0x02"],
-                    "contract_ids": ["0x01", "0x02"],
-                    "static_attributes": {"attr1": "0x01f4"},
-                    "change": "Update",
-                    "creation_tx": "0x01",
-                    "created_at": "2023-09-14T00:00:00"
-                }
-            },
-            "deleted_protocol_components": {},
-            "component_balances": {
-                "protocol_1": {
-                    "0x01": {
-                        "token": "0x01",
-                        "balance": "0x01f4",
-                        "balance_float": 0.0,
-                        "modify_tx": "0x01",
-                        "component_id": "protocol_1"
-                    }
-                }
-            },
-            "component_tvl": {
-                "protocol_1": 1000.0
-            }
-        }
-        "#;
-
-        serde_json::from_str::<BlockChanges>(json_data).expect("parsing failed");
-    }
-
-    #[test]
     fn test_parse_native_websocket_message() {
         let json_data = r#"
         {
@@ -1189,6 +1139,16 @@ mod test {
                 },
                 "revert": false,
                 "new_tokens": {},
+                "account_updates": {
+                            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                                "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                                "chain": "ethereum",
+                                "slots": {},
+                                "balance": "0x01f4",
+                                "code": "",
+                                "change": "Update"
+                            }
+                        },
                 "state_updates": {
                     "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28": {
                         "component_id": "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28",
