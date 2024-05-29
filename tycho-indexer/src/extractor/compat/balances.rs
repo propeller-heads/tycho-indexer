@@ -152,7 +152,7 @@ mod tests {
                 )]),
             )]),
             tx: Transaction::new(H256::zero(), H256::zero(), H160::zero(), Some(H160::zero()), 10),
-                protocol_states: Default::default(),
+                state_updates: Default::default(),
             }];
 
         let changes = BlockChanges::new(
@@ -196,7 +196,7 @@ mod tests {
                     Some(H160::zero()),
                     10,
                 ),
-                protocol_states: Default::default(),
+                state_updates: Default::default(),
             }],
         );
 
