@@ -592,7 +592,7 @@ where
                 new_components = changes.new_protocol_components.len(),
                 new_tokens = changes.new_tokens.len(),
                 account_update = changes.account_updates.len(),
-                state_update = changes.protocol_states.len(),
+                state_update = changes.state_updates.len(),
                 tvl_changes = changes.component_tvl.len(),
                 "ProcessedMessage"
             );
@@ -950,7 +950,7 @@ where
                 .block_update
                 .finalized_block_height,
             revert: true,
-            protocol_states: state_updates,
+            state_updates,
             account_updates,
             new_tokens: HashMap::new(),
             new_protocol_components: reverted_components_deletions,
@@ -2210,7 +2210,7 @@ mod test_serial_db {
                 },
                 finalized_block_height: 1,
                 revert: true,
-                protocol_states: HashMap::from([
+                state_updates: HashMap::from([
                     ("pc_1".to_string(), evm::ProtocolStateDelta {
                         component_id: "pc_1".to_string(),
                         updated_attributes: HashMap::from([
@@ -2456,7 +2456,7 @@ mod test_serial_db {
                     ])),
                 ]),
                 component_tvl: HashMap::new(),
-                protocol_states: Default::default(),
+                state_updates: Default::default(),
             };
 
             assert_eq!(
