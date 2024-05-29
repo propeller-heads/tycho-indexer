@@ -198,7 +198,7 @@ where
     #[allow(clippy::mutable_key_type)]
     async fn handle_tvl_changes(
         &self,
-        msg: &mut evm::BlockChangesResult,
+        msg: &mut evm::AggregatedBlockChanges,
     ) -> Result<(), ExtractionError> {
         trace!("Calculating tvl changes");
         if msg.component_balances.is_empty() {
@@ -808,7 +808,7 @@ where
                     .iter()
                     .flat_map(|update| {
                         update
-                            .protocol_states
+                            .state_updates
                             .iter()
                             .filter(|(c_id, _)| !reverted_components_creations.contains_key(*c_id))
                             .flat_map(|(c_id, delta)| {
@@ -939,7 +939,7 @@ where
             .get_balances(&revert_buffer, &reverted_balances_keys_vec)
             .await?;
 
-        let revert_message = evm::BlockChangesResult {
+        let revert_message = evm::AggregatedBlockChanges {
             extractor: self.name.clone(),
             chain: self.chain,
             block: revert_buffer
@@ -1099,7 +1099,7 @@ impl HybridPgGateway {
             // Map protocol state changes
             state_updates.extend(
                 tx_update
-                    .protocol_states
+                    .state_updates
                     .values()
                     .map(|state_change| (hash.clone(), state_change.into())),
             );
@@ -1376,7 +1376,7 @@ mod test {
                     },
                 )]),
                 account_updates: HashMap::new(),
-                protocol_states: Default::default(),
+                state_updates: Default::default(),
                 balance_changes: HashMap::new(),
                 tx: evm::Transaction::default(),
             }],
@@ -1456,7 +1456,7 @@ mod test {
 
     #[test_log::test(tokio::test)]
     async fn test_handle_tvl_changes() {
-        let mut msg = evm::BlockChangesResult {
+        let mut msg = evm::AggregatedBlockChanges {
             component_balances: HashMap::from([(
                 "comp1".to_string(),
                 HashMap::from([(
@@ -1815,7 +1815,7 @@ mod test_serial_db {
                     Some(H160::zero()),
                     10,
                 ),
-                protocol_states: HashMap::new(),
+                state_updates: HashMap::new(),
                 balance_changes: HashMap::new(),
                 protocol_components: HashMap::from([(
                     "pool".to_string(),
@@ -2195,10 +2195,10 @@ mod test_serial_db {
 
             let res = client_msg
                 .as_any()
-                .downcast_ref::<evm::BlockChangesResult>()
+                .downcast_ref::<evm::AggregatedBlockChanges>()
                 .expect("not good type");
             let base_ts = yesterday_midnight().timestamp();
-            let block_entity_changes_result = evm::BlockChangesResult {
+            let block_entity_changes_result = evm::AggregatedBlockChanges {
                 extractor: "native_name".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2377,11 +2377,11 @@ mod test_serial_db {
 
             let res = client_msg
                 .as_any()
-                .downcast_ref::<evm::BlockChangesResult>()
+                .downcast_ref::<evm::AggregatedBlockChanges>()
                 .expect("not good type");
 
             let base_ts = yesterday_midnight().timestamp();
-            let block_account_expected = evm::BlockChangesResult {
+            let block_account_expected = evm::AggregatedBlockChanges {
                 extractor: "vm_name".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
