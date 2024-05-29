@@ -26,7 +26,7 @@ fn get_pool_tokens(pool_address: &Vec<u8>, tokens_store: &StoreGetString) -> Opt
 
 /// TODO rewrite
 pub fn emit_deltas(log: LogView, tokens_store: &StoreGetString) -> Option<BalanceDelta> {
-    let transfer = abi::ERC20::events::Transfer::match_and_decode(log)?;
+    let transfer = abi::erc20::events::Transfer::match_and_decode(log)?;
 
     let (component_id, pool_tokens, is_incoming) =
         if let Some(pool_tokens) = get_pool_tokens(&transfer.to, tokens_store) {

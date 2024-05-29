@@ -311,10 +311,7 @@ pub fn address_map(
                         })?;
 
                 let component_id = &call.return_data[12..];
-
-                let get_lp_token =
-                    abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
-                let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
+                let lp_token = get_token_from_pool(&pool_added.base_pool);
 
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
@@ -415,10 +412,7 @@ pub fn address_map(
                 let add_pool =
                     abi::crypto_swap_ng_factory::functions::DeployMetapool::match_and_decode(call)?;
                 let component_id = &call.return_data[12..];
-
-                let get_lp_token =
-                    abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
-                let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
+                let lp_token = get_token_from_pool(&pool_added.base_pool);
 
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
@@ -664,4 +658,36 @@ pub fn address_map(
         }
         _ => None,
     }
+}
+
+/// This function makes 3 attempts to confirm / get the LP token address from a pool address.
+///
+/// 1. We attempt to see if the pool address is a token address itself by calling an ERC 20 func.
+///  - Some pools may not be the token themselves
+/// 2. Then, we try to ping the `META_REGISTRY` address to see if it has a record of the pool.
+///  - Older pools might have been created before the `META_REGISTRY` was created and therefore
+///    would have registered much later
+/// 3. Finally, we have a hardcoded map of pool address -> token address for some pools.
+///
+/// If all else fails, we force an `unwrap` to trigger a `panic` so that we can resolve this by
+///  adding onto our map of `pool` -> `token` addresses.
+fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
+    abi::erc20::functions::Name {}
+        .call(pool.clone())
+        .and(Some(pool.clone()))
+        .or_else(|| {
+            abi::meta_registry::functions::GetLpToken1 { pool: pool.clone() }
+                .call(META_REGISTRY.to_vec())
+        })
+        .or_else(|| {
+            substreams::log::info!(format!("Using pool tree with pool {}", hex::encode(&pool)));
+            match hex::encode(&pool).as_str() {
+                // Curve.fi DAI/USDC/USDT (3Crv)
+                "bebc44782c7db0a1a60cb6fe97d0b483032ff1c7" => {
+                    hex::decode("6c3F90f043a72FA612cbac8115EE7e52BDe6E490").ok()
+                }
+                _ => None,
+            }
+        })
+        .unwrap()
 }

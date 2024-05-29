@@ -12,6 +12,6 @@ pub mod pool;
 pub mod tricrypto_factory;
 pub mod main_registry;
 pub mod pool_3pool;
-pub mod ERC20;
+pub mod erc20;
 pub mod meta_pool_factory;
 pub mod crypto_swap_registry;
