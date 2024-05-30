@@ -1,5 +1,5 @@
 use crate::extractor::{
-    evm::{AggregatedBlockChanges, BlockAccountChanges, BlockEntityChangesResult},
+    evm::AggregatedBlockChanges,
     revert_buffer::{BlockNumberOrTimestamp, FinalityStatus, RevertBuffer},
     runner::MessageSender,
 };
@@ -13,7 +13,6 @@ use thiserror::Error;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::debug;
 use tycho_core::{
-    models,
     models::{
         blockchain::BlockAggregatedDeltas,
         contract::Contract,
@@ -77,7 +76,7 @@ impl PendingDeltas {
             .downcast_ref::<AggregatedBlockChanges>()
             .map(|msg| msg.into());
         match maybe_convert {
-            (Some(msg)) => {
+            Some(msg) => {
                 let maybe_vm_buffer = self.vm.get(&msg.extractor);
                 let maybe_native_buffer = self.native.get(&msg.extractor);
 
@@ -329,28 +328,14 @@ mod test {
         )
     }
 
-    fn vm_block_deltas() -> BlockAccountChanges {
+    fn vm_block_deltas() -> AggregatedBlockChanges {
         let address = H160::from_str("0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05").unwrap();
-        BlockAccountChanges::new(
+        AggregatedBlockChanges::new(
             "vm:extractor",
             Chain::Ethereum,
             evm_block(1),
             1,
             false,
-            [(
-                address,
-                AccountUpdate::new(
-                    address,
-                    Chain::Ethereum,
-                    evm::fixtures::evm_slots([(1, 1), (2, 1)]),
-                    Some(U256::from(1999)),
-                    None,
-                    ChangeType::Update,
-                ),
-            )]
-            .into_iter()
-            .collect::<HashMap<_, _>>(),
-            HashMap::new(),
             [(
                 "component2".to_string(),
                 evm::ProtocolComponent {
@@ -370,6 +355,21 @@ mod test {
             .collect::<HashMap<_, _>>(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
+            [(
+                address,
+                AccountUpdate::new(
+                    address,
+                    Chain::Ethereum,
+                    evm::fixtures::evm_slots([(1, 1), (2, 1)]),
+                    Some(U256::from(1999)),
+                    None,
+                    ChangeType::Update,
+                ),
+            )]
+            .into_iter()
+            .collect::<HashMap<_, _>>(),
+            HashMap::new(),
         )
     }
 
@@ -386,24 +386,13 @@ mod test {
         )
     }
 
-    fn native_block_deltas() -> BlockEntityChangesResult {
-        BlockEntityChangesResult::new(
+    fn native_block_deltas() -> AggregatedBlockChanges {
+        AggregatedBlockChanges::new(
             "native:extractor",
             Chain::Ethereum,
             evm_block(1),
             1,
             false,
-            [evm::ProtocolStateDelta::new(
-                "component1".to_string(),
-                [("attr1", Bytes::from("0x01"))]
-                    .into_iter()
-                    .map(|(k, v)| (k.to_string(), v))
-                    .collect(),
-            )]
-            .into_iter()
-            .map(|v| (v.component_id.clone(), v))
-            .collect(),
-            HashMap::new(),
             [(
                 "component3".to_string(),
                 evm::ProtocolComponent {
@@ -421,6 +410,18 @@ mod test {
             )]
             .into_iter()
             .collect::<HashMap<_, _>>(),
+            HashMap::new(),
+            HashMap::new(),
+            [evm::ProtocolStateDelta::new(
+                "component1".to_string(),
+                [("attr1", Bytes::from("0x01"))]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                    .collect(),
+            )]
+            .into_iter()
+            .map(|v| (v.component_id.clone(), v))
+            .collect(),
             HashMap::new(),
             [(
                 "component1".to_string(),
@@ -440,7 +441,6 @@ mod test {
             )]
             .into_iter()
             .collect(),
-            HashMap::new(),
         )
     }
 
