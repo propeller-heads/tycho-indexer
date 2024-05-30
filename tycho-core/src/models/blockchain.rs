@@ -45,13 +45,14 @@ pub struct TransactionDeltaGroup<T> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BlockAggregatedDeltas<T: Clone + std::fmt::Debug + PartialEq> {
+pub struct BlockAggregatedDeltas {
     pub extractor: String,
     pub chain: Chain,
     pub block: Block,
     pub finalised_block_height: u64,
     pub revert: bool,
-    pub deltas: T,
+    pub state_deltas: HashMap<String, ProtocolComponentStateDelta>,
+    pub account_deltas: HashMap<Bytes, ContractDelta>,
     pub new_components: HashMap<String, ProtocolComponent>,
     pub deleted_components: HashMap<String, ProtocolComponent>,
     pub component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
@@ -59,13 +60,10 @@ pub struct BlockAggregatedDeltas<T: Clone + std::fmt::Debug + PartialEq> {
     component_tvl: HashMap<String, f64>,
 }
 
-pub type NativeBlockDeltas = BlockAggregatedDeltas<HashMap<String, ProtocolComponentStateDelta>>;
-pub type VmBlockDeltas = BlockAggregatedDeltas<HashMap<Bytes, ContractDelta>>;
+// pub type NativeBlockDeltas = BlockAggregatedDeltas<HashMap<String, ProtocolComponentStateDelta>>;
+// pub type VmBlockDeltas = BlockAggregatedDeltas<HashMap<Bytes, ContractDelta>>;
 
-impl<T> BlockAggregatedDeltas<T>
-where
-    T: Clone + std::fmt::Debug + PartialEq,
-{
+impl BlockAggregatedDeltas {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor: &str,
@@ -73,7 +71,8 @@ where
         block: Block,
         finalised_block_height: u64,
         revert: bool,
-        deltas: &T,
+        state_deltas: &HashMap<String, ProtocolComponentStateDelta>,
+        account_deltas: &HashMap<Bytes, ContractDelta>,
         new_components: &HashMap<String, ProtocolComponent>,
         deleted_components: &HashMap<String, ProtocolComponent>,
         component_balances: &HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
@@ -85,7 +84,8 @@ where
             block,
             finalised_block_height,
             revert,
-            deltas: deltas.clone(),
+            state_deltas: state_deltas.clone(),
+            account_deltas: account_deltas.clone(),
             new_components: new_components.clone(),
             deleted_components: deleted_components.clone(),
             component_balances: component_balances.clone(),
@@ -98,10 +98,7 @@ pub trait BlockScoped {
     fn block(&self) -> Block;
 }
 
-impl<T> BlockScoped for BlockAggregatedDeltas<T>
-where
-    T: Clone + std::fmt::Debug + PartialEq,
-{
+impl BlockScoped for BlockAggregatedDeltas {
     fn block(&self) -> Block {
         self.block.clone()
     }
