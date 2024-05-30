@@ -1,5 +1,5 @@
 use crate::extractor::{
-    evm::{BlockAccountChanges, BlockEntityChangesResult},
+    evm::{AggregatedBlockChanges, BlockAccountChanges, BlockEntityChangesResult},
     revert_buffer::{BlockNumberOrTimestamp, FinalityStatus, RevertBuffer},
     runner::MessageSender,
 };
@@ -13,8 +13,9 @@ use thiserror::Error;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::debug;
 use tycho_core::{
+    models,
     models::{
-        blockchain::{NativeBlockDeltas, VmBlockDeltas},
+        blockchain::BlockAggregatedDeltas,
         contract::Contract,
         protocol::{ProtocolComponent, ProtocolComponentState},
         DeltaError, NormalisedMessage,
@@ -22,8 +23,8 @@ use tycho_core::{
     storage::StorageError,
 };
 
-type NativeRevertBuffer = Arc<Mutex<RevertBuffer<NativeBlockDeltas>>>;
-type VmRevertBuffer = Arc<Mutex<RevertBuffer<VmBlockDeltas>>>;
+type NativeRevertBuffer = Arc<Mutex<RevertBuffer<BlockAggregatedDeltas>>>;
+type VmRevertBuffer = Arc<Mutex<RevertBuffer<BlockAggregatedDeltas>>>;
 
 #[derive(Default, Clone)]
 pub struct PendingDeltas {
@@ -71,46 +72,42 @@ impl PendingDeltas {
     }
 
     fn insert(&self, message: Arc<dyn NormalisedMessage>) -> Result<()> {
-        let maybe_native: Option<NativeBlockDeltas> = message
+        let maybe_convert: Option<BlockAggregatedDeltas> = message
             .as_any()
-            .downcast_ref::<BlockEntityChangesResult>()
+            .downcast_ref::<AggregatedBlockChanges>()
             .map(|msg| msg.into());
-        let maybe_vm: Option<VmBlockDeltas> = message
-            .as_any()
-            .downcast_ref::<BlockAccountChanges>()
-            .map(|msg| msg.into());
-        match (maybe_native, maybe_vm) {
-            (Some(msg), None) => {
-                if let Some(buffer) = self.native.get(&msg.extractor) {
-                    let mut guard = buffer.lock().map_err(|e| {
-                        PendingDeltasError::LockError("Native".to_string(), e.to_string())
-                    })?;
-                    if msg.revert {
-                        guard.purge(msg.block.hash.clone())?;
-                    } else {
-                        guard.insert_block(msg.clone())?;
-                        guard.drain_new_finalized_blocks(msg.finalised_block_height)?;
+        match maybe_convert {
+            (Some(msg)) => {
+                let maybe_vm_buffer = self.vm.get(&msg.extractor);
+                let maybe_native_buffer = self.native.get(&msg.extractor);
+
+                match (maybe_vm_buffer, maybe_native_buffer) {
+                    (Some(buffer), _) => {
+                        let mut guard = buffer.lock().map_err(|e| {
+                            PendingDeltasError::LockError("VM".to_string(), e.to_string())
+                        })?;
+                        if msg.revert {
+                            guard.purge(msg.block.hash.clone())?;
+                        } else {
+                            guard.insert_block(msg.clone())?;
+                            guard.drain_new_finalized_blocks(msg.finalised_block_height)?;
+                        }
                     }
-                } else {
-                    return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone()));
+                    (_, Some(buffer)) => {
+                        let mut guard = buffer.lock().map_err(|e| {
+                            PendingDeltasError::LockError("Native".to_string(), e.to_string())
+                        })?;
+                        if msg.revert {
+                            guard.purge(msg.block.hash.clone())?;
+                        } else {
+                            guard.insert_block(msg.clone())?;
+                            guard.drain_new_finalized_blocks(msg.finalised_block_height)?;
+                        }
+                    }
+                    _ => return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone())),
                 }
             }
-            (None, Some(msg)) => {
-                if let Some(buffer) = self.vm.get(&msg.extractor) {
-                    let mut guard = buffer.lock().map_err(|e| {
-                        PendingDeltasError::LockError("VM".to_string(), e.to_string())
-                    })?;
-                    if msg.revert {
-                        guard.purge(msg.block.hash.clone())?;
-                    } else {
-                        guard.insert_block(msg.clone())?;
-                        guard.drain_new_finalized_blocks(msg.finalised_block_height)?;
-                    }
-                } else {
-                    return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone()));
-                }
-            }
-            _ => return Err(PendingDeltasError::UnknownMessageType),
+            None => return Err(PendingDeltasError::UnknownMessageType),
         }
 
         Ok(())
@@ -139,7 +136,10 @@ impl PendingDeltas {
                 .map_err(|e| PendingDeltasError::LockError("Native".to_string(), e.to_string()))?;
 
             for entry in guard.get_block_range(None, version)? {
-                if let Some(delta) = entry.deltas.get(&db_state.component_id) {
+                if let Some(delta) = entry
+                    .state_deltas
+                    .get(&db_state.component_id)
+                {
                     db_state.apply_state_delta(delta)?;
                     change_found = true;
                 }
@@ -183,13 +183,22 @@ impl PendingDeltas {
                 .lock()
                 .map_err(|e| PendingDeltasError::LockError("VM".to_string(), e.to_string()))?;
             for entry in guard.get_block_range(None, version)? {
-                if let Some(delta) = entry.deltas.get(&db_state.address) {
+                if let Some(delta) = entry
+                    .account_deltas
+                    .get(&db_state.address)
+                {
                     db_state.apply_contract_delta(delta)?;
                     change_found = true;
                 }
-
-                // TODO: currently it is impossible to apply balance changes since
+                // TODO: currently it is impossible to apply balance changes and state deltas since
                 //  we don't know the component_id of the contract.
+                // if let Some(delta) = entry
+                //     .state_deltas
+                //     .get(&db_state.component_id)
+                // {
+                //     db_state.apply_state_delta(delta)?;
+                //     change_found = true;
+                // }
             }
 
             if change_found {
@@ -438,7 +447,7 @@ mod test {
     #[test]
     fn test_insert_vm() {
         let buffer = PendingDeltas::new(["vm:extractor"], []);
-        let exp: VmBlockDeltas = (&vm_block_deltas()).into();
+        let exp: BlockAggregatedDeltas = (&vm_block_deltas()).into();
 
         buffer
             .insert(Arc::new(vm_block_deltas()))
@@ -459,7 +468,7 @@ mod test {
     #[test]
     fn test_insert_native() {
         let buffer = PendingDeltas::new([], ["native:extractor"]);
-        let exp: NativeBlockDeltas = (&native_block_deltas()).into();
+        let exp: BlockAggregatedDeltas = (&native_block_deltas()).into();
 
         buffer
             .insert(Arc::new(native_block_deltas()))
