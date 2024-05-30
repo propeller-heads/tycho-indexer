@@ -60,9 +60,6 @@ pub struct BlockAggregatedDeltas {
     component_tvl: HashMap<String, f64>,
 }
 
-// pub type NativeBlockDeltas = BlockAggregatedDeltas<HashMap<String, ProtocolComponentStateDelta>>;
-// pub type VmBlockDeltas = BlockAggregatedDeltas<HashMap<Bytes, ContractDelta>>;
-
 impl BlockAggregatedDeltas {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
