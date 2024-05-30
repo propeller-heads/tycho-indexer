@@ -191,13 +191,6 @@ impl PendingDeltas {
                 }
                 // TODO: currently it is impossible to apply balance changes and state deltas since
                 //  we don't know the component_id of the contract.
-                // if let Some(delta) = entry
-                //     .state_deltas
-                //     .get(&db_state.component_id)
-                // {
-                //     db_state.apply_state_delta(delta)?;
-                //     change_found = true;
-                // }
             }
 
             if change_found {
