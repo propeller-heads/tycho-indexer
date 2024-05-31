@@ -532,32 +532,30 @@ where
             url if url.ends_with("BlockContractChanges") => {
                 let raw_msg =
                     pb::tycho::evm::v1::BlockContractChanges::decode(data.value.as_slice())?;
-                match evm::BlockContractChanges::try_from_message(
+                trace!(?raw_msg, "Received BlockContractChanges message");
+                evm::BlockContractChanges::try_from_message(
                     raw_msg,
                     &self.name,
                     self.chain,
                     self.protocol_system.clone(),
                     &self.protocol_types,
                     inp.final_block_height,
-                ) {
-                    Ok(changes) => Ok(changes.into()),
-                    Err(e) => Err(e),
-                }
+                )
+                .map(Into::into)
             }
             url if url.ends_with("BlockEntityChanges") => {
                 let raw_msg =
                     pb::tycho::evm::v1::BlockEntityChanges::decode(data.value.as_slice())?;
-                match evm::BlockEntityChanges::try_from_message(
+                trace!(?raw_msg, "Received BlockEntityChanges message");
+                evm::BlockEntityChanges::try_from_message(
                     raw_msg,
                     &self.name,
                     self.chain,
                     &self.protocol_system,
                     &self.protocol_types,
                     inp.final_block_height,
-                ) {
-                    Ok(changes) => Ok(changes.into()),
-                    Err(e) => Err(e),
-                }
+                )
+                .map(Into::into)
             }
             _ => return Err(ExtractionError::DecodeError("Unknown message type".into())),
         };
