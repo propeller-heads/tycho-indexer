@@ -1062,8 +1062,7 @@ mod test {
     use tycho_core::models::{protocol::ProtocolComponent, FinancialType, ImplementationType};
 
     use crate::{
-        extractor::evm::token_pre_processor::MockTokenPreProcessorTrait,
-        pb::tycho::evm::v1::BlockEntityChanges, testing::MockGateway,
+        extractor::evm::token_pre_processor::MockTokenPreProcessorTrait, testing::MockGateway,
     };
 
     use super::*;
@@ -1154,11 +1153,11 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
-                BlockEntityChanges {
+                BlockContractChanges {
                     block: Some(evm::fixtures::pb_blocks(1)),
-                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionContractChanges {
                         tx: Some(evm::fixtures::pb_transactions(1, 1)),
-                        entity_changes: vec![],
+                        contract_changes: vec![],
                         component_changes: vec![],
                         balance_changes: vec![],
                     }],
@@ -1173,11 +1172,11 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
-                BlockEntityChanges {
+                BlockContractChanges {
                     block: Some(evm::fixtures::pb_blocks(2)),
-                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionContractChanges {
                         tx: Some(evm::fixtures::pb_transactions(2, 1)),
-                        entity_changes: vec![],
+                        contract_changes: vec![],
                         component_changes: vec![],
                         balance_changes: vec![],
                     }],
