@@ -514,25 +514,62 @@ where
             .as_ref()
             .unwrap();
 
-        let raw_msg = pb::tycho::evm::v1::BlockChanges::decode(data.value.as_slice())?;
-        trace!(?raw_msg, "Received message");
+        // Check if message_type ends with BlockAccountChanges or BlockEntityChanges. If it does,
+        // then we need to decode as the corresponding message type, then convert it to BlockChanges
+        let msg = match data.type_url.as_str() {
+            url if url.ends_with("BlockChanges") => {
+                let raw_msg = pb::tycho::evm::v1::BlockChanges::decode(data.value.as_slice())?;
+                trace!(?raw_msg, "Received BlockChanges message");
+                evm::BlockChanges::try_from_message(
+                    raw_msg,
+                    &self.name,
+                    self.chain,
+                    &self.protocol_system,
+                    &self.protocol_types,
+                    inp.final_block_height,
+                )
+            }
+            url if url.ends_with("BlockContractChanges") => {
+                let raw_msg =
+                    pb::tycho::evm::v1::BlockContractChanges::decode(data.value.as_slice())?;
+                match evm::BlockContractChanges::try_from_message(
+                    raw_msg,
+                    &self.name,
+                    self.chain,
+                    self.protocol_system.clone(),
+                    &self.protocol_types,
+                    inp.final_block_height,
+                ) {
+                    Ok(changes) => Ok(changes.into()),
+                    Err(e) => Err(e),
+                }
+            }
+            url if url.ends_with("BlockEntityChanges") => {
+                let raw_msg =
+                    pb::tycho::evm::v1::BlockEntityChanges::decode(data.value.as_slice())?;
+                match evm::BlockEntityChanges::try_from_message(
+                    raw_msg,
+                    &self.name,
+                    self.chain,
+                    &self.protocol_system,
+                    &self.protocol_types,
+                    inp.final_block_height,
+                ) {
+                    Ok(changes) => Ok(changes.into()),
+                    Err(e) => Err(e),
+                }
+            }
+            _ => return Err(ExtractionError::DecodeError("Unknown message type".into())),
+        };
 
-        // Validate protocol_type_id
-        let msg = match evm::BlockChanges::try_from_message(
-            raw_msg,
-            &self.name,
-            self.chain,
-            &self.protocol_system,
-            &self.protocol_types,
-            inp.final_block_height,
-        ) {
+        let msg = match msg {
             Ok(changes) => {
                 tracing::Span::current().record("block_number", changes.block.number);
                 changes
             }
             Err(ExtractionError::Empty) => {
                 self.update_cursor(inp.cursor).await;
-                return Ok(None);
+                return Ok(None)
             }
             Err(e) => return Err(e),
         };
@@ -1221,7 +1258,8 @@ mod test {
     use super::*;
     use crate::{
         extractor::evm::token_pre_processor::MockTokenPreProcessorTrait,
-        pb::tycho::evm::v1::BlockChanges, testing::MockGateway,
+        pb::tycho::evm::v1::{BlockChanges, BlockContractChanges, BlockEntityChanges},
+        testing::MockGateway,
     };
     use float_eq::assert_float_eq;
     use tycho_core::models::protocol::ProtocolComponent;
@@ -1313,6 +1351,117 @@ mod test {
         assert_eq!(extractor.get_cursor().await, "cursor@2");
     }
 
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data_old_native_msg() {
+        let mut gw = MockHybridGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+        gw.expect_advance()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockEntityChanges {
+                    block: Some(evm::fixtures::pb_blocks(1)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                        tx: Some(evm::fixtures::pb_transactions(1, 1)),
+                        entity_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockEntityChanges {
+                    block: Some(evm::fixtures::pb_blocks(2)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionEntityChanges {
+                        tx: Some(evm::fixtures::pb_transactions(2, 1)),
+                        entity_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(2),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@2");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data_old_vm_msg() {
+        let mut gw = MockHybridGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok("cursor".into()));
+        gw.expect_advance()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockContractChanges {
+                    block: Some(evm::fixtures::pb_blocks(1)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionContractChanges {
+                        tx: Some(evm::fixtures::pb_transactions(1, 1)),
+                        contract_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        extractor
+            .handle_tick_scoped_data(evm::fixtures::pb_block_scoped_data(
+                BlockContractChanges {
+                    block: Some(evm::fixtures::pb_blocks(2)),
+                    changes: vec![crate::pb::tycho::evm::v1::TransactionContractChanges {
+                        tx: Some(evm::fixtures::pb_transactions(2, 1)),
+                        contract_changes: vec![],
+                        component_changes: vec![],
+                        balance_changes: vec![],
+                    }],
+                },
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(2),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@2");
+    }
     #[tokio::test]
     async fn test_handle_tick_scoped_data_skip() {
         let mut gw = MockHybridGateway::new();

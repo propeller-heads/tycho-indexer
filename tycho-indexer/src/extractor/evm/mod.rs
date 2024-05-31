@@ -1687,6 +1687,30 @@ impl TxWithChanges {
     }
 }
 
+impl From<TransactionVMUpdates> for TxWithChanges {
+    fn from(value: TransactionVMUpdates) -> Self {
+        Self {
+            protocol_components: value.protocol_components,
+            account_updates: value.account_updates,
+            state_updates: HashMap::new(),
+            balance_changes: value.component_balances,
+            tx: value.tx,
+        }
+    }
+}
+
+impl From<ProtocolChangesWithTx> for TxWithChanges {
+    fn from(value: ProtocolChangesWithTx) -> TxWithChanges {
+        TxWithChanges {
+            protocol_components: value.new_protocol_components,
+            account_updates: HashMap::new(),
+            state_updates: value.protocol_states,
+            balance_changes: value.balance_changes,
+            tx: value.tx,
+        }
+    }
+}
+
 /// A container for updates grouped by protocol component.
 ///
 /// Hold a single update per component. This is a condensed form of
@@ -1999,6 +2023,41 @@ impl BlockChanges {
     }
 }
 
+impl From<BlockContractChanges> for BlockChanges {
+    fn from(value: BlockContractChanges) -> Self {
+        Self {
+            extractor: value.extractor,
+            chain: value.chain,
+            block: value.block,
+            finalized_block_height: value.finalized_block_height,
+            revert: value.revert,
+            new_tokens: value.new_tokens,
+            txs_with_update: value
+                .tx_updates
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        }
+    }
+}
+
+impl From<BlockEntityChanges> for BlockChanges {
+    fn from(value: BlockEntityChanges) -> Self {
+        Self {
+            extractor: value.extractor,
+            chain: value.chain,
+            block: value.block,
+            finalized_block_height: value.finalized_block_height,
+            revert: value.revert,
+            new_tokens: value.new_tokens,
+            txs_with_update: value
+                .txs_with_update
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        }
+    }
+}
 #[cfg(test)]
 pub mod fixtures {
     use std::str::FromStr;
