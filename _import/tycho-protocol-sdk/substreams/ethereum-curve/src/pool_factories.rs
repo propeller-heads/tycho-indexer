@@ -672,7 +672,7 @@ pub fn address_map(
 /// If all else fails, we force an `unwrap` to trigger a `panic` so that we can resolve this by
 ///  adding onto our map of `pool` -> `token` addresses.
 fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
-    abi::erc20::functions::Name {}
+    abi::ERC20::functions::Name {}
         .call(pool.clone())
         .and(Some(pool.clone()))
         .or_else(|| {

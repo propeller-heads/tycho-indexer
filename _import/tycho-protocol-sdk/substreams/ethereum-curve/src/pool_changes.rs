@@ -24,9 +24,9 @@ fn get_pool_tokens(pool_address: &Vec<u8>, tokens_store: &StoreGetString) -> Opt
     )
 }
 
-/// TODO rewrite
+/// Tracks `Transfers` in and out of tracked pools if it matches the specific tokens.
 pub fn emit_deltas(log: LogView, tokens_store: &StoreGetString) -> Option<BalanceDelta> {
-    let transfer = abi::erc20::events::Transfer::match_and_decode(log)?;
+    let transfer = abi::ERC20::events::Transfer::match_and_decode(log)?;
 
     let (component_id, pool_tokens, is_incoming) =
         if let Some(pool_tokens) = get_pool_tokens(&transfer.to, tokens_store) {
