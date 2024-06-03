@@ -2102,7 +2102,7 @@ pub mod fixtures {
             output: Some(MapModuleOutput {
                 name: "map_changes".to_owned(),
                 map_output: Some(prost_types::Any {
-                    type_url: "tycho.evm.v1.BlockContractChanges".to_owned(),
+                    type_url: "tycho.evm.v1.BlockChanges".to_owned(),
                     value: val,
                 }),
                 debug_info: None,
