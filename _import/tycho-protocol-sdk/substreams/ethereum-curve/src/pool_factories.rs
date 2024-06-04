@@ -184,7 +184,11 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: pool_added.coins.into(),
+                    tokens: pool_added
+                        .coins
+                        .into_iter()
+                        .filter(|token| *token != [0; 20])
+                        .collect(),
                     contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
