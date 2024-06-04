@@ -13,3 +13,5 @@ target/
 *.log
 
 substreams/ethereum-template/Cargo.lock
+
+.DS_Store
