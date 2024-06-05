@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - patch/*
-      - ah/fix-token-owner-detection
+      - release/sdk
   workflow_dispatch: { }
 
 

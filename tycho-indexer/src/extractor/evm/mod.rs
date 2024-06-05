@@ -1864,12 +1864,12 @@ impl StateUpdateBufferEntry for BlockChanges {
 
         for update in self.txs_with_update.iter().rev() {
             for (address, account_update) in update.account_updates.iter() {
-                for (attr, val) in account_update
+                for (slot, val) in account_update
                     .slots
                     .iter()
-                    .filter(|(attr, _)| keys_set.contains(&(address, attr)))
+                    .filter(|(slot, _)| keys_set.contains(&(address, slot)))
                 {
-                    res.entry((*address, *attr))
+                    res.entry((*address, *slot))
                         .or_insert(*val);
                 }
             }
