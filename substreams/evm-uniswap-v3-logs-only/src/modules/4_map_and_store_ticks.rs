@@ -34,11 +34,7 @@ pub fn store_ticks_liquidity(ticks_deltas: TickDeltas, store: StoreAddBigInt) {
     deltas.iter().for_each(|delta| {
         store.add(
             delta.ordinal,
-            format!(
-                "pool:{0}:tick:{1}",
-                hex::encode(&delta.pool_address),
-                delta.tick_index.to_string(),
-            ),
+            format!("pool:{0}:tick:{1}", hex::encode(&delta.pool_address), delta.tick_index,),
             BigInt::from_signed_bytes_le(&delta.liquidity_net_delta),
         );
     });

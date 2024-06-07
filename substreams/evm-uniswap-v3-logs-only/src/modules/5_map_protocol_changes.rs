@@ -52,7 +52,7 @@ pub fn map_protocol_changes(
                 BigInt::from_str(&String::from_utf8(store_delta.new_value).unwrap()).unwrap();
             balance_changes
                 .entry(balance_delta.transaction.unwrap().index)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(BalanceChange {
                     component_id: balance_delta
                         .pool_address
@@ -85,9 +85,9 @@ pub fn map_protocol_changes(
 
             entity_changes
                 .entry(tick_delta.transaction.unwrap().index)
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .entry(tick_delta.pool_address)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(attribute);
         });
 
@@ -97,7 +97,7 @@ pub fn map_protocol_changes(
         .zip(pool_liquidity_changes.changes)
         .for_each(|(store_delta, change)| {
             let new_value_bigint = BigInt::from_str(
-                &String::from_utf8(store_delta.new_value)
+                String::from_utf8(store_delta.new_value)
                     .unwrap()
                     .split(':')
                     .nth(1)
@@ -106,9 +106,9 @@ pub fn map_protocol_changes(
             .unwrap();
             entity_changes
                 .entry(change.transaction.unwrap().index)
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .entry(change.pool_address)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(Attribute {
                     name: "liquidity".to_string(),
                     value: new_value_bigint.to_signed_bytes_le(),
@@ -123,9 +123,9 @@ pub fn map_protocol_changes(
         .for_each(|(tx_ix, pool_address, attr)| {
             entity_changes
                 .entry(tx_ix)
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .entry(pool_address)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(attr);
         });
 
@@ -321,7 +321,7 @@ fn event_to_attributes_updates(event: PoolEvent) -> Vec<(TxIndex, PoolAddress, A
                 hex::decode(event.pool_address.clone()).unwrap(),
                 Attribute {
                     name: "protocol_fees/token0".to_string(),
-                    value: BigInt::from(sfp.fee_protocol_0_new.clone()).to_signed_bytes_le(),
+                    value: BigInt::from(sfp.fee_protocol_0_new).to_signed_bytes_le(),
                     change: ChangeType::Update.into(),
                 },
             ),
@@ -330,7 +330,7 @@ fn event_to_attributes_updates(event: PoolEvent) -> Vec<(TxIndex, PoolAddress, A
                 hex::decode(event.pool_address).unwrap(),
                 Attribute {
                     name: "protocol_fees/token1".to_string(),
-                    value: BigInt::from(sfp.fee_protocol_1_new.clone()).to_signed_bytes_le(),
+                    value: BigInt::from(sfp.fee_protocol_1_new).to_signed_bytes_le(),
                     change: ChangeType::Update.into(),
                 },
             ),

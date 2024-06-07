@@ -5,7 +5,6 @@ members = [
     "tycho-core",
     "tycho-storage",
     "token-analyzer",
-    "substreams/evm-uniswap-v3-logs-only",
 ]
 resolver = "2"
 

@@ -119,12 +119,10 @@ fn event_to_liquidity_deltas(current_tick: i64, event: PoolEvent) -> Option<Liqu
 
 impl PoolEvent {
     fn can_introduce_liquidity_changes(&self) -> bool {
-        match self.r#type.as_ref().unwrap() {
-            pool_event::Type::Mint(_) => true,
-            pool_event::Type::Burn(_) => true,
-            pool_event::Type::Swap(_) => true,
-            _ => false,
-        }
+        matches!(
+            self.r#type.as_ref().unwrap(),
+            pool_event::Type::Mint(_) | pool_event::Type::Burn(_) | pool_event::Type::Swap(_)
+        )
     }
 }
 
