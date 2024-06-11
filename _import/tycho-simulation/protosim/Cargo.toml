@@ -36,8 +36,8 @@ uuid = { version = "1.4.1", features = [
 num-traits = "0.2.17"
 dotenv = "0.15.0"
 reqwest = "0.11.22"
-tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.6.0-pre.1" }
-tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.6.0-pre.1" }
+tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.7.0-pre.1" }
+tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.7.0-pre.1" }
 rpc_state_reader = { git = "https://github.com/propeller-heads/starknet_in_rust.git", package = "rpc_state_reader", branch = "feature/bump-cairo-lang-version", optional = true }
 starknet_in_rust = { git = "https://github.com/propeller-heads/starknet_in_rust.git", package = "starknet_in_rust", branch = "feature/bump-cairo-lang-version", optional = true }
 starknet_api = { version = "0.4.1", optional = true }
