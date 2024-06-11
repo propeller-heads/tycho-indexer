@@ -10,7 +10,11 @@ use substreams::{
 
 use substreams_ethereum::pb::eth;
 
-use crate::{pool_changes::emit_deltas, pool_factories, pools::emit_specific_pools};
+use crate::{
+    pool_changes::{emit_deltas, emit_eth_deltas},
+    pool_factories,
+    pools::emit_specific_pools,
+};
 use tycho_substreams::{
     balances::store_balance_changes, contract::extract_contract_changes, prelude::*,
 };
@@ -107,8 +111,13 @@ pub fn map_relative_balances(
     Ok(BlockBalanceDeltas {
         balance_deltas: {
             block
-                .logs()
-                .filter_map(|log| emit_deltas(log, &tokens_store))
+                .transactions()
+                .into_iter()
+                .flat_map(|tx| {
+                    emit_eth_deltas(&tx, &tokens_store)
+                        .into_iter()
+                        .chain(emit_deltas(&tx, &tokens_store))
+                })
                 .collect::<Vec<_>>()
         },
     })
@@ -195,7 +204,7 @@ pub fn map_protocol_changes(
             )
         })
         // We need to group the balance changes by tx hash for the `TransactionContractChanges` agg
-        .group_by(|(tx, _)| TransactionWrapper(tx.clone()))
+        .chunk_by(|(tx, _)| TransactionWrapper(tx.clone()))
         .into_iter()
         .for_each(|(tx_wrapped, group)| {
             let tx = tx_wrapped.0;
