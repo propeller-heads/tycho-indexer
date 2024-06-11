@@ -181,7 +181,7 @@ pub fn map_protocol_changes(
                                     value: format!("0x{}", hex::encode(registered.pool_id))
                                         .as_bytes()
                                         .to_vec(),
-                                    change: ChangeType::Update.into(),
+                                    change: ChangeType::Creation.into(),
                                 },
                                 Attribute {
                                     name: "balance_owner".to_string(),
