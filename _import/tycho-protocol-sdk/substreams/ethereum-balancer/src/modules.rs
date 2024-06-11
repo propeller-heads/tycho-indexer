@@ -170,7 +170,6 @@ pub fn map_protocol_changes(
                 .filter(|(log, _)| log.address == VAULT_ADDRESS)
                 .filter_map(|(log, _)| {
                     let registered = abi::vault::events::PoolRegistered::match_and_decode(log)?;
-                    substreams::log::info!("{:?}", log);
                     Some((
                         tx.clone(),
                         EntityChanges {
