@@ -6346,7 +6346,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.5.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6376,7 +6376,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6401,7 +6401,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-indexer"
-version = "0.5.0"
+version = "0.7.0"
 dependencies = [
  "actix",
  "actix-rt",
