@@ -414,6 +414,8 @@ impl ExtractorBuilder {
                     "uniswap_v2" => {
                         if self.config.chain == Chain::Ethereum {
                             Some(|b| transcode_usv2_balances(add_default_attributes_uniswapv2(b)))
+                        } else {
+                            None
                         }
                     }
                     "uniswap_v3" => Some(add_default_attributes_uniswapv3),

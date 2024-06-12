@@ -768,6 +768,7 @@ mod tests {
                             "chain": "ethereum",             
                             "ts": "2023-09-14T00:00:00"
                         },
+                        "finalized_block_height": 0,
                         "revert": false,
                         "new_tokens": {},
                         "account_updates": {
@@ -1060,6 +1061,7 @@ mod tests {
                             "chain": "ethereum",             
                             "ts": "2023-09-14T00:00:00"
                         },
+                        "finalized_block_height": 0,
                         "revert": false,
                         "new_tokens": {},
                         "account_updates": {
