@@ -12,13 +12,13 @@ members = ["protosim", "protosim_py"]
 [dependencies]
 time = "0.3.17"
 protosim = { version = "0.1.0", path = "./protosim" }
-ethers = "^2.0.2"
+ethers = "2.0.13"
 rdkafka = "0.36.0"
 tokio = { version = "1.23.0", features = ["full"] }
 redis = { version = "0.23.3", features = ["tokio-comp"] }
 futures = "0.3.25"
-serde_json = { version = "1.0.91", features = ["arbitrary_precision"] }
-serde = "1.0.152"
+serde_json = "1.0.105"
+serde = { version = "1.0", features = ["rc"] }
 clap = { version = "4.4.14", features = ["derive"] }
 reqwest = "0.11.14"
 async-trait = "0.1"
@@ -27,8 +27,8 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
-tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.7.0-pre.3" }
-tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.7.0-pre.3" }
+tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.7.0-pre.4" }
+tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.7.0-pre.4" }
 
 
 [dev-dependencies]
