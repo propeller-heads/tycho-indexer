@@ -72,6 +72,7 @@ pub trait RPCClient {
     async fn get_protocol_states_paginated(
         &self,
         chain: Chain,
+        filters: &StateRequestParameters,
         ids: &[ProtocolId],
         version: &VersionParam,
         chunk_size: usize,
@@ -95,8 +96,7 @@ pub trait RPCClient {
                     .acquire()
                     .await
                     .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
-                let filters = StateRequestParameters::new(true);
-                self.get_protocol_states(chain, &filters, body)
+                self.get_protocol_states(chain, filters, body)
                     .await
             });
         }

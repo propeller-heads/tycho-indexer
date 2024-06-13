@@ -201,9 +201,17 @@ where
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
+        let filters = StateRequestParameters::new(self.retrieve_balances);
         let mut protocol_states = self
             .rpc_client
-            .get_protocol_states_paginated(self.extractor_id.chain, &request_ids, &version, 50, 4)
+            .get_protocol_states_paginated(
+                self.extractor_id.chain,
+                &filters,
+                &request_ids,
+                &version,
+                50,
+                4,
+            )
             .await?
             .states
             .into_iter()
