@@ -34,6 +34,7 @@ impl SerializableVecBigInt for Vec<BigInt> {
 ///  - Weighted Pool Factories
 ///  - Linear Pool Factories
 ///  - Stable Pool Factories
+///
 /// (Balancer does have a bit more (esp. in the deprecated section) that could be implemented as
 ///  desired.)
 /// We use the specific ABIs to decode both the log event and corresponding call to gather

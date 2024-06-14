@@ -1,0 +1,66 @@
+specVersion: v0.1.0
+package:
+  name: "substreams_curve"
+  version: v0.1.0
+
+protobuf:
+  files:
+    - tycho/evm/v1/vm.proto
+    - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
+  importPaths:
+    - ../../proto
+    - ./proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../target/wasm32-unknown-unknown/release/ethereum_curve.wasm
+
+modules:
+  - name: map_components
+    kind: map
+    initialBlock: 9906598
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
+
+  - name: store_component_tokens
+    kind: store
+    initialBlock: 9906598
+    updatePolicy: set
+    valueType: string
+    inputs:
+      - map: map_components
+
+  - name: map_relative_balances
+    kind: map
+    initialBlock: 9906598  # An arbitrary block that should change based on your requirements
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: store_component_tokens
+    output:
+      type: proto:tycho.evm.v1.BlockBalanceDeltas
+
+  - name: store_balances
+    kind: store
+    initialBlock: 9906598
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_relative_balances
+
+  - name: map_protocol_changes
+    kind: map
+    initialBlock: 9906598
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: map_components
+      - map: map_relative_balances
+      - store: store_component_tokens
+      - store: store_balances
+        mode: deltas  # This is the key property that simplifies `BalanceChange` handling
+    output:
+      type: proto:tycho.evm.v1.BlockContractChanges

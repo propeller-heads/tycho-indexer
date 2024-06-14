@@ -1,0 +1,51 @@
+[
+    {
+        "name": "3pool",
+        "address": "bebc44782c7db0a1a60cb6fe97d0b483032ff1c7",
+        "tx_hash": "20793bbf260912aae189d5d261ff003c9b9166da8191d8f9d63ff1c7722f3ac6",
+        "tokens": [
+            "6b175474e89094c44da98b954eedeac495271d0f",
+            "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "dac17f958d2ee523a2206206994597c13d831ec7"
+        ]
+    },
+    {
+        "name": "steth",
+        "address": "dc24316b9ae028f1497c275eb9192a3ea0f67022",
+        "tx_hash": "fac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa",
+        "tokens": [
+            "EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            "ae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
+        ]
+    },
+    {
+        "name": "tricrypto2",
+        "address": "d51a44d3fae010294c616388b506acda1bfaae46",
+        "tx_hash": "dafb6385ed988ce8aacecfe1d97b38ea5e60b1ebce74d2423f71ddd621680138",
+        "tokens": [
+            "dAC17F958D2ee523a2206206994597C13D831ec7",
+            "2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        ]
+    },
+    {
+        "name": "susd",
+        "address": "A5407eAE9Ba41422680e2e00537571bcC53efBfD",
+        "tx_hash": "51aca4a03a395de8855fa2ca59b7febe520c2a223e69c502066162f7c1a95ec2",
+        "tokens": [
+            "6B175474E89094C44Da98b954EedeAC495271d0F",
+            "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "dAC17F958D2ee523a2206206994597C13D831ec7",
+            "57Ab1ec28D129707052df4dF418D58a2D46d5f51"
+        ]
+    },
+    {
+        "name": "fraxusdc",
+        "address": "DcEF968d416a41Cdac0ED8702fAC8128A64241A2",
+        "tx_hash": "1f4254004ce9e19d4eb742ee5a69d30f29085902d976f73e97c44150225ef775",
+        "tokens": [
+            "853d955aCEf822Db058eb8505911ED77F175b99e",
+            "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        ]
+    }
+]
