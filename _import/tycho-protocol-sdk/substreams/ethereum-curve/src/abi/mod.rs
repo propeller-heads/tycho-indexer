@@ -1,5 +1,4 @@
 #![allow(clippy::all)]
-#[allow(non_snake_case)]
 pub mod crypto_pool_factory;
 pub mod stableswap_factory;
 pub mod susd;
