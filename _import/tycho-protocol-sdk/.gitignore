@@ -17,3 +17,5 @@ __pycache__
 substreams/ethereum-template/Cargo.lock
 
 .DS_Store
+
+tycho-indexer
