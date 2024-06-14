@@ -98,14 +98,22 @@ class TestRunner:
                         return TestResult.Failed(
                             f"Value mismatch for key '{key}': {value} != {component[key]}"
                         )
-                for state in protocol_states["states"]:
-                    for token, balance in state["balances"].items():
-                        node_balance = get_token_balance(token,comp_id,stop_block)
-                        tycho_balance = int(balance,16)
-                        if node_balance != tycho_balance:
-                            return TestResult.Failed(f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} from rpc call and {tycho_balance} from Substreams")
-            return TestResult.Passed()
 
+            for component in protocol_components["protocol_components"]:
+                comp_id = component["id"].lower()
+                for token in component["tokens"]:
+                    token_lower = token.lower()
+                    state = next((s for s in protocol_states["states"] if s["component_id"].lower() == comp_id), None)
+                    if state:
+                        balance_hex = state["balances"].get(token_lower, "0x0")
+                    else:
+                        balance_hex = "0x0"
+
+                    node_balance = get_token_balance(token, comp_id, stop_block)
+                    tycho_balance = int(balance_hex, 16)
+                    if node_balance != tycho_balance:
+                        return TestResult.Failed(f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} from rpc call and {tycho_balance} from Substreams")
+            return TestResult.Passed()
         except Exception as e:
             return TestResult.Failed(str(e))
 

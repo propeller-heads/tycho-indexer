@@ -41,23 +41,23 @@ class TychoRunner:
                     str(start_block),
                     "--stop-block",
                     str(end_block + 2),
-                ],  # TODO: +2 is a hack to make up for the cache in the index side.
+                ],  # +2 is to make up for the cache in the index side.
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
                 env=env,
             )
-            if self.with_binary_logs:
-                with process.stdout:
-                    for line in iter(process.stdout.readline, ""):
-                        if line:
-                            print(line.strip())
+            
+            with process.stdout:
+                for line in iter(process.stdout.readline, ""):
+                    if line and self.with_binary_logs:
+                        print(line.strip())
 
-                with process.stderr:
-                    for line in iter(process.stderr.readline, ""):
-                        if line:
-                            print(line.strip())
+            with process.stderr:
+                for line in iter(process.stderr.readline, ""):
+                    if line and self.with_binary_logs:
+                        print(line.strip())
 
             process.wait()
 
