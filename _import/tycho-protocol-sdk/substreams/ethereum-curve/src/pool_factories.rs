@@ -28,7 +28,7 @@ impl SerializableVecBigInt for Vec<BigInt> {
     fn deserialize_bytes(bytes: &[u8]) -> Vec<BigInt> {
         bytes
             .chunks_exact(32)
-            .map(|chunk| BigInt::from_signed_bytes_be(chunk))
+            .map(BigInt::from_signed_bytes_be)
             .collect::<Vec<BigInt>>()
     }
 }
@@ -381,7 +381,7 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: pool_added.coins.into(),
+                    tokens: pool_added.coins,
                     contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
@@ -487,7 +487,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens,
-                    contracts: vec![pool_added.pool.into()],
+                    contracts: vec![pool_added.pool],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -701,8 +701,7 @@ fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
                 .call(META_REGISTRY.to_vec())
         })
         .or_else(|| {
-            substreams::log::info!(format!("Using pool tree with pool {}", hex::encode(&pool)));
-            match hex::encode(&pool).as_str() {
+            match hex::encode(pool).as_str() {
                 // Curve.fi DAI/USDC/USDT (3Crv)
                 "bebc44782c7db0a1a60cb6fe97d0b483032ff1c7" => {
                     hex::decode("6c3F90f043a72FA612cbac8115EE7e52BDe6E490").ok()

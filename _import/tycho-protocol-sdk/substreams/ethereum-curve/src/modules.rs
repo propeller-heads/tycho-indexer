@@ -45,7 +45,7 @@ pub fn map_components(
                     .logs_with_calls()
                     .filter(|(_, call)| !call.call.state_reverted)
                     .filter_map(|(log, call)| {
-                        Some(pool_factories::address_map(
+                        pool_factories::address_map(
                             call.call
                                 .address
                                 .as_slice()
@@ -54,11 +54,11 @@ pub fn map_components(
                             log,
                             call.call,
                             tx,
-                        )?)
+                        )
                     })
                     .collect::<Vec<_>>();
 
-                if let Some(component) = emit_specific_pools(&params, &tx).expect(
+                if let Some(component) = emit_specific_pools(&params, tx).expect(
                     "An unexpected error occured when parsing params for emitting specific pools",
                 ) {
                     components.push(component)
@@ -95,8 +95,8 @@ pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: St
                 &component
                     .tokens
                     .iter()
-                    .map(|token| hex::encode(token))
-                    .join(":".into()),
+                    .map(hex::encode)
+                    .join(":"),
             );
         });
 }
@@ -112,11 +112,10 @@ pub fn map_relative_balances(
         balance_deltas: {
             let mut deltas: Vec<_> = block
                 .transactions()
-                .into_iter()
                 .flat_map(|tx| {
-                    emit_eth_deltas(&tx, &tokens_store)
+                    emit_eth_deltas(tx, &tokens_store)
                         .into_iter()
-                        .chain(emit_deltas(&tx, &tokens_store))
+                        .chain(emit_deltas(tx, &tokens_store))
                 })
                 .collect();
 
@@ -268,7 +267,7 @@ pub fn map_protocol_changes(
         }),
         changes: transaction_contract_changes
             .drain()
-            .sorted_unstable_by_key(|(index, _)| index.clone())
+            .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, change)| {
                 if change.contract_changes.is_empty() &&
                     change.component_changes.is_empty() &&

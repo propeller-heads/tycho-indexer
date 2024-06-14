@@ -29,7 +29,7 @@ struct PoolQueryParams {
 /// This function can error based on some basic parsing errors and deeper down hex decoding errors
 ///  if various addresses are not formatted properly.
 pub fn emit_specific_pools(
-    params: &String,
+    params: &str,
     tx: &TransactionTrace,
 ) -> Result<Option<ProtocolComponent>> {
     let pools = parse_params(params)?;
@@ -60,12 +60,10 @@ fn create_component(
             static_att: zip(
                 pool.attribute_keys
                     .clone()
-                    .unwrap_or(vec![])
-                    .into_iter(),
+                    .unwrap_or(vec![]),
                 pool.attribute_vals
                     .clone()
-                    .unwrap_or(vec![])
-                    .into_iter(),
+                    .unwrap_or(vec![]),
             )
             .clone()
             .map(|(key, value)| Attribute {

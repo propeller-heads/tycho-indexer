@@ -11,7 +11,7 @@ use crate::{
 };
 
 fn get_pool_tokens(pool_address: &Vec<u8>, tokens_store: &StoreGetString) -> Option<Vec<String>> {
-    let pool_key = format!("pool:{}", hex::encode(&pool_address));
+    let pool_key = format!("pool:{}", hex::encode(pool_address));
     Some(
         tokens_store
             .get_last(pool_key)?
@@ -24,10 +24,8 @@ fn get_pool_tokens(pool_address: &Vec<u8>, tokens_store: &StoreGetString) -> Opt
 /// Tracks `Transfers` in and out of tracked pools if it matches the specific tokens.
 pub fn emit_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> Vec<BalanceDelta> {
     tx.logs_with_calls()
-        .into_iter()
         .filter_map(|(log, _)| {
             let transfer = abi::erc20::events::Transfer::match_and_decode(log)?;
-
             let (component_id, pool_tokens, is_incoming) =
                 if let Some(pool_tokens) = get_pool_tokens(&transfer.to, tokens_store) {
                     (hex::encode(&transfer.to), pool_tokens, true)
@@ -53,7 +51,6 @@ pub fn emit_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> Vec<
                     component_id: component_id.into(),
                 })
             } else {
-                substreams::log::info!("Token {:?} not in pool: {:?}", token_id, &component_id);
                 None
             }
         })
@@ -69,7 +66,6 @@ pub fn emit_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> Vec<
 ///  - If neither, it's likely an erroneous ETH transactions that many older pools don't reject.
 pub fn emit_eth_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> Vec<BalanceDelta> {
     tx.calls()
-        .into_iter()
         .flat_map(|call| {
             call.call
                 .balance_changes
