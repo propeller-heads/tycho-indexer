@@ -1,8 +1,6 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_type_names:
   - "curve_pool"
-  - "crypto_swap_ng"
-  - "tricrypto"
 tests:
   - name: test_3pool_creation
     start_block: 10809470
