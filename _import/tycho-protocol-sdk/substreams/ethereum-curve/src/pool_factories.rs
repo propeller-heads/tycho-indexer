@@ -247,7 +247,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into(), add_pool.base_pool],
+                    contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -267,6 +267,13 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&META_POOL_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "base_pool".into(),
+                            value: address_to_bytes_with_0x(
+                                &add_pool.base_pool.try_into().unwrap(),
+                            ),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -315,7 +322,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into(), add_pool.base_pool],
+                    contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -335,6 +342,13 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&META_POOL_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "base_pool".into(),
+                            value: address_to_bytes_with_0x(
+                                &add_pool.base_pool.try_into().unwrap(),
+                            ),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -416,7 +430,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into(), pool_added.base_pool],
+                    contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -436,6 +450,13 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "base_pool".into(),
+                            value: address_to_bytes_with_0x(
+                                &pool_added.base_pool.try_into().unwrap(),
+                            ),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -614,7 +635,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into(), pool_added.base_pool],
+                    contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -634,6 +655,13 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&STABLESWAP_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "base_pool".into(),
+                            value: address_to_bytes_with_0x(
+                                &pool_added.base_pool.try_into().unwrap(),
+                            ),
                             change: ChangeType::Creation.into(),
                         },
                     ],
