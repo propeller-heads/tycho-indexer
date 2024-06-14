@@ -26,7 +26,7 @@ pub fn emit_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> Vec<
     tx.logs_with_calls()
         .into_iter()
         .filter_map(|(log, _)| {
-            let transfer = abi::ERC20::events::Transfer::match_and_decode(log)?;
+            let transfer = abi::erc20::events::Transfer::match_and_decode(log)?;
 
             let (component_id, pool_tokens, is_incoming) =
                 if let Some(pool_tokens) = get_pool_tokens(&transfer.to, tokens_store) {
@@ -75,7 +75,9 @@ pub fn emit_eth_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> 
                 .balance_changes
                 .iter()
                 .filter_map(|balance_change| {
-                    if let Some(pool_tokens) = get_pool_tokens(&call.call.address, tokens_store) {
+                    if let Some(pool_tokens) =
+                        get_pool_tokens(&balance_change.address, tokens_store)
+                    {
                         let token = if pool_tokens.contains(&hex::encode(ETH_ADDRESS)) {
                             ETH_ADDRESS.to_vec()
                         } else if pool_tokens.contains(&hex::encode(WETH_ADDRESS)) {
@@ -88,11 +90,19 @@ pub fn emit_eth_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> 
 
                         // We need to convert to the usable `BigInt` type to be able to calculate
                         //  subtraction. This is seemingly the easiest way to do this.
-                        let delta =
-                            BigInt::from_store_bytes(&balance_change.new_value.clone()?.bytes) -
-                                BigInt::from_store_bytes(
-                                    &balance_change.old_value.clone()?.bytes,
-                                );
+                        let delta = BigInt::from_unsigned_bytes_be(
+                            &balance_change
+                                .new_value
+                                .clone()
+                                .unwrap_or_default()
+                                .bytes,
+                        ) - BigInt::from_unsigned_bytes_be(
+                            &balance_change
+                                .old_value
+                                .clone()
+                                .unwrap_or_default()
+                                .bytes,
+                        );
                         Some(BalanceDelta {
                             ord: call.call.end_ordinal,
                             tx: Some(Transaction {
@@ -103,7 +113,7 @@ pub fn emit_eth_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> 
                             }),
                             token,
                             delta: delta.to_signed_bytes_be(),
-                            component_id: call.call.address.clone(),
+                            component_id: hex::encode(balance_change.address.clone()).into(),
                         })
                     } else {
                         None

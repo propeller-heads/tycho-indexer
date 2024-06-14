@@ -693,7 +693,7 @@ pub fn address_map(
 /// If all else fails, we force an `unwrap` to trigger a `panic` so that we can resolve this by
 ///  adding onto our map of `pool` -> `token` addresses.
 fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
-    abi::ERC20::functions::Name {}
+    abi::erc20::functions::Name {}
         .call(pool.clone())
         .and(Some(pool.clone()))
         .or_else(|| {
@@ -707,7 +707,9 @@ fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
                 "bebc44782c7db0a1a60cb6fe97d0b483032ff1c7" => {
                     hex::decode("6c3F90f043a72FA612cbac8115EE7e52BDe6E490").ok()
                 }
-                _ => None,
+                // Placeholder if we can't find the token. It will help us to detect these missing
+                // token easily with a SQL query.
+                _ => hex::decode("1111111111111111111111111111111111111111").ok(),
             }
         })
         .unwrap()

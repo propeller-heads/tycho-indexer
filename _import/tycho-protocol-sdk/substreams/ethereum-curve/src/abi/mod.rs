@@ -5,6 +5,6 @@ pub mod crypto_swap_ng_factory;
 pub mod meta_registry;
 pub mod tricrypto_factory;
 pub mod main_registry;
-pub mod ERC20;
+pub mod erc20;
 pub mod meta_pool_factory;
 pub mod crypto_swap_registry;

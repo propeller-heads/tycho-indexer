@@ -110,7 +110,7 @@ pub fn map_relative_balances(
 ) -> Result<BlockBalanceDeltas, anyhow::Error> {
     Ok(BlockBalanceDeltas {
         balance_deltas: {
-            block
+            let mut deltas: Vec<_> = block
                 .transactions()
                 .into_iter()
                 .flat_map(|tx| {
@@ -118,7 +118,13 @@ pub fn map_relative_balances(
                         .into_iter()
                         .chain(emit_deltas(&tx, &tokens_store))
                 })
-                .collect::<Vec<_>>()
+                .collect();
+
+            // Keep it consistent with how it's inserted in the store. This step is important
+            // because we use a zip on the store deltas and balance deltas later.
+            deltas.sort_unstable_by(|a, b| a.ord.cmp(&b.ord));
+
+            deltas
         },
     })
 }
@@ -234,6 +240,18 @@ pub fn map_protocol_changes(
         &mut transaction_contract_changes,
     );
 
+    for change in transaction_contract_changes.values_mut() {
+        for balance_change in change.balance_changes.iter_mut() {
+            replace_eth_address(&mut balance_change.token);
+        }
+
+        for component_change in change.component_changes.iter_mut() {
+            for token in component_change.tokens.iter_mut() {
+                replace_eth_address(token);
+            }
+        }
+    }
+
     // Process all `transaction_contract_changes` for final output in the `BlockContractChanges`,
     //  sorted by transaction index (the key).
     Ok(BlockContractChanges {
@@ -263,4 +281,11 @@ pub fn map_protocol_changes(
             })
             .collect::<Vec<_>>(),
     })
+}
+
+fn replace_eth_address(token: &mut Vec<u8>) {
+    let eth_address = [238u8; 20]; // 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    if *token == eth_address {
+        *token = [0u8; 20].to_vec();
+    }
 }
