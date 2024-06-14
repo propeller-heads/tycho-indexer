@@ -5878,6 +5878,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "url",
  "web3",
 ]
