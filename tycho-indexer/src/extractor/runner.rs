@@ -1,7 +1,7 @@
 use super::{
     compat::{
         add_default_attributes_uniswapv2, add_default_attributes_uniswapv3, ignore_self_balances,
-        transcode_ambient_balances, transcode_usv2_balances,
+        transcode_ambient_balances, transcode_usv2_balances, trim_curve_component_token,
     },
     evm::{
         chain_state::ChainState,
@@ -383,6 +383,8 @@ impl ExtractorBuilder {
                             Some(transcode_ambient_balances)
                         } else if self.config.name == "vm:balancer" {
                             Some(ignore_self_balances)
+                        } else if self.config.name == "vm:curve" {
+                            Some(trim_curve_component_token)
                         } else {
                             None
                         },
