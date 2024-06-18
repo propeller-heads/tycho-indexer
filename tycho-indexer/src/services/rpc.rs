@@ -442,17 +442,24 @@ where
             .map(|vec| vec.iter().map(String::as_str).collect());
 
         let ids_slice = ids_strs.as_deref();
+
+        let mut new_components = self
+            .pending_deltas
+            .get_new_components(ids_slice)?;
+
         match self
             .db_gateway
             .get_protocol_components(chain, system, ids_slice, params.tvl_gt)
             .await
         {
-            Ok(components) => Ok(dto::ProtocolComponentRequestResponse::new(
-                components
+            Ok(comps) => {
+                new_components.extend(comps);
+                let components = new_components
                     .into_iter()
                     .map(dto::ProtocolComponent::from)
-                    .collect(),
-            )),
+                    .collect::<Vec<dto::ProtocolComponent>>();
+                Ok(dto::ProtocolComponentRequestResponse::new(components))
+            }
             Err(err) => {
                 error!(error = %err, "Error while getting protocol components.");
                 Err(err.into())
