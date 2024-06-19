@@ -47,15 +47,5 @@
             "853d955acef822db058eb8505911ed77f175b99e",
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
         ]
-    },
-    {
-        "name": "apool",
-        "address": "debf20617708857ebe4f679508e7b7863a8a8eee",
-        "tx_hash": "1e3b4c34b38b42ad07ef12dc55248ebf996021028a44077cfd79bb194b4b1968",
-        "tokens": [
-            "028171bca77440897b824ca71d1c56cac55b68a3",
-            "bcca60bb61934080951369a648fb03df4f96263c",
-            "3ed3b47dd13ec9a98b44e6204a523e766b225811"
-        ]
     }
 ]
