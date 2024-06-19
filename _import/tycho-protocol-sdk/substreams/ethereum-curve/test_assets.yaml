@@ -139,3 +139,15 @@ tests:
             - "0x78da5799cf427fee11e9996982f4150ece7a99a7"
           static_attributes:
           creation_tx: "0xd4ad7efdcc16d797dd3494ba02b377da4127fd5b1bd25089858b66e5a7e456ab"
+  # - name: test_apool_creation
+  #   start_block: 11497105
+  #   stop_block: 11498025
+  #   expected_state:
+  #     protocol_components:
+  #       - id: "0xdebf20617708857ebe4f679508e7b7863a8a8eee"
+  #         tokens:
+  #           - "0x028171bca77440897b824ca71d1c56cac55b68a3"
+  #           - "0xbcca60bb61934080951369a648fb03df4f96263c"
+  #           - "0x3ed3b47dd13ec9a98b44e6204a523e766b225811"
+  #         static_attributes:
+  #         creation_tx: "0x1e3b4c34b38b42ad07ef12dc55248ebf996021028a44077cfd79bb194b4b1968"
