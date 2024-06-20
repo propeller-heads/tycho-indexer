@@ -384,6 +384,7 @@ where
         // Check the cache for a cached response
         {
             let read_lock = self.cache.read().await;
+            trace!(cache_key, "Checking cache for response");
             if let Some(cached_response) = read_lock.get(&cache_key) {
                 trace!("Returning cached response");
                 return Ok(cached_response);
