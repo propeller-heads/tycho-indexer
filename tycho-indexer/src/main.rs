@@ -5,6 +5,7 @@ use futures03::future::select_all;
 use reqwest::Client;
 use serde::Deserialize;
 use std::{collections::HashMap, fs::File, io::Read, str::FromStr, sync::Arc};
+use tracing_subscriber::EnvFilter;
 use url::Url;
 
 use extractor::{
@@ -87,6 +88,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .compact();
             tracing_subscriber::fmt()
                 .event_format(format)
+                .with_env_filter(EnvFilter::from_default_env())
                 .init();
         }
     }
