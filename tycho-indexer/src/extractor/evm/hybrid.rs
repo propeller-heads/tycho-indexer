@@ -600,10 +600,10 @@ where
         if self.chain == Chain::Arbitrum {
             if let Some(last_processed_block) = self.get_last_processed_block().await {
                 let mut inner = self.inner.lock().await;
-                let current_ts =
-                    msg.block.ts + Duration::microseconds(inner.same_ts_blocks_streak.into());
+                let latest_processed_block_ts = last_processed_block.ts -
+                    Duration::microseconds(inner.same_ts_blocks_streak.into());
 
-                if current_ts == last_processed_block.ts {
+                if msg.block.ts == latest_processed_block_ts {
                     inner.same_ts_blocks_streak += 1;
                     // For blockchains with subsecond block times, like Arbitrum, timestamps aren't
                     // precise enough to distinguish between two blocks accurately.
