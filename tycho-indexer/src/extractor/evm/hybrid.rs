@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
+use chrono::{Duration, NaiveDateTime};
 use ethers::prelude::{H160, H256, U256};
 use mockall::automock;
 use prost::Message;
@@ -14,15 +14,16 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 use token_analyzer::TokenFinder;
 use tycho_core::{
-    models,
     models::{
+        self,
         contract::Contract,
         protocol::{ComponentBalance, ProtocolComponentState},
         token::CurrencyToken,
         Address, Chain, ChangeType, ExtractionState, ExtractorIdentity, ProtocolType, TxHash,
     },
     storage::{
-        ChainGateway, ContractStateGateway, ExtractionStateGateway, ProtocolGateway, StorageError,
+        BlockIdentifier, ChainGateway, ContractStateGateway, ExtractionStateGateway,
+        ProtocolGateway, StorageError,
     },
     Bytes,
 };
@@ -48,6 +49,9 @@ use crate::{
 pub struct Inner {
     cursor: Vec<u8>,
     last_processed_block: Option<Block>,
+    /// Keeps count of consecutive blocks with the same timestamp. This is then used to add some
+    /// microseconds in the blocks and maintain order.
+    same_ts_blocks_streak: u8,
     /// Used to give more informative logs
     last_report_ts: NaiveDateTime,
     last_report_block_number: u64,
@@ -103,6 +107,7 @@ where
                     inner: Arc::new(Mutex::new(Inner {
                         cursor: vec![],
                         last_processed_block: None,
+                        same_ts_blocks_streak: 0,
                         last_report_ts: chrono::Utc::now().naive_utc(),
                         last_report_block_number: 0,
                     })),
@@ -113,6 +118,13 @@ where
                 }
             }
             Ok(cursor) => {
+                let last_processed_block = gateway
+                    .get_latest_block()
+                    .await
+                    .unwrap_or_else(|err| {
+                        error!(%chain, %err, "Found a cursor but was unable to retreive latest block");
+                        panic!("Unexpected error when fetching latest block {}", err);
+                    });
                 let cursor_hex = hex::encode(&cursor);
                 info!(
                     ?name,
@@ -127,7 +139,8 @@ where
                     chain_state,
                     inner: Arc::new(Mutex::new(Inner {
                         cursor,
-                        last_processed_block: None,
+                        same_ts_blocks_streak: 0,
+                        last_processed_block: Some(last_processed_block),
                         last_report_ts: chrono::Local::now().naive_utc(),
                         last_report_block_number: 0,
                     })),
@@ -495,10 +508,19 @@ where
     }
 
     async fn get_last_processed_block(&self) -> Option<Block> {
-        self.inner
+        let last_block = self
+            .inner
             .lock()
             .await
-            .last_processed_block
+            .last_processed_block;
+        if last_block.is_some() {
+            last_block
+        } else {
+            self.gateway
+                .get_latest_block()
+                .await
+                .ok()
+        }
     }
 
     #[instrument(skip_all, fields(block_number))]
@@ -574,6 +596,25 @@ where
 
         let mut msg =
             if let Some(post_process_f) = self.post_processor { post_process_f(msg) } else { msg };
+
+        if self.chain == Chain::Arbitrum {
+            if let Some(last_processed_block) = self.get_last_processed_block().await {
+                let mut inner = self.inner.lock().await;
+                let current_ts =
+                    msg.block.ts + Duration::microseconds(inner.same_ts_blocks_streak.into());
+
+                if current_ts == last_processed_block.ts {
+                    inner.same_ts_blocks_streak += 1;
+                    // For blockchains with subsecond block times, like Arbitrum, timestamps aren't
+                    // precise enough to distinguish between two blocks accurately.
+                    // To maintain accurate ordering, we adjust timestamps by appending part of the
+                    // current block number as microseconds.
+                    msg.block.ts += Duration::microseconds(inner.same_ts_blocks_streak.into());
+                } else {
+                    inner.same_ts_blocks_streak = 0;
+                }
+            }
+        };
 
         msg.new_tokens = self
             .construct_currency_tokens(&msg)
@@ -1042,6 +1083,8 @@ pub trait HybridGateway: Send + Sync {
         &self,
         component_ids: &[&'a str],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
+
+    async fn get_latest_block(&self) -> Result<Block, StorageError>;
 }
 
 impl HybridPgGateway {
@@ -1249,6 +1292,13 @@ impl HybridGateway for HybridPgGateway {
             .get_balances(&self.chain, Some(component_ids), None)
             .await
     }
+
+    async fn get_latest_block(&self) -> Result<Block, StorageError> {
+        self.state_gateway
+            .get_block(&BlockIdentifier::Latest(self.chain))
+            .await
+            .map(Into::into)
+    }
 }
 
 #[cfg(test)]
@@ -1264,6 +1314,8 @@ mod test {
 
     const EXTRACTOR_NAME: &str = "TestExtractor";
     const TEST_PROTOCOL: &str = "TestProtocol";
+    const BLOCK_HASH_0: &str = "0x98b4a4fef932b1862be52de218cc32b714a295fae48b775202361a6fa09b66eb";
+
     async fn create_extractor(
         gw: MockHybridGateway,
     ) -> HybridContractExtractor<MockHybridGateway, MockTokenPreProcessorTrait> {
@@ -1302,6 +1354,17 @@ mod test {
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok("cursor".into()));
+        gw.expect_get_latest_block()
+            .times(1)
+            .returning(|| {
+                Ok(evm::Block {
+                    number: 0,
+                    chain: Chain::Ethereum,
+                    hash: BLOCK_HASH_0.parse().unwrap(),
+                    parent_hash: BLOCK_HASH_0.parse().unwrap(),
+                    ts: "2020-01-01T01:00:00".parse().unwrap(),
+                })
+            });
 
         let extractor = create_extractor(gw).await;
         let res = extractor.get_cursor().await;
@@ -1321,6 +1384,17 @@ mod test {
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_latest_block()
+            .times(1)
+            .returning(|| {
+                Ok(evm::Block {
+                    number: 0,
+                    chain: Chain::Ethereum,
+                    hash: BLOCK_HASH_0.parse().unwrap(),
+                    parent_hash: BLOCK_HASH_0.parse().unwrap(),
+                    ts: "2020-01-01T01:00:00".parse().unwrap(),
+                })
+            });
 
         let extractor = create_extractor(gw).await;
 
@@ -1361,6 +1435,17 @@ mod test {
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_latest_block()
+            .times(1)
+            .returning(|| {
+                Ok(evm::Block {
+                    number: 0,
+                    chain: Chain::Ethereum,
+                    hash: BLOCK_HASH_0.parse().unwrap(),
+                    parent_hash: BLOCK_HASH_0.parse().unwrap(),
+                    ts: "2020-01-01T01:00:00".parse().unwrap(),
+                })
+            });
 
         let extractor = create_extractor(gw).await;
 
@@ -1417,6 +1502,17 @@ mod test {
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_latest_block()
+            .times(1)
+            .returning(|| {
+                Ok(evm::Block {
+                    number: 0,
+                    chain: Chain::Ethereum,
+                    hash: BLOCK_HASH_0.parse().unwrap(),
+                    parent_hash: BLOCK_HASH_0.parse().unwrap(),
+                    ts: "2020-01-01T01:00:00".parse().unwrap(),
+                })
+            });
 
         let extractor = create_extractor(gw).await;
 
@@ -1472,6 +1568,17 @@ mod test {
         gw.expect_advance()
             .times(0)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_latest_block()
+            .times(1)
+            .returning(|| {
+                Ok(evm::Block {
+                    number: 0,
+                    chain: Chain::Ethereum,
+                    hash: BLOCK_HASH_0.parse().unwrap(),
+                    parent_hash: BLOCK_HASH_0.parse().unwrap(),
+                    ts: "2020-01-01T01:00:00".parse().unwrap(),
+                })
+            });
 
         let extractor = create_extractor(gw).await;
 
@@ -1574,6 +1681,18 @@ mod test {
             .expect_get_cursor()
             .times(1)
             .returning(|| Ok("cursor".into()));
+        extractor_gw
+            .expect_get_latest_block()
+            .times(1)
+            .returning(|| {
+                Ok(evm::Block {
+                    number: 0,
+                    chain: Chain::Ethereum,
+                    hash: BLOCK_HASH_0.parse().unwrap(),
+                    parent_hash: BLOCK_HASH_0.parse().unwrap(),
+                    ts: "2020-01-01T01:00:00".parse().unwrap(),
+                })
+            });
         let extractor = HybridContractExtractor::new(
             extractor_gw,
             EXTRACTOR_NAME,
@@ -1702,6 +1821,18 @@ mod test {
         extractor_gw
             .expect_get_components_balances()
             .return_once(|_| Ok(HashMap::new()));
+        extractor_gw
+            .expect_get_latest_block()
+            .times(1)
+            .returning(|| {
+                Ok(evm::Block {
+                    number: 0,
+                    chain: Chain::Ethereum,
+                    hash: BLOCK_HASH_0.parse().unwrap(),
+                    parent_hash: BLOCK_HASH_0.parse().unwrap(),
+                    ts: "2020-01-01T01:00:00".parse().unwrap(),
+                })
+            });
 
         let extractor = HybridContractExtractor::new(
             extractor_gw,
@@ -1761,7 +1892,7 @@ mod test_serial_db {
 
     use tycho_core::{
         models::{ContractId, FinancialType, ImplementationType},
-        storage::{BlockIdentifier, BlockOrTimestamp},
+        storage::BlockOrTimestamp,
     };
     use tycho_storage::{
         postgres,
