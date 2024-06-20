@@ -316,7 +316,7 @@ where
         request: &dto::ProtocolStateRequestBody,
         params: &dto::StateRequestParameters,
     ) -> Result<dto::ProtocolStateRequestResponse, RpcError> {
-        info!(?request, ?params, "Getting protocol state.");
+        debug!(?request, ?params, "Getting protocol state.");
         self.get_protocol_state_inner(chain, request, params)
             .await
     }

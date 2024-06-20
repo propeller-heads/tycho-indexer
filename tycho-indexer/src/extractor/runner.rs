@@ -39,7 +39,7 @@ use crate::{
 use super::{
     compat::{
         add_default_attributes_uniswapv2, add_default_attributes_uniswapv3, ignore_self_balances,
-        transcode_ambient_balances, transcode_usv2_balances,
+        transcode_ambient_balances, transcode_usv2_balances, trim_curve_component_token,
     },
     evm::{chain_state::ChainState, token_pre_processor::TokenPreProcessor},
     Extractor, ExtractorMsg,
@@ -436,6 +436,7 @@ impl ExtractorBuilder {
                     "uniswap_v3" => Some(add_default_attributes_uniswapv3),
                     "vm:ambient" => Some(transcode_ambient_balances),
                     "vm:balancer" => Some(ignore_self_balances),
+                    "vm:curve" => Some(trim_curve_component_token),
                     _ => None,
                 },
                 128,
