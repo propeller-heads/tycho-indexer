@@ -151,6 +151,38 @@ impl<'a> Route<'a> {
         Ok(res)
     }
 
+
+    /// Get amount out of the inverse route
+    ///
+    /// ## Arguments
+    /// - `amount_in`: A U256 representing the input amount.
+    ///
+    /// ## Returns
+    /// A `Result` containing a `GetAmountOutResult` on success and a `TradeSimulationError` on
+    /// failure.
+    pub fn get_amount_out_inverse_route(
+        &self,
+        amount_in: U256,
+    ) -> Result<GetAmountOutResult, TradeSimulationError> {
+        let mut res = GetAmountOutResult::new(amount_in, U256::zero());
+        for i in (0..self.pairs.len()).rev() {
+            let token_in = self.tokens[i + 1];
+            let token_out = self.tokens[i];
+            let Pair(_, state) = self.pairs[i];
+            let amount_out = state.get_amount_out(res.amount, token_in, token_out)?;
+            trace!(
+            amount_in = ?res.amount,
+            amount_out = ?amount_out,
+            token_in = ?token_in,
+            token_out = ?token_out,
+            "REVERSE ROUTE SWAP"
+        );
+            res.aggregate(&amount_out);
+        }
+        Ok(res)
+    }
+
+
     /// Get the swaps for a given input.
     ///
     /// ## Arguments
@@ -1431,5 +1463,34 @@ mod tests {
         assert_eq!(actions[0].amount_in(), amount_in);
         assert_eq!(actions[0].amount_out(), actions[1].amount_in());
         assert_eq!(actions[1].amount_out(), U256::from(39_484))
+    }
+
+    #[test]
+    fn get_amount_out_inverse_route() {
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            10_000_000,
+        );
+        let pair_1 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            25_000_000,
+        );
+        let Pair(props, _) = &pair_0;
+        let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
+        let pairs = vec![&pair_0, &pair_1];
+        let route = Route::new(1, &tokens, &pairs);
+
+        let res = route
+            .get_amount_out_inverse_route(U256::from(100_000))
+            .unwrap();
+
+        assert_eq!(res.gas, U256::from(240_000));
+        assert_eq!(res.amount, U256::from(244_248));
     }
 }
