@@ -809,7 +809,7 @@ mod tests {
         uniswap_v2::{events::UniswapV2Sync, state::UniswapV2State},
     };
 
-    use super::{*, ProtoGraph};
+    use super::{ProtoGraph, *};
 
     #[test]
     fn test_insert_pair() {
