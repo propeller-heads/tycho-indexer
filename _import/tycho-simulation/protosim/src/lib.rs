@@ -25,7 +25,7 @@ pub mod serde_helpers;
 
 #[cfg(feature = "starknet")]
 pub mod starknet_simulation;
-mod u256_num;
+pub mod u256_num;
 
 // Reexports
 pub use num_traits;
