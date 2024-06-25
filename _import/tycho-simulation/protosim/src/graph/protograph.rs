@@ -43,16 +43,16 @@
 //!
 //! g.info()
 //! ```
-use ethers::types::{H160, U256};
-use itertools::Itertools;
-
-use petgraph::{
-    prelude::{EdgeRef, UnGraph},
-    stable_graph::{EdgeIndex, NodeIndex},
-};
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt,
+};
+
+use ethers::types::{H160, U256};
+use itertools::Itertools;
+use petgraph::{
+    prelude::{EdgeRef, UnGraph},
+    stable_graph::{EdgeIndex, NodeIndex},
 };
 use tracing::{debug, info, trace, warn};
 
@@ -151,7 +151,6 @@ impl<'a> Route<'a> {
         Ok(res)
     }
 
-
     /// Get amount out of the inverse route
     ///
     /// ## Arguments
@@ -171,17 +170,16 @@ impl<'a> Route<'a> {
             let Pair(_, state) = self.pairs[i];
             let amount_out = state.get_amount_out(res.amount, token_in, token_out)?;
             trace!(
-            amount_in = ?res.amount,
-            amount_out = ?amount_out,
-            token_in = ?token_in,
-            token_out = ?token_out,
-            "REVERSE ROUTE SWAP"
-        );
+                amount_in = ?res.amount,
+                amount_out = ?amount_out,
+                token_in = ?token_in,
+                token_out = ?token_out,
+                "REVERSE ROUTE SWAP"
+            );
             res.aggregate(&amount_out);
         }
         Ok(res)
     }
-
 
     /// Get the swaps for a given input.
     ///
@@ -803,16 +801,15 @@ impl ProtoGraph {
 mod tests {
     use std::str::FromStr;
 
+    use ethers::types::H256;
+    use rstest::rstest;
+
     use crate::protocol::{
         models::ProtocolComponent,
         uniswap_v2::{events::UniswapV2Sync, state::UniswapV2State},
     };
-    use ethers::types::H256;
-    use rstest::rstest;
 
-    use super::*;
-
-    use super::ProtoGraph;
+    use super::{*, ProtoGraph};
 
     #[test]
     fn test_insert_pair() {
