@@ -107,7 +107,7 @@ pub fn address_map(
                     },
                     Attribute {
                         name: "factory_name".into(),
-                        value: "crypto_pool".into(),
+                        value: "crypto_pool_factory".into(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
@@ -182,7 +182,7 @@ pub fn address_map(
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
-                            value: "PlainPool".into(),
+                            value: "plain_pool".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -192,7 +192,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "meta_pool".into(),
+                            value: "meta_pool_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -261,7 +261,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "meta_pool".into(),
+                            value: "meta_pool_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -336,12 +336,12 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "meta_pool".into(),
+                            value: "meta_pool_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
                             name: "factory".into(),
-                            value: address_to_bytes_with_0x(&META_POOL_FACTORY),
+                            value: address_to_bytes_with_0x(&META_POOL_FACTORY_OLD),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -396,7 +396,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "crypto_swap_ng".into(),
+                            value: "crypto_swap_ng_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -444,7 +444,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "crypto_swap_ng".into(),
+                            value: "crypto_swap_ng_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -491,7 +491,7 @@ pub fn address_map(
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
-                            value: "trycrypto".into(),
+                            value: "tricrypto".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -501,7 +501,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "tricrypto".into(),
+                            value: "tricrypto_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -571,7 +571,7 @@ pub fn address_map(
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
-                            value: "plain".into(),
+                            value: "plain_pool".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -581,18 +581,18 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "stable_swap".into(),
+                            value: "stable_swap_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
                             name: "factory".into(),
-                            value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
+                            value: address_to_bytes_with_0x(&STABLESWAP_FACTORY),
                             change: ChangeType::Creation.into(),
                         },
                     ],
                     change: ChangeType::Creation.into(),
                     protocol_type: Some(ProtocolType {
-                        name: "curve".into(),
+                        name: "curve_pool".into(),
                         financial_type: FinancialType::Swap.into(),
                         attribute_schema: Vec::new(),
                         implementation_type: ImplementationType::Vm.into(),
@@ -649,7 +649,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "factory_name".into(),
-                            value: "stable_swap".into(),
+                            value: "stable_swap_factory".into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -667,7 +667,7 @@ pub fn address_map(
                     ],
                     change: ChangeType::Creation.into(),
                     protocol_type: Some(ProtocolType {
-                        name: "curve".into(),
+                        name: "curve_pool".into(),
                         financial_type: FinancialType::Swap.into(),
                         attribute_schema: Vec::new(),
                         implementation_type: ImplementationType::Vm.into(),
