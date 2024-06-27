@@ -1,7 +1,7 @@
-use crate::abi;
+use crate::{abi, modules::VAULT_ADDRESS};
 use substreams::{hex, scalar::BigInt};
 use substreams_ethereum::{
-    pb::eth::v2::{Call, Log},
+    pb::eth::v2::{Call, Log, TransactionTrace},
     Event, Function,
 };
 use tycho_substreams::prelude::*;
@@ -29,6 +29,19 @@ impl SerializableVecBigInt for Vec<BigInt> {
     }
 }
 
+/// Helper function to get pool_registered event
+fn get_pool_registered(
+    tx: &TransactionTrace,
+    pool_address: &Vec<u8>,
+) -> abi::vault::events::PoolRegistered {
+    tx.logs_with_calls()
+        .filter(|(log, _)| log.address == VAULT_ADDRESS)
+        .filter_map(|(log, _)| abi::vault::events::PoolRegistered::match_and_decode(log))
+        .find(|pool| pool.pool_address == *pool_address)
+        .unwrap()
+        .clone()
+}
+
 /// This is the main function that handles the creation of `ProtocolComponent`s with `Attribute`s
 /// based on the specific factory address. There's 3 factory groups that are represented here:
 ///  - Weighted Pool Factories
@@ -45,7 +58,7 @@ pub fn address_map(
     pool_factory_address: &[u8],
     log: &Log,
     call: &Call,
-    tx: &Transaction,
+    tx: &TransactionTrace,
 ) -> Option<ProtocolComponent> {
     match *pool_factory_address {
         hex!("897888115Ada5773E02aA29F775430BFB5F34c51") => {
@@ -53,9 +66,10 @@ pub fn address_map(
                 abi::weighted_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
                 abi::weighted_pool_factory::events::PoolCreated::match_and_decode(log)?;
+            let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, tx)
+                ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "WeightedPoolFactory".as_bytes()),
@@ -64,6 +78,10 @@ pub fn address_map(
                             &create_call
                                 .normalized_weights
                                 .serialize_bytes(),
+                        ),
+                        (
+                            "pool_id",
+                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -74,11 +92,18 @@ pub fn address_map(
                 abi::composable_stable_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
                 abi::composable_stable_pool_factory::events::PoolCreated::match_and_decode(log)?;
+            let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, tx)
+                ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
                     .with_tokens(&create_call.tokens)
-                    .with_attributes(&[("pool_type", "ComposableStablePoolFactory".as_bytes())])
+                    .with_attributes(&[
+                        ("pool_type", "ComposableStablePoolFactory".as_bytes()),
+                        (
+                            "pool_id",
+                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                        ),
+                    ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
             )
         }
@@ -87,9 +112,10 @@ pub fn address_map(
                 abi::erc_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
                 abi::erc_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+            let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, tx)
+                ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
@@ -98,6 +124,10 @@ pub fn address_map(
                             &create_call
                                 .upper_target
                                 .to_signed_bytes_be(),
+                        ),
+                        (
+                            "pool_id",
+                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -108,9 +138,10 @@ pub fn address_map(
                 abi::euler_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
                 abi::euler_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+            let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, tx)
+                ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "EulerLinearPoolFactory".as_bytes()),
@@ -119,6 +150,10 @@ pub fn address_map(
                             &create_call
                                 .upper_target
                                 .to_signed_bytes_be(),
+                        ),
+                        (
+                            "pool_id",
+                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -177,9 +212,10 @@ pub fn address_map(
                 abi::silo_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
                 abi::silo_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+            let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, tx)
+                ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "SiloLinearPoolFactory".as_bytes()),
@@ -188,6 +224,10 @@ pub fn address_map(
                             &create_call
                                 .upper_target
                                 .to_signed_bytes_be(),
+                        ),
+                        (
+                            "pool_id",
+                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -198,9 +238,10 @@ pub fn address_map(
                 abi::yearn_linear_pool_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
                 abi::yearn_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+            let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, tx)
+                ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "YearnLinearPoolFactory".as_bytes()),
@@ -209,6 +250,10 @@ pub fn address_map(
                             &create_call
                                 .upper_target
                                 .to_signed_bytes_be(),
+                        ),
+                        (
+                            "pool_id",
+                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
@@ -221,13 +266,18 @@ pub fn address_map(
                 abi::weighted_pool_tokens_factory::functions::Create::match_and_decode(call)?;
             let pool_created =
                 abi::weighted_pool_tokens_factory::events::PoolCreated::match_and_decode(log)?;
+            let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::at_contract(&pool_created.pool, tx)
+                ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "WeightedPool2TokensFactory".as_bytes()),
                         ("weights", &create_call.weights.serialize_bytes()),
+                        (
+                            "pool_id",
+                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                        ),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
             )

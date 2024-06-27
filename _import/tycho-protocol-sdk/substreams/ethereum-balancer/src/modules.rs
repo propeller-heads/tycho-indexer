@@ -12,7 +12,7 @@ use tycho_substreams::{
     balances::aggregate_balances_changes, contract::extract_contract_changes, prelude::*,
 };
 
-const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
+pub const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
 #[substreams::handlers::map]
 pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
@@ -29,7 +29,7 @@ pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolC
                             call.call.address.as_slice(),
                             log,
                             call.call,
-                            &(tx.into()),
+                            tx,
                         )
                     })
                     .collect::<Vec<_>>();
@@ -160,48 +160,26 @@ pub fn map_protocol_changes(
                 .or_insert_with(|| TransactionChanges::new(tx))
                 .component_changes
                 .extend_from_slice(&tx_component.components);
-        });
-
-    block
-        .transactions()
-        .flat_map(|tx| {
-            let components = tx
-                .logs_with_calls()
-                .filter(|(log, _)| log.address == VAULT_ADDRESS)
-                .filter_map(|(log, _)| {
-                    let registered = abi::vault::events::PoolRegistered::match_and_decode(log)?;
-                    Some((
-                        tx.clone(),
-                        EntityChanges {
-                            component_id: hex::encode(registered.pool_address),
-                            attributes: vec![
-                                Attribute {
-                                    name: "pool_id".to_string(),
-                                    value: format!("0x{}", hex::encode(registered.pool_id))
-                                        .as_bytes()
-                                        .to_vec(),
-                                    change: ChangeType::Creation.into(),
-                                },
-                                Attribute {
-                                    name: "balance_owner".to_string(),
-                                    value: "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
-                                        .to_string()
-                                        .as_bytes()
-                                        .to_vec(),
-                                    change: ChangeType::Creation.into(),
-                                },
-                            ],
-                        },
-                    ))
+            tx_component
+                .components
+                .iter()
+                .for_each(|component| {
+                    transaction_changes
+                        .entry(tx.index)
+                        .or_insert_with(|| TransactionChanges::new(tx))
+                        .entity_changes
+                        .push(EntityChanges {
+                            component_id: component.id.clone(),
+                            attributes: vec![Attribute {
+                                name: "balance_owner".to_string(),
+                                value: "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+                                    .to_string()
+                                    .as_bytes()
+                                    .to_vec(),
+                                change: ChangeType::Creation.into(),
+                            }],
+                        });
                 });
-            components
-        })
-        .for_each(|(tx, state_change)| {
-            transaction_changes
-                .entry(tx.index.into())
-                .or_insert_with(|| TransactionChanges::new(&(&tx).into()))
-                .entity_changes
-                .push(state_change);
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `PoolBalanceChanged` creating
