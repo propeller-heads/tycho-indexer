@@ -7,7 +7,7 @@ target/
 # Substreams spkg files are build artifacts
 *.spkg
 
-.env
+*/.env
 .vscode
 .idea
 *.log
@@ -19,3 +19,4 @@ substreams/ethereum-template/Cargo.lock
 .DS_Store
 
 tycho-indexer
+substreams/my_substream

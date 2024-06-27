@@ -1,53 +1,40 @@
 # Substreams Testing
 
-We know testing your Substreams modules can be a pain. So, our goal here is to provide a quick and easy way to run end-to-end tests.
+This package provides a comprehensive testing suite for Substreams modules. The testing suite is designed to facilitate end-to-end testing, ensuring that your Substreams modules function as expected.
 
-Our script will build the `.spkg` for your Substreams module, index the specified block range, and check if the expected state has been correctly indexed in PostgreSQL.
+## Overview
 
-## How to Test
+The testing suite builds the `.spkg` for your Substreams module, indexes a specified block range, and verifies that the expected state has been correctly indexed in PostgreSQL.
 
-Here's what you need to do:
+## Prerequisites
 
-1. Get the latest version of our indexer.
-2. Define your tests and expected state.
-3. Run the testing script.
+- Latest version of our indexer, Tycho. Please contact us to obtain the latest version. Once acquired, place it in the `/testing/` directory.
+- Docker installed on your machine.
 
-### Get the Latest Version of Tycho (Indexer)
+## Test Configuration
 
-We don't have a direct download link yet. Please reach out to us to get the latest version. Once you have it, place it in the `/testing/` folder.
+Tests are defined in a `yaml` file. A template can be found at `substreams/ethereum-template/test_assets.yaml`. The configuration file should include:
 
-### Define Your Tests
+- The target Substreams config file.
+- The expected protocol types.
+- The tests to be run.
 
-Define all your tests in a `yaml` file. You can find a template in `substreams/ethereum-template/test_assets.yaml`.
+Each test will index all blocks between `start-block` and `stop-block` and verify that the indexed state matches the expected state.
 
-You'll need to:
+## Running Tests
 
-- Point to the target substreams config file.
-- Specify the expected protocol types.
-- Define your tests.
+### Step 1: Export Environment Variables
 
-For each test, the script will index all blocks between `start-block` and `stop-block` and check that the indexed state matches the expected state.
+Export the required environment variables for the execution. You can find the available environment variables in the `.env.default` file.
+Please create a `.env` file in the `testing` directory and set the required environment variables.
 
-### Run the Script
+The variable SUBSTREAMS_PATH should be a relative reference to the directory containing the Substreams module that you want to test.
 
-Once everything is set up, run our script using the CLI.
+Example: `SUBSTREAMS_PATH=../substreams/ethereum-curve`
 
-First, you need a local postgres database
+### Step 2: Build and the Testing Script
 
+Run the testing script using Docker Compose:
 ```bash
-docker-compose up -d db
+docker compose run app
 ```
-
-Then export an environment variable for RPC connection
-
-```bash
-export RPC_URL=your-chain-rpc
-```
-
-And finally run the testing script
-
-```bash
-python testing/cli.py --test_yaml_path "./substreams/your-substreams-folder/test_assets.yaml"
-```
-
-You can get the available CLI flags using `--help`
