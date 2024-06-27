@@ -14,9 +14,14 @@ def main() -> None:
         action="store_true",
         help="Flag to activate logs from Tycho.",
     )
+    parser.add_argument(
+        "--db_url",
+        type=str,
+        help="Postgres database URL for the Tycho indexer.",
+    )
     args = parser.parse_args()
 
-    test_runner = TestRunner(args.test_yaml_path, args.with_binary_logs)
+    test_runner = TestRunner(args.test_yaml_path, args.with_binary_logs, db_url=args.db_url)
     test_runner.run_tests()
 
 

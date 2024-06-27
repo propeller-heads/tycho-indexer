@@ -30,4 +30,4 @@ RUN wget -c https://github.com/streamingfast/substreams/releases/download/v1.8.0
 RUN mv substreams /usr/local/bin/substreams && chmod +x /usr/local/bin/substreams
 
 # Run the command to start your application
-CMD ["python", "testing/cli.py", "--test_yaml_path", "/app/substreams/my_substream/test_assets.yaml", "--with_binary_logs"]
+CMD ["python", "testing/cli.py", "--test_yaml_path", "/app/substreams/my_substream/test_assets.yaml", "--with_binary_logs", "--db_url", "postgres://postgres:mypassword@db:5432"]

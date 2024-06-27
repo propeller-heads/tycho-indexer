@@ -30,10 +30,11 @@ def load_config(yaml_path: str) -> dict:
 
 
 class TestRunner:
-    def __init__(self, config_path: str, with_binary_logs: bool):
+    def __init__(self, config_path: str, with_binary_logs: bool, db_url: str):
         self.config = load_config(config_path)
         self.base_dir = os.path.dirname(config_path)
         self.tycho_runner = TychoRunner(with_binary_logs)
+        self.db_url = db_url
 
     def run_tests(self) -> None:
         """Run all tests specified in the configuration."""
@@ -61,7 +62,7 @@ class TestRunner:
                 print(f"❗️ {test['name']} failed: {result.message}")
 
             self.tycho_runner.empty_database(
-                "postgres://postgres:mypassword@db:5432"
+                self.db_url
             )
 
     def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
@@ -89,7 +90,7 @@ class TestRunner:
                         )
                     if isinstance(value, list):
                         if set(map(str.lower, value)) != set(
-                            map(str.lower, component[key])
+                                map(str.lower, component[key])
                         ):
                             return TestResult.Failed(
                                 f"List mismatch for key '{key}': {value} != {component[key]}"
@@ -112,7 +113,8 @@ class TestRunner:
                     node_balance = get_token_balance(token, comp_id, stop_block)
                     tycho_balance = int(balance_hex, 16)
                     if node_balance != tycho_balance:
-                        return TestResult.Failed(f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} from rpc call and {tycho_balance} from Substreams")
+                        return TestResult.Failed(
+                            f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} from rpc call and {tycho_balance} from Substreams")
             return TestResult.Passed()
         except Exception as e:
             return TestResult.Failed(str(e))
