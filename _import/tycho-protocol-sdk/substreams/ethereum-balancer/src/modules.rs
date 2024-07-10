@@ -202,7 +202,8 @@ pub fn map_protocol_changes(
         |addr| {
             components_store
                 .get_last(format!("pool:0x{0}", hex::encode(addr)))
-                .is_some()
+                .is_some() ||
+                addr.eq(VAULT_ADDRESS)
         },
         &mut transaction_changes,
     );

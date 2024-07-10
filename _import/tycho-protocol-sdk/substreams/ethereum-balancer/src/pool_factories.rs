@@ -70,6 +70,7 @@ pub fn address_map(
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "WeightedPoolFactory".as_bytes()),
@@ -96,6 +97,7 @@ pub fn address_map(
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "ComposableStablePoolFactory".as_bytes()),
@@ -116,6 +118,7 @@ pub fn address_map(
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
@@ -142,6 +145,7 @@ pub fn address_map(
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "EulerLinearPoolFactory".as_bytes()),
@@ -216,6 +220,7 @@ pub fn address_map(
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "SiloLinearPoolFactory".as_bytes()),
@@ -242,6 +247,7 @@ pub fn address_map(
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
                     .with_tokens(&[create_call.main_token, create_call.wrapped_token])
                     .with_attributes(&[
                         ("pool_type", "YearnLinearPoolFactory".as_bytes()),
@@ -270,6 +276,7 @@ pub fn address_map(
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
                     .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "WeightedPool2TokensFactory".as_bytes()),
