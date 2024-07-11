@@ -12,7 +12,6 @@ from http.client import HTTPException
 from logging import getLogger
 from typing import Tuple, Any, Optional, Dict
 
-from eth_utils import to_checksum_address
 from protosim_py import (
     AccountUpdate,
     AccountInfo,
@@ -74,7 +73,6 @@ class TokenLoader:
         formatted_tokens = dict()
 
         for token in all_tokens:
-            token["address"] = to_checksum_address(token["address"])
             formatted = EthereumToken(**token)
             formatted_tokens[formatted.address] = formatted
 
@@ -102,6 +100,7 @@ class TychoPoolStateStreamAdapter:
         self,
         tycho_url: str,
         protocol: str,
+        decoder: ThirdPartyPoolTychoDecoder,
         blockchain: Blockchain,
         min_tvl: Optional[Decimal] = 10,
         min_token_quality: Optional[int] = 51,
@@ -122,6 +121,7 @@ class TychoPoolStateStreamAdapter:
         self.protocol = f"vm:{protocol}"
         self._include_state = include_state
         self._blockchain = blockchain
+        self._decoder = decoder
 
         # Create engine
         self._db = TychoDB(tycho_http_url=self.tycho_url)
@@ -245,8 +245,8 @@ class TychoPoolStateStreamAdapter:
         self._process_vm_storage(state_msg["snapshots"]["vm_storage"], block)
 
         # decode new pools
-        decoded_pools, failed_pools = ThirdPartyPoolTychoDecoder().decode_snapshot(
-            state_msg["snapshots"]["states"], block
+        decoded_pools, failed_pools = self._decoder.decode_snapshot(
+            state_msg["snapshots"]["states"], block, self._tokens
         )
 
         decoded_count += len(decoded_pools)
