@@ -1,5 +1,7 @@
 import datetime
 from enum import Enum
+from typing import Union
+
 from pydantic import BaseModel, Field
 
 
@@ -18,3 +20,10 @@ class EVMBlock(BaseModel):
 
 class ThirdPartyPool:
     pass
+
+
+class EthereumToken(BaseModel):
+    symbol: str
+    address: str
+    decimals: int
+    gas: Union[int, list[int]] = 29000

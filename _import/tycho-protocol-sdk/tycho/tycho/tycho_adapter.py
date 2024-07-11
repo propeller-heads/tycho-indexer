@@ -1,13 +1,16 @@
 import asyncio
 import json
 import platform
+import requests
 import time
+
 from asyncio.subprocess import STDOUT, PIPE
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
+from http.client import HTTPException
 from logging import getLogger
-from typing import Tuple, Any, Optional
+from typing import Tuple, Any, Optional, Dict
 
 from eth_utils import to_checksum_address
 from protosim_py import (
@@ -25,13 +28,73 @@ from tycho.tycho.constants import (
     MAX_BALANCE,
 )
 from tycho.tycho.decoders import ThirdPartyPoolTychoDecoder
-from tycho.tycho.models import Blockchain, EVMBlock, ThirdPartyPool
+from tycho.tycho.exceptions import APIRequestError
+from tycho.tycho.models import Blockchain, EVMBlock, ThirdPartyPool, EthereumToken
 
 log = getLogger(__name__)
 
 
 class TychoClientException(Exception):
     pass
+
+
+class TokenLoader:
+    def __init__(
+        self,
+        tycho_url: str,
+        blockchain: Blockchain,
+        min_token_quality: Optional[int] = 51,
+    ):
+        self.tycho_url = tycho_url
+        self.blockchain = blockchain
+        self.min_token_quality = min_token_quality
+        self.endpoint = "/v1/{}/tokens"
+        self._token_limit = 10000
+
+    def get_tokens(self) -> dict[str, EthereumToken]:
+        """Loads all tokens from Tycho RPC"""
+        url = self.tycho_url + self.endpoint.format(self.blockchain.value)
+        page = 0
+
+        start = time.monotonic()
+        all_tokens = []
+        while data := self._get_all_with_pagination(
+            url=url,
+            page=page,
+            limit=self._token_limit,
+            params={"min_quality": self.min_token_quality},
+        ):
+            all_tokens.extend(data)
+            page += 1
+            if len(data) < self._token_limit:
+                break
+
+        log.info(f"Loaded {len(all_tokens)} tokens in {time.monotonic() - start:.2f}s")
+
+        formatted_tokens = dict()
+
+        for token in all_tokens:
+            token["address"] = to_checksum_address(token["address"])
+            formatted = EthereumToken(**token)
+            formatted_tokens[formatted.address] = formatted
+
+        return formatted_tokens
+
+    @staticmethod
+    def _get_all_with_pagination(
+        url: str, params: Optional[Dict] = None, page: int = 0, limit: int = 50
+    ) -> Dict:
+        if params is None:
+            params = {}
+
+        params["pagination"] = {"page": page, "page_size": limit}
+        r = requests.post(url, json=params)
+        try:
+            r.raise_for_status()
+        except HTTPException as e:
+            log.error(f"Request status {r.status_code} with content {r.json()}")
+            raise APIRequestError("Failed to load token configurations")
+        return r.json()["tokens"]
 
 
 class TychoPoolStateStreamAdapter:
@@ -56,7 +119,7 @@ class TychoPoolStateStreamAdapter:
         self.tycho_url = tycho_url
         self.min_tvl = min_tvl
         self.tycho_client = None
-        self.protocol = "vm:protocol"
+        self.protocol = f"vm:{protocol}"
         self._include_state = include_state
         self._blockchain = blockchain
 
@@ -69,6 +132,13 @@ class TychoPoolStateStreamAdapter:
             mocked=False,
             permanent_storage=None,
         )
+
+        # Loads tokens from Tycho
+        self._tokens: dict[str, EthereumToken] = TokenLoader(
+            tycho_url=self.tycho_url,
+            blockchain=self._blockchain,
+            min_token_quality=self.min_token_quality,
+        ).get_tokens()
 
         # TODO: Check if it's necessary
         self.ignored_pools = []
