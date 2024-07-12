@@ -758,6 +758,10 @@ fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
                 "bebc44782c7db0a1a60cb6fe97d0b483032ff1c7" => {
                     hex::decode("6c3F90f043a72FA612cbac8115EE7e52BDe6E490").ok()
                 }
+                // Curve.fi renBTC/wBTC/sBTC (crvRenWSBTC)
+                "7fc77b5c7614e1533320ea6ddc2eb61fa00a9714" => {
+                    hex::decode("075b1bb99792c9e1041ba13afef80c91a1e70fb3").ok()
+                }
                 // Placeholder if we can't find the token. It will help us to detect these missing
                 // token easily with a SQL query.
                 _ => hex::decode("1111111111111111111111111111111111111111").ok(),
