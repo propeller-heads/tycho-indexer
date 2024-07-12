@@ -212,12 +212,7 @@ pub fn extract_balance_deltas_from_tx<F: Fn(&[u8], &[u8]) -> bool>(
                 let mut create_balance_delta = |transactor: &[u8], delta: BigInt| {
                     balance_deltas.push(BalanceDelta {
                         ord: log.ordinal,
-                        tx: Some(Transaction {
-                            to: tx.to.clone(),
-                            from: tx.from.clone(),
-                            hash: tx.hash.clone(),
-                            index: tx.index.into(),
-                        }),
+                        tx: Some(tx.into()),
                         token: log.address.clone(),
                         delta: delta.to_signed_bytes_be(),
                         component_id: hex::encode(transactor).into(),

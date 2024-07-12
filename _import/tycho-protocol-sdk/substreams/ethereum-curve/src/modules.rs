@@ -117,11 +117,7 @@ pub fn map_relative_balances(
                             let pool_key = format!("pool:{}", hex::encode(transactor));
                             if let Some(tokens) = tokens_store.get_last(pool_key) {
                                 let token_id = hex::encode(token);
-                                tokens
-                                    .split(":")
-                                    .map(|token| token.to_owned())
-                                    .collect::<Vec<_>>()
-                                    .contains(&token_id)
+                                tokens.split(':').any(|t| t == token_id)
                             } else {
                                 false
                             }
