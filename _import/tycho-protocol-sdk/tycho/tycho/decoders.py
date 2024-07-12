@@ -1,8 +1,12 @@
+from decimal import Decimal
 from logging import getLogger
 from typing import Any
 
+from protosim_py import SimulationEngine
+
 from tycho.tycho.exceptions import TychoDecodeError
-from tycho.tycho.models import EVMBlock, ThirdPartyPool, EthereumToken
+from tycho.tycho.models import EVMBlock, EthereumToken, DatabaseType
+from tycho.tycho.pool_state import ThirdPartyPool
 from tycho.tycho.utils import decode_tycho_exchange
 
 log = getLogger(__name__)
@@ -60,7 +64,6 @@ class ThirdPartyPoolTychoDecoder:
             adapter_contract_name=self.adapter_contract,
             minimum_gas=self.minimum_gas,
             hard_sell_limit=self.hard_limit,
-            db_type=DatabaseType.tycho,
             trace=True,
             **optional_attributes,
         )

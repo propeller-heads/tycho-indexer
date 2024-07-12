@@ -28,7 +28,9 @@ from tycho.tycho.constants import (
 )
 from tycho.tycho.decoders import ThirdPartyPoolTychoDecoder
 from tycho.tycho.exceptions import APIRequestError
-from tycho.tycho.models import Blockchain, EVMBlock, ThirdPartyPool, EthereumToken
+from tycho.tycho.models import Blockchain, EVMBlock, EthereumToken
+from tycho.tycho.pool_state import ThirdPartyPool
+from tycho.tycho.utils import create_engine, TychoDBSingleton
 
 log = getLogger(__name__)
 
@@ -124,14 +126,9 @@ class TychoPoolStateStreamAdapter:
         self._decoder = decoder
 
         # Create engine
-        self._db = TychoDB(tycho_http_url=self.tycho_url)
-        self._engine = SimulationEngine.new_with_tycho_db(db=self._db, trace=True)
-        self._engine.init_account(
-            address=EXTERNAL_ACCOUNT,
-            account=AccountInfo(balance=MAX_BALANCE, nonce=0, code=None),
-            mocked=False,
-            permanent_storage=None,
-        )
+        # TODO: This should be initialized outside the adapter?
+        TychoDBSingleton.initialize(tycho_http_url=self.tycho_url)
+        self._engine = create_engine([], state_block=None, trace=True)
 
         # Loads tokens from Tycho
         self._tokens: dict[str, EthereumToken] = TokenLoader(
