@@ -10,13 +10,11 @@ use substreams::{
 
 use substreams_ethereum::pb::eth;
 
-use crate::{
-    pool_changes::{emit_deltas, emit_eth_deltas},
-    pool_factories,
-    pools::emit_specific_pools,
-};
+use crate::{pool_changes::emit_eth_deltas, pool_factories, pools::emit_specific_pools};
 use tycho_substreams::{
-    balances::store_balance_changes, contract::extract_contract_changes, prelude::*,
+    balances::{extract_balance_deltas_from_tx, store_balance_changes},
+    contract::extract_contract_changes,
+    prelude::*,
 };
 
 /// This struct purely exists to spoof the `PartialEq` trait for `Transaction` so we can use it in
@@ -115,7 +113,19 @@ pub fn map_relative_balances(
                 .flat_map(|tx| {
                     emit_eth_deltas(tx, &tokens_store)
                         .into_iter()
-                        .chain(emit_deltas(tx, &tokens_store))
+                        .chain(extract_balance_deltas_from_tx(tx, |token, transactor| {
+                            let pool_key = format!("pool:{}", hex::encode(transactor));
+                            if let Some(tokens) = tokens_store.get_last(pool_key) {
+                                let token_id = hex::encode(token);
+                                tokens
+                                    .split(":")
+                                    .map(|token| token.to_owned())
+                                    .collect::<Vec<_>>()
+                                    .contains(&token_id)
+                            } else {
+                                false
+                            }
+                        }))
                 })
                 .collect();
 
