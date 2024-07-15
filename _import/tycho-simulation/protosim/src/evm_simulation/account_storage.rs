@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use revm::primitives::{AccountInfo, B160, U256 as rU256};
+use revm::primitives::{AccountInfo, Address, U256 as rU256};
 use std::collections::hash_map::Entry::Vacant;
 use tracing::{debug, warn};
 
@@ -28,7 +28,7 @@ pub struct StateUpdate {
 #[derive(Clone, Default, Debug)]
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.
 pub struct AccountStorage {
-    accounts: HashMap<B160, Account>,
+    accounts: HashMap<Address, Account>,
 }
 
 impl AccountStorage {
@@ -52,7 +52,7 @@ impl AccountStorage {
     /// Otherwise, it stores a new `Account` instance with the provided data at the given address.
     pub fn init_account(
         &mut self,
-        address: B160,
+        address: Address,
         info: AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
@@ -91,7 +91,7 @@ impl AccountStorage {
     ///
     /// If the `address` is not found in either collection, a warning is logged and no changes are
     /// made.
-    pub fn update_account(&mut self, address: &B160, update: &StateUpdate) {
+    pub fn update_account(&mut self, address: &Address, update: &StateUpdate) {
         if let Some(account) = self.accounts.get_mut(address) {
             if let Some(new_balance) = update.balance {
                 account.info.balance = new_balance;
@@ -121,7 +121,7 @@ impl AccountStorage {
     ///
     /// Returns an `Option` that holds a reference to the `AccountInfo`. If the account is not
     /// found, `None` is returned.
-    pub fn get_account_info(&self, address: &B160) -> Option<&AccountInfo> {
+    pub fn get_account_info(&self, address: &Address) -> Option<&AccountInfo> {
         self.accounts
             .get(address)
             .map(|acc| &acc.info)
@@ -137,7 +137,7 @@ impl AccountStorage {
     ///
     /// Returns `true` if an account with the specified address is present in the storage,
     /// otherwise returns `false`.
-    pub fn account_present(&self, address: &B160) -> bool {
+    pub fn account_present(&self, address: &Address) -> bool {
         self.accounts.contains_key(address)
     }
 
@@ -152,7 +152,7 @@ impl AccountStorage {
     /// * `address`: The address of the account to set the storage value for.
     /// * `index`: The index of the storage value to set.
     /// * `value`: The new value to set for the storage.
-    pub fn set_temp_storage(&mut self, address: B160, index: rU256, value: rU256) {
+    pub fn set_temp_storage(&mut self, address: Address, index: rU256, value: rU256) {
         if let Some(acc) = self.accounts.get_mut(&address) {
             acc.temp_storage.insert(index, value);
         } else {
@@ -175,7 +175,7 @@ impl AccountStorage {
     ///
     /// Returns an `Option` containing a reference to the storage value if it exists, otherwise
     /// returns `None`.
-    pub fn get_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
+    pub fn get_storage(&self, address: &Address, index: &rU256) -> Option<rU256> {
         if let Some(acc) = self.accounts.get(address) {
             if let Some(s) = acc.temp_storage.get(index) {
                 Some(*s)
@@ -198,7 +198,7 @@ impl AccountStorage {
     ///
     /// * `address` - The address of the account.
     /// * `index` - The index of the desired storage value.
-    pub fn get_permanent_storage(&self, address: &B160, index: &rU256) -> Option<rU256> {
+    pub fn get_permanent_storage(&self, address: &Address, index: &rU256) -> Option<rU256> {
         if let Some(acc) = self.accounts.get(address) {
             acc.permanent_storage
                 .get(index)
@@ -222,7 +222,7 @@ impl AccountStorage {
     /// # Arguments
     ///
     /// * `address` - A reference to the account address.
-    pub fn is_mocked_account(&self, address: &B160) -> Option<bool> {
+    pub fn is_mocked_account(&self, address: &Address) -> Option<bool> {
         self.accounts
             .get(address)
             .map(|acc| acc.mocked)
@@ -233,7 +233,7 @@ impl AccountStorage {
 mod tests {
     use super::StateUpdate;
     use crate::evm_simulation::account_storage::{Account, AccountStorage};
-    use revm::primitives::{AccountInfo, B160, KECCAK_EMPTY, U256 as rU256};
+    use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY, U256 as rU256};
     use std::{collections::HashMap, error::Error, str::FromStr};
 
     #[test]
@@ -241,7 +241,7 @@ mod tests {
         let mut account_storage = AccountStorage::default();
         let expected_nonce = 100;
         let expected_balance = rU256::from(500);
-        let acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let info: AccountInfo = AccountInfo {
             nonce: expected_nonce,
             balance: expected_balance,
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn test_update_account_info() -> Result<(), Box<dyn Error>> {
         let mut account_storage = AccountStorage::default();
-        let acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let info: AccountInfo = AccountInfo {
             nonce: 100,
             balance: rU256::from(500),
@@ -322,15 +322,15 @@ mod tests {
     #[test]
     fn test_get_account_info() {
         let mut account_storage = AccountStorage::default();
-        let address_1 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
-        let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let address_1 = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address_2 = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let account_info_1 = AccountInfo::default();
         let account_info_2 = AccountInfo { nonce: 500, ..Default::default() };
         account_storage.init_account(address_1, account_info_1, None, false);
         account_storage.init_account(address_2, account_info_2, None, false);
 
         let existing_account = account_storage.get_account_info(&address_1);
-        let address_3 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
+        let address_3 = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
         let non_existing_account = account_storage.get_account_info(&address_3);
 
         assert_eq!(
@@ -345,10 +345,10 @@ mod tests {
     fn test_account_present() {
         let mut account_storage = AccountStorage::default();
         let existing_account =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
-        let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address_2 = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let non_existing_account =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
         account_storage
             .accounts
             .insert(existing_account, Account::default());
@@ -371,9 +371,9 @@ mod tests {
         // Create a new instance of the struct for testing
         let mut account_storage = AccountStorage::default();
         // Add a test account
-        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let non_existing_address =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let account = Account::default();
         account_storage
             .accounts
@@ -400,9 +400,9 @@ mod tests {
     fn test_get_storage() {
         let mut account_storage = AccountStorage::default();
         let existing_address =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let non_existent_address =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let index = rU256::from(42);
         let value = rU256::from(100);
         let non_existent_index = rU256::from(999);
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn test_get_storage_priority() {
         let mut account_storage = AccountStorage::default();
-        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let index = rU256::from(69);
         let temp_value = rU256::from(100);
         let permanent_value = rU256::from(200);
@@ -463,10 +463,11 @@ mod tests {
     fn test_is_mocked_account() {
         let mut account_storage = AccountStorage::default();
         let mocked_account_address =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let not_mocked_account_address =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
-        let unknown_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let unknown_address =
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9de").unwrap();
         let mocked_account = Account { mocked: true, ..Default::default() };
         let not_mocked_account = Account { mocked: false, ..Default::default() };
         account_storage
@@ -484,8 +485,8 @@ mod tests {
     #[test]
     fn test_clear_temp_storage() {
         let mut account_storage = AccountStorage::default();
-        let address_1 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
-        let address_2 = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+        let address_1 = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address_2 = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let mut account_1 = Account::default();
         account_1
             .temp_storage
@@ -516,9 +517,9 @@ mod tests {
     #[test]
     fn test_get_permanent_storage() {
         let mut account_storage = AccountStorage::default();
-        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let non_existing_address =
-            B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dd").unwrap();
         let index = rU256::from_str("123").unwrap();
         let value = rU256::from_str("456").unwrap();
         let mut account = Account::default();

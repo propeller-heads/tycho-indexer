@@ -1,10 +1,10 @@
 use ethers::{
     providers::{Http, Provider},
-    types::{Address, Bytes, H256, U256},
+    types::{Bytes, H256, U256},
 };
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Bytecode, B160, U256 as rU256};
+use revm::primitives::{Address as RevmAddress, Bytecode, U256 as rU256};
 use tokio::runtime::Runtime;
 use tracing::info;
 
@@ -84,7 +84,7 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
     fn from(params: SimulationParameters) -> Self {
         let overrides = match params.overrides {
             Some(py_overrides) => {
-                let mut rust_overrides: HashMap<Address, HashMap<U256, U256>> = HashMap::new();
+                let mut rust_overrides: HashMap<RevmAddress, HashMap<U256, U256>> = HashMap::new();
                 for (address, py_slots) in py_overrides {
                     let mut rust_slots: HashMap<U256, U256> = HashMap::new();
                     for (index, value) in py_slots {
@@ -94,7 +94,7 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
                         );
                     }
                     rust_overrides.insert(
-                        Address::from_str(address.as_str()).expect("Wrong address format"),
+                        RevmAddress::from_str(address.as_str()).expect("Wrong address format"),
                         rust_slots,
                     );
                 }
@@ -103,8 +103,8 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
             None => None,
         };
         simulation::SimulationParameters {
-            caller: Address::from_str(params.caller.as_str()).unwrap(),
-            to: Address::from_str(params.to.as_str()).unwrap(),
+            caller: RevmAddress::from_str(params.caller.as_str()).unwrap(),
+            to: RevmAddress::from_str(params.to.as_str()).unwrap(),
             data: Bytes::from(params.data),
             value: U256::from_big_endian(params.value.to_bytes_be().as_slice()),
             overrides,
@@ -272,7 +272,7 @@ impl From<AccountUpdate> for tycho_models::AccountUpdate {
             .map(|b| rU256::from_str(&b.to_string()).unwrap());
 
         tycho_models::AccountUpdate {
-            address: B160::from_str(py_update.address.as_str()).unwrap(),
+            address: RevmAddress::from_str(py_update.address.as_str()).unwrap(),
             chain: tycho_models::Chain::from_str(py_update.chain.as_str()).unwrap(),
             slots: rust_slots,
             balance: rust_balance,
@@ -361,7 +361,7 @@ impl From<AccountInfo> for revm::primitives::AccountInfo {
     fn from(py_info: AccountInfo) -> Self {
         let code;
         if let Some(c) = py_info.code {
-            code = Bytecode::new_raw(Bytes::from(c).0);
+            code = Bytecode::new_raw(revm::primitives::Bytes::from(c));
         } else {
             code = Bytecode::new()
         }

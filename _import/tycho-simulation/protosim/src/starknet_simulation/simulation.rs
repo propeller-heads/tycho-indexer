@@ -774,7 +774,7 @@ pub mod tests {
         let mut call_info =
             CallInfo::empty_constructor_call(address.clone(), address.clone(), None);
         call_info.gas_consumed = gas_consumed;
-        call_info.retdata = retdata.clone();
+        call_info.retdata.clone_from(&retdata);
         // Flag relevant storage slots as updated during simulation
         call_info.accessed_storage_keys = HashSet::new();
         call_info

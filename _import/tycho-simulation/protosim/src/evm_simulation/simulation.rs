@@ -1,24 +1,17 @@
 use crate::evm_simulation::database::OverriddenSimulationDB;
 
 use super::account_storage::StateUpdate;
-use ethers::types::{Address, Bytes, U256};
+use ethers::types::{Bytes, U256};
 
 use revm::{
     db::DatabaseRef,
+    inspector_handle_register,
     inspectors::CustomPrintTracer,
     primitives::{
-        bytes, // `bytes` is an external crate
-        CreateScheme,
-        EVMError,
-        EVMResult,
-        ExecutionResult,
-        Output,
-        State,
-        TransactTo,
-        B160 as rB160,
-        U256 as rU256,
+        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output,
+        TransactTo, TxEnv, U256 as rU256,
     },
-    EVM,
+    Evm,
 };
 use std::collections::HashMap;
 use tracing::debug;
@@ -76,7 +69,6 @@ where
         // There is no need to keep an EVM on the struct as it only holds the environment and the
         // db, the db is simply a reference wrapper. To avoid lifetimes leaking we don't let the evm
         // struct outlive this scope.
-        let mut vm = EVM::new();
 
         // We protect the state from being consumed.
         let db_ref = OverriddenSimulationDB {
@@ -86,25 +78,45 @@ where
                 .unwrap_or_default(),
         };
 
-        vm.database(db_ref);
+        let tx_env = TxEnv {
+            caller: params.revm_caller(),
+            gas_limit: params
+                .revm_gas_limit()
+                .unwrap_or(8_000_000),
+            transact_to: params.revm_to(),
+            value: params.revm_value(),
+            data: params.revm_data(),
+            ..Default::default()
+        };
 
-        // vm.database(&self.state);
-        vm.env.block.number = params.revm_block_number();
-        vm.env.block.timestamp = params.revm_timestamp();
-        vm.env.tx.caller = params.revm_caller();
-        vm.env.tx.transact_to = params.revm_to();
-        vm.env.tx.data = params.revm_data();
-        vm.env.tx.value = params.revm_value();
-        vm.env.tx.gas_limit = params
-            .revm_gas_limit()
-            .unwrap_or(8_000_000);
-        debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.env.tx, vm.env.block);
+        let block_env = BlockEnv {
+            number: params.revm_block_number(),
+            timestamp: params.revm_timestamp(),
+            ..Default::default()
+        };
 
         let evm_result = if self.trace {
-            let tracer = CustomPrintTracer::default();
-            vm.inspect_ref(tracer)
+            let mut vm = Evm::builder()
+                .with_ref_db(db_ref)
+                .with_block_env(block_env)
+                .with_tx_env(tx_env)
+                .with_external_context(CustomPrintTracer::default())
+                .append_handler_register(inspector_handle_register)
+                .build();
+
+            debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.tx(), vm.block());
+
+            vm.transact()
         } else {
-            vm.transact_ref()
+            let mut vm = Evm::builder()
+                .with_ref_db(db_ref)
+                .with_block_env(block_env)
+                .with_tx_env(tx_env)
+                .build();
+
+            debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.tx(), vm.block());
+
+            vm.transact()
         };
 
         interpret_evm_result(evm_result)
@@ -150,13 +162,21 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                 data: format!("EVM error: {invalid_tx:?}"),
                 gas_used: None,
             }),
-            EVMError::PrevrandaoNotSet => Err(SimulationError::TransactionError {
-                data: "EVM error: PrevrandaoNotSet".to_owned(),
-                gas_used: None,
-            }),
             EVMError::Database(db_error) => {
                 Err(SimulationError::StorageError(format!("Storage error: {:?}", db_error)))
             }
+            EVMError::Custom(err) => Err(SimulationError::TransactionError {
+                data: format!("Unexpected error {}", err),
+                gas_used: None,
+            }),
+            EVMError::Header(err) => Err(SimulationError::TransactionError {
+                data: format!("Unexpected error {}", err),
+                gas_used: None,
+            }),
+            EVMError::Precompile(err) => Err(SimulationError::TransactionError {
+                data: format!("Unexpected error {}", err),
+                gas_used: None,
+            }),
         },
     }
 }
@@ -166,10 +186,10 @@ fn interpret_evm_success(
     gas_used: u64,
     gas_refunded: u64,
     output: Output,
-    state: State,
+    state: EvmState,
 ) -> SimulationResult {
     SimulationResult {
-        result: output.into_data(),
+        result: output.into_data().into(),
         state_updates: {
             // For each account mentioned in state updates in REVM output, we will have
             // one record in our hashmap. Such record contains *new* values of account's
@@ -182,7 +202,7 @@ fn interpret_evm_success(
             let mut account_updates: HashMap<Address, StateUpdate> = HashMap::new();
             for (address, account) in state {
                 account_updates.insert(
-                    Address::from(address),
+                    address,
                     StateUpdate {
                         // revm doesn't say if the balance was actually changed
                         balance: Some(account.info.balance),
@@ -236,15 +256,15 @@ pub struct SimulationParameters {
 
 // Converters of fields to revm types
 impl SimulationParameters {
-    fn revm_caller(&self) -> rB160 {
-        rB160::from_slice(&self.caller.0)
+    fn revm_caller(&self) -> Address {
+        Address::from_slice(self.caller.as_slice())
     }
 
     fn revm_to(&self) -> TransactTo {
-        if self.to == Address::zero() {
-            TransactTo::Create(CreateScheme::Create2 { salt: rU256::default() })
+        if self.to == Address::ZERO {
+            TransactTo::Create
         } else {
-            TransactTo::Call(rB160::from_slice(&self.to.0))
+            TransactTo::Call(self.to)
         }
     }
 
@@ -256,7 +276,7 @@ impl SimulationParameters {
         rU256::from_limbs(self.value.0)
     }
 
-    fn revm_overrides(&self) -> Option<HashMap<rB160, HashMap<rU256, rU256>>> {
+    fn revm_overrides(&self) -> Option<HashMap<Address, HashMap<rU256, rU256>>> {
         self.overrides.clone().map(|original| {
             let mut result = HashMap::new();
             for (address, storage) in original {
@@ -264,7 +284,7 @@ impl SimulationParameters {
                 for (key, value) in storage {
                     account_storage.insert(rU256::from_limbs(key.0), rU256::from_limbs(value.0));
                 }
-                result.insert(rB160::from(address), account_storage);
+                result.insert(address, account_storage);
             }
             result
         })
@@ -293,12 +313,12 @@ mod tests {
         abi::parse_abi,
         prelude::BaseContract,
         providers::{Http, Provider, ProviderError},
-        types::{Address, U256},
+        types::U256,
     };
     use revm::primitives::{
-        bytes, hex, Account, AccountInfo, AccountStatus, Bytecode, Eval, ExecutionResult, Halt,
-        InvalidTransaction, OutOfGasError, Output, ResultAndState, State as rState, StorageSlot,
-        B160, B256,
+        bytes, hex, Account, AccountInfo, AccountStatus, Address, Bytecode, Bytes,
+        EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, InvalidTransaction,
+        OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
     use std::{error::Error, str::FromStr, sync::Arc, time::Instant};
 
@@ -308,11 +328,11 @@ mod tests {
         let params = SimulationParameters {
             caller: Address::from_str(address_string).unwrap(),
             to: Address::from_str(address_string).unwrap(),
-            data: Bytes::from_static(b"Hello"),
+            data: ethers::types::Bytes::from_static(b"Hello"),
             value: U256::from(123),
             overrides: Some(
                 [(
-                    Address::zero(),
+                    Address::ZERO,
                     [(U256::from(1), U256::from(11)), (U256::from(2), U256::from(22))]
                         .iter()
                         .cloned()
@@ -327,17 +347,17 @@ mod tests {
             timestamp: 0,
         };
 
-        assert_eq!(params.revm_caller(), rB160::from_str(address_string).unwrap());
+        assert_eq!(params.revm_caller(), Address::from_str(address_string).unwrap());
         assert_eq!(
             if let TransactTo::Call(value) = params.revm_to() { value } else { panic!() },
-            rB160::from_str(address_string).unwrap()
+            Address::from_str(address_string).unwrap()
         );
         assert_eq!(params.revm_data(), revm::primitives::Bytes::from_static(b"Hello"));
         assert_eq!(params.revm_value(), rU256::from_str("123").unwrap());
         // Below I am using `from_str` instead of `from`, because `from` for this type gives
         // an ugly false positive error in Pycharm.
         let expected_overrides = [(
-            rB160::zero(),
+            Address::ZERO,
             [
                 (rU256::from_str("1").unwrap(), rU256::from_str("11").unwrap()),
                 (rU256::from_str("2").unwrap(), rU256::from_str("22").unwrap()),
@@ -358,9 +378,9 @@ mod tests {
     #[test]
     fn test_converting_nones_to_revm() {
         let params = SimulationParameters {
-            caller: Address::zero(),
-            to: Address::zero(),
-            data: Bytes::new(),
+            caller: Address::ZERO,
+            to: Address::ZERO,
+            data: ethers::types::Bytes::new(),
             value: U256::zero(),
             overrides: None,
             gas_limit: None,
@@ -376,37 +396,39 @@ mod tests {
     fn test_interpret_result_ok_success() {
         let evm_result: EVMResult<ProviderError> = Ok(ResultAndState {
             result: ExecutionResult::Success {
-                reason: Eval::Return,
+                reason: SuccessReason::Return,
                 gas_used: 100_u64,
                 gas_refunded: 10_u64,
                 logs: Vec::new(),
-                output: Output::Call(bytes::Bytes::from_static(b"output")),
+                output: Output::Call(Bytes::from_static(b"output")),
             },
             state: [(
                 // storage has changed
-                rB160::from(Address::zero()),
+                Address::ZERO,
                 Account {
                     info: AccountInfo {
                         balance: rU256::from_limbs([1, 0, 0, 0]),
                         nonce: 2,
-                        code_hash: B256::zero(),
+                        code_hash: B256::ZERO,
                         code: None,
                     },
                     storage: [
                         // this slot has changed
                         (
                             rU256::from_limbs([3, 1, 0, 0]),
-                            StorageSlot {
-                                previous_or_original_value: rU256::from_limbs([4, 0, 0, 0]),
+                            EvmStorageSlot {
+                                original_value: rU256::from_limbs([4, 0, 0, 0]),
                                 present_value: rU256::from_limbs([5, 0, 0, 0]),
+                                is_cold: true,
                             },
                         ),
                         // this slot hasn't changed
                         (
                             rU256::from_limbs([3, 2, 0, 0]),
-                            StorageSlot {
-                                previous_or_original_value: rU256::from_limbs([4, 0, 0, 0]),
+                            EvmStorageSlot {
+                                original_value: rU256::from_limbs([4, 0, 0, 0]),
                                 present_value: rU256::from_limbs([4, 0, 0, 0]),
+                                is_cold: true,
                             },
                         ),
                     ]
@@ -426,7 +448,7 @@ mod tests {
 
         assert_eq!(simulation_result.result, bytes::Bytes::from_static(b"output"));
         let expected_state_updates = [(
-            Address::zero(),
+            Address::ZERO,
             StateUpdate {
                 storage: Some(
                     [(rU256::from_limbs([3, 1, 0, 0]), rU256::from_limbs([5, 0, 0, 0]))]
@@ -449,7 +471,7 @@ mod tests {
         let evm_result: EVMResult<ProviderError> = Ok(ResultAndState {
             result: ExecutionResult::Revert {
                 gas_used: 100_u64,
-                output: bytes::Bytes::from_static(b"output"),
+                output: revm::primitives::Bytes::from_static(b"output"),
             },
             state: rState::new(),
         });
@@ -474,7 +496,7 @@ mod tests {
     fn test_interpret_result_ok_halt() {
         let evm_result: EVMResult<ProviderError> = Ok(ResultAndState {
             result: ExecutionResult::Halt {
-                reason: Halt::OutOfGas(OutOfGasError::BasicOutOfGas),
+                reason: HaltReason::OutOfGas(OutOfGasError::Basic),
                 gas_used: 100_u64,
             },
             state: rState::new(),
@@ -486,7 +508,7 @@ mod tests {
         let err = result.err().unwrap();
         match err {
             SimulationError::TransactionError { data, gas_used } => {
-                assert_eq!(data, "OutOfGas(BasicOutOfGas)");
+                assert_eq!(data, "OutOfGas(Basic)");
                 assert_eq!(gas_used, Some(100));
             }
             _ => panic!("Wrong type of SimulationError!"),
@@ -496,7 +518,7 @@ mod tests {
     #[test]
     fn test_interpret_result_err_invalid_transaction() {
         let evm_result: EVMResult<ProviderError> =
-            Err(EVMError::Transaction(InvalidTransaction::GasMaxFeeGreaterThanPriorityFee));
+            Err(EVMError::Transaction(InvalidTransaction::PriorityFeeGreaterThanMaxFee));
 
         let result = interpret_evm_result(evm_result);
 
@@ -504,7 +526,7 @@ mod tests {
         let err = result.err().unwrap();
         match err {
             SimulationError::TransactionError { data, gas_used } => {
-                assert_eq!(data, "EVM error: GasMaxFeeGreaterThanPriorityFee");
+                assert_eq!(data, "EVM error: PriorityFeeGreaterThanMaxFee");
                 assert_eq!(gas_used, None);
             }
             _ => panic!("Wrong type of SimulationError!"),
@@ -552,7 +574,16 @@ mod tests {
         let weth_addr = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")?;
         let usdc_addr = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")?;
         let encoded = router_abi
-            .encode("getAmountsOut", (U256::from(100_000_000), vec![usdc_addr, weth_addr]))
+            .encode(
+                "getAmountsOut",
+                (
+                    U256::from(100_000_000),
+                    vec![
+                        ethers::types::Address::from(**usdc_addr),
+                        ethers::types::Address::from(**weth_addr),
+                    ],
+                ),
+            )
             .unwrap();
 
         let sim_params = SimulationParameters {
@@ -618,9 +649,9 @@ mod tests {
         let erc20_abi = BaseContract::from(parse_abi(&[
             "function balanceOf(address account) public view virtual returns (uint256)",
         ])?);
-        let usdt_address = B160::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+        let usdt_address = Address::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
         let _ = readonly_state
-            .basic(usdt_address)
+            .basic_ref(usdt_address)
             .unwrap()
             .unwrap();
         let eoa_address = Address::from_str("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d")?;
@@ -684,14 +715,14 @@ mod tests {
             .unwrap(),
             U256::from_dec_str("80").unwrap(),
         );
-        overrides.insert(Address::from(usdt_address), storage_overwrite);
+        overrides.insert(usdt_address, storage_overwrite);
 
         let calldata = erc20_abi
-            .encode("balanceOf", eoa_address)
+            .encode("balanceOf", ethers::types::Address::from(**eoa_address))
             .unwrap();
         let sim_params = SimulationParameters {
             caller: Address::from_str("0x0000000000000000000000000000000000000000")?,
-            to: Address::from(usdt_address),
+            to: usdt_address,
             // to: Address::from(deployed_contract_address),
             data: calldata,
             value: U256::zero(),
