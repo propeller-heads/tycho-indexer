@@ -7,26 +7,20 @@ from fractions import Fraction
 from logging import getLogger
 from typing import Optional, cast, TypeVar
 
+from eth_typing import HexStr
 from protosim_py import SimulationEngine, AccountInfo
 from pydantic import BaseModel, PrivateAttr, Field
 
 from tycho.tycho.adapter_contract import AdapterContract
 from tycho.tycho.constants import MAX_BALANCE, EXTERNAL_ACCOUNT
 from tycho.tycho.exceptions import RecoverableSimulationException
-from tycho.tycho.models import (
-    EVMBlock,
-    DatabaseType,
-    Capability,
-    Address,
-    EthereumToken,
-)
+from tycho.tycho.models import EVMBlock, Capability, Address, EthereumToken
 from tycho.tycho.utils import (
     create_engine,
     get_contract_bytecode,
     frac_to_decimal,
     ERC20OverwriteFactory,
 )
-from eth_typing import HexStr
 
 ADAPTER_ADDRESS = "0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270"
 
@@ -167,8 +161,6 @@ class ThirdPartyPool(BaseModel):
         sell_token: EthereumToken,
         sell_amount: Decimal,
         buy_token: EthereumToken,
-        slippage: Decimal = Decimal(0),
-        create_new_pool: bool = True,
     ) -> tuple[Decimal, int, TPoolState]:
         # if the pool has a hard limit and the sell amount exceeds that, simulate and
         # raise a partial trade
@@ -276,7 +268,7 @@ class ThirdPartyPool(BaseModel):
         simulate the same block. This is fine, see
         https://datarevenue.atlassian.net/browse/ROC-1301
 
-        Not naming this method _copy to not confuse with pydantic's .copy method.
+        Not naming this method _copy to not confuse with Pydantic's .copy method.
         """
         return type(self)(
             exchange=self.exchange,
@@ -379,8 +371,8 @@ def _merge(a: dict, b: dict, path=None):
         to keep track of the ancestry of nested dictionaries.
 
     Returns:
-    a (dict): The merged dictionary which includes all key-value pairs from b
-        added into a. If they have nested dictionaries with same keys, those are also merged.
+    a (dict): The merged dictionary which includes all key-value pairs from `b`
+        added into `a`. If they have nested dictionaries with same keys, those are also merged.
         On key conflicts, preference is given to values from b.
     """
     if path is None:

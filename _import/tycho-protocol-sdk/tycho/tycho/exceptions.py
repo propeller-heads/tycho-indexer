@@ -53,3 +53,7 @@ class OutOfGas(RecoverableSimulationException):
     """
 
     pass
+
+
+class TychoClientException(Exception):
+    pass

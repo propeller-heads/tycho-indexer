@@ -10,12 +10,13 @@ from typing import Final, Any
 import eth_abi
 from eth_typing import HexStr
 from hexbytes import HexBytes
-from protosim_py import SimulationEngine, TychoDB, AccountInfo
+from protosim_py import SimulationEngine, AccountInfo
 from web3 import Web3
 
 from tycho.tycho.constants import EXTERNAL_ACCOUNT, MAX_BALANCE
 from tycho.tycho.exceptions import OutOfGas
 from tycho.tycho.models import Address, EthereumToken
+from tycho.tycho.tycho_db import TychoDBSingleton
 
 log = getLogger(__name__)
 
@@ -23,53 +24,6 @@ log = getLogger(__name__)
 def decode_tycho_exchange(exchange: str) -> (str, bool):
     # removes vm prefix if present, returns True if vm prefix was present (vm protocol) or False if native protocol
     return (exchange.split(":")[1], False) if "vm:" in exchange else (exchange, True)
-
-
-class TychoDBSingleton:
-    """
-    A singleton wrapper around the TychoDB class.
-
-    This class ensures that there is only one instance of TychoDB throughout the lifetime of the program,
-    avoiding the overhead of creating multiple instances.
-    """
-
-    _instance = None
-
-    @classmethod
-    def initialize(cls, tycho_http_url: str):
-        """
-        Initialize the TychoDB instance with the given URLs.
-
-        Parameters
-        ----------
-        tycho_http_url : str
-            The URL of the Tycho HTTP server.
-
-        """
-        cls._instance = TychoDB(tycho_http_url=tycho_http_url)
-
-    @classmethod
-    def get_instance(cls) -> TychoDB:
-        """
-        Retrieve the singleton instance of TychoDB.
-
-        If the TychoDB instance does not exist, it creates a new one.
-        If it already exists, it returns the existing instance.
-
-        Returns
-        -------
-        TychoDB
-            The singleton instance of TychoDB.
-        """
-        if cls._instance is None:
-            raise ValueError(
-                "TychoDB instance not initialized. Call initialize() first."
-            )
-        return cls._instance
-
-    @classmethod
-    def clear_instance(cls):
-        cls._instance = None
 
 
 def create_engine(

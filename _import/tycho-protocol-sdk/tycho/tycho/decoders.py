@@ -2,10 +2,8 @@ from decimal import Decimal
 from logging import getLogger
 from typing import Any
 
-from protosim_py import SimulationEngine
-
 from tycho.tycho.exceptions import TychoDecodeError
-from tycho.tycho.models import EVMBlock, EthereumToken, DatabaseType
+from tycho.tycho.models import EVMBlock, EthereumToken
 from tycho.tycho.pool_state import ThirdPartyPool
 from tycho.tycho.utils import decode_tycho_exchange
 
@@ -87,7 +85,8 @@ class ThirdPartyPoolTychoDecoder:
             "stateless_contracts": stateless_contracts,
         }
 
-    def decode_balances(self, snap, tokens):
+    @staticmethod
+    def decode_balances(snap, tokens):
         balances = {}
         for addr, balance in snap["state"]["balances"].items():
             checksum_addr = addr
@@ -97,9 +96,9 @@ class ThirdPartyPoolTychoDecoder:
             )
         return balances
 
+    @staticmethod
     def apply_update(
-        self,
-        pool: ThirdPartyPool,
+            pool: ThirdPartyPool,
         pool_update: dict[str, Any],
         balance_updates: dict[str, Any],
         block: EVMBlock,

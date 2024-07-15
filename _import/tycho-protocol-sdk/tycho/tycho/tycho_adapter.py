@@ -1,42 +1,32 @@
 import asyncio
 import json
 import platform
-import requests
 import time
-
 from asyncio.subprocess import STDOUT, PIPE
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 from http.client import HTTPException
 from logging import getLogger
-from typing import Tuple, Any, Optional, Dict
+from typing import Any, Optional, Dict
 
-from protosim_py import (
-    AccountUpdate,
-    AccountInfo,
-    BlockHeader,
-    TychoDB,
-    SimulationEngine,
-)
+import requests
+from protosim_py import AccountUpdate, AccountInfo, BlockHeader
 
-from tycho.tycho.constants import (
-    TYCHO_CLIENT_LOG_FOLDER,
-    TYCHO_CLIENT_FOLDER,
-    EXTERNAL_ACCOUNT,
-    MAX_BALANCE,
-)
+from tycho.tycho.constants import TYCHO_CLIENT_LOG_FOLDER, TYCHO_CLIENT_FOLDER
 from tycho.tycho.decoders import ThirdPartyPoolTychoDecoder
-from tycho.tycho.exceptions import APIRequestError
-from tycho.tycho.models import Blockchain, EVMBlock, EthereumToken
-from tycho.tycho.pool_state import ThirdPartyPool
-from tycho.tycho.utils import create_engine, TychoDBSingleton
+from tycho.tycho.exceptions import APIRequestError, TychoClientException
+from tycho.tycho.models import (
+    Blockchain,
+    EVMBlock,
+    EthereumToken,
+    BlockProtocolChanges,
+    SynchronizerState,
+)
+from tycho.tycho.tycho_db import TychoDBSingleton
+from tycho.tycho.utils import create_engine
 
 log = getLogger(__name__)
-
-
-class TychoClientException(Exception):
-    pass
 
 
 class TokenLoader:
@@ -128,7 +118,7 @@ class TychoPoolStateStreamAdapter:
         # Create engine
         # TODO: This should be initialized outside the adapter?
         TychoDBSingleton.initialize(tycho_http_url=self.tycho_url)
-        self._engine = create_engine([], state_block=None, trace=True)
+        self._engine = create_engine([], trace=True)
 
         # Loads tokens from Tycho
         self._tokens: dict[str, EthereumToken] = TokenLoader(
@@ -222,7 +212,7 @@ class TychoPoolStateStreamAdapter:
             sync_state = msg["sync_states"][self.protocol]
             state_msg = msg["state_msgs"][self.protocol]
             log.info(f"Received sync state for {self.protocol}: {sync_state}")
-            if not sync_state["status"] != "ready":
+            if not sync_state["status"] != SynchronizerState.ready.value:
                 raise ValueError("Tycho-indexer is not synced")
         except KeyError:
             raise ValueError("Invalid message received from tycho-client.")
@@ -265,10 +255,9 @@ class TychoPoolStateStreamAdapter:
             log.info(f"Could not to decode {failed_count}/{total} pool snapshots")
 
         return BlockProtocolChanges(
-            block=self.current_block,
-            pool_states=pool_states,
+            block=block,
+            pool_states=decoded_pools,
             removed_pools=removed_pools,
-            sync_states=exchanges_states,
             deserialization_time=round(deserialization_time, 3),
         )
 

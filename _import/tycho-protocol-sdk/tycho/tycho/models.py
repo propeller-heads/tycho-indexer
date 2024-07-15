@@ -1,8 +1,11 @@
 import datetime
+from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from typing import Union
 
 from pydantic import BaseModel, Field
+
+from tycho.tycho.pool_state import ThirdPartyPool
 
 Address = str
 
@@ -43,3 +46,23 @@ class Capability(IntEnum):
     ConstantPrice = auto()
     TokenBalanceIndependent = auto()
     ScaledPrice = auto()
+
+
+class SynchronizerState(Enum):
+    started = "started"
+    ready = "ready"
+    stale = "stale"
+    delayed = "delayed"
+    advanced = "advanced"
+    ended = "ended"
+
+
+@dataclass(repr=False)
+class BlockProtocolChanges:
+    block: EVMBlock
+    pool_states: dict[Address, ThirdPartyPool]
+    """All updated pools"""
+    removed_pools: set[Address]
+    sync_states: dict[str, SynchronizerState]
+    deserialization_time: float
+    """The time it took to deserialize the pool states from the tycho feed message"""
