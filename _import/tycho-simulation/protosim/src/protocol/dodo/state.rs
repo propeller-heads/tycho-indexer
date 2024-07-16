@@ -8,7 +8,7 @@ use ethers::{
 };
 use revm::{
     db::DatabaseRef,
-    primitives::{B160, U256 as rU256},
+    primitives::{Address, U256 as rU256},
 };
 
 use crate::{
@@ -48,8 +48,8 @@ where
             .encode("getMidPrice", ())
             .unwrap();
         let params: SimulationParameters = SimulationParameters {
-            caller: H160::zero(),
-            to: self.pool_address,
+            caller: Address::ZERO,
+            to: Address::from(self.pool_address.0),
             data: spot_price_calldata,
             value: U256::zero(),
             overrides: None,
@@ -81,11 +81,11 @@ where
         let engine = self.engine.borrow();
         let lp_fee = engine
             .state
-            .storage(B160(self.pool_address.0), rU256::from(8))
+            .storage_ref(Address::from_slice(&self.pool_address.0), rU256::from(8))
             .unwrap_or_else(|_| panic!("Error while requesting data from node."));
         let maintainer_fee = engine
             .state
-            .storage(B160(self.pool_address.0), rU256::from(8))
+            .storage_ref(Address::from_slice(&self.pool_address.0), rU256::from(8))
             .unwrap_or_else(|_| panic!("Error while requesting data from node."));
         let total_fee = U256::from_little_endian((lp_fee + maintainer_fee).as_le_slice());
         u256_to_f64(total_fee) / 1e18f64
@@ -131,8 +131,8 @@ where
         }
         .expect("DODO: Error encoding calldata for get_amount_out!");
         let params = SimulationParameters {
-            caller: H160::zero(),
-            to: self.helper_address,
+            caller: Address::ZERO,
+            to: Address::from(self.helper_address.0),
             data: calldata,
             value: U256::zero(),
             overrides: None,

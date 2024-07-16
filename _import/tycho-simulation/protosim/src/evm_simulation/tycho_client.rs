@@ -19,8 +19,10 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 /// TODO read consts from config
 pub const TYCHO_SERVER_VERSION: &str = "v1";
 pub const AMBIENT_EXTRACTOR_HANDLE: &str = "vm:ambient";
-pub const AMBIENT_ACCOUNT_ADDRESS: &str = "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688";
-
+pub const AMBIENT_ACCOUNT_ADDRESS: [u8; 20] = [
+    0xaa, 0xaa, 0xaa, 0xaa, 0xa2, 0x4e, 0xee, 0xb8, 0xd5, 0x7d, 0x43, 0x12, 0x24, 0xf7, 0x38, 0x32,
+    0xbc, 0x34, 0xf6, 0x88,
+];
 #[derive(Error, Debug)]
 pub enum TychoClientError {
     #[error("Failed to parse URI: {0}. Error: {1}")]
@@ -237,7 +239,7 @@ impl TychoWsClient for TychoWsClientImpl {
                     Ok(Message::Close(_)) => {
                         // Close the connection.
                         drop(tx);
-                        return
+                        return;
                     }
                     Ok(unknown_msg) => {
                         info!("Received an unknown message type: {:?}", unknown_msg);
@@ -263,7 +265,7 @@ mod tests {
 
     use mockito::Server;
 
-    use revm::primitives::{B160, B256, U256 as rU256};
+    use revm::primitives::{Address, B256, U256 as rU256};
     use std::{net::TcpListener, str::FromStr};
 
     #[tokio::test]
@@ -335,15 +337,15 @@ mod tests {
             ts: NaiveDateTime::from_str("2023-09-14T00:00:00").unwrap(),
         };
         let account_update = AccountUpdate::new(
-            B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+            Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
             Chain::Ethereum,
             HashMap::new(),
             Some(rU256::from(500)),
             Some(Vec::<u8>::new()),
             ChangeType::Update,
         );
-        let account_updates: HashMap<B160, AccountUpdate> = vec![(
-            B160::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
+        let account_updates: HashMap<Address, AccountUpdate> = vec![(
+            Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
             account_update,
         )]
         .into_iter()

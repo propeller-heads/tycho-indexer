@@ -1,6 +1,6 @@
 [package]
 name = "protosim"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 
@@ -12,12 +12,12 @@ petgraph = "0.6.2"
 enum_dispatch = "0.3.8"
 serde_json = "1.0.105"
 serde = { version = "1.0", features = ["rc"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.38.0", features = ["full"] }
 tokio-tungstenite = "0.20.1"
 async-trait = "0.1.73"
 hyper = "0.14.27"
 futures = "0.3.28"
-revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
+revm = { git = "https://github.com/bluealloy/revm", rev = "cbe99fc9d9ac6c65d724c64e2f9a2aca884c49aa", features = [
     "ethersdb",
     "serde",
 ] }
@@ -35,7 +35,7 @@ uuid = { version = "1.4.1", features = [
 ] }
 num-traits = "0.2.17"
 dotenv = "0.15.0"
-reqwest = { version = "0.11.22", features = ["blocking"]}
+reqwest = { version = "0.11.22", features = ["blocking"] }
 tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.7.1" }
 tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.7.1" }
 rpc_state_reader = { git = "https://github.com/propeller-heads/starknet_in_rust.git", package = "rpc_state_reader", branch = "feature/bump-cairo-lang-version", optional = true }

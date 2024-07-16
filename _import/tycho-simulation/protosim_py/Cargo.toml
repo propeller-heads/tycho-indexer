@@ -12,11 +12,11 @@ crate-type = ["cdylib"]
 num-bigint = "0.4.3"
 pyo3 = { version = "0.19", features = ["num-bigint", "extension-module"] }
 pyo3-asyncio = { version = "0.19", features = ["tokio-runtime"] }
-protosim = { path = "../protosim", features=["starknet"] }
-tokio = { version = "1.23.0", features = ["full"] }
+protosim = { path = "../protosim", features = ["starknet"] }
+tokio = { version = "1.38.0", features = ["full"] }
 ethers = "2.0.13"
 once_cell = "1.17.2"
-revm = { git = "https://github.com/bluealloy/revm", rev = "00281930d90f200ac376be5778d62bed591b9c99", features = [
+revm = { git = "https://github.com/bluealloy/revm", rev = "cbe99fc9d9ac6c65d724c64e2f9a2aca884c49aa", features = [
     "ethersdb",
 ] }
 hex = "0.4.3"

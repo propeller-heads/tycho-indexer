@@ -1,6 +1,6 @@
 use ethers::providers::{Http, Provider};
 use num_bigint::BigUint;
-use revm::primitives::{B160, U256 as rU256};
+use revm::primitives::{Address, U256 as rU256};
 
 use crate::structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
@@ -38,7 +38,7 @@ impl SimulationEngineInner {
 
     fn init_account(
         &self,
-        address: B160,
+        address: Address,
         account: revm::primitives::AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
@@ -59,9 +59,9 @@ impl SimulationEngineInner {
 
     fn update_state(
         &mut self,
-        updates: &HashMap<B160, account_storage::StateUpdate>,
+        updates: &HashMap<Address, account_storage::StateUpdate>,
         block: database::BlockHeader,
-    ) -> HashMap<B160, account_storage::StateUpdate> {
+    ) -> HashMap<Address, account_storage::StateUpdate> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine
                 .state
@@ -72,7 +72,7 @@ impl SimulationEngineInner {
         }
     }
 
-    fn query_storage(&self, address: B160, slot: rU256) -> Option<rU256> {
+    fn query_storage(&self, address: Address, slot: rU256) -> Option<rU256> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine
                 .state
@@ -146,7 +146,7 @@ impl SimulationEngine {
         mocked: bool,
         permanent_storage: Option<HashMap<BigUint, BigUint>>,
     ) {
-        let address = B160::from_str(&address).unwrap();
+        let address = Address::from_str(&address).unwrap();
         let account = revm::primitives::AccountInfo::from(account);
 
         let mut rust_slots: HashMap<rU256, rU256> = HashMap::new();
@@ -170,10 +170,12 @@ impl SimulationEngine {
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
         let block = protosim::evm_simulation::database::BlockHeader::from(block);
-        let mut rust_updates: HashMap<B160, account_storage::StateUpdate> = HashMap::new();
+        let mut rust_updates: HashMap<Address, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
-            rust_updates
-                .insert(B160::from_str(&key).unwrap(), account_storage::StateUpdate::from(value));
+            rust_updates.insert(
+                Address::from_str(&key).unwrap(),
+                account_storage::StateUpdate::from(value),
+            );
         }
 
         let reverse_updates = self_
@@ -192,7 +194,7 @@ impl SimulationEngine {
         address: String,
         slot: String,
     ) -> PyResult<Option<String>> {
-        let address = B160::from_str(&address).unwrap();
+        let address = Address::from_str(&address).unwrap();
         let slot = rU256::from_str(&slot).unwrap();
         match self_.0.query_storage(address, slot) {
             Some(state_update) => Ok(Some(state_update.to_string())),

@@ -9,7 +9,7 @@ use std::{cell::RefCell, collections::HashMap, sync::Arc};
 use revm::{
     db::DatabaseRef,
     interpreter::analysis::to_analysed,
-    primitives::{AccountInfo, Bytecode, B160, B256, U256 as rU256},
+    primitives::{AccountInfo, Address, Bytecode, B256, U256 as rU256},
 };
 
 use super::account_storage::{AccountStorage, StateUpdate};
@@ -20,7 +20,7 @@ pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
     pub inner_db: &'a DB,
     /// A mapping from account address to storage.
     /// Storage is a mapping from slot index to slot value.
-    pub overrides: &'a HashMap<B160, HashMap<rU256, rU256>>,
+    pub overrides: &'a HashMap<Address, HashMap<rU256, rU256>>,
 }
 
 impl<'a, DB: DatabaseRef> OverriddenSimulationDB<'a, DB> {
@@ -34,7 +34,7 @@ impl<'a, DB: DatabaseRef> OverriddenSimulationDB<'a, DB> {
     /// # Returns
     ///
     /// A new instance of OverriddenSimulationDB.
-    pub fn new(inner_db: &'a DB, overrides: &'a HashMap<B160, HashMap<rU256, rU256>>) -> Self {
+    pub fn new(inner_db: &'a DB, overrides: &'a HashMap<Address, HashMap<rU256, rU256>>) -> Self {
         OverriddenSimulationDB { inner_db, overrides }
     }
 }
@@ -42,29 +42,34 @@ impl<'a, DB: DatabaseRef> OverriddenSimulationDB<'a, DB> {
 impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
     type Error = DB::Error;
 
-    fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
-        self.inner_db.basic(address)
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        self.inner_db.basic_ref(address)
     }
 
-    fn code_by_hash(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        self.inner_db.code_by_hash(code_hash)
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        self.inner_db
+            .code_by_hash_ref(code_hash)
     }
 
-    fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
+    fn storage_ref(&self, address: Address, index: rU256) -> Result<rU256, Self::Error> {
         match self.overrides.get(&address) {
-            None => self.inner_db.storage(address, index),
+            None => self
+                .inner_db
+                .storage_ref(address, index),
             Some(slot_overrides) => match slot_overrides.get(&index) {
                 Some(value) => {
                     debug!(%address, %index, %value, "Requested storage of account {:x?} slot {}", address, index);
                     Ok(*value)
                 }
-                None => self.inner_db.storage(address, index),
+                None => self
+                    .inner_db
+                    .storage_ref(address, index),
             },
         }
     }
 
-    fn block_hash(&self, number: rU256) -> Result<B256, Self::Error> {
-        self.inner_db.block_hash(number)
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        self.inner_db.block_hash_ref(number)
     }
 }
 
@@ -123,7 +128,7 @@ impl<M: Middleware> SimulationDB<M> {
     ///   is downloaded from a node; all data must be inserted manually.
     pub fn init_account(
         &self,
-        address: B160,
+        address: Address,
         mut account: AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
@@ -150,9 +155,9 @@ impl<M: Middleware> SimulationDB<M> {
     /// Returns a state update struct to revert this update.
     pub fn update_state(
         &mut self,
-        updates: &HashMap<B160, StateUpdate>,
+        updates: &HashMap<Address, StateUpdate>,
         block: BlockHeader,
-    ) -> HashMap<B160, StateUpdate> {
+    ) -> HashMap<Address, StateUpdate> {
         info!("Received account state update.");
         let mut revert_updates = HashMap::new();
         self.block = Some(block);
@@ -215,26 +220,27 @@ impl<M: Middleware> SimulationDB<M> {
     /// information, or an error of type `SimulationDB<M>::Error` if the query fails.
     fn query_account_info(
         &self,
-        address: B160,
+        address: Address,
     ) -> Result<AccountInfo, <SimulationDB<M> as DatabaseRef>::Error> {
         debug!("Querying account info of {:x?} at block {:?}", address, self.block);
         let block_id: Option<BlockId> = self.block.map(|v| v.into());
         let fut = async {
             tokio::join!(
                 self.client
-                    .get_balance(H160(address.0), block_id),
+                    .get_balance(H160(**address), block_id),
                 self.client
-                    .get_transaction_count(H160(address.0), block_id),
+                    .get_transaction_count(H160(**address), block_id),
                 self.client
-                    .get_code(H160(address.0), block_id),
+                    .get_code(H160(**address), block_id),
             )
         };
 
         let (balance, nonce, code) = self.block_on(fut);
-        let code = to_analysed(Bytecode::new_raw(
-            code.unwrap_or_else(|e| panic!("ethers get code error: {e:?}"))
+        let code = to_analysed(Bytecode::new_raw(revm::primitives::Bytes::copy_from_slice(
+            &code
+                .unwrap_or_else(|e| panic!("ethers get code error: {e:?}"))
                 .0,
-        ));
+        )));
         Ok(AccountInfo::new(
             rU256::from_limbs(
                 balance
@@ -262,12 +268,12 @@ impl<M: Middleware> SimulationDB<M> {
     /// or an error of type `SimulationDB<M>::Error` if the query fails.
     pub fn query_storage(
         &self,
-        address: B160,
+        address: Address,
         index: rU256,
     ) -> Result<rU256, <SimulationDB<M> as DatabaseRef>::Error> {
         let index_h256 = H256::from(index.to_be_bytes());
         let fut = async {
-            let address = H160::from(address.0);
+            let address = H160::from(**address);
             let storage = self
                 .client
                 .get_storage_at(address, index_h256, self.block.map(|v| v.into()))
@@ -324,20 +330,20 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the account is not present in the storage, the function queries the account information
     ///   from the contract, initializes the account in the storage with the retrieved information,
     ///   and returns a clone of the account information.
-    fn basic(&self, address: B160) -> Result<Option<AccountInfo>, Self::Error> {
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         if let Some(account) = self
             .account_storage
             .borrow()
             .get_account_info(&address)
         {
-            return Ok(Some(account.clone()))
+            return Ok(Some(account.clone()));
         }
         let account_info = self.query_account_info(address)?;
         self.init_account(address, account_info.clone(), None, false);
         Ok(Some(account_info))
     }
 
-    fn code_by_hash(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
+    fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
         panic!("Code by hash is not implemented")
     }
 
@@ -375,7 +381,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// * If the contract is not present locally, the function queries the account info and storage
     ///   value from a node, initializes the account locally with the retrieved information, and
     ///   returns the storage value.
-    fn storage(&self, address: B160, index: rU256) -> Result<rU256, Self::Error> {
+    fn storage_ref(&self, address: Address, index: rU256) -> Result<rU256, Self::Error> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
@@ -388,7 +394,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                     (if is_mocked.unwrap_or(false) { "mocked" } else { "non-mocked" }),
                     storage_value
                 );
-                return Ok(storage_value)
+                return Ok(storage_value);
             }
         }
         // At this point we know we don't have data for this storage slot.
@@ -423,10 +429,12 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
 
     /// If block header is set, returns the hash. Otherwise returns a zero hash
     /// instead of querying a node.
-    fn block_hash(&self, _number: rU256) -> Result<B256, Self::Error> {
+    fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
         match &self.block {
-            Some(header) => Ok(B256::from(header.hash)),
-            None => Ok(B256::zero()),
+            Some(header) => Ok(B256::try_from(header.hash.as_bytes()).unwrap_or_else(|_| {
+                panic!("Failed to convert header hash {:?} to B256", header.hash)
+            })),
+            None => Ok(B256::ZERO),
         }
     }
 }
@@ -499,7 +507,7 @@ mod tests {
             .as_ref()
             .push(response_balance)
             .unwrap();
-        let address = B160::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
+        let address = Address::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
 
         let acc_info = mock_sim_db
             .query_account_info(address)
@@ -509,7 +517,7 @@ mod tests {
         assert_eq!(acc_info.nonce, response_nonce.as_u64());
         assert_eq!(
             acc_info.code,
-            Some(to_analysed(Bytecode::new_raw(ethers::types::Bytes::from([128; 1]).0)))
+            Some(to_analysed(Bytecode::new_raw(revm::primitives::Bytes::from([128; 1]))))
         );
     }
 
@@ -517,7 +525,7 @@ mod tests {
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
         let db = SimulationDB::new(get_client(), get_runtime(), None);
-        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from_limbs_slice(&[8]);
         db.init_account(address, AccountInfo::default(), None, false);
 
@@ -534,7 +542,7 @@ mod tests {
     fn test_query_storage_past_block(
         mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
-        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = rU256::from_limbs_slice(&[8]);
         let response_storage = H256::from_low_u64_le(123);
         mock_sim_db.init_account(address, AccountInfo::default(), None, false);
@@ -559,11 +567,11 @@ mod tests {
     ) -> Result<(), Box<dyn Error>> {
         // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
-        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_sim_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
 
         let acc_info = mock_sim_db
-            .basic(mock_acc_address)
+            .basic_ref(mock_acc_address)
             .unwrap()
             .unwrap();
 
@@ -585,12 +593,12 @@ mod tests {
         // Tests if mock accounts are not considered temp accounts and if the provider has not been
         // queried. Querying the mocked provider would cause a panic, therefore no assert is
         // needed.
-        let mock_acc_address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::ZERO;
         mock_sim_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
 
         let storage = mock_sim_db
-            .storage(mock_acc_address, storage_address)
+            .storage_ref(mock_acc_address, storage_address)
             .unwrap();
 
         assert_eq!(storage, rU256::ZERO);
@@ -601,7 +609,7 @@ mod tests {
     fn test_update_state(
         mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
     ) -> Result<(), Box<dyn Error>> {
-        let address = B160::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_sim_db.init_account(address, AccountInfo::default(), None, false);
 
         let mut new_storage = HashMap::default();
@@ -667,22 +675,24 @@ mod tests {
             .cloned()
             .collect();
 
-        let address1 = B160::from(1);
+        let address1 = Address::from_str("0000000000000000000000000000000000000001").unwrap();
         mock_sim_db.init_account(
             address1,
             AccountInfo::default(),
             Some(original_storage.clone()),
             false,
         );
-        let address2 = B160::from(2);
+        let address2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
         mock_sim_db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
 
         // override slot 1 of address 2
         // and slot 1 of address 3 which doesn't exist in the original DB
-        let address3 = B160::from(3);
+        let address3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
         let overridden_value1 = rU256::from_limbs_slice(&[101]);
-        let mut overrides: HashMap<B160, HashMap<revm::primitives::U256, revm::primitives::U256>> =
-            HashMap::new();
+        let mut overrides: HashMap<
+            Address,
+            HashMap<revm::primitives::U256, revm::primitives::U256>,
+        > = HashMap::new();
         overrides.insert(
             address2,
             [(slot1, overridden_value1)]
@@ -704,7 +714,7 @@ mod tests {
         // THEN...
         assert_eq!(
             overriden_db
-                .storage(address1, slot1)
+                .storage_ref(address1, slot1)
                 .expect("Value should be available"),
             orig_value1,
             "Slots of non-overridden account should hold original values."
@@ -712,7 +722,7 @@ mod tests {
 
         assert_eq!(
             overriden_db
-                .storage(address1, slot2)
+                .storage_ref(address1, slot2)
                 .expect("Value should be available"),
             orig_value2,
             "Slots of non-overridden account should hold original values."
@@ -720,7 +730,7 @@ mod tests {
 
         assert_eq!(
             overriden_db
-                .storage(address2, slot1)
+                .storage_ref(address2, slot1)
                 .expect("Value should be available"),
             overridden_value1,
             "Overridden slot of overridden account should hold an overridden value."
@@ -728,7 +738,7 @@ mod tests {
 
         assert_eq!(
             overriden_db
-                .storage(address2, slot2)
+                .storage_ref(address2, slot2)
                 .expect("Value should be available"),
             orig_value2,
             "Non-overridden slot of an account with other slots overridden \
@@ -737,7 +747,7 @@ mod tests {
 
         assert_eq!(
             overriden_db
-                .storage(address3, slot1)
+                .storage_ref(address3, slot1)
                 .expect("Value should be available"),
             overridden_value1,
             "Overridden slot of an overridden non-existent account should hold an overriden value."
@@ -770,7 +780,7 @@ mod tests {
             .unwrap(); // balance
         assert_eq!(
             overriden_db
-                .storage(address3, slot2)
+                .storage_ref(address3, slot2)
                 .expect("Value should be available"),
             rU256::from_limbs_slice(&[123]),
             "Non-overridden slot of a non-existent account should query a node."

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use chrono::{NaiveDateTime, Utc};
-use revm::primitives::{B160, B256, U256, U256 as rU256};
+use ethers::types::H256;
+use revm::primitives::{Address, B256, U256, U256 as rU256};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use strum_macros::{Display, EnumString};
@@ -66,8 +67,8 @@ impl From<Block> for BlockHeader {
     fn from(value: Block) -> Self {
         Self {
             number: value.number,
-            hash: value.hash.into(),
-            timestamp: value.ts.timestamp() as u64,
+            hash: H256::from(value.hash.0),
+            timestamp: value.ts.and_utc().timestamp() as u64,
         }
     }
 }
@@ -79,8 +80,8 @@ pub struct SwapPool {}
 pub struct Transaction {
     pub hash: B256,
     pub block_hash: B256,
-    pub from: B160,
-    pub to: Option<B160>,
+    pub from: Address,
+    pub to: Option<Address>,
     pub index: u64,
 }
 
@@ -93,8 +94,8 @@ pub struct BlockAccountChanges {
     extractor: String,
     chain: Chain,
     pub block: Block,
-    pub account_updates: HashMap<B160, AccountUpdate>,
-    pub new_pools: HashMap<B160, SwapPool>,
+    pub account_updates: HashMap<Address, AccountUpdate>,
+    pub new_pools: HashMap<Address, SwapPool>,
 }
 
 impl BlockAccountChanges {
@@ -102,8 +103,8 @@ impl BlockAccountChanges {
         extractor: String,
         chain: Chain,
         block: Block,
-        account_updates: HashMap<B160, AccountUpdate>,
-        new_pools: HashMap<B160, SwapPool>,
+        account_updates: HashMap<Address, AccountUpdate>,
+        new_pools: HashMap<Address, SwapPool>,
     ) -> Self {
         Self { extractor, chain, block, account_updates, new_pools }
     }
@@ -131,7 +132,7 @@ pub enum ChangeType {
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct AccountUpdate {
-    pub address: B160,
+    pub address: Address,
     pub chain: Chain,
     pub slots: HashMap<U256, U256>,
     pub balance: Option<U256>,
@@ -143,7 +144,7 @@ pub struct AccountUpdate {
 impl AccountUpdate {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        address: B160,
+        address: Address,
         chain: Chain,
         slots: HashMap<U256, U256>,
         balance: Option<U256>,
@@ -163,7 +164,7 @@ pub struct StateRequestBody {
 }
 
 impl StateRequestBody {
-    pub fn new(contract_ids: Option<Vec<B160>>, version: Version) -> Self {
+    pub fn new(contract_ids: Option<Vec<Address>>, version: Version) -> Self {
         Self {
             contract_ids: contract_ids.map(|ids| {
                 ids.into_iter()
@@ -202,7 +203,7 @@ impl StateRequestResponse {
 /// Code is serialized as a hex string instead of a list of bytes.
 pub struct ResponseAccount {
     pub chain: Chain,
-    pub address: B160,
+    pub address: Address,
     pub title: String,
     pub slots: HashMap<rU256, rU256>,
     pub balance: rU256,
@@ -218,7 +219,7 @@ impl ResponseAccount {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         chain: Chain,
-        address: B160,
+        address: Address,
         title: String,
         slots: HashMap<rU256, rU256>,
         balance: rU256,
@@ -260,9 +261,6 @@ impl std::fmt::Debug for ResponseAccount {
             .finish()
     }
 }
-
-/// Type alias for a contract address.
-pub type Address = B160;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ContractId {
