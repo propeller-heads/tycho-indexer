@@ -8,7 +8,7 @@ use revm::{
     inspector_handle_register,
     inspectors::CustomPrintTracer,
     primitives::{
-        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output,
+        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output, SpecId,
         TransactTo, TxEnv, U256 as rU256,
     },
     Evm,
@@ -109,6 +109,7 @@ where
             vm.transact()
         } else {
             let mut vm = Evm::builder()
+                .with_spec_id(SpecId::CANCUN)
                 .with_ref_db(db_ref)
                 .with_block_env(block_env)
                 .with_tx_env(tx_env)
