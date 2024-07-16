@@ -97,6 +97,7 @@ where
 
         let evm_result = if self.trace {
             let mut vm = Evm::builder()
+                .with_spec_id(SpecId::CANCUN)
                 .with_ref_db(db_ref)
                 .with_block_env(block_env)
                 .with_tx_env(tx_env)
