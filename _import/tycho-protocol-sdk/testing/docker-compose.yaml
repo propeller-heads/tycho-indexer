@@ -1,12 +1,14 @@
 version: '3.1'
 services:
   db:
-    image: ghcr.io/dbsystel/postgresql-partman:15-5
+    build:
+      dockerfile: postgres.Dockerfile
     restart: "always"
     environment:
       POSTGRESQL_PASSWORD: mypassword
       POSTGRESQL_DATABASE: tycho_indexer_0
       POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_SHARED_PRELOAD_LIBRARIES: pg_cron
     ports:
       - "5431:5432"
     volumes:

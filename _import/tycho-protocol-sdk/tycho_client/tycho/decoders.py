@@ -2,10 +2,10 @@ from decimal import Decimal
 from logging import getLogger
 from typing import Any
 
-from tycho.tycho.exceptions import TychoDecodeError
-from tycho.tycho.models import EVMBlock, EthereumToken
-from tycho.tycho.pool_state import ThirdPartyPool
-from tycho.tycho.utils import decode_tycho_exchange
+from .exceptions import TychoDecodeError
+from .models import EVMBlock, EthereumToken
+from .pool_state import ThirdPartyPool
+from .utils import decode_tycho_exchange
 
 log = getLogger(__name__)
 
@@ -98,7 +98,7 @@ class ThirdPartyPoolTychoDecoder:
 
     @staticmethod
     def apply_update(
-            pool: ThirdPartyPool,
+        pool: ThirdPartyPool,
         pool_update: dict[str, Any],
         balance_updates: dict[str, Any],
         block: EVMBlock,

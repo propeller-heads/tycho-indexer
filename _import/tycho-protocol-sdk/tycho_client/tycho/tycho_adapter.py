@@ -4,6 +4,7 @@ import platform
 import time
 from asyncio.subprocess import STDOUT, PIPE
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from http.client import HTTPException
@@ -13,18 +14,13 @@ from typing import Any, Optional, Dict
 import requests
 from protosim_py import AccountUpdate, AccountInfo, BlockHeader
 
-from tycho.tycho.constants import TYCHO_CLIENT_LOG_FOLDER, TYCHO_CLIENT_FOLDER
-from tycho.tycho.decoders import ThirdPartyPoolTychoDecoder
-from tycho.tycho.exceptions import APIRequestError, TychoClientException
-from tycho.tycho.models import (
-    Blockchain,
-    EVMBlock,
-    EthereumToken,
-    BlockProtocolChanges,
-    SynchronizerState,
-)
-from tycho.tycho.tycho_db import TychoDBSingleton
-from tycho.tycho.utils import create_engine
+from .pool_state import ThirdPartyPool
+from .constants import TYCHO_CLIENT_LOG_FOLDER, TYCHO_CLIENT_FOLDER
+from .decoders import ThirdPartyPoolTychoDecoder
+from .exceptions import APIRequestError, TychoClientException
+from .models import Blockchain, EVMBlock, EthereumToken, SynchronizerState, Address
+from .tycho_db import TychoDBSingleton
+from .utils import create_engine
 
 log = getLogger(__name__)
 
@@ -34,7 +30,7 @@ class TokenLoader:
         self,
         tycho_url: str,
         blockchain: Blockchain,
-        min_token_quality: Optional[int] = 51,
+        min_token_quality: Optional[int] = 0,
     ):
         self.tycho_url = tycho_url
         self.blockchain = blockchain
@@ -70,6 +66,34 @@ class TokenLoader:
 
         return formatted_tokens
 
+    def get_token_subset(self, addresses: list[str]) -> dict[str, EthereumToken]:
+        """Loads a subset of tokens from Tycho RPC"""
+        url = self.tycho_url + self.endpoint.format(self.blockchain.value)
+        page = 0
+
+        start = time.monotonic()
+        all_tokens = []
+        while data := self._get_all_with_pagination(
+            url=url,
+            page=page,
+            limit=self._token_limit,
+            params={"min_quality": self.min_token_quality, "addresses": addresses},
+        ):
+            all_tokens.extend(data)
+            page += 1
+            if len(data) < self._token_limit:
+                break
+
+        log.info(f"Loaded {len(all_tokens)} tokens in {time.monotonic() - start:.2f}s")
+
+        formatted_tokens = dict()
+
+        for token in all_tokens:
+            formatted = EthereumToken(**token)
+            formatted_tokens[formatted.address] = formatted
+
+        return formatted_tokens
+
     @staticmethod
     def _get_all_with_pagination(
         url: str, params: Optional[Dict] = None, page: int = 0, limit: int = 50
@@ -87,6 +111,17 @@ class TokenLoader:
         return r.json()["tokens"]
 
 
+@dataclass(repr=False)
+class BlockProtocolChanges:
+    block: EVMBlock
+    pool_states: dict[Address, ThirdPartyPool]
+    """All updated pools"""
+    removed_pools: set[Address]
+    sync_states: dict[str, SynchronizerState]
+    deserialization_time: float
+    """The time it took to deserialize the pool states from the tycho feed message"""
+
+
 class TychoPoolStateStreamAdapter:
     def __init__(
         self,
@@ -95,7 +130,7 @@ class TychoPoolStateStreamAdapter:
         decoder: ThirdPartyPoolTychoDecoder,
         blockchain: Blockchain,
         min_tvl: Optional[Decimal] = 10,
-        min_token_quality: Optional[int] = 51,
+        min_token_quality: Optional[int] = 0,
         include_state=True,
     ):
         """
@@ -122,7 +157,7 @@ class TychoPoolStateStreamAdapter:
 
         # Loads tokens from Tycho
         self._tokens: dict[str, EthereumToken] = TokenLoader(
-            tycho_url=self.tycho_url,
+            tycho_url=f"http://{self.tycho_url}",
             blockchain=self._blockchain,
             min_token_quality=self.min_token_quality,
         ).get_tokens()
@@ -139,11 +174,11 @@ class TychoPoolStateStreamAdapter:
 
         cmd = [
             "--log-folder",
-            TYCHO_CLIENT_LOG_FOLDER,
+            str(TYCHO_CLIENT_LOG_FOLDER),
             "--tycho-url",
             self.tycho_url,
             "--min-tvl",
-            self.min_tvl,
+            str(self.min_tvl),
         ]
         if not self._include_state:
             cmd.append("--no-state")
@@ -152,7 +187,7 @@ class TychoPoolStateStreamAdapter:
 
         log.debug(f"Starting tycho-client binary at {bin_path}. CMD: {cmd}")
         self.tycho_client = await asyncio.create_subprocess_exec(
-            bin_path, *cmd, stdout=PIPE, stderr=STDOUT, limit=2 ** 64
+            str(bin_path), *cmd, stdout=PIPE, stderr=STDOUT, limit=2 ** 64
         )
 
     @staticmethod

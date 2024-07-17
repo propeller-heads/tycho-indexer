@@ -13,10 +13,10 @@ from hexbytes import HexBytes
 from protosim_py import SimulationEngine, AccountInfo
 from web3 import Web3
 
-from tycho.tycho.constants import EXTERNAL_ACCOUNT, MAX_BALANCE
-from tycho.tycho.exceptions import OutOfGas
-from tycho.tycho.models import Address, EthereumToken
-from tycho.tycho.tycho_db import TychoDBSingleton
+from .constants import EXTERNAL_ACCOUNT, MAX_BALANCE
+from .exceptions import OutOfGas
+from .models import Address, EthereumToken
+from .tycho_db import TychoDBSingleton
 
 log = getLogger(__name__)
 
@@ -182,6 +182,8 @@ def get_storage_slot_at_key(key: Address, mapping_slot: int) -> int:
 
 @lru_cache
 def get_contract_bytecode(name: str) -> bytes:
+    """Load contract bytecode from a file in the assets directory"""
+    # TODO: Check if this locaation is correct
     with open(Path(__file__).parent / "assets" / name, "rb") as fh:
         code = fh.read()
     return code

@@ -17,9 +17,9 @@ from protosim_py import (
     StateUpdate,
 )
 
-from tycho.tycho.constants import EXTERNAL_ACCOUNT
-from tycho.tycho.models import Address, EthereumToken, EVMBlock, Capability
-from tycho.tycho.utils import load_abi, maybe_coerce_error
+from .constants import EXTERNAL_ACCOUNT
+from .models import Address, EthereumToken, EVMBlock, Capability
+from .utils import load_abi, maybe_coerce_error
 
 log = logging.getLogger(__name__)
 

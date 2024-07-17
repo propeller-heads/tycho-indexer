@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Final
 
-TYCHO_CLIENT_FOLDER = Path(__file__) / "bins"
+TYCHO_CLIENT_FOLDER = Path(__file__).parent / "bins"
 TYCHO_CLIENT_LOG_FOLDER = TYCHO_CLIENT_FOLDER / "logs"
 
 EXTERNAL_ACCOUNT: Final[str] = "0xf847a638E44186F3287ee9F8cAF73FF4d4B80784"

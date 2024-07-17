@@ -5,17 +5,17 @@ from copy import deepcopy
 from decimal import Decimal
 from fractions import Fraction
 from logging import getLogger
-from typing import Optional, cast, TypeVar
+from typing import Optional, cast, TypeVar, Annotated, DefaultDict
 
 from eth_typing import HexStr
 from protosim_py import SimulationEngine, AccountInfo
 from pydantic import BaseModel, PrivateAttr, Field
 
-from tycho.tycho.adapter_contract import AdapterContract
-from tycho.tycho.constants import MAX_BALANCE, EXTERNAL_ACCOUNT
-from tycho.tycho.exceptions import RecoverableSimulationException
-from tycho.tycho.models import EVMBlock, Capability, Address, EthereumToken
-from tycho.tycho.utils import (
+from .adapter_contract import AdapterContract
+from .constants import MAX_BALANCE, EXTERNAL_ACCOUNT
+from .exceptions import RecoverableSimulationException
+from .models import EVMBlock, Capability, Address, EthereumToken
+from .utils import (
     create_engine,
     get_contract_bytecode,
     frac_to_decimal,
@@ -54,9 +54,11 @@ class ThirdPartyPool(BaseModel):
     """The contract address for where protocol balances are stored (i.e. a vault contract).
     If given, balances will be overwritten here instead of on the pool contract during simulations."""
 
-    block_lasting_overwrites: defaultdict[Address, dict[int, int]] = Field(
-        default_factory=lambda: defaultdict(dict)
-    )
+    block_lasting_overwrites: DefaultDict[
+        Address,
+        Annotated[dict[int, int], Field(default_factory=lambda: defaultdict[dict])],
+    ]
+
     """Storage overwrites that will be applied to all simulations. They will be cleared
     when ``clear_all_cache`` is called, i.e. usually at each block. Hence the name."""
 

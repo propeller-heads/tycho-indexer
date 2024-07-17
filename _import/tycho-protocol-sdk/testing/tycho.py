@@ -7,7 +7,9 @@ import os
 import psycopg2
 from psycopg2 import sql
 
-binary_path = "./testing/tycho-indexer"
+from pathlib import Path
+
+binary_path = Path(__file__).parent / "tycho-indexer"
 
 
 class TychoRunner:
@@ -48,7 +50,7 @@ class TychoRunner:
                 bufsize=1,
                 env=env,
             )
-            
+
             with process.stdout:
                 for line in iter(process.stdout.readline, ""):
                     if line and self.with_binary_logs:
