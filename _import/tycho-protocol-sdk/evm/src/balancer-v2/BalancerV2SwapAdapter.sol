@@ -188,10 +188,11 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         override
         returns (Capability[] memory capabilities)
     {
-        capabilities = new Capability[](3);
+        capabilities = new Capability[](4);
         capabilities[0] = Capability.SellOrder;
         capabilities[1] = Capability.BuyOrder;
         capabilities[2] = Capability.PriceFunction;
+        capabilities[3] = Capability.HardLimits;
     }
 
     function getTokens(bytes32 poolId)

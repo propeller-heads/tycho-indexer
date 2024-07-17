@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import "forge-std/Test.sol";
+import "./AdapterTest.sol";
 import {
     BalancerV2SwapAdapter,
     IERC20,
     IVault
 } from "src/balancer-v2/BalancerV2SwapAdapter.sol";
-import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 import {FractionMath} from "src/libraries/FractionMath.sol";
 
-contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
+contract BalancerV2SwapAdapterTest is AdapterTest {
     using FractionMath for Fraction;
 
     IVault constant balancerV2Vault =
@@ -228,5 +227,11 @@ contract BalancerV2SwapAdapterTest is Test, ISwapAdapterTypes {
             )
         );
         adapter.getPoolIds(100, 200);
+    }
+
+    function testBalancerV2PoolBehaviour() public {
+        bytes32[] memory poolIds = new bytes32[](1);
+        poolIds[0] = B_80BAL_20WETH_POOL_ID;
+        testPoolBehaviour(adapter, poolIds);
     }
 }
