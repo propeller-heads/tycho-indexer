@@ -62,7 +62,7 @@ class ThirdPartyPoolTychoDecoder:
             adapter_contract_name=self.adapter_contract,
             minimum_gas=self.minimum_gas,
             hard_sell_limit=self.hard_limit,
-            trace=True,
+            trace=False,
             **optional_attributes,
         )
 

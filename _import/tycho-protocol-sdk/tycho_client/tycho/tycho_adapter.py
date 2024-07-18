@@ -3,7 +3,6 @@ import json
 import platform
 import time
 from asyncio.subprocess import STDOUT, PIPE
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -14,11 +13,11 @@ from typing import Any, Optional, Dict
 import requests
 from protosim_py import AccountUpdate, AccountInfo, BlockHeader
 
-from .pool_state import ThirdPartyPool
 from .constants import TYCHO_CLIENT_LOG_FOLDER, TYCHO_CLIENT_FOLDER
 from .decoders import ThirdPartyPoolTychoDecoder
 from .exceptions import APIRequestError, TychoClientException
 from .models import Blockchain, EVMBlock, EthereumToken, SynchronizerState, Address
+from .pool_state import ThirdPartyPool
 from .tycho_db import TychoDBSingleton
 from .utils import create_engine
 
@@ -117,7 +116,6 @@ class BlockProtocolChanges:
     pool_states: dict[Address, ThirdPartyPool]
     """All updated pools"""
     removed_pools: set[Address]
-    sync_states: dict[str, SynchronizerState]
     deserialization_time: float
     """The time it took to deserialize the pool states from the tycho feed message"""
 
@@ -153,7 +151,7 @@ class TychoPoolStateStreamAdapter:
         # Create engine
         # TODO: This should be initialized outside the adapter?
         TychoDBSingleton.initialize(tycho_http_url=self.tycho_url)
-        self._engine = create_engine([], trace=True)
+        self._engine = create_engine([], trace=False)
 
         # Loads tokens from Tycho
         self._tokens: dict[str, EthereumToken] = TokenLoader(
@@ -161,10 +159,6 @@ class TychoPoolStateStreamAdapter:
             blockchain=self._blockchain,
             min_token_quality=self.min_token_quality,
         ).get_tokens()
-
-        # TODO: Check if it's necessary
-        self.ignored_pools = []
-        self.vm_contracts = defaultdict(list)
 
     async def start(self):
         """Start the tycho-client Rust binary through subprocess"""
@@ -240,23 +234,31 @@ class TychoPoolStateStreamAdapter:
                 error_msg += f" Tycho logs: {last_lines}"
             log.exception(error_msg)
             raise Exception("Tycho-client failed.")
-        return self._process_message(msg)
+        return self.process_tycho_message(msg)
 
-    def _process_message(self, msg) -> BlockProtocolChanges:
-        try:
-            sync_state = msg["sync_states"][self.protocol]
-            state_msg = msg["state_msgs"][self.protocol]
-            log.info(f"Received sync state for {self.protocol}: {sync_state}")
-            if not sync_state["status"] != SynchronizerState.ready.value:
-                raise ValueError("Tycho-indexer is not synced")
-        except KeyError:
-            raise ValueError("Invalid message received from tycho-client.")
+    @staticmethod
+    def build_snapshot_message(
+        protocol_components: dict, protocol_states: dict, contract_states: dict
+    ) -> dict[str, ThirdPartyPool]:
+        vm_states = {state["address"]: state for state in contract_states["accounts"]}
+        states = {}
+        for component in protocol_components["protocol_components"]:
+            pool_id = component["id"]
+            states[pool_id] = {"component": component}
+        for state in protocol_states["states"]:
+            pool_id = state["component_id"]
+            if pool_id not in states:
+                log.warning(f"State for pool {pool_id} not found in components")
+                continue
+            states[pool_id]["state"] = state
+        snapshot = {"vm_storage": vm_states, "states": states}
 
-        start = time.monotonic()
+        return snapshot
 
-        removed_pools = set()
-        decoded_count = 0
-        failed_count = 0
+    def process_tycho_message(self, msg) -> BlockProtocolChanges:
+        self._validate_sync_states(msg)
+
+        state_msg = msg["state_msgs"][self.protocol]
 
         block = EVMBlock(
             id=msg["block"]["id"],
@@ -264,24 +266,30 @@ class TychoPoolStateStreamAdapter:
             hash_=msg["block"]["hash"],
         )
 
-        self._process_vm_storage(state_msg["snapshots"]["vm_storage"], block)
+        return self.process_snapshot(block, state_msg["snapshot"])
 
-        # decode new pools
+    def process_snapshot(
+        self, block: EVMBlock, state_msg: dict
+    ) -> BlockProtocolChanges:
+        start = time.monotonic()
+        removed_pools = set()
+        decoded_count = 0
+        failed_count = 0
+
+        self._process_vm_storage(state_msg["vm_storage"], block)
+
+        # decode new components
         decoded_pools, failed_pools = self._decoder.decode_snapshot(
-            state_msg["snapshots"]["states"], block, self._tokens
+            state_msg["states"], block, self._tokens
         )
 
         decoded_count += len(decoded_pools)
         failed_count += len(failed_pools)
 
-        for addr, p in decoded_pools.items():
-            self.vm_contracts[addr].append(p.id_)
         decoded_pools = {
             p.id_: p for p in decoded_pools.values()
         }  # remap pools to their pool ids
-
         deserialization_time = time.monotonic() - start
-
         total = decoded_count + failed_count
         log.debug(
             f"Received {total} snapshots. n_decoded: {decoded_count}, n_failed: {failed_count}"
@@ -295,6 +303,15 @@ class TychoPoolStateStreamAdapter:
             removed_pools=removed_pools,
             deserialization_time=round(deserialization_time, 3),
         )
+
+    def _validate_sync_states(self, msg):
+        try:
+            sync_state = msg["sync_states"][self.protocol]
+            log.info(f"Received sync state for {self.protocol}: {sync_state}")
+            if not sync_state["status"] != SynchronizerState.ready.value:
+                raise ValueError("Tycho-indexer is not synced")
+        except KeyError:
+            raise ValueError("Invalid message received from tycho-client.")
 
     def _process_vm_storage(self, storage: dict[str, Any], block: EVMBlock):
         vm_updates = []
@@ -325,4 +342,4 @@ class TychoPoolStateStreamAdapter:
             )
 
         block_header = BlockHeader(block.id, block.hash_, int(block.ts.timestamp()))
-        self._db.update(vm_updates, block_header)
+        TychoDBSingleton.get_instance().update(vm_updates, block_header)

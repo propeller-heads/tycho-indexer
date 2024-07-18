@@ -5,7 +5,7 @@ from copy import deepcopy
 from decimal import Decimal
 from fractions import Fraction
 from logging import getLogger
-from typing import Optional, cast, TypeVar, Annotated, DefaultDict
+from typing import Optional, cast, TypeVar, Annotated
 
 from eth_typing import HexStr
 from protosim_py import SimulationEngine, AccountInfo
@@ -54,10 +54,10 @@ class ThirdPartyPool(BaseModel):
     """The contract address for where protocol balances are stored (i.e. a vault contract).
     If given, balances will be overwritten here instead of on the pool contract during simulations."""
 
-    block_lasting_overwrites: DefaultDict[
+    block_lasting_overwrites: defaultdict[
         Address,
         Annotated[dict[int, int], Field(default_factory=lambda: defaultdict[dict])],
-    ]
+    ] = Field(default_factory=lambda: defaultdict(dict))
 
     """Storage overwrites that will be applied to all simulations. They will be cleared
     when ``clear_all_cache`` is called, i.e. usually at each block. Hence the name."""
@@ -98,6 +98,18 @@ class ThirdPartyPool(BaseModel):
         else:
             engine = create_engine([t.address for t in self.tokens], trace=self.trace)
             engine.init_account(
+                address="0x0000000000000000000000000000000000000000",
+                account=AccountInfo(balance=0, nonce=0),
+                mocked=False,
+                permanent_storage=None,
+            )
+            engine.init_account(
+                address="0x0000000000000000000000000000000000000004",
+                account=AccountInfo(balance=0, nonce=0),
+                mocked=False,
+                permanent_storage=None,
+            )
+            engine.init_account(
                 address=ADAPTER_ADDRESS,
                 account=AccountInfo(
                     balance=0,
@@ -116,6 +128,7 @@ class ThirdPartyPool(BaseModel):
                 )
         self._engine = engine
 
+    def _set_spot_prices(self):
         """Set the spot prices for this pool.
 
         We currently require the price function capability for now.

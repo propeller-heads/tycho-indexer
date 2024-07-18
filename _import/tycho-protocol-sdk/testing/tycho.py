@@ -1,13 +1,13 @@
+import os
 import signal
+import subprocess
 import threading
 import time
-import requests
-import subprocess
-import os
-import psycopg2
-from psycopg2 import sql
-
 from pathlib import Path
+
+import psycopg2
+import requests
+from psycopg2 import sql
 
 binary_path = Path(__file__).parent / "tycho-indexer"
 
@@ -142,6 +142,16 @@ class TychoRunner:
     def get_protocol_state() -> dict:
         """Retrieve protocol state from the RPC server."""
         url = "http://0.0.0.0:4242/v1/ethereum/protocol_state"
+        headers = {"accept": "application/json", "Content-Type": "application/json"}
+        data = {}
+
+        response = requests.post(url, headers=headers, json=data)
+        return response.json()
+
+    @staticmethod
+    def get_contract_state() -> dict:
+        """Retrieve contract state from the RPC server."""
+        url = "http://0.0.0.0:4242/v1/ethereum/contract_state"
         headers = {"accept": "application/json", "Content-Type": "application/json"}
         data = {}
 
