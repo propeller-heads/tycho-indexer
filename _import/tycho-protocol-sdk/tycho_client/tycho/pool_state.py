@@ -322,56 +322,10 @@ class ThirdPartyPool(BaseModel):
         )[0]
         return sell_token.from_onchain_amount(limit)
 
-    def simulate_transition(
-        self: TPoolState,
-        sell_token: EthereumToken,
-        buy_token: EthereumToken,
-        target_price: Decimal,
-        max_sell_amount: Decimal,
-    ) -> tuple[Decimal, Decimal, int, TPoolState]:
-        pass
-
-    def update_inplace(self, new: "ThirdPartyPool"):
-        """
-        Updates the current `ThirdPartyPool` in-place.
-
-        If the block attribute of the `new` state differs from the block attribute of
-        the current state, the temporary storage of the simulation engine is cleared.
-
-        Parameters
-        ----------
-        new
-            The new state object to update from.
-
-        """
-        old_block = self.block
-        super(ThirdPartyPool, self).update_inplace(new)
-        self.block_lasting_overwrites = new.block_lasting_overwrites.copy()
-        if new.block != old_block:
-            self.clear_all_cache()
-
     def clear_all_cache(self):
         self._engine.clear_temp_storage()
         self.block_lasting_overwrites = defaultdict(dict)
         self._set_spot_prices()
-
-    # def transition(self, event: ProtocolEvent) -> "ThirdPartyPool":
-    #     """Make a new pool state so that everything's initialised from scratch.
-    #
-    #     Instead of interpreting the event and applying the changes in signals, we just
-    #     create a fresh instance of the pool. This way all dynamic parameters will be
-    #     set again using the on-chain data.
-    #     """
-    #     new = type(self)(
-    #         block=self.block,
-    #         id_=self.id_,
-    #         tokens=self.tokens,
-    #         balances=self.balances.copy(),
-    #     )
-    #     if isinstance(event, ERC20Transfer):
-    #         transition_balances_inplace(self.id_, event, new.balances)
-    #     return new
-    #
 
 
 def _merge(a: dict, b: dict, path=None):
