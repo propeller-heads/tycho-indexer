@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import "forge-std/Test.sol";
+import "./AdapterTest.sol";
 import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import "src/uniswap-v2/UniswapV2SwapAdapter.sol";
 import "src/interfaces/ISwapAdapterTypes.sol";
 import "src/libraries/FractionMath.sol";
 
-contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
+contract UniswapV2PairFunctionTest is AdapterTest {
     using FractionMath for Fraction;
 
     UniswapV2SwapAdapter adapter;
@@ -159,5 +159,11 @@ contract UniswapV2PairFunctionTest is Test, ISwapAdapterTypes {
         uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
 
         assertEq(limits.length, 2);
+    }
+
+    function testUsv2PoolBehaviour() public {
+        bytes32[] memory poolIds = new bytes32[](1);
+        poolIds[0] = bytes32(bytes20(USDC_WETH_PAIR));
+        testPoolBehaviour(adapter, poolIds);
     }
 }
