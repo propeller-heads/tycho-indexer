@@ -1,4 +1,4 @@
-./tycho/bins/protosim_py-0.4.9-cp39-cp39-macosx_11_0_arm64.whl
+./tycho/bins/protosim_py-0.4.9-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 requests==2.32.2
 eth-abi==2.2.0
 eth-typing==2.3.0

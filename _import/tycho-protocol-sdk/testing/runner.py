@@ -15,9 +15,7 @@ from evm import get_token_balance, get_block_header
 from tycho import TychoRunner
 from tycho_client.tycho.decoders import ThirdPartyPoolTychoDecoder
 from tycho_client.tycho.models import Blockchain, EVMBlock
-from tycho_client.tycho.tycho_adapter import (
-    TychoPoolStateStreamAdapter,
-)
+from tycho_client.tycho.tycho_adapter import TychoPoolStateStreamAdapter
 
 
 class TestResult:

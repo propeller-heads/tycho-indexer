@@ -5,7 +5,9 @@ FROM --platform=linux/amd64 continuumio/miniconda3:24.4.0-0
 WORKDIR /app
 
 # Add current directory code to /app in container
-ADD . /app/testing
+ADD ./testing /app/testing
+ADD ./tycho_client /app/tycho_client
+
 RUN chmod +x /app/testing/tycho-indexer
 
 # Create a new conda environment and install pip
@@ -20,7 +22,7 @@ RUN apt-get update \
     && pip install psycopg2 \
     && apt-get clean
 
-RUN /bin/bash -c "source activate myenv && pip install --no-cache-dir -r testing/requirements.txt"
+RUN /bin/bash -c "source activate myenv && pip install --no-cache-dir -r testing/requirements.txt && cd /app/tycho_client && pip install -r requirements-docker.txt && cd -"
 
 # Make port 80 available to the world outside this container
 EXPOSE 80

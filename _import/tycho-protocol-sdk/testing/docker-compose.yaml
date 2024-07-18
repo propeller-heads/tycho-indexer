@@ -15,8 +15,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: testing/Dockerfile
     volumes:
       - ${SUBSTREAMS_PATH}:/app/substreams/my_substream
       - ../substreams:/app/substreams

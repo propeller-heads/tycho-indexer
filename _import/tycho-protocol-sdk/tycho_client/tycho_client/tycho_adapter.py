@@ -343,3 +343,4 @@ class TychoPoolStateStreamAdapter:
 
         block_header = BlockHeader(block.id, block.hash_, int(block.ts.timestamp()))
         TychoDBSingleton.get_instance().update(vm_updates, block_header)
+
