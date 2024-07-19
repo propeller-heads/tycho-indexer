@@ -104,3 +104,38 @@ tests:
             - "0x0000000000000000000000000000000000000000"
           static_attributes:
           creation_tx: "0x2bd59c19f993b83729fb23498f897a58567c6f0b3ee2f00613ba515a7b19fe23"
+  - name: test_twocrypto_factory_creation
+    start_block: 19760009
+    stop_block: 19763634
+    expected_state:
+      protocol_components:
+        - id: "0x011e998d2d794424de95935d55a6ca81822ecb2b"
+          tokens:
+            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
+            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          static_attributes:
+          creation_tx: "0x412b745a9467aed14f22d2a4cc30651939872d19cee65053f14dd3eb9d488003"
+        - id: "0x19d2b5ce188ca60790755204691e38102749297b"
+          tokens:
+            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
+            - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+          static_attributes:
+          creation_tx: "0x61118d9903f8344e5971d1e7c781f76e855996408dac979d3a4971cefafa6587"
+        - id: "0xb3341ca63b6cecf1e1a0d1a99bf0587f4c305652"
+          tokens:
+            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
+            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          static_attributes:
+          creation_tx: "0xc69332294313b3a8f260e0d5b6a50f0d83707f715fbd8016c32ca61a39ce7ad5"
+        - id: "0x99ca0fbaa278cd62e26f0e9b6d167b07d1f0d51b"
+          tokens:
+            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
+            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          static_attributes:
+          creation_tx: "0xf2b0c697161f08384c642297e01b3a35f7ec00dd3871d4237a16ae4bb8a1ca99"
+        - id: "0xde73e407efc75edbafc5bcd62ebb1e7a9b38ebcd"
+          tokens:
+            - "0x0d86883faf4ffd7aeb116390af37746f45b6f378"
+            - "0x78da5799cf427fee11e9996982f4150ece7a99a7"
+          static_attributes:
+          creation_tx: "0xd4ad7efdcc16d797dd3494ba02b377da4127fd5b1bd25089858b66e5a7e456ab"

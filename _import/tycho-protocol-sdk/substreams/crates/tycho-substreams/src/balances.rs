@@ -21,7 +21,11 @@
 //! Through this sequence, the module ensures the transformation from relative to absolute
 //! balances is conducted with high fidelity, upholding the integrity of transactional data.
 
-use crate::pb::tycho::evm::v1::{BalanceChange, BlockBalanceDeltas, Transaction};
+use crate::{
+    abi,
+    pb::tycho::evm::v1::{BalanceChange, BlockBalanceDeltas, Transaction},
+    prelude::BalanceDelta,
+};
 use itertools::Itertools;
 use std::{collections::HashMap, str::FromStr};
 use substreams::{
@@ -29,6 +33,7 @@ use substreams::{
     pb::substreams::StoreDeltas,
     prelude::{BigInt, StoreAdd},
 };
+use substreams_ethereum::{pb::eth::v2::TransactionTrace, Event};
 
 /// Stores relative balance changes in an additive manner.
 ///
@@ -156,6 +161,74 @@ pub fn aggregate_balances_changes(
             (txh, (transactions.pop().unwrap(), balances))
         })
         .collect()
+}
+
+/// Extracts balance deltas from a transaction trace based on a given address predicate.
+///
+/// This function processes the logs within a transaction trace to identify ERC-20 token transfer
+/// events. It applies the given predicate to determine which addresses are of interest and extracts
+/// the balance changes (deltas) for those addresses. The balance deltas are then returned as a
+/// vector.
+///
+/// # Arguments
+///
+/// * `tx` - A reference to a `TransactionTrace` which contains the transaction logs and other
+///   details.
+/// * `address_predicate` - A predicate function that takes two byte slices representing a token and
+///   a component and returns a boolean. This function is used to filter which addresses' balance
+///   changes should be extracted.
+///
+/// # Returns
+///
+/// A vector of `BalanceDelta` structs, each representing a change in balance for a specific address
+/// within the transaction.
+///
+/// # Example
+///
+/// ```
+/// let predicate = |log_address: &[u8], transfer_address: &[u8]| -> bool {
+///     // Your predicate logic here, e.g., checking if the address matches a specific pattern.
+///     true
+/// };
+///
+/// let balance_deltas = extract_balance_deltas_from_tx(&tx, predicate);
+/// ```
+///
+/// # Notes
+///
+/// - It is assumed that the transactor is the component. If the protocol follows a different
+///   design, this function may not be applicable.
+/// - The `address_predicate` is applied to both the log address and the `from`/`to` addresses in
+///   the transfer event.
+pub fn extract_balance_deltas_from_tx<F: Fn(&[u8], &[u8]) -> bool>(
+    tx: &TransactionTrace,
+    address_predicate: F,
+) -> Vec<BalanceDelta> {
+    let mut balance_deltas = vec![];
+
+    tx.logs_with_calls()
+        .for_each(|(log, _)| {
+            if let Some(transfer) = abi::erc20::events::Transfer::match_and_decode(log) {
+                let mut create_balance_delta = |transactor: &[u8], delta: BigInt| {
+                    balance_deltas.push(BalanceDelta {
+                        ord: log.ordinal,
+                        tx: Some(tx.into()),
+                        token: log.address.clone(),
+                        delta: delta.to_signed_bytes_be(),
+                        component_id: hex::encode(transactor).into(),
+                    });
+                };
+
+                if address_predicate(&log.address, &transfer.from) {
+                    create_balance_delta(&transfer.from, transfer.value.neg());
+                }
+                if address_predicate(&log.address, &transfer.to) {
+                    create_balance_delta(&transfer.to, transfer.value);
+                }
+            }
+        });
+
+    balance_deltas
 }
 
 #[cfg(test)]

@@ -566,7 +566,11 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: pool_added.coins.into(),
+                    tokens: pool_added
+                        .coins
+                        .into_iter()
+                        .filter(|token| *token != [0; 20])
+                        .collect(),
                     contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
@@ -677,6 +681,54 @@ pub fn address_map(
                 None
             }
         }
+        TWOCRYPTO_FACTORY => {
+            if let Some(pool_added) =
+                abi::twocrypto_factory::events::TwocryptoPoolDeployed::match_and_decode(log)
+            {
+                Some(ProtocolComponent {
+                    id: hex::encode(&pool_added.pool),
+                    tx: Some(Transaction {
+                        to: tx.to.clone(),
+                        from: tx.from.clone(),
+                        hash: tx.hash.clone(),
+                        index: tx.index.into(),
+                    }),
+                    tokens: pool_added.coins.into(),
+                    contracts: vec![pool_added.pool],
+                    static_att: vec![
+                        Attribute {
+                            name: "pool_type".into(),
+                            value: "twocrypto".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "name".into(),
+                            value: pool_added.name.into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "factory_name".into(),
+                            value: "twocrypto_factory".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "factory".into(),
+                            value: address_to_bytes_with_0x(&TWOCRYPTO_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                    ],
+                    change: ChangeType::Creation.into(),
+                    protocol_type: Some(ProtocolType {
+                        name: "curve_pool".into(),
+                        financial_type: FinancialType::Swap.into(),
+                        attribute_schema: Vec::new(),
+                        implementation_type: ImplementationType::Vm.into(),
+                    }),
+                })
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -705,6 +757,10 @@ fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
                 // Curve.fi DAI/USDC/USDT (3Crv)
                 "bebc44782c7db0a1a60cb6fe97d0b483032ff1c7" => {
                     hex::decode("6c3F90f043a72FA612cbac8115EE7e52BDe6E490").ok()
+                }
+                // Curve.fi renBTC/wBTC/sBTC (crvRenWSBTC)
+                "7fc77b5c7614e1533320ea6ddc2eb61fa00a9714" => {
+                    hex::decode("075b1bb99792c9e1041ba13afef80c91a1e70fb3").ok()
                 }
                 // Placeholder if we can't find the token. It will help us to detect these missing
                 // token easily with a SQL query.

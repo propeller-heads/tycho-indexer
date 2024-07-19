@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "substreams_curve"
-  version: v0.1.0
+  version: v0.2.0
 
 protobuf:
   files:

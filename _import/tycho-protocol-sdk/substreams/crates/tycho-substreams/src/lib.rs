@@ -1,3 +1,4 @@
+mod abi;
 pub mod balances;
 pub mod contract;
 mod mock_store;

@@ -13,6 +13,7 @@ abis = {
     "MainRegistry": "0x90E00ACe148ca3b23Ac1bC8C240C2a7Dd9c2d7f5",
     "MetaPoolFactory": "0xB9fC157394Af804a3578134A6585C0dc9cc990d4",
     "CryptoPoolFactory": "0xF18056Bbd320E96A48e3Fbf8bC061322531aac99",
+    "TwocryptoFactory": "0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F",
     # pool
     "Pool": "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
     "3Pool": "0x5F890841f657d90E081bAbdB532A05996Af79Fe6",

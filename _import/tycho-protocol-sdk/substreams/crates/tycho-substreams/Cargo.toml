@@ -1,6 +1,6 @@
 [package]
 name = "tycho-substreams"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
@@ -9,3 +9,5 @@ substreams.workspace = true
 prost.workspace = true
 hex.workspace = true
 itertools = "0.12.0"
+ethabi.workspace = true
+num-bigint = "0.4.4"

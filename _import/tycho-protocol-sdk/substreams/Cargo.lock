@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-curve"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1097,10 +1097,12 @@ dependencies = [
 
 [[package]]
 name = "tycho-substreams"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "ethabi 18.0.0",
  "hex",
  "itertools 0.12.1",
+ "num-bigint",
  "prost 0.11.9",
  "substreams",
  "substreams-ethereum",
