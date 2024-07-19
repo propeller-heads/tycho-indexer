@@ -35,8 +35,7 @@ interface ISwapAdapterTypes {
         // revert (optional)
         HardLimits,
         // Indicates whether the pool's price function can be called with
-        // amountIn=0 to return the
-        // current price (optional)
+        // amountIn=0 to return the current price (optional)
         MarginalPrice
     }
 
