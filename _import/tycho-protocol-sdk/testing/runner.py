@@ -135,12 +135,13 @@ class TestRunner:
                     tycho_balance = int(balance_hex, 16)
                     token_balances[comp_id][token_lower] = tycho_balance
 
-                    node_balance = get_token_balance(token, comp_id, stop_block)
-                    if node_balance != tycho_balance:
-                        return TestResult.Failed(
-                            f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} "
-                            f"from rpc call and {tycho_balance} from Substreams"
-                        )
+                    if self.config["skip_balance_check"] is not True:
+                        node_balance = get_token_balance(token, comp_id, stop_block)
+                        if node_balance != tycho_balance:
+                            return TestResult.Failed(
+                                f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} "
+                                f"from rpc call and {tycho_balance} from Substreams"
+                            )
             contract_states = self.tycho_runner.get_contract_state()
             simulation_failures = self.simulate_get_amount_out(
                 token_balances,

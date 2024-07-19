@@ -22,7 +22,7 @@ Tests are defined in a `yaml` file. A template can be found at `substreams/ether
 Each test will index all blocks between `start-block` and `stop-block` and verify that the indexed state matches the expected state.
 
 You will also need the EVM Runtime file for the adapter contract. 
-The script to generate this file is available under `/evm/scripts/buildRuntime.sh`.
+The script to generate this file is available under `evm/scripts/buildRuntime.sh`.
 Please place this Runtime file under the respective `substream` directory inside the `evm` folder.
 
 ## Running Tests

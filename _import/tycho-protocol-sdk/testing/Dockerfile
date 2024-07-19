@@ -5,7 +5,7 @@ FROM --platform=linux/amd64 continuumio/miniconda3:24.4.0-0
 WORKDIR /app
 
 # Add current directory code to /app in container
-ADD ./ /app/testing
+ADD . /app/testing
 
 RUN chmod +x /app/testing/tycho-indexer
 

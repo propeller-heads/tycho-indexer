@@ -1,4 +1,6 @@
 substreams_yaml_path: ./substreams.yaml
+adapter_contract: "SwapAdapter.evm.runtime"
+skip_balance_check: false
 protocol_type_names:
   - "type_name_1"
   - "type_name_2"

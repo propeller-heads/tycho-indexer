@@ -40,7 +40,7 @@ class Trade(NamedTuple):
 
 
 class ProtoSimResponse:
-    def __init__(self, return_value: Any, simulation_result: "SimulationResult"):
+    def __init__(self, return_value: Any, simulation_result: SimulationResult):
         self.return_value = return_value
         self.simulation_result = simulation_result
 
