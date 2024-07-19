@@ -131,7 +131,11 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
             block_tx
                 .calls
                 .iter()
-                .filter(|call| !call.state_reverted && inclusion_predicate(&call.address))
+                .filter(|call| {
+                    !call.state_reverted && inclusion_predicate(&call.address) ||
+                        inclusion_predicate(&call.caller) // In the context of DELEGATECALL
+                                                          // call.caller changes it's own state
+                })
                 .for_each(|call| {
                     storage_changes.extend(call.storage_changes.iter());
                     balance_changes.extend(call.balance_changes.iter());
