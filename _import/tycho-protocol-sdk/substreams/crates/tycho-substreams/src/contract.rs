@@ -10,9 +10,9 @@
 /// more [here](https://streamingfastio.medium.com/new-block-model-to-accelerate-chain-integration-9f65126e5425)
 use std::collections::HashMap;
 
-use substreams_ethereum::pb::{
-    eth,
-    eth::v2::{block::DetailLevel, StorageChange},
+use substreams_ethereum::pb::eth::{
+    self,
+    v2::{block::DetailLevel, CallType, StorageChange},
 };
 
 use crate::pb::tycho::evm::v1::{self as tycho};
@@ -128,19 +128,21 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
             let mut balance_changes = Vec::new();
             let mut code_changes = Vec::new();
 
-            block_tx
-                .calls
-                .iter()
-                .filter(|call| {
-                    !call.state_reverted && inclusion_predicate(&call.address) ||
-                        inclusion_predicate(&call.caller) // In the context of DELEGATECALL
-                                                          // call.caller changes it's own state
-                })
-                .for_each(|call| {
-                    storage_changes.extend(call.storage_changes.iter());
-                    balance_changes.extend(call.balance_changes.iter());
-                    code_changes.extend(call.code_changes.iter());
-                });
+            let filtered_calls = block_tx.calls.iter().filter(|call| {
+                let address_included = inclusion_predicate(&call.address);
+                let caller_included = inclusion_predicate(&call.caller);
+                let is_delegate_or_callcode = call.call_type() == CallType::Delegate ||
+                    call.call_type() == CallType::Callcode;
+
+                !call.state_reverted &&
+                    (address_included || (caller_included && is_delegate_or_callcode))
+            });
+
+            filtered_calls.for_each(|call| {
+                storage_changes.extend(call.storage_changes.iter());
+                balance_changes.extend(call.balance_changes.iter());
+                code_changes.extend(call.code_changes.iter());
+            });
 
             storage_changes.sort_unstable_by_key(|change| change.ordinal);
             balance_changes.sort_unstable_by_key(|change| change.ordinal);
