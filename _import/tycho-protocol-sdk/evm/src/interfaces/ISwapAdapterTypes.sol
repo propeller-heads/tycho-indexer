@@ -33,7 +33,10 @@ interface ISwapAdapterTypes {
         ScaledPrices,
         // Indicates that if we try to go over the sell limits, the pool will
         // revert (optional)
-        HardLimits
+        HardLimits,
+        // Indicates whether the pool's price function can be called with
+        // amountIn=0 to return the current price (optional)
+        MarginalPrice
     }
 
     /// @dev Representation used for rational numbers such as prices.
