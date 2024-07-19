@@ -87,6 +87,8 @@ contract AdapterTest is Test, ISwapAdapterTypes {
         Trade memory trade;
         deal(tokenIn, address(this), 5 * amounts[amounts.length - 1]);
 
+        uint256 initialState = vm.snapshot();
+
         for (uint256 j = 1; j < amounts.length; j++) {
             console2.log(
                 "TEST: Testing behavior for price at %s of limit.",
@@ -139,6 +141,8 @@ contract AdapterTest is Test, ISwapAdapterTypes {
                     "Price should be or equal to price after swap."
                 );
             }
+
+            vm.revertTo(initialState);
         }
         uint256 amountAboveLimit = sellLimit * 105 / 100;
 
@@ -167,7 +171,10 @@ contract AdapterTest is Test, ISwapAdapterTypes {
         address tokenOut,
         uint256 amountAboveLimit
     ) internal {
-        console2.log("TEST: Testing revert behavior above the sell limit");
+        console2.log(
+            "TEST: Testing revert behavior above the sell limit: %d",
+            amountAboveLimit
+        );
         uint256[] memory aboveLimitArray = new uint256[](1);
         aboveLimitArray[0] = amountAboveLimit;
 
@@ -198,7 +205,10 @@ contract AdapterTest is Test, ISwapAdapterTypes {
         address tokenOut,
         uint256 amountAboveLimit
     ) internal {
-        console2.log("TEST: Testing operations above the sell limit");
+        console2.log(
+            "TEST: Testing operations above the sell limit: %d",
+            amountAboveLimit
+        );
         uint256[] memory aboveLimitArray = new uint256[](1);
         aboveLimitArray[0] = amountAboveLimit;
 

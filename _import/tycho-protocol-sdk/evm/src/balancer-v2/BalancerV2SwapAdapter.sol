@@ -9,7 +9,7 @@ import {
 
 // Maximum Swap In/Out Ratio - 0.3
 // https://balancer.gitbook.io/balancer/core-concepts/protocol/limitations#v2-limits
-uint256 constant RESERVE_LIMIT_FACTOR = 4;
+uint256 constant RESERVE_LIMIT_FACTOR = 3;
 uint256 constant SWAP_DEADLINE_SEC = 1000;
 
 contract BalancerV2SwapAdapter is ISwapAdapter {
@@ -174,10 +174,10 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
 
         for (uint256 i = 0; i < tokens.length; i++) {
             if (tokens[i] == sellToken) {
-                limits[0] = balances[i] / RESERVE_LIMIT_FACTOR;
+                limits[0] = balances[i] * RESERVE_LIMIT_FACTOR / 10;
             }
             if (tokens[i] == buyToken) {
-                limits[1] = balances[i] / RESERVE_LIMIT_FACTOR;
+                limits[1] = balances[i] * RESERVE_LIMIT_FACTOR / 10;
             }
         }
     }
@@ -188,10 +188,11 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         override
         returns (Capability[] memory capabilities)
     {
-        capabilities = new Capability[](3);
+        capabilities = new Capability[](4);
         capabilities[0] = Capability.SellOrder;
         capabilities[1] = Capability.BuyOrder;
         capabilities[2] = Capability.PriceFunction;
+        capabilities[3] = Capability.HardLimits;
     }
 
     function getTokens(bytes32 poolId)
