@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Final
 
+ASSETS_FOLDER = Path(__file__).parent / "assets"
 TYCHO_CLIENT_FOLDER = Path(__file__).parent / "bins"
 TYCHO_CLIENT_LOG_FOLDER = TYCHO_CLIENT_FOLDER / "logs"
 

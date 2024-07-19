@@ -1,6 +1,7 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_type_names:
   - "curve_pool"
+adapter_contract: "CurveSwapAdapter.evm.runtime"
 tests:
   - name: test_3pool_creation
     start_block: 10809470

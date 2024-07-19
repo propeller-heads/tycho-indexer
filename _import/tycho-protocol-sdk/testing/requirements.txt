@@ -2,3 +2,4 @@ psycopg2==2.9.9
 PyYAML==6.0.1
 Requests==2.32.2
 web3==5.31.3
+./tycho-client

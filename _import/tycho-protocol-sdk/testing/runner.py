@@ -1,5 +1,4 @@
 import itertools
-import itertools
 import os
 import shutil
 import subprocess
@@ -10,12 +9,12 @@ from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
+from tycho_client.decoders import ThirdPartyPoolTychoDecoder
+from tycho_client.models import Blockchain, EVMBlock
+from tycho_client.tycho_adapter import TychoPoolStateStreamAdapter
 
 from evm import get_token_balance, get_block_header
 from tycho import TychoRunner
-from tycho_client.tycho.decoders import ThirdPartyPoolTychoDecoder
-from tycho_client.tycho.models import Blockchain, EVMBlock
-from tycho_client.tycho.tycho_adapter import TychoPoolStateStreamAdapter
 
 
 class TestResult:
@@ -139,16 +138,27 @@ class TestRunner:
                     node_balance = get_token_balance(token, comp_id, stop_block)
                     if node_balance != tycho_balance:
                         return TestResult.Failed(
-                            f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} from rpc call and {tycho_balance} from Substreams"
+                            f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} "
+                            f"from rpc call and {tycho_balance} from Substreams"
                         )
             contract_states = self.tycho_runner.get_contract_state()
-            self.simulate_get_amount_out(
+            simulation_failures = self.simulate_get_amount_out(
                 token_balances,
                 stop_block,
                 protocol_states,
                 protocol_components,
                 contract_states,
             )
+            if len(simulation_failures):
+                error_msgs = []
+                for pool_id, failures in simulation_failures.items():
+                    failures_ = [
+                        f"{f.sell_token} -> {f.buy_token}: {f.error}" for f in failures
+                    ]
+                    error_msgs.append(
+                        f"Pool {pool_id} failed simulations: {', '.join(failures_)}"
+                    )
+                raise ValueError(". ".join(error_msgs))
 
             return TestResult.Passed()
         except Exception as e:
@@ -161,7 +171,7 @@ class TestRunner:
         protocol_states: dict,
         protocol_components: dict,
         contract_state: dict,
-    ) -> TestResult:
+    ) -> dict[str, list[SimulationFailure]]:
         protocol_type_names = self.config["protocol_type_names"]
 
         block_header = get_block_header(block_number)
@@ -171,12 +181,12 @@ class TestRunner:
             hash_=block_header.hash.hex(),
         )
 
-        failed_simulations = dict[str, list[SimulationFailure]]
+        failed_simulations: dict[str, list[SimulationFailure]] = dict()
         for protocol in protocol_type_names:
-            # TODO: Parametrize this
-            decoder = ThirdPartyPoolTychoDecoder(
-                "CurveSwapAdapter.evm.runtime", 0, False
+            adapter_contract = os.path.join(
+                self.base_dir, "evm", self.config["adapter_contract"]
             )
+            decoder = ThirdPartyPoolTychoDecoder(adapter_contract, 0, False)
             stream_adapter = TychoPoolStateStreamAdapter(
                 tycho_url="0.0.0.0:4242",
                 protocol=protocol,
@@ -225,6 +235,7 @@ class TestRunner:
                             )
                         )
                         continue
+        return failed_simulations
 
     @staticmethod
     def build_spkg(yaml_file_path: str, modify_func: callable) -> str:

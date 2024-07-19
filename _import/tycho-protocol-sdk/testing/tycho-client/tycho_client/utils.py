@@ -13,7 +13,7 @@ from hexbytes import HexBytes
 from protosim_py import SimulationEngine, AccountInfo
 from web3 import Web3
 
-from .constants import EXTERNAL_ACCOUNT, MAX_BALANCE
+from .constants import EXTERNAL_ACCOUNT, MAX_BALANCE, ASSETS_FOLDER
 from .exceptions import OutOfGas
 from .models import Address, EthereumToken
 from .tycho_db import TychoDBSingleton
@@ -45,7 +45,9 @@ def create_engine(
     engine = SimulationEngine.new_with_tycho_db(db=db, trace=trace)
 
     for t in mocked_tokens:
-        info = AccountInfo(balance=0, nonce=0, code=get_contract_bytecode("ERC20.bin"))
+        info = AccountInfo(
+            balance=0, nonce=0, code=get_contract_bytecode(ASSETS_FOLDER / "ERC20.bin")
+        )
         engine.init_account(
             address=t, account=info, mocked=True, permanent_storage=None
         )
@@ -132,7 +134,8 @@ class ERC20OverwriteFactory:
             HexBytes(key).hex(): "0x" + HexBytes(val).hex().lstrip("0x").zfill(64)
             for key, val in self._overwrites.items()
         }
-        code = "0x" + get_contract_bytecode("ERC20.bin").hex()
+
+        code = "0x" + get_contract_bytecode(ASSETS_FOLDER / "ERC20.bin").hex()
         return {self._token.address: {"stateDiff": formatted_overwrites, "code": code}}
 
 
@@ -181,10 +184,9 @@ def get_storage_slot_at_key(key: Address, mapping_slot: int) -> int:
 
 
 @lru_cache
-def get_contract_bytecode(name: str) -> bytes:
-    """Load contract bytecode from a file in the assets directory"""
-    # TODO: Check if this locaation is correct
-    with open(Path(__file__).parent / "assets" / name, "rb") as fh:
+def get_contract_bytecode(path: str) -> bytes:
+    """Load contract bytecode from a file given an absolute path"""
+    with open(path, "rb") as fh:
         code = fh.read()
     return code
 

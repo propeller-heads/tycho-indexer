@@ -1,6 +1,8 @@
 import os
+import platform
 import signal
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -9,7 +11,19 @@ import psycopg2
 import requests
 from psycopg2 import sql
 
-binary_path = Path(__file__).parent / "tycho-indexer"
+
+def get_binary_path():
+    path = Path(__file__).parent
+    if sys.platform.startswith("darwin") and platform.machine() == "arm64":
+        return Path(__file__).parent / "tycho-indexer-mac-arm64"
+    elif sys.platform.startswith("linux") and platform.machine() == "x86_64":
+        return Path(__file__).parent / "tycho-indexer-linux-x64"
+
+    else:
+        raise RuntimeError("Unsupported platform or architecture")
+
+
+binary_path = get_binary_path()
 
 
 class TychoRunner:
