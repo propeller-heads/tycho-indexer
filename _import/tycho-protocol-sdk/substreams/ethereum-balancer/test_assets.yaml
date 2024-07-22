@@ -4,7 +4,7 @@ protocol_type_names:
 adapter_contract: "BalancerV2SwapAdapter.evm.runtime"
 skip_balance_check: true
 tests:
-# WeightedPoolFactory - 897888115Ada5773E02aA29F775430BFB5F34c51
+# WeightedPoolFactory - 0x897888115Ada5773E02aA29F775430BFB5F34c51
   - name: test_weighted_pool_creation
     start_block: 16878320
     stop_block: 16971020
@@ -22,7 +22,7 @@ tests:
             - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
           static_attributes:
           creation_tx: "0xbed0c745c3761cd54a7489181a5f1165c628c35ef69ecb0bfeec08f09f0ec407"
-# ComposableStablePoolFactory - DB8d758BCb971e482B2C45f7F8a7740283A1bd3A
+# ComposableStablePoolFactory - 0xDB8d758BCb971e482B2C45f7F8a7740283A1bd3A
   - name: test_composable_stable_pool_creation
     start_block: 17672478
     stop_block: 17677310
@@ -41,7 +41,7 @@ tests:
             - "0xae78736Cd615f374D3085123A210448E74Fc6393"
         static_attributes:
         creation_tx: "0x53ff6bab0d8a76a998e29e59da8068ad906ae85507a1c2fbf2505e2cb52fd754"
-# ERC4626LinearPoolFactory
+# ERC4626LinearPoolFactory - 0x813EE7a840CE909E7Fea2117A44a90b8063bd4fd
   - name: test_erc4626_linear_pool_creation
     start_block: 17045881
     stop_block: 17480143
@@ -59,7 +59,7 @@ tests:
           - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
       static_attributes:
       creation_tx: "0x5ff97870685370bab3876a4335d28c42e24659064fe78b486d6fb1b37b992877"
-# EulerLinearPoolFactory
+# EulerLinearPoolFactory - 0x5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347
   - name: test_euler_linear_pool_creation
     start_block: 16588078
     stop_block: 16588118
@@ -77,7 +77,7 @@ tests:
         - "0xEb91861f8A4e1C12333F42DCE8fB0Ecdc28dA716"
       static_attributes:
       creation_tx: "0x4a9ea683052afefdae3d189862868c3a7dc8f431d1d9828b6bfd9451a8816426"
-# SiloLinearPoolFactory
+# SiloLinearPoolFactory - 0x4E11AEec21baF1660b1a46472963cB3DA7811C89
   - name: test_silo_linear_pool_creation
     start_block: 17173185
     stop_block: 17173187
@@ -89,3 +89,33 @@ tests:
           - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
         static_attributes:
         creation_tx: "0xd639c8a6c3a553d47fd7f3d384ec4bc50a2cd6dfb2c3135b7f5db49d73c15df2"
+# YearnLinearPoolFactory - 0x5F5222Ffa40F2AEd6380D022184D6ea67C776eE0a
+  - name: test_yearn_linear_pool_creation
+    start_block: 17052601
+    stop_block: 17052605
+    expected_state:
+    protocol_components:
+      - id: "0x5F5222Ffa40F2AEd6380D022184D6ea67C776eE0"
+        tokens:
+          - "0x806E02Dea8d4a0882caD9fA3Fa75B212328692dE"
+          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        static_attributes:
+        creation_tx: "0x497aa03ce84d236c183204ddfc6762c8e4158da1ebc5e7e18e7f6cceaa497a2a"
+# WeightedPool2TokensFactory - 0xA5bf2ddF098bb0Ef6d120C98217dD6B141c74EE0
+  - name: test_yearn_linear_pool_creation
+    start_block: 12349890
+    stop_block: 12363660
+    expected_state:
+    protocol_components:
+      - id: "0x021c343C6180f03cE9E48FaE3ff432309b9aF199"
+        tokens:
+          - "0xD291E7a03283640FDc51b121aC401383A46cC623"
+          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        static_attributes:
+        creation_tx: "0xc6b9f8ee6c6f17edacc6df1b6287c57157a16f2aa5b315a03cf2c42d7ebb74e3"
+      - id: "0x571046EaE58C783f29f95ADBa17Dd561Af8a8712"
+        tokens:
+          - "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        static_attributes:
+        creation_tx: "0xe60d97670f902d58e65fb2d56f77a0cee19ffad47deae1fb8a126d534ee1ece5"
