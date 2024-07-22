@@ -13,7 +13,6 @@ pub fn json_serialize_value<T: serde::Serialize + Debug>(v: T) -> Vec<u8> {
         .to_vec()
 }
 
-
 /// Encodes a list of addresses (in byte representation) into json.
 ///
 /// Converts each address to a 0x prefixed hex string and then serializes
@@ -29,7 +28,6 @@ pub fn json_serialize_address_list(addresses: &[Vec<u8>]) -> Vec<u8> {
             .collect::<Vec<_>>(),
     )
 }
-
 
 /// Encodes a list of BigInt values into json.
 ///

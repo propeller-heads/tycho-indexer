@@ -176,14 +176,17 @@ pub fn map_protocol_changes(
                 .or_insert_with(|| TransactionChangesBuilder::new(tx));
 
             // iterate over individual components created within this tx
-            tx_component.components.iter().for_each(|component| {
-                builder.add_protocol_component(component);
-                let entity_change = EntityChanges {
-                    component_id: component.id.clone(),
-                    attributes: default_attributes.clone(),
-                };
-                builder.add_entity_change(&entity_change)
-            });
+            tx_component
+                .components
+                .iter()
+                .for_each(|component| {
+                    builder.add_protocol_component(component);
+                    let entity_change = EntityChanges {
+                        component_id: component.id.clone(),
+                        attributes: default_attributes.clone(),
+                    };
+                    builder.add_entity_change(&entity_change)
+                });
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `PoolBalanceChanged` creating
@@ -196,7 +199,9 @@ pub fn map_protocol_changes(
             let builder = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&tx));
-            balances.values().for_each(|bc| builder.add_balance_change(bc));
+            balances
+                .values()
+                .for_each(|bc| builder.add_balance_change(bc));
         });
 
     // Extract and insert any storage changes that happened for any of the components.
@@ -211,16 +216,23 @@ pub fn map_protocol_changes(
         &mut transaction_changes,
     );
 
-    transaction_changes.iter_mut().for_each(|(_, change)| {
-        // this indirection is necessary due to borrowing rules.
-        let addresses = change.changed_contracts().map(|e| e.to_vec()).collect::<Vec<_>>();
-        addresses.into_iter().for_each(|address| {
-            if address != VAULT_ADDRESS {
-                // We reconstruct the component_id from the address here
-                change.mark_component_as_updated(&format!("0x{}", hex::encode(address)))
-            }
-        })
-    });
+    transaction_changes
+        .iter_mut()
+        .for_each(|(_, change)| {
+            // this indirection is necessary due to borrowing rules.
+            let addresses = change
+                .changed_contracts()
+                .map(|e| e.to_vec())
+                .collect::<Vec<_>>();
+            addresses
+                .into_iter()
+                .for_each(|address| {
+                    if address != VAULT_ADDRESS {
+                        // We reconstruct the component_id from the address here
+                        change.mark_component_as_updated(&format!("0x{}", hex::encode(address)))
+                    }
+                })
+        });
 
     // Process all `transaction_changes` for final output in the `BlockChanges`,
     //  sorted by transaction index (the key).
@@ -229,9 +241,7 @@ pub fn map_protocol_changes(
         changes: transaction_changes
             .drain()
             .sorted_unstable_by_key(|(index, _)| *index)
-            .filter_map(|(_, builder)| {
-                builder.build()
-            })
+            .filter_map(|(_, builder)| builder.build())
             .collect::<Vec<_>>(),
     })
 }

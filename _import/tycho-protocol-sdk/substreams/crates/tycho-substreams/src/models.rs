@@ -66,7 +66,7 @@ impl TransactionChangesBuilder {
     }
 
     /// Unique contract/account addresses that have been changed so far.
-    pub fn changed_contracts(&self) -> impl Iterator<Item=&[u8]> {
+    pub fn changed_contracts(&self) -> impl Iterator<Item = &[u8]> {
         self.contract_changes
             .keys()
             .map(|k| k.as_slice())

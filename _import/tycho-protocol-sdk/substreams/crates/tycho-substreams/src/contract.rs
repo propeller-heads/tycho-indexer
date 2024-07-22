@@ -10,13 +10,14 @@
 /// more [here](https://streamingfastio.medium.com/new-block-model-to-accelerate-chain-integration-9f65126e5425)
 use std::collections::HashMap;
 
+use crate::{
+    models::{InterimContractChange, TransactionChanges},
+    prelude::TransactionChangesBuilder,
+};
 use substreams_ethereum::pb::{
     eth,
-    eth::v2::block::DetailLevel, eth::v2::CallType
+    eth::v2::{block::DetailLevel, TransactionTrace, CallType},
 };
-use substreams_ethereum::pb::eth::v2::TransactionTrace;
-use crate::models::{InterimContractChange, TransactionChanges};
-use crate::prelude::TransactionChangesBuilder;
 
 /// Extracts and aggregates contract changes from a block.
 ///
@@ -49,46 +50,40 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
     inclusion_predicate: F,
     transaction_changes: &mut HashMap<u64, TransactionChanges>,
 ) {
-    extract_contract_changes_generic(
-        block,
-        inclusion_predicate,
-        |tx, changed_contracts| {
-            transaction_changes
-                .entry(tx.index.into())
-                .or_insert_with(|| TransactionChanges::new(&(tx.into())))
-                .contract_changes
-                .extend(
-                    changed_contracts
-                        .clone()
-                        .into_values()
-                        .map(|change| change.into()),
-                );
-        },
-    )
+    extract_contract_changes_generic(block, inclusion_predicate, |tx, changed_contracts| {
+        transaction_changes
+            .entry(tx.index.into())
+            .or_insert_with(|| TransactionChanges::new(&(tx.into())))
+            .contract_changes
+            .extend(
+                changed_contracts
+                    .clone()
+                    .into_values()
+                    .map(|change| change.into()),
+            );
+    })
 }
-
 
 pub fn extract_contract_changes_builder<F: Fn(&[u8]) -> bool>(
     block: &eth::v2::Block,
     inclusion_predicate: F,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
-    extract_contract_changes_generic(
-        block,
-        inclusion_predicate,
-        |tx, changed_contracts| {
-            let builder = transaction_changes
-                .entry(tx.index.into())
-                .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
-            changed_contracts
-                .clone()
-                .into_iter()
-                .for_each(|(_, change)| builder.add_contract_changes(&change));
-        },
-    )
+    extract_contract_changes_generic(block, inclusion_predicate, |tx, changed_contracts| {
+        let builder = transaction_changes
+            .entry(tx.index.into())
+            .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
+        changed_contracts
+            .clone()
+            .into_iter()
+            .for_each(|(_, change)| builder.add_contract_changes(&change));
+    })
 }
 
-fn extract_contract_changes_generic<F: Fn(&[u8]) -> bool, G: FnMut(&TransactionTrace, &HashMap<Vec<u8>, InterimContractChange>)>(
+fn extract_contract_changes_generic<
+    F: Fn(&[u8]) -> bool,
+    G: FnMut(&TransactionTrace, &HashMap<Vec<u8>, InterimContractChange>),
+>(
     block: &eth::v2::Block,
     inclusion_predicate: F,
     mut store_changes: G,
