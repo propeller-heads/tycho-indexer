@@ -26,6 +26,38 @@ def get_binary_path():
 binary_path = get_binary_path()
 
 
+class TychoRPCClient:
+    def __init__(self, rpc_url: str = "http://0.0.0.0:4242"):
+        self.rpc_url = rpc_url
+
+    def get_protocol_components(self) -> dict:
+        """Retrieve protocol components from the RPC server."""
+        url = self.rpc_url + "/v1/ethereum/protocol_components"
+        headers = {"accept": "application/json", "Content-Type": "application/json"}
+        data = {"protocol_system": "test_protocol"}
+
+        response = requests.post(url, headers=headers, json=data)
+        return response.json()
+
+    def get_protocol_state(self) -> dict:
+        """Retrieve protocol state from the RPC server."""
+        url = self.rpc_url + "/v1/ethereum/protocol_state"
+        headers = {"accept": "application/json", "Content-Type": "application/json"}
+        data = {}
+
+        response = requests.post(url, headers=headers, json=data)
+        return response.json()
+
+    def get_contract_state(self) -> dict:
+        """Retrieve contract state from the RPC server."""
+        url = self.rpc_url + "/v1/ethereum/contract_state"
+        headers = {"accept": "application/json", "Content-Type": "application/json"}
+        data = {}
+
+        response = requests.post(url, headers=headers, json=data)
+        return response.json()
+
+
 class TychoRunner:
     def __init__(self, with_binary_logs: bool = False):
         self.with_binary_logs = with_binary_logs
@@ -141,36 +173,6 @@ class TychoRunner:
                 process.send_signal(signal.SIGINT)
             if rpc_thread.is_alive():
                 rpc_thread.join()
-
-    @staticmethod
-    def get_protocol_components() -> dict:
-        """Retrieve protocol components from the RPC server."""
-        url = "http://0.0.0.0:4242/v1/ethereum/protocol_components"
-        headers = {"accept": "application/json", "Content-Type": "application/json"}
-        data = {"protocol_system": "test_protocol"}
-
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()
-
-    @staticmethod
-    def get_protocol_state() -> dict:
-        """Retrieve protocol state from the RPC server."""
-        url = "http://0.0.0.0:4242/v1/ethereum/protocol_state"
-        headers = {"accept": "application/json", "Content-Type": "application/json"}
-        data = {}
-
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()
-
-    @staticmethod
-    def get_contract_state() -> dict:
-        """Retrieve contract state from the RPC server."""
-        url = "http://0.0.0.0:4242/v1/ethereum/contract_state"
-        headers = {"accept": "application/json", "Content-Type": "application/json"}
-        data = {}
-
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()
 
     @staticmethod
     def empty_database(db_url: str) -> None:

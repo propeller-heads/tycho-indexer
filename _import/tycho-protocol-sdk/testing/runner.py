@@ -14,7 +14,7 @@ from tycho_client.models import Blockchain, EVMBlock
 from tycho_client.tycho_adapter import TychoPoolStateStreamAdapter
 
 from evm import get_token_balance, get_block_header
-from tycho import TychoRunner
+from tycho import TychoRunner, TychoRPCClient
 
 
 class TestResult:
@@ -49,6 +49,7 @@ class TestRunner:
         self.config = load_config(config_path)
         self.base_dir = os.path.dirname(config_path)
         self.tycho_runner = TychoRunner(with_binary_logs)
+        self.tycho_rpc_client = TychoRPCClient()
         self.db_url = db_url
         self._chain = Blockchain.ethereum
 
@@ -82,8 +83,8 @@ class TestRunner:
 
     def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
         """Validate the current protocol state against the expected state."""
-        protocol_components = self.tycho_runner.get_protocol_components()
-        protocol_states = self.tycho_runner.get_protocol_state()
+        protocol_components = self.tycho_rpc_client.get_protocol_components()
+        protocol_states = self.tycho_rpc_client.get_protocol_state()
         components = {
             component["id"]: component
             for component in protocol_components["protocol_components"]
@@ -142,7 +143,7 @@ class TestRunner:
                                 f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} "
                                 f"from rpc call and {tycho_balance} from Substreams"
                             )
-            contract_states = self.tycho_runner.get_contract_state()
+            contract_states = self.tycho_rpc_client.get_contract_state()
             simulation_failures = self.simulate_get_amount_out(
                 token_balances,
                 stop_block,

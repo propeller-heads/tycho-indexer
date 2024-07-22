@@ -1,0 +1,24 @@
+substreams_yaml_path: ./substreams.yaml
+protocol_type_names:
+  - "pool"
+adapter_contract: "BalancerSwapAdapter.evm.runtime"
+skip_balance_check: true
+tests:
+#  WeightedPoolFactory
+  - name: test_weighted_pool_creation
+    start_block: 16878326
+    stop_block: 16971020
+    expected_state:
+      protocol_components:
+        - id: "0x8055b8C947De30130BC1Ec750C8F345a50006B23"
+          tokens:
+            - "0xba100000625a3754423978a60c9317c58a424e3D"
+            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          static_attributes:
+          creation_tx: "0x3ae08d6ff86737a64827855af810f7ee9ee208ff8e6d8c916495d09a83282c8a"
+        - id: "0xDac7eF49161bdBf0e8f0B4c8e2D38DF19D972874"
+          tokens:
+            - "0x9A62fB1CAFEa99f8f0441f80af7F7ccf0d46847D"
+            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          static_attributes:
+          creation_tx: "0xbed0c745c3761cd54a7489181a5f1165c628c35ef69ecb0bfeec08f09f0ec407"
