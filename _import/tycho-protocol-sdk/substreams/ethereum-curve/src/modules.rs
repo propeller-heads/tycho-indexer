@@ -142,8 +142,8 @@ pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
 }
 
 /// This is the main map that handles most of the indexing of this substream.
-/// Every contract change is grouped by transaction index via the `transaction_contract_changes`
-///  map. Each block of code will extend the `TransactionContractChanges` struct with the
+/// Every change is grouped by transaction index via the `transaction_changes`
+///  map. Each block of code will extend the `TransactionChanges` struct with the
 ///  cooresponding changes (balance, component, contract), inserting a new one if it doesn't exist.
 ///  At the very end, the map can easily be sorted by index to ensure the final
 /// `BlockContractChanges` is ordered by transactions properly.
@@ -154,25 +154,26 @@ pub fn map_protocol_changes(
     deltas: BlockBalanceDeltas,
     components_store: StoreGetString,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
-) -> Result<BlockContractChanges> {
+) -> Result<BlockChanges> {
     // We merge contract changes by transaction (identified by transaction index) making it easy to
     //  sort them at the very end.
-    let mut transaction_contract_changes: HashMap<_, TransactionContractChanges> = HashMap::new();
+    let mut transaction_changes: HashMap<_, TransactionChanges> = HashMap::new();
 
     // `ProtocolComponents` are gathered from `map_pools_created` which just need a bit of work to
-    //  convert into `TransactionContractChanges`
+    //  convert into `TransactionChanges`
     grouped_components
         .tx_components
         .into_iter()
         .for_each(|tx_component| {
             let tx = tx_component.tx.as_ref().unwrap();
-            transaction_contract_changes
+            transaction_changes
                 .entry(tx.index)
-                .or_insert_with(|| TransactionContractChanges {
+                .or_insert_with(|| TransactionChanges {
                     tx: Some(tx.clone()),
                     contract_changes: vec![],
                     component_changes: vec![],
                     balance_changes: vec![],
+                    entity_changes: vec![],
                 })
                 .component_changes
                 .extend_from_slice(
@@ -214,19 +215,20 @@ pub fn map_protocol_changes(
                 },
             )
         })
-        // We need to group the balance changes by tx hash for the `TransactionContractChanges` agg
+        // We need to group the balance changes by tx hash for the `TransactionChanges` agg
         .chunk_by(|(tx, _)| TransactionWrapper(tx.clone()))
         .into_iter()
         .for_each(|(tx_wrapped, group)| {
             let tx = tx_wrapped.0;
 
-            transaction_contract_changes
+            transaction_changes
                 .entry(tx.index)
-                .or_insert_with(|| TransactionContractChanges {
+                .or_insert_with(|| TransactionChanges {
                     tx: Some(tx.clone()),
                     contract_changes: vec![],
                     component_changes: vec![],
                     balance_changes: vec![],
+                    entity_changes: vec![],
                 })
                 .balance_changes
                 .extend(group.map(|(_, change)| change));
@@ -242,10 +244,10 @@ pub fn map_protocol_changes(
                 .get_last(format!("pool:{0}", hex::encode(addr)))
                 .is_some()
         },
-        &mut transaction_contract_changes,
+        &mut transaction_changes,
     );
 
-    for change in transaction_contract_changes.values_mut() {
+    for change in transaction_changes.values_mut() {
         for balance_change in change.balance_changes.iter_mut() {
             replace_eth_address(&mut balance_change.token);
         }
@@ -257,9 +259,9 @@ pub fn map_protocol_changes(
         }
     }
 
-    // Process all `transaction_contract_changes` for final output in the `BlockContractChanges`,
+    // Process all `transaction_changes` for final output in the `BlockContractChanges`,
     //  sorted by transaction index (the key).
-    Ok(BlockContractChanges {
+    Ok(BlockChanges {
         block: Some(Block {
             number: block.number,
             hash: block.hash.clone(),
@@ -271,7 +273,7 @@ pub fn map_protocol_changes(
                 .clone(),
             ts: block.timestamp_seconds(),
         }),
-        changes: transaction_contract_changes
+        changes: transaction_changes
             .drain()
             .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, change)| {

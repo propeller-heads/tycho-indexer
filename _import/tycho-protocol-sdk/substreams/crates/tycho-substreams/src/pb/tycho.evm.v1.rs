@@ -115,6 +115,87 @@ pub struct BalanceChange {
     #[prost(bytes="vec", tag="3")]
     pub component_id: ::prost::alloc::vec::Vec<u8>,
 }
+// Native entities
+
+/// A component is a set of attributes that are associated with a custom entity.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EntityChanges {
+    /// A unique identifier of the entity within the protocol.
+    #[prost(string, tag="1")]
+    pub component_id: ::prost::alloc::string::String,
+    /// The set of attributes that are associated with the entity.
+    #[prost(message, repeated, tag="2")]
+    pub attributes: ::prost::alloc::vec::Vec<Attribute>,
+}
+// VM entities
+
+/// A key value entry into contract storage.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ContractSlot {
+    /// A contract's storage slot.
+    #[prost(bytes="vec", tag="2")]
+    pub slot: ::prost::alloc::vec::Vec<u8>,
+    /// The new value for this storage slot.
+    #[prost(bytes="vec", tag="3")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
+}
+/// Changes made to a single contract's state.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ContractChange {
+    /// The contract's address
+    #[prost(bytes="vec", tag="1")]
+    pub address: ::prost::alloc::vec::Vec<u8>,
+    /// The new balance of the contract, empty bytes indicates no change.
+    #[prost(bytes="vec", tag="2")]
+    pub balance: ::prost::alloc::vec::Vec<u8>,
+    /// The new code of the contract, empty bytes indicates no change.
+    #[prost(bytes="vec", tag="3")]
+    pub code: ::prost::alloc::vec::Vec<u8>,
+    /// The changes to this contract's slots, empty sequence indicates no change.
+    #[prost(message, repeated, tag="4")]
+    pub slots: ::prost::alloc::vec::Vec<ContractSlot>,
+    /// Whether this is an update, a creation or a deletion.
+    #[prost(enumeration="ChangeType", tag="5")]
+    pub change: i32,
+}
+// Aggregate entities
+
+/// A set of changes aggregated by transaction.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionChanges {
+    /// The transaction instance that results in the changes.
+    #[prost(message, optional, tag="1")]
+    pub tx: ::core::option::Option<Transaction>,
+    /// Contains the changes induced by the above transaction, aggregated on a per-contract basis.
+    /// Contains the contract changes induced by the above transaction, usually for tracking VM components.
+    #[prost(message, repeated, tag="2")]
+    pub contract_changes: ::prost::alloc::vec::Vec<ContractChange>,
+    /// Contains the entity changes induced by the above transaction.
+    /// Usually for tracking native components or used for VM extensions (plugins).
+    #[prost(message, repeated, tag="3")]
+    pub entity_changes: ::prost::alloc::vec::Vec<EntityChanges>,
+    /// An array of newly added components.
+    #[prost(message, repeated, tag="4")]
+    pub component_changes: ::prost::alloc::vec::Vec<ProtocolComponent>,
+    /// An array of balance changes to components.
+    #[prost(message, repeated, tag="5")]
+    pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
+}
+/// A set of transaction changes within a single block.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockChanges {
+    /// The block for which these changes are collectively computed.
+    #[prost(message, optional, tag="1")]
+    pub block: ::core::option::Option<Block>,
+    /// The set of transaction changes observed in the specified block.
+    #[prost(message, repeated, tag="2")]
+    pub changes: ::prost::alloc::vec::Vec<TransactionChanges>,
+}
 /// Enum to specify the type of a change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -206,19 +287,9 @@ impl ImplementationType {
         }
     }
 }
+// WARNING: DEPRECATED. Please use common.proto's TransactionChanges and BlockChanges instead.
 // This file contains the definition for the native integration of Substreams.
 
-/// A component is a set of attributes that are associated with a custom entity.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EntityChanges {
-    /// A unique identifier of the entity within the protocol.
-    #[prost(string, tag="1")]
-    pub component_id: ::prost::alloc::string::String,
-    /// The set of attributes that are associated with the entity.
-    #[prost(message, repeated, tag="2")]
-    pub attributes: ::prost::alloc::vec::Vec<Attribute>,
-}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionEntityChanges {
@@ -293,39 +364,9 @@ pub struct BlockTransactionProtocolComponents {
     #[prost(message, repeated, tag="1")]
     pub tx_components: ::prost::alloc::vec::Vec<TransactionProtocolComponents>,
 }
+// WARNING: DEPRECATED. Please use common.proto's TransactionChanges and BlockChanges instead.
 // This file contains proto definitions specific to the VM integration.
 
-/// A key value entry into contract storage.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ContractSlot {
-    /// A contract's storage slot.
-    #[prost(bytes="vec", tag="2")]
-    pub slot: ::prost::alloc::vec::Vec<u8>,
-    /// The new value for this storage slot.
-    #[prost(bytes="vec", tag="3")]
-    pub value: ::prost::alloc::vec::Vec<u8>,
-}
-/// Changes made to a single contract's state.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ContractChange {
-    /// The contract's address
-    #[prost(bytes="vec", tag="1")]
-    pub address: ::prost::alloc::vec::Vec<u8>,
-    /// The new native balance of the contract, empty bytes indicates no change.
-    #[prost(bytes="vec", tag="2")]
-    pub balance: ::prost::alloc::vec::Vec<u8>,
-    /// The new code of the contract, empty bytes indicates no change.
-    #[prost(bytes="vec", tag="3")]
-    pub code: ::prost::alloc::vec::Vec<u8>,
-    /// The changes to this contract's slots, empty sequence indicates no change.
-    #[prost(message, repeated, tag="4")]
-    pub slots: ::prost::alloc::vec::Vec<ContractSlot>,
-    /// Whether this is an update, a creation or a deletion.
-    #[prost(enumeration="ChangeType", tag="5")]
-    pub change: i32,
-}
 /// A set of changes aggregated by transaction.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -334,10 +375,9 @@ pub struct TransactionContractChanges {
     #[prost(message, optional, tag="1")]
     pub tx: ::core::option::Option<Transaction>,
     /// Contains the changes induced by the above transaction, aggregated on a per-contract basis.
-    /// Must include changes to every contract that is tracked by all ProtocolComponents.
     #[prost(message, repeated, tag="2")]
     pub contract_changes: ::prost::alloc::vec::Vec<ContractChange>,
-    /// An array of any component changes.
+    /// An array of newly added components.
     #[prost(message, repeated, tag="3")]
     pub component_changes: ::prost::alloc::vec::Vec<ProtocolComponent>,
     /// An array of balance changes to components.

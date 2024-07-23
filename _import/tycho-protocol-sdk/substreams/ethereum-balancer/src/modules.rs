@@ -12,7 +12,7 @@ use tycho_substreams::{
     balances::aggregate_balances_changes, contract::extract_contract_changes, prelude::*,
 };
 
-const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
+pub const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
 
 #[substreams::handlers::map]
 pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
@@ -24,13 +24,12 @@ pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolC
             .filter_map(|tx| {
                 let components = tx
                     .logs_with_calls()
-                    .filter(|(_, call)| !call.call.state_reverted)
                     .filter_map(|(log, call)| {
                         pool_factories::address_map(
                             call.call.address.as_slice(),
                             log,
                             call.call,
-                            &(tx.into()),
+                            tx,
                         )
                     })
                     .collect::<Vec<_>>();
@@ -132,11 +131,11 @@ pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
 }
 
 /// This is the main map that handles most of the indexing of this substream.
-/// Every contract change is grouped by transaction index via the `transaction_contract_changes`
-///  map. Each block of code will extend the `TransactionContractChanges` struct with the
+/// Every contract change is grouped by transaction index via the `transaction_changes`
+///  map. Each block of code will extend the `TransactionChanges` struct with the
 ///  cooresponding changes (balance, component, contract), inserting a new one if it doesn't exist.
 ///  At the very end, the map can easily be sorted by index to ensure the final
-/// `BlockContractChanges`  is ordered by transactions properly.
+/// `BlockChanges`  is ordered by transactions properly.
 #[substreams::handlers::map]
 pub fn map_protocol_changes(
     block: eth::v2::Block,
@@ -144,23 +143,43 @@ pub fn map_protocol_changes(
     deltas: BlockBalanceDeltas,
     components_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
-) -> Result<BlockContractChanges> {
+) -> Result<BlockChanges> {
     // We merge contract changes by transaction (identified by transaction index) making it easy to
     //  sort them at the very end.
-    let mut transaction_contract_changes: HashMap<_, TransactionContractChanges> = HashMap::new();
+    let mut transaction_changes: HashMap<_, TransactionChanges> = HashMap::new();
 
     // `ProtocolComponents` are gathered from `map_pools_created` which just need a bit of work to
-    //   convert into `TransactionContractChanges`
+    //   convert into `TransactionChanges`
     grouped_components
         .tx_components
         .iter()
         .for_each(|tx_component| {
             let tx = tx_component.tx.as_ref().unwrap();
-            transaction_contract_changes
+            transaction_changes
                 .entry(tx.index)
-                .or_insert_with(|| TransactionContractChanges::new(tx))
+                .or_insert_with(|| TransactionChanges::new(tx))
                 .component_changes
                 .extend_from_slice(&tx_component.components);
+            tx_component
+                .components
+                .iter()
+                .for_each(|component| {
+                    transaction_changes
+                        .entry(tx.index)
+                        .or_insert_with(|| TransactionChanges::new(tx))
+                        .entity_changes
+                        .push(EntityChanges {
+                            component_id: component.id.clone(),
+                            attributes: vec![Attribute {
+                                name: "balance_owner".to_string(),
+                                value: "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+                                    .to_string()
+                                    .as_bytes()
+                                    .to_vec(),
+                                change: ChangeType::Creation.into(),
+                            }],
+                        });
+                });
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `PoolBalanceChanged` creating
@@ -170,9 +189,9 @@ pub fn map_protocol_changes(
     aggregate_balances_changes(balance_store, deltas)
         .into_iter()
         .for_each(|(_, (tx, balances))| {
-            transaction_contract_changes
+            transaction_changes
                 .entry(tx.index)
-                .or_insert_with(|| TransactionContractChanges::new(&tx))
+                .or_insert_with(|| TransactionChanges::new(&tx))
                 .balance_changes
                 .extend(balances.into_values());
         });
@@ -183,22 +202,24 @@ pub fn map_protocol_changes(
         |addr| {
             components_store
                 .get_last(format!("pool:0x{0}", hex::encode(addr)))
-                .is_some()
+                .is_some() ||
+                addr.eq(VAULT_ADDRESS)
         },
-        &mut transaction_contract_changes,
+        &mut transaction_changes,
     );
 
-    // Process all `transaction_contract_changes` for final output in the `BlockContractChanges`,
+    // Process all `transaction_changes` for final output in the `BlockChanges`,
     //  sorted by transaction index (the key).
-    Ok(BlockContractChanges {
+    Ok(BlockChanges {
         block: Some((&block).into()),
-        changes: transaction_contract_changes
+        changes: transaction_changes
             .drain()
             .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, change)| {
                 if change.contract_changes.is_empty() &&
                     change.component_changes.is_empty() &&
-                    change.balance_changes.is_empty()
+                    change.balance_changes.is_empty() &&
+                    change.entity_changes.is_empty()
                 {
                     None
                 } else {

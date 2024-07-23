@@ -83,9 +83,8 @@ impl From<InterimContractChange> for tycho::ContractChange {
 ///   model.
 /// * `inclusion_predicate` - A closure that determines if a contract's address is of interest for
 ///   the collection of changes. Only contracts satisfying this predicate are included.
-/// * `transaction_contract_changes` - A mutable reference to a map where extracted contract changes
-///   are stored. Keyed by transaction index, it aggregates changes into
-///   `tycho::TransactionContractChanges`.
+/// * `transaction_changes` - A mutable reference to a map where extracted contract changes are
+///   stored. Keyed by transaction index, it aggregates changes into `tycho::TransactionChanges`.
 ///
 /// ## Panics
 /// Panics if the provided block is not an extended block model, as indicated by its detail level.
@@ -94,7 +93,7 @@ impl From<InterimContractChange> for tycho::ContractChange {
 /// The function iterates over transactions and their calls within the block, collecting contract
 /// changes (storage, balance, code) that pass the inclusion predicate. Changes are then sorted by
 /// their ordinals to maintain the correct sequence of events. Aggregated changes for each contract
-/// are stored in `transaction_contract_changes`, categorized by transaction index.
+/// are stored in `transaction_changes`, categorized by transaction index.
 ///
 /// Contracts created within the block are tracked to differentiate between new and existing
 /// contracts. The aggregation process respects transaction boundaries, ensuring that changes are
@@ -102,7 +101,7 @@ impl From<InterimContractChange> for tycho::ContractChange {
 pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
     block: &eth::v2::Block,
     inclusion_predicate: F,
-    transaction_contract_changes: &mut HashMap<u64, tycho::TransactionContractChanges>,
+    transaction_changes: &mut HashMap<u64, tycho::TransactionChanges>,
 ) {
     if block.detail_level != Into::<i32>::into(DetailLevel::DetaillevelExtended) {
         panic!("Only extended blocks are supported");
@@ -215,9 +214,9 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
                 !balance_changes.is_empty() ||
                 !code_changes.is_empty()
             {
-                transaction_contract_changes
+                transaction_changes
                     .entry(block_tx.index.into())
-                    .or_insert_with(|| tycho::TransactionContractChanges::new(&(block_tx.into())))
+                    .or_insert_with(|| tycho::TransactionChanges::new(&(block_tx.into())))
                     .contract_changes
                     .extend(
                         changed_contracts

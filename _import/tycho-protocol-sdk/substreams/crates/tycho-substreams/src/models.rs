@@ -6,12 +6,14 @@ pub use crate::pb::tycho::evm::v1::*;
 impl TransactionContractChanges {
     /// Creates a new empty `TransactionContractChanges` instance.
     pub fn new(tx: &Transaction) -> Self {
-        Self {
-            tx: Some(tx.clone()),
-            contract_changes: vec![],
-            component_changes: vec![],
-            balance_changes: vec![],
-        }
+        Self { tx: Some(tx.clone()), ..Default::default() }
+    }
+}
+
+impl TransactionChanges {
+    /// Creates a new empty `TransactionChanges` instance.
+    pub fn new(tx: &Transaction) -> Self {
+        Self { tx: Some(tx.clone()), ..Default::default() }
     }
 }
 

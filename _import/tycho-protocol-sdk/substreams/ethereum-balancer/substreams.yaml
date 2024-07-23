@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "ethereum_balancer"
-  version: v0.1.0
+  version: v0.2.0
 
 protobuf:
   files:
@@ -19,15 +19,15 @@ binaries:
 modules:
   - name: map_components
     kind: map
-    initialBlock: 12369300
+    initialBlock: 12272146
     inputs:
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:tycho.evm.v1.GroupedTransactionProtocolComponents
+      type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
 
   - name: store_components
     kind: store
-    initialBlock: 12369300
+    initialBlock: 12272146
     updatePolicy: add
     valueType: int64
     inputs:
@@ -35,16 +35,16 @@ modules:
 
   - name: map_relative_balances
     kind: map
-    initialBlock: 12369300 # An arbitrary block that should change based on your requirements
+    initialBlock: 12272146
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_components
     output:
-      type: proto:tycho.evm.v1.BalanceDeltas
+      type: proto:tycho.evm.v1.BlockBalanceDeltas
 
   - name: store_balances
     kind: store
-    initialBlock: 12369300
+    initialBlock: 12272146
     updatePolicy: add
     valueType: bigint
     inputs:
@@ -52,7 +52,7 @@ modules:
 
   - name: map_protocol_changes
     kind: map
-    initialBlock: 12369300
+    initialBlock: 12272146
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: map_components
@@ -61,4 +61,4 @@ modules:
       - store: store_balances
         mode: deltas # This is the key property that simplifies `BalanceChange` handling
     output:
-      type: proto:tycho.evm.v1.BlockContractChanges
+      type: proto:tycho.evm.v1.BlockChanges

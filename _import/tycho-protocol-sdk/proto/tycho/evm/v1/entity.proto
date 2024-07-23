@@ -4,15 +4,8 @@ package tycho.evm.v1;
 
 import "tycho/evm/v1/common.proto";
 
+// WARNING: DEPRECATED. Please use common.proto's TransactionChanges and BlockChanges instead.
 // This file contains the definition for the native integration of Substreams.
-
-// A component is a set of attributes that are associated with a custom entity.
-message EntityChanges {
-  // A unique identifier of the entity within the protocol.
-  string component_id = 1;
-  // The set of attributes that are associated with the entity.
-  repeated Attribute attributes = 2;
-}
 
 message TransactionEntityChanges {
   Transaction tx = 1;
