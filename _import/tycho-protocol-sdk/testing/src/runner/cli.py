@@ -7,7 +7,7 @@ def main() -> None:
         description="Run indexer within a specified range of blocks"
     )
     parser.add_argument(
-        "--test_yaml_path", type=str, help="Path to the test configuration YAML file."
+        "--package", type=str, help="Name of the package to test."
     )
     parser.add_argument(
         "--with_binary_logs",
@@ -20,7 +20,7 @@ def main() -> None:
     args = parser.parse_args()
 
     test_runner = TestRunner(
-        args.test_yaml_path, args.with_binary_logs, db_url=args.db_url
+        args.package, args.with_binary_logs, db_url=args.db_url
     )
     test_runner.run_tests()
 

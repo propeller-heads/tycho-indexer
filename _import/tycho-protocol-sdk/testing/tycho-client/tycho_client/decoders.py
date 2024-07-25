@@ -19,10 +19,10 @@ class ThirdPartyPoolTychoDecoder:
         self.hard_limit = hard_limit
 
     def decode_snapshot(
-        self,
-        snapshot: dict[str, Any],
-        block: EVMBlock,
-        tokens: dict[str, EthereumToken],
+            self,
+            snapshot: dict[str, Any],
+            block: EVMBlock,
+            tokens: dict[str, EthereumToken],
     ) -> tuple[dict[str, ThirdPartyPool], list[str]]:
         pools = {}
         failed_pools = []
@@ -38,7 +38,7 @@ class ThirdPartyPoolTychoDecoder:
         return pools, failed_pools
 
     def decode_pool_state(
-        self, snap: dict, block: EVMBlock, tokens: dict[str, EthereumToken]
+            self, snap: dict, block: EVMBlock, tokens: dict[str, EthereumToken]
     ) -> ThirdPartyPool:
         component = snap["component"]
         exchange, _ = decode_tycho_exchange(component["protocol_system"])
@@ -70,26 +70,30 @@ class ThirdPartyPoolTychoDecoder:
     def decode_optional_attributes(component, snap):
         # Handle optional state attributes
         attributes = snap["state"]["attributes"]
-        pool_id = attributes.get("pool_id") or component["id"]
         balance_owner = attributes.get("balance_owner")
+        balance_owner = bytes.fromhex(balance_owner[2:] if balance_owner.startswith('0x') else balance_owner).decode(
+            'utf-8').lower()
         stateless_contracts = {}
         static_attributes = snap["component"]["static_attributes"]
-        
+        pool_id = static_attributes.get("pool_id") or component["id"]
+        pool_id = bytes.fromhex(pool_id[2:]).decode().lower()
+
         index = 0
         while f"stateless_contract_addr_{index}" in static_attributes:
             encoded_address = static_attributes[f"stateless_contract_addr_{index}"]
-            address = bytes.fromhex(encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
+            address = bytes.fromhex(
+                encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
 
             code = static_attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
             stateless_contracts[address] = code
             index += 1
-            
+
         index = 0
         while f"stateless_contract_addr_{index}" in attributes:
             address = attributes[f"stateless_contract_addr_{index}"]
             code = attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
             stateless_contracts[address] = code
-            index += 1      
+            index += 1
         return {
             "balance_owner": balance_owner,
             "pool_id": pool_id,
@@ -109,10 +113,10 @@ class ThirdPartyPoolTychoDecoder:
 
     @staticmethod
     def apply_update(
-        pool: ThirdPartyPool,
-        pool_update: dict[str, Any],
-        balance_updates: dict[str, Any],
-        block: EVMBlock,
+            pool: ThirdPartyPool,
+            pool_update: dict[str, Any],
+            balance_updates: dict[str, Any],
+            block: EVMBlock,
     ) -> ThirdPartyPool:
         # check for and apply optional state attributes
         attributes = pool_update.get("updated_attributes")

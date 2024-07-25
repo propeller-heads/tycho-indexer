@@ -1,29 +1,42 @@
-import os
-import platform
 import signal
 import subprocess
-import sys
 import threading
 import time
-from pathlib import Path
 
 import psycopg2
 import requests
 from psycopg2 import sql
 
-
-def get_binary_path():
-    path = Path(__file__).parent
-    if sys.platform.startswith("darwin") and platform.machine() == "arm64":
-        return Path(__file__).parent / "tycho-indexer-mac-arm64"
-    elif sys.platform.startswith("linux") and platform.machine() == "x86_64":
-        return Path(__file__).parent / "tycho-indexer-linux-x64"
-
-    else:
-        raise RuntimeError("Unsupported platform or architecture")
+import os
 
 
-binary_path = get_binary_path()
+def find_binary_file(file_name):
+    # Define usual locations for binary files in Unix-based systems
+    locations = [
+        "/bin",
+        "/sbin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+    ]
+
+    # Add user's local bin directory if it exists
+    home = os.path.expanduser("~")
+    if os.path.exists(home + "/.local/bin"):
+        locations.append(home + "/.local/bin")
+
+    # Check each location
+    for location in locations:
+        potential_path = location + "/" + file_name
+        if os.path.exists(potential_path):
+            return potential_path
+
+    # If binary is not found in the usual locations, return None
+    raise RuntimeError("Unable to locate tycho-indexer binary")
+
+
+binary_path = find_binary_file("tycho-indexer")
 
 
 class TychoRPCClient:
@@ -59,25 +72,29 @@ class TychoRPCClient:
 
 
 class TychoRunner:
-    def __init__(self, with_binary_logs: bool = False):
+    def __init__(self, db_url: str, with_binary_logs: bool = False, initialized_accounts: list[str] = None):
         self.with_binary_logs = with_binary_logs
+        self._db_url = db_url
+        self._initialized_accounts = initialized_accounts or []
 
     def run_tycho(
-        self,
-        spkg_path: str,
-        start_block: int,
-        end_block: int,
-        protocol_type_names: list,
+            self,
+            spkg_path: str,
+            start_block: int,
+            end_block: int,
+            protocol_type_names: list,
     ) -> None:
         """Run the Tycho indexer with the specified SPKG and block range."""
 
         env = os.environ.copy()
-        env["RUST_LOG"] = "info"
+        env["RUST_LOG"] = "tycho_indexer=info"
 
         try:
             process = subprocess.Popen(
                 [
                     binary_path,
+                    "--database-url",
+                    self._db_url,
                     "run",
                     "--spkg",
                     spkg_path,
@@ -88,8 +105,11 @@ class TychoRunner:
                     "--start-block",
                     str(start_block),
                     "--stop-block",
+                    # +2 is to make up for the cache in the index side.
                     str(end_block + 2),
-                ],  # +2 is to make up for the cache in the index side.
+                    "--initialized-accounts",
+                    ",".join(self._initialized_accounts)
+                ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -128,7 +148,12 @@ class TychoRunner:
                 env["RUST_LOG"] = "info"
 
                 process = subprocess.Popen(
-                    [binary_path, "rpc"],
+                    [
+                        binary_path,
+                        "--database-url",
+                        self._db_url,
+                        "rpc"
+                    ],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
