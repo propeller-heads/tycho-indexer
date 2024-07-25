@@ -95,12 +95,14 @@ where
             ..Default::default()
         };
 
+        let default_builder = Evm::builder()
+            .with_spec_id(SpecId::CANCUN)
+            .with_ref_db(db_ref)
+            .with_block_env(block_env)
+            .with_tx_env(tx_env);
+
         let evm_result = if self.trace {
-            let mut vm = Evm::builder()
-                .with_spec_id(SpecId::CANCUN)
-                .with_ref_db(db_ref)
-                .with_block_env(block_env)
-                .with_tx_env(tx_env)
+            let mut vm = default_builder
                 .with_external_context(CustomPrintTracer::default())
                 .append_handler_register(inspector_handle_register)
                 .build();
@@ -109,12 +111,7 @@ where
 
             vm.transact()
         } else {
-            let mut vm = Evm::builder()
-                .with_spec_id(SpecId::CANCUN)
-                .with_ref_db(db_ref)
-                .with_block_env(block_env)
-                .with_tx_env(tx_env)
-                .build();
+            let mut vm = default_builder.build();
 
             debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.tx(), vm.block());
 
