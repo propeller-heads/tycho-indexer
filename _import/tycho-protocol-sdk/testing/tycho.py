@@ -183,7 +183,7 @@ class TychoRunner:
             cursor = conn.cursor()
 
             cursor.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
                     sql.Identifier("tycho_indexer_0")
                 )
             )
