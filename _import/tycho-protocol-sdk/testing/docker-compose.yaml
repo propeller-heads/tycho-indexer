@@ -22,7 +22,7 @@ services:
       - ../substreams:/app/substreams
       - ../proto:/app/proto
       - ./tycho-indexer:/app/testing/tycho-indexer
-      - ./runner.py:/app/testing/runner.py
+      - ./src/runner/runner.py:/app/testing/src.py
     ports:
       - "80:80"
     depends_on:
