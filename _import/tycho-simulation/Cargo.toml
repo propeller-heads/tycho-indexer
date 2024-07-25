@@ -10,7 +10,7 @@ path = "src/main.rs"
 members = ["protosim", "protosim_py"]
 
 [dependencies]
-time = "0.3.17"
+time = "0.3.36"
 protosim = { version = "0.1.0", path = "./protosim" }
 ethers = "2.0.13"
 rdkafka = "0.36.0"
