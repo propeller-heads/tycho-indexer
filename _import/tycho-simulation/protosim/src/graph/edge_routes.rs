@@ -20,15 +20,15 @@ use std::{
 ///  ## Arguments
 ///
 ///  - `graph`: The graph to search in. Must implement the `EdgeCount`,
-///  `IntoEdgesDirected`, and `IntoEdgeReferences` traits, as well as have `NodeId`
-///  and `EdgeId` types that implement `Eq` and `Hash`.
+///    `IntoEdgesDirected`, and `IntoEdgeReferences` traits, as well as have `NodeId`
+///    and `EdgeId` types that implement `Eq` and `Hash`.
 ///  - `from`: The starting node of the routes.
 ///  - `to`: The target node of the routes.
 ///  - `min_edges`: The minimum number of edges that a route must have to be included
-///  in the returned iterator.
+///    in the returned iterator.
 ///  - `max_edges`: The maximum number of edges that a route can have to be included
-///  in the returned iterator. If not specified, defaults to the number of nodes in
-///  the graph minus one.
+///    in the returned iterator. If not specified, defaults to the number of nodes in
+///    the graph minus one.
 ///
 ///  ## Return
 ///
@@ -75,8 +75,8 @@ where
                                 .collect::<TargetColl>();
                             return Some(route);
                         }
-                    } else if !visited_nodes.contains(&edge.target()) &&
-                        !visited.contains(&edge.id())
+                    } else if !visited_nodes.contains(&edge.target())
+                        && !visited.contains(&edge.id())
                     {
                         visited.insert(edge.id());
                         visited_nodes.insert(edge.target());

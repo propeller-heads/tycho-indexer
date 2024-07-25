@@ -109,7 +109,7 @@ pub trait ProtocolSim {
     /// # Returns
     ///
     /// * `Result<(), TransitionError<String>>` - A `Result` containing `()` on success or a
-    ///  `TransitionError` on failure.
+    ///   `TransitionError` on failure.
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,

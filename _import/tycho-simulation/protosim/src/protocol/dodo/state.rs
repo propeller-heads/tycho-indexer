@@ -17,6 +17,7 @@ use crate::{
     u256_num::u256_to_f64,
 };
 
+#[allow(dead_code)]
 pub struct DodoPoolState<D: DatabaseRef>
 where
     D::Error: std::fmt::Debug,
@@ -38,6 +39,7 @@ impl<D: DatabaseRef> DodoPoolState<D>
 where
     D::Error: std::fmt::Debug,
 {
+    #[allow(dead_code)]
     fn simulate_spot_prices(
         &self,
         base: &crate::models::ERC20Token,

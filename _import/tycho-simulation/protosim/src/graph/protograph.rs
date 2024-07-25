@@ -84,7 +84,7 @@ impl<'a> Route<'a> {
     /// - `id`: The route's unique integer ID
     /// - `tokens`: A reference to a vector of references to ERC20Token structs.
     /// - `pairs`: A reference to a vector of references to Pair structs.
-    /// Returns a new instance of the Route struct.
+    ///   Returns a new instance of the Route struct.
     pub fn new(id: usize, tokens: &'a Vec<&ERC20Token>, pairs: &'a Vec<&Pair>) -> Route<'a> {
         Route { id, pairs, tokens }
     }
@@ -718,7 +718,7 @@ impl ProtoGraph {
     ///   opportunities.
     /// * `involved_addresses` - Optional list of addresses to filter the routes. If provided, only
     ///   routes involving
-    /// the specified addresses will be processed.
+    ///   the specified addresses will be processed.
     ///
     /// # Returns
     ///
