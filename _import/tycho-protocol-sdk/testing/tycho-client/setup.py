@@ -22,7 +22,7 @@ def get_wheel_file():
         return str(
             path
             / "wheels"
-            / f"protosim_py-0.4.9-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+            / f"protosim_py-0.4.11-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
         )
     else:
         raise RuntimeError("Unsupported platform or architecture")

@@ -7,7 +7,7 @@ WORKDIR /app
 # Add current directory code to /app in container
 ADD . /app/testing
 
-RUN chmod +x /app/testing/tycho-indexer
+RUN chmod +x /app/testing/tycho-indexer-linux-x64
 
 # Create a new conda environment and install pip
 RUN conda create -n myenv pip python=3.9

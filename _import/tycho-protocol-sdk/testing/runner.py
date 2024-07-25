@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+import traceback
 
 import yaml
 from pydantic import BaseModel
@@ -164,7 +165,8 @@ class TestRunner:
 
             return TestResult.Passed()
         except Exception as e:
-            return TestResult.Failed(str(e))
+            error_message = f"An error occurred: {str(e)}\n" + traceback.format_exc()
+            return TestResult.Failed(error_message)
 
     def simulate_get_amount_out(
         self,

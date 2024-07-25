@@ -73,12 +73,23 @@ class ThirdPartyPoolTychoDecoder:
         pool_id = attributes.get("pool_id") or component["id"]
         balance_owner = attributes.get("balance_owner")
         stateless_contracts = {}
+        static_attributes = snap["component"]["static_attributes"]
+        
+        index = 0
+        while f"stateless_contract_addr_{index}" in static_attributes:
+            encoded_address = static_attributes[f"stateless_contract_addr_{index}"]
+            address = bytes.fromhex(encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
+
+            code = static_attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
+            stateless_contracts[address] = code
+            index += 1
+            
         index = 0
         while f"stateless_contract_addr_{index}" in attributes:
             address = attributes[f"stateless_contract_addr_{index}"]
-            code = attributes[f"stateless_contract_code_{index}"]
+            code = attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
             stateless_contracts[address] = code
-            index += 1
+            index += 1      
         return {
             "balance_owner": balance_owner,
             "pool_id": pool_id,
