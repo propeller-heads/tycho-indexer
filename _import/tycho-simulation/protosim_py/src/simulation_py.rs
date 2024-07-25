@@ -139,6 +139,23 @@ impl SimulationEngine {
         }
     }
 
+    /// Sets up a single account.
+    ///
+    /// Full control over setting up accounts. Allows setting up EOAs as
+    /// well as smart contracts.
+    ///
+    /// Parameters
+    /// ----------
+    /// address : str
+    ///     Address of the account.
+    /// account : AccountInfo
+    ///     The account information.
+    /// mocked : bool
+    ///     Whether this account should be considered mocked. For mocked accounts, nothing
+    ///     is downloaded from a node; all data must be inserted manually.
+    /// permanent_storage : dict[int, int]
+    ///     Storage to init the account with. This storage can only be updated
+    ///     manually.
     fn init_account(
         self_: PyRef<Self>,
         address: String,
@@ -164,6 +181,21 @@ impl SimulationEngine {
             .init_account(address, account, Some(rust_slots), mocked)
     }
 
+    /// Update the simulation state.
+    ///
+    /// Updates the underlying smart contract storage.
+    ///
+    /// Parameters
+    /// ----------
+    /// updates : dict[str, StateUpdate]
+    ///     Values for the updates that should be applied to the accounts.
+    /// block : BlockHeader
+    ///     The newest block.
+    ///
+    /// Returns
+    /// -------
+    /// revert_updates: dict[str, StateUpdate]
+    ///     State update structs to revert this update.
     fn update_state(
         mut self_: PyRefMut<Self>,
         updates: HashMap<String, StateUpdate>,
@@ -189,6 +221,23 @@ impl SimulationEngine {
         Ok(py_reverse_updates)
     }
 
+    /// Retrieves the storage value at the specified index for the given account, if it exists.
+    ///
+    /// If the account exists in the storage, the storage value at the specified `index` is returned
+    /// as a reference. Temp storage takes priority over permanent storage.
+    /// If the account does not exist, `None` is returned.
+    ///
+    /// Parameters
+    /// ----------
+    /// address : str
+    ///     A reference to the address of the account to retrieve the storage value from.
+    /// index : str
+    ///     A reference to the index of the storage value to retrieve.
+    ///
+    /// Returns
+    /// -------
+    /// Union[str, None]
+    ///     The storage value if it exists, otherwise `None`.
     fn query_storage(
         self_: PyRef<Self>,
         address: String,
@@ -202,6 +251,10 @@ impl SimulationEngine {
         }
     }
 
+    /// Clears temporary storage slots from DB.
+    ///
+    /// This only has an effect if using the RPCReader database. It will clear any
+    /// storage slots that have been populated through rpc calls.
     fn clear_temp_storage(mut self_: PyRefMut<Self>) {
         self_.0.clear_temp_storage()
     }

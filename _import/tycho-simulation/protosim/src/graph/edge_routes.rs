@@ -19,16 +19,15 @@ use std::{
 ///
 ///  ## Arguments
 ///
-///  - `graph`: The graph to search in. Must implement the `EdgeCount`,
-///  `IntoEdgesDirected`, and `IntoEdgeReferences` traits, as well as have `NodeId`
-///  and `EdgeId` types that implement `Eq` and `Hash`.
+///  - `graph`: The graph to search in. Must implement the `EdgeCount`, `IntoEdgesDirected`, and
+///    `IntoEdgeReferences` traits, as well as have `NodeId` and `EdgeId` types that implement `Eq`
+///    and `Hash`.
 ///  - `from`: The starting node of the routes.
 ///  - `to`: The target node of the routes.
-///  - `min_edges`: The minimum number of edges that a route must have to be included
-///  in the returned iterator.
-///  - `max_edges`: The maximum number of edges that a route can have to be included
-///  in the returned iterator. If not specified, defaults to the number of nodes in
-///  the graph minus one.
+///  - `min_edges`: The minimum number of edges that a route must have to be included in the
+///    returned iterator.
+///  - `max_edges`: The maximum number of edges that a route can have to be included in the returned
+///    iterator. If not specified, defaults to the number of nodes in the graph minus one.
 ///
 ///  ## Return
 ///
