@@ -51,7 +51,7 @@ class EthereumToken(BaseModel):
             return int(amount)
 
     def from_onchain_amount(
-        self, onchain_amount: Union[int, Fraction], quantize: bool = True
+            self, onchain_amount: Union[int, Fraction], quantize: bool = True
     ) -> Decimal:
         """Converts an Integer to a quantized decimal, by shifting left by the token's
         maximum amount of decimals (e.g.: 1000000 becomes 1.000000 for a 6-decimal token
@@ -66,14 +66,14 @@ class EthereumToken(BaseModel):
         with localcontext(Context(rounding=ROUND_FLOOR, prec=256)):
             if isinstance(onchain_amount, Fraction):
                 return (
-                    Decimal(onchain_amount.numerator)
-                    / Decimal(onchain_amount.denominator)
-                    / Decimal(10 ** self.decimals)
+                        Decimal(onchain_amount.numerator)
+                        / Decimal(onchain_amount.denominator)
+                        / Decimal(10 ** self.decimals)
                 ).quantize(Decimal(f"{1 / 10 ** self.decimals}"))
             if quantize is True:
                 try:
                     amount = (
-                        Decimal(str(onchain_amount)) / 10 ** self.decimals
+                            Decimal(str(onchain_amount)) / 10 ** self.decimals
                     ).quantize(Decimal(f"{1 / 10 ** self.decimals}"))
                 except InvalidOperation:
                     amount = Decimal(str(onchain_amount)) / Decimal(10 ** self.decimals)
@@ -114,6 +114,8 @@ class Capability(IntEnum):
     ConstantPrice = auto()
     TokenBalanceIndependent = auto()
     ScaledPrice = auto()
+    HardLimits = auto()
+    MarginalPrice = auto()
 
 
 class SynchronizerState(Enum):
