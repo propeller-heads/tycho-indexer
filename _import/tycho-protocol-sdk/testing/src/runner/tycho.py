@@ -63,7 +63,7 @@ class TychoRPCClient:
 
     def get_contract_state(self) -> dict:
         """Retrieve contract state from the RPC server."""
-        url = self.rpc_url + "/v1/ethereum/contract_state"
+        url = self.rpc_url + "/v1/ethereum/contract_state?include_balances=false"
         headers = {"accept": "application/json", "Content-Type": "application/json"}
         data = {}
 
