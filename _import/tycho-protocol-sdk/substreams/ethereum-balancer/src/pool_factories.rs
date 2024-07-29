@@ -22,6 +22,18 @@ fn get_pool_registered(
         .clone()
 }
 
+fn get_token_registered(
+    tx: &TransactionTrace,
+    pool_id: &[u8],
+) -> abi::vault::events::TokensRegistered {
+    tx.logs_with_calls()
+        .filter(|(log, _)| log.address == VAULT_ADDRESS)
+        .filter_map(|(log, _)| abi::vault::events::TokensRegistered::match_and_decode(log))
+        .find(|ev| ev.pool_id == pool_id)
+        .unwrap()
+        .clone()
+}
+
 /// This is the main function that handles the creation of `ProtocolComponent`s with `Attribute`s
 /// based on the specific factory address. There's 3 factory groups that are represented here:
 ///  - Weighted Pool Factories
@@ -73,17 +85,19 @@ pub fn address_map(
             let pool_created =
                 abi::composable_stable_pool_factory::events::PoolCreated::match_and_decode(log)?;
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
+            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
-                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&create_call.tokens)
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
                     .with_attributes(&[
                         ("pool_type", "ComposableStablePoolFactory".as_bytes()),
                         (
                             "pool_id",
                             format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
+                        ("bpt", &pool_created.pool),
                         ("manual_updates", &[1u8]),
                         (
                             "rate_providers",
@@ -99,14 +113,12 @@ pub fn address_map(
             let pool_created =
                 abi::erc_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
+            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
-                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&[
-                        create_call.main_token.clone(),
-                        create_call.wrapped_token.clone(),
-                    ])
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
                     .with_attributes(&[
                         ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
                         (
@@ -120,6 +132,7 @@ pub fn address_map(
                             format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                         ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
                         ("wrapped_token", &create_call.wrapped_token),
                         (
@@ -138,14 +151,12 @@ pub fn address_map(
             let pool_created =
                 abi::euler_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
+            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
-                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&[
-                        create_call.main_token.clone(),
-                        create_call.wrapped_token.clone(),
-                    ])
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
                     .with_attributes(&[
                         ("pool_type", "EulerLinearPoolFactory".as_bytes()),
                         (
@@ -159,6 +170,7 @@ pub fn address_map(
                             format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                         ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
                         ("wrapped_token", &create_call.wrapped_token),
                         (
@@ -225,14 +237,12 @@ pub fn address_map(
             let pool_created =
                 abi::silo_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
+            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
-                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&[
-                        create_call.main_token.clone(),
-                        create_call.wrapped_token.clone(),
-                    ])
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
                     .with_attributes(&[
                         ("pool_type", "SiloLinearPoolFactory".as_bytes()),
                         (
@@ -246,6 +256,7 @@ pub fn address_map(
                             format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                         ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
                         ("wrapped_token", &create_call.wrapped_token),
                         (
@@ -264,14 +275,12 @@ pub fn address_map(
             let pool_created =
                 abi::yearn_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
+            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
                 ProtocolComponent::at_contract(&pool_created.pool, &(tx.into()))
-                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&[
-                        create_call.main_token.clone(),
-                        create_call.wrapped_token.clone(),
-                    ])
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
                     .with_attributes(&[
                         ("pool_type", "YearnLinearPoolFactory".as_bytes()),
                         (
@@ -285,6 +294,7 @@ pub fn address_map(
                             format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
                         ),
                         ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
                         ("wrapped_token", &create_call.wrapped_token),
                         (
