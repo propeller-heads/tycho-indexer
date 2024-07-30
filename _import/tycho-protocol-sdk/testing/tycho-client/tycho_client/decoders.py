@@ -1,11 +1,18 @@
+import time
 from decimal import Decimal
 from logging import getLogger
 from typing import Any
 
+import eth_abi
+from eth_utils import keccak
+from protosim_py import SimulationEngine, SimulationParameters, AccountInfo
+
+from .constants import EXTERNAL_ACCOUNT
 from .exceptions import TychoDecodeError
 from .models import EVMBlock, EthereumToken
 from .pool_state import ThirdPartyPool
-from .utils import decode_tycho_exchange
+from .tycho_db import TychoDBSingleton
+from .utils import decode_tycho_exchange, get_code_for_address
 
 log = getLogger(__name__)
 
@@ -49,7 +56,7 @@ class ThirdPartyPoolTychoDecoder:
             raise TychoDecodeError("Unsupported token", pool_id=component["id"])
 
         balances = self.decode_balances(snap, tokens)
-        optional_attributes = self.decode_optional_attributes(component, snap)
+        optional_attributes = self.decode_optional_attributes(component, snap, block.id)
 
         return ThirdPartyPool(
             id_=optional_attributes.pop("pool_id", component["id"]),
@@ -62,43 +69,66 @@ class ThirdPartyPoolTychoDecoder:
             adapter_contract_name=self.adapter_contract,
             minimum_gas=self.minimum_gas,
             hard_sell_limit=self.hard_limit,
-            trace=False,
+            trace=True,
             **optional_attributes,
         )
 
     @staticmethod
-    def decode_optional_attributes(component, snap):
+    def decode_optional_attributes(component, snap, block_number):
         # Handle optional state attributes
         attributes = snap["state"]["attributes"]
+        pool_id = attributes.get("pool_id") or component["id"]
         balance_owner = attributes.get("balance_owner")
-        balance_owner = bytes.fromhex(balance_owner[2:] if balance_owner.startswith('0x') else balance_owner).decode(
-            'utf-8').lower()
         stateless_contracts = {}
         static_attributes = snap["component"]["static_attributes"]
-        pool_id = static_attributes.get("pool_id") or component["id"]
-        pool_id = bytes.fromhex(pool_id[2:]).decode().lower()
-
+        
         index = 0
         while f"stateless_contract_addr_{index}" in static_attributes:
             encoded_address = static_attributes[f"stateless_contract_addr_{index}"]
-            address = bytes.fromhex(
-                encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
+            decoded = bytes.fromhex(encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
+            if decoded.startswith("call"):
+                address = ThirdPartyPoolTychoDecoder.get_address_from_call(block_number, decoded)
+            else:
+                address = decoded
 
             code = static_attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
             stateless_contracts[address] = code
             index += 1
-
+            
         index = 0
         while f"stateless_contract_addr_{index}" in attributes:
             address = attributes[f"stateless_contract_addr_{index}"]
             code = attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
             stateless_contracts[address] = code
-            index += 1
+            index += 1      
         return {
             "balance_owner": balance_owner,
             "pool_id": pool_id,
             "stateless_contracts": stateless_contracts,
         }
+
+    @staticmethod
+    def get_address_from_call(block_number, decoded):
+        db = TychoDBSingleton.get_instance()
+        engine = SimulationEngine.new_with_tycho_db(db=db)
+        engine.init_account(
+            address="0x0000000000000000000000000000000000000000",
+            account=AccountInfo(balance=0, nonce=0),
+            mocked=False,
+            permanent_storage=None,
+        )
+        selector = keccak(text=decoded.split(":")[-1])[:4]
+        sim_result = engine.run_sim(SimulationParameters(
+            data=bytearray(selector),
+            to=decoded.split(':')[1],
+            block_number=block_number,
+            timestamp=int(time.time()),
+            overrides={},
+            caller=EXTERNAL_ACCOUNT,
+            value=0,
+        ))
+        address = eth_abi.decode(["address"], bytearray(sim_result.result))
+        return address[0]
 
     @staticmethod
     def decode_balances(snap, tokens):

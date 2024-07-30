@@ -83,11 +83,14 @@ class TychoRunner:
             start_block: int,
             end_block: int,
             protocol_type_names: list,
+            initialized_accounts: list,
     ) -> None:
         """Run the Tycho indexer with the specified SPKG and block range."""
 
         env = os.environ.copy()
         env["RUST_LOG"] = "tycho_indexer=info"
+
+        all_accounts = self._initialized_accounts + initialized_accounts
 
         try:
             process = subprocess.Popen(
@@ -106,16 +109,14 @@ class TychoRunner:
                     str(start_block),
                     "--stop-block",
                     # +2 is to make up for the cache in the index side.
-                    str(end_block + 2),
-                    "--initialized-accounts",
-                    ",".join(self._initialized_accounts)
-                ],
+                    str(end_block + 2)
+                ] + (["--initialized-accounts", ",".join(all_accounts)] if all_accounts else []),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
                 env=env,
-            )
+                )
 
             with process.stdout:
                 for line in iter(process.stdout.readline, ""):
@@ -203,7 +204,7 @@ class TychoRunner:
     def empty_database(db_url: str) -> None:
         """Drop and recreate the Tycho indexer database."""
         try:
-            conn = psycopg2.connect(db_url)
+            conn = psycopg2.connect(db_url[:db_url.rfind('/')])
             conn.autocommit = True
             cursor = conn.cursor()
 

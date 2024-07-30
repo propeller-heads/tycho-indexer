@@ -105,7 +105,7 @@ class ThirdPartyPool(BaseModel):
             engine.init_account(
                 address=ADAPTER_ADDRESS,
                 account=AccountInfo(
-                    balance=0,
+                    balance=MAX_BALANCE,
                     nonce=0,
                     code=get_contract_bytecode(self.adapter_contract_name),
                 ),

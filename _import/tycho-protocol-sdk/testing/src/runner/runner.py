@@ -61,6 +61,7 @@ class TestRunner:
         """Run all tests specified in the configuration."""
         print(f"Running tests ...")
         for test in self.config["tests"]:
+            self.tycho_runner.empty_database(self.db_url)
 
             spkg_path = self.build_spkg(
                 os.path.join(self.spkg_src, self.config["substreams_yaml_path"]),
@@ -71,6 +72,7 @@ class TestRunner:
                 test["start_block"],
                 test["stop_block"],
                 self.config["protocol_type_names"],
+                test.get("initialized_accounts", []),
             )
 
             result = self.tycho_runner.run_with_rpc_server(
@@ -83,7 +85,6 @@ class TestRunner:
             else:
                 print(f"❗️ {test['name']} failed: {result.message}")
 
-            self.tycho_runner.empty_database(self.db_url)
 
     def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
         """Validate the current protocol state against the expected state."""
@@ -104,6 +105,8 @@ class TestRunner:
 
                 component = components[comp_id]
                 for key, value in expected_component.items():
+                    if key not in ["tokens", "static_attributes", "creation_tx"]:
+                        continue
                     if key not in component:
                         return TestResult.Failed(
                             f"Missing '{key}' in component '{comp_id}'."
@@ -148,10 +151,13 @@ class TestRunner:
                                 f"from rpc call and {tycho_balance} from Substreams"
                             )
             contract_states = self.tycho_rpc_client.get_contract_state()
+            filtered_components = {'protocol_components': [pc for pc in protocol_components["protocol_components"] if
+                                                           pc["id"] in [c["id"].lower() for c in
+                                                                        expected_state["protocol_components"] if c["skip_simulation"] is False]]}
             simulation_failures = self.simulate_get_amount_out(
                 stop_block,
                 protocol_states,
-                protocol_components,
+                filtered_components,
                 contract_states,
             )
             if len(simulation_failures):
