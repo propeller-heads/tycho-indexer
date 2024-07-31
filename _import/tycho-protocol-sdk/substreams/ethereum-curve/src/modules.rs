@@ -5,12 +5,19 @@ use itertools::Itertools;
 use substreams::{
     pb::substreams::StoreDeltas,
     scalar::BigInt,
-    store::{StoreAddBigInt, StoreGet, StoreGetString, StoreNew, StoreSet, StoreSetString},
+    store::{
+        StoreAddBigInt, StoreGet, StoreGetInt64, StoreGetString, StoreNew, StoreSet, StoreSetInt64,
+        StoreSetString,
+    },
 };
-
 use substreams_ethereum::pb::eth;
 
-use crate::{pool_changes::emit_eth_deltas, pool_factories, pools::emit_specific_pools};
+use crate::{
+    consts::{CRYPTO_SWAP_NG_FACTORY, TRICRYPTO_FACTORY},
+    pool_changes::emit_eth_deltas,
+    pool_factories,
+    pools::emit_specific_pools,
+};
 use tycho_substreams::{
     balances::{extract_balance_deltas_from_tx, store_balance_changes},
     contract::extract_contract_changes,
@@ -99,6 +106,43 @@ pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: St
         });
 }
 
+/// Stores contracts required by components, for example LP tokens if they are different from the
+/// pool.
+/// This is later used to index them with `extract_contract_changes`
+#[substreams::handlers::store]
+pub fn store_non_component_accounts(map: BlockTransactionProtocolComponents, store: StoreSetInt64) {
+    map.tx_components
+        .iter()
+        .flat_map(|tx_components| &tx_components.components)
+        .for_each(|component| {
+            // Crypto pool factory creates LP token separated from the pool, we need to index it so we add it to the store if the new protocol component comes from this factory
+            if component
+                .static_att
+                .contains(&Attribute {
+                    name: "pool_type".into(),
+                    value: "crypto_pool".into(),
+                    change: ChangeType::Creation.into(),
+                }) &&
+                component
+                    .static_att
+                    .contains(&Attribute {
+                        name: "factory_name".into(),
+                        value: "crypto_pool_factory".into(),
+                        change: ChangeType::Creation.into(),
+                    })
+            {
+                let lp_token = component
+                    .static_att
+                    .iter()
+                    .find(|attr| attr.name == "lp_token")
+                    .unwrap()
+                    .value
+                    .clone();
+                store.set(0, hex::encode(lp_token), &1);
+            }
+        });
+}
+
 /// Since the `PoolBalanceChanged` events administer only deltas, we need to leverage a map and a
 ///  store to be able to tally up final balances for tokens in a pool.
 #[substreams::handlers::map]
@@ -153,6 +197,7 @@ pub fn map_protocol_changes(
     grouped_components: BlockTransactionProtocolComponents,
     deltas: BlockBalanceDeltas,
     components_store: StoreGetString,
+    non_component_accounts_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
 ) -> Result<BlockChanges> {
     // We merge contract changes by transaction (identified by transaction index) making it easy to
@@ -242,7 +287,12 @@ pub fn map_protocol_changes(
         |addr| {
             components_store
                 .get_last(format!("pool:{0}", hex::encode(addr)))
-                .is_some()
+                .is_some() ||
+                non_component_accounts_store
+                    .get_last(hex::encode(addr))
+                    .is_some() ||
+                addr.eq(&CRYPTO_SWAP_NG_FACTORY) ||
+                addr.eq(&TRICRYPTO_FACTORY)
         },
         &mut transaction_changes,
     );

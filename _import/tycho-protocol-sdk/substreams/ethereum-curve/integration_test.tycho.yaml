@@ -1,9 +1,11 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_type_names:
   - "curve_pool"
-adapter_contract: "CurveSwapAdapter.evm.runtime"
-skip_balance_check: false
+adapter_contract: "CurveAdapter"
+skip_balance_check: true
+initialized_accounts:
 tests:
+
   - name: test_3pool_creation
     start_block: 10809470
     stop_block: 10810226
@@ -16,6 +18,8 @@ tests:
             - "0x6b175474e89094c44da98b954eedeac495271d0f"
           static_attributes:
           creation_tx: "0x20793bbf260912aae189d5d261ff003c9b9166da8191d8f9d63ff1c7722f3ac6"
+          skip_simulation: false
+
   - name: test_steth_creation
     start_block: 11592550
     stop_block: 11595553
@@ -27,31 +31,46 @@ tests:
             - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
           static_attributes:
           creation_tx: "0xfac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa"
+          skip_simulation: false
+
   - name: test_crypto_swap_ng_factory_plain_pool_creation
-    start_block: 19355220
-    stop_block: 19356225
+    start_block: 18580701
+    stop_block: 18614742
+    initialized_accounts:
+      - "0x6a8cbed756804b16e05e741edabd5cb544ae21bf"
+      - "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963" # Needed by another component that is created within this block range
+      - "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7"
     expected_state:
       protocol_components:
-        - id: "0xeeda34a377dd0ca676b9511ee1324974fa8d980d"
+        - id: "0x02950460E2b9529D0E00284A5fA2d7bDF3fA4d72"
           tokens:
-            - "0xd9a442856c234a39a81a089c06451ebaa4306a72"
-            - "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
+            - "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"
+            - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
           static_attributes:
-          creation_tx: "0x0e2bad5695d4ff8ebbaf668674a24bdcc4843da44933d947f2a454fd731da3c1"
+          creation_tx: "0x6f4438aa1785589e2170599053a0cdc740d8987746a4b5ad9614b6ab7bb4e550"
+          skip_simulation: false
+
   - name: test_crypto_swap_ng_factory_meta_pool_creation
     start_block: 19216042
     stop_block: 19217045
+    initialized_accounts:
+      - "0x6a8cbed756804b16e05e741edabd5cb544ae21bf" # Factory, needed for implementations contrats queries
+      - "0xa5588f7cdf560811710a2d82d3c9c99769db1dcb" # Base pool of this meta pool
     expected_state:
       protocol_components:
         - id: "0xef484de8C07B6e2d732A92B5F78e81B38f99f95E"
           tokens:
             - "0x865377367054516e17014CcdED1e7d814EDC9ce4"
-            - "0xA5588F7cdf560811710A2D82D3C9c99769DB1Dcb"
+            - "0xa5588f7cdf560811710a2d82d3c9c99769db1dcb"
           static_attributes:
           creation_tx: "0x3cfeecae1b43086ee5705f89b803e21eb0492d7d5db06c229586db8fc72f5665"
+          skip_simulation: true # Reason: this pool use a base pool which is also one of its tokens, therefore our token override doesn't work here and it fails on transfers
+
   - name: test_metapool_factory_metapool_creation
-    start_block: 18028600
+    start_block: 18028604
     stop_block: 18029610
+    initialized_accounts:
+      - "0xdcef968d416a41cdac0ed8702fac8128a64241a2"
     expected_state:
       protocol_components:
         - id: "0x61fA2c947e523F9ABfb8d7e2903A5D5218C119a7"
@@ -60,6 +79,8 @@ tests:
             - "0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC"
           static_attributes:
           creation_tx: "0xc9c6b879cbb19f7f26405335c3879c350592d530956878ff172e9efad786c63f"
+          skip_simulation: true # Reason: this pool calls `totalSupply()` on the LP token during simulation. But this token is overridden and doesn't have anything for totalSupply
+
   - name: test_metapool_factory_plainpool_creation
     start_block: 18808555
     stop_block: 18818577
@@ -71,12 +92,15 @@ tests:
             - "0x77E06c9eCCf2E797fd462A92B6D7642EF85b0A44"
           static_attributes:
           creation_tx: "0xeb34c90d352f18ffcfe78b7e393e155f0314acf06c54d1ac9996e4ee5a9b4742"
+          skip_simulation: false
         - id: "0x3f67dc2AdBA4B1beB6A48c30AB3AFb1c1440d35B"
           tokens:
             - "0xe9633C52f4c8B7BDeb08c4A7fE8a5c1B84AFCf67"
             - "0x77E06c9eCCf2E797fd462A92B6D7642EF85b0A44"
           static_attributes:
           creation_tx: "0x455559b43afaf429c15c1d807fd7f5dd47be30f6411a854499f719b944f4c024"
+          skip_simulation: true # Reason: this pool has no liquidity at stop_block
+
   - name: test_cryptopool_factory_creation
     start_block: 19162590
     stop_block: 19163633
@@ -88,15 +112,20 @@ tests:
             - "0x4591dbff62656e7859afe5e45f6f47d3669fbb28"
           static_attributes:
           creation_tx: "0xa89c09a7e0dfd84f3a294b8df4f33cc4a623e6d52deee357457afe2591ea596f"
+          skip_simulation: false
         - id: "0x6c9Fe53cC13b125d6476E5Ce2b76983bd5b7A112"
           tokens:
             - "0x35fA164735182de50811E8e2E824cFb9B6118ac2"
             - "0xf951E335afb289353dc249e82926178EaC7DEd78"
           static_attributes:
           creation_tx: "0xa5b13d50c56242f7994b8e1339032bb4c6f9ac3af3054d4eae3ce9e32e3c1a50"
+          skip_simulation: true # Reason: this pool has no liquidity at stop_block
+
   - name: test_tricrypto_factory_creation
     start_block: 17371455
     stop_block: 17374457
+    initialized_accounts:
+      - "0x0c0e5f2ff0ff18a3be9b835635039256dc4b4963"
     expected_state:
       protocol_components:
         - id: "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B"
@@ -106,38 +135,62 @@ tests:
             - "0x0000000000000000000000000000000000000000"
           static_attributes:
           creation_tx: "0x2bd59c19f993b83729fb23498f897a58567c6f0b3ee2f00613ba515a7b19fe23"
+          skip_simulation: false
+
   - name: test_twocrypto_factory_creation
-    start_block: 19760009
-    stop_block: 19763634
+    start_block: 19692166
+    stop_block: 19692232
+    initialized_accounts:
+      - "0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f" # Factory, needed for implementations contracts queries
     expected_state:
       protocol_components:
-        - id: "0x011e998d2d794424de95935d55a6ca81822ecb2b"
+        - id: "0x77146B0a1d08B6844376dF6d9da99bA7F1b19e71"
           tokens:
-            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
-            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            - "0x55C08ca52497e2f1534B59E2917BF524D4765257"
+            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
           static_attributes:
-          creation_tx: "0x412b745a9467aed14f22d2a4cc30651939872d19cee65053f14dd3eb9d488003"
-        - id: "0x19d2b5ce188ca60790755204691e38102749297b"
+          creation_tx: "0x61d563e2627437da172fdd60ab54e5cc955fcb75829fd819486e857bac31cad2"
+          skip_simulation: false
+
+  - name: test_stableswap_factory_plain_pool_creation
+    start_block: 17258004
+    stop_block: 17260023
+    expected_state:
+      protocol_components:
+        - id: "0x390f3595bCa2Df7d23783dFd126427CCeb997BF4"
           tokens:
-            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
-            - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            - "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
+            - "0xdAC17F958D2ee523a2206206994597C13D831ec7"
           static_attributes:
-          creation_tx: "0x61118d9903f8344e5971d1e7c781f76e855996408dac979d3a4971cefafa6587"
-        - id: "0xb3341ca63b6cecf1e1a0d1a99bf0587f4c305652"
+          creation_tx: "0x40b25773bf8ea673434277d279af40a85b09072072e7004e9048a2ec0f0dd5a0"
+          skip_simulation: false
+
+  #  - name: test_stableswap_factory_meta_pool_creation
+  # There was no metapool created from this factory yet.
+  # TODO: Double check https://etherscan.io/address/0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d#events search events with topic 0x01f31cd2abdeb4e5e10ba500f2db0f937d9e8c735ab04681925441b4ea37eda5.
+  # Got the topic using:
+  #  from web3 import Web3
+  #
+  #  def keccak(event):
+  #      return Web3.keccak(text=event).hex()
+  #
+  #  plain_pool_deployed = "PlainPoolDeployed(address[4],uint256,uint256,address,address)"
+  #  meta_pool_deployed = "MetaPoolDeployed(address,address,uint256,uint256,address)"
+  #
+  #  print(keccak(plain_pool_deployed))
+  #  print(keccak(meta_pool_deployed))
+
+  - name: test_metapool_factory_old
+    start_block: 11968730
+    stop_block: 12028110
+    initialized_accounts:
+      - "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7" # Linked pool of this metapool
+    expected_state:
+      protocol_components:
+        - id: "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B"
           tokens:
-            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
-            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            - "0x853d955aCEf822Db058eb8505911ED77F175b99e"
+            - "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490"
           static_attributes:
-          creation_tx: "0xc69332294313b3a8f260e0d5b6a50f0d83707f715fbd8016c32ca61a39ce7ad5"
-        - id: "0x99ca0fbaa278cd62e26f0e9b6d167b07d1f0d51b"
-          tokens:
-            - "0x6c4a8973e6633da2da7187669479c27830c7b1c4"
-            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-          static_attributes:
-          creation_tx: "0xf2b0c697161f08384c642297e01b3a35f7ec00dd3871d4237a16ae4bb8a1ca99"
-        - id: "0xde73e407efc75edbafc5bcd62ebb1e7a9b38ebcd"
-          tokens:
-            - "0x0d86883faf4ffd7aeb116390af37746f45b6f378"
-            - "0x78da5799cf427fee11e9996982f4150ece7a99a7"
-          static_attributes:
-          creation_tx: "0xd4ad7efdcc16d797dd3494ba02b377da4127fd5b1bd25089858b66e5a7e456ab"
+          creation_tx: "0x1f2a0d4e1c1eca594bd7f27f9952480ccda422c3453e0c5074a63aa46a2ed628"
+          skip_simulation: true # Reason: this pool calls `totalSupply()` on the LP token during simulation. But this token is overridden and doesn't have anything for totalSupply

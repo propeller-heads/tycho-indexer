@@ -1,3 +1,4 @@
+use substreams::hex;
 use substreams_ethereum::{
     pb::eth::v2::{Call, Log, TransactionTrace},
     Event, Function,
@@ -66,9 +67,9 @@ fn swap_weth_for_eth(tokens: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
 /// The basic flow of this function is as follows:
 /// - Match the factory address
 /// - Decode the relevant event from the log
-/// - Attempt to decode the cooresponding function call (based on the permutation of the ABI)
+/// - Attempt to decode the corresponding function call (based on the permutation of the ABI)
 /// - Optionally make an RPC call to produce further information (see metapools)
-/// - Construct the cooresponding `ProtocolComponent`
+/// - Construct the corresponding `ProtocolComponent`
 pub fn address_map(
     call_address: &[u8; 20],
     log: &Log,
@@ -84,6 +85,12 @@ pub fn address_map(
 
             let component_id = &call.return_data[12..];
 
+            let pool_implementation = abi::crypto_pool_factory::functions::PoolImplementation {}
+                .call(CRYPTO_POOL_FACTORY.to_vec())?;
+
+            let token_implementation = abi::crypto_pool_factory::functions::TokenImplementation {}
+                .call(CRYPTO_POOL_FACTORY.to_vec())?;
+
             Some(ProtocolComponent {
                 id: hex::encode(component_id),
                 tx: Some(Transaction {
@@ -93,7 +100,7 @@ pub fn address_map(
                     index: tx.index.into(),
                 }),
                 tokens,
-                contracts: vec![component_id.into()],
+                contracts: vec![component_id.into(), pool_added.token.clone()],
                 static_att: vec![
                     Attribute {
                         name: "pool_type".into(),
@@ -113,6 +120,21 @@ pub fn address_map(
                     Attribute {
                         name: "factory".into(),
                         value: address_to_bytes_with_0x(&CRYPTO_POOL_FACTORY),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "lp_token".into(),
+                        value: pool_added.token,
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "stateless_contract_addr_0".into(),
+                        value: address_to_bytes_with_0x(&pool_implementation.try_into().unwrap()),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "stateless_contract_addr_1".into(),
+                        value: address_to_bytes_with_0x(&token_implementation.try_into().unwrap()),
                         change: ChangeType::Creation.into(),
                     },
                 ],
@@ -164,6 +186,17 @@ pub fn address_map(
 
                 // The return data of several of these calls contain the actual component id
                 let component_id = &call.return_data[12..];
+                let tokens: Vec<_> = pool_added
+                    .coins
+                    .into_iter()
+                    .filter(|token| *token != [0; 20])
+                    .collect();
+
+                let pool_implementation = abi::meta_pool_factory::functions::PlainImplementations {
+                    arg0: BigInt::from(tokens.len()),
+                    arg1: add_pool.implementation_idx,
+                }
+                .call(META_POOL_FACTORY.to_vec())?;
 
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
@@ -173,11 +206,7 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: pool_added
-                        .coins
-                        .into_iter()
-                        .filter(|token| *token != [0; 20])
-                        .collect(),
+                    tokens,
                     contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
@@ -198,6 +227,13 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&META_POOL_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            value: address_to_bytes_with_0x(
+                                &pool_implementation.try_into().unwrap(),
+                            ),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -238,6 +274,14 @@ pub fn address_map(
                     abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
                 let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
 
+                let pool_implementation =
+                    abi::meta_pool_factory::functions::MetapoolImplementations {
+                        base_pool: add_pool.base_pool.clone(),
+                    }
+                    .call(META_POOL_FACTORY.to_vec())?
+                        [usize::try_from(add_pool.implementation_idx.to_u64()).unwrap()]
+                    .clone();
+
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
                     tx: Some(Transaction {
@@ -247,7 +291,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into()],
+                    contracts: vec![component_id.into(), add_pool.base_pool.clone()],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -273,6 +317,13 @@ pub fn address_map(
                             name: "base_pool".into(),
                             value: address_to_bytes_with_0x(
                                 &add_pool.base_pool.try_into().unwrap(),
+                            ),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            value: address_to_bytes_with_0x(
+                                &pool_implementation.try_into().unwrap(),
                             ),
                             change: ChangeType::Creation.into(),
                         },
@@ -309,6 +360,20 @@ pub fn address_map(
                                 call,
                             )
                         })?;
+                let filtered: Vec<_> = tx
+                    .calls
+                    .iter()
+                    .filter(|call| !call.account_creations.is_empty())
+                    .collect();
+
+                let implementation = extract_eip1167_target_from_code(
+                    filtered
+                        .first()?
+                        .code_changes
+                        .first()?
+                        .new_code
+                        .clone(),
+                );
 
                 let component_id = &call.return_data[12..];
                 let lp_token = get_token_from_pool(&pool_added.base_pool);
@@ -351,6 +416,11 @@ pub fn address_map(
                             ),
                             change: ChangeType::Creation.into(),
                         },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            value: address_to_bytes_with_0x(&implementation.try_into().unwrap()),
+                            change: ChangeType::Creation.into(),
+                        },
                     ],
                     change: ChangeType::Creation.into(),
                     protocol_type: Some(ProtocolType {
@@ -382,7 +452,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: pool_added.coins,
-                    contracts: vec![component_id.into()],
+                    contracts: vec![component_id.into(), CRYPTO_SWAP_NG_FACTORY.into()],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -402,6 +472,16 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
+                            value: format!(
+                                "call:{}:views_implementation()",
+                                format!("0x{}", hex::encode(CRYPTO_SWAP_NG_FACTORY))
+                            )
+                            .into(),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -430,7 +510,11 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into()],
+                    contracts: vec![
+                        component_id.into(),
+                        CRYPTO_SWAP_NG_FACTORY.into(),
+                        pool_added.base_pool.clone(),
+                    ],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -459,6 +543,26 @@ pub fn address_map(
                             ),
                             change: ChangeType::Creation.into(),
                         },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
+                            value: format!(
+                                "call:{}:views_implementation()",
+                                format!("0x{}", hex::encode(CRYPTO_SWAP_NG_FACTORY))
+                            )
+                            .into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_1".into(),
+                            // Call math_implementation() on CRYPTO_SWAP_NG_FACTORY
+                            value: format!(
+                                "call:{}:math_implementation()",
+                                format!("0x{}", hex::encode(CRYPTO_SWAP_NG_FACTORY))
+                            )
+                            .into(),
+                            change: ChangeType::Creation.into(),
+                        },
                     ],
                     change: ChangeType::Creation.into(),
                     protocol_type: Some(ProtocolType {
@@ -477,6 +581,60 @@ pub fn address_map(
                 abi::tricrypto_factory::events::TricryptoPoolDeployed::match_and_decode(log)
             {
                 let tokens = swap_weth_for_eth(pool_added.coins.into());
+                let mut static_attributes = vec![
+                    Attribute {
+                        name: "pool_type".into(),
+                        value: "tricrypto".into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "name".into(),
+                        value: pool_added.name.into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "factory_name".into(),
+                        value: "tricrypto_factory".into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "factory".into(),
+                        value: address_to_bytes_with_0x(&TRICRYPTO_FACTORY),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "stateless_contract_addr_0".into(),
+                        // Call views_implementation() on TRICRYPTO_FACTORY
+                        value: format!(
+                            "call:{}:views_implementation()",
+                            format!("0x{}", hex::encode(TRICRYPTO_FACTORY))
+                        )
+                        .into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "stateless_contract_addr_1".into(),
+                        // Call math_implementation() on TRICRYPTO_FACTORY
+                        value: format!(
+                            "call:{}:math_implementation()",
+                            format!("0x{}", hex::encode(TRICRYPTO_FACTORY))
+                        )
+                        .into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                ];
+
+                // This is relevant only if the contract has ETH
+                if tokens.contains(&ETH_ADDRESS.into()) {
+                    static_attributes.push(Attribute {
+                        name: "stateless_contract_addr_2".into(),
+                        // WETH
+                        value: address_to_bytes_with_0x(&hex!(
+                            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+                        )),
+                        change: ChangeType::Creation.into(),
+                    })
+                }
 
                 Some(ProtocolComponent {
                     id: hex::encode(&pool_added.pool),
@@ -487,29 +645,8 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens,
-                    contracts: vec![pool_added.pool],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "tricrypto".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: pool_added.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "tricrypto_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&TRICRYPTO_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
+                    contracts: vec![pool_added.pool, TRICRYPTO_FACTORY.into()],
+                    static_att: static_attributes,
                     change: ChangeType::Creation.into(),
                     protocol_type: Some(ProtocolType {
                         name: "curve_pool".into(),
@@ -558,6 +695,20 @@ pub fn address_map(
                     return None;
                 };
                 let component_id = &call.return_data[12..];
+
+                let tokens: Vec<_> = pool_added
+                    .coins
+                    .into_iter()
+                    .filter(|token| *token != [0; 20])
+                    .collect();
+
+                let pool_implementation =
+                    abi::stableswap_factory::functions::PlainImplementations {
+                        arg0: BigInt::from(tokens.len()),
+                        arg1: add_pool.implementation_idx,
+                    }
+                    .call(STABLESWAP_FACTORY.to_vec())?;
+
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
                     tx: Some(Transaction {
@@ -566,11 +717,7 @@ pub fn address_map(
                         hash: tx.hash.clone(),
                         index: tx.index.into(),
                     }),
-                    tokens: pool_added
-                        .coins
-                        .into_iter()
-                        .filter(|token| *token != [0; 20])
-                        .collect(),
+                    tokens,
                     contracts: vec![component_id.into()],
                     static_att: vec![
                         Attribute {
@@ -591,6 +738,13 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&STABLESWAP_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            value: address_to_bytes_with_0x(
+                                &pool_implementation.try_into().unwrap(),
+                            ),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -694,7 +848,7 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens: pool_added.coins.into(),
-                    contracts: vec![pool_added.pool],
+                    contracts: vec![pool_added.pool, TWOCRYPTO_FACTORY.into()],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -714,6 +868,26 @@ pub fn address_map(
                         Attribute {
                             name: "factory".into(),
                             value: address_to_bytes_with_0x(&TWOCRYPTO_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            // Call views_implementation() on TWOCRYPTO_FACTORY
+                            value: format!(
+                                "call:{}:views_implementation()",
+                                format!("0x{}", hex::encode(TWOCRYPTO_FACTORY))
+                            )
+                            .into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_1".into(),
+                            // Call math_implementation() on TWOCRYPTO_FACTORY
+                            value: format!(
+                                "call:{}:math_implementation()",
+                                format!("0x{}", hex::encode(TWOCRYPTO_FACTORY))
+                            )
+                            .into(),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -768,4 +942,21 @@ fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
             }
         })
         .unwrap()
+}
+
+//TODO: We can most likely replace many RPC calls above using this function.
+fn extract_eip1167_target_from_code(code: Vec<u8>) -> [u8; 20] {
+    let mut target = [0u8; 20];
+
+    // Depending on the Vyper version, they use different implementation of EIP1167.
+    // We use the first 10 bytes of the code to make a clear distinction.
+    match code[0..10] {
+        [54, 61, 61, 55, 61, 61, 61, 54, 61, 115] => target.copy_from_slice(&code[10..30]),
+        [54, 96, 0, 96, 0, 55, 97, 16, 0, 96] => target.copy_from_slice(&code[15..35]),
+        _ => {
+            panic!("unknown implementation")
+        }
+    }
+
+    target
 }
