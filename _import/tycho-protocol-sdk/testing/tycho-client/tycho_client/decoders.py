@@ -20,10 +20,9 @@ log = getLogger(__name__)
 class ThirdPartyPoolTychoDecoder:
     """ThirdPartyPool decoder for protocol messages from the Tycho feed"""
 
-    def __init__(self, adapter_contract: str, minimum_gas: int, hard_limit: bool):
+    def __init__(self, adapter_contract: str, minimum_gas: int):
         self.adapter_contract = adapter_contract
         self.minimum_gas = minimum_gas
-        self.hard_limit = hard_limit
 
     def decode_snapshot(
             self,
@@ -68,8 +67,7 @@ class ThirdPartyPoolTychoDecoder:
             exchange=exchange,
             adapter_contract_name=self.adapter_contract,
             minimum_gas=self.minimum_gas,
-            hard_sell_limit=self.hard_limit,
-            trace=True,
+            trace=False,
             **optional_attributes,
         )
 
@@ -77,15 +75,16 @@ class ThirdPartyPoolTychoDecoder:
     def decode_optional_attributes(component, snap, block_number):
         # Handle optional state attributes
         attributes = snap["state"]["attributes"]
-        pool_id = attributes.get("pool_id") or component["id"]
         balance_owner = attributes.get("balance_owner")
         stateless_contracts = {}
         static_attributes = snap["component"]["static_attributes"]
-        
+        pool_id = static_attributes.get("pool_id") or component["id"]
+
         index = 0
         while f"stateless_contract_addr_{index}" in static_attributes:
             encoded_address = static_attributes[f"stateless_contract_addr_{index}"]
-            decoded = bytes.fromhex(encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
+            decoded = bytes.fromhex(
+                encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
             if decoded.startswith("call"):
                 address = ThirdPartyPoolTychoDecoder.get_address_from_call(block_number, decoded)
             else:
@@ -94,13 +93,13 @@ class ThirdPartyPoolTychoDecoder:
             code = static_attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
             stateless_contracts[address] = code
             index += 1
-            
+
         index = 0
         while f"stateless_contract_addr_{index}" in attributes:
             address = attributes[f"stateless_contract_addr_{index}"]
             code = attributes.get(f"stateless_contract_code_{index}") or get_code_for_address(address)
             stateless_contracts[address] = code
-            index += 1      
+            index += 1
         return {
             "balance_owner": balance_owner,
             "pool_id": pool_id,

@@ -26,10 +26,10 @@ log = getLogger(__name__)
 
 class TokenLoader:
     def __init__(
-        self,
-        tycho_url: str,
-        blockchain: Blockchain,
-        min_token_quality: Optional[int] = 0,
+            self,
+            tycho_url: str,
+            blockchain: Blockchain,
+            min_token_quality: Optional[int] = 0,
     ):
         self.tycho_url = tycho_url
         self.blockchain = blockchain
@@ -45,10 +45,10 @@ class TokenLoader:
         start = time.monotonic()
         all_tokens = []
         while data := self._get_all_with_pagination(
-            url=url,
-            page=page,
-            limit=self._token_limit,
-            params={"min_quality": self.min_token_quality},
+                url=url,
+                page=page,
+                limit=self._token_limit,
+                params={"min_quality": self.min_token_quality},
         ):
             all_tokens.extend(data)
             page += 1
@@ -73,10 +73,10 @@ class TokenLoader:
         start = time.monotonic()
         all_tokens = []
         while data := self._get_all_with_pagination(
-            url=url,
-            page=page,
-            limit=self._token_limit,
-            params={"min_quality": self.min_token_quality, "addresses": addresses},
+                url=url,
+                page=page,
+                limit=self._token_limit,
+                params={"min_quality": self.min_token_quality, "addresses": addresses},
         ):
             all_tokens.extend(data)
             page += 1
@@ -95,7 +95,7 @@ class TokenLoader:
 
     @staticmethod
     def _get_all_with_pagination(
-        url: str, params: Optional[Dict] = None, page: int = 0, limit: int = 50
+            url: str, params: Optional[Dict] = None, page: int = 0, limit: int = 50
     ) -> Dict:
         if params is None:
             params = {}
@@ -122,14 +122,14 @@ class BlockProtocolChanges:
 
 class TychoPoolStateStreamAdapter:
     def __init__(
-        self,
-        tycho_url: str,
-        protocol: str,
-        decoder: ThirdPartyPoolTychoDecoder,
-        blockchain: Blockchain,
-        min_tvl: Optional[Decimal] = 10,
-        min_token_quality: Optional[int] = 0,
-        include_state=True,
+            self,
+            tycho_url: str,
+            protocol: str,
+            decoder: ThirdPartyPoolTychoDecoder,
+            blockchain: Blockchain,
+            min_tvl: Optional[Decimal] = 10,
+            min_token_quality: Optional[int] = 0,
+            include_state=True,
     ):
         """
         :param tycho_url: URL to connect to Tycho DB
@@ -238,7 +238,7 @@ class TychoPoolStateStreamAdapter:
 
     @staticmethod
     def build_snapshot_message(
-        protocol_components: dict, protocol_states: dict, contract_states: dict
+            protocol_components: dict, protocol_states: dict, contract_states: dict
     ) -> dict[str, ThirdPartyPool]:
         vm_states = {state["address"]: state for state in contract_states["accounts"]}
         states = {}
@@ -248,7 +248,7 @@ class TychoPoolStateStreamAdapter:
         for state in protocol_states["states"]:
             pool_id = state["component_id"]
             if pool_id not in states:
-                log.warning(f"State for pool {pool_id} not found in components")
+                log.debug(f"{pool_id} was present in snapshot but not in components")
                 continue
             states[pool_id]["state"] = state
         snapshot = {"vm_storage": vm_states, "states": states}
@@ -269,7 +269,7 @@ class TychoPoolStateStreamAdapter:
         return self.process_snapshot(block, state_msg["snapshot"])
 
     def process_snapshot(
-        self, block: EVMBlock, state_msg: dict
+            self, block: EVMBlock, state_msg: dict
     ) -> BlockProtocolChanges:
         start = time.monotonic()
         removed_pools = set()

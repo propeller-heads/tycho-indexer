@@ -85,7 +85,6 @@ class TestRunner:
             else:
                 print(f"❗️ {test['name']} failed: {result.message}")
 
-
     def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
         """Validate the current protocol state against the expected state."""
         protocol_components = self.tycho_rpc_client.get_protocol_components()
@@ -153,7 +152,8 @@ class TestRunner:
             contract_states = self.tycho_rpc_client.get_contract_state()
             filtered_components = {'protocol_components': [pc for pc in protocol_components["protocol_components"] if
                                                            pc["id"] in [c["id"].lower() for c in
-                                                                        expected_state["protocol_components"] if c["skip_simulation"] is False]]}
+                                                                        expected_state["protocol_components"] if
+                                                                        c.get("skip_simulation", False) is False]]}
             simulation_failures = self.simulate_get_amount_out(
                 stop_block,
                 protocol_states,
@@ -198,7 +198,7 @@ class TestRunner:
                 self.adapters_src, "out", f"{self.config['adapter_contract']}.sol",
                 f"{self.config['adapter_contract']}.evm.runtime"
             )
-            decoder = ThirdPartyPoolTychoDecoder(adapter_contract, 0, False)
+            decoder = ThirdPartyPoolTychoDecoder(adapter_contract, 0)
             stream_adapter = TychoPoolStateStreamAdapter(
                 tycho_url="0.0.0.0:4242",
                 protocol=protocol,

@@ -153,10 +153,7 @@ pub fn map_protocol_changes(
     let default_attributes = vec![
         Attribute {
             name: "balance_owner".to_string(),
-            value: "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
-                .to_string()
-                .as_bytes()
-                .to_vec(),
+            value: VAULT_ADDRESS.to_vec(),
             change: ChangeType::Creation.into(),
         },
         Attribute {

@@ -71,8 +71,17 @@ pub fn address_map(
                             &json_serialize_bigint_list(&create_call.normalized_weights),
                         ),
                         (
-                            "pool_id",
-                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                            "pool_id", &pool_registered.pool_id,
+                        ),
+                        (
+                            "rate_providers",
+                            &json_serialize_address_list(&create_call.rate_providers),
+                        ),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
                         ),
                         ("manual_updates", &[1u8]),
                     ])
@@ -94,15 +103,20 @@ pub fn address_map(
                     .with_attributes(&[
                         ("pool_type", "ComposableStablePoolFactory".as_bytes()),
                         (
-                            "pool_id",
-                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                            "pool_id", &pool_registered.pool_id,
                         ),
                         ("bpt", &pool_created.pool),
-                        ("manual_updates", &[1u8]),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
                         (
                             "rate_providers",
                             &json_serialize_address_list(&create_call.rate_providers),
                         ),
+                        ("manual_updates", &[1u8]),
                     ])
                     .as_swap_type("balancer_pool", ImplementationType::Vm),
             )
@@ -128,8 +142,7 @@ pub fn address_map(
                                 .to_signed_bytes_be(),
                         ),
                         (
-                            "pool_id",
-                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                            "pool_id", &pool_registered.pool_id,
                         ),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
@@ -166,8 +179,7 @@ pub fn address_map(
                                 .to_signed_bytes_be(),
                         ),
                         (
-                            "pool_id",
-                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                            "pool_id", &pool_registered.pool_id,
                         ),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
@@ -252,8 +264,7 @@ pub fn address_map(
                                 .to_signed_bytes_be(),
                         ),
                         (
-                            "pool_id",
-                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                            "pool_id", &pool_registered.pool_id,
                         ),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
@@ -290,8 +301,7 @@ pub fn address_map(
                                 .to_signed_bytes_be(),
                         ),
                         (
-                            "pool_id",
-                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                            "pool_id", &pool_registered.pool_id,
                         ),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
@@ -324,8 +334,13 @@ pub fn address_map(
                         ("pool_type", "WeightedPool2TokensFactory".as_bytes()),
                         ("weights", &json_serialize_bigint_list(&create_call.weights)),
                         (
-                            "pool_id",
-                            format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
+                            "pool_id", &pool_registered.pool_id,
+                        ),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
                         ),
                         ("manual_updates", &[1u8]),
                     ])
