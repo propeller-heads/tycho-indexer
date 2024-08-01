@@ -10,7 +10,9 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-version = "0.5.0"
+version = "0.4.12"
 
 [tool.maturin]
+python-source = "python"
+module-name = "protosim_py._protosim_py"
 features = ["pyo3/extension-module"]

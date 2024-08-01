@@ -13,6 +13,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "_protosim_py"
+version = "0.2.1"
+dependencies = [
+ "ethers",
+ "hex",
+ "num-bigint",
+ "once_cell",
+ "protosim",
+ "pyo3",
+ "pyo3-asyncio",
+ "pyo3-log",
+ "revm",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.4.1",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6149,25 +6168,6 @@ dependencies = [
  "tycho-core",
  "uuid 1.4.1",
  "warp",
-]
-
-[[package]]
-name = "protosim-py"
-version = "0.5.0"
-dependencies = [
- "ethers",
- "hex",
- "num-bigint",
- "once_cell",
- "protosim",
- "pyo3",
- "pyo3-asyncio",
- "pyo3-log",
- "revm",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid 1.4.1",
 ]
 
 [[package]]
