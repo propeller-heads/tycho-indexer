@@ -10,17 +10,25 @@ def main() -> None:
         "--package", type=str, help="Name of the package to test."
     )
     parser.add_argument(
-        "--with_binary_logs",
+        "--tycho-logs",
         action="store_true",
         help="Flag to activate logs from Tycho.",
     )
     parser.add_argument(
-        "--db_url", type=str, help="Postgres database URL for the Tycho indexer."
+        "--db-url", type=str, help="Postgres database URL for the Tycho indexer."
+    )
+    parser.add_argument(
+        "--vm-traces",
+        action="store_true",
+        help="Enable tracing during vm simulations.",
     )
     args = parser.parse_args()
 
     test_runner = TestRunner(
-        args.package, args.with_binary_logs, db_url=args.db_url
+        args.package,
+        args.tycho_logs,
+        db_url=args.db_url,
+        vm_traces=args.vm_traces,
     )
     test_runner.run_tests()
 

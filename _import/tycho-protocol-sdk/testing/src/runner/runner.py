@@ -46,7 +46,7 @@ class SimulationFailure(BaseModel):
 
 
 class TestRunner:
-    def __init__(self, package: str, with_binary_logs: bool, db_url: str):
+    def __init__(self, package: str, with_binary_logs: bool, db_url: str, vm_traces: bool):
         self.repo_root = os.getcwd()
         config_path = os.path.join(self.repo_root, "substreams", package, "test_assets.yaml")
         self.config = load_config(config_path)
@@ -55,6 +55,7 @@ class TestRunner:
         self.tycho_runner = TychoRunner(db_url, with_binary_logs, self.config["initialized_accounts"])
         self.tycho_rpc_client = TychoRPCClient()
         self.db_url = db_url
+        self._vm_traces = vm_traces
         self._chain = Blockchain.ethereum
 
     def run_tests(self) -> None:
@@ -198,7 +199,7 @@ class TestRunner:
                 self.adapters_src, "out", f"{self.config['adapter_contract']}.sol",
                 f"{self.config['adapter_contract']}.evm.runtime"
             )
-            decoder = ThirdPartyPoolTychoDecoder(adapter_contract, 0)
+            decoder = ThirdPartyPoolTychoDecoder(adapter_contract, 0, trace=self._vm_traces)
             stream_adapter = TychoPoolStateStreamAdapter(
                 tycho_url="0.0.0.0:4242",
                 protocol=protocol,

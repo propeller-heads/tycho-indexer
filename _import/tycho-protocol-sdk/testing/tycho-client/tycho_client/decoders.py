@@ -20,9 +20,10 @@ log = getLogger(__name__)
 class ThirdPartyPoolTychoDecoder:
     """ThirdPartyPool decoder for protocol messages from the Tycho feed"""
 
-    def __init__(self, adapter_contract: str, minimum_gas: int):
+    def __init__(self, adapter_contract: str, minimum_gas: int, trace: bool):
         self.adapter_contract = adapter_contract
         self.minimum_gas = minimum_gas
+        self.trace = trace
 
     def decode_snapshot(
             self,
@@ -67,7 +68,7 @@ class ThirdPartyPoolTychoDecoder:
             exchange=exchange,
             adapter_contract_name=self.adapter_contract,
             minimum_gas=self.minimum_gas,
-            trace=False,
+            trace=self.trace,
             **optional_attributes,
         )
 
