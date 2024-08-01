@@ -16,7 +16,7 @@ use crate::{
 };
 use substreams_ethereum::pb::{
     eth,
-    eth::v2::{block::DetailLevel, TransactionTrace, CallType},
+    eth::v2::{block::DetailLevel, CallType, TransactionTrace},
 };
 
 /// Extracts and aggregates contract changes from a block.

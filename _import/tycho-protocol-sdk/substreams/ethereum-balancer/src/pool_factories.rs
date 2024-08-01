@@ -70,9 +70,7 @@ pub fn address_map(
                             "normalized_weights",
                             &json_serialize_bigint_list(&create_call.normalized_weights),
                         ),
-                        (
-                            "pool_id", &pool_registered.pool_id,
-                        ),
+                        ("pool_id", &pool_registered.pool_id),
                         (
                             "rate_providers",
                             &json_serialize_address_list(&create_call.rate_providers),
@@ -102,9 +100,7 @@ pub fn address_map(
                     .with_tokens(&tokens_registered.tokens)
                     .with_attributes(&[
                         ("pool_type", "ComposableStablePoolFactory".as_bytes()),
-                        (
-                            "pool_id", &pool_registered.pool_id,
-                        ),
+                        ("pool_id", &pool_registered.pool_id),
                         ("bpt", &pool_created.pool),
                         (
                             "fee",
@@ -141,9 +137,7 @@ pub fn address_map(
                                 .upper_target
                                 .to_signed_bytes_be(),
                         ),
-                        (
-                            "pool_id", &pool_registered.pool_id,
-                        ),
+                        ("pool_id", &pool_registered.pool_id),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
@@ -178,9 +172,7 @@ pub fn address_map(
                                 .upper_target
                                 .to_signed_bytes_be(),
                         ),
-                        (
-                            "pool_id", &pool_registered.pool_id,
-                        ),
+                        ("pool_id", &pool_registered.pool_id),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
@@ -263,9 +255,7 @@ pub fn address_map(
                                 .upper_target
                                 .to_signed_bytes_be(),
                         ),
-                        (
-                            "pool_id", &pool_registered.pool_id,
-                        ),
+                        ("pool_id", &pool_registered.pool_id),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
@@ -300,9 +290,7 @@ pub fn address_map(
                                 .upper_target
                                 .to_signed_bytes_be(),
                         ),
-                        (
-                            "pool_id", &pool_registered.pool_id,
-                        ),
+                        ("pool_id", &pool_registered.pool_id),
                         ("manual_updates", &[1u8]),
                         ("bpt", &pool_created.pool),
                         ("main_token", &create_call.main_token),
@@ -333,9 +321,7 @@ pub fn address_map(
                     .with_attributes(&[
                         ("pool_type", "WeightedPool2TokensFactory".as_bytes()),
                         ("weights", &json_serialize_bigint_list(&create_call.weights)),
-                        (
-                            "pool_id", &pool_registered.pool_id,
-                        ),
+                        ("pool_id", &pool_registered.pool_id),
                         (
                             "fee",
                             &create_call
