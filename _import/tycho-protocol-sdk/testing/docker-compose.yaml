@@ -17,17 +17,29 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL}
     volumes:
-      - ${SUBSTREAMS_PATH}:/app/substreams/my_substream
+#      - ${SUBSTREAMS_PATH}:/app/substreams/my_substream
       - ../substreams:/app/substreams
       - ../proto:/app/proto
-      - ./tycho-indexer:/app/testing/tycho-indexer
+      - ./tycho-indexer:/bin/tycho-indexer
       - ./src/runner/runner.py:/app/testing/src.py
+      - ../evm:/app/evm
+      - ./src/runner:/app/testing/src/runner
     ports:
       - "80:80"
     depends_on:
       - db
     env_file:
       - ".env"
+    command:
+      - "python"
+      - "testing/src/runner/cli.py"
+      - "--package"
+      - "ethereum-balancer"
+      - "--with_binary_logs"
+      - "--db_url"
+      - "postgres://postgres:mypassword@db:5432/tycho_indexer_0"
 volumes:
   postgres_data:

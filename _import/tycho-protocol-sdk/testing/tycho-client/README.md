@@ -7,10 +7,13 @@ This repository contains the Tycho Adapter, a tool that allows you to interact w
 ### Prerequisites
 
 - Python 3.9
+- Access to PropellerHead's private PyPi repository (CodeArtifact)
 
 ### Install with pip
 
 ```shell
+# Access to PropellerHead's private PyPi repository (CodeArtifact)
+aws codeartifact login --tool pip --repository protosim --domain propeller
 # Create conda environment
 conda create -n tycho pip python=3.9
 # Activate environment

@@ -2,6 +2,8 @@ substreams_yaml_path: ./substreams.yaml
 protocol_type_names:
   - "balancer_pool"
 adapter_contract: "BalancerV2SwapAdapter"
+adapter_build_signature: "constructor(address)"
+adapter_build_args: "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
 skip_balance_check: true
 initialized_accounts:
   - "0xba12222222228d8ba445958a75a0704d566bf2c8"

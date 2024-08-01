@@ -9,6 +9,7 @@ The testing suite builds the `.spkg` for your Substreams module, indexes a speci
 ## Prerequisites
 
 - Latest version of our indexer, Tycho. Please contact us to obtain the latest version. Once acquired, place it in the `/testing/` directory.
+- Access to PropellerHeads' private PyPI repository. Please contact us to obtain access.
 - Docker installed on your machine.
 
 ## Test Configuration
@@ -38,7 +39,9 @@ Example: `SUBSTREAMS_PATH=../substreams/ethereum-curve`
 
 ### Step 2: Build and the Testing Script
 
-Run the testing script using Docker Compose:
+To build the testing script, run the following commands:
 ```bash
+source pre_build.sh
+docker compose build
 docker compose run app
 ```
