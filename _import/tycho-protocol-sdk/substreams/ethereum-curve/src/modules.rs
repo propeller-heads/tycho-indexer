@@ -115,29 +115,15 @@ pub fn store_non_component_accounts(map: BlockTransactionProtocolComponents, sto
         .iter()
         .flat_map(|tx_components| &tx_components.components)
         .for_each(|component| {
-            // Crypto pool factory creates LP token separated from the pool, we need to index it so we add it to the store if the new protocol component comes from this factory
-            if component
-                .static_att
-                .contains(&Attribute {
-                    name: "pool_type".into(),
-                    value: "crypto_pool".into(),
-                    change: ChangeType::Creation.into(),
-                }) &&
-                component
-                    .static_att
-                    .contains(&Attribute {
-                        name: "factory_name".into(),
-                        value: "crypto_pool_factory".into(),
-                        change: ChangeType::Creation.into(),
-                    })
-            {
+            // Crypto pool factory creates LP token separated from the pool, we need to index it so
+            // we add it to the store if the new protocol component comes from this factory
+            if component.has_attributes(&[
+                ("pool_type", "crypto_pool".into()),
+                ("factory_name", "crypto_pool_factory".into()),
+            ]) {
                 let lp_token = component
-                    .static_att
-                    .iter()
-                    .find(|attr| attr.name == "lp_token")
-                    .unwrap()
-                    .value
-                    .clone();
+                    .get_attribute_value("lp_token")
+                    .expect("didn't find lp_token attribute");
                 store.set(0, hex::encode(lp_token), &1);
             }
         });
