@@ -1,4 +1,5 @@
 mod abi;
+pub mod attributes;
 pub mod balances;
 pub mod contract;
 mod mock_store;

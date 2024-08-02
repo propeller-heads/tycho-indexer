@@ -1,16 +1,18 @@
 version: '3.1'
 services:
   db:
-    image: ghcr.io/dbsystel/postgresql-partman:15-5
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
     restart: "always"
     environment:
       POSTGRESQL_PASSWORD: mypassword
       POSTGRESQL_DATABASE: tycho_indexer_0
       POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_SHARED_PRELOAD_LIBRARIES: pg_cron
     ports:
       - "5431:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    shm_size: '1gb'
   app:
     build:
       context: .
@@ -20,7 +22,7 @@ services:
       - ../substreams:/app/substreams
       - ../proto:/app/proto
       - ./tycho-indexer:/app/testing/tycho-indexer
-      - ./runner.py:/app/testing/runner.py
+      - ./src/runner/runner.py:/app/testing/src.py
     ports:
       - "80:80"
     depends_on:

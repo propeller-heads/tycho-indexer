@@ -6,7 +6,8 @@ WORKDIR /app
 
 # Add current directory code to /app in container
 ADD . /app/testing
-RUN chmod +x /app/testing/tycho-indexer
+
+RUN chmod +x /app/testing/tycho-indexer-linux-x64
 
 # Create a new conda environment and install pip
 RUN conda create -n myenv pip python=3.9
@@ -20,7 +21,7 @@ RUN apt-get update \
     && pip install psycopg2 \
     && apt-get clean
 
-RUN /bin/bash -c "source activate myenv && pip install --no-cache-dir -r testing/requirements.txt"
+RUN /bin/bash -c "source activate myenv && cd testing && pip install --no-cache-dir -r requirements.txt && cd -"
 
 # Make port 80 available to the world outside this container
 EXPOSE 80

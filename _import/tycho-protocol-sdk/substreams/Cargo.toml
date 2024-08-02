@@ -12,6 +12,8 @@ hex-literal = "0.4.1"
 hex = "0.4.3"
 ethabi = "18.0.0"
 tycho-substreams = { path = "crates/tycho-substreams" }
+serde = "1.0.204"
+serde_json = "1.0.120"
 
 [profile.release]
 lto = true

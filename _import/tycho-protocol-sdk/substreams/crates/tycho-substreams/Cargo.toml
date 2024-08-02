@@ -11,3 +11,5 @@ hex.workspace = true
 itertools = "0.12.0"
 ethabi.workspace = true
 num-bigint = "0.4.4"
+serde.workspace = true
+serde_json.workspace = true

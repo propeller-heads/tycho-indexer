@@ -1,35 +1,103 @@
 import signal
+import subprocess
 import threading
 import time
-import requests
-import subprocess
-import os
+
 import psycopg2
+import requests
 from psycopg2 import sql
 
-binary_path = "./testing/tycho-indexer"
+import os
+
+
+def find_binary_file(file_name):
+    # Define usual locations for binary files in Unix-based systems
+    locations = [
+        "/bin",
+        "/sbin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+    ]
+
+    # Add user's local bin directory if it exists
+    home = os.path.expanduser("~")
+    if os.path.exists(home + "/.local/bin"):
+        locations.append(home + "/.local/bin")
+
+    # Check each location
+    for location in locations:
+        potential_path = location + "/" + file_name
+        if os.path.exists(potential_path):
+            return potential_path
+
+    # If binary is not found in the usual locations, return None
+    raise RuntimeError("Unable to locate tycho-indexer binary")
+
+
+binary_path = find_binary_file("tycho-indexer")
+
+
+class TychoRPCClient:
+    def __init__(self, rpc_url: str = "http://0.0.0.0:4242"):
+        self.rpc_url = rpc_url
+
+    def get_protocol_components(self) -> dict:
+        """Retrieve protocol components from the RPC server."""
+        url = self.rpc_url + "/v1/ethereum/protocol_components"
+        headers = {"accept": "application/json", "Content-Type": "application/json"}
+        data = {"protocol_system": "test_protocol"}
+
+        response = requests.post(url, headers=headers, json=data)
+        return response.json()
+
+    def get_protocol_state(self) -> dict:
+        """Retrieve protocol state from the RPC server."""
+        url = self.rpc_url + "/v1/ethereum/protocol_state"
+        headers = {"accept": "application/json", "Content-Type": "application/json"}
+        data = {}
+
+        response = requests.post(url, headers=headers, json=data)
+        return response.json()
+
+    def get_contract_state(self) -> dict:
+        """Retrieve contract state from the RPC server."""
+        url = self.rpc_url + "/v1/ethereum/contract_state?include_balances=false"
+        headers = {"accept": "application/json", "Content-Type": "application/json"}
+        data = {}
+
+        response = requests.post(url, headers=headers, json=data)
+        return response.json()
 
 
 class TychoRunner:
-    def __init__(self, with_binary_logs: bool = False):
+    def __init__(self, db_url: str, with_binary_logs: bool = False, initialized_accounts: list[str] = None):
         self.with_binary_logs = with_binary_logs
+        self._db_url = db_url
+        self._initialized_accounts = initialized_accounts or []
 
     def run_tycho(
-        self,
-        spkg_path: str,
-        start_block: int,
-        end_block: int,
-        protocol_type_names: list,
+            self,
+            spkg_path: str,
+            start_block: int,
+            end_block: int,
+            protocol_type_names: list,
+            initialized_accounts: list,
     ) -> None:
         """Run the Tycho indexer with the specified SPKG and block range."""
 
         env = os.environ.copy()
-        env["RUST_LOG"] = "info"
+        env["RUST_LOG"] = "tycho_indexer=info"
+
+        all_accounts = self._initialized_accounts + initialized_accounts
 
         try:
             process = subprocess.Popen(
                 [
                     binary_path,
+                    "--database-url",
+                    self._db_url,
                     "run",
                     "--spkg",
                     spkg_path,
@@ -40,15 +108,16 @@ class TychoRunner:
                     "--start-block",
                     str(start_block),
                     "--stop-block",
-                    str(end_block + 2),
-                ],  # +2 is to make up for the cache in the index side.
+                    # +2 is to make up for the cache in the index side.
+                    str(end_block + 2)
+                ] + (["--initialized-accounts", ",".join(all_accounts)] if all_accounts else []),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
                 env=env,
-            )
-            
+                )
+
             with process.stdout:
                 for line in iter(process.stdout.readline, ""):
                     if line and self.with_binary_logs:
@@ -80,7 +149,12 @@ class TychoRunner:
                 env["RUST_LOG"] = "info"
 
                 process = subprocess.Popen(
-                    [binary_path, "rpc"],
+                    [
+                        binary_path,
+                        "--database-url",
+                        self._db_url,
+                        "rpc"
+                    ],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -127,35 +201,15 @@ class TychoRunner:
                 rpc_thread.join()
 
     @staticmethod
-    def get_protocol_components() -> dict:
-        """Retrieve protocol components from the RPC server."""
-        url = "http://0.0.0.0:4242/v1/ethereum/protocol_components"
-        headers = {"accept": "application/json", "Content-Type": "application/json"}
-        data = {"protocol_system": "test_protocol"}
-
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()
-
-    @staticmethod
-    def get_protocol_state() -> dict:
-        """Retrieve protocol state from the RPC server."""
-        url = "http://0.0.0.0:4242/v1/ethereum/protocol_state"
-        headers = {"accept": "application/json", "Content-Type": "application/json"}
-        data = {}
-
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()
-
-    @staticmethod
     def empty_database(db_url: str) -> None:
         """Drop and recreate the Tycho indexer database."""
         try:
-            conn = psycopg2.connect(db_url)
+            conn = psycopg2.connect(db_url[:db_url.rfind('/')])
             conn.autocommit = True
             cursor = conn.cursor()
 
             cursor.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
                     sql.Identifier("tycho_indexer_0")
                 )
             )
