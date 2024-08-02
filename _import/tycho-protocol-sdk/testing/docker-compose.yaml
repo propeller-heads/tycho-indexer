@@ -20,7 +20,6 @@ services:
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL}
     volumes:
-#      - ${SUBSTREAMS_PATH}:/app/substreams/my_substream
       - ../substreams:/app/substreams
       - ../proto:/app/proto
       - ./tycho-indexer:/bin/tycho-indexer
@@ -33,13 +32,15 @@ services:
       - db
     env_file:
       - ".env"
+    environment:
+      - DATABASE_URL=postgres://postgres:mypassword@db:5432/tycho_indexer_0
     command:
       - "python"
       - "testing/src/runner/cli.py"
       - "--package"
-      - "ethereum-balancer"
-      - "--with_binary_logs"
-      - "--db_url"
+      - ${SUBSTREAMS_PACKAGE}
+      - "--tycho-logs"
+      - "--db-url"
       - "postgres://postgres:mypassword@db:5432/tycho_indexer_0"
 volumes:
   postgres_data:

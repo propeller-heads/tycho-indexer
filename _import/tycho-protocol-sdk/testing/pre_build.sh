@@ -12,7 +12,7 @@ set +a
 # Check if DOMAIN_OWNER is set
 if [ -z "$DOMAIN_OWNER" ]; then
   echo "DOMAIN_OWNER environment variable is not set."
-  exit 1
+  return 1
 fi
 
 # Fetch the CODEARTIFACT_AUTH_TOKEN

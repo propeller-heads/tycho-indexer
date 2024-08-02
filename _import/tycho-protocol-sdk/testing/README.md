@@ -33,9 +33,27 @@ Please place this Runtime file under the respective `substream` directory inside
 Export the required environment variables for the execution. You can find the available environment variables in the `.env.default` file.
 Please create a `.env` file in the `testing` directory and set the required environment variables.
 
-The variable SUBSTREAMS_PATH should be a relative reference to the directory containing the Substreams module that you want to test.
+#### Environment Variables
 
-Example: `SUBSTREAMS_PATH=../substreams/ethereum-curve`
+**SUBSTREAMS_PACKAGE**
+- **Description**: Specifies the Substreams module that you want to test
+- **Example**: `export SUBSTREAMS_PACKAGE=ethereum-balancer`
+
+**DATABASE_URL**
+- **Description**: The connection string for the PostgreSQL database. It includes the username, password, host, port, and database name. It's already set to the default for the Docker container.
+- **Example**: `export DATABASE_URL="postgres://postgres:mypassword@localhost:5431/tycho_indexer_0`
+
+**RPC_URL**
+- **Description**: The URL for the Ethereum RPC endpoint. This is used to fetch the storage data. The node needs to be an archive node, and support [debug_storageRangeAt](https://www.quicknode.com/docs/ethereum/debug_storageRangeAt).
+- **Example**: `export RPC_URL="https://ethereum-mainnet.core.chainstack.com/123123123123"`
+
+**SUBSTREAMS_API_TOKEN**
+- **Description**: The API token for accessing Substreams services. This token is required for authentication.
+- **Example**: `export SUBSTREAMS_API_TOKEN=eyJhbGci...`
+
+**DOMAIN_OWNER**
+- **Description**: The domain owner identifier for Propellerhead's AWS account, used for authenticating on the private PyPI repository.
+- **Example**: `export DOMAIN_OWNER=123456789`
 
 ### Step 2: Build and the Testing Script
 

@@ -4,6 +4,14 @@ FROM --platform=linux/amd64 continuumio/miniconda3:24.4.0-0
 # Set the working directory in the container to /app
 WORKDIR /app
 
+# Install Foundry
+RUN apt-get update && apt-get install -y curl
+RUN curl -L https://foundry.paradigm.xyz | bash
+RUN /bin/bash -c "source $HOME/.bashrc && $HOME/.foundry/bin/foundryup"
+#
+# Add Foundry to PATH
+ENV PATH /root/.foundry/bin:$PATH
+
 # Add current directory code to /app in container
 ADD . /app/testing
 
@@ -22,7 +30,7 @@ RUN apt-get update \
     && apt-get clean
 
 ARG PIP_INDEX_URL
-RUN /bin/bash -c "source activate myenv && cd testing && pip install --no-cache-dir -r src/requirements.txt && cd -"
+RUN /bin/bash -c "source activate myenv && cd testing && pip install --no-cache-dir -r requirements.txt && cd -"
 
 # Make port 80 available to the world outside this container
 EXPOSE 80
