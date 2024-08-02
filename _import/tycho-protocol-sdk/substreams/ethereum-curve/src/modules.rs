@@ -13,7 +13,7 @@ use substreams::{
 use substreams_ethereum::pb::eth;
 
 use crate::{
-    consts::{CRYPTO_SWAP_NG_FACTORY, TRICRYPTO_FACTORY},
+    consts::{CRYPTO_SWAP_NG_FACTORY, NEW_SUSD, OLD_SUSD, TRICRYPTO_FACTORY},
     pool_changes::emit_eth_deltas,
     pool_factories,
     pools::emit_specific_pools,
@@ -157,15 +157,30 @@ pub fn map_relative_balances(
                 .flat_map(|tx| {
                     emit_eth_deltas(tx, &tokens_store)
                         .into_iter()
-                        .chain(extract_balance_deltas_from_tx(tx, |token, transactor| {
-                            let pool_key = format!("pool:{}", hex::encode(transactor));
-                            if let Some(tokens) = tokens_store.get_last(pool_key) {
-                                let token_id = hex::encode(token);
-                                tokens.split(':').any(|t| t == token_id)
-                            } else {
-                                false
-                            }
-                        }))
+                        .chain(
+                            extract_balance_deltas_from_tx(tx, |token, transactor| {
+                                let pool_key = format!("pool:{}", hex::encode(transactor));
+                                if let Some(tokens) = tokens_store.get_last(pool_key) {
+                                    let token_id;
+                                    if token == OLD_SUSD {
+                                        token_id = hex::encode(NEW_SUSD);
+                                    } else {
+                                        token_id = hex::encode(token);
+                                    }
+                                    tokens.split(':').any(|t| t == token_id)
+                                } else {
+                                    false
+                                }
+                            })
+                            .into_iter()
+                            .map(|mut balance| {
+                                if balance.token == OLD_SUSD {
+                                    balance.token = NEW_SUSD.into();
+                                }
+                                balance
+                            })
+                            .collect::<Vec<_>>(),
+                        )
                 })
                 .collect();
 

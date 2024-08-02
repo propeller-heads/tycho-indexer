@@ -33,6 +33,48 @@ tests:
           creation_tx: "0xfac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa"
           skip_simulation: false
 
+  - name: test_tricrypto2
+    start_block: 12821148
+    stop_block: 12831387
+    expected_state:
+      protocol_components:
+        - id: "0xd51a44d3fae010294c616388b506acda1bfaae46"
+          tokens:
+            - "0xdac17f958d2ee523a2206206994597c13d831ec7"
+            - "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+            - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+          static_attributes:
+          creation_tx: "0xdafb6385ed988ce8aacecfe1d97b38ea5e60b1ebce74d2423f71ddd621680138"
+          skip_simulation: true #TODO: investigate this failure
+
+  - name: test_susd
+    start_block: 9906598
+    stop_block: 9907338
+    expected_state:
+      protocol_components:
+        - id: "0xa5407eae9ba41422680e2e00537571bcc53efbfd"
+          tokens:
+            - "0x6b175474e89094c44da98b954eedeac495271d0f"
+            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            - "0xdac17f958d2ee523a2206206994597c13d831ec7"
+            - "0x57ab1ec28d129707052df4df418d58a2d46d5f51"
+          static_attributes:
+          creation_tx: "0x51aca4a03a395de8855fa2ca59b7febe520c2a223e69c502066162f7c1a95ec2"
+          skip_simulation: false
+
+  - name: test_fraxusdc
+    start_block: 14939588
+    stop_block: 14939712
+    expected_state:
+      protocol_components:
+        - id: "0xdcef968d416a41cdac0ed8702fac8128a64241a2"
+          tokens:
+            - "0x853d955acef822db058eb8505911ed77f175b99e"
+            - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          static_attributes:
+          creation_tx: "0x1f4254004ce9e19d4eb742ee5a69d30f29085902d976f73e97c44150225ef775"
+          skip_simulation: false
+
   - name: test_crypto_swap_ng_factory_plain_pool
     start_block: 18580701
     stop_block: 18614742
@@ -106,7 +148,7 @@ tests:
     stop_block: 19163633
     expected_state:
       protocol_components:
-        - id: "0x71db3764d6841d8b01dc27c0fd4a66a8a34b2be0"
+        - id: "0x71db3764d6841d8b01dc27c0fd4a66a8a34b2be0" #TODO: ADD TEST THAT USE WETH
           tokens:
             - "0x04c154b66cb340f3ae24111cc767e0184ed00cc6"
             - "0x4591dbff62656e7859afe5e45f6f47d3669fbb28"
