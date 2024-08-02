@@ -74,6 +74,7 @@ class ERC20OverwriteFactory:
         self._overwrites = dict()
         self._balance_slot: Final[int] = 0
         self._allowance_slot: Final[int] = 1
+        self._total_supply_slot: Final[int] = 2
 
     def set_balance(self, balance: int, owner: Address):
         """
@@ -109,6 +110,19 @@ class ERC20OverwriteFactory:
             5,
             f"Override allowance: token={self._token.address} owner={owner}"
             f"spender={spender} value={allowance} slot={storage_index}",
+        )
+
+    def set_total_supply(self, supply: int):
+        """
+        Set the total supply of the token.
+
+        Parameters:
+            supply: The total supply value.
+        """
+        self._overwrites[self._total_supply_slot] = supply
+        log.log(
+            5,
+            f"Override total supply: token={self._token.address} supply={supply}"
         )
 
     def get_protosim_overwrites(self) -> dict[Address, dict[int, int]]:

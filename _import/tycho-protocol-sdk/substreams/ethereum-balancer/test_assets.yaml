@@ -1,121 +1,125 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_type_names:
   - "balancer_pool"
-adapter_contract: "BalancerV2SwapAdapter.evm.runtime"
+adapter_contract: "BalancerV2SwapAdapter"
 skip_balance_check: true
+initialized_accounts:
+  - "0xba12222222228d8ba445958a75a0704d566bf2c8"
+# Uncomment entries below to include composable stable pool dependencies
+# wstETH dependencies
+#  - "0x72D07D7DcA67b8A406aD1Ec34ce969c90bFEE768"
+#  - "0xb8ffc3cd6e7cf5a098a1c92f48009765b24088dc"
+#  - "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"
+#  - "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
+#  - "0x2b33cf282f867a7ff693a66e11b0fcc5552e4425"
+#  - "0x17144556fd3424edc8fc8a4c940b2d04936d17eb"
+# sfrxETH dependencies
+#  - "0x302013E7936a39c358d07A3Df55dc94EC417E3a1"
+#  - "0xac3e018457b222d93114458476f3e3416abbe38f"
+# rETH dependencies
+#  - "0x1a8F81c256aee9C640e14bB0453ce247ea0DFE6F"
+#  - "0x07fcabcbe4ff0d80c2b1eb42855c0131b6cba2f4"
+#  - "0x1d8f8f00cfa6758d7be78336684788fb0ee0fa46"
+#  - "0xae78736cd615f374d3085123a210448e74fc6393"
 tests:
-# WeightedPoolFactory - 0x897888115Ada5773E02aA29F775430BFB5F34c51
+  # WeightedPoolFactory - 0x897888115Ada5773E02aA29F775430BFB5F34c51
   - name: test_weighted_pool_creation
-    start_block: 16878320
-    stop_block: 16971020
+    start_block: 20128706
+    stop_block: 20128806
     expected_state:
       protocol_components:
-        - id: "0x8055b8C947De30130BC1Ec750C8F345a50006B23"
+        - id: "0xe96a45f66bdDA121B24F0a861372A72E8889523d"
           tokens:
-            - "0xba100000625a3754423978a60c9317c58a424e3D"
-            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-          static_attributes:
-          creation_tx: "0x3ae08d6ff86737a64827855af810f7ee9ee208ff8e6d8c916495d09a83282c8a"
-        - id: "0xDac7eF49161bdBf0e8f0B4c8e2D38DF19D972874"
-          tokens:
-            - "0x9A62fB1CAFEa99f8f0441f80af7F7ccf0d46847D"
-            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-          static_attributes:
-          creation_tx: "0xbed0c745c3761cd54a7489181a5f1165c628c35ef69ecb0bfeec08f09f0ec407"
-# ComposableStablePoolFactory - 0xDB8d758BCb971e482B2C45f7F8a7740283A1bd3A
-  - name: test_composable_stable_pool_creation
-    start_block: 17672478
-    stop_block: 17677310
+            - "0x38C2a4a7330b22788374B8Ff70BBa513C8D848cA"
+            - "0x514910771AF9Ca656af840dff83E8264EcF986CA"
+          static_attributes: null
+          creation_tx: "0xa63c671046ad2075ec8ea83ac21199cf3e3a5f433e72ec4c117cbabfb9b18de2"
+
+  # WeightedPool2TokensFactory - 0xA5bf2ddF098bb0Ef6d120C98217dD6B141c74EE0
+  - name: weighted_legacy_creation
+    start_block: 13148365
+    stop_block: 13148465
     expected_state:
-    protocol_components:
-      - id: "0x20356663C17D31549d1210379749E2aE36722D8f"
-        tokens:
-            - "0xba100000625a3754423978a60c9317c58a424e3D"
+      protocol_components:
+        - id: "0xBF96189Eee9357a95C7719f4F5047F76bdE804E5"
+          tokens:
+            - "0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32"
             - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        static_attributes:
-        creation_tx: "0x822653ae905ab40f51f46c7b8185ba9a4aa06e674789f87dd26d0d11b26dc7c9"
-      - id: "0x42ED016F826165C2e5976fe5bC3df540C5aD0Af7"
-        tokens:
+          static_attributes: null
+          creation_tx: "0xdced662e41b1608c386551bbc89894a10321fd8bd58782e22077d1044cf99cb5"
+
+  # ComposableStablePoolFactory - 0xDB8d758BCb971e482B2C45f7F8a7740283A1bd3A
+  - name: test_composable_stable_pool_creation
+    start_block: 17677300
+    stop_block: 17678400
+    expected_state:
+      protocol_components:
+        - id: "0x42ED016F826165C2e5976fe5bC3df540C5aD0Af7"
+          tokens:
+            - "0x42ed016f826165c2e5976fe5bc3df540c5ad0af7"
             - "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
             - "0xac3E018457B222d93114458476f3E3416Abbe38F"
             - "0xae78736Cd615f374D3085123A210448E74Fc6393"
-        static_attributes:
-        creation_tx: "0x53ff6bab0d8a76a998e29e59da8068ad906ae85507a1c2fbf2505e2cb52fd754"
-# ERC4626LinearPoolFactory - 0x813EE7a840CE909E7Fea2117A44a90b8063bd4fd
+          static_attributes: null
+          skip_simulation: true
+          creation_tx: "0x53ff6bab0d8a76a998e29e59da8068ad906ae85507a1c2fbf2505e2cb52fd754"
+
+  # ERC4626LinearPoolFactory - 0x813EE7a840CE909E7Fea2117A44a90b8063bd4fd
   - name: test_erc4626_linear_pool_creation
-    start_block: 17045881
-    stop_block: 17480143
+    start_block: 17480142
+    stop_block: 17480242
     expected_state:
-    protocol_components:
-    - id: "0x9516a2d25958EdB8da246a320f2c7d94A0DBe25d"
-      tokens:
-          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-          - "0xB99eDc4b289B0F2284fCF3f66884191BdCe29624"
-      static_attributes:
-      creation_tx: "0x756e81cea4cf725c738bcef3852ad57687156b561574cad3e2956e6cb48da5e6"
-    - id: "0x3fCb7085B8F2F473F80bF6D879cAe99eA4DE9344"
-      tokens:
-          - "0x39Dd7790e75C6F663731f7E1FdC0f35007D3879b"
-          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-      static_attributes:
-      creation_tx: "0x5ff97870685370bab3876a4335d28c42e24659064fe78b486d6fb1b37b992877"
-# EulerLinearPoolFactory - 0x5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347
+      protocol_components:
+        - id: "0x3fCb7085B8F2F473F80bF6D879cAe99eA4DE9344"
+          tokens:
+            - "0x39Dd7790e75C6F663731f7E1FdC0f35007D3879b"
+            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            - "0x3fcb7085b8f2f473f80bf6d879cae99ea4de9344"
+          static_attributes: null
+          skip_simulation: true
+          creation_tx: "0x5ff97870685370bab3876a4335d28c42e24659064fe78b486d6fb1b37b992877"
+
+  # EulerLinearPoolFactory - 0x5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347
   - name: test_euler_linear_pool_creation
-    start_block: 16588078
-    stop_block: 16588118
+    start_block: 16588117
+    stop_block: 16588217
     expected_state:
-    protocol_components:
-    - id: "0xDEC02e6642e2c999aF429F5cE944653CAd15e093"
-      tokens:
-        - "0xC101dcA301a4011C1F925e9622e749e550a1B667"
-        - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-      static_attributes:
-      creation_tx: "0xd639c8a6c3a553d47fd7f3d384ec4bc50a2cd6dfb2c3135b7f5db49d73c15df2"
-    - id: "0xD4e7C1F3DA1144c9E2CfD1b015eDA7652b4a4399"
-      tokens:
-        - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-        - "0xEb91861f8A4e1C12333F42DCE8fB0Ecdc28dA716"
-      static_attributes:
-      creation_tx: "0x4a9ea683052afefdae3d189862868c3a7dc8f431d1d9828b6bfd9451a8816426"
-# SiloLinearPoolFactory - 0x4E11AEec21baF1660b1a46472963cB3DA7811C89
+      protocol_components:
+        - id: "0xD4e7C1F3DA1144c9E2CfD1b015eDA7652b4a4399"
+          tokens:
+            - "0xD4e7C1F3DA1144c9E2CfD1b015eDA7652b4a4399"
+            - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            - "0xEb91861f8A4e1C12333F42DCE8fB0Ecdc28dA716"
+          static_attributes: null
+          skip_simulation: true
+          creation_tx: "0x4a9ea683052afefdae3d189862868c3a7dc8f431d1d9828b6bfd9451a8816426"
+
+  # SiloLinearPoolFactory - 0x4E11AEec21baF1660b1a46472963cB3DA7811C89
   - name: test_silo_linear_pool_creation
     start_block: 17173185
     stop_block: 17173187
     expected_state:
-    protocol_components:
-      - id: "0x74CBfAF94A3577c539a9dCEE9870A6349a33b34f"
-        tokens:
-          - "0x192E67544694a7bAA2DeA94f9B1Df58BB3395A12"
-          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        static_attributes:
-        creation_tx: "0xd639c8a6c3a553d47fd7f3d384ec4bc50a2cd6dfb2c3135b7f5db49d73c15df2"
-# YearnLinearPoolFactory - 0x5F5222Ffa40F2AEd6380D022184D6ea67C776eE0a
+      protocol_components:
+        - id: "0x74CBfAF94A3577c539a9dCEE9870A6349a33b34f"
+          tokens:
+            - "0x192E67544694a7bAA2DeA94f9B1Df58BB3395A12"
+            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            - "0x74cbfaf94a3577c539a9dcee9870a6349a33b34f"
+          static_attributes: null
+          skip_simulation: true
+          creation_tx: "0x215c9f4256ab450368132f4063611ae8cdd98e80bea7e44ecf0600ed1d757018"
+
+  # YearnLinearPoolFactory - 0x5F5222Ffa40F2AEd6380D022184D6ea67C776eE0a
   - name: test_yearn_linear_pool_creation
     start_block: 17052601
     stop_block: 17052605
     expected_state:
-    protocol_components:
-      - id: "0x5F5222Ffa40F2AEd6380D022184D6ea67C776eE0"
-        tokens:
-          - "0x806E02Dea8d4a0882caD9fA3Fa75B212328692dE"
-          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        static_attributes:
-        creation_tx: "0x497aa03ce84d236c183204ddfc6762c8e4158da1ebc5e7e18e7f6cceaa497a2a"
-# WeightedPool2TokensFactory - 0xA5bf2ddF098bb0Ef6d120C98217dD6B141c74EE0
-  - name: test_yearn_linear_pool_creation
-    start_block: 12349890
-    stop_block: 12363660
-    expected_state:
-    protocol_components:
-      - id: "0x021c343C6180f03cE9E48FaE3ff432309b9aF199"
-        tokens:
-          - "0xD291E7a03283640FDc51b121aC401383A46cC623"
-          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        static_attributes:
-        creation_tx: "0xc6b9f8ee6c6f17edacc6df1b6287c57157a16f2aa5b315a03cf2c42d7ebb74e3"
-      - id: "0x571046EaE58C783f29f95ADBa17Dd561Af8a8712"
-        tokens:
-          - "0x6B175474E89094C44Da98b954EedeAC495271d0F"
-          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        static_attributes:
-        creation_tx: "0xe60d97670f902d58e65fb2d56f77a0cee19ffad47deae1fb8a126d534ee1ece5"
+      protocol_components:
+        - id: "0xac5b4ef7ede2f2843a704e96dcaa637f4ba3dc3f"
+          tokens:
+            - "0x806E02Dea8d4a0882caD9fA3Fa75B212328692dE"
+            - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            - "0xac5b4ef7ede2f2843a704e96dcaa637f4ba3dc3f"
+          static_attributes: null
+          skip_simulation: true
+          creation_tx: "0x497aa03ce84d236c183204ddfc6762c8e4158da1ebc5e7e18e7f6cceaa497a2a"

@@ -10,67 +10,14 @@
 /// more [here](https://streamingfastio.medium.com/new-block-model-to-accelerate-chain-integration-9f65126e5425)
 use std::collections::HashMap;
 
-use substreams_ethereum::pb::eth::{
-    self,
-    v2::{block::DetailLevel, CallType, StorageChange},
+use crate::{
+    models::{InterimContractChange, TransactionChanges},
+    prelude::TransactionChangesBuilder,
 };
-
-use crate::pb::tycho::evm::v1::{self as tycho};
-
-struct SlotValue {
-    new_value: Vec<u8>,
-    start_value: Vec<u8>,
-}
-
-impl From<&StorageChange> for SlotValue {
-    fn from(change: &StorageChange) -> Self {
-        Self { new_value: change.new_value.clone(), start_value: change.old_value.clone() }
-    }
-}
-
-impl SlotValue {
-    fn has_changed(&self) -> bool {
-        self.start_value != self.new_value
-    }
-}
-
-// Uses a map for slots, protobuf does not allow bytes in hashmap keys
-struct InterimContractChange {
-    address: Vec<u8>,
-    balance: Vec<u8>,
-    code: Vec<u8>,
-    slots: HashMap<Vec<u8>, SlotValue>,
-    change: tycho::ChangeType,
-}
-
-impl InterimContractChange {
-    fn new(address: &[u8], creation: bool) -> Self {
-        Self {
-            address: address.to_vec(),
-            balance: vec![],
-            code: vec![],
-            slots: Default::default(),
-            change: if creation { tycho::ChangeType::Creation } else { tycho::ChangeType::Update },
-        }
-    }
-}
-
-impl From<InterimContractChange> for tycho::ContractChange {
-    fn from(value: InterimContractChange) -> Self {
-        tycho::ContractChange {
-            address: value.address,
-            balance: value.balance,
-            code: value.code,
-            slots: value
-                .slots
-                .into_iter()
-                .filter(|(_, value)| value.has_changed())
-                .map(|(slot, value)| tycho::ContractSlot { slot, value: value.new_value })
-                .collect(),
-            change: value.change.into(),
-        }
-    }
-}
+use substreams_ethereum::pb::{
+    eth,
+    eth::v2::{block::DetailLevel, CallType, TransactionTrace},
+};
 
 /// Extracts and aggregates contract changes from a block.
 ///
@@ -101,7 +48,45 @@ impl From<InterimContractChange> for tycho::ContractChange {
 pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
     block: &eth::v2::Block,
     inclusion_predicate: F,
-    transaction_changes: &mut HashMap<u64, tycho::TransactionChanges>,
+    transaction_changes: &mut HashMap<u64, TransactionChanges>,
+) {
+    extract_contract_changes_generic(block, inclusion_predicate, |tx, changed_contracts| {
+        transaction_changes
+            .entry(tx.index.into())
+            .or_insert_with(|| TransactionChanges::new(&(tx.into())))
+            .contract_changes
+            .extend(
+                changed_contracts
+                    .clone()
+                    .into_values()
+                    .map(|change| change.into()),
+            );
+    })
+}
+
+pub fn extract_contract_changes_builder<F: Fn(&[u8]) -> bool>(
+    block: &eth::v2::Block,
+    inclusion_predicate: F,
+    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
+) {
+    extract_contract_changes_generic(block, inclusion_predicate, |tx, changed_contracts| {
+        let builder = transaction_changes
+            .entry(tx.index.into())
+            .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
+        changed_contracts
+            .clone()
+            .into_iter()
+            .for_each(|(_, change)| builder.add_contract_changes(&change));
+    })
+}
+
+fn extract_contract_changes_generic<
+    F: Fn(&[u8]) -> bool,
+    G: FnMut(&TransactionTrace, &HashMap<Vec<u8>, InterimContractChange>),
+>(
+    block: &eth::v2::Block,
+    inclusion_predicate: F,
+    mut store_changes: G,
 ) {
     if block.detail_level != Into::<i32>::into(DetailLevel::DetaillevelExtended) {
         panic!("Only extended blocks are supported");
@@ -160,14 +145,7 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
                             )
                         });
 
-                    let slot_value = contract_change
-                        .slots
-                        .entry(storage_change.key.clone())
-                        .or_insert_with(|| storage_change.into());
-
-                    slot_value
-                        .new_value
-                        .copy_from_slice(&storage_change.new_value);
+                    contract_change.upsert_slot(storage_change);
                 });
 
             balance_changes
@@ -184,10 +162,7 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
                         });
 
                     if let Some(new_balance) = &balance_change.new_value {
-                        contract_change.balance.clear();
-                        contract_change
-                            .balance
-                            .extend_from_slice(&new_balance.bytes);
+                        contract_change.set_balance(&new_balance.bytes);
                     }
                 });
 
@@ -204,25 +179,15 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
                             )
                         });
 
-                    contract_change.code.clear();
-                    contract_change
-                        .code
-                        .extend_from_slice(&code_change.new_code);
+                    contract_change.set_code(&code_change.new_code);
                 });
 
             if !storage_changes.is_empty() ||
                 !balance_changes.is_empty() ||
                 !code_changes.is_empty()
             {
-                transaction_changes
-                    .entry(block_tx.index.into())
-                    .or_insert_with(|| tycho::TransactionChanges::new(&(block_tx.into())))
-                    .contract_changes
-                    .extend(
-                        changed_contracts
-                            .drain()
-                            .map(|(_, change)| change.into()),
-                    );
+                store_changes(block_tx, &changed_contracts)
             }
+            changed_contracts.clear()
         });
 }

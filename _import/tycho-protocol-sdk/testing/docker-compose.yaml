@@ -2,6 +2,7 @@ version: '3.1'
 services:
   db:
     build:
+      context: .
       dockerfile: postgres.Dockerfile
     restart: "always"
     environment:
@@ -11,8 +12,7 @@ services:
       POSTGRESQL_SHARED_PRELOAD_LIBRARIES: pg_cron
     ports:
       - "5431:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    shm_size: '1gb'
   app:
     build:
       context: .
@@ -22,7 +22,7 @@ services:
       - ../substreams:/app/substreams
       - ../proto:/app/proto
       - ./tycho-indexer:/app/testing/tycho-indexer
-      - ./runner.py:/app/testing/runner.py
+      - ./src/runner/runner.py:/app/testing/src.py
     ports:
       - "80:80"
     depends_on:

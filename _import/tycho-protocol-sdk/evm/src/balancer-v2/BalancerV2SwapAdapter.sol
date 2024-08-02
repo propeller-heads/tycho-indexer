@@ -169,17 +169,60 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         returns (uint256[] memory limits)
     {
         limits = new uint256[](2);
+        address pool;
+        (pool,) = vault.getPool(poolId);
+        uint256 bptIndex = maybeGetBptTokenIndex(pool);
+        uint256 circulatingSupply = getBptCirculatingSupply(pool);
+
         (address[] memory tokens, uint256[] memory balances,) =
             vault.getPoolTokens(poolId);
 
         for (uint256 i = 0; i < tokens.length; i++) {
             if (tokens[i] == sellToken) {
-                limits[0] = balances[i] * RESERVE_LIMIT_FACTOR / 10;
+                if (i == bptIndex) {
+                    // Some pools pre-mint the bpt tokens and keep the balance
+                    // on the
+                    // pool we can't sell more than the circulating supply
+                    // though,
+                    // else we get an underflow error.
+                    limits[0] = circulatingSupply;
+                } else {
+                    limits[0] = balances[i] * RESERVE_LIMIT_FACTOR / 10;
+                }
             }
             if (tokens[i] == buyToken) {
                 limits[1] = balances[i] * RESERVE_LIMIT_FACTOR / 10;
             }
         }
+    }
+
+    function maybeGetBptTokenIndex(address poolAddress)
+        internal
+        view
+        returns (uint256)
+    {
+        IPool pool = IPool(poolAddress);
+
+        try pool.getBptIndex() returns (uint256 index) {
+            return index;
+        } catch {
+            return type(uint256).max;
+        }
+    }
+
+    function getBptCirculatingSupply(address poolAddress)
+        internal
+        view
+        returns (uint256)
+    {
+        IPool pool = IPool(poolAddress);
+        try pool.getActualSupply() returns (uint256 supply) {
+            return supply;
+        } catch {}
+        try pool.getVirtualSupply() returns (uint256 supply) {
+            return supply;
+        } catch {}
+        return type(uint256).max;
     }
 
     function getCapabilities(bytes32, address, address)
@@ -485,4 +528,12 @@ interface IVault {
         /// The number of tokens to take from the Pool is known
         GIVEN_OUT
     }
+}
+
+interface IPool {
+    function getBptIndex() external view returns (uint256);
+
+    function getActualSupply() external view returns (uint256);
+
+    function getVirtualSupply() external view returns (uint256);
 }
