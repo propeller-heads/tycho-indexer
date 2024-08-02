@@ -88,7 +88,7 @@ contract UniswapV2PairFunctionTest is AdapterTest {
         uint256 weth_balance = IERC20(WETH).balanceOf(address(this));
 
         Trade memory trade =
-            adapter.swap(pair, USDC, WETH, side, specifiedAmount);
+            adapter.swap(pair, USDC, WETH, side, specifiedAmount, mockData);
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -133,7 +133,8 @@ contract UniswapV2PairFunctionTest is AdapterTest {
             deal(USDC, address(this), amounts[i]);
             IERC20(USDC).approve(address(adapter), amounts[i]);
 
-            trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
+            trades[i] =
+                adapter.swap(pair, USDC, WETH, side, amounts[i], mockData);
             vm.revertTo(beforeSwap);
         }
 

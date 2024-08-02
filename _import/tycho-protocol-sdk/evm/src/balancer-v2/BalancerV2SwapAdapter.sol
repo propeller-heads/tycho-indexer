@@ -118,7 +118,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
         address sellToken,
         address buyToken,
         OrderSide side,
-        uint256 specifiedAmount
+        uint256 specifiedAmount,
+        bytes32 data
     ) external override returns (Trade memory trade) {
         uint256 sellAmount;
         IVault.SwapKind kind;

@@ -16,6 +16,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
     address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant USDC_WETH_PAIR = 0x2fe16Dd18bba26e457B7dD2080d5674312b026a2;
     address constant relayerAddress = 0xd17b3c9784510E33cD5B87b490E79253BcD81e2E;
+    bytes32 mockData = bytes32(abi.encodePacked(false));
 
     uint256 constant TEST_ITERATIONS = 100;
 
@@ -83,7 +84,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         uint256 weth_balance_before = IERC20(WETH).balanceOf(address(this));
 
         Trade memory trade =
-            adapter.swap(pair, USDC, WETH, side, specifiedAmount);
+            adapter.swap(pair, USDC, WETH, side, specifiedAmount, mockData);
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -138,7 +139,8 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
             deal(USDC, address(this), amounts[i]);
             IERC20(USDC).approve(address(adapter), amounts[i]);
 
-            trades[i] = adapter.swap(pair, USDC, WETH, side, amounts[i]);
+            trades[i] =
+                adapter.swap(pair, USDC, WETH, side, amounts[i], mockData);
             vm.revertTo(beforeSwap);
         }
 

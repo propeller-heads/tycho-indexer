@@ -111,7 +111,7 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
         uint256 weth_balance = IERC20(WETH).balanceOf(address(this));
 
         Trade memory trade = adapter.swap(
-            B_80BAL_20WETH_POOL_ID, BAL, WETH, side, specifiedAmount
+            B_80BAL_20WETH_POOL_ID, BAL, WETH, side, specifiedAmount, mockData
         );
 
         if (trade.calculatedAmount > 0) {
@@ -149,7 +149,12 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
             deal(BAL, address(this), amounts[i]);
             IERC20(BAL).approve(address(adapter), amounts[i]);
             trades[i] = adapter.swap(
-                B_80BAL_20WETH_POOL_ID, BAL, WETH, OrderSide.Sell, amounts[i]
+                B_80BAL_20WETH_POOL_ID,
+                BAL,
+                WETH,
+                OrderSide.Sell,
+                amounts[i],
+                mockData
             );
 
             vm.revertTo(beforeSwap);
@@ -180,7 +185,12 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
             deal(BAL, address(this), amountIn);
             IERC20(BAL).approve(address(adapter), amountIn);
             trades[i] = adapter.swap(
-                B_80BAL_20WETH_POOL_ID, BAL, WETH, OrderSide.Buy, amounts[i]
+                B_80BAL_20WETH_POOL_ID,
+                BAL,
+                WETH,
+                OrderSide.Buy,
+                amounts[i],
+                mockData
             );
 
             vm.revertTo(beforeSwap);

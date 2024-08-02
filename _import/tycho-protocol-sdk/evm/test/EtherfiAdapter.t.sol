@@ -15,6 +15,7 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
     IeEth eEth;
 
     uint256 constant TEST_ITERATIONS = 100;
+    bytes32 mockData = bytes32(abi.encodePacked(false));
 
     function setUp() public {
         uint256 forkBlock = 19218495;
@@ -72,7 +73,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                 address(address(0)),
                 address(eEth_),
                 OrderSide.Buy,
-                limits[0]
+                limits[0],
+                mockData
             );
 
             eEth_.approve(address(adapter), type(uint256).max);
@@ -87,7 +89,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                 address(address(0)),
                 address(eEth_),
                 OrderSide.Buy,
-                specifiedAmount
+                specifiedAmount,
+                mockData
             );
 
             eEth_.approve(address(adapter), specifiedAmount);
@@ -97,7 +100,12 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         uint256 weEth_balance = weEth_.balanceOf(address(this));
 
         Trade memory trade = adapter.swap(
-            pair, address(eEth_), address(weEth_), side, specifiedAmount
+            pair,
+            address(eEth_),
+            address(weEth_),
+            side,
+            specifiedAmount,
+            mockData
         );
 
         if (trade.calculatedAmount > 0) {
@@ -164,7 +172,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                 address(address(0)),
                 address(weEth_),
                 OrderSide.Buy,
-                limits[0]
+                limits[0],
+                mockData
             );
 
             weEth_.approve(address(adapter), type(uint256).max);
@@ -179,7 +188,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                 address(address(0)),
                 address(weEth_),
                 OrderSide.Buy,
-                specifiedAmount
+                specifiedAmount,
+                mockData
             );
 
             weEth_.approve(address(adapter), specifiedAmount);
@@ -194,7 +204,12 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         uint256 realAmountWeEth_ = weEth_balance - weEth_bal_before;
 
         Trade memory trade = adapter.swap(
-            pair, address(weEth_), address(eEth_), side, realAmountWeEth_
+            pair,
+            address(weEth_),
+            address(eEth_),
+            side,
+            realAmountWeEth_,
+            mockData
         );
 
         if (trade.calculatedAmount > 0) {
@@ -254,8 +269,9 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         uint256 eth_balance = address(adapter).balance;
         uint256 eEth_balance = eEth_.balanceOf(address(this));
 
-        Trade memory trade =
-            adapter.swap(pair, eth_, address(eEth_), side, specifiedAmount);
+        Trade memory trade = adapter.swap(
+            pair, eth_, address(eEth_), side, specifiedAmount, mockData
+        );
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -309,8 +325,9 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         uint256 eth_balance = address(adapter).balance;
         uint256 weEth_balance = weEth_.balanceOf(address(this));
 
-        Trade memory trade =
-            adapter.swap(pair, eth_, address(weEth_), side, specifiedAmount);
+        Trade memory trade = adapter.swap(
+            pair, eth_, address(weEth_), side, specifiedAmount, mockData
+        );
 
         if (trade.calculatedAmount > 0) {
             if (side == OrderSide.Buy) {
@@ -373,7 +390,8 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                 address(address(weEth)),
                 address(address(eEth)),
                 side,
-                amounts[i]
+                amounts[i],
+                mockData
             );
             vm.revertTo(beforeSwap);
         }

@@ -18,6 +18,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         ITransmuter(0x00253582b2a3FE112feEC532221d9708c64cEFAb);
 
     uint256 constant TEST_ITERATIONS = 100;
+    bytes32 mockData = bytes32(abi.encodePacked(false));
 
     function setUp() public {
         uint256 forkBlock = 18921770;
@@ -55,7 +56,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         uint256 agEUR_balance = agEUR.balanceOf(address(this));
 
         Trade memory trade = adapter.swap(
-            pair, address(EURC), address(agEUR), side, specifiedAmount
+            pair, address(EURC), address(agEUR), side, specifiedAmount, mockData
         );
 
         if (trade.calculatedAmount > 0) {
@@ -106,7 +107,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         uint256 agEUR_balance = agEUR.balanceOf(address(this));
 
         Trade memory trade = adapter.swap(
-            pair, address(agEUR), address(EURC), side, specifiedAmount
+            pair, address(agEUR), address(EURC), side, specifiedAmount, mockData
         );
 
         if (trade.calculatedAmount > 0) {
@@ -159,7 +160,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
                 agEUR.approve(address(adapter), type(uint256).max);
             }
             trades[i] = adapter.swap(
-                pair, address(agEUR), address(EURC), side, amounts[i]
+                pair, address(agEUR), address(EURC), side, amounts[i], mockData
             );
             vm.revertTo(beforeSwap);
         }
