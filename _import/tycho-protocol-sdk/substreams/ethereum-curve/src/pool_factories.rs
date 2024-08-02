@@ -7,9 +7,8 @@ use substreams_ethereum::{
 use crate::abi;
 use tycho_substreams::prelude::*;
 
-use substreams::scalar::BigInt;
-
 use crate::consts::*;
+use substreams::scalar::BigInt;
 
 /// This trait defines some helpers for serializing and deserializing `Vec<BigInt>` which is needed
 ///  to be able to encode some of the `Attribute`s. This should also be handled by any downstream
@@ -85,11 +84,8 @@ pub fn address_map(
 
             let component_id = &call.return_data[12..];
 
-            let pool_implementation = abi::crypto_pool_factory::functions::PoolImplementation {}
-                .call(CRYPTO_POOL_FACTORY.to_vec())?;
-
-            let token_implementation = abi::crypto_pool_factory::functions::TokenImplementation {}
-                .call(CRYPTO_POOL_FACTORY.to_vec())?;
+            let token_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
+            let pool_implementation = extract_proxy_impl(call, tx, 1).unwrap_or([1u8; 20]);
 
             Some(ProtocolComponent {
                 id: hex::encode(component_id),
@@ -192,12 +188,7 @@ pub fn address_map(
                     .filter(|token| *token != [0; 20])
                     .collect();
 
-                let pool_implementation = abi::meta_pool_factory::functions::PlainImplementations {
-                    arg0: BigInt::from(tokens.len()),
-                    arg1: add_pool.implementation_idx,
-                }
-                .call(META_POOL_FACTORY.to_vec())?;
-
+                let pool_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
                     tx: Some(Transaction {
@@ -274,13 +265,7 @@ pub fn address_map(
                     abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
                 let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
 
-                let pool_implementation =
-                    abi::meta_pool_factory::functions::MetapoolImplementations {
-                        base_pool: add_pool.base_pool.clone(),
-                    }
-                    .call(META_POOL_FACTORY.to_vec())?
-                        [usize::try_from(add_pool.implementation_idx.to_u64()).unwrap()]
-                    .clone();
+                let pool_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
 
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
@@ -360,20 +345,8 @@ pub fn address_map(
                                 call,
                             )
                         })?;
-                let filtered: Vec<_> = tx
-                    .calls
-                    .iter()
-                    .filter(|call| !call.account_creations.is_empty())
-                    .collect();
 
-                let implementation = extract_eip1167_target_from_code(
-                    filtered
-                        .first()?
-                        .code_changes
-                        .first()?
-                        .new_code
-                        .clone(),
-                );
+                let pool_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
 
                 let component_id = &call.return_data[12..];
                 let lp_token = get_token_from_pool(&pool_added.base_pool);
@@ -418,7 +391,9 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "stateless_contract_addr_0".into(),
-                            value: address_to_bytes_with_0x(&implementation.try_into().unwrap()),
+                            value: address_to_bytes_with_0x(
+                                &pool_implementation.try_into().unwrap(),
+                            ),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -702,12 +677,7 @@ pub fn address_map(
                     .filter(|token| *token != [0; 20])
                     .collect();
 
-                let pool_implementation =
-                    abi::stableswap_factory::functions::PlainImplementations {
-                        arg0: BigInt::from(tokens.len()),
-                        arg1: add_pool.implementation_idx,
-                    }
-                    .call(STABLESWAP_FACTORY.to_vec())?;
+                let pool_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
 
                 Some(ProtocolComponent {
                     id: hex::encode(component_id),
@@ -944,19 +914,27 @@ fn get_token_from_pool(pool: &Vec<u8>) -> Vec<u8> {
         .unwrap()
 }
 
-//TODO: We can most likely replace many RPC calls above using this function.
-fn extract_eip1167_target_from_code(code: Vec<u8>) -> [u8; 20] {
+fn extract_eip1167_target_from_code(code: &[u8]) -> [u8; 20] {
     let mut target = [0u8; 20];
 
-    // Depending on the Vyper version, they use different implementation of EIP1167.
+    // Depending on the Vyper version, they use different implementations of EIP1167.
     // We use the first 10 bytes of the code to make a clear distinction.
-    match code[0..10] {
-        [54, 61, 61, 55, 61, 61, 61, 54, 61, 115] => target.copy_from_slice(&code[10..30]),
-        [54, 96, 0, 96, 0, 55, 97, 16, 0, 96] => target.copy_from_slice(&code[15..35]),
-        _ => {
-            panic!("unknown implementation")
-        }
+    match code.get(0..10) {
+        Some([54, 61, 61, 55, 61, 61, 61, 54, 61, 115]) => target.copy_from_slice(&code[10..30]),
+        Some([54, 96, 0, 96, 0, 55, 97, 16, 0, 96]) => target.copy_from_slice(&code[15..35]),
+        _ => target = [1u8; 20], // Placeholder for unexpected values
     }
 
     target
+}
+
+fn extract_proxy_impl(call: &Call, tx: &TransactionTrace, index: usize) -> Option<[u8; 20]> {
+    let code_change = tx
+        .calls
+        .iter()
+        .filter(|c| !c.code_changes.is_empty() && c.parent_index == call.index)
+        .nth(index)?
+        .code_changes
+        .first()?;
+    Some(extract_eip1167_target_from_code(&code_change.new_code))
 }
