@@ -217,10 +217,11 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
     {
         Capability[] memory res = adapter.getCapabilities(pool, t0, t1);
 
-        assertEq(res.length, 3);
+        assertEq(res.length, 4);
         assertEq(uint256(res[0]), uint256(Capability.SellOrder));
         assertEq(uint256(res[1]), uint256(Capability.BuyOrder));
         assertEq(uint256(res[2]), uint256(Capability.PriceFunction));
+        assertEq(uint256(res[3]), uint256(Capability.HardLimits));
     }
 
     function testGetTokens() public {
