@@ -123,6 +123,7 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
     ) external override returns (Trade memory trade) {
         uint256 sellAmount;
         IVault.SwapKind kind;
+        bool reduceFee = abi.decode(abi.encodePacked(data), (bool));
         uint256 limit; // TODO set this slippage limit properly
         if (side == OrderSide.Sell) {
             kind = IVault.SwapKind.GIVEN_IN;
