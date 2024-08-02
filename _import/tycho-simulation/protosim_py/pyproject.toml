@@ -11,6 +11,15 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 version = "0.4.12"
+dependencies = [
+    "requests < 3",
+    "eth-abi >= 2.2.0",
+    "eth-typing >= 2.3",
+    "eth-utils >= 1.9.0",
+    "hexbytes >= 0.2.2",
+    "pydantic < 2",
+    "tycho-client @ file:///Users/kayibal/code/tycho-indexer/tycho-client-py"
+]
 
 [tool.maturin]
 python-source = "python"
