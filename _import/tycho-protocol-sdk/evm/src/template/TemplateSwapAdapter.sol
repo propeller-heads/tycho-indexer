@@ -22,7 +22,8 @@ contract TemplateSwapAdapter is ISwapAdapter {
         address sellToken,
         address buyToken,
         OrderSide side,
-        uint256 specifiedAmount
+        uint256 specifiedAmount,
+        bytes32
     ) external returns (Trade memory trade) {
         revert NotImplemented("TemplateSwapAdapter.swap");
     }

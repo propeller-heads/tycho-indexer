@@ -66,7 +66,8 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         address sellToken,
         address buyToken,
         OrderSide side,
-        uint256 specifiedAmount
+        uint256 specifiedAmount,
+        bytes32
     ) external override returns (Trade memory trade) {
         if (specifiedAmount == 0) {
             return trade;

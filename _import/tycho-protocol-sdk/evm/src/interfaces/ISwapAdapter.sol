@@ -54,6 +54,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
      * @param buyToken The token being bought.
      * @param side The side of the trade (Sell or Buy).
      * @param specifiedAmount The amount to be traded.
+     * @param data Additional arbitrary data for the swap.
      * @return trade Trade struct representing the executed trade.
      */
     function swap(
@@ -61,7 +62,8 @@ interface ISwapAdapter is ISwapAdapterTypes {
         address sellToken,
         address buyToken,
         OrderSide side,
-        uint256 specifiedAmount
+        uint256 specifiedAmount,
+        bytes32 data
     ) external returns (Trade memory trade);
 
     /// @notice Retrieves the limits for each token.
