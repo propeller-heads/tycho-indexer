@@ -243,6 +243,6 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
     function testBalancerV2PoolBehaviour() public {
         bytes32[] memory poolIds = new bytes32[](1);
         poolIds[0] = B_80BAL_20WETH_POOL_ID;
-        testPoolBehaviour(adapter, poolIds);
+        runPoolBehaviourTest(adapter, poolIds);
     }
 }

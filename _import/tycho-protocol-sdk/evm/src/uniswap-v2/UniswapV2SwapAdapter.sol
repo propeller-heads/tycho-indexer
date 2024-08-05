@@ -54,13 +54,10 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         if (reserveIn == 0 || reserveOut == 0) {
             revert Unavailable("At least one reserve is zero!");
         }
-        uint256 amountInWithFee = amountIn * 997;
-        uint256 numerator = amountInWithFee * reserveOut;
-        uint256 denominator = (reserveIn * 1000) + amountInWithFee;
-        uint256 amountOut = numerator / denominator;
+        uint256 amountOut = getAmountOut(amountIn, reserveIn, reserveOut);
         uint256 newReserveOut = reserveOut - amountOut;
         uint256 newReserveIn = reserveIn + amountIn;
-        return Fraction(newReserveOut * 1000, newReserveIn * 997);
+        return Fraction(newReserveOut * 997, newReserveIn * 1000);
     }
 
     /// @inheritdoc ISwapAdapter
@@ -234,10 +231,11 @@ contract UniswapV2SwapAdapter is ISwapAdapter {
         override
         returns (Capability[] memory capabilities)
     {
-        capabilities = new Capability[](3);
+        capabilities = new Capability[](4);
         capabilities[0] = Capability.SellOrder;
         capabilities[1] = Capability.BuyOrder;
         capabilities[2] = Capability.PriceFunction;
+        capabilities[3] = Capability.MarginalPrice;
     }
 
     /// @inheritdoc ISwapAdapter
