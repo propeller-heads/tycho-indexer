@@ -1,7 +1,7 @@
 const config = {
   branches: [
     "release/+([0-9])?(.{+([0-9]),x}).x",
-    "main",
+    "feat/check-semantic-release",
     "next",
     "next-major",
     {

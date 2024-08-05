@@ -3,7 +3,7 @@ name: Main workflow
 on:
   push:
     branches:
-      - main
+      - feat/check-semantic-release
 
 jobs:
   release:
