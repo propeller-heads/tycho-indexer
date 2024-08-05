@@ -949,23 +949,17 @@ impl PostgresGateway {
                 let creation_tx = account.tx.clone();
 
                 let balances = if retrieve_balances {
-                    let component_id = components
-                        .get(&code.id)
-                        .ok_or_else(|| {
-                            StorageError::NoRelatedEntity(
-                                "ComponentBalance".to_string(),
-                                "Account".to_string(),
-                                account.title.clone(),
-                            )
-                        })?;
-
-                    token_balances
-                        .get(component_id)
-                        .unwrap_or(&HashMap::new())
-                        .clone()
-                        .into_iter()
-                        .map(|(key, balance)| (key, balance.new_balance))
-                        .collect()
+                    if let Some(component_id) = components.get(&code.id) {
+                        token_balances
+                            .get(component_id)
+                            .unwrap_or(&HashMap::new())
+                            .clone()
+                            .into_iter()
+                            .map(|(key, balance)| (key, balance.new_balance))
+                            .collect()
+                    } else {
+                        HashMap::new()
+                    }
                 } else {
                     HashMap::new()
                 };
