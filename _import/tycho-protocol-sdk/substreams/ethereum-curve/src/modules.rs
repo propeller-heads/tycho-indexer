@@ -13,7 +13,9 @@ use substreams::{
 use substreams_ethereum::pb::eth;
 
 use crate::{
-    consts::{CRYPTO_SWAP_NG_FACTORY, NEW_SUSD, OLD_SUSD, TRICRYPTO_FACTORY},
+    consts::{
+        CONTRACTS_TO_INDEX, NEW_SUSD, OLD_SUSD,
+    },
     pool_changes::emit_eth_deltas,
     pool_factories,
     pools::emit_specific_pools,
@@ -292,8 +294,7 @@ pub fn map_protocol_changes(
                 non_component_accounts_store
                     .get_last(hex::encode(addr))
                     .is_some() ||
-                addr.eq(&CRYPTO_SWAP_NG_FACTORY) ||
-                addr.eq(&TRICRYPTO_FACTORY)
+                CONTRACTS_TO_INDEX.contains(addr.try_into().expect("address should be 20 bytes long"))
         },
         &mut transaction_changes,
     );

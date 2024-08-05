@@ -9,6 +9,7 @@ const PARAMS_SEPERATOR: &str = ",";
 #[derive(Debug, Deserialize, PartialEq)]
 struct PoolQueryParams {
     address: String,
+    contracts: Option<Vec<String>>,
     tx_hash: String,
     tokens: Vec<String>,
     attribute_keys: Option<Vec<String>>,
@@ -72,8 +73,20 @@ fn create_component(
                 change: ChangeType::Creation.into(),
             })
             .collect::<Vec<_>>(),
-            contracts: vec![hex::decode(pool.address.clone())
-                .with_context(|| "Pool address was not formatted properly")?],
+            contracts: pool
+                .contracts
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|contract| {
+                    hex::decode(contract)
+                        .with_context(|| "Pool contracts was not formatted properly")
+                })
+                .chain(std::iter::once(
+                    hex::decode(&pool.address)
+                        .with_context(|| "Pool address was not formatted properly"),
+                ))
+                .collect::<Result<Vec<Vec<u8>>>>()?,
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {
                 name: "curve_pool".into(),

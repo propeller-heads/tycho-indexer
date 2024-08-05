@@ -34,7 +34,7 @@ tests:
           skip_simulation: false
 
   - name: test_tricrypto2
-    start_block: 12821148
+    start_block: 12821118 #This pool was created at 12821148, but it requires some contracts that were created shortly before.
     stop_block: 12831387
     expected_state:
       protocol_components:
@@ -45,7 +45,7 @@ tests:
             - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
           static_attributes:
           creation_tx: "0xdafb6385ed988ce8aacecfe1d97b38ea5e60b1ebce74d2423f71ddd621680138"
-          skip_simulation: true #TODO: investigate this failure
+          skip_simulation: false
 
   - name: test_susd
     start_block: 9906598
