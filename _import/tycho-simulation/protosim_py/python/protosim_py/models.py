@@ -5,8 +5,6 @@ from fractions import Fraction
 from logging import getLogger
 from typing import Union
 
-from pydantic import BaseModel, Field, PrivateAttr
-
 Address = str
 
 log = getLogger(__name__)
@@ -19,18 +17,32 @@ class Blockchain(Enum):
     zksync = "zksync"
 
 
-class EVMBlock(BaseModel):
-    id: int
-    ts: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
-    hash_: str
+class EVMBlock:
+    def __init__(
+        self,
+        id: int,
+        hash_: str,
+        ts: datetime.datetime = None,
+    ):
+        self.id = id
+        self.ts = ts or datetime.datetime.utcnow()
+        self.hash_ = (hash_,)
 
 
-class EthereumToken(BaseModel):
-    symbol: str
-    address: str
-    decimals: int
-    gas: Union[int, list[int]] = 29000
-    _hash: int = PrivateAttr(default=None)
+class EthereumToken:
+    def __init__(
+        self,
+        symbol: str,
+        address: str,
+        decimals: int,
+        gas: Union[int, list[int]] = 29000,
+        _hash: int = None,
+    ):
+        self.symbol: str = symbol
+        self.address: str = address
+        self.decimals: int = decimals
+        self.gas: Union[int, list[int]] = gas
+        self._hash: Union[None, int] = _hash
 
     def to_onchain_amount(self, amount: Union[float, Decimal, str]) -> int:
         """Converts floating-point numerals to an integer, by shifting right by the

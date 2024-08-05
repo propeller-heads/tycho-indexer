@@ -28,7 +28,7 @@ def decode_tycho_exchange(exchange: str) -> (str, bool):
 
 
 def create_engine(
-        mocked_tokens: list[Address], trace: bool = False
+    mocked_tokens: list[Address], trace: bool = False
 ) -> SimulationEngine:
     """Create a simulation engine with a mocked ERC20 contract at given addresses.
 
@@ -283,7 +283,7 @@ def parse_solidity_error_message(data) -> str:
 
 
 def maybe_coerce_error(
-        err: RuntimeError, pool_state: Any, gas_limit: int = None
+    err: RuntimeError, pool_state: Any, gas_limit: int = None
 ) -> Exception:
     details = err.args[0]
     # we got bytes as data, so this was a revert

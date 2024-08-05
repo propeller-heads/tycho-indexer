@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.2.1"
+version = "0.5.0"
 dependencies = [
  "ethers",
  "hex",

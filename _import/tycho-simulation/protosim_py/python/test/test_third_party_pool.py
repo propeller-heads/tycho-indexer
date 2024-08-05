@@ -23,12 +23,12 @@ def Token(name: str) -> EthereumToken:
         "DAI": EthereumToken(
             symbol="DAI",
             address="0x6B175474E89094C44Da98b954EedeAC495271d0F",
-            decimals=18
+            decimals=18,
         ),
         "BAL": EthereumToken(
             symbol="BAL",
             address="0xba100000625a3754423978a60c9317c58a424e3D",
-            decimals=18
+            decimals=18,
         ),
     }[name]
 
@@ -50,7 +50,7 @@ def setup_db(asset_dir):
     block = BlockHeader(
         20463609,
         "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
-        1722875891
+        1722875891,
     )
     engine = create_engine([], False)
     for account in accounts:
@@ -87,27 +87,24 @@ def test_init(asset_dir):
     pool = ThirdPartyPool(
         block=block,
         id_="0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011",
-        tokens=[dai, bal],
-        spot_prices={},
-        trading_fee="0.003",
+        tokens=(dai, bal),
+        marginal_prices={},
         balances={
             dai.address: "178.7540127373018",
             bal.address: "91.08298776336989",
         },
         adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
-        state_block=block,
-        minimum_gas=72300,
     )
 
     assert pool.capabilities == {
         Capability.SellSide,
         Capability.BuySide,
         Capability.PriceFunction,
-        Capability.HardLimits
+        Capability.HardLimits,
     }
-    assert pool.spot_prices == {
-        (bal, dai): Decimal('7.071503245428245871486924221'),
-        (dai, bal): Decimal('0.1377789143190479049114331557')
+    assert pool.marginal_prices == {
+        (bal, dai): Decimal("7.071503245428245871486924221"),
+        (dai, bal): Decimal("0.1377789143190479049114331557"),
     }
 
 
@@ -121,20 +118,17 @@ def pool_state(asset_dir):
     pool = ThirdPartyPool(
         block=block,
         id_="0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011",
-        tokens=[dai, bal],
-        spot_prices={
-            (bal, dai): Decimal('7.071503245428245871486924221'),
-            (dai, bal): Decimal('0.1377789143190479049114331557')
+        tokens=(dai, bal),
+        marginal_prices={
+            (bal, dai): Decimal("7.071503245428245871486924221"),
+            (dai, bal): Decimal("0.1377789143190479049114331557"),
         },
-        trading_fee="0.003",
         balances={
             dai.address: "178.7540127373018",
             bal.address: "91.08298776336989",
         },
         adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
-        state_block=block,
         balance_owner="0xBA12222222228d8Ba445958a75a0704d566BF2C8",
-        minimum_gas=71000,
     )
     return pool
 
@@ -159,7 +153,7 @@ def test_get_amount_out(pool_state):
     #  probably need trace to debug this, running only test_sell_amount_limit
     #  before reduces gas already, running test_init does not.
     assert gas == 85995
-    assert new_state.spot_prices != pool_state.spot_prices
+    assert new_state.marginal_prices != pool_state.marginal_prices
     for override in new_state.block_lasting_overwrites.values():
         assert isinstance(override, dict)
 
@@ -171,16 +165,18 @@ def test_sequential_get_amount_outs(pool_state):
     buy_amount, gas, new_state2 = new_state.get_amount_out(t1, Decimal(10), t0)
 
     assert buy_amount == Decimal("41.016419447002364763")
-    assert new_state2.spot_prices != new_state.spot_prices
+    assert new_state2.marginal_prices != new_state.marginal_prices
 
 
 def test_get_amount_out_dust(pool_state):
     t0, t1 = pool_state.tokens
 
-    buy_amount, gas, new_state = pool_state.get_amount_out(t1, Decimal(0.0000000000001), t0)
+    buy_amount, gas, new_state = pool_state.get_amount_out(
+        t1, Decimal(0.0000000000001), t0
+    )
 
     assert buy_amount == Decimal("0")
-    assert new_state.spot_prices == pool_state.spot_prices
+    assert new_state.marginal_prices == pool_state.marginal_prices
 
 
 def test_get_amount_out_sell_limit(pool_state):
