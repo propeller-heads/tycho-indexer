@@ -2,22 +2,31 @@ import itertools
 import os
 import shutil
 import subprocess
+import traceback
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-import traceback
 
 import yaml
 from pydantic import BaseModel
+from tycho_client.dto import (
+    Chain,
+    ProtocolComponentsParams,
+    ProtocolStateParams,
+    ContractStateParams, ProtocolComponent, ResponseProtocolState, HexBytes,
+)
+from tycho_client.rpc_client import TychoRPCClient
+from tycho_client.stream import TychoStream
 
-from adapter_handler import AdapterContractHandler
-from tycho_client.decoders import ThirdPartyPoolTychoDecoder
-from tycho_client.models import Blockchain, EVMBlock
-from tycho_client.tycho_adapter import TychoPoolStateStreamAdapter
+from .adapter_handler import AdapterContractHandler
+from .evm import get_token_balance, get_block_header
+from .tycho import TychoRunner
 
-from evm import get_token_balance, get_block_header
-from tycho import TychoRunner, TychoRPCClient
+
+# from tycho_client.decoders import ThirdPartyPoolTychoDecoder
+# from tycho_client.models import Blockchain, EVMBlock
+# from tycho_client.tycho_adapter import TychoPoolStateStreamAdapter
 
 
 class TestResult:
@@ -49,7 +58,7 @@ class SimulationFailure(BaseModel):
 
 class TestRunner:
     def __init__(
-        self, package: str, with_binary_logs: bool, db_url: str, vm_traces: bool
+            self, package: str, with_binary_logs: bool, db_url: str, vm_traces: bool
     ):
         self.repo_root = os.getcwd()
         config_path = os.path.join(
@@ -64,7 +73,7 @@ class TestRunner:
         self.tycho_rpc_client = TychoRPCClient()
         self.db_url = db_url
         self._vm_traces = vm_traces
-        self._chain = Blockchain.ethereum
+        self._chain = Chain.ethereum
 
     def run_tests(self) -> None:
         """Run all tests specified in the configuration."""
@@ -96,22 +105,27 @@ class TestRunner:
 
     def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
         """Validate the current protocol state against the expected state."""
-        protocol_components = self.tycho_rpc_client.get_protocol_components()
-        protocol_states = self.tycho_rpc_client.get_protocol_state()
-        components = {
-            component["id"]: component
-            for component in protocol_components["protocol_components"]
+        protocol_components: list[ProtocolComponent] = self.tycho_rpc_client.get_protocol_components(
+            ProtocolComponentsParams(protocol_system="test_protocol")
+        )
+        protocol_states: list[ResponseProtocolState] = self.tycho_rpc_client.get_protocol_state(
+            ProtocolStateParams(protocol_system="test_protocol")
+        )
+        components_by_id = {
+            component.id: component
+            for component in protocol_components
         }
 
         try:
             for expected_component in expected_state.get("protocol_components", []):
                 comp_id = expected_component["id"].lower()
-                if comp_id not in components:
+                if comp_id not in components_by_id:
                     return TestResult.Failed(
                         f"'{comp_id}' not found in protocol components."
                     )
 
-                component = components[comp_id]
+                # TODO: Manipulate pydantic objects instead of dict
+                component = components_by_id[comp_id].dict()
                 for key, value in expected_component.items():
                     if key not in ["tokens", "static_attributes", "creation_tx"]:
                         continue
@@ -121,7 +135,7 @@ class TestRunner:
                         )
                     if isinstance(value, list):
                         if set(map(str.lower, value)) != set(
-                            map(str.lower, component[key])
+                                map(str.lower, component[key])
                         ):
                             return TestResult.Failed(
                                 f"List mismatch for key '{key}': {value} != {component[key]}"
@@ -131,11 +145,10 @@ class TestRunner:
                             f"Value mismatch for key '{key}': {value} != {component[key]}"
                         )
 
-            token_balances: dict[str, dict[str, int]] = defaultdict(dict)
-            for component in protocol_components["protocol_components"]:
-                comp_id = component["id"].lower()
-                for token in component["tokens"]:
-                    token_lower = token.lower()
+            token_balances: dict[str, dict[HexBytes, int]] = defaultdict(dict)
+            for component in protocol_components:
+                comp_id = component.id.lower()
+                for token in component.tokens:
                     state = next(
                         (
                             s
@@ -145,11 +158,11 @@ class TestRunner:
                         None,
                     )
                     if state:
-                        balance_hex = state["balances"].get(token_lower, "0x0")
+                        balance_hex = state["balances"].get(token, "0x0")
                     else:
                         balance_hex = "0x0"
                     tycho_balance = int(balance_hex, 16)
-                    token_balances[comp_id][token_lower] = tycho_balance
+                    token_balances[comp_id][token] = tycho_balance
 
                     if self.config["skip_balance_check"] is not True:
                         node_balance = get_token_balance(token, comp_id, stop_block)
@@ -158,17 +171,18 @@ class TestRunner:
                                 f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} "
                                 f"from rpc call and {tycho_balance} from Substreams"
                             )
-            contract_states = self.tycho_rpc_client.get_contract_state()
+            contract_states = self.tycho_rpc_client.get_contract_state(
+                ContractStateParams()
+            )
             filtered_components = {
                 "protocol_components": [
                     pc
-                    for pc in protocol_components["protocol_components"]
-                    if pc["id"]
-                    in [
-                        c["id"].lower()
-                        for c in expected_state["protocol_components"]
-                        if c.get("skip_simulation", False) is False
-                    ]
+                    for pc in protocol_components
+                    if pc.id in [
+                           c["id"].lower()
+                           for c in expected_state["protocol_components"]
+                           if c.get("skip_simulation", False) is False
+                       ]
                 ]
             }
             simulation_failures = self.simulate_get_amount_out(
@@ -191,11 +205,11 @@ class TestRunner:
             return TestResult.Failed(error_message)
 
     def simulate_get_amount_out(
-        self,
-        block_number: int,
-        protocol_states: dict,
-        protocol_components: dict,
-        contract_state: dict,
+            self,
+            block_number: int,
+            protocol_states: ResponseProtocolState,
+            protocol_components: list[ProtocolComponent],
+            contract_state: Contract,
     ) -> dict[str, list[SimulationFailure]]:
         protocol_type_names = self.config["protocol_type_names"]
 
@@ -224,15 +238,22 @@ class TestRunner:
                     self.config["adapter_build_args"],
                 )
 
-            decoder = ThirdPartyPoolTychoDecoder(
-                adapter_contract, 0, trace=self._vm_traces
-            )
-            stream_adapter = TychoPoolStateStreamAdapter(
+            # decoder = ThirdPartyPoolTychoDecoder(
+            #     adapter_contract, 0, trace=self._vm_traces
+            # )
+            # stream_adapter = TychoPoolStateStreamAdapter(
+            #     tycho_url="0.0.0.0:4242",
+            #     protocol=protocol,
+            #     decoder=decoder,
+            #     blockchain=self._chain,
+            # )
+            stream_adapter = TychoStream(
                 tycho_url="0.0.0.0:4242",
-                protocol=protocol,
-                decoder=decoder,
+                exchanges=[protocol],
+                min_tvl=Decimal("0"),
                 blockchain=self._chain,
             )
+
             snapshot_message = stream_adapter.build_snapshot_message(
                 protocol_components, protocol_states, contract_state
             )
@@ -243,11 +264,11 @@ class TestRunner:
                 if not pool_state.balances:
                     raise ValueError(f"Missing balances for pool {pool_id}")
                 for sell_token, buy_token in itertools.permutations(
-                    pool_state.tokens, 2
+                        pool_state.tokens, 2
                 ):
                     # Try to sell 0.1% of the protocol balance
                     sell_amount = (
-                        Decimal("0.001") * pool_state.balances[sell_token.address]
+                            Decimal("0.001") * pool_state.balances[sell_token.address]
                     )
                     try:
                         amount_out, gas_used, _ = pool_state.get_amount_out(

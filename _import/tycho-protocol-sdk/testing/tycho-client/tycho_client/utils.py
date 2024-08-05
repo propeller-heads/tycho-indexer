@@ -121,8 +121,7 @@ class ERC20OverwriteFactory:
         """
         self._overwrites[self._total_supply_slot] = supply
         log.log(
-            5,
-            f"Override total supply: token={self._token.address} supply={supply}"
+            5, f"Override total supply: token={self._token.address} supply={supply}"
         )
 
     def get_protosim_overwrites(self) -> dict[Address, dict[int, int]]:

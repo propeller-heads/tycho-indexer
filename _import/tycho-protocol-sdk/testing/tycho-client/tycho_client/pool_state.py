@@ -142,7 +142,7 @@ class ThirdPartyPool(BaseModel):
             if Capability.ScaledPrice in self.capabilities:
                 self.spot_prices[(t0, t1)] = frac_to_decimal(frac)
             else:
-                scaled = frac * Fraction(10 ** t0.decimals, 10 ** t1.decimals)
+                scaled = frac * Fraction(10**t0.decimals, 10**t1.decimals)
                 self.spot_prices[(t0, t1)] = frac_to_decimal(scaled)
 
     def _ensure_capability(self, capability: Capability):
@@ -165,10 +165,10 @@ class ThirdPartyPool(BaseModel):
             )
 
     def get_amount_out(
-            self: TPoolState,
-            sell_token: EthereumToken,
-            sell_amount: Decimal,
-            buy_token: EthereumToken,
+        self: TPoolState,
+        sell_token: EthereumToken,
+        sell_amount: Decimal,
+        buy_token: EthereumToken,
     ) -> tuple[Decimal, int, TPoolState]:
         # if the pool has a hard limit and the sell amount exceeds that, simulate and
         # raise a partial trade
@@ -185,10 +185,10 @@ class ThirdPartyPool(BaseModel):
         return self._get_amount_out(sell_token, sell_amount, buy_token)
 
     def _get_amount_out(
-            self: TPoolState,
-            sell_token: EthereumToken,
-            sell_amount: Decimal,
-            buy_token: EthereumToken,
+        self: TPoolState,
+        sell_token: EthereumToken,
+        sell_amount: Decimal,
+        buy_token: EthereumToken,
     ) -> tuple[Decimal, int, TPoolState]:
         trade, state_changes = self._adapter_contract.swap(
             cast(HexStr, self.id_),
@@ -216,7 +216,7 @@ class ThirdPartyPool(BaseModel):
         return buy_amount, trade.gas_used, new_state
 
     def _get_overwrites(
-            self, sell_token: EthereumToken, buy_token: EthereumToken, **kwargs
+        self, sell_token: EthereumToken, buy_token: EthereumToken, **kwargs
     ) -> dict[Address, dict[int, int]]:
         """Get an overwrites dictionary to use in a simulation.
 
@@ -227,7 +227,7 @@ class ThirdPartyPool(BaseModel):
         return _merge(self.block_lasting_overwrites, token_overwrites)
 
     def _get_token_overwrites(
-            self, sell_token: EthereumToken, buy_token: EthereumToken, max_amount=None
+        self, sell_token: EthereumToken, buy_token: EthereumToken, max_amount=None
     ) -> dict[Address, dict[int, int]]:
         """Creates overwrites for a token.
 
@@ -295,7 +295,7 @@ class ThirdPartyPool(BaseModel):
         )
 
     def get_sell_amount_limit(
-            self, sell_token: EthereumToken, buy_token: EthereumToken
+        self, sell_token: EthereumToken, buy_token: EthereumToken
     ) -> Decimal:
         """
         Retrieves the sell amount of the given token.
