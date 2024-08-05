@@ -221,3 +221,42 @@ class SynchronizerState(BaseModel):
 class FeedMessage(BaseModel):
     state_msgs: dict[str, StateSyncMessage]
     sync_states: dict[str, SynchronizerState]
+
+
+# Client Parameters
+class ProtocolId(BaseModel):
+    chain: Chain
+    id: str
+
+
+class ContractId(BaseModel):
+    address: HexBytes
+    chain: Chain
+
+
+class VersionParams(BaseModel):
+    block: Optional[BlockParam] = None
+    timestamp: Optional[datetime] = None
+
+
+class ProtocolComponentsParams(BaseModel):
+    protocol_system: Optional[str] = None
+    component_addresses: Optional[List[HexBytes]] = None
+    tvl_gt: Optional[int] = None
+
+
+class ProtocolStateParams(BaseModel):
+    tvl_gt: Optional[int] = None
+    inertia_min_gt: Optional[int] = None
+    include_balances: Optional[bool] = True
+    protocol_ids: Optional[List[ProtocolId]] = None
+    protocol_system: Optional[str] = None
+    version: Optional[VersionParams] = None
+
+
+class ContractStateParams(BaseModel):
+    tvl_gt: Optional[int] = None
+    inertia_min_gt: Optional[int] = None
+    include_balances: Optional[bool] = True
+    contract_ids: Optional[List[ContractId]] = None
+    version: Optional[VersionParams] = None

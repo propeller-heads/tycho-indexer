@@ -1,7 +1,8 @@
 import json
 from unittest.mock import patch, Mock
 
-from tycho_client.dto import ProtocolComponent, ResponseProtocolState, ResponseAccount
+from tycho_client.dto import ProtocolComponent, ResponseProtocolState, ResponseAccount, \
+    ProtocolComponentsParams, ProtocolStateParams, ContractStateParams
 from tycho_client.rpc_client import TychoRPCClient
 
 
@@ -15,7 +16,8 @@ def test_get_protocol_components_returns_expected_result(mock_post, asset_dir):
     mock_post.return_value = mock_response
 
     client = TychoRPCClient()
-    result = client.get_protocol_components("uniswap_v2")
+    params = ProtocolComponentsParams(protocol_system="uniswap_v2")
+    result = client.get_protocol_components(params)
 
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/protocol_components",
@@ -38,7 +40,8 @@ def test_get_protocol_state_returns_expected_result(mock_post, asset_dir):
     mock_post.return_value = mock_response
 
     client = TychoRPCClient()
-    result = client.get_protocol_state()
+    params = ProtocolStateParams()
+    result = client.get_protocol_state(params)
 
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/protocol_state",
@@ -65,7 +68,8 @@ def test_get_contract_state_returns_expected_result(
     mock_post.return_value = mock_response
 
     client = TychoRPCClient()
-    result = client.get_contract_state(include_balances=True)
+    params = ContractStateParams(include_balances=True)
+    result = client.get_contract_state(params)
 
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/contract_state",

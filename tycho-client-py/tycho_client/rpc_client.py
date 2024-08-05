@@ -1,8 +1,14 @@
-from typing import Optional, Any
-
 import requests
 
-from .dto import Chain, ProtocolComponent, ResponseProtocolState, ResponseAccount
+from .dto import (
+    Chain,
+    ProtocolComponent,
+    ResponseProtocolState,
+    ResponseAccount,
+    ProtocolComponentsParams,
+    ProtocolStateParams,
+    ContractStateParams,
+)
 
 
 class TychoRPCClient:
@@ -11,7 +17,7 @@ class TychoRPCClient:
     """
 
     def __init__(
-            self, rpc_url: str = "http://0.0.0.0:4242", chain: Chain = Chain.ethereum
+        self, rpc_url: str = "http://0.0.0.0:4242", chain: Chain = Chain.ethereum
     ):
         self.rpc_url = rpc_url
         self._headers = {
@@ -21,7 +27,7 @@ class TychoRPCClient:
         self._chain = chain
 
     def _post_request(
-            self, endpoint: str, params: dict = None, body: dict = None
+        self, endpoint: str, params: dict = None, body: dict = None
     ) -> dict:
         """Sends a POST request to the given endpoint and returns the response."""
         response = requests.post(
@@ -33,81 +39,61 @@ class TychoRPCClient:
         return response.json()
 
     def get_protocol_components(
-            self,
-            protocol_system: Optional[str] = None,
-            component_addresses: Optional[list[str]] = None,
-            tvl_gt: Optional[int] = None,
+        self, params: ProtocolComponentsParams
     ) -> list[ProtocolComponent]:
         body = {
-            "protocol_system": protocol_system,
-            "component_addresses": component_addresses,
+            "protocol_system": params.protocol_system,
+            "component_addresses": params.component_addresses,
         }
         body = {k: v for k, v in body.items() if v is not None}
 
-        params = {"tvl_gt": tvl_gt}
-        params = {k: v for k, v in params.items() if v is not None}
+        query_params = {"tvl_gt": params.tvl_gt}
+        query_params = {k: v for k, v in query_params.items() if v is not None}
 
         res = self._post_request(
             f"/v1/{self._chain}/protocol_components",
             body=body,
-            params=params,
+            params=query_params,
         )
         return [ProtocolComponent(**c) for c in res["protocol_components"]]
 
     def get_protocol_state(
-            self,
-            tvl_gt: Optional[int] = None,
-            inertia_min_gt: Optional[int] = None,
-            include_balances: Optional[bool] = True,
-            protocol_ids: Optional[list[dict[str, str]]] = None,
-            protocol_system: Optional[str] = None,
-            version: Optional[dict[str, Any]] = None,
+        self, params: ProtocolStateParams
     ) -> list[ResponseProtocolState]:
-        params = {
-            "tvl_gt": tvl_gt,
-            "inertia_min_gt": inertia_min_gt,
-            "include_balances": include_balances,
+        query_params = {
+            "tvl_gt": params.tvl_gt,
+            "inertia_min_gt": params.inertia_min_gt,
+            "include_balances": params.include_balances,
         }
-        params = {k: v for k, v in params.items() if v is not None}
+        query_params = {k: v for k, v in query_params.items() if v is not None}
 
         body = {
-            "protocolIds": protocol_ids,
-            "protocolSystem": protocol_system,
-            "version": version,
+            "protocolIds": params.protocol_ids,
+            "protocolSystem": params.protocol_system,
+            "version": params.version,
         }
         body = {k: v for k, v in body.items() if v is not None}
 
         res = self._post_request(
-            f"/v1/{self._chain}/protocol_state", params=params, body=body
+            f"/v1/{self._chain}/protocol_state", params=query_params, body=body
         )
         return [ResponseProtocolState(**s) for s in res["states"]]
 
-    def get_contract_state(
-            self,
-            tvl_gt: Optional[int] = None,
-            inertia_min_gt: Optional[int] = None,
-            include_balances: Optional[bool] = True,
-            contract_ids: Optional[list[dict[str, str]]] = None,
-            version: Optional[dict[str, Any]] = None,
-    ) -> list[ResponseAccount]:
-        params = {
-            "tvl_gt": tvl_gt,
-            "inertia_min_gt": inertia_min_gt,
-            "include_balances": include_balances,
+    def get_contract_state(self, params: ContractStateParams) -> list[ResponseAccount]:
+        query_params = {
+            "tvl_gt": params.tvl_gt,
+            "inertia_min_gt": params.inertia_min_gt,
+            "include_balances": params.include_balances,
         }
+        query_params = {k: v for k, v in query_params.items() if v is not None}
 
-        # Filter out None values
-        params = {k: v for k, v in params.items() if v is not None}
-
-        body = {"contractIds": contract_ids, "version": version}
-
-        # Filter out None values
+        body = {"contractIds": params.contract_ids, "version": params.version}
         body = {k: v for k, v in body.items() if v is not None}
 
         res = self._post_request(
             f"/v1/{self._chain}/contract_state",
             body=body,
-            params=params,
+            params=query_params,
         )
         return [ResponseAccount(**a) for a in res["accounts"]]
 
