@@ -1,4 +1,4 @@
-FROM rust:1.74 AS build
+FROM rust:latest AS build
 WORKDIR /build
 
 ENV CARGO_HOME=/build/.cargo
