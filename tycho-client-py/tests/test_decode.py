@@ -6,7 +6,6 @@ from tycho_client.dto import (
     SynchronizerStateEnum,
     Header,
 )
-from . import asset_dir
 
 
 def test_decode_snapshot(asset_dir):

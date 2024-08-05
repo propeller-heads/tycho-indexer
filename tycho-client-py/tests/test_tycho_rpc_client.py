@@ -1,9 +1,8 @@
 import json
 from unittest.mock import patch, Mock
 
+from tycho_client.dto import ProtocolComponent, ResponseProtocolState, ResponseAccount
 from tycho_client.rpc_client import TychoRPCClient
-
-from . import asset_dir
 
 
 @patch("requests.post")
@@ -24,8 +23,9 @@ def test_get_protocol_components_returns_expected_result(mock_post, asset_dir):
         json={"protocol_system": "uniswap_v2"},
         params={},
     )
-    assert "protocol_components" in result
-    assert len(result["protocol_components"]) == 2
+    assert isinstance(result, list)
+    assert isinstance(result[0], ProtocolComponent)
+    assert len(result) == 2
 
 
 @patch("requests.post")
@@ -46,10 +46,11 @@ def test_get_protocol_state_returns_expected_result(mock_post, asset_dir):
         json={},
         params={'include_balances': True},
     )
-    assert "states" in result
-    assert len(result["states"]) == 1
-    assert result["states"][0][
-               "component_id"] == "0xe96a45f66bdda121b24f0a861372a72e8889523d"
+    assert isinstance(result, list)
+    assert isinstance(result[0], ResponseProtocolState)
+    assert len(result) == 1
+
+    assert result[0].component_id == "0xe96a45f66bdda121b24f0a861372a72e8889523d"
 
 
 @patch("requests.post")
@@ -73,5 +74,6 @@ def test_get_contract_state_returns_expected_result(
         params={"include_balances": True},
     )
 
-    assert "accounts" in result
-    assert len(result["accounts"][0]["slots"]) > 0
+    assert isinstance(result, list)
+    assert isinstance(result[0], ResponseAccount)
+    assert len(result[0].slots) > 0

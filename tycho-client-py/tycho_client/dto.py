@@ -1,9 +1,10 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Set, Union
-from pydantic import BaseModel, Field
 from uuid import UUID
+
 from hexbytes import HexBytes as _HexBytes
+from pydantic import BaseModel, Field
 
 
 class HexBytes(_HexBytes):
@@ -179,6 +180,9 @@ class ResponseAccount(BaseModel):
     balance_modify_tx: HexBytes
     code_modify_tx: HexBytes
     creation_tx: Optional[HexBytes] = None
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class Snapshot(BaseModel):
