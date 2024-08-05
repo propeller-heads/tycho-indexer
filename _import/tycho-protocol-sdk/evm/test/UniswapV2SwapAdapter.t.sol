@@ -29,7 +29,7 @@ contract UniswapV2PairFunctionTest is AdapterTest {
         vm.label(USDC_WETH_PAIR, "USDC_WETH_PAIR");
     }
 
-    function testPriceFuzz(uint256 amount0, uint256 amount1) public {
+    function testPriceFuzz(uint256 amount0, uint256 amount1) public view {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
         vm.assume(amount0 < limits[0]);
@@ -47,7 +47,7 @@ contract UniswapV2PairFunctionTest is AdapterTest {
         }
     }
 
-    function testPriceDecreasing() public {
+    function testPriceDecreasing() public view {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory amounts = new uint256[](TEST_ITERATIONS);
 
@@ -149,13 +149,16 @@ contract UniswapV2PairFunctionTest is AdapterTest {
         executeIncreasingSwaps(OrderSide.Buy);
     }
 
-    function testGetCapabilities(bytes32 pair, address t0, address t1) public {
+    function testGetCapabilities(bytes32 pair, address t0, address t1)
+        public
+        view
+    {
         Capability[] memory res = adapter.getCapabilities(pair, t0, t1);
 
         assertEq(res.length, 4);
     }
 
-    function testGetLimits() public {
+    function testGetLimits() public view {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
 

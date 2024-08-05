@@ -10,7 +10,7 @@ import "src/libraries/FractionMath.sol";
 contract AdapterTest is Test, ISwapAdapterTypes {
     using FractionMath for Fraction;
 
-    bytes32 mockData = bytes32(abi.encodePacked(false));
+    bytes32 mockData;
     uint256 constant pricePrecision = 10e24;
     string[] public stringPctgs = ["0%", "0.1%", "50%", "100%"];
 

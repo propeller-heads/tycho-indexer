@@ -16,7 +16,7 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
     address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant USDC_WETH_PAIR = 0x2fe16Dd18bba26e457B7dD2080d5674312b026a2;
     address constant relayerAddress = 0xd17b3c9784510E33cD5B87b490E79253BcD81e2E;
-    bytes32 mockData = bytes32(abi.encodePacked(false));
+    bytes32 mockData;
 
     uint256 constant TEST_ITERATIONS = 100;
 
@@ -31,7 +31,10 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         vm.label(address(USDC_WETH_PAIR), "USDC_WETH_PAIR");
     }
 
-    function testPriceFuzzIntegral(uint256 amount0, uint256 amount1) public {
+    function testPriceFuzzIntegral(uint256 amount0, uint256 amount1)
+        public
+        view
+    {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
         vm.assume(amount0 < limits[0]);
@@ -159,14 +162,14 @@ contract IntegralSwapAdapterTest is Test, ISwapAdapterTypes {
         assertEq(res.length, 4);
     }
 
-    function testGetTokensIntegral() public {
+    function testGetTokensIntegral() public view {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         address[] memory tokens = adapter.getTokens(pair);
 
         assertEq(tokens.length, 2);
     }
 
-    function testGetLimitsIntegral() public {
+    function testGetLimitsIntegral() public view {
         bytes32 pair = bytes32(bytes20(USDC_WETH_PAIR));
         uint256[] memory limits = adapter.getLimits(pair, USDC, WETH);
 

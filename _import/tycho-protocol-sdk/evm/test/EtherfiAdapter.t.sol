@@ -15,7 +15,7 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
     IeEth eEth;
 
     uint256 constant TEST_ITERATIONS = 100;
-    bytes32 mockData = bytes32(abi.encodePacked(false));
+    bytes32 mockData;
 
     function setUp() public {
         uint256 forkBlock = 19218495;
@@ -404,6 +404,7 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
 
     function testGetCapabilitiesEtherfi(bytes32 pair, address t0, address t1)
         public
+        view
     {
         Capability[] memory res =
             adapter.getCapabilities(pair, address(t0), address(t1));
@@ -411,14 +412,14 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         assertEq(res.length, 3);
     }
 
-    function testGetTokensEtherfi() public {
+    function testGetTokensEtherfi() public view {
         bytes32 pair = bytes32(0);
         address[] memory tokens = adapter.getTokens(pair);
 
         assertEq(tokens.length, 3);
     }
 
-    function testGetLimitsEtherfi() public {
+    function testGetLimitsEtherfi() public view {
         bytes32 pair = bytes32(0);
         uint256[] memory limits =
             adapter.getLimits(pair, address(eEth), address(weEth));

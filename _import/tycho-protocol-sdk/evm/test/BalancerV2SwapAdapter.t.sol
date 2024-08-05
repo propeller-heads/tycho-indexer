@@ -12,6 +12,7 @@ import {FractionMath} from "src/libraries/FractionMath.sol";
 contract BalancerV2SwapAdapterTest is AdapterTest {
     using FractionMath for Fraction;
 
+    bytes32 mockBoolData = bytes32(abi.encode(false));
     IVault constant balancerV2Vault =
         IVault(payable(0xBA12222222228d8Ba445958a75a0704d566BF2C8));
     BalancerV2SwapAdapter adapter;
@@ -111,7 +112,12 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
         uint256 weth_balance = IERC20(WETH).balanceOf(address(this));
 
         Trade memory trade = adapter.swap(
-            B_80BAL_20WETH_POOL_ID, BAL, WETH, side, specifiedAmount, mockData
+            B_80BAL_20WETH_POOL_ID,
+            BAL,
+            WETH,
+            side,
+            specifiedAmount,
+            mockBoolData
         );
 
         if (trade.calculatedAmount > 0) {
@@ -154,7 +160,7 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
                 WETH,
                 OrderSide.Sell,
                 amounts[i],
-                mockData
+                mockBoolData
             );
 
             vm.revertTo(beforeSwap);
@@ -190,7 +196,7 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
                 WETH,
                 OrderSide.Buy,
                 amounts[i],
-                mockData
+                mockBoolData
             );
 
             vm.revertTo(beforeSwap);
@@ -214,6 +220,7 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
 
     function testGetCapabilitiesFuzz(bytes32 pool, address t0, address t1)
         public
+        view
     {
         Capability[] memory res = adapter.getCapabilities(pool, t0, t1);
 
@@ -224,7 +231,7 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
         assertEq(uint256(res[3]), uint256(Capability.HardLimits));
     }
 
-    function testGetTokens() public {
+    function testGetTokens() public view {
         address[] memory tokens = adapter.getTokens(B_80BAL_20WETH_POOL_ID);
 
         assertEq(tokens[0], BAL);

@@ -18,7 +18,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         ITransmuter(0x00253582b2a3FE112feEC532221d9708c64cEFAb);
 
     uint256 constant TEST_ITERATIONS = 100;
-    bytes32 mockData = bytes32(abi.encodePacked(false));
+    bytes32 mockData;
 
     function setUp() public {
         uint256 forkBlock = 18921770;
@@ -179,19 +179,20 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
 
     function testGetCapabilitiesAngle(bytes32 pair, address t0, address t1)
         public
+        view
     {
         Capability[] memory res = adapter.getCapabilities(pair, t0, t1);
 
         assertEq(res.length, 2);
     }
 
-    function testGetTokensAngle() public {
+    function testGetTokensAngle() public view {
         address[] memory tokens = adapter.getTokens(bytes32(0));
 
         assertGe(tokens.length, 2);
     }
 
-    function testGetLimitsAngle() public {
+    function testGetLimitsAngle() public view {
         bytes32 pair = bytes32(0);
         uint256[] memory limits =
             adapter.getLimits(pair, address(agEUR), address(EURC));
