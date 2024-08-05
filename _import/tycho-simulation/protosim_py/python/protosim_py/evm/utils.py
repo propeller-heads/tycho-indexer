@@ -11,6 +11,7 @@ import eth_utils
 from eth_typing import HexStr
 from hexbytes import HexBytes
 import requests
+from protosim_py.evm import AccountUpdate
 
 from . import SimulationEngine, AccountInfo
 from .constants import EXTERNAL_ACCOUNT, MAX_BALANCE, ASSETS_FOLDER
@@ -27,7 +28,7 @@ def decode_tycho_exchange(exchange: str) -> (str, bool):
 
 
 def create_engine(
-    mocked_tokens: list[Address], trace: bool = False
+        mocked_tokens: list[Address], trace: bool = False
 ) -> SimulationEngine:
     """Create a simulation engine with a mocked ERC20 contract at given addresses.
 
@@ -212,7 +213,7 @@ def load_abi(name_or_path: str) -> dict:
     if os.path.exists(abspath := os.path.abspath(name_or_path)):
         path = abspath
     else:
-        path = f"{os.path.dirname(os.path.abspath(__file__))}/assets/{name_or_path}.abi"
+        path = f"{ASSETS_FOLDER}/{name_or_path}.abi"
     try:
         with open(os.path.abspath(path)) as f:
             abi: dict = json.load(f)
@@ -282,7 +283,7 @@ def parse_solidity_error_message(data) -> str:
 
 
 def maybe_coerce_error(
-    err: RuntimeError, pool_state: Any, gas_limit: int = None
+        err: RuntimeError, pool_state: Any, gas_limit: int = None
 ) -> Exception:
     details = err.args[0]
     # we got bytes as data, so this was a revert
@@ -351,3 +352,29 @@ def get_code_for_address(address: str, connection_string: str = None):
     except RuntimeError as e:
         print(f"Error fetching code for address {address}: {e}")
         return None
+
+
+def parse_account_info(accounts: list[dict[str, Any]]) -> list[AccountUpdate]:
+    """Parses AccountInfo objects from a dictionary.
+
+    Assumes all values are hex encoded bytes.
+    """
+    parsed = []
+    for account in accounts:
+        address = account["address"]
+        balance = int(account["native_balance"], 16)
+        code = bytearray.fromhex(account["code"][2:])
+        # apply account updates
+        slots = {int(k, 16): int(v, 16) for k, v in account["slots"].items()}
+        parsed.append(
+            AccountUpdate(
+                address=address,
+                chain=account["chain"],
+                slots=slots,
+                balance=balance,
+                code=code,
+                change="Update",
+            )
+        )
+
+    return parsed

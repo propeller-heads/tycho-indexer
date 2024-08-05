@@ -12,7 +12,7 @@ class TychoDBSingleton:
     _instance = None
 
     @classmethod
-    def initialize(cls, tycho_http_url: str):
+    def initialize(cls):
         """
         Initialize the TychoDB instance with the given URLs.
 
@@ -22,7 +22,7 @@ class TychoDBSingleton:
             The URL of the Tycho HTTP server.
 
         """
-        cls._instance = TychoDB(tycho_http_url=tycho_http_url)
+        cls._instance = TychoDB("")
 
     @classmethod
     def get_instance(cls) -> TychoDB:
