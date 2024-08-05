@@ -110,14 +110,6 @@ class EthereumToken:
         return self._hash
 
 
-class DatabaseType(Enum):
-    # Make call to the node each time it needs a storage (unless cached from a previous call).
-    rpc_reader = "rpc_reader"
-    # Connect to Tycho and cache the whole state of a target contract, the state is continuously updated by Tycho.
-    # To use this we need Tycho to be configured to index the target contract state.
-    tycho = "tycho"
-
-
 class Capability(IntEnum):
     SellSide = auto()
     BuySide = auto()
@@ -128,12 +120,3 @@ class Capability(IntEnum):
     ScaledPrice = auto()
     HardLimits = auto()
     MarginalPrice = auto()
-
-
-class SynchronizerState(Enum):
-    started = "started"
-    ready = "ready"
-    stale = "stale"
-    delayed = "delayed"
-    advanced = "advanced"
-    ended = "ended"

@@ -36,14 +36,12 @@ class ThirdPartyPool:
         block: EVMBlock,
         adapter_contract_path: str,
         marginal_prices: dict[tuple[EthereumToken, EthereumToken], Decimal] = None,
-        engine: SimulationEngine = None,
         stateless_contracts: dict[str, bytes] = None,
         capabilities: set[Capability] = None,
         balance_owner: Optional[str] = None,
-        block_lasting_overwrites: defaultdict[
-            Address,
-            dict[int, int],
-        ] = None,
+        block_lasting_overwrites: defaultdict[Address, dict[int, int]] = None,
+        manual_updates: bool = False,
+        trace: bool = False,
     ):
         self.id_ = id_
         """The pools identifier."""
@@ -64,14 +62,16 @@ class ThirdPartyPool:
         """The adapters contract name. Used to look up the byte code for the adapter."""
 
         self.stateless_contracts: dict[str, bytes] = stateless_contracts or {}
-        """The address to bytecode map of all stateless contracts used by the protocol for simulations."""
+        """The address to bytecode map of all stateless contracts used by the protocol 
+        for simulations."""
 
         self.capabilities: set[Capability] = capabilities or {Capability.SellSide}
         """The supported capabilities of this pool."""
 
         self.balance_owner: Optional[str] = balance_owner
-        """The contract address for where protocol balances are stored (i.e. a vault contract).
-        If given, balances will be overwritten here instead of on the pool contract during simulations."""
+        """The contract address for where protocol balances are stored (i.e. a vault 
+        contract). If given, balances will be overwritten here instead of on the pool 
+        contract during simulations."""
 
         self.block_lasting_overwrites: defaultdict[
             Address, dict[int, int]
@@ -79,16 +79,22 @@ class ThirdPartyPool:
         """Storage overwrites that will be applied to all simulations. They will be cleared
         when ``clear_all_cache`` is called, i.e. usually at each block. Hence the name."""
 
+        self.manual_updates: bool = manual_updates
+        """Indicates if the protocol uses custom update rules and requires update 
+        triggers to recalculate spot prices ect. Default is to update on all changes on 
+        the pool."""
+
+        self.trace: bool = trace
+        """If set, vm will emit detailed traces about the execution."""
+
         self._engine: Optional[SimulationEngine] = None
-        self._set_engine(engine)
+        self._set_engine()
         self._adapter_contract = AdapterContract(ADAPTER_ADDRESS, self._engine)
         self._set_capabilities()
         if len(self.marginal_prices) == 0:
             self._set_marginal_prices()
 
-    trace: bool = False
-
-    def _set_engine(self, engine: Optional[SimulationEngine]):
+    def _set_engine(self):
         """Set instance's simulation engine. If no engine given, make a default one.
 
         If engine is already set, this is a noop.
@@ -173,7 +179,7 @@ class ThirdPartyPool:
                 self._adapter_contract.get_capabilities(cast(HexStr, self.id_), t0, t1)
             )
         max_capabilities = max(map(len, capabilities))
-        self.capabilities = functools.reduce(set.intersection, capabilities)
+        self.capabilities = set(functools.reduce(set.intersection, capabilities))
         if len(self.capabilities) < max_capabilities:
             log.warning(
                 f"Pool {self.id_} hash different capabilities depending on the token pair!"
@@ -284,7 +290,7 @@ class ThirdPartyPool:
             balance_overwrites.update(overwrites.get_protosim_overwrites())
         return balance_overwrites
 
-    def _duplicate(self: type["ThirdPartyPool"]) -> "ThirdPartyPool":
+    def _duplicate(self: "ThirdPartyPool") -> "ThirdPartyPool":
         """Make a new instance identical to self that shares the same simulation engine.
 
         Note that the new and current state become coupled in a way that they must
@@ -294,16 +300,18 @@ class ThirdPartyPool:
         Not naming this method _copy to not confuse with Pydantic's .copy method.
         """
         return type(self)(
-            adapter_contract_path=self.adapter_contract_path,
-            block=self.block,
             id_=self.id_,
             tokens=self.tokens,
-            marginal_prices=self.marginal_prices.copy(),
-            block_lasting_overwrites=deepcopy(self.block_lasting_overwrites),
-            engine=self._engine,
             balances=self.balances,
-            balance_owner=self.balance_owner,
+            block=self.block,
+            marginal_prices=self.marginal_prices.copy(),
+            adapter_contract_path=self.adapter_contract_path,
             stateless_contracts=self.stateless_contracts,
+            capabilities=self.capabilities,
+            balance_owner=self.balance_owner,
+            block_lasting_overwrites=deepcopy(self.block_lasting_overwrites),
+            manual_updates=self.manual_updates,
+            trace=self.trace,
         )
 
     def get_sell_amount_limit(

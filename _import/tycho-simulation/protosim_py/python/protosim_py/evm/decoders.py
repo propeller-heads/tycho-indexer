@@ -1,6 +1,5 @@
 from abc import ABC
 from collections import defaultdict
-from decimal import Decimal
 from logging import getLogger
 from typing import Callable, Union
 
@@ -8,8 +7,8 @@ from eth_utils import to_checksum_address
 from tycho_client import dto
 from tycho_client.dto import ComponentWithState, BlockChanges
 
-from . import SimulationEngine, SimulationParameters, AccountInfo, BlockHeader
-from ..models import EVMBlock, DatabaseType, EthereumToken
+from . import AccountUpdate, BlockHeader
+from ..models import EVMBlock, EthereumToken
 from .pool_state import ThirdPartyPool
 from .storage import TychoDBSingleton
 from .utils import decode_tycho_exchange
@@ -90,7 +89,6 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         component = snapshot.component
         state_attributes = snapshot.state.attributes
         static_attributes = component.static_attributes
-        exchange = decode_tycho_exchange(component.protocol_system)
 
         try:
             tokens = tuple(self.token_factory_func(t.hex()) for t in component.tokens)
@@ -101,9 +99,9 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         optional_attributes = self.decode_optional_attributes(state_attributes)
         pool_id = static_attributes.pop("pool_id", component.id)
-        manual_attributes = static_attributes.get("manual_attributes", False)
+        manual_updates = static_attributes.get("manual_updates", False)
 
-        if not manual_attributes:
+        if not manual_updates:
             # do not trigger pool updates on contract changes for exchanges configured to listen for manual updates
             for address in component.contract_ids:
                 self.contract_pools[address.hex()].append(pool_id)
@@ -113,14 +111,10 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             tokens=tokens,
             balances=balances,
             block=block,
-            spot_prices={},
-            trading_fee=Decimal("0"),
-            exchange=exchange,
-            adapter_contract_name=self.adapter_contract,
-            minimum_gas=self.minimum_gas,
-            db_type=DatabaseType.tycho,
+            marginal_prices={},
+            adapter_contract_path=self.adapter_contract,
             trace=True,
-            manual_attributes=manual_attributes,
+            manual_updates=manual_updates,
             **optional_attributes,
         )
 
@@ -212,7 +206,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             dict[dto.HexBytes, dto.AccountUpdate],
             dict[dto.HexBytes, dto.ResponseAccount],
         ],
-    ):
+    ) -> list[AccountUpdate]:
         vm_updates = []
         for address, account_update in account_updates.items():
             # collect contract updates to apply to simulation db
