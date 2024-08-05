@@ -19,9 +19,10 @@ contract AdapterTest is Test, ISwapAdapterTypes {
     // sell amounts. Asserts that the prices behaves as expected.
     // @param adapter The swap adapter to test
     // @param poolIds The list of pool ids to test
-    function testPoolBehaviour(ISwapAdapter adapter, bytes32[] memory poolIds)
-        public
-    {
+    function runPoolBehaviourTest(
+        ISwapAdapter adapter,
+        bytes32[] memory poolIds
+    ) public {
         bool hasPriceImpact = !hasCapability(
             adapter.getCapabilities(poolIds[0], address(0), address(0)),
             Capability.ConstantPrice
