@@ -207,7 +207,7 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
     {
         Capability[] memory res = adapter.getCapabilities(pool, t0, t1);
 
-        assertEq(res.length, 3);
+        assertEq(res.length, 4);
         assertEq(uint256(res[0]), uint256(Capability.SellOrder));
         assertEq(uint256(res[1]), uint256(Capability.BuyOrder));
         assertEq(uint256(res[2]), uint256(Capability.PriceFunction));
@@ -232,6 +232,6 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
     function testBalancerV2PoolBehaviour() public {
         bytes32[] memory poolIds = new bytes32[](1);
         poolIds[0] = B_80BAL_20WETH_POOL_ID;
-        testPoolBehaviour(adapter, poolIds);
+        runPoolBehaviourTest(adapter, poolIds);
     }
 }

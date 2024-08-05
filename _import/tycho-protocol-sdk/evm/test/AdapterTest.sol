@@ -19,9 +19,10 @@ contract AdapterTest is Test, ISwapAdapterTypes {
     // sell amounts. Asserts that the prices behaves as expected.
     // @param adapter The swap adapter to test
     // @param poolIds The list of pool ids to test
-    function testPoolBehaviour(ISwapAdapter adapter, bytes32[] memory poolIds)
-        public
-    {
+    function runPoolBehaviourTest(
+        ISwapAdapter adapter,
+        bytes32[] memory poolIds
+    ) public {
         bool hasPriceImpact = !hasCapability(
             adapter.getCapabilities(poolIds[0], address(0), address(0)),
             Capability.ConstantPrice
@@ -83,6 +84,8 @@ contract AdapterTest is Test, ISwapAdapterTypes {
         console2.log("TEST: Testing behavior for price at 0");
         assertGt(prices[0].numerator, 0, "Nominator shouldn't be 0");
         assertGt(prices[0].denominator, 0, "Denominator shouldn't be 0");
+        uint256 priceAtZero = fractionToInt(prices[0]);
+        console2.log("TEST: Price at 0: %d", priceAtZero);
 
         Trade memory trade;
         deal(tokenIn, address(this), 5 * amounts[amounts.length - 1]);
@@ -104,14 +107,14 @@ contract AdapterTest is Test, ISwapAdapterTypes {
             uint256 executedPrice =
                 trade.calculatedAmount * pricePrecision / amounts[j];
             uint256 priceAfterSwap = fractionToInt(trade.price);
-            console2.log("TEST:  - Pool price:       %d", priceAtAmount);
             console2.log("TEST:  - Executed price:   %d", executedPrice);
+            console2.log("TEST:  - Price at amount:  %d", priceAtAmount);
             console2.log("TEST:  - Price after swap: %d", priceAfterSwap);
 
             if (hasPriceImpact) {
                 assertGe(
-                    priceAtAmount,
                     executedPrice,
+                    priceAtAmount,
                     "Price should be greated than executed price."
                 );
                 assertGt(
@@ -120,24 +123,24 @@ contract AdapterTest is Test, ISwapAdapterTypes {
                     "Executed price should be greater than price after swap."
                 );
                 assertGt(
-                    priceAtAmount,
-                    priceAfterSwap,
+                    priceAtZero,
+                    executedPrice,
                     "Price should be greated than price after swap."
                 );
             } else {
                 assertGe(
-                    priceAtAmount,
-                    executedPrice,
-                    "Price should be greater or equal to executed price."
-                );
-                assertGe(
-                    executedPrice,
+                    priceAtZero,
                     priceAfterSwap,
                     "Executed price should be or equal to price after swap."
                 );
                 assertGe(
+                    priceAtZero,
                     priceAtAmount,
-                    priceAfterSwap,
+                    "Executed price should be or equal to price after swap."
+                );
+                assertGe(
+                    priceAtZero,
+                    executedPrice,
                     "Price should be or equal to price after swap."
                 );
             }

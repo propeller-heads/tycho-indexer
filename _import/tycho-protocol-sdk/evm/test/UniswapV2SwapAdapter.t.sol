@@ -151,7 +151,7 @@ contract UniswapV2PairFunctionTest is AdapterTest {
     function testGetCapabilities(bytes32 pair, address t0, address t1) public {
         Capability[] memory res = adapter.getCapabilities(pair, t0, t1);
 
-        assertEq(res.length, 3);
+        assertEq(res.length, 4);
     }
 
     function testGetLimits() public {
@@ -164,6 +164,6 @@ contract UniswapV2PairFunctionTest is AdapterTest {
     function testUsv2PoolBehaviour() public {
         bytes32[] memory poolIds = new bytes32[](1);
         poolIds[0] = bytes32(bytes20(USDC_WETH_PAIR));
-        testPoolBehaviour(adapter, poolIds);
+        runPoolBehaviourTest(adapter, poolIds);
     }
 }
