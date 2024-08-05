@@ -1,8 +1,14 @@
 import json
 from unittest.mock import patch, Mock
 
-from tycho_client.dto import ProtocolComponent, ResponseProtocolState, ResponseAccount, \
-    ProtocolComponentsParams, ProtocolStateParams, ContractStateParams
+from tycho_client.dto import (
+    ProtocolComponent,
+    ResponseProtocolState,
+    ResponseAccount,
+    ProtocolComponentsParams,
+    ProtocolStateParams,
+    ContractStateParams,
+)
 from tycho_client.rpc_client import TychoRPCClient
 
 
@@ -47,7 +53,7 @@ def test_get_protocol_state_returns_expected_result(mock_post, asset_dir):
         "http://0.0.0.0:4242/v1/ethereum/protocol_state",
         headers={"accept": "application/json", "Content-Type": "application/json"},
         json={},
-        params={'include_balances': True},
+        params={"include_balances": True},
     )
     assert isinstance(result, list)
     assert isinstance(result[0], ResponseProtocolState)
@@ -57,9 +63,7 @@ def test_get_protocol_state_returns_expected_result(mock_post, asset_dir):
 
 
 @patch("requests.post")
-def test_get_contract_state_returns_expected_result(
-        mock_post, asset_dir
-):
+def test_get_contract_state_returns_expected_result(mock_post, asset_dir):
     with (asset_dir / "rpc" / "contract_state.json").open("r") as fp:
         data = json.load(fp)
 

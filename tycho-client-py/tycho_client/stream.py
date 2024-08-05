@@ -20,14 +20,14 @@ log = getLogger(__name__)
 
 class TychoStream:
     def __init__(
-            self,
-            tycho_url: str,
-            exchanges: list[str],
-            min_tvl: Decimal,
-            blockchain: Chain,
-            include_state=True,
-            logs_directory: str = None,
-            tycho_client_path: str = None,
+        self,
+        tycho_url: str,
+        exchanges: list[str],
+        min_tvl: Decimal,
+        blockchain: Chain,
+        include_state=True,
+        logs_directory: str = None,
+        tycho_client_path: str = None,
     ):
         self.tycho_url = tycho_url
         self.min_tvl = min_tvl
@@ -61,7 +61,7 @@ class TychoStream:
             f"Starting tycho-client binary at {self._tycho_client_path}. CMD: {cmd}"
         )
         self.tycho_client = await asyncio.create_subprocess_exec(
-            self._tycho_client_path, *cmd, stdout=PIPE, stderr=STDOUT, limit=2 ** 64
+            self._tycho_client_path, *cmd, stdout=PIPE, stderr=STDOUT, limit=2**64
         )
 
     def __aiter__(self):
@@ -136,11 +136,9 @@ def find_tycho_client():
 if __name__ == "__main__":
     stream = TychoStream("localhost:8888", ["uniswap_v2"], Decimal(100), Chain.ethereum)
 
-
     async def print_messages():
         await stream.start()
         async for msg in stream:
             print(msg)
-
 
     asyncio.run(print_messages())
