@@ -9,6 +9,7 @@ const config = {
       prerelease: "pre",
     },
   ],
+  tagFormat: '${version}',
   ci: true,
   debug: true,
   plugins: [
