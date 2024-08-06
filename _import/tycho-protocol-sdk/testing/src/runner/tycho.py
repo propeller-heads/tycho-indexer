@@ -82,11 +82,14 @@ class TychoRunner:
                     "--stop-block",
                     # +2 is to make up for the cache in the index side.
                     str(end_block + 2),
-                    "--initialization-block",
-                    str(start_block),
                 ]
                 + (
-                    ["--initialized-accounts", ",".join(all_accounts)]
+                    [
+                        "--initialized-accounts",
+                        ",".join(all_accounts),
+                        "--initialization-block",
+                        str(start_block),
+                    ]
                     if all_accounts
                     else []
                 ),

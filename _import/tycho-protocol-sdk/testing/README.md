@@ -14,7 +14,8 @@ The testing suite builds the `.spkg` for your Substreams module, indexes a speci
 
 ## Test Configuration
 
-Tests are defined in a `yaml` file. A template can be found at `substreams/ethereum-template/test_assets.yaml`. The configuration file should include:
+Tests are defined in a `yaml` file. A template can be found at
+`substreams/ethereum-template/integration_test.tycho.yaml`. The configuration file should include:
 
 - The target Substreams config file.
 - The expected protocol types.
