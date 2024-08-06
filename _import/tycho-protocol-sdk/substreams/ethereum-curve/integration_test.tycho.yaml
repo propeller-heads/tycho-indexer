@@ -6,6 +6,7 @@ skip_balance_check: true
 initialized_accounts:
 tests:
 
+  # Unique pool (no factory) 3pool - 0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7
   - name: test_3pool
     start_block: 10809470
     stop_block: 10810226
@@ -20,6 +21,7 @@ tests:
           creation_tx: "0x20793bbf260912aae189d5d261ff003c9b9166da8191d8f9d63ff1c7722f3ac6"
           skip_simulation: false
 
+  # Unique pool (no factory) steth - 0xdc24316b9ae028f1497c275eb9192a3ea0f67022
   - name: test_steth
     start_block: 11592550
     stop_block: 11595553
@@ -33,6 +35,7 @@ tests:
           creation_tx: "0xfac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa"
           skip_simulation: false
 
+  # Unique pool (no factory) tricrypto2 - 0xd51a44d3fae010294c616388b506acda1bfaae46
   - name: test_tricrypto2
     start_block: 12821118 #This pool was created at 12821148, but it requires some contracts that were created shortly before.
     stop_block: 12831387
@@ -47,6 +50,7 @@ tests:
           creation_tx: "0xdafb6385ed988ce8aacecfe1d97b38ea5e60b1ebce74d2423f71ddd621680138"
           skip_simulation: false
 
+  # Unique pool (no factory) susd - 0xa5407eae9ba41422680e2e00537571bcc53efbfd
   - name: test_susd
     start_block: 9906598
     stop_block: 9907338
@@ -62,6 +66,7 @@ tests:
           creation_tx: "0x51aca4a03a395de8855fa2ca59b7febe520c2a223e69c502066162f7c1a95ec2"
           skip_simulation: false
 
+  # Unique pool (no factory) fraxusdc - 0xdcef968d416a41cdac0ed8702fac8128a64241a2
   - name: test_fraxusdc
     start_block: 14939588
     stop_block: 14939712
@@ -75,6 +80,7 @@ tests:
           creation_tx: "0x1f4254004ce9e19d4eb742ee5a69d30f29085902d976f73e97c44150225ef775"
           skip_simulation: false
 
+  # CryptoSwapNG factory 0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf - PlainPool
   - name: test_crypto_swap_ng_factory_plain_pool
     start_block: 18580701
     stop_block: 18614742
@@ -93,6 +99,7 @@ tests:
           creation_tx: "0x6f4438aa1785589e2170599053a0cdc740d8987746a4b5ad9614b6ab7bb4e550"
           skip_simulation: false
 
+  # CryptoSwapNG factory 0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf - MetaPool
   - name: test_crypto_swap_ng_factory_meta_pool
     start_block: 19216042
     stop_block: 19217045
@@ -109,6 +116,7 @@ tests:
           creation_tx: "0x3cfeecae1b43086ee5705f89b803e21eb0492d7d5db06c229586db8fc72f5665"
           skip_simulation: true # Reason: this pool use a base pool which is also one of its tokens, therefore our token override doesn't work here and it fails on transfers
 
+  # Metapool factory 0xB9fC157394Af804a3578134A6585C0dc9cc990d4 - MetaPool
   - name: test_metapool_factory_metapool
     start_block: 18028604
     stop_block: 18029610
@@ -125,6 +133,7 @@ tests:
           creation_tx: "0xc9c6b879cbb19f7f26405335c3879c350592d530956878ff172e9efad786c63f"
           skip_simulation: true # Reason: this pool calls `totalSupply()` on the LP token during simulation. But this token is overridden and doesn't have anything for totalSupply
 
+  # Metapool factory 0xB9fC157394Af804a3578134A6585C0dc9cc990d4 - PlainPool
   - name: test_metapool_factory_plainpool
     start_block: 18808555
     stop_block: 18818577
@@ -145,6 +154,7 @@ tests:
           creation_tx: "0x455559b43afaf429c15c1d807fd7f5dd47be30f6411a854499f719b944f4c024"
           skip_simulation: true # Reason: this pool has no liquidity at stop_block
 
+  # CryptoPool factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99
   - name: test_cryptopool_factory
     start_block: 19162590
     stop_block: 19163633
@@ -165,6 +175,7 @@ tests:
           creation_tx: "0xa5b13d50c56242f7994b8e1339032bb4c6f9ac3af3054d4eae3ce9e32e3c1a50"
           skip_simulation: true # Reason: this pool has no liquidity at stop_block
 
+  # Tricrypto factory 0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963
   - name: test_tricrypto_factory
     start_block: 17371455
     stop_block: 17374457
@@ -182,6 +193,7 @@ tests:
           creation_tx: "0x2bd59c19f993b83729fb23498f897a58567c6f0b3ee2f00613ba515a7b19fe23"
           skip_simulation: false
 
+  # Twocrypto factory 0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f
   - name: test_twocrypto_factory
     start_block: 19692166
     stop_block: 19692232
@@ -197,6 +209,7 @@ tests:
           creation_tx: "0x61d563e2627437da172fdd60ab54e5cc955fcb75829fd819486e857bac31cad2"
           skip_simulation: false
 
+  # StableSwap factory 0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d - PlainPool
   - name: test_stableswap_factory_plain_pool
     start_block: 17258004
     stop_block: 17260023
@@ -212,6 +225,7 @@ tests:
           creation_tx: "0x40b25773bf8ea673434277d279af40a85b09072072e7004e9048a2ec0f0dd5a0"
           skip_simulation: false
 
+  # StableSwap factory 0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d - Metapool
   #  - name: test_stableswap_factory_meta_pool
   # There was no metapool created from this factory yet.
   # TODO: Double check https://etherscan.io/address/0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d#events search events with topic 0x01f31cd2abdeb4e5e10ba500f2db0f937d9e8c735ab04681925441b4ea37eda5.
@@ -227,6 +241,7 @@ tests:
   #  print(keccak(plain_pool_deployed))
   #  print(keccak(meta_pool_deployed))
 
+  # Old MetaPool factory 0x0959158b6040D32d04c301A72CBFD6b39E21c9AE
   - name: test_metapool_factory_old
     start_block: 11968730
     stop_block: 12028110
