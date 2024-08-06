@@ -46,7 +46,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
     def __init__(
         self,
-        token_factory_func: Callable[[str], EthereumToken],
+        token_factory_func: Callable[[list[str]], EthereumToken],
         adapter_contract: str,
         minimum_gas: int,
         trace: bool = False,
@@ -91,7 +91,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         static_attributes = component.static_attributes
 
         try:
-            tokens = tuple(self.token_factory_func(t.hex()) for t in component.tokens)
+            tokens = tuple(self.token_factory_func(component.tokens))
         except KeyError:
             raise TychoDecodeError("Unsupported token", pool_id=component.id)
 
