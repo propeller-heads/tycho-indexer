@@ -81,6 +81,7 @@ tests:
     initialized_accounts:
       - "0x6a8cbed756804b16e05e741edabd5cb544ae21bf"
       - "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963" # Needed by another component that is created within this block range
+      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
       - "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7"
     expected_state:
       protocol_components:
@@ -113,6 +114,7 @@ tests:
     stop_block: 18029610
     initialized_accounts:
       - "0xdcef968d416a41cdac0ed8702fac8128a64241a2"
+      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
     expected_state:
       protocol_components:
         - id: "0x61fA2c947e523F9ABfb8d7e2903A5D5218C119a7"
@@ -168,6 +170,7 @@ tests:
     stop_block: 17374457
     initialized_accounts:
       - "0x0c0e5f2ff0ff18a3be9b835635039256dc4b4963"
+      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
     expected_state:
       protocol_components:
         - id: "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B"
@@ -197,6 +200,8 @@ tests:
   - name: test_stableswap_factory_plain_pool
     start_block: 17258004
     stop_block: 17260023
+    initialized_accounts:
+      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
     expected_state:
       protocol_components:
         - id: "0x390f3595bCa2Df7d23783dFd126427CCeb997BF4"
