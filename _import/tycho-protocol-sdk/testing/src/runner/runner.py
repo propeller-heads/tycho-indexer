@@ -29,7 +29,7 @@ from tycho_client.stream import TychoStream
 from .adapter_handler import AdapterContractHandler
 from .evm import get_token_balance, get_block_header
 from .tycho import TychoRunner
-from .utils import build_snapshot_message
+from .utils import build_snapshot_message, token_factory
 
 
 class TestResult:
@@ -74,6 +74,7 @@ class TestRunner:
             db_url, with_binary_logs, self.config["initialized_accounts"]
         )
         self.tycho_rpc_client = TychoRPCClient()
+        self._token_factory_func = token_factory(self.tycho_rpc_client)
         self.db_url = db_url
         self._vm_traces = vm_traces
         self._chain = Chain.ethereum
@@ -244,14 +245,10 @@ class TestRunner:
                 )
 
             decoder = ThirdPartyPoolTychoDecoder(
-                adapter_contract=adapter_contract, minimum_gas=0, trace=self._vm_traces
-            )
-
-            stream_adapter = TychoStream(
-                tycho_url="0.0.0.0:4242",
-                exchanges=[protocol],
-                min_tvl=Decimal("0"),
-                blockchain=self._chain,
+                token_factory_func=self._token_factory_func,
+                adapter_contract=adapter_contract,
+                minimum_gas=0,
+                trace=self._vm_traces,
             )
 
             snapshot_message: Snapshot = build_snapshot_message(
