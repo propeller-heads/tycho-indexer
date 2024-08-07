@@ -162,7 +162,7 @@ class TestRunner:
                     tycho_balance = int(balance_hex)
                     token_balances[comp_id][token] = tycho_balance
 
-                    if self.config.skip_balance_check is not True:
+                    if not self.config.skip_balance_check:
                         node_balance = get_token_balance(token, comp_id, stop_block)
                         if node_balance != tycho_balance:
                             return TestResult.Failed(
