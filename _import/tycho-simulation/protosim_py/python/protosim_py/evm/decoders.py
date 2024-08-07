@@ -6,6 +6,7 @@ from typing import Callable, Union
 from eth_utils import to_checksum_address
 from tycho_client import dto
 from tycho_client.dto import ComponentWithState, BlockChanges
+from protosim_py.evm import AccountUpdate
 
 from . import AccountUpdate, BlockHeader
 from ..models import EVMBlock, EthereumToken
@@ -210,18 +211,19 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         vm_updates = []
         for address, account_update in account_updates.items():
             # collect contract updates to apply to simulation db
-            slots = {int(k, 16): int(v, 16) for k, v in account_update.slots.items()}
-            balance = account_update.balance
+            slots = {int(k): int(v) for k, v in account_update.slots.items()}
+            balance = account_update.native_balance
             code = account_update.code
+            change = account_update.change.value if hasattr(account_update, "change") else dto.ChangeType.creation.value
 
             vm_updates.append(
                 AccountUpdate(
                     address=address.hex(),
                     chain=account_update.chain,
                     slots=slots,
-                    balance=int(balance, 16) if balance is not None else None,
-                    code=bytearray.fromhex(code[2:]) if code is not None else None,
-                    change=account_update["change"],
+                    balance=int(balance) if balance is not None else None,
+                    code=bytearray.fromhex(code.hex()[2:]) if code is not None else None,
+                    change=change,
                 )
             )
         if vm_updates:
