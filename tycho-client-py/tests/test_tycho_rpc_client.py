@@ -30,7 +30,7 @@ def test_get_protocol_components_returns_expected_result(mock_post, asset_dir):
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/protocol_components",
         headers={"accept": "application/json", "Content-Type": "application/json"},
-        json={"protocol_system": "uniswap_v2"},
+        data='{"protocol_system": "uniswap_v2"}',
         params={},
     )
     assert isinstance(result, list)
@@ -54,8 +54,8 @@ def test_get_protocol_state_returns_expected_result(mock_post, asset_dir):
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/protocol_state",
         headers={"accept": "application/json", "Content-Type": "application/json"},
-        json={},
-        params={"include_balances": True},
+        data='{}',
+        params='{"include_balances": true}',
     )
     assert isinstance(result, list)
     assert isinstance(result[0], ResponseProtocolState)
@@ -80,8 +80,8 @@ def test_get_contract_state_returns_expected_result(mock_post, asset_dir):
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/contract_state",
         headers={"accept": "application/json", "Content-Type": "application/json"},
-        json={},
-        params={"include_balances": True},
+        data='{}',
+        params='{"include_balances": true}',
     )
 
     assert isinstance(result, list)
@@ -103,20 +103,14 @@ def test_get_tokens_returns_expected_result(mock_post, asset_dir):
     mock_post.return_value = mock_response
 
     client = TychoRPCClient()
-    params = TokensParams(
-        min_quality=10,
-        traded_n_days_ago=30
-    )
+    params = TokensParams(min_quality=10, traded_n_days_ago=30)
     result = client.get_tokens(params)
 
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/tokens",
         headers={"accept": "application/json", "Content-Type": "application/json"},
-        json={
-            "min_quality": 10,
-            "traded_n_days_ago": 30
-        },
-        params={}
+        data='{"min_quality": 10, "traded_n_days_ago": 30}',
+        params={},
     )
     assert isinstance(result, list)
     assert isinstance(result[0], ResponseToken)

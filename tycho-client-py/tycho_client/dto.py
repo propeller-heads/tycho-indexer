@@ -224,6 +224,7 @@ class FeedMessage(BaseModel):
 
 
 # Client Parameters
+
 class ProtocolId(BaseModel):
     chain: Chain
     id: str
@@ -241,25 +242,37 @@ class VersionParams(BaseModel):
 
 class ProtocolComponentsParams(BaseModel):
     protocol_system: Optional[str] = None
-    component_addresses: Optional[List[HexBytes]] = None
+    component_addresses: Optional[List[HexBytes]] = Field(
+        default=None, alias="componentAddresses"
+    )
     tvl_gt: Optional[int] = None
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class ProtocolStateParams(BaseModel):
     tvl_gt: Optional[int] = None
     inertia_min_gt: Optional[int] = None
     include_balances: Optional[bool] = True
-    protocol_ids: Optional[List[ProtocolId]] = None
-    protocol_system: Optional[str] = None
+    protocol_ids: Optional[List[ProtocolId]] = Field(default=None, alias="protocolIds")
+    protocol_system: Optional[str] = Field(default=None, alias="protocolSystem")
     version: Optional[VersionParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
+        use_enum_values = True
 
 
 class ContractStateParams(BaseModel):
     tvl_gt: Optional[int] = None
     inertia_min_gt: Optional[int] = None
     include_balances: Optional[bool] = True
-    contract_ids: Optional[List[ContractId]] = None
+    contract_ids: Optional[List[ContractId]] = Field(default=None, alias="contractIds")
     version: Optional[VersionParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class PaginationParams(BaseModel):
@@ -270,5 +283,10 @@ class PaginationParams(BaseModel):
 class TokensParams(BaseModel):
     min_quality: Optional[int] = None
     pagination: Optional[PaginationParams] = None
-    token_addresses: Optional[List[HexBytes]] = None
+    token_addresses: Optional[List[HexBytes]] = Field(
+        default=None, alias="tokenAddresses"
+    )
     traded_n_days_ago: Optional[int] = None
+
+    class Config:
+        allow_population_by_field_name = True
