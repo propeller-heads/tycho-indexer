@@ -30,6 +30,9 @@ class HexBytes(_HexBytes):
 
         return cls(data)
 
+    def __int__(self):
+        return int(self.hex(), 16)
+
 
 class Chain(str, Enum):
     ethereum = "ethereum"
