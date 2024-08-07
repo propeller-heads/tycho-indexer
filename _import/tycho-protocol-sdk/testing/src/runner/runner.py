@@ -140,7 +140,17 @@ class TestRunner:
                         return TestResult.Failed(
                             f"Missing '{key}' in component '{comp_id}'."
                         )
-                    if isinstance(value, list):
+                    if key == "tokens":
+                        if set(map(HexBytes, value)) != set(component[key]):
+                            return TestResult.Failed(
+                                f"Token mismatch for key '{key}': {value} != {component[key]}"
+                            )
+                    elif key == "creation_tx":
+                        if HexBytes(value) != component[key]:
+                            return TestResult.Failed(
+                                f"Creation tx mismatch for key '{key}': {value} != {component[key]}"
+                            )
+                    elif isinstance(value, list):
                         if set(map(str.lower, value)) != set(
                             map(str.lower, component[key])
                         ):
@@ -165,10 +175,10 @@ class TestRunner:
                         None,
                     )
                     if state:
-                        balance_hex = state["balances"].get(token, "0x0")
+                        balance_hex = state.balances.get(token, "0x0")
                     else:
                         balance_hex = "0x0"
-                    tycho_balance = int(balance_hex, 16)
+                    tycho_balance = int(balance_hex)
                     token_balances[comp_id][token] = tycho_balance
 
                     if self.config["skip_balance_check"] is not True:
@@ -227,7 +237,7 @@ class TestRunner:
         )
 
         failed_simulations: dict[str, list[SimulationFailure]] = dict()
-        for protocol in protocol_type_names:
+        for _ in protocol_type_names:
             adapter_contract = os.path.join(
                 self.adapters_src,
                 "out",
