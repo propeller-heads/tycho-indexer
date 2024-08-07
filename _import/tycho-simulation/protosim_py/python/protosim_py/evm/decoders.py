@@ -212,9 +212,9 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         for address, account_update in account_updates.items():
             # collect contract updates to apply to simulation db
             slots = {int(k): int(v) for k, v in account_update.slots.items()}
-            balance = account_update.native_balance
+            balance = account_update.balance
             code = account_update.code
-            change = account_update.change.value if hasattr(account_update, "change") else dto.ChangeType.creation.value
+            change = account_update.change.value
 
             vm_updates.append(
                 AccountUpdate(
@@ -222,7 +222,9 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                     chain=account_update.chain,
                     slots=slots,
                     balance=int(balance) if balance is not None else None,
-                    code=bytearray.fromhex(code.hex()[2:]) if code is not None else None,
+                    code=bytearray.fromhex(code.hex()[2:])
+                    if code is not None
+                    else None,
                     change=change,
                 )
             )
