@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 from protosim_py.evm.decoders import ThirdPartyPoolTychoDecoder
+from protosim_py.evm.storage import TychoDBSingleton
 from protosim_py.models import EVMBlock
 from pydantic import BaseModel
 from tycho_client.dto import (
@@ -24,12 +25,11 @@ from tycho_client.dto import (
     Snapshot,
 )
 from tycho_client.rpc_client import TychoRPCClient
-from tycho_client.stream import TychoStream
 
-from .adapter_handler import AdapterContractHandler
-from .evm import get_token_balance, get_block_header
-from .tycho import TychoRunner
-from .utils import build_snapshot_message, token_factory
+from adapter_handler import AdapterContractHandler
+from evm import get_token_balance, get_block_header
+from tycho import TychoRunner
+from utils import build_snapshot_message, token_factory
 
 
 class TestResult:
@@ -109,14 +109,10 @@ class TestRunner:
 
     def validate_state(self, expected_state: dict, stop_block: int) -> TestResult:
         """Validate the current protocol state against the expected state."""
-        protocol_components: list[
-            ProtocolComponent
-        ] = self.tycho_rpc_client.get_protocol_components(
+        protocol_components = self.tycho_rpc_client.get_protocol_components(
             ProtocolComponentsParams(protocol_system="test_protocol")
         )
-        protocol_states: list[
-            ResponseProtocolState
-        ] = self.tycho_rpc_client.get_protocol_state(
+        protocol_states = self.tycho_rpc_client.get_protocol_state(
             ProtocolStateParams(protocol_system="test_protocol")
         )
         components_by_id = {
@@ -175,9 +171,9 @@ class TestRunner:
                         None,
                     )
                     if state:
-                        balance_hex = state.balances.get(token, "0x0")
+                        balance_hex = state.balances.get(token, HexBytes("0x00"))
                     else:
-                        balance_hex = "0x0"
+                        balance_hex = HexBytes("0x00")
                     tycho_balance = int(balance_hex)
                     token_balances[comp_id][token] = tycho_balance
 
@@ -188,9 +184,9 @@ class TestRunner:
                                 f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} "
                                 f"from rpc call and {tycho_balance} from Substreams"
                             )
-            contract_states: list[
-                ResponseAccount
-            ] = self.tycho_rpc_client.get_contract_state(ContractStateParams())
+            contract_states = self.tycho_rpc_client.get_contract_state(
+                ContractStateParams()
+            )
             filtered_components = [
                 pc
                 for pc in protocol_components
@@ -227,6 +223,7 @@ class TestRunner:
         protocol_components: list[ProtocolComponent],
         contract_states: list[ResponseAccount],
     ) -> dict[str, list[SimulationFailure]]:
+        TychoDBSingleton.initialize()
         protocol_type_names = self.config["protocol_type_names"]
 
         block_header = get_block_header(block_number)

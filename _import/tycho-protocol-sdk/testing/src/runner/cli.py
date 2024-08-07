@@ -1,5 +1,5 @@
 import argparse
-from .runner import TestRunner
+from runner import TestRunner
 
 
 def main() -> None:

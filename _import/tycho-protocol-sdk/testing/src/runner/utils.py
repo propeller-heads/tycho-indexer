@@ -1,7 +1,7 @@
 from logging import getLogger
 from typing import Union
 
-from protosim_py.evm.pool_state import ThirdPartyPool
+from eth_utils import to_checksum_address
 from protosim_py.models import EthereumToken
 from tycho_client.dto import (
     ResponseProtocolState,
@@ -12,7 +12,6 @@ from tycho_client.dto import (
     HexBytes,
     TokensParams,
     PaginationParams,
-    ResponseToken,
 )
 from tycho_client.rpc_client import TychoRPCClient
 
@@ -43,16 +42,18 @@ def build_snapshot_message(
 
 def token_factory(rpc_client: TychoRPCClient) -> callable(HexBytes):
     _client = rpc_client
-    _token_cache: dict[HexBytes, EthereumToken] = {}
+    _token_cache: dict[str, EthereumToken] = {}
 
-    def factory(addresses: Union[HexBytes, list[HexBytes]]) -> list[EthereumToken]:
-        if not isinstance(addresses, list):
-            addresses = [addresses]
+    def factory(requested_addresses: Union[str, list[str]]) -> list[EthereumToken]:
+        if not isinstance(requested_addresses, list):
+            requested_addresses = [to_checksum_address(requested_addresses)]
+        else:
+            requested_addresses = [to_checksum_address(a) for a in requested_addresses]
 
         response = dict()
         to_fetch = []
 
-        for address in addresses:
+        for address in requested_addresses:
             if address in _token_cache:
                 response[address] = _token_cache[address]
             else:
@@ -63,11 +64,17 @@ def token_factory(rpc_client: TychoRPCClient) -> callable(HexBytes):
             params = TokensParams(token_addresses=to_fetch, pagination=pagination)
             tokens = _client.get_tokens(params)
             for token in tokens:
-                eth_token = EthereumToken(**token.dict())
+                address = to_checksum_address(token.address)
+                eth_token = EthereumToken(
+                    symbol=token.symbol,
+                    address=address,
+                    decimals=token.decimals,
+                    gas=token.gas,
+                )
 
-                response[token.address] = eth_token
-                _token_cache[token.address] = eth_token
+                response[address] = eth_token
+                _token_cache[address] = eth_token
 
-        return [response[address] for address in addresses]
+        return [response[address] for address in requested_addresses]
 
     return factory

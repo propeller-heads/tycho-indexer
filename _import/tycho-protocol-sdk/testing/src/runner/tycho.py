@@ -4,7 +4,6 @@ import threading
 import time
 
 import psycopg2
-import requests
 from psycopg2 import sql
 
 import os
