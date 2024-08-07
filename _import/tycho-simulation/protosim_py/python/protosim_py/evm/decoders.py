@@ -5,8 +5,7 @@ from typing import Callable, Union
 
 from eth_utils import to_checksum_address
 from tycho_client import dto
-from tycho_client.dto import ComponentWithState, BlockChanges
-from protosim_py.evm import AccountUpdate
+from tycho_client.dto import ComponentWithState, BlockChanges, HexBytes
 
 from . import AccountUpdate, BlockHeader
 from ..models import EVMBlock, EthereumToken
@@ -47,7 +46,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
     def __init__(
         self,
-        token_factory_func: Callable[[list[str]], EthereumToken],
+        token_factory_func: Callable[[list[str]], list[EthereumToken]],
         adapter_contract: str,
         minimum_gas: int,
         trace: bool = False,
@@ -76,7 +75,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         if pools:
             exchange = decode_tycho_exchange(
-                next(iter(snapshot.values())).component.protocol_system
+                next(iter(snapshot.states.values())).component.protocol_system
             )
             log.debug(
                 f"Finished decoding {exchange} snapshots: {len(pools)} succeeded, {len(self.ignored_pools)} failed"
@@ -91,15 +90,18 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         state_attributes = snapshot.state.attributes
         static_attributes = component.static_attributes
 
+        tokens = [t.hex() for t in component.tokens]
         try:
-            tokens = tuple(self.token_factory_func(component.tokens))
-        except KeyError:
-            raise TychoDecodeError("Unsupported token", pool_id=component.id)
+            tokens = self.token_factory_func(tokens)
+        except KeyError as e:
+            raise TychoDecodeError(f"Unsupported token: {e}", pool_id=component.id)
 
         balances = self.decode_balances(snapshot.state.balances, tokens)
 
         optional_attributes = self.decode_optional_attributes(state_attributes)
-        pool_id = static_attributes.pop("pool_id", component.id)
+        pool_id = component.id
+        if "pool_id" in static_attributes:
+            pool_id = static_attributes.pop("pool_id").decode("utf-8")
         manual_updates = static_attributes.get("manual_updates", False)
 
         if not manual_updates:
@@ -114,7 +116,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             block=block,
             marginal_prices={},
             adapter_contract_path=self.adapter_contract,
-            trace=True,
+            trace=self.trace,
             manual_updates=manual_updates,
             **optional_attributes,
         )
@@ -123,12 +125,14 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
     def decode_optional_attributes(attributes):
         # Handle optional state attributes
         balance_owner = attributes.get("balance_owner")
+        if balance_owner is not None:
+            balance_owner = balance_owner.hex()
         stateless_contracts = {}
         index = 0
         while f"stateless_contract_addr_{index}" in attributes:
-            address = attributes[f"stateless_contract_addr_{index}"]
-            code = attributes[f"stateless_contract_code_{index}"]
-            stateless_contracts[address] = code
+            address = attributes[f"stateless_contract_addr_{index}"].hex()
+            code = attributes[f"stateless_contract_code_{index}"].hex()
+            stateless_contracts[address] = code.hex()
             index += 1
         return {
             "balance_owner": balance_owner,
@@ -136,13 +140,15 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         }
 
     @staticmethod
-    def decode_balances(balances_msg, tokens):
+    def decode_balances(
+        balances_msg: dict[HexBytes, HexBytes], tokens: list[EthereumToken]
+    ):
         balances = {}
         for addr, balance in balances_msg.items():
             checksum_addr = to_checksum_address(addr)
             token = next(t for t in tokens if t.address == checksum_addr)
             balances[token.address] = token.from_onchain_amount(
-                int(balance, 16)  # balances are big endian encoded
+                int(balance)  # balances are big endian encoded
             )
         return balances
 
@@ -173,7 +179,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 checksum_addr = to_checksum_address(addr)
                 token = next(t for t in pool.tokens if t.address == checksum_addr)
                 balance = token.from_onchain_amount(
-                    int(token_balance["balance"], 16)
+                    int.from_bytes(token_balance.balance, "big", signed=False)
                 )  # balances are big endian encoded
                 pool.balances[token.address] = balance
             pool.block = block
@@ -222,10 +228,8 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                     chain=account_update.chain,
                     slots=slots,
                     balance=int(balance) if balance is not None else None,
-                    code=bytearray.fromhex(code.hex()[2:])
-                    if code is not None
-                    else None,
-                    change=change,
+                    code=bytearray(code) if code is not None else None,
+                    change=account_update.change,
                 )
             )
         if vm_updates:

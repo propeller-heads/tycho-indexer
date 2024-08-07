@@ -18,7 +18,7 @@ dependencies = [
     "eth-utils >= 1.9.0",
     "pycryptodome<4,>=3.6.6",
     "hexbytes >= 0.2.2",
-    "tycho-client @ file:///Users/kayibal/code/tycho-indexer/tycho-client-py"
+    "tycho-client>=0.7"
 ]
 
 [project.optional-dependencies]

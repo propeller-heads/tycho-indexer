@@ -26,7 +26,7 @@ class EVMBlock:
     ):
         self.id = id
         self.ts = ts or datetime.datetime.utcnow()
-        self.hash_ = (hash_,)
+        self.hash_ = hash_
 
 
 class EthereumToken:
@@ -37,6 +37,7 @@ class EthereumToken:
         decimals: int,
         gas: Union[int, list[int]] = 29000,
         _hash: int = None,
+        **_kwargs,
     ):
         self.symbol: str = symbol
         self.address: str = address
