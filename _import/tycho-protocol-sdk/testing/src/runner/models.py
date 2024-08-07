@@ -50,10 +50,6 @@ class ProtocolComponentExpectation(BaseModel):
 
         return "\n".join(differences)
 
-    @staticmethod
-    def from_dto(dto: ProtocolComponent) -> "ProtocolComponentExpectation":
-        return ProtocolComponentExpectation(**dto.dict())
-
 
 class ProtocolComponentWithTestConfig(ProtocolComponentExpectation):
     """Represents a ProtocolComponent with its main attributes and test configuration."""
@@ -62,9 +58,6 @@ class ProtocolComponentWithTestConfig(ProtocolComponentExpectation):
         False,
         description="Flag indicating whether to skip simulation for this component",
     )
-
-    def into_protocol_component(self) -> ProtocolComponentExpectation:
-        return ProtocolComponentExpectation(**self.dict())
 
 
 class IntegrationTest(BaseModel):

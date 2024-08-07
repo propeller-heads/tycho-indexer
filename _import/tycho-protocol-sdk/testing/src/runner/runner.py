@@ -137,9 +137,9 @@ class TestRunner:
                         f"'{comp_id}' not found in protocol components."
                     )
 
-                diff = ProtocolComponentExpectation.from_dto(
-                    components_by_id[comp_id]
-                ).compare(expected_component.into_protocol_component())
+                diff = ProtocolComponentExpectation(
+                    **components_by_id[comp_id].dict()
+                ).compare(ProtocolComponentExpectation(**expected_component.dict()))
                 if diff is not None:
                     return TestResult.Failed(diff)
 
