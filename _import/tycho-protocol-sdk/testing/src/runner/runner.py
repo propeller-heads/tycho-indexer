@@ -23,6 +23,7 @@ from tycho_client.dto import (
     HexBytes,
     ResponseAccount,
     Snapshot,
+    ContractId,
 )
 from tycho_client.rpc_client import TychoRPCClient
 
@@ -185,7 +186,13 @@ class TestRunner:
                                 f"from rpc call and {tycho_balance} from Substreams"
                             )
             contract_states = self.tycho_rpc_client.get_contract_state(
-                ContractStateParams()
+                ContractStateParams(
+                    contract_ids=[
+                        ContractId(chain=self._chain, address=a)
+                        for component in protocol_components
+                        for a in component.contract_ids
+                    ]
+                )
             )
             filtered_components = [
                 pc
