@@ -194,7 +194,7 @@ fn decode_le_bytes_as_i128(src: &Bytes) -> i128 {
 mod tests {
     use std::{collections::HashMap, str::FromStr};
 
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use rstest::rstest;
     use tycho_core::{
         dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
@@ -204,7 +204,9 @@ mod tests {
     use super::*;
 
     fn usv2_component() -> ProtocolComponent {
-        let creation_time = NaiveDateTime::from_timestamp_opt(1622526000, 0).unwrap(); //Sample timestamp
+        let creation_time = DateTime::from_timestamp(1622526000, 0)
+            .unwrap()
+            .naive_utc(); //Sample timestamp
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
         static_attributes.insert("attr1".to_string(), "0x000012".into());
@@ -274,7 +276,9 @@ mod tests {
     }
 
     fn usv3_component() -> ProtocolComponent {
-        let creation_time = NaiveDateTime::from_timestamp_opt(1622526000, 0).unwrap(); //Sample timestamp
+        let creation_time = DateTime::from_timestamp(1622526000, 0)
+            .unwrap()
+            .naive_utc(); //Sample timestamp
 
         // Add a static attribute "fee"
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();

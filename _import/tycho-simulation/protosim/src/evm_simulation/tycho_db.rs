@@ -374,7 +374,7 @@ impl DatabaseRef for PreCachedDB {
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
 
     use revm::primitives::U256 as rU256;
     use rstest::{fixture, rstest};
@@ -484,7 +484,9 @@ mod tests {
             hash: B256::default(),
             parent_hash: B256::default(),
             chain: Chain::Ethereum,
-            ts: NaiveDateTime::from_timestamp_millis(123).unwrap(),
+            ts: DateTime::from_timestamp_millis(123)
+                .unwrap()
+                .naive_utc(),
         };
         let mut updates = HashMap::default();
         updates.insert(address, update);
@@ -521,7 +523,9 @@ mod tests {
             hash: B256::default(),
             parent_hash: B256::default(),
             chain: Chain::Ethereum,
-            ts: NaiveDateTime::from_timestamp_millis(123).unwrap(),
+            ts: DateTime::from_timestamp_millis(123)
+                .unwrap()
+                .naive_utc(),
         };
         let updates = HashMap::default();
 
@@ -607,7 +611,9 @@ mod tests {
             hash: B256::default(),
             parent_hash: B256::default(),
             chain: Chain::Ethereum,
-            ts: NaiveDateTime::from_timestamp_millis(123).unwrap(),
+            ts: DateTime::from_timestamp_millis(123)
+                .unwrap()
+                .naive_utc(),
         };
 
         mock_db

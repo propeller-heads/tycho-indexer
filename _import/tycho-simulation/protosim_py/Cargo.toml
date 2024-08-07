@@ -1,6 +1,6 @@
 [package]
 name = "protosim-py"
-version = "0.2.1"
+version = "0.5.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,7 +16,7 @@ protosim = { path = "../protosim", features = ["starknet"] }
 tokio = { version = "1.38.0", features = ["full"] }
 ethers = "2.0.13"
 once_cell = "1.17.2"
-revm = { git = "https://github.com/bluealloy/revm", rev = "cbe99fc9d9ac6c65d724c64e2f9a2aca884c49aa", features = [
+revm = { version = "12.1.0", features = [
     "ethersdb",
 ] }
 hex = "0.4.3"

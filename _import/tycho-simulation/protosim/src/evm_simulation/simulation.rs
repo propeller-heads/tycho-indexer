@@ -1,19 +1,26 @@
 use crate::evm_simulation::database::OverriddenSimulationDB;
 
-use super::account_storage::StateUpdate;
+use super::{
+    account_storage::StateUpdate,
+    traces::{handle_traces, TraceResult},
+};
 use ethers::types::{Bytes, U256};
 
+use foundry_config::{Chain, Config};
+use foundry_evm::traces::TraceKind;
 use revm::{
     db::DatabaseRef,
     inspector_handle_register,
-    inspectors::CustomPrintTracer,
+    interpreter::{return_ok, InstructionResult},
     primitives::{
-        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output, SpecId,
-        TransactTo, TxEnv, U256 as rU256,
+        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output,
+        ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
     },
     Evm,
 };
+use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use std::collections::HashMap;
+use tokio::runtime::Runtime;
 use tracing::debug;
 
 /// An error representing any transaction simulation result other than successful execution
@@ -102,14 +109,22 @@ where
             .with_tx_env(tx_env);
 
         let evm_result = if self.trace {
-            let mut vm = default_builder
-                .with_external_context(CustomPrintTracer::default())
-                .append_handler_register(inspector_handle_register)
-                .build();
+            let mut tracer = TracingInspector::new(TracingInspectorConfig::default());
+            let res = {
+                let mut vm = default_builder
+                    .with_external_context(&mut tracer)
+                    .append_handler_register(inspector_handle_register)
+                    .build();
 
-            debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.tx(), vm.block());
+                debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.tx(), vm.block());
+                vm.transact()
+            };
 
-            vm.transact()
+            if let Ok(result) = res.as_ref() {
+                Self::print_traces(tracer, result)
+            }
+
+            res
         } else {
             let mut vm = default_builder.build();
 
@@ -119,6 +134,37 @@ where
         };
 
         interpret_evm_result(evm_result)
+    }
+
+    fn print_traces(tracer: TracingInspector, res: &ResultAndState) {
+        let ResultAndState { result, state: _ } = res;
+        let (exit_reason, _gas_refunded, gas_used, _out, _exec_logs) = match result.clone() {
+            ExecutionResult::Success { reason, gas_used, gas_refunded, output, logs, .. } => {
+                (reason.into(), gas_refunded, gas_used, Some(output), logs)
+            }
+            ExecutionResult::Revert { gas_used, output } => {
+                // Need to fetch the unused gas
+                (InstructionResult::Revert, 0_u64, gas_used, Some(Output::Call(output)), vec![])
+            }
+            ExecutionResult::Halt { reason, gas_used } => {
+                (reason.into(), 0_u64, gas_used, None, vec![])
+            }
+        };
+
+        let trace_res = TraceResult {
+            success: matches!(exit_reason, return_ok!()),
+            traces: Some(vec![(TraceKind::Execution, tracer.into_traces())]),
+            gas_used,
+        };
+
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| Runtime::new().unwrap())
+            .unwrap();
+
+        runtime
+            .block_on(handle_traces(trace_res, &Config::default(), Some(Chain::default()), true))
+            .expect("failure handling traces");
     }
 }
 
@@ -595,7 +641,7 @@ mod tests {
             block_number: 0,
             timestamp: 0,
         };
-        let eng = SimulationEngine::new(state, false);
+        let eng = SimulationEngine::new(state, true);
 
         let result = eng.simulate(&sim_params);
 

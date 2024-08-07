@@ -30,7 +30,6 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.7.1" }
 tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.7.1" }
 
-
 [dev-dependencies]
 rstest = "0.18.2"
 http = "0.2.8"
