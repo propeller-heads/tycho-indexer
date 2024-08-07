@@ -1,8 +1,8 @@
 use foundry_config::{Chain, Config};
-use foundry_evm::traces::identifier::{EtherscanIdentifier, SignaturesIdentifier};
 use foundry_evm::traces::{
-    decode_trace_arena, render_trace_arena, CallTraceDecoder, CallTraceDecoderBuilder,
-    DebugTraceIdentifier, Traces,
+    decode_trace_arena,
+    identifier::{EtherscanIdentifier, SignaturesIdentifier},
+    render_trace_arena, CallTraceDecoder, CallTraceDecoderBuilder, DebugTraceIdentifier, Traces,
 };
 
 /// A slimmed down return from the executor used for returning minimal trace + gas metering info
@@ -70,9 +70,9 @@ pub async fn print_traces(
     println!();
 
     if result.success {
-        println!("{}", "Transaction successfully executed.");
+        println!("Transaction successfully executed.");
     } else {
-        println!("{}", "Transaction failed.");
+        println!("Transaction failed.");
     }
 
     println!("Gas used: {}", result.gas_used);
