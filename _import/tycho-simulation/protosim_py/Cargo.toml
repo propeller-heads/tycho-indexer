@@ -1,11 +1,11 @@
 [package]
-name = "protosim-py"
+name = "_protosim_py"
 version = "0.5.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "protosim_py"
+name = "_protosim_py"
 crate-type = ["cdylib"]
 
 [dependencies]

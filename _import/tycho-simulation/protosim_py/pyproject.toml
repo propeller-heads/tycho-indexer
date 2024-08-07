@@ -4,13 +4,29 @@ build-backend = "maturin"
 
 [project]
 name = "protosim-py"
+version = "0.5.0"
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-version = "0.5.0"
+dependencies = [
+    "requests < 3",
+    "eth-abi >= 2.2.0",
+    "eth-typing >= 2.3",
+    "eth-utils >= 1.9.0",
+    "pycryptodome<4,>=3.6.6",
+    "hexbytes >= 0.2.2",
+    "tycho-client>=0.7"
+]
+
+[project.optional-dependencies]
+testing = [
+    "pytest",
+]
 
 [tool.maturin]
+python-source = "python"
+module-name = "protosim_py._protosim_py"
 features = ["pyo3/extension-module"]
