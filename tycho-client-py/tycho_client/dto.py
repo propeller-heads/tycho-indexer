@@ -187,6 +187,14 @@ class ResponseAccount(BaseModel):
     class Config:
         allow_population_by_field_name = True
 
+    @property
+    def balance(self) -> HexBytes:
+        return self.native_balance
+
+    @property
+    def change(self) -> ChangeType:
+        return ChangeType.creation
+
 
 class Snapshot(BaseModel):
     states: Dict[str, ComponentWithState] = Field(default_factory=dict)
