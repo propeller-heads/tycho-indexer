@@ -9,11 +9,13 @@ The testing suite builds the `.spkg` for your Substreams module, indexes a speci
 ## Prerequisites
 
 - Latest version of our indexer, Tycho. Please contact us to obtain the latest version. Once acquired, place it in the `/testing/` directory.
+- Access to PropellerHeads' private PyPI repository. Please contact us to obtain access.
 - Docker installed on your machine.
 
 ## Test Configuration
 
-Tests are defined in a `yaml` file. A template can be found at `substreams/ethereum-template/test_assets.yaml`. The configuration file should include:
+Tests are defined in a `yaml` file. A template can be found at
+`substreams/ethereum-template/integration_test.tycho.yaml`. The configuration file should include:
 
 - The target Substreams config file.
 - The expected protocol types.
@@ -32,13 +34,33 @@ Please place this Runtime file under the respective `substream` directory inside
 Export the required environment variables for the execution. You can find the available environment variables in the `.env.default` file.
 Please create a `.env` file in the `testing` directory and set the required environment variables.
 
-The variable SUBSTREAMS_PATH should be a relative reference to the directory containing the Substreams module that you want to test.
+#### Environment Variables
 
-Example: `SUBSTREAMS_PATH=../substreams/ethereum-curve`
+**SUBSTREAMS_PACKAGE**
+- **Description**: Specifies the Substreams module that you want to test
+- **Example**: `export SUBSTREAMS_PACKAGE=ethereum-balancer`
+
+**DATABASE_URL**
+- **Description**: The connection string for the PostgreSQL database. It includes the username, password, host, port, and database name. It's already set to the default for the Docker container.
+- **Example**: `export DATABASE_URL="postgres://postgres:mypassword@localhost:5431/tycho_indexer_0`
+
+**RPC_URL**
+- **Description**: The URL for the Ethereum RPC endpoint. This is used to fetch the storage data. The node needs to be an archive node, and support [debug_storageRangeAt](https://www.quicknode.com/docs/ethereum/debug_storageRangeAt).
+- **Example**: `export RPC_URL="https://ethereum-mainnet.core.chainstack.com/123123123123"`
+
+**SUBSTREAMS_API_TOKEN**
+- **Description**: The API token for accessing Substreams services. This token is required for authentication.
+- **Example**: `export SUBSTREAMS_API_TOKEN=eyJhbGci...`
+
+**DOMAIN_OWNER**
+- **Description**: The domain owner identifier for Propellerhead's AWS account, used for authenticating on the private PyPI repository.
+- **Example**: `export DOMAIN_OWNER=123456789`
 
 ### Step 2: Build and the Testing Script
 
-Run the testing script using Docker Compose:
+To build the testing script, run the following commands:
 ```bash
+source pre_build.sh
+docker compose build
 docker compose run app
 ```

@@ -16,7 +16,7 @@ This is planned to be resolved with the dynamic contract indexing module.
 |--------------------|-------|---------------------------------------------------------------------------------------------------------|
 | pool_type          | str   | A unique identifier per pool type. Set depending on the factory                                         |
 | normalized weights | json  | The normalised weights of a weighted pool.                                                              |
-| pool_id            | bytes | The balancer pool id.                                                                                   |
+| pool_id            | str   | A hex encoded balancer pool id.                                                                         |
 | rate_providers     | json  | A list of rate provider addresses.                                                                      |
 | bpt                | bytes | The balancer lp token, set if the pool support entering and exiting lp postions via the swap interface. |
 | main_token         | bytes | The main token address for a linear pool                                                                |

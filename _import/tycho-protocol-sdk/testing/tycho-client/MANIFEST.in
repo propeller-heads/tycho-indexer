@@ -1,3 +1,0 @@
-include wheels/*.whl
-include tycho_client/assets/*
-include tycho_client/bins/*
