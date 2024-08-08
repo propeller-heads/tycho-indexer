@@ -89,6 +89,9 @@ class TestRunner:
     def run_tests(self) -> None:
         """Run all tests specified in the configuration."""
         print(f"Running tests ...")
+
+        failed_tests = []
+
         for test in self.config.tests:
             self.tycho_runner.empty_database(self.db_url)
 
@@ -109,9 +112,18 @@ class TestRunner:
             )
 
             if result.success:
-                print(f"✅ {test.name} passed.")
+                print(f"\n✅ {test.name} passed.\n")
             else:
-                print(f"❗️ {test.name} failed: {result.message}")
+                print(f"\n❗️ {test.name} failed: {result.message}\n")
+
+        print(
+            "\nTest finished! \n"
+            f"Passed: {len(self.config.tests) - len(failed_tests)}/{len(self.config.tests)}\n"
+        )
+        if failed_tests:
+            print("Failed tests:")
+            for failed_test in failed_tests:
+                print(failed_test)
 
     def validate_state(
         self,
