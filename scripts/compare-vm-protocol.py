@@ -29,7 +29,7 @@ async def fetch_tycho_components(session, system: str) -> dict:
 
 async def fetch_tycho_accounts(session, accounts: list[str], state_block: int) -> list[dict]:
     payload = {
-        "contractIds": [{"address": addr, "chain": "ethereum"}for addr in accounts],
+        "contract_ids": [{"address": addr, "chain": "ethereum"}for addr in accounts],
         "version": {"block": {"number": state_block, "chain": "ethereum"}}
     }
     uri="http://127.0.0.1:4242/v1/ethereum/contract_state"

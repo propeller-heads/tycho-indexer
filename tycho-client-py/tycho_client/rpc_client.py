@@ -12,7 +12,15 @@ from .dto import (
     ContractStateParams,
     ResponseToken,
     TokensParams,
+    HexBytes,
 )
+
+
+class HexBytesEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, HexBytes):
+            return obj.hex()
+        return super().default(obj)
 
 
 class TychoRPCClient:
@@ -21,7 +29,7 @@ class TychoRPCClient:
     """
 
     def __init__(
-            self, rpc_url: str = "http://0.0.0.0:4242", chain: Chain = Chain.ethereum
+        self, rpc_url: str = "http://0.0.0.0:4242", chain: Chain = Chain.ethereum
     ):
         self.rpc_url = rpc_url
         self._headers = {
@@ -31,15 +39,15 @@ class TychoRPCClient:
         self._chain = chain
 
     def _post_request(
-            self, endpoint: str, params: dict = None, body: dict = None
+        self, endpoint: str, params: dict = None, body: dict = None
     ) -> dict:
         """Sends a POST request to the given endpoint and returns the response."""
 
         # Convert to JSON strings to cast booleans to strings
         if body is not None:
-            body = json.dumps(body)
+            body = json.dumps(body, cls=HexBytesEncoder)
         if params:
-            params = json.dumps(params)
+            params = json.dumps(params, cls=HexBytesEncoder)
 
         response = requests.post(
             self.rpc_url + endpoint,
@@ -50,7 +58,7 @@ class TychoRPCClient:
         return response.json()
 
     def get_protocol_components(
-            self, params: ProtocolComponentsParams
+        self, params: ProtocolComponentsParams
     ) -> list[ProtocolComponent]:
         params = params.dict(exclude_none=True)
 
@@ -60,20 +68,24 @@ class TychoRPCClient:
         query_params = {k: v for k, v in params.items() if k in query_params_fields}
         body = {k: v for k, v in params.items() if k in body_fields}
 
+        # Convert HexBytes to strings
+        if "component_addresses" in body:
+            body["component_addresses"] = [
+                address.hex() for address in body["component_addresses"]
+            ]
+
         res = self._post_request(
-            f"/v1/{self._chain}/protocol_components",
-            body=body,
-            params=query_params,
+            f"/v1/{self._chain}/protocol_components", body=body, params=query_params
         )
         return [ProtocolComponent(**c) for c in res["protocol_components"]]
 
     def get_protocol_state(
-            self, params: ProtocolStateParams
+        self, params: ProtocolStateParams
     ) -> list[ResponseProtocolState]:
         params = params.dict(exclude_none=True)
 
         query_params_fields = ["tvl_gt", "inertia_min_gt", "include_balances"]
-        body_fields = ["protocolIds", "protocolSystem", "version"]
+        body_fields = ["protocol_ids", "protocol_system", "version"]
 
         query_params = {k: v for k, v in params.items() if k in query_params_fields}
         body = {k: v for k, v in params.items() if k in body_fields}
@@ -87,31 +99,39 @@ class TychoRPCClient:
         params = params.dict(exclude_none=True)
 
         query_params_fields = ["tvl_gt", "inertia_min_gt", "include_balances"]
-        body_fields = ["contractIds", "version"]
+        body_fields = ["contract_ids", "version"]
 
         query_params = {k: v for k, v in params.items() if k in query_params_fields}
         body = {k: v for k, v in params.items() if k in body_fields}
 
         res = self._post_request(
-            f"/v1/{self._chain}/contract_state",
-            body=body,
-            params=query_params,
+            f"/v1/{self._chain}/contract_state", body=body, params=query_params
         )
         return [ResponseAccount(**a) for a in res["accounts"]]
 
     def get_tokens(self, params: TokensParams) -> list[ResponseToken]:
         params = params.dict(exclude_none=True)
 
-        body_fields = ["min_quality", "pagination", "tokenAddresses", "traded_n_days_ago"]
+        body_fields = [
+            "min_quality",
+            "pagination",
+            "token_addresses",
+            "traded_n_days_ago",
+        ]
         body = {k: v for k, v in params.items() if k in body_fields}
-
         res = self._post_request(f"/v1/{self._chain}/tokens", body=body, params={})
         return [ResponseToken(**t) for t in res["tokens"]]
 
 
 if __name__ == "__main__":
     client = TychoRPCClient("http://0.0.0.0:4242")
-    print(client.get_protocol_components(ProtocolComponentsParams(protocol_system="test_protocol")))
-    print(client.get_protocol_state(ProtocolStateParams(protocol_system="test_protocol")))
+    print(
+        client.get_protocol_components(
+            ProtocolComponentsParams(protocol_system="test_protocol")
+        )
+    )
+    print(
+        client.get_protocol_state(ProtocolStateParams(protocol_system="test_protocol"))
+    )
     print(client.get_contract_state(ContractStateParams()))
     print(client.get_tokens(TokensParams(min_quality=10, traded_n_days_ago=30)))
