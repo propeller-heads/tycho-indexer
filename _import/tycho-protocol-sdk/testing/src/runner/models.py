@@ -1,3 +1,5 @@
+import difflib
+
 from hexbytes import HexBytes
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Optional
@@ -36,14 +38,35 @@ class ProtocolComponentExpectation(BaseModel):
     def convert_creation_tx_to_hexbytes(cls, v):
         return HexBytes(v.lower())
 
-    def compare(self, other: "ProtocolComponentExpectation") -> Optional[str]:
-        """Compares the current instance with another ProtocolComponent instance and returns a message with the differences or None if there are no differences."""
+    def compare(
+        self, other: "ProtocolComponentExpectation", colorize_output: bool = True
+    ) -> Optional[str]:
+        """Compares the current instance with another ProtocolComponent instance and returns a message with the
+        differences or None if there are no differences."""
+
+        def colorize_diff(diff):
+            colored_diff = []
+            for line in diff:
+                if line.startswith("-"):
+                    colored_diff.append(f"\033[91m{line}\033[0m")  # Red
+                elif line.startswith("+"):
+                    colored_diff.append(f"\033[92m{line}\033[0m")  # Green
+                elif line.startswith("?"):
+                    colored_diff.append(f"\033[93m{line}\033[0m")  # Yellow
+                else:
+                    colored_diff.append(line)
+            return "\n".join(colored_diff)
+
         differences = []
         for field_name, field_value in self.__dict__.items():
             other_value = getattr(other, field_name, None)
             if field_value != other_value:
+                diff = list(difflib.ndiff([str(field_value)], [str(other_value)]))
+                highlighted_diff = (
+                    colorize_diff(diff) if colorize_output else "\n".join(diff)
+                )
                 differences.append(
-                    f"Field '{field_name}' mismatch: '{field_value}' != '{other_value}'"
+                    f"Field '{field_name}' mismatch:\n{highlighted_diff}"
                 )
         if not differences:
             return None
