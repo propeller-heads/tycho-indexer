@@ -33,7 +33,7 @@ from models import (
     ProtocolComponentWithTestConfig,
     ProtocolComponentExpectation,
 )
-from adapter_handler import AdapterContractHandler
+from adapter_builder import AdapterContractBuilder
 from evm import get_token_balance, get_block_header
 from tycho import TychoRunner
 from utils import build_snapshot_message, token_factory
@@ -76,7 +76,9 @@ class TestRunner:
         )
         self.config: IntegrationTestsConfig = parse_config(config_path)
         self.spkg_src = os.path.join(self.repo_root, "substreams", package)
-        self.adapters_src = os.path.join(self.repo_root, "evm")
+        self.adapter_contract_builder = AdapterContractBuilder(
+            os.path.join(self.repo_root, "evm")
+        )
         self.tycho_runner = TychoRunner(
             db_url, with_binary_logs, self.config.initialized_accounts
         )
@@ -233,71 +235,62 @@ class TestRunner:
         )
 
         failed_simulations: dict[str, list[SimulationFailure]] = dict()
-        for _ in protocol_type_names:
-            adapter_contract = os.path.join(
-                self.adapters_src,
-                "out",
-                f"{self.config.adapter_contract}.sol",
-                f"{self.config.adapter_contract}.evm.runtime",
+
+        try:
+            adapter_contract = self.adapter_contract_builder.find_contract(
+                self.config.adapter_contract
             )
-            if not os.path.exists(adapter_contract):
-                print("Adapter contract not found. Building it ...")
-
-                AdapterContractHandler.build_target(
-                    self.adapters_src,
-                    self.config.adapter_contract,
-                    self.config.adapter_build_signature,
-                    self.config.adapter_build_args,
-                )
-
-            decoder = ThirdPartyPoolTychoDecoder(
-                token_factory_func=self._token_factory_func,
-                adapter_contract=adapter_contract,
-                minimum_gas=0,
-                trace=self._vm_traces,
+        except FileNotFoundError:
+            adapter_contract = self.adapter_contract_builder.build_target(
+                self.config.adapter_contract,
+                self.config.adapter_build_signature,
+                self.config.adapter_build_args,
             )
 
-            snapshot_message: Snapshot = build_snapshot_message(
-                protocol_states, protocol_components, contract_states
-            )
+        decoder = ThirdPartyPoolTychoDecoder(
+            token_factory_func=self._token_factory_func,
+            adapter_contract=adapter_contract,
+            minimum_gas=0,
+            trace=self._vm_traces,
+        )
 
-            decoded = decoder.decode_snapshot(snapshot_message, block)
+        snapshot_message: Snapshot = build_snapshot_message(
+            protocol_states, protocol_components, contract_states
+        )
 
-            for pool_state in decoded.values():
-                pool_id = pool_state.id_
-                if not pool_state.balances:
-                    raise ValueError(f"Missing balances for pool {pool_id}")
-                for sell_token, buy_token in itertools.permutations(
-                    pool_state.tokens, 2
-                ):
-                    # Try to sell 0.1% of the protocol balance
-                    sell_amount = (
-                        Decimal("0.001") * pool_state.balances[sell_token.address]
+        decoded = decoder.decode_snapshot(snapshot_message, block)
+
+        for pool_state in decoded.values():
+            pool_id = pool_state.id_
+            if not pool_state.balances:
+                raise ValueError(f"Missing balances for pool {pool_id}")
+            for sell_token, buy_token in itertools.permutations(pool_state.tokens, 2):
+                # Try to sell 0.1% of the protocol balance
+                sell_amount = Decimal("0.001") * pool_state.balances[sell_token.address]
+                try:
+                    amount_out, gas_used, _ = pool_state.get_amount_out(
+                        sell_token, sell_amount, buy_token
                     )
-                    try:
-                        amount_out, gas_used, _ = pool_state.get_amount_out(
-                            sell_token, sell_amount, buy_token
+                    print(
+                        f"Amount out for {pool_id}: {sell_amount} {sell_token} -> {amount_out} {buy_token} - "
+                        f"Gas used: {gas_used}"
+                    )
+                except Exception as e:
+                    print(
+                        f"Error simulating get_amount_out for {pool_id}: {sell_token} -> {buy_token}. "
+                        f"Error: {e}"
+                    )
+                    if pool_id not in failed_simulations:
+                        failed_simulations[pool_id] = []
+                    failed_simulations[pool_id].append(
+                        SimulationFailure(
+                            pool_id=pool_id,
+                            sell_token=str(sell_token),
+                            buy_token=str(buy_token),
+                            error=str(e),
                         )
-                        print(
-                            f"Amount out for {pool_id}: {sell_amount} {sell_token} -> {amount_out} {buy_token} - "
-                            f"Gas used: {gas_used}"
-                        )
-                    except Exception as e:
-                        print(
-                            f"Error simulating get_amount_out for {pool_id}: {sell_token} -> {buy_token}. "
-                            f"Error: {e}"
-                        )
-                        if pool_id not in failed_simulations:
-                            failed_simulations[pool_id] = []
-                        failed_simulations[pool_id].append(
-                            SimulationFailure(
-                                pool_id=pool_id,
-                                sell_token=str(sell_token),
-                                buy_token=str(buy_token),
-                                error=str(e),
-                            )
-                        )
-                        continue
+                    )
+                    continue
         return failed_simulations
 
     @staticmethod
