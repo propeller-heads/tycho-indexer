@@ -56,8 +56,7 @@ contract AngleAdapter is ISwapAdapter {
         address sellToken,
         address buyToken,
         OrderSide side,
-        uint256 specifiedAmount,
-        bytes32
+        uint256 specifiedAmount
     ) external returns (Trade memory trade) {
         if (specifiedAmount == 0) {
             return trade;
@@ -224,7 +223,7 @@ contract AngleAdapter is ISwapAdapter {
 
 interface IAgToken is IERC20 {
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    MINTER ROLE ONLY FUNCTIONS
+    MINTER ROLE ONLY FUNCTIONS                                            
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
     /// @notice Lets a whitelisted contract mint agTokens
@@ -255,7 +254,7 @@ interface IAgToken is IERC20 {
     function burnSelf(uint256 amount, address burner) external;
 
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    TREASURY ONLY FUNCTIONS
+    TREASURY ONLY FUNCTIONS                                             
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
     /// @notice Adds a minter in the contract
@@ -275,7 +274,7 @@ interface IAgToken is IERC20 {
     function setTreasury(address _treasury) external;
 
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    EXTERNAL FUNCTIONS
+    EXTERNAL FUNCTIONS                                                
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
     /// @notice Checks whether an address has the right to mint agTokens

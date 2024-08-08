@@ -99,8 +99,7 @@ contract EtherfiAdapter is ISwapAdapter {
         address sellToken,
         address buyToken,
         OrderSide side,
-        uint256 specifiedAmount,
-        bytes32
+        uint256 specifiedAmount
     )
         external
         override

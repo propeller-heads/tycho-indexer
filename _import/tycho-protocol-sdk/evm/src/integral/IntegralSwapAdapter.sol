@@ -59,8 +59,7 @@ contract IntegralSwapAdapter is ISwapAdapter {
         address sellToken,
         address buyToken,
         OrderSide side,
-        uint256 specifiedAmount,
-        bytes32
+        uint256 specifiedAmount
     ) external override returns (Trade memory trade) {
         if (specifiedAmount == 0) {
             return trade;
