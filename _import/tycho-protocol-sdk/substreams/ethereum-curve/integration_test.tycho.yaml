@@ -222,6 +222,27 @@ tests:
         creation_tx: "0xa5b13d50c56242f7994b8e1339032bb4c6f9ac3af3054d4eae3ce9e32e3c1a50"
         skip_simulation: true # Reason: this pool has no liquidity at stop_block
 
+  # CryptoPool factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99 - with ETH
+  - name: test_cryptopool_factory
+    start_block: 19278886
+    stop_block: 19278926
+    expected_components:
+      - id: "0x99e09ee2d6Bb16c0F5ADDfEA649dbB2C1d524624"
+        tokens:
+          - "0x0000000000000000000000000000000000000000"
+          - "0x55296f69f40Ea6d20E478533C15A6B08B654E758"
+        static_attributes:
+          name: "0x343030303030" # 400000
+          pool_type: "0x63727970746f5f706f6f6c" # crypto_pool
+          factory: "0x307866313830353662626433323065393661343865336662663862633036313332323533316161633939" # 0xf18056bbd320e96a48e3fb8bc061322531aacc99
+          factory_name: "0x63727970746f5f706f6f6c5f666163746f7279" # crypto_pool_factory
+          lp_token: "0x393dad6c76d962abba489a77dbf37ae948a4a6ee" # 0x393dad6c76d962abba489a77dbf37ae948a4a6ee
+          stateless_contract_addr_0: "0x307861383534363161666332646565633031626461323362356364323637643531663736356662613130" # 0xa85461afc2deec01bda23b5cd267d51f765fba10
+          stateless_contract_addr_1: "0x307863303835353061346363353333336634306535393365636334633437323438303830383564333034" # 0xc08550a4cc5333f40e593ecc4c4724808085d304
+          stateless_contract_addr_2: "0x307863303261616133396232323366653864306130653563346632376561643930383363373536636332" # 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
+        creation_tx: "0x52f0f76d97e77579eebd32876de99f656930a99131dc4c4f1dec005786c8782b"
+        skip_simulation: false
+
   # Tricrypto factory 0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963
   - name: test_tricrypto_factory
     start_block: 17371455

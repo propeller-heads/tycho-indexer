@@ -87,6 +87,56 @@ pub fn address_map(
             let token_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
             let pool_implementation = extract_proxy_impl(call, tx, 1).unwrap_or([1u8; 20]);
 
+            let mut static_attributes = vec![
+                Attribute {
+                    name: "pool_type".into(),
+                    value: "crypto_pool".into(),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "name".into(),
+                    value: pool_added.a.to_string().into(),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "factory_name".into(),
+                    value: "crypto_pool_factory".into(),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "factory".into(),
+                    value: address_to_bytes_with_0x(&CRYPTO_POOL_FACTORY),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "lp_token".into(),
+                    value: pool_added.token.clone(),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "stateless_contract_addr_0".into(),
+                    value: address_to_bytes_with_0x(&pool_implementation.try_into().unwrap()),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "stateless_contract_addr_1".into(),
+                    value: address_to_bytes_with_0x(&token_implementation.try_into().unwrap()),
+                    change: ChangeType::Creation.into(),
+                },
+            ];
+
+            // This is relevant only if the contract has ETH
+            if tokens.contains(&ETH_ADDRESS.into()) {
+                static_attributes.push(Attribute {
+                    name: "stateless_contract_addr_2".into(),
+                    // WETH
+                    value: address_to_bytes_with_0x(&hex!(
+                        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+                    )),
+                    change: ChangeType::Creation.into(),
+                })
+            }
+
             Some(ProtocolComponent {
                 id: hex::encode(component_id),
                 tx: Some(Transaction {
@@ -96,44 +146,8 @@ pub fn address_map(
                     index: tx.index.into(),
                 }),
                 tokens,
-                contracts: vec![component_id.into(), pool_added.token.clone()],
-                static_att: vec![
-                    Attribute {
-                        name: "pool_type".into(),
-                        value: "crypto_pool".into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "name".into(),
-                        value: pool_added.a.to_string().into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "factory_name".into(),
-                        value: "crypto_pool_factory".into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "factory".into(),
-                        value: address_to_bytes_with_0x(&CRYPTO_POOL_FACTORY),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "lp_token".into(),
-                        value: pool_added.token,
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "stateless_contract_addr_0".into(),
-                        value: address_to_bytes_with_0x(&pool_implementation.try_into().unwrap()),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "stateless_contract_addr_1".into(),
-                        value: address_to_bytes_with_0x(&token_implementation.try_into().unwrap()),
-                        change: ChangeType::Creation.into(),
-                    },
-                ],
+                contracts: vec![component_id.into(), pool_added.token],
+                static_att: static_attributes,
                 change: ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
                     name: "curve_pool".into(),
