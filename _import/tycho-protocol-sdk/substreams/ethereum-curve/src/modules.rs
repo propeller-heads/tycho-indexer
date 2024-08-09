@@ -13,9 +13,7 @@ use substreams::{
 use substreams_ethereum::pb::eth;
 
 use crate::{
-    consts::{
-        CONTRACTS_TO_INDEX, NEW_SUSD, OLD_SUSD,
-    },
+    consts::{CONTRACTS_TO_INDEX, NEW_SUSD, OLD_SUSD},
     pool_changes::emit_eth_deltas,
     pool_factories,
     pools::emit_specific_pools,
@@ -149,12 +147,11 @@ pub fn map_relative_balances(
                             extract_balance_deltas_from_tx(tx, |token, transactor| {
                                 let pool_key = format!("pool:{}", hex::encode(transactor));
                                 if let Some(tokens) = tokens_store.get_last(pool_key) {
-                                    let token_id;
-                                    if token == OLD_SUSD {
-                                        token_id = hex::encode(NEW_SUSD);
+                                    let token_id = if token == OLD_SUSD {
+                                        hex::encode(NEW_SUSD)
                                     } else {
-                                        token_id = hex::encode(token);
-                                    }
+                                        hex::encode(token)
+                                    };
                                     tokens.split(':').any(|t| t == token_id)
                                 } else {
                                     false
@@ -294,7 +291,10 @@ pub fn map_protocol_changes(
                 non_component_accounts_store
                     .get_last(hex::encode(addr))
                     .is_some() ||
-                CONTRACTS_TO_INDEX.contains(addr.try_into().expect("address should be 20 bytes long"))
+                CONTRACTS_TO_INDEX.contains(
+                    addr.try_into()
+                        .expect("address should be 20 bytes long"),
+                )
         },
         &mut transaction_changes,
     );

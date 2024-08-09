@@ -115,12 +115,12 @@ pub fn address_map(
                 },
                 Attribute {
                     name: "stateless_contract_addr_0".into(),
-                    value: address_to_bytes_with_0x(&pool_implementation.try_into().unwrap()),
+                    value: address_to_bytes_with_0x(&pool_implementation),
                     change: ChangeType::Creation.into(),
                 },
                 Attribute {
                     name: "stateless_contract_addr_1".into(),
-                    value: address_to_bytes_with_0x(&token_implementation.try_into().unwrap()),
+                    value: address_to_bytes_with_0x(&token_implementation),
                     change: ChangeType::Creation.into(),
                 },
             ];
@@ -236,9 +236,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "stateless_contract_addr_0".into(),
-                            value: address_to_bytes_with_0x(
-                                &pool_implementation.try_into().unwrap(),
-                            ),
+                            value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -321,9 +319,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "stateless_contract_addr_0".into(),
-                            value: address_to_bytes_with_0x(
-                                &pool_implementation.try_into().unwrap(),
-                            ),
+                            value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -405,9 +401,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "stateless_contract_addr_0".into(),
-                            value: address_to_bytes_with_0x(
-                                &pool_implementation.try_into().unwrap(),
-                            ),
+                            value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -467,8 +461,8 @@ pub fn address_map(
                             name: "stateless_contract_addr_0".into(),
                             // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
                             value: format!(
-                                "call:{}:views_implementation()",
-                                format!("0x{}", hex::encode(CRYPTO_SWAP_NG_FACTORY))
+                                "call:0x{}:views_implementation()",
+                                hex::encode(CRYPTO_SWAP_NG_FACTORY)
                             )
                             .into(),
                             change: ChangeType::Creation.into(),
@@ -536,8 +530,8 @@ pub fn address_map(
                             name: "stateless_contract_addr_0".into(),
                             // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
                             value: format!(
-                                "call:{}:views_implementation()",
-                                format!("0x{}", hex::encode(CRYPTO_SWAP_NG_FACTORY))
+                                "call:0x{}:views_implementation()",
+                                hex::encode(CRYPTO_SWAP_NG_FACTORY)
                             )
                             .into(),
                             change: ChangeType::Creation.into(),
@@ -546,8 +540,8 @@ pub fn address_map(
                             name: "stateless_contract_addr_1".into(),
                             // Call math_implementation() on CRYPTO_SWAP_NG_FACTORY
                             value: format!(
-                                "call:{}:math_implementation()",
-                                format!("0x{}", hex::encode(CRYPTO_SWAP_NG_FACTORY))
+                                "call:0x{}:math_implementation()",
+                                hex::encode(CRYPTO_SWAP_NG_FACTORY)
                             )
                             .into(),
                             change: ChangeType::Creation.into(),
@@ -595,8 +589,8 @@ pub fn address_map(
                         name: "stateless_contract_addr_0".into(),
                         // Call views_implementation() on TRICRYPTO_FACTORY
                         value: format!(
-                            "call:{}:views_implementation()",
-                            format!("0x{}", hex::encode(TRICRYPTO_FACTORY))
+                            "call:0x{}:views_implementation()",
+                            hex::encode(TRICRYPTO_FACTORY)
                         )
                         .into(),
                         change: ChangeType::Creation.into(),
@@ -605,8 +599,8 @@ pub fn address_map(
                         name: "stateless_contract_addr_1".into(),
                         // Call math_implementation() on TRICRYPTO_FACTORY
                         value: format!(
-                            "call:{}:math_implementation()",
-                            format!("0x{}", hex::encode(TRICRYPTO_FACTORY))
+                            "call:0x{}:math_implementation()",
+                            hex::encode(TRICRYPTO_FACTORY)
                         )
                         .into(),
                         change: ChangeType::Creation.into(),
@@ -726,9 +720,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "stateless_contract_addr_0".into(),
-                            value: address_to_bytes_with_0x(
-                                &pool_implementation.try_into().unwrap(),
-                            ),
+                            value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
                         },
                     ],
@@ -858,8 +850,8 @@ pub fn address_map(
                             name: "stateless_contract_addr_0".into(),
                             // Call views_implementation() on TWOCRYPTO_FACTORY
                             value: format!(
-                                "call:{}:views_implementation()",
-                                format!("0x{}", hex::encode(TWOCRYPTO_FACTORY))
+                                "call:0x{}:views_implementation()",
+                                hex::encode(TWOCRYPTO_FACTORY)
                             )
                             .into(),
                             change: ChangeType::Creation.into(),
@@ -868,8 +860,8 @@ pub fn address_map(
                             name: "stateless_contract_addr_1".into(),
                             // Call math_implementation() on TWOCRYPTO_FACTORY
                             value: format!(
-                                "call:{}:math_implementation()",
-                                format!("0x{}", hex::encode(TWOCRYPTO_FACTORY))
+                                "call:0x{}:math_implementation()",
+                                hex::encode(TWOCRYPTO_FACTORY)
                             )
                             .into(),
                             change: ChangeType::Creation.into(),

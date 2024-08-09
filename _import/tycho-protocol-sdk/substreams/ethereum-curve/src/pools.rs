@@ -126,6 +126,7 @@ mod tests {
                 "0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a".to_string(),
                 PoolQueryParams {
                     address: "0x5F890841f657d90E081bAbdB532A05996Af79Fe6".to_string(),
+                    contracts: None,
                     tx_hash: "0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a"
                         .to_string(),
                     tokens: vec![
