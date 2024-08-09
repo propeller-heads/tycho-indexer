@@ -98,7 +98,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         balances = self.decode_balances(snapshot.state.balances, tokens)
 
-        optional_attributes = self.decode_optional_attributes(state_attributes)
+        optional_attributes = self.decode_optional_attributes({**state_attributes, **static_attributes})
         pool_id = component.id
         if "pool_id" in static_attributes:
             pool_id = static_attributes.pop("pool_id").decode("utf-8")
@@ -130,9 +130,12 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         stateless_contracts = {}
         index = 0
         while f"stateless_contract_addr_{index}" in attributes:
-            address = attributes[f"stateless_contract_addr_{index}"].hex()
-            code = attributes[f"stateless_contract_code_{index}"].hex()
-            stateless_contracts[address] = code.hex()
+            encoded_address = attributes[f"stateless_contract_addr_{index}"].hex()
+            # Stateless contracts address must be utf-8 encoded
+            decoded = bytes.fromhex(
+                encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
+            code = (value.hex() if (value := attributes.get(f"stateless_contract_code_{index}")) is not None else None)
+            stateless_contracts[decoded] = code
             index += 1
         return {
             "balance_owner": balance_owner,
