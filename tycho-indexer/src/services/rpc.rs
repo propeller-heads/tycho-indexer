@@ -877,7 +877,7 @@ mod tests {
     async fn test_parse_state_request_no_version_specified() {
         let json_str = r#"
     {
-        "contractIds": [
+        "contract_ids": [
             {
                 "address": "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092",
                 "chain": "ethereum"
