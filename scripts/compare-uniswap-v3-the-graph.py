@@ -8,7 +8,7 @@ GRAPH_URL = 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3'
 
 def fetch_tycho_data(block: int, component_ids: list[str]):
     payload = {
-      "protocol_ids": [
+      "protocolIds": [
         {
           "chain": "ethereum",
           "id": cid

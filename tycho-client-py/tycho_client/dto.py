@@ -21,7 +21,7 @@ class HexBytes(_HexBytes):
         # the returned value will be ignored
         field_schema.update(
             # some example postcodes
-            examples=["0xBadBad"]
+            examples=["0xBadBad"],
         )
 
     @classmethod
@@ -236,7 +236,6 @@ class FeedMessage(BaseModel):
 
 # Client Parameters
 
-
 class ProtocolId(BaseModel):
     chain: Chain
     id: str
@@ -254,7 +253,9 @@ class VersionParams(BaseModel):
 
 class ProtocolComponentsParams(BaseModel):
     protocol_system: Optional[str] = None
-    component_addresses: Optional[List[HexBytes]] = Field(default=None)
+    component_addresses: Optional[List[HexBytes]] = Field(
+        default=None, alias="componentAddresses"
+    )
     tvl_gt: Optional[int] = None
 
     class Config:
@@ -265,8 +266,8 @@ class ProtocolStateParams(BaseModel):
     tvl_gt: Optional[int] = None
     inertia_min_gt: Optional[int] = None
     include_balances: Optional[bool] = True
-    protocol_ids: Optional[List[ProtocolId]] = Field(default=None)
-    protocol_system: Optional[str] = Field(default=None)
+    protocol_ids: Optional[List[ProtocolId]] = Field(default=None, alias="protocolIds")
+    protocol_system: Optional[str] = Field(default=None, alias="protocolSystem")
     version: Optional[VersionParams] = None
 
     class Config:
@@ -278,7 +279,7 @@ class ContractStateParams(BaseModel):
     tvl_gt: Optional[int] = None
     inertia_min_gt: Optional[int] = None
     include_balances: Optional[bool] = True
-    contract_ids: Optional[List[ContractId]] = Field(default=None)
+    contract_ids: Optional[List[ContractId]] = Field(default=None, alias="contractIds")
     version: Optional[VersionParams] = None
 
     class Config:
@@ -293,7 +294,9 @@ class PaginationParams(BaseModel):
 class TokensParams(BaseModel):
     min_quality: Optional[int] = None
     pagination: Optional[PaginationParams] = None
-    token_addresses: Optional[List[HexBytes]] = Field(default=None)
+    token_addresses: Optional[List[HexBytes]] = Field(
+        default=None, alias="tokenAddresses"
+    )
     traded_n_days_ago: Optional[int] = None
 
     class Config:

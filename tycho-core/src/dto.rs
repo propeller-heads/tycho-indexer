@@ -503,6 +503,7 @@ impl ProtocolStateDelta {
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema)]
 pub struct StateRequestBody {
+    #[serde(rename = "contractIds")]
     pub contract_ids: Option<Vec<ContractId>>,
     #[serde(default = "VersionParam::default")]
     pub version: VersionParam,
@@ -707,6 +708,7 @@ impl StateRequestParameters {
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema)]
 pub struct TokensRequestBody {
+    #[serde(rename = "tokenAddresses")]
     #[schema(value_type=Option<Vec<String>>)]
     pub token_addresses: Option<Vec<Bytes>>,
     #[serde(default)]
@@ -786,6 +788,7 @@ impl From<models::token::CurrencyToken> for ResponseToken {
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema)]
 pub struct ProtocolComponentsRequestBody {
     pub protocol_system: Option<String>,
+    #[serde(rename = "componentAddresses")]
     pub component_ids: Option<Vec<String>>,
 }
 
@@ -840,6 +843,7 @@ impl ProtocolComponentRequestResponse {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContractDeltaRequestBody {
+    #[serde(rename = "contractIds")]
     pub contract_ids: Option<Vec<ContractId>>,
     #[serde(default = "VersionParam::default")]
     pub start: VersionParam,
@@ -889,7 +893,9 @@ impl From<models::protocol::ProtocolComponentState> for ResponseProtocolState {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema, Default)]
 pub struct ProtocolStateRequestBody {
+    #[serde(rename = "protocolIds")]
     pub protocol_ids: Option<Vec<ProtocolId>>,
+    #[serde(rename = "protocolSystem")]
     pub protocol_system: Option<String>,
     #[serde(default = "VersionParam::default")]
     pub version: VersionParam,
@@ -914,6 +920,7 @@ impl ProtocolStateRequestResponse {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ProtocolDeltaRequestBody {
+    #[serde(rename = "contractIds")]
     pub component_ids: Option<Vec<String>>,
     #[serde(default = "VersionParam::default")]
     pub start: VersionParam,
@@ -958,7 +965,7 @@ mod test {
     fn test_parse_state_request() {
         let json_str = r#"
         {
-            "contract_ids": [
+            "contractIds": [
                 {
                     "address": "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092",
                     "chain": "ethereum"
