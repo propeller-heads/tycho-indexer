@@ -54,7 +54,7 @@ def test_get_protocol_state_returns_expected_result(mock_post, asset_dir):
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/protocol_state",
         headers={"accept": "application/json", "Content-Type": "application/json"},
-        data="{}",
+        data='{}',
         params='{"include_balances": true}',
     )
     assert isinstance(result, list)
@@ -80,7 +80,7 @@ def test_get_contract_state_returns_expected_result(mock_post, asset_dir):
     mock_post.assert_called_once_with(
         "http://0.0.0.0:4242/v1/ethereum/contract_state",
         headers={"accept": "application/json", "Content-Type": "application/json"},
-        data="{}",
+        data='{}',
         params='{"include_balances": true}',
     )
 
