@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use ethers::{
@@ -7,16 +5,74 @@ use ethers::{
     prelude::{BlockId, Http, Provider, H160, H256, U256},
 };
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, num::Add, sync::mpsc};
 use tracing::trace;
 use tycho_core::{
     models::{Address, Chain, ChangeType},
     Bytes,
 };
 
-use crate::extractor::{
-    evm::{AccountUpdate, Block},
-    RPCError,
+use crate::{
+    extractor::{
+        evm::{hybrid::HybridPgGateway, AccountUpdate, Block},
+        ExtractionError, ExtractorMsg, RPCError,
+    },
+    pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal},
 };
+
+#[async_trait]
+pub trait DynamicContractExtractor {
+    // This method is called on initialization. It should:
+    // 1. Check if the account is already present in the database, by calling Postgres Gateway
+    //    method
+    // 2. If the account is not present, it should extract the account data using the
+    //    AccountExtractor.
+    // Currently, AccountExtractor already inserts the account data into the database.
+    async fn initialize(
+        &self,
+        block: Block,
+        account_addresses: Vec<Address>,
+    ) -> Result<(), RPCError>;
+
+    // Infinite loop that runs in a different Tokio task. It should:
+    // 1. Receive the contract address from the receiver channel
+    // 2. Call the AccountExtractor to extract the account data
+    // 3. Update internal struct of tracked accounts, so it can start processing changes on
+    //    `handle_tick_scoped_data`
+
+    // QUESTION: How can we ensure that this works for low block times? If extracting the account
+    // state takes too long, and there is an update in the subsequent block, we might miss it.
+    // We might need some kind of synchronization to ensure we don't miss any updates.
+    fn consume(&self) {}
+
+    // These methods were extracted from Extractor trait. Maybe the other methods should be moved
+    // to a different trait - like ensure_protocol_types
+
+    // This method will receive a FullBlock from Substreams. The full block should contain all the
+    // storage slots that were changed in the block. The method should:
+    // 1. Extract the storage slots from the FullBlock that match the registered contracts
+    // Build the AccountUpdate object and call the Postgres Gateway method to update the account
+    // data in the database.
+    // Returns AggregatedBlockChanges with the account updates.
+    async fn handle_tick_scoped_data(&self, block: BlockScopedData) -> Result<(), RPCError>;
+
+    // In case of a revert in the block, we need to rollback the account updates. Otherwise we risk
+    // having inconsistent state in the db.
+    // Behaviour should be similar to HybridExtractor's implementation for `handle_revert` - but
+    // only care about AccountUpdates.
+    async fn handle_revert(
+        &self,
+        inp: BlockUndoSignal,
+    ) -> Result<Option<ExtractorMsg>, ExtractionError>;
+}
+
+pub struct DynamicContractExtractorImpl {
+    account_extractor: Box<dyn AccountExtractor>,
+    tracked_contracts: Vec<Address>,
+    // TODO: Make PG Gateway generic and remove "Hybrid" from the name
+    hybrid_pg_gateway: HybridPgGateway,
+    receiver: mpsc::Receiver<Address>,
+}
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
