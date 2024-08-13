@@ -1,4 +1,3 @@
-use substreams::hex;
 use substreams_ethereum::{
     pb::eth::v2::{Call, Log, TransactionTrace},
     Event, Function,
@@ -87,56 +86,6 @@ pub fn address_map(
             let token_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
             let pool_implementation = extract_proxy_impl(call, tx, 1).unwrap_or([1u8; 20]);
 
-            let mut static_attributes = vec![
-                Attribute {
-                    name: "pool_type".into(),
-                    value: "crypto_pool".into(),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "name".into(),
-                    value: pool_added.a.to_string().into(),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "factory_name".into(),
-                    value: "crypto_pool_factory".into(),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "factory".into(),
-                    value: address_to_bytes_with_0x(&CRYPTO_POOL_FACTORY),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "lp_token".into(),
-                    value: pool_added.token.clone(),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "stateless_contract_addr_0".into(),
-                    value: address_to_bytes_with_0x(&pool_implementation),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "stateless_contract_addr_1".into(),
-                    value: address_to_bytes_with_0x(&token_implementation),
-                    change: ChangeType::Creation.into(),
-                },
-            ];
-
-            // This is relevant only if the contract has ETH
-            if tokens.contains(&ETH_ADDRESS.into()) {
-                static_attributes.push(Attribute {
-                    name: "stateless_contract_addr_2".into(),
-                    // WETH
-                    value: address_to_bytes_with_0x(&hex!(
-                        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
-                    )),
-                    change: ChangeType::Creation.into(),
-                })
-            }
-
             Some(ProtocolComponent {
                 id: hex::encode(component_id),
                 tx: Some(Transaction {
@@ -146,8 +95,44 @@ pub fn address_map(
                     index: tx.index.into(),
                 }),
                 tokens,
-                contracts: vec![component_id.into(), pool_added.token],
-                static_att: static_attributes,
+                contracts: vec![component_id.into(), pool_added.token.clone()],
+                static_att: vec![
+                    Attribute {
+                        name: "pool_type".into(),
+                        value: "crypto_pool".into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "name".into(),
+                        value: pool_added.a.to_string().into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "factory_name".into(),
+                        value: "crypto_pool_factory".into(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "factory".into(),
+                        value: address_to_bytes_with_0x(&CRYPTO_POOL_FACTORY),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "lp_token".into(),
+                        value: pool_added.token,
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "stateless_contract_addr_0".into(),
+                        value: address_to_bytes_with_0x(&pool_implementation),
+                        change: ChangeType::Creation.into(),
+                    },
+                    Attribute {
+                        name: "stateless_contract_addr_1".into(),
+                        value: address_to_bytes_with_0x(&token_implementation),
+                        change: ChangeType::Creation.into(),
+                    },
+                ],
                 change: ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
                     name: "curve_pool".into(),
@@ -564,60 +549,6 @@ pub fn address_map(
                 abi::tricrypto_factory::events::TricryptoPoolDeployed::match_and_decode(log)
             {
                 let tokens = swap_weth_for_eth(pool_added.coins.into());
-                let mut static_attributes = vec![
-                    Attribute {
-                        name: "pool_type".into(),
-                        value: "tricrypto".into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "name".into(),
-                        value: pool_added.name.into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "factory_name".into(),
-                        value: "tricrypto_factory".into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "factory".into(),
-                        value: address_to_bytes_with_0x(&TRICRYPTO_FACTORY),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "stateless_contract_addr_0".into(),
-                        // Call views_implementation() on TRICRYPTO_FACTORY
-                        value: format!(
-                            "call:0x{}:views_implementation()",
-                            hex::encode(TRICRYPTO_FACTORY)
-                        )
-                        .into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "stateless_contract_addr_1".into(),
-                        // Call math_implementation() on TRICRYPTO_FACTORY
-                        value: format!(
-                            "call:0x{}:math_implementation()",
-                            hex::encode(TRICRYPTO_FACTORY)
-                        )
-                        .into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                ];
-
-                // This is relevant only if the contract has ETH
-                if tokens.contains(&ETH_ADDRESS.into()) {
-                    static_attributes.push(Attribute {
-                        name: "stateless_contract_addr_2".into(),
-                        // WETH
-                        value: address_to_bytes_with_0x(&hex!(
-                            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
-                        )),
-                        change: ChangeType::Creation.into(),
-                    })
-                }
 
                 Some(ProtocolComponent {
                     id: hex::encode(&pool_added.pool),
@@ -629,7 +560,48 @@ pub fn address_map(
                     }),
                     tokens,
                     contracts: vec![pool_added.pool, TRICRYPTO_FACTORY.into()],
-                    static_att: static_attributes,
+                    static_att: vec![
+                        Attribute {
+                            name: "pool_type".into(),
+                            value: "tricrypto".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "name".into(),
+                            value: pool_added.name.into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "factory_name".into(),
+                            value: "tricrypto_factory".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "factory".into(),
+                            value: address_to_bytes_with_0x(&TRICRYPTO_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            // Call views_implementation() on TRICRYPTO_FACTORY
+                            value: format!(
+                                "call:0x{}:views_implementation()",
+                                hex::encode(TRICRYPTO_FACTORY)
+                            )
+                            .into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_1".into(),
+                            // Call math_implementation() on TRICRYPTO_FACTORY
+                            value: format!(
+                                "call:0x{}:math_implementation()",
+                                hex::encode(TRICRYPTO_FACTORY)
+                            )
+                            .into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                    ],
                     change: ChangeType::Creation.into(),
                     protocol_type: Some(ProtocolType {
                         name: "curve_pool".into(),
