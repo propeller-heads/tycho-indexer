@@ -46,8 +46,8 @@ pub struct ExternalAccountEntrypoint {
 //         },
 #[derive(Debug, Clone)]
 pub struct EntrypointRetriggers {
-    pub addresses: Vec<String>,    // Collection of addresses
-    pub storage_keys: Vec<String>, // Collection of storage keys that trigger re-analysis
+    pub addresses: Vec<Address>,  // Collection of addresses
+    pub storage_keys: Vec<Bytes>, // Collection of storage keys that trigger re-analysis
 }
 
 // Data model for Known Contracts. Those are contracts that are static (cannot be changed during a
@@ -59,5 +59,5 @@ pub struct EntrypointRetriggers {
 //         },
 #[derive(Debug, Clone)]
 pub struct KnownContracts {
-    pub related_contracts: Vec<String>, // Collection of related contracts (e.g., Oracles)
+    pub related_contracts: Vec<Address>, // Collection of related contracts (e.g., Oracles)
 }
