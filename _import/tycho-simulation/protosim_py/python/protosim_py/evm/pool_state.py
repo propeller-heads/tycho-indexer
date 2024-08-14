@@ -137,24 +137,16 @@ class ThirdPartyPool:
                 permanent_storage=None,
             )
             for addr, bytecode in self.stateless_contracts.items():
-                if bytecode is not None:
-                    engine.init_account(
-                        address=addr,
-                        account=AccountInfo(balance=0, nonce=0, code=bytecode),
-                        mocked=False,
-                        permanent_storage=None,
-                    )
-                else:
+                if bytecode is None:
                     if addr.startswith("call"):
                         addr = self._get_address_from_call(engine, addr)
-
-                    code = get_code_for_address(addr)
-                    engine.init_account(
-                        address=addr,
-                        account=AccountInfo(balance=0, nonce=0, code=code),
-                        mocked=False,
-                        permanent_storage=None,
-                    )
+                    bytecode = get_code_for_address(addr)
+                engine.init_account(
+                    address=addr,
+                    account=AccountInfo(balance=0, nonce=0, code=bytecode),
+                    mocked=False,
+                    permanent_storage=None,
+                )
 
 
         self._engine = engine

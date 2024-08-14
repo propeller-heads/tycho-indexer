@@ -98,7 +98,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         balances = self.decode_balances(snapshot.state.balances, tokens)
 
-        optional_attributes = self.decode_optional_attributes({**state_attributes, **static_attributes})
+        optional_attributes = self.decode_optional_attributes(state_attributes)
         pool_id = component.id
         if "pool_id" in static_attributes:
             pool_id = static_attributes.pop("pool_id").decode("utf-8")
