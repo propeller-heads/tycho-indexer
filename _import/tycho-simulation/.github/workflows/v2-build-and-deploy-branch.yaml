@@ -1,0 +1,43 @@
+name: Dev; Build and deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: Application name; If you choose propeller-searcher all application deploy to dev environment; If you choose specific app name you deploy only specific app
+        required: true
+        default: propeller-searcher
+        type: choice
+        options:
+          - propeller-searcher
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_tag: ${{ github.sha }}
+      image_name: propeller-searcher
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
+
+  deploy-dev:
+    needs:
+      - build-and-push
+    uses: propeller-heads/ci-cd-templates/.github/workflows/deploy-any-branch-dev.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_name: propeller-searcher
+      image_tag: ${{ github.sha }}
+      app_name: propeller-searcher
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}

@@ -1,13 +1,11 @@
 name: Release Python Wheel
 
 on:
-  workflow_run:
-    workflows: ["Continuous Integration"]
-    branches: ["main"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
   release:
-    types: 
+    types:
       - prereleased
       - released
   workflow_dispatch: {}
@@ -20,9 +18,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  tests-and-lints:
+    uses: ./.github/workflows/tests-and-lints-template.yaml
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
+      infura_api_key: ${{ secrets.INFURA_API_KEY }}
+
   protosim_py_release:
     name: Protosim-Py Build Wheel
     runs-on: ubuntu-latest
+    needs:
+      - tests-and-lints
     steps:
       - name: Check out Repo
         uses: actions/checkout@v3
