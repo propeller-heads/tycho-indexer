@@ -15,28 +15,26 @@ from protosim_py import (
     TychoDB,
 )
 import logging
-FORMAT = '%(levelname)s %(name)s %(asctime)-15s %(filename)s:%(lineno)d %(message)s'
+
+FORMAT = "%(levelname)s %(name)s %(asctime)-15s %(filename)s:%(lineno)d %(message)s"
 logging.basicConfig(format=FORMAT)
 logging.getLogger().setLevel(logging.INFO)
 
 U256MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935
 
+
 def test_simulation_db():
     print("Run test function")
 
     infura_api_key = os.getenv("INFURA_API_KEY")
-    
+
     if infura_api_key is None:
         raise Exception("INFURA_API_KEY environment variable not set")
-   
+
     db = SimulationDB(
-        rpc_url=f"https://mainnet.infura.io/v3/{infura_api_key}",
-        block=None
+        rpc_url=f"https://mainnet.infura.io/v3/{infura_api_key}", block=None
     )
-    engine = SimulationEngine.new_with_simulation_db(
-        db=db,
-        trace=False
-    )
+    engine = SimulationEngine.new_with_simulation_db(db=db, trace=False)
 
     params = SimulationParameters(
         caller="0x0000000000000000000000000000000000000000",
@@ -54,8 +52,7 @@ def test_simulation_db():
         ]),
         # fmt: on
         value=0,
-        overrides={"0x0000000000000000000000000000000000000001": {
-            U256MAX: U256MAX}},
+        overrides={"0x0000000000000000000000000000000000000001": {U256MAX: U256MAX}},
         gas_limit=500000000000000,
     )
     print("Run test sim")
@@ -68,11 +65,7 @@ def test_simulation_db():
     print("Inserting Account")
     engine.init_account(
         address="0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5",
-        account=AccountInfo(
-            balance=U256MAX,
-            nonce=20,
-            code=None,
-        ),
+        account=AccountInfo(balance=U256MAX, nonce=20, code=None),
         mocked=False,  # i.e. missing storage will be queried from a node
         permanent_storage={500: 500000, 20: 2000},
     )
@@ -91,27 +84,23 @@ def test_simulation_db():
             number=50,
             hash="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
             timestamp=200,
-        )
+        ),
     )
+
 
 def test_tycho_db():
     print("Run test function")
 
     # Select the simulation database based on the input
-    db = TychoDB(tycho_http_url="http://127.0.0.1:4242", tycho_ws_url="ws://127.0.0.1:4242")
-    engine = SimulationEngine.new_with_tycho_db(
-        db=db,
-        trace=False
+    db = TychoDB(
+        tycho_http_url="http://127.0.0.1:4242", tycho_ws_url="ws://127.0.0.1:4242"
     )
+    engine = SimulationEngine.new_with_tycho_db(db=db, trace=False)
 
     print("Inserting Account")
     engine.init_account(
         address="0x0000000000000000000000000000000000000000",
-        account=AccountInfo(
-            balance=U256MAX,
-            nonce=20,
-            code=None,
-        ),
+        account=AccountInfo(balance=U256MAX, nonce=20, code=None),
         mocked=True,
         permanent_storage={500: 500000, 20: 2000},
     )
@@ -127,7 +116,7 @@ def test_tycho_db():
             number=50,
             hash="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
             timestamp=200,
-        )
+        ),
     )
 
     print("Get ambient storage")
@@ -136,14 +125,52 @@ def test_tycho_db():
 
     # cast calldata 'readSlot(uint256)' '0'   -> 0x02ce8af30000000000000000000000000000000000000000000000000000000000000000
     print("Simulate get slot")
-    calldata = bytearray([2, 206, 138, 243, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    calldata = bytearray(
+        [
+            2,
+            206,
+            138,
+            243,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+    )
     params = SimulationParameters(
         caller="0x0000000000000000000000000000000000000000",
         to="0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688",
         data=calldata,
         value=0,
-        overrides={"0x0000000000000000000000000000000000000000": {
-            U256MAX: U256MAX}},
+        overrides={"0x0000000000000000000000000000000000000000": {U256MAX: U256MAX}},
         gas_limit=500000000000000,
     )
     print("Run test sim")
@@ -159,4 +186,3 @@ if __name__ == "__main__":
     # Requires a running TychoDB server
     print("Test Tycho DB")
     test_tycho_db()
-

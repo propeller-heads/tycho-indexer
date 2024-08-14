@@ -21,7 +21,8 @@ from .utils import (
     create_engine,
     get_contract_bytecode,
     frac_to_decimal,
-    ERC20OverwriteFactory, get_code_for_address,
+    ERC20OverwriteFactory,
+    get_code_for_address,
 )
 
 ADAPTER_ADDRESS = "0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270"
@@ -76,9 +77,9 @@ class ThirdPartyPool:
         contract). If given, balances will be overwritten here instead of on the pool 
         contract during simulations."""
 
-        self.block_lasting_overwrites: defaultdict[
-            Address, dict[int, int]
-        ] = block_lasting_overwrites or defaultdict(dict)
+        self.block_lasting_overwrites: defaultdict[Address, dict[int, int]] = (
+            block_lasting_overwrites or defaultdict(dict)
+        )
         """Storage overwrites that will be applied to all simulations. They will be cleared
         when ``clear_all_cache`` is called, i.e. usually at each block. Hence the name."""
 
@@ -147,7 +148,6 @@ class ThirdPartyPool:
                     mocked=False,
                     permanent_storage=None,
                 )
-
 
         self._engine = engine
 
@@ -350,15 +350,17 @@ class ThirdPartyPool:
 
     def _get_address_from_call(self, engine, decoded):
         selector = keccak(text=decoded.split(":")[-1])[:4]
-        sim_result = engine.run_sim(SimulationParameters(
-            data=bytearray(selector),
-            to=decoded.split(':')[1],
-            block_number=self.block.id,
-            timestamp=int(time.time()),
-            overrides={},
-            caller=EXTERNAL_ACCOUNT,
-            value=0,
-        ))
+        sim_result = engine.run_sim(
+            SimulationParameters(
+                data=bytearray(selector),
+                to=decoded.split(":")[1],
+                block_number=self.block.id,
+                timestamp=int(time.time()),
+                overrides={},
+                caller=EXTERNAL_ACCOUNT,
+                value=0,
+            )
+        )
         address = eth_abi.decode(["address"], bytearray(sim_result.result))
         return address[0]
 

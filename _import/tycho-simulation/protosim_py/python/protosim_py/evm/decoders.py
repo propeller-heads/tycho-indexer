@@ -133,8 +133,16 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             encoded_address = attributes[f"stateless_contract_addr_{index}"].hex()
             # Stateless contracts address must be utf-8 encoded
             decoded = bytes.fromhex(
-                encoded_address[2:] if encoded_address.startswith('0x') else encoded_address).decode('utf-8')
-            code = (value.hex() if (value := attributes.get(f"stateless_contract_code_{index}")) is not None else None)
+                encoded_address[2:]
+                if encoded_address.startswith("0x")
+                else encoded_address
+            ).decode("utf-8")
+            code = (
+                value.hex()
+                if (value := attributes.get(f"stateless_contract_code_{index}"))
+                is not None
+                else None
+            )
             stateless_contracts[decoded] = code
             index += 1
         return {
