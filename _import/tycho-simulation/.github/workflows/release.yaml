@@ -1,12 +1,10 @@
 name: Release
 
 on:
-    workflow_run:
-        workflows: ["Continuous Integration"]
-        branches: [main]
-        types: 
-        - completed
-        
+  push:
+    branches:
+      - main
+
 permissions:
   id-token: write
   contents: read
@@ -15,9 +13,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  tests-and-lints:
+    uses: ./.github/workflows/tests-and-lints-template.yaml
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
+      infura_api_key: ${{ secrets.INFURA_API_KEY }}
+
   protosim_py_release:
     name: Protosim-Py Release
     runs-on: ubuntu-latest
+    needs:
+      - tests-and-lints
     steps:
       - name: Check out Repo
         uses: actions/checkout@v3
@@ -54,7 +60,8 @@ jobs:
   docker_release:
     name: Docker Release
     runs-on: ubuntu-latest
-
+    needs:
+      - tests-and-lints
     steps:
       - name: Check out Repo
         uses: actions/checkout@v3

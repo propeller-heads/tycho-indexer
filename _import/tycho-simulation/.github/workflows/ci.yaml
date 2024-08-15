@@ -7,67 +7,9 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-  INFURA_API_KEY: ${{ secrets.INFURA_API_KEY }}
-
 jobs:
-  compile_and_test:
-    name: Compile & Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        toolchain:
-          - stable
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Setup git to use https
-        run: |
-            git config --global credential.helper store
-            echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
-            git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
-      - name: Setup toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: ${{ matrix.toolchain }}
-      - name: Setup Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - name: Install latest nextest release
-        uses: taiki-e/install-action@nextest
-      - name: Test 
-        run: cargo nextest run --workspace --all-targets --all-features
-
-  lint:
-    name: Code Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Setup git to use https
-        run: |
-            git config --global credential.helper store
-            echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
-            git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
-      - name: Setup clippy toolchain - stable
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: clippy
-      - name: Setup Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
-      - run: cargo clippy --workspace --all-targets --all-features -- -D clippy::dbg-macro
-        env:
-          RUSTFLAGS: -Dwarnings
-
-      - name: Setup rustfmt toolchain - nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-
-      - run: cargo +nightly fmt --all --check
+  tests-and-lints:
+    uses: ./.github/workflows/tests-and-lints-template.yaml
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
+      infura_api_key: ${{ secrets.INFURA_API_KEY }}
