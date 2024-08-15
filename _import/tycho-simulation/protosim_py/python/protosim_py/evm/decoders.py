@@ -4,8 +4,8 @@ from logging import getLogger
 from typing import Callable, Union
 
 from eth_utils import to_checksum_address
-from tycho_client import dto
-from tycho_client.dto import ComponentWithState, BlockChanges, HexBytes
+from tycho_indexer_client import dto
+from tycho_indexer_client.dto import ComponentWithState, BlockChanges, HexBytes
 
 from . import AccountUpdate, BlockHeader
 from ..models import EVMBlock, EthereumToken
