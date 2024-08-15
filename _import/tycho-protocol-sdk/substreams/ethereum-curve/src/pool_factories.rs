@@ -32,9 +32,14 @@ impl SerializableVecBigInt for Vec<BigInt> {
     }
 }
 
-/// Converts address bytes into a string containing a leading `0x`.
+/// Converts address bytes into a Vec<u8> containing a leading `0x`.
 fn address_to_bytes_with_0x(address: &[u8; 20]) -> Vec<u8> {
-    format!("0x{}", hex::encode(address)).into_bytes()
+    address_to_string_with_0x(address).into_bytes()
+}
+
+/// Converts address bytes into a string containing a leading `0x`.
+fn address_to_string_with_0x(address: &[u8]) -> String {
+    format!("0x{}", hex::encode(address))
 }
 
 /// Function that swaps `WETH` addresses for `ETH` address for specific factory types that decide
@@ -52,9 +57,9 @@ fn swap_weth_for_eth(tokens: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
 }
 
 /// This massive function matches factory address to specific logic to construct
-///  `ProtocolComponent`s. While, most of the logic is readily replicable, several factories differ
-///  in information density resulting in needing other information sources such as decoding calls
-///  or even making RPC calls to provide extra details.
+///  `ProtocolComponent`s and their related `EntityChanges` at creation. While, most of the logic is
+/// readily replicable, several factories differ  in information density resulting in needing other
+/// information sources such as decoding calls  or even making RPC calls to provide extra details.
 ///
 /// Each `ProtocolComponent` contains the following static attributes:
 /// - `pool_type`: The type of pool, such as `crypto_pool`, `plain_pool`, `metapool`, etc.
@@ -73,7 +78,7 @@ pub fn address_map(
     log: &Log,
     call: &Call,
     tx: &TransactionTrace,
-) -> Option<ProtocolComponent> {
+) -> Option<(ProtocolComponent, Vec<EntityChanges>)> {
     match *call_address {
         CRYPTO_POOL_FACTORY => {
             let pool_added =
@@ -86,61 +91,68 @@ pub fn address_map(
             let token_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
             let pool_implementation = extract_proxy_impl(call, tx, 1).unwrap_or([1u8; 20]);
 
-            Some(ProtocolComponent {
-                id: hex::encode(component_id),
-                tx: Some(Transaction {
-                    to: tx.to.clone(),
-                    from: tx.from.clone(),
-                    hash: tx.hash.clone(),
-                    index: tx.index.into(),
-                }),
-                tokens,
-                contracts: vec![component_id.into(), pool_added.token.clone()],
-                static_att: vec![
-                    Attribute {
-                        name: "pool_type".into(),
-                        value: "crypto_pool".into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "name".into(),
-                        value: pool_added.a.to_string().into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "factory_name".into(),
-                        value: "crypto_pool_factory".into(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "factory".into(),
-                        value: address_to_bytes_with_0x(&CRYPTO_POOL_FACTORY),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "lp_token".into(),
-                        value: pool_added.token,
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "stateless_contract_addr_0".into(),
-                        value: address_to_bytes_with_0x(&pool_implementation),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "stateless_contract_addr_1".into(),
-                        value: address_to_bytes_with_0x(&token_implementation),
-                        change: ChangeType::Creation.into(),
-                    },
-                ],
-                change: ChangeType::Creation.into(),
-                protocol_type: Some(ProtocolType {
-                    name: "curve_pool".into(),
-                    financial_type: FinancialType::Swap.into(),
-                    attribute_schema: Vec::new(),
-                    implementation_type: ImplementationType::Vm.into(),
-                }),
-            })
+            Some((
+                ProtocolComponent {
+                    id: hex::encode(component_id),
+                    tx: Some(Transaction {
+                        to: tx.to.clone(),
+                        from: tx.from.clone(),
+                        hash: tx.hash.clone(),
+                        index: tx.index.into(),
+                    }),
+                    tokens,
+                    contracts: vec![component_id.into(), pool_added.token.clone()],
+                    static_att: vec![
+                        Attribute {
+                            name: "pool_type".into(),
+                            value: "crypto_pool".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "name".into(),
+                            value: pool_added.a.to_string().into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "factory_name".into(),
+                            value: "crypto_pool_factory".into(),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "factory".into(),
+                            value: address_to_bytes_with_0x(&CRYPTO_POOL_FACTORY),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "lp_token".into(),
+                            value: pool_added.token,
+                            change: ChangeType::Creation.into(),
+                        },
+                    ],
+                    change: ChangeType::Creation.into(),
+                    protocol_type: Some(ProtocolType {
+                        name: "curve_pool".into(),
+                        financial_type: FinancialType::Swap.into(),
+                        attribute_schema: Vec::new(),
+                        implementation_type: ImplementationType::Vm.into(),
+                    }),
+                },
+                vec![EntityChanges {
+                    component_id: address_to_string_with_0x(component_id),
+                    attributes: vec![
+                        Attribute {
+                            name: "stateless_contract_addr_0".into(),
+                            value: address_to_bytes_with_0x(&pool_implementation),
+                            change: ChangeType::Creation.into(),
+                        },
+                        Attribute {
+                            name: "stateless_contract_addr_1".into(),
+                            value: address_to_bytes_with_0x(&token_implementation),
+                            change: ChangeType::Creation.into(),
+                        },
+                    ],
+                }],
+            ))
         }
         META_POOL_FACTORY => {
             if let Some(pool_added) =
@@ -188,51 +200,56 @@ pub fn address_map(
                     .collect();
 
                 let pool_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
-                Some(ProtocolComponent {
-                    id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens,
-                    contracts: vec![component_id.into()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "plain_pool".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: add_pool.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "meta_pool_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&META_POOL_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
+                Some((
+                    ProtocolComponent {
+                        id: hex::encode(component_id),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens,
+                        contracts: vec![component_id.into()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "plain_pool".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: add_pool.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "meta_pool_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&META_POOL_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: address_to_string_with_0x(component_id),
+                        attributes: vec![Attribute {
                             name: "stateless_contract_addr_0".into(),
                             value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                        }],
+                    }],
+                ))
             } else if let Some(pool_added) =
                 abi::meta_pool_factory::events::MetaPoolDeployed::match_and_decode(log)
             {
@@ -264,58 +281,63 @@ pub fn address_map(
 
                 let pool_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
 
-                Some(ProtocolComponent {
-                    id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into(), add_pool.base_pool.clone()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "metapool".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: add_pool.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "meta_pool_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&META_POOL_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "base_pool".into(),
-                            value: address_to_bytes_with_0x(
-                                &add_pool.base_pool.try_into().unwrap(),
-                            ),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
+                Some((
+                    ProtocolComponent {
+                        id: hex::encode(component_id),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens: vec![pool_added.coin, lp_token],
+                        contracts: vec![component_id.into(), add_pool.base_pool.clone()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "metapool".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: add_pool.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "meta_pool_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&META_POOL_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "base_pool".into(),
+                                value: address_to_bytes_with_0x(
+                                    &add_pool.base_pool.try_into().unwrap(),
+                                ),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: address_to_string_with_0x(component_id),
+                        attributes: vec![Attribute {
                             name: "stateless_contract_addr_0".into(),
                             value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                        }],
+                    }],
+                ))
             } else {
                 None
             }
@@ -346,58 +368,63 @@ pub fn address_map(
                 let component_id = &call.return_data[12..];
                 let lp_token = get_token_from_pool(&pool_added.base_pool);
 
-                Some(ProtocolComponent {
-                    id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "metapool".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: add_pool.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "meta_pool_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&META_POOL_FACTORY_OLD),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "base_pool".into(),
-                            value: address_to_bytes_with_0x(
-                                &add_pool.base_pool.try_into().unwrap(),
-                            ),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
+                Some((
+                    ProtocolComponent {
+                        id: hex::encode(component_id),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens: vec![pool_added.coin, lp_token],
+                        contracts: vec![component_id.into()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "metapool".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: add_pool.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "meta_pool_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&META_POOL_FACTORY_OLD),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "base_pool".into(),
+                                value: address_to_bytes_with_0x(
+                                    &add_pool.base_pool.try_into().unwrap(),
+                                ),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: address_to_string_with_0x(component_id),
+                        attributes: vec![Attribute {
                             name: "stateless_contract_addr_0".into(),
                             value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                        }],
+                    }],
+                ))
             } else {
                 None
             }
@@ -411,38 +438,50 @@ pub fn address_map(
                         call,
                     )?;
                 let component_id = &call.return_data[12..];
-                Some(ProtocolComponent {
-                    id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens: pool_added.coins,
-                    contracts: vec![component_id.into(), CRYPTO_SWAP_NG_FACTORY.into()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "plain_pool".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: add_pool.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "crypto_swap_ng_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
+                Some((
+                    ProtocolComponent {
+                        id: hex::encode(component_id),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens: pool_added.coins,
+                        contracts: vec![component_id.into(), CRYPTO_SWAP_NG_FACTORY.into()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "plain_pool".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: add_pool.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "crypto_swap_ng_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: address_to_string_with_0x(component_id),
+                        attributes: vec![Attribute {
                             name: "stateless_contract_addr_0".into(),
                             // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
                             value: format!(
@@ -451,16 +490,9 @@ pub fn address_map(
                             )
                             .into(),
                             change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                        }],
+                    }],
+                ))
             } else if let Some(pool_added) =
                 abi::crypto_swap_ng_factory::events::MetaPoolDeployed::match_and_decode(log)
             {
@@ -469,77 +501,84 @@ pub fn address_map(
                 let component_id = &call.return_data[12..];
                 let lp_token = get_token_from_pool(&pool_added.base_pool);
 
-                Some(ProtocolComponent {
-                    id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![
-                        component_id.into(),
-                        CRYPTO_SWAP_NG_FACTORY.into(),
-                        pool_added.base_pool.clone(),
-                    ],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "metapool".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: add_pool.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "crypto_swap_ng_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "base_pool".into(),
-                            value: address_to_bytes_with_0x(
-                                &pool_added.base_pool.try_into().unwrap(),
-                            ),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "stateless_contract_addr_0".into(),
-                            // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
-                            value: format!(
-                                "call:0x{}:views_implementation()",
-                                hex::encode(CRYPTO_SWAP_NG_FACTORY)
-                            )
-                            .into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "stateless_contract_addr_1".into(),
-                            // Call math_implementation() on CRYPTO_SWAP_NG_FACTORY
-                            value: format!(
-                                "call:0x{}:math_implementation()",
-                                hex::encode(CRYPTO_SWAP_NG_FACTORY)
-                            )
-                            .into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                Some((
+                    ProtocolComponent {
+                        id: hex::encode(component_id),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens: vec![pool_added.coin, lp_token],
+                        contracts: vec![
+                            component_id.into(),
+                            CRYPTO_SWAP_NG_FACTORY.into(),
+                            pool_added.base_pool.clone(),
+                        ],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "metapool".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: add_pool.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "crypto_swap_ng_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "base_pool".into(),
+                                value: address_to_bytes_with_0x(
+                                    &pool_added.base_pool.try_into().unwrap(),
+                                ),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: address_to_string_with_0x(component_id),
+                        attributes: vec![
+                            Attribute {
+                                name: "stateless_contract_addr_0".into(),
+                                // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
+                                value: format!(
+                                    "call:0x{}:views_implementation()",
+                                    hex::encode(CRYPTO_SWAP_NG_FACTORY)
+                                )
+                                .into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "stateless_contract_addr_1".into(),
+                                // Call math_implementation() on CRYPTO_SWAP_NG_FACTORY
+                                value: format!(
+                                    "call:0x{}:math_implementation()",
+                                    hex::encode(CRYPTO_SWAP_NG_FACTORY)
+                                )
+                                .into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                    }],
+                ))
             } else {
                 None
             }
@@ -549,67 +588,75 @@ pub fn address_map(
                 abi::tricrypto_factory::events::TricryptoPoolDeployed::match_and_decode(log)
             {
                 let tokens = swap_weth_for_eth(pool_added.coins.into());
+                let id = hex::encode(&pool_added.pool);
 
-                Some(ProtocolComponent {
-                    id: hex::encode(&pool_added.pool),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens,
-                    contracts: vec![pool_added.pool, TRICRYPTO_FACTORY.into()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "tricrypto".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: pool_added.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "tricrypto_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&TRICRYPTO_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "stateless_contract_addr_0".into(),
-                            // Call views_implementation() on TRICRYPTO_FACTORY
-                            value: format!(
-                                "call:0x{}:views_implementation()",
-                                hex::encode(TRICRYPTO_FACTORY)
-                            )
-                            .into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "stateless_contract_addr_1".into(),
-                            // Call math_implementation() on TRICRYPTO_FACTORY
-                            value: format!(
-                                "call:0x{}:math_implementation()",
-                                hex::encode(TRICRYPTO_FACTORY)
-                            )
-                            .into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                Some((
+                    ProtocolComponent {
+                        id: id.clone(),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens,
+                        contracts: vec![pool_added.pool, TRICRYPTO_FACTORY.into()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "tricrypto".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: pool_added.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "tricrypto_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&TRICRYPTO_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: format!("0x{}", id),
+                        attributes: vec![
+                            Attribute {
+                                name: "stateless_contract_addr_0".into(),
+                                // Call views_implementation() on TRICRYPTO_FACTORY
+                                value: format!(
+                                    "call:0x{}:views_implementation()",
+                                    hex::encode(TRICRYPTO_FACTORY)
+                                )
+                                .into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "stateless_contract_addr_1".into(),
+                                // Call math_implementation() on TRICRYPTO_FACTORY
+                                value: format!(
+                                    "call:0x{}:math_implementation()",
+                                    hex::encode(TRICRYPTO_FACTORY)
+                                )
+                                .into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                    }],
+                ))
             } else {
                 None
             }
@@ -659,51 +706,56 @@ pub fn address_map(
 
                 let pool_implementation = extract_proxy_impl(call, tx, 0).unwrap_or([1u8; 20]);
 
-                Some(ProtocolComponent {
-                    id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens,
-                    contracts: vec![component_id.into()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "plain_pool".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: add_pool.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "stable_swap_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&STABLESWAP_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
+                Some((
+                    ProtocolComponent {
+                        id: hex::encode(component_id),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens,
+                        contracts: vec![component_id.into()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "plain_pool".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: add_pool.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "stable_swap_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&STABLESWAP_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: address_to_string_with_0x(component_id),
+                        attributes: vec![Attribute {
                             name: "stateless_contract_addr_0".into(),
                             value: address_to_bytes_with_0x(&pool_implementation),
                             change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                        }],
+                    }],
+                ))
             } else if let Some(pool_added) =
                 abi::stableswap_factory::events::MetaPoolDeployed::match_and_decode(log)
             {
@@ -732,53 +784,56 @@ pub fn address_map(
                     abi::meta_registry::functions::GetLpToken1 { pool: add_pool.base_pool.clone() };
                 let lp_token = get_lp_token.call(META_REGISTRY.to_vec())?;
 
-                Some(ProtocolComponent {
-                    id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens: vec![pool_added.coin, lp_token],
-                    contracts: vec![component_id.into()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "metapool".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: add_pool.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "stable_swap_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&STABLESWAP_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "base_pool".into(),
-                            value: address_to_bytes_with_0x(
-                                &pool_added.base_pool.try_into().unwrap(),
-                            ),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                Some((
+                    ProtocolComponent {
+                        id: hex::encode(component_id),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens: vec![pool_added.coin, lp_token],
+                        contracts: vec![component_id.into()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "metapool".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: add_pool.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "stable_swap_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&STABLESWAP_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "base_pool".into(),
+                                value: address_to_bytes_with_0x(
+                                    &pool_added.base_pool.try_into().unwrap(),
+                                ),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![],
+                ))
             } else {
                 None
             }
@@ -787,66 +842,74 @@ pub fn address_map(
             if let Some(pool_added) =
                 abi::twocrypto_factory::events::TwocryptoPoolDeployed::match_and_decode(log)
             {
-                Some(ProtocolComponent {
-                    id: hex::encode(&pool_added.pool),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
-                    tokens: pool_added.coins.into(),
-                    contracts: vec![pool_added.pool, TWOCRYPTO_FACTORY.into()],
-                    static_att: vec![
-                        Attribute {
-                            name: "pool_type".into(),
-                            value: "twocrypto".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "name".into(),
-                            value: pool_added.name.into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory_name".into(),
-                            value: "twocrypto_factory".into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "factory".into(),
-                            value: address_to_bytes_with_0x(&TWOCRYPTO_FACTORY),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "stateless_contract_addr_0".into(),
-                            // Call views_implementation() on TWOCRYPTO_FACTORY
-                            value: format!(
-                                "call:0x{}:views_implementation()",
-                                hex::encode(TWOCRYPTO_FACTORY)
-                            )
-                            .into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "stateless_contract_addr_1".into(),
-                            // Call math_implementation() on TWOCRYPTO_FACTORY
-                            value: format!(
-                                "call:0x{}:math_implementation()",
-                                hex::encode(TWOCRYPTO_FACTORY)
-                            )
-                            .into(),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "curve_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                })
+                let id = hex::encode(&pool_added.pool);
+                Some((
+                    ProtocolComponent {
+                        id: id.clone(),
+                        tx: Some(Transaction {
+                            to: tx.to.clone(),
+                            from: tx.from.clone(),
+                            hash: tx.hash.clone(),
+                            index: tx.index.into(),
+                        }),
+                        tokens: pool_added.coins.into(),
+                        contracts: vec![pool_added.pool, TWOCRYPTO_FACTORY.into()],
+                        static_att: vec![
+                            Attribute {
+                                name: "pool_type".into(),
+                                value: "twocrypto".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "name".into(),
+                                value: pool_added.name.into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory_name".into(),
+                                value: "twocrypto_factory".into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "factory".into(),
+                                value: address_to_bytes_with_0x(&TWOCRYPTO_FACTORY),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                        change: ChangeType::Creation.into(),
+                        protocol_type: Some(ProtocolType {
+                            name: "curve_pool".into(),
+                            financial_type: FinancialType::Swap.into(),
+                            attribute_schema: Vec::new(),
+                            implementation_type: ImplementationType::Vm.into(),
+                        }),
+                    },
+                    vec![EntityChanges {
+                        component_id: format!("0x{}", id),
+                        attributes: vec![
+                            Attribute {
+                                name: "stateless_contract_addr_0".into(),
+                                // Call views_implementation() on TWOCRYPTO_FACTORY
+                                value: format!(
+                                    "call:0x{}:views_implementation()",
+                                    hex::encode(TWOCRYPTO_FACTORY)
+                                )
+                                .into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "stateless_contract_addr_1".into(),
+                                // Call math_implementation() on TWOCRYPTO_FACTORY
+                                value: format!(
+                                    "call:0x{}:math_implementation()",
+                                    hex::encode(TWOCRYPTO_FACTORY)
+                                )
+                                .into(),
+                                change: ChangeType::Creation.into(),
+                            },
+                        ],
+                    }],
+                ))
             } else {
                 None
             }

@@ -36,63 +36,69 @@ impl PartialEq for TransactionWrapper {
 }
 
 #[substreams::handlers::map]
-pub fn map_components(
-    params: String,
-    block: eth::v2::Block,
-) -> Result<BlockTransactionProtocolComponents> {
-    // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
-    // We store these as a hashmap by tx hash since we need to agg by tx hash later
-    Ok(BlockTransactionProtocolComponents {
-        tx_components: block
-            .transactions()
-            .filter_map(|tx| {
-                let mut components = tx
-                    .logs_with_calls()
-                    .filter(|(_, call)| !call.call.state_reverted)
-                    .filter_map(|(log, call)| {
-                        pool_factories::address_map(
-                            call.call
-                                .address
-                                .as_slice()
-                                .try_into()
-                                .ok()?, // this shouldn't fail
-                            log,
-                            call.call,
-                            tx,
-                        )
-                    })
-                    .collect::<Vec<_>>();
+// Map all created components and their related entity changes.
+pub fn map_components(params: String, block: eth::v2::Block) -> Result<BlockChanges> {
+    let changes = block
+        .transactions()
+        .filter_map(|tx| {
+            let mut entity_changes = vec![];
+            let mut components = vec![];
 
-                if let Some(component) = emit_specific_pools(&params, tx).expect(
-                    "An unexpected error occured when parsing params for emitting specific pools",
+            for (log, call) in tx
+                .logs_with_calls()
+                .filter(|(_, call)| !call.call.state_reverted)
+            {
+                if let Some((component, mut state)) = pool_factories::address_map(
+                    call.call
+                        .address
+                        .as_slice()
+                        .try_into()
+                        .ok()?, // this shouldn't fail
+                    log,
+                    call.call,
+                    tx,
                 ) {
-                    components.push(component)
+                    entity_changes.append(&mut state);
+                    components.push(component);
                 }
+            }
 
-                if !components.is_empty() {
-                    Some(TransactionProtocolComponents {
-                        tx: Some(Transaction {
-                            hash: tx.hash.clone(),
-                            from: tx.from.clone(),
-                            to: tx.to.clone(),
-                            index: Into::<u64>::into(tx.index),
-                        }),
-                        components,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>(),
-    })
+            if let Some((component, mut state)) = emit_specific_pools(&params, tx).expect(
+                "An unexpected error occured when parsing params for emitting specific pools",
+            ) {
+                entity_changes.append(&mut state);
+                components.push(component);
+            }
+
+            if components.is_empty() {
+                None
+            } else {
+                Some(TransactionChanges {
+                    tx: Some(Transaction {
+                        hash: tx.hash.clone(),
+                        from: tx.from.clone(),
+                        to: tx.to.clone(),
+                        index: tx.index.into(),
+                    }),
+                    contract_changes: vec![],
+                    entity_changes,
+                    component_changes: components,
+                    balance_changes: vec![],
+                })
+            }
+        })
+        .collect::<Vec<_>>();
+
+    Ok(BlockChanges { block: None, changes })
 }
 
-/// Simply stores the `ProtocolComponent`s with the pool id as the key and tokens as the value
+/// Get result `map_components` and stores the created `ProtocolComponent`s with the pool id as the
+/// key and tokens as the value
 #[substreams::handlers::store]
-pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: StoreSetString) {
-    map.tx_components
+pub fn store_component_tokens(map: BlockChanges, store: StoreSetString) {
+    map.changes
         .iter()
-        .flat_map(|tx_components| &tx_components.components)
+        .flat_map(|tx_changes| &tx_changes.component_changes)
         .for_each(|component| {
             store.set(
                 0,
@@ -110,10 +116,10 @@ pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: St
 /// pool.
 /// This is later used to index them with `extract_contract_changes`
 #[substreams::handlers::store]
-pub fn store_non_component_accounts(map: BlockTransactionProtocolComponents, store: StoreSetInt64) {
-    map.tx_components
+pub fn store_non_component_accounts(map: BlockChanges, store: StoreSetInt64) {
+    map.changes
         .iter()
-        .flat_map(|tx_components| &tx_components.components)
+        .flat_map(|tx_changes| &tx_changes.component_changes)
         .for_each(|component| {
             // Crypto pool factory creates LP token separated from the pool, we need to index it so
             // we add it to the store if the new protocol component comes from this factory
@@ -194,7 +200,7 @@ pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
 #[substreams::handlers::map]
 pub fn map_protocol_changes(
     block: eth::v2::Block,
-    grouped_components: BlockTransactionProtocolComponents,
+    grouped_components: BlockChanges,
     deltas: BlockBalanceDeltas,
     components_store: StoreGetString,
     non_component_accounts_store: StoreGetInt64,
@@ -204,14 +210,14 @@ pub fn map_protocol_changes(
     //  sort them at the very end.
     let mut transaction_changes: HashMap<_, TransactionChanges> = HashMap::new();
 
-    // `ProtocolComponents` are gathered from `map_pools_created` which just need a bit of work to
-    //  convert into `TransactionChanges`
+    // `ProtocolComponents` are gathered with some entity changes from `map_pools_created` which
+    // just need a bit of work to  convert into `TransactionChanges`
     grouped_components
-        .tx_components
+        .changes
         .into_iter()
-        .for_each(|tx_component| {
-            let tx = tx_component.tx.as_ref().unwrap();
-            transaction_changes
+        .for_each(|tx_changes| {
+            let tx = tx_changes.tx.as_ref().unwrap();
+            let transaction_entry = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChanges {
                     tx: Some(tx.clone()),
@@ -219,18 +225,23 @@ pub fn map_protocol_changes(
                     component_changes: vec![],
                     balance_changes: vec![],
                     entity_changes: vec![],
-                })
+                });
+
+            let formated_components: Vec<_> = tx_changes //TODO: format directly at creation
                 .component_changes
-                .extend_from_slice(
-                    &(tx_component
-                        .components
-                        .into_iter()
-                        .map(|mut component| {
-                            component.id = format!("0x{}", component.id);
-                            component
-                        })
-                        .collect::<Vec<_>>()),
-                );
+                .into_iter()
+                .map(|mut component| {
+                    component.id = format!("0x{}", component.id);
+                    component
+                })
+                .collect();
+
+            transaction_entry
+                .component_changes
+                .extend(formated_components);
+            transaction_entry
+                .entity_changes
+                .extend(tx_changes.entity_changes);
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `TokenExchange`, etc. creating
