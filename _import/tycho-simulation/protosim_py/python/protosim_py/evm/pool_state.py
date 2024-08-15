@@ -1,5 +1,6 @@
 import functools
 import itertools
+import time
 from collections import defaultdict
 from copy import deepcopy
 from decimal import Decimal
@@ -7,9 +8,11 @@ from fractions import Fraction
 from logging import getLogger
 from typing import Optional, cast, TypeVar
 
+import eth_abi
+from eth_utils import keccak
 from eth_typing import HexStr
 
-from . import SimulationEngine, AccountInfo
+from . import SimulationEngine, AccountInfo, SimulationParameters
 from .adapter_contract import AdapterContract
 from .constants import MAX_BALANCE, EXTERNAL_ACCOUNT
 from ..exceptions import RecoverableSimulationException
@@ -19,6 +22,7 @@ from .utils import (
     get_contract_bytecode,
     frac_to_decimal,
     ERC20OverwriteFactory,
+    get_code_for_address,
 )
 
 ADAPTER_ADDRESS = "0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270"
@@ -61,9 +65,9 @@ class ThirdPartyPool:
         self.adapter_contract_path = adapter_contract_path
         """The adapters contract name. Used to look up the byte code for the adapter."""
 
-        self.stateless_contracts: dict[str, bytes] = stateless_contracts or {}
+        self.stateless_contracts: dict[str, Optional[bytes]] = stateless_contracts or {}
         """The address to bytecode map of all stateless contracts used by the protocol 
-        for simulations."""
+        for simulations. If the bytecode is None, an RPC call is done to get the code from our node"""
 
         self.capabilities: set[Capability] = capabilities or {Capability.SellSide}
         """The supported capabilities of this pool."""
@@ -73,9 +77,9 @@ class ThirdPartyPool:
         contract). If given, balances will be overwritten here instead of on the pool 
         contract during simulations."""
 
-        self.block_lasting_overwrites: defaultdict[
-            Address, dict[int, int]
-        ] = block_lasting_overwrites or defaultdict(dict)
+        self.block_lasting_overwrites: defaultdict[Address, dict[int, int]] = (
+            block_lasting_overwrites or defaultdict(dict)
+        )
         """Storage overwrites that will be applied to all simulations. They will be cleared
         when ``clear_all_cache`` is called, i.e. usually at each block. Hence the name."""
 
@@ -134,12 +138,17 @@ class ThirdPartyPool:
                 permanent_storage=None,
             )
             for addr, bytecode in self.stateless_contracts.items():
+                if bytecode is None:
+                    if addr.startswith("call"):
+                        addr = self._get_address_from_call(engine, addr)
+                    bytecode = get_code_for_address(addr)
                 engine.init_account(
                     address=addr,
                     account=AccountInfo(balance=0, nonce=0, code=bytecode),
                     mocked=False,
                     permanent_storage=None,
                 )
+
         self._engine = engine
 
     def _set_marginal_prices(self):
@@ -338,6 +347,22 @@ class ThirdPartyPool:
         self._engine.clear_temp_storage()
         self.block_lasting_overwrites = defaultdict(dict)
         self._set_marginal_prices()
+
+    def _get_address_from_call(self, engine, decoded):
+        selector = keccak(text=decoded.split(":")[-1])[:4]
+        sim_result = engine.run_sim(
+            SimulationParameters(
+                data=bytearray(selector),
+                to=decoded.split(":")[1],
+                block_number=self.block.id,
+                timestamp=int(time.time()),
+                overrides={},
+                caller=EXTERNAL_ACCOUNT,
+                value=0,
+            )
+        )
+        address = eth_abi.decode(["address"], bytearray(sim_result.result))
+        return address[0]
 
 
 def _merge(a: dict, b: dict, path=None):

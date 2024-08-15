@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch, call
 
 import pytest
 from hexbytes import HexBytes
@@ -89,10 +90,7 @@ def test_init(asset_dir):
         id_="0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011",
         tokens=(dai, bal),
         marginal_prices={},
-        balances={
-            dai.address: "178.7540127373018",
-            bal.address: "91.08298776336989",
-        },
+        balances={dai.address: "178.7540127373018", bal.address: "91.08298776336989"},
         adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
     )
 
@@ -123,10 +121,7 @@ def pool_state(asset_dir):
             (bal, dai): Decimal("7.071503245428245871486924221"),
             (dai, bal): Decimal("0.1377789143190479049114331557"),
         },
-        balances={
-            dai.address: "178.7540127373018",
-            bal.address: "91.08298776336989",
-        },
+        balances={dai.address: "178.7540127373018", bal.address: "91.08298776336989"},
         adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
         balance_owner="0xBA12222222228d8Ba445958a75a0704d566BF2C8",
     )
@@ -187,3 +182,43 @@ def test_get_amount_out_sell_limit(pool_state):
 
     # check the partial trade sells the max sell limit
     assert e.value.partial_trade[3] == Decimal("13.997408640689987484")
+
+
+def test_stateless_contract_pool(asset_dir):
+    with patch("protosim_py.evm.pool_state.get_code_for_address") as mock_get_code:
+        mock_get_code.return_value = bytes.fromhex("363d")
+
+        dai, bal = Token("DAI"), Token("BAL")
+        block = EVMBlock(
+            id=18485417,
+            hash_="0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
+        )
+        pool = ThirdPartyPool(
+            block=block,
+            id_="0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011",
+            tokens=(dai, bal),
+            marginal_prices={
+                (bal, dai): Decimal("7.071503245428245871486924221"),
+                (dai, bal): Decimal("0.1377789143190479049114331557"),
+            },
+            balances={
+                dai.address: "178.7540127373018",
+                bal.address: "91.08298776336989",
+            },
+            adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
+            balance_owner="0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+            stateless_contracts={
+                "call:0xba12222222228d8ba445958a75a0704d566bf2c8:getAuthorizer()": None,
+                "0x9008D19f58AAbD9eD0D60971565AA8510560ab41": None,
+            },
+        )
+
+        mock_get_code.assert_has_calls(
+            [
+                call("0x9008D19f58AAbD9eD0D60971565AA8510560ab41"),
+                call("0xa331d84ec860bf466b4cdccfb4ac09a1b43f3ae6"),
+            ],
+            any_order=True,
+        )
+
+        assert mock_get_code.call_count == 2

@@ -18,12 +18,7 @@ class Blockchain(Enum):
 
 
 class EVMBlock:
-    def __init__(
-        self,
-        id: int,
-        hash_: str,
-        ts: datetime.datetime = None,
-    ):
+    def __init__(self, id: int, hash_: str, ts: datetime.datetime = None):
         self.id = id
         self.ts = ts or datetime.datetime.utcnow()
         self.hash_ = hash_

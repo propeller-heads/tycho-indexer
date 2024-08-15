@@ -11,12 +11,7 @@ from eth_utils import keccak
 from eth_utils.abi import collapse_if_tuple
 from hexbytes import HexBytes
 
-from . import (
-    SimulationEngine,
-    SimulationParameters,
-    SimulationResult,
-    StateUpdate,
-)
+from . import SimulationEngine, SimulationParameters, SimulationResult, StateUpdate
 from .constants import EXTERNAL_ACCOUNT
 from ..models import Address, EthereumToken, EVMBlock, Capability
 from .utils import load_abi, maybe_coerce_error
