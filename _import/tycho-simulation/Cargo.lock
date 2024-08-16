@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.5.0"
+version = "0.6.3"
 dependencies = [
  "ethers",
  "hex",
@@ -6052,7 +6052,7 @@ dependencies = [
 
 [[package]]
 name = "prop-builder"
-version = "0.1.1"
+version = "0.6.3"
 dependencies = [
  "async-trait",
  "clap",
@@ -6127,7 +6127,7 @@ dependencies = [
 
 [[package]]
 name = "protosim"
-version = "0.1.2"
+version = "0.6.2"
 dependencies = [
  "approx",
  "async-trait",
@@ -8681,7 +8681,7 @@ dependencies = [
 [[package]]
 name = "tycho-client"
 version = "0.7.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.8.2#043ce24ad432ca54b479fd0516d61293d94e4629"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.9.1#cea6bba8f95291b4be8328487bcbe0ec679f189c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8706,7 +8706,7 @@ dependencies = [
 [[package]]
 name = "tycho-core"
 version = "0.4.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.8.2#043ce24ad432ca54b479fd0516d61293d94e4629"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.9.1#cea6bba8f95291b4be8328487bcbe0ec679f189c"
 dependencies = [
  "anyhow",
  "async-trait",
