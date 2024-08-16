@@ -4,7 +4,7 @@ Our indexing integrations use the Substreams library to transform raw blockchain
 
 ## Example
 
-We have integrated the **Ambient** protocol as a reference, see `/substreams/ethereum-ambient` for more information.
+We have integrated the **Balancer** protocol as a reference, see `/substreams/ethereum-balancer` for more information.
 
 ## Step by step
 
@@ -51,7 +51,6 @@ If you are unfamiliar with ProtoBuf at all, you can start with the [official doc
 
 First get familiar with the raw ProtoBuf definitions provided by us:
 - [common.proto](../../../proto/tycho/evm/v1/common.proto) - Common types used by all integration types
-- [vm.proto](../../../proto/tycho/evm/v1/vm.proto) - Types specific to the VM integration
 
 You can also create your own intermediate ProtoBufs. These files should reside in your own substreams package, e.g. `./substreams/ethereum-template/proto/custom-messages.proto`. You have to link these files in the `substreams.yaml` file, see the [manifest docs](https://substreams.streamingfast.io/developers-guide/creating-your-manifest) for more information or you can look at the official substreams example integration of [UniswapV2](https://github.com/messari/substreams/blob/master/uniswap-v2/substreams.yaml#L20-L22).
 
@@ -63,7 +62,7 @@ The goal of the rust module is to implement the logic that will transform the ra
 
 *This is the actual integration code that you will be writing!*
 
-The module is a Rust library that is compiled into a SPKG (`.spkg`) file using the Substreams CLI and then loaded by the Substreams server. It is defined by the `lib.rs` file (see the [Ambient reference example](../../../substreams/ethereum-ambient/src/lib.rs)).
+The module is a Rust library that is compiled into a SPKG (`.spkg`) file using the Substreams CLI and then loaded by the Substreams server. It is defined by the `lib.rs` file (see the [Balancer reference example](../../../substreams/ethereum-balancer/src/lib.rs)).
 
 Read our [Substreams README.md](../../../substreams/README.md) for more information on how to write the Rust module.
 
@@ -74,26 +73,27 @@ Read our [Substreams README.md](../../../substreams/README.md) for more informat
     ```bash
     cp -r ./substreams/ethereum-template ./substreams/[CHAIN]-[PROTOCOL_SYSTEM]
     ```
-1. Implement the logic in the Rust module `lib.rs`. The main function to implement is the `map_changes` function, which is called for every block. 
+1. Implement the logic in the Rust module `lib.rs`. The main function to implement is the `map_protocol_changes` function, which is called for every block. 
     
     ```rust
     #[substreams::handlers::map]
-    fn map_changes(
+    fn map_protocol_changes(
         block: eth::v2::Block,
-    ) -> Result<tycho::BlockContractChanges, substreams::errors::Error> {}
+    ) -> Result<tycho::BlockChanges, substreams::errors::Error> {}
     ```
-    The `map_changes` function takes a raw block as input and returns a `BlockContractChanges` struct, which is derived from the `BlockContractChanges` protobuf message in [vm.proto](../../../proto/tycho/evm/v1/vm.proto). 
+    The `map_protocol_changes` function takes a raw block as input and returns a `BlockChanges` struct, which is derived from the `BlockChanges` protobuf message in [vm.proto](../../../proto/tycho/evm/v1/vm.proto). 
 
 
-1. The `BlockContractChanges` is a list of `TransactionContractChanges`, which includes these main fields:
+1. The `BlockChanges` is a list of `TransactionChanges`, which includes these main fields:
     - list of `ContractChange` - All storage slots that have changed in the transaction for every contract tracked by any ProtocolComponent
+    - list of `EntityChanges` - All the attribute changes in the transaction
     - list of `ProtocolComponent` - All the protocol component changes in the transaction
-    - list of `BalanceChange` - All the contract component changes in the transaction
+    - list of `BalanceChange` - All the token balances changes in the transaction
 
-    See the [Ambient reference example](../../../substreams/ethereum-ambient/src/lib.rs) for more information.
+    See the [Balancer reference example](../../../substreams/ethereum-balancer/src/lib.rs) for more information.
 
 1. If you are more advanced with Substreams, you can define more steps than a single "map" step, including defining your own protobuf files. Add these protobuf files in your `pb` folder and update the manifest accordingly. This allows for better parallelization of the indexing process. See the official documentation of [modules](https://substreams.streamingfast.io/concepts-and-fundamentals/modules#modules-basics-overview).
 
 ### Testing
 
-Read the [Substreams testing docs](../../../substreams/README.md#testing-your-implementation) for more information on how to test your integration.
+Read the [Substreams testing docs](../../../substreams/README.md#test-your-implementation) for more information on how to test your integration.
