@@ -4,8 +4,6 @@ from hexbytes import HexBytes
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Optional
 
-from tycho_client.dto import ProtocolComponent
-
 
 class ProtocolComponentExpectation(BaseModel):
     """Represents a ProtocolComponent with its main attributes."""

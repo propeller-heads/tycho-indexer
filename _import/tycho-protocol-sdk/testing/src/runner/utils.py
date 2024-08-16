@@ -3,7 +3,7 @@ from typing import Union
 
 from eth_utils import to_checksum_address
 from protosim_py.models import EthereumToken
-from tycho_client.dto import (
+from tycho_indexer_client.dto import (
     ResponseProtocolState,
     ProtocolComponent,
     ResponseAccount,
@@ -13,7 +13,7 @@ from tycho_client.dto import (
     TokensParams,
     PaginationParams,
 )
-from tycho_client.rpc_client import TychoRPCClient
+from tycho_indexer_client.rpc_client import TychoRPCClient
 
 log = getLogger(__name__)
 

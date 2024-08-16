@@ -31,8 +31,15 @@ echo "CONSTRUCTOR_ARGUMENTS: $CONSTRUCTOR_ARGUMENTS"
 
 # Perform operations if CONSTRUCTOR_SIGNATURE and CONSTRUCTOR_ARGUMENTS are set
 if [[ ! -z "$CONSTRUCTOR_SIGNATURE" && ! -z "$CONSTRUCTOR_ARGUMENTS" ]]; then
-    # Do some operations here
-    export __PROPELLER_DEPLOY_ARGS=$(cast abi-encode $CONSTRUCTOR_SIGNATURE $CONSTRUCTOR_ARGUMENTS)
+    # Split the CONSTRUCTOR_ARGUMENTS by commas into an array
+    IFS=',' read -r -a ARG_ARRAY <<< "$CONSTRUCTOR_ARGUMENTS"
+    
+    # Create the cast abi-encode command with the arguments
+    ENCODED_ARGS=$(cast abi-encode "$CONSTRUCTOR_SIGNATURE" "${ARG_ARRAY[@]}")
+    
+    # Export the encoded arguments
+    export __PROPELLER_DEPLOY_ARGS=$ENCODED_ARGS
+    echo "$ENCODED_ARGS"
 fi
 
 export __PROPELLER_CONTRACT="$CONTRACT_NAME.sol:$CONTRACT_NAME"
