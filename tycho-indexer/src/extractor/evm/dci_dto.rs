@@ -1,38 +1,37 @@
 use std::collections::HashMap;
 use tycho_core::{models::Address, Bytes};
 
-// Here we describe the data models for the Dynamic Contract Indexer.
-// In the comments, there is an example of how this data could be added to the substreams via
+// This file defines the data models for the Dynamic Contract Indexer (DCI).
+// In the comments, you will find examples of how this data might be added to Substreams via
 // attributes.
-// The goal of the DCI is to identify contracts that are accessed by a contract, so we can index
-// them. The list of contracts should be saved as a relation to our protocol components, and
-// propagated to DynamicContractExtractor, so it can extract the contract data.
+// The purpose of the DCI is to identify contracts accessed by another contract so that we can index them.
+// The list of contracts should be saved as a relation to our protocol components and propagated
+// to the DynamicContractExtractor for contract data extraction.
 
 // 1st Data Model: External Account Entrypoint
 //
-// This data model serves to orient the DCI on which functions should be explored when
-// running the fuzz analysis to identify all the external contracts that are accessed by a
-// ProtocolComponent. We want to identify all the external contracts that can be called by the
-// contract's public functions, specially the functions that are covered in the AdapterContract
-// (swap, mint, burn, getFees, permissions, etc).
-// Each ExternalAccountEntrypoint is a set of address, signature and
-// parameters that will be used to call the function. All the functions will be fuzzed, so it's not
-// necessary to specify all the possible values of the parameters. It's enough to specify only
-// special cases, like a specific address that, when used to call a function can trigger a specific
-// behavior and call a specific contract.
+// This data model guides the DCI on which functions should be explored during
+// the fuzz analysis to identify all external contracts accessed by a
+// ProtocolComponent. We aim to identify all external contracts that can be called by the
+// contract's public functions, especially those covered in the AdapterContract
+// (e.g., swap, mint, burn, getFees, permissions).
+// Each `ExternalAccountEntrypoint` is defined by an address, signature, and
+// parameters used to call the function. All functions will undergo fuzzing, so it is not
+// necessary to specify all possible parameter values. It suffices to specify only special cases,
+// such as a specific address that triggers particular behavior and calls a specific contract.
 #[derive(Debug, Clone)]
 pub struct ExternalAccountEntrypoint {
-    pub address: Address,  // The address of the contract
-    pub signature: String, // The name of the function and parameter types
-    pub parameters: HashMap<usize, Vec<Bytes>>, /* An optional HashMap that contains the index
-                           * of the parameter, and an array of
-                           * values to be tested for the function. These parameters are only
-                           * values that need to be tried during fuzzing, while the other cases are
-                            still tested via fuzzer.
-                            https://book.getfoundry.sh/forge/fuzz-testing#configuring-fuzz-test-execution
+    pub address: Address,  // The contract's address
+    pub signature: String, // The function name and parameter types
+    pub parameters: HashMap<usize, Vec<Bytes>>, /* An optional HashMap containing the index
+                            * of the parameter and an array of
+                            * values to test during fuzzing. These parameters are only
+                            * values that need special attention during fuzzing; other cases are
+                            * still tested via the fuzzer.
+                            * See: https://book.getfoundry.sh/forge/fuzz-testing#configuring-fuzz-test-execution
                             */
 }
-// SUBSTREAMS EXAMPLE: How would we deal with Balancer's AuthorizerWithAdaptorValidation.canPerform
+// SUBSTREAMS EXAMPLE: How would we handle Balancer's AuthorizerWithAdaptorValidation.canPerform
 // function?
 //
 // let entrypoint = ExternalAccountEntrypoint {
@@ -52,13 +51,13 @@ pub struct ExternalAccountEntrypoint {
 //     change: ChangeType::Creation.into(),
 // },
 
-// Special case: Analysis Retriggers
-// Sometimes, we need to re-analyze a contract when a specific event happens. This can be detected
-// on Substreams side when a specific event is emitted, or when a storage slot of a specific
-// contract is changed. If that happens, Substreams should emit a new ExternalAccountEntrypoint or
+// Special Case: Analysis Retriggers
+// Occasionally, a contract needs to be re-analyzed when a specific event occurs. This can be detected
+// on the Substreams side when a particular event is emitted or when a storage slot in a specific
+// contract changes. If this happens, Substreams should emit a new `ExternalAccountEntrypoint` or
 // modify the existing one.
-// Q: What happens if a storage change affects the ExternalAccountEntrypoint?
-// A: We emit either a new ExternalAccountEntrypoint, or modify the existing one, if possible.
+// Q: What if a storage change impacts the `ExternalAccountEntrypoint`?
+// A: We either emit a new `ExternalAccountEntrypoint` or modify the existing one, if possible.
 // Example:
 // Attribute {
 //     name: "dci_entrypoint_0".to_string(),
@@ -67,15 +66,15 @@ pub struct ExternalAccountEntrypoint {
 // },
 
 // 2nd Data Model: Known Contracts
-// This data model serves to orient Tycho on which contracts are known and should be indexed.
-// Since they don't require analysis, they can be indexed directly.
+// This data model guides Tycho on which contracts are known and should be indexed.
+// These contracts don't require analysis and can be indexed directly.
 //         Attribute {
 //             name: "external_contract_address_0".to_string(),
 //             value: CONTRACT_ADDRESS.to_vec(),
 //             change: ChangeType::Creation.into(),
 //         },
-// Q. Why have the index in the attribute name?
-// A. So we can easily identify the contract address when we need to update it.
+// Q: Why include the index in the attribute name?
+// A: To easily identify the contract address when it needs updating.
 #[derive(Debug, Clone)]
 pub struct KnownContracts {
     pub related_contracts: Vec<Address>, // Collection of related contracts (e.g., Oracles)
