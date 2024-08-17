@@ -45,7 +45,7 @@ pub mod token_analysis_cron;
 pub mod token_pre_processor;
 mod utils;
 pub mod vm;
-mod dynamic_account_indexer;
+mod dci_dto;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ERC20Token {
