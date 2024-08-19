@@ -81,7 +81,7 @@ Read our [Substreams README.md](../../../substreams/README.md) for more informat
         block: eth::v2::Block,
     ) -> Result<tycho::BlockChanges, substreams::errors::Error> {}
     ```
-    The `map_protocol_changes` function takes a raw block as input and returns a `BlockChanges` struct, which is derived from the `BlockChanges` protobuf message in [vm.proto](../../../proto/tycho/evm/v1/vm.proto). 
+    The `map_protocol_changes` function takes a raw block as input and returns a `BlockChanges` struct, which is derived from the `BlockChanges` protobuf message in [common.proto](../../../proto/tycho/evm/v1/common.proto). 
 
 
 1. The `BlockChanges` is a list of `TransactionChanges`, which includes these main fields:

@@ -38,6 +38,10 @@ Many of the types above are variable length bytes. This allows for flexibility a
 
 **Attributes:** the value encoding for attributes is variable. It depends on the use case. Since the attributes are highly dynamic they are only used by the corresponding logic components, so the encoding can be tailored to the logic implementation: E.g. since Rust uses little endian one may choose to use little endian encoding for integers if the native logic module is written in Rust.
 
+#### Special attribute names
+
+Certain attribute names are reserved exclusively for specific purposes in our simulation process. Please use them only for their intended functions. See the [list of reserved attributes](./reserved-attributes.md)
+
 ### Changes of interest
 
 PropellerHeads integration should at least communicate the following changes:
@@ -88,7 +92,33 @@ Newly created components are detected by mapping over the `sf.ethereum.type.v2.B
 
 The output message should usually contain as much information about the component available at that time as well as the transaction that created the protocol component.
 
-We have found that using the final model (`BlockChanges`) prefilled with only component changes is usually good enough since it holds all the information that will be necessary at the end.&#x20;
+We have found that using the final model (see `BlockChanges` below) prefilled with only component changes is usually good enough since it holds all the information that will be necessary at the end.&#x20;
+
+```protobuf
+// A set of changes aggregated by transaction.
+message TransactionChanges {
+  // The transaction instance that results in the changes.
+  Transaction tx = 1;
+  // Contains the changes induced by the above transaction, aggregated on a per-contract basis.
+  // Contains the contract changes induced by the above transaction, usually for tracking VM components.
+  repeated ContractChange contract_changes = 2;
+  // Contains the entity changes induced by the above transaction.
+  // Usually for tracking native components or used for VM extensions (plugins).
+  repeated EntityChanges entity_changes = 3;
+  // An array of newly added components.
+  repeated ProtocolComponent component_changes = 4;
+  // An array of balance changes to components.
+  repeated BalanceChange balance_changes = 5;
+}
+// A set of transaction changes within a single block.
+// This message must be the output of your substreams module.
+message BlockChanges {
+  // The block for which these changes are collectively computed.
+  Block block = 1;
+  // The set of transaction changes observed in the specified block.
+  repeated TransactionChanges changes = 2;
+}
+```
 
 Note that a single transaction may emit multiple newly created components. In this case it is expected that the `TransactionChanges.component_changes`, contains multiple `ProtocolComponents`.
 
@@ -106,7 +136,7 @@ Since this is challenging the following approach is recommended:
 - Aggregate the BalanceDelta messages using a `BigIntAddStore`.
 - In a final handler, use as inputs: A `DeltaStore` input from step 2 and the `BlockBalanceDeltas` from step 1. You can now zip the deltas from the store with the balance deltas from step 1. The store deltas contains the aggregated (absolute) balance at each version and the balance deltas contain the corresponding transaction.
 
-Our Substreams SDK provide the `extract_balance_deltas_from_tx` function that extracts all relevant `BalanceDelta` from ERC20 `Transfer` events in a given transaction (see Curve implementation).
+Our Substreams SDK provides the `extract_balance_deltas_from_tx` function that extracts all relevant `BalanceDelta` from ERC20 `Transfer` events for a given transaction (see Curve implementation).
 
 #### Tracking State Changes
 
