@@ -1,9 +1,7 @@
-name: Release
+name: Manual release docker and wheels
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   id-token: write

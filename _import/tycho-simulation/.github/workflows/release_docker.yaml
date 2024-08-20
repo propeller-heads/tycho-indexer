@@ -1,14 +1,7 @@
-name: Docker Release
+name: Manual docker Release
 
 on:
-  push:
-    branches:
-      - main
-  release:
-    types:
-      - prereleased
-      - released
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 permissions:
   id-token: write
