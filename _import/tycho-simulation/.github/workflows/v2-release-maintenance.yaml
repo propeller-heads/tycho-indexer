@@ -14,8 +14,6 @@ jobs:
 
   check-release:
     uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
-    needs:
-      - tests-and-lints
     with:
       args: --dry-run --no-ci
     permissions:
@@ -29,6 +27,7 @@ jobs:
 
   release:
     needs:
+      - tests-and-lints
       - check-release
     if: needs.check-release.outputs.verify_release_version != ''
     uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
