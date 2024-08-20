@@ -11,8 +11,7 @@ Additionally, it will also try to simulate some transactions using the `SwapAdap
 
 ## Prerequisites
 
-- Latest version of our indexer, Tycho. Please contact us to obtain the latest version. Once acquired, place it in the
-  `/usr/local/bin/` directory.
+- Latest version of our indexer, Tycho. Please contact us to obtain the latest version. Once acquired, place it in a directory that is included in your system’s PATH.
 - Access to PropellerHeads' private PyPI repository. Please contact us to obtain access.
 - Docker installed on your machine.
 - [Conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html)
@@ -48,6 +47,7 @@ The script to generate this file manually is available under `evm/scripts/buildR
 ### Step 2: Create python virtual environment for testing
 
 Run setup env script. It will create a conda virtual env and install all dependencies.
+This script must be run from within the `propeller-protocol-lib/testing` directory.
 
 Please note that some dependencies require access to our private PyPI repository.
 

@@ -1,10 +1,10 @@
 # Reserved attribute names
 
-Certain attribute names are reserved exclusively for specific purposes. Please use them only for their intended functions
+Certain attribute names are reserved exclusively for specific purposes. Please use them only for their intended applications.
 
 ## Static Attributes
 
-The following attributes names are reserved and must be given using `ProtocolComponent.static_att`.
+The following attributes names are reserved and must be given using `ProtocolComponent.static_att`. These attributes MUST be immutable. If it can ever change, it should be given as a state attribute (see below) for this component id.
 
 - ### <u>**pool_id**</u>
 
@@ -32,11 +32,11 @@ change: ChangeType::Creation.into(),
 
 The `manual_updates` static attribute determines whether the component update should be manually triggered using the `update_marker` state attribute. By default, updates occur automatically whenever there is a change in any of the required contracts. However, in scenarios where a contract undergoes frequent changes, automatic updates may not be desirable. For instance, a change in Balancer Vault storage should only trigger updates for the specific pools affected by the change, rather than for all pools indiscriminately. The `manual_updates` field helps to control and prevent unnecessary updates in such cases.
 
-If it's set to `[1u8]`, updates on this component are only triggered by emitting an `update_marker` state attribute (described below).
+If it's enable, updates on this component are only triggered by emitting an `update_marker` state attribute (described below).
 
 #### Type
 
-This attribute value must be provided as bytes.
+This attribute must be set to [1u8] to enable manual updates.
 
 #### Example Usage
 
@@ -50,7 +50,7 @@ change: ChangeType::Creation.into(),
 
 ## State Attributes
 
-The following attributes names are reserved and must be given using `EntityChanges`.
+The following attributes names are reserved and must be given using `EntityChanges`. Unlike [Static Attributes](#static-attributes), state attributes are used for dynamic attributes and are allowed to change at anytime.
 
 - ### <u>**stateless_contract_addr**</u>
 
@@ -127,7 +127,7 @@ change: ChangeType::Creation.into(),
 
 #### Description
 
-The `balance_owner` field is used to specify the address of the account that owns the protocol component tokens, in cases where the tokens are not owned by the protocol component itself. This is particularly useful for protocols that use a vault, for example Balancer.
+The `balance_owner` field is used to specify the address of the account that owns the protocol component tokens, in cases where the tokens are not owned by the protocol component itself or the component specifies multiple contract addresses. This is particularly useful for protocols that use a vault, for example Balancer.
 
 #### Type
 

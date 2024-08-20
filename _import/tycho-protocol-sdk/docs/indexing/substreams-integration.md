@@ -20,7 +20,7 @@ So basically when processing a block we need to emit the block itself, all trans
 
 #### Models
 
-The models below are used for communication between Substreams and our indexer, as well as between Substreams modules.
+The models below are used for communication between Substreams and Tycho indexer, as well as between Substreams modules.
 
 Our indexer expects to receive a `BlockChanges` output from your Substreams package.
 
