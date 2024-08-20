@@ -1,9 +1,6 @@
 name: Release Python Wheel
 
 on:
-  push:
-    branches:
-      - main
   release:
     types:
       - prereleased
