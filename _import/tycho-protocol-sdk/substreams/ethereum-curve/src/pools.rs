@@ -9,8 +9,11 @@ const PARAMS_SEPERATOR: &str = ",";
 #[derive(Debug, Deserialize, PartialEq)]
 struct PoolQueryParams {
     address: String,
+    contracts: Option<Vec<String>>,
     tx_hash: String,
     tokens: Vec<String>,
+    static_attribute_keys: Option<Vec<String>>,
+    static_attribute_vals: Option<Vec<String>>,
     attribute_keys: Option<Vec<String>>,
     attribute_vals: Option<Vec<String>>,
 }
@@ -31,7 +34,7 @@ struct PoolQueryParams {
 pub fn emit_specific_pools(
     params: &str,
     tx: &TransactionTrace,
-) -> Result<Option<ProtocolComponent>> {
+) -> Result<Option<(ProtocolComponent, Vec<EntityChanges>)>> {
     let pools = parse_params(params)?;
     create_component(tx, pools)
 }
@@ -39,49 +42,81 @@ pub fn emit_specific_pools(
 fn create_component(
     tx: &TransactionTrace,
     pools: HashMap<String, PoolQueryParams>,
-) -> Result<Option<ProtocolComponent>> {
+) -> Result<Option<(ProtocolComponent, Vec<EntityChanges>)>> {
     let encoded_hash = hex::encode(tx.hash.clone());
     if let Some(pool) = pools.get(&encoded_hash) {
-        Ok(Some(ProtocolComponent {
-            id: pool.address.clone(),
-            tx: Some(Transaction {
-                to: tx.to.clone(),
-                from: tx.from.clone(),
-                hash: tx.hash.clone(),
-                index: tx.index.into(),
-            }),
-            tokens: pool
-                .tokens
+        Ok(Some((
+            ProtocolComponent {
+                id: pool.address.clone(),
+                tx: Some(Transaction {
+                    to: tx.to.clone(),
+                    from: tx.from.clone(),
+                    hash: tx.hash.clone(),
+                    index: tx.index.into(),
+                }),
+                tokens: pool
+                    .tokens
+                    .clone()
+                    .into_iter()
+                    .map(|token| Result::Ok(hex::decode(token)?))
+                    .collect::<Result<Vec<_>>>()
+                    .with_context(|| "Token addresses were not formatted properly")?,
+                static_att: zip(
+                    pool.static_attribute_keys
+                        .clone()
+                        .unwrap_or(vec![]),
+                    pool.static_attribute_vals
+                        .clone()
+                        .unwrap_or(vec![]),
+                )
                 .clone()
-                .into_iter()
-                .map(|token| Result::Ok(hex::decode(token)?))
-                .collect::<Result<Vec<_>>>()
-                .with_context(|| "Token addresses were not formatted properly")?,
-            static_att: zip(
-                pool.attribute_keys
+                .map(|(key, value)| Attribute {
+                    name: key,
+                    value: value.into(),
+                    change: ChangeType::Creation.into(),
+                })
+                .collect::<Vec<_>>(),
+                contracts: pool
+                    .contracts
                     .clone()
-                    .unwrap_or(vec![]),
-                pool.attribute_vals
-                    .clone()
-                    .unwrap_or(vec![]),
-            )
-            .clone()
-            .map(|(key, value)| Attribute {
-                name: key,
-                value: value.into(),
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|contract| {
+                        hex::decode(contract)
+                            .with_context(|| "Pool contracts was not formatted properly")
+                    })
+                    .chain(std::iter::once(
+                        hex::decode(&pool.address)
+                            .with_context(|| "Pool address was not formatted properly"),
+                    ))
+                    .collect::<Result<Vec<Vec<u8>>>>()?,
                 change: ChangeType::Creation.into(),
-            })
-            .collect::<Vec<_>>(),
-            contracts: vec![hex::decode(pool.address.clone())
-                .with_context(|| "Pool address was not formatted properly")?],
-            change: ChangeType::Creation.into(),
-            protocol_type: Some(ProtocolType {
-                name: "curve_pool".into(),
-                financial_type: FinancialType::Swap.into(),
-                attribute_schema: Vec::new(),
-                implementation_type: ImplementationType::Vm.into(),
-            }),
-        }))
+                protocol_type: Some(ProtocolType {
+                    name: "curve_pool".into(),
+                    financial_type: FinancialType::Swap.into(),
+                    attribute_schema: Vec::new(),
+                    implementation_type: ImplementationType::Vm.into(),
+                }),
+            },
+            vec![EntityChanges {
+                component_id: format!("0x{}", pool.address.clone()),
+                attributes: zip(
+                    pool.attribute_keys
+                        .clone()
+                        .unwrap_or(vec![]),
+                    pool.attribute_vals
+                        .clone()
+                        .unwrap_or(vec![]),
+                )
+                .clone()
+                .map(|(key, value)| Attribute {
+                    name: key,
+                    value: value.into(),
+                    change: ChangeType::Creation.into(),
+                })
+                .collect::<Vec<_>>(),
+            }],
+        )))
     } else {
         Ok(None)
     }
@@ -113,6 +148,7 @@ mod tests {
                 "0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a".to_string(),
                 PoolQueryParams {
                     address: "0x5F890841f657d90E081bAbdB532A05996Af79Fe6".to_string(),
+                    contracts: None,
                     tx_hash: "0xb71a66c1d93c525a2dd19a8db0da19e65be04f36e733af7f03e3c9dff41aa16a"
                         .to_string(),
                     tokens: vec![
@@ -120,6 +156,8 @@ mod tests {
                         "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
                         "0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(),
                     ],
+                    static_attribute_keys: None,
+                    static_attribute_vals: None,
                     attribute_keys: Some(vec!["key1".to_string()]),
                     attribute_vals: Some(vec!["val1".to_string()]),
                 },

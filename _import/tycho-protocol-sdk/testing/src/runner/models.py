@@ -66,7 +66,7 @@ class ProtocolComponentExpectation(BaseModel):
                     colorize_diff(diff) if colorize_output else "\n".join(diff)
                 )
                 differences.append(
-                    f"Field '{field_name}' mismatch:\n{highlighted_diff}"
+                    f"Field '{field_name}' mismatch for {self.id}:\n{highlighted_diff}"
                 )
         if not differences:
             return None

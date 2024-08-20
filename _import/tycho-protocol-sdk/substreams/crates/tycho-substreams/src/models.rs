@@ -300,6 +300,88 @@ impl ProtocolComponent {
         });
         self
     }
+
+    /// Checks if the instance contains all specified attributes.
+    ///
+    /// This function verifies whether the `ProtocolComponent` has all the given static attributes.
+    /// Each attribute is represented by a tuple containing a name and a value. The function
+    /// iterates over the provided attributes and checks if they exist in the instance's
+    /// `static_att`.
+    ///
+    /// # Arguments
+    ///
+    /// * `attributes` - A slice of tuples where each tuple consists of a `String` representing the
+    ///   attribute name and a `Vec<u8>` representing the attribute value.
+    ///
+    /// # Returns
+    ///
+    /// A boolean indicating whether all specified attributes are present in the instance.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let attributes_to_check = vec![
+    ///     ("attribute1".to_string(), vec![1, 2, 3]),
+    ///     ("attribute2".to_string(), vec![4, 5, 6]),
+    /// ];
+    ///
+    /// let has_all_attributes = instance.has_attributes(&attributes_to_check);
+    /// assert!(has_all_attributes);
+    /// ```
+    ///
+    /// # Notes
+    ///
+    /// - The function assumes that the `static_att` collection contains attributes with a
+    ///   `ChangeType` of `Creation` when they are initially added. This is fine because
+    ///   `static_att` can't be updated
+    pub fn has_attributes(&self, attributes: &[(&str, Vec<u8>)]) -> bool {
+        attributes.iter().all(|(name, value)| {
+            self.static_att.contains(&Attribute {
+                name: name.to_string(),
+                value: value.clone(),
+                change: ChangeType::Creation.into(),
+            })
+        })
+    }
+
+    /// Retrieves the value of a specified attribute by name.
+    ///
+    /// This function searches the instance's `static_att` collection for an attribute with the
+    /// given name. If found, it returns a copy of the attribute's value. If the attribute is
+    /// not found, it returns `None`.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - A string slice that holds the name of the attribute to be searched.
+    ///
+    /// # Returns
+    ///
+    /// An `Option<Vec<u8>>` containing the attribute value if found, or `None` if the attribute
+    /// does not exist.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let attribute_name = "attribute1";
+    /// if let Some(value) = instance.get_attribute_value(attribute_name) {
+    ///     // Use the attribute value
+    ///     println!("Attribute value: {:?}", value);
+    /// } else {
+    ///     println!("Attribute not found");
+    /// }
+    /// ```
+    ///
+    /// # Notes
+    ///
+    /// - The function performs a search based on the attribute name and returns the first match
+    ///   found. If there are multiple attributes with the same name, only the first one is
+    ///   returned.
+    pub fn get_attribute_value(&self, name: &str) -> Option<Vec<u8>> {
+        self.static_att
+            .iter()
+            .find(|attr| attr.name == name)
+            .map(|attr| attr.value.clone())
+    }
 }
 
 /// Same as `EntityChanges` but ensures attributes are unique by name.

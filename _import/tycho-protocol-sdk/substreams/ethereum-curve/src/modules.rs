@@ -5,12 +5,19 @@ use itertools::Itertools;
 use substreams::{
     pb::substreams::StoreDeltas,
     scalar::BigInt,
-    store::{StoreAddBigInt, StoreGet, StoreGetString, StoreNew, StoreSet, StoreSetString},
+    store::{
+        StoreAddBigInt, StoreGet, StoreGetInt64, StoreGetString, StoreNew, StoreSet, StoreSetInt64,
+        StoreSetString,
+    },
 };
-
 use substreams_ethereum::pb::eth;
 
-use crate::{pool_changes::emit_eth_deltas, pool_factories, pools::emit_specific_pools};
+use crate::{
+    consts::{CONTRACTS_TO_INDEX, NEW_SUSD, OLD_SUSD},
+    pool_changes::emit_eth_deltas,
+    pool_factories,
+    pools::emit_specific_pools,
+};
 use tycho_substreams::{
     balances::{extract_balance_deltas_from_tx, store_balance_changes},
     contract::extract_contract_changes,
@@ -29,63 +36,69 @@ impl PartialEq for TransactionWrapper {
 }
 
 #[substreams::handlers::map]
-pub fn map_components(
-    params: String,
-    block: eth::v2::Block,
-) -> Result<BlockTransactionProtocolComponents> {
-    // Gather contract changes by indexing `PoolCreated` events and analysing the `Create` call
-    // We store these as a hashmap by tx hash since we need to agg by tx hash later
-    Ok(BlockTransactionProtocolComponents {
-        tx_components: block
-            .transactions()
-            .filter_map(|tx| {
-                let mut components = tx
-                    .logs_with_calls()
-                    .filter(|(_, call)| !call.call.state_reverted)
-                    .filter_map(|(log, call)| {
-                        pool_factories::address_map(
-                            call.call
-                                .address
-                                .as_slice()
-                                .try_into()
-                                .ok()?, // this shouldn't fail
-                            log,
-                            call.call,
-                            tx,
-                        )
-                    })
-                    .collect::<Vec<_>>();
+// Map all created components and their related entity changes.
+pub fn map_components(params: String, block: eth::v2::Block) -> Result<BlockChanges> {
+    let changes = block
+        .transactions()
+        .filter_map(|tx| {
+            let mut entity_changes = vec![];
+            let mut components = vec![];
 
-                if let Some(component) = emit_specific_pools(&params, tx).expect(
-                    "An unexpected error occured when parsing params for emitting specific pools",
+            for (log, call) in tx
+                .logs_with_calls()
+                .filter(|(_, call)| !call.call.state_reverted)
+            {
+                if let Some((component, mut state)) = pool_factories::address_map(
+                    call.call
+                        .address
+                        .as_slice()
+                        .try_into()
+                        .ok()?, // this shouldn't fail
+                    log,
+                    call.call,
+                    tx,
                 ) {
-                    components.push(component)
+                    entity_changes.append(&mut state);
+                    components.push(component);
                 }
+            }
 
-                if !components.is_empty() {
-                    Some(TransactionProtocolComponents {
-                        tx: Some(Transaction {
-                            hash: tx.hash.clone(),
-                            from: tx.from.clone(),
-                            to: tx.to.clone(),
-                            index: Into::<u64>::into(tx.index),
-                        }),
-                        components,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>(),
-    })
+            if let Some((component, mut state)) = emit_specific_pools(&params, tx).expect(
+                "An unexpected error occured when parsing params for emitting specific pools",
+            ) {
+                entity_changes.append(&mut state);
+                components.push(component);
+            }
+
+            if components.is_empty() {
+                None
+            } else {
+                Some(TransactionChanges {
+                    tx: Some(Transaction {
+                        hash: tx.hash.clone(),
+                        from: tx.from.clone(),
+                        to: tx.to.clone(),
+                        index: tx.index.into(),
+                    }),
+                    contract_changes: vec![],
+                    entity_changes,
+                    component_changes: components,
+                    balance_changes: vec![],
+                })
+            }
+        })
+        .collect::<Vec<_>>();
+
+    Ok(BlockChanges { block: None, changes })
 }
 
-/// Simply stores the `ProtocolComponent`s with the pool id as the key and tokens as the value
+/// Get result `map_components` and stores the created `ProtocolComponent`s with the pool id as the
+/// key and tokens as the value
 #[substreams::handlers::store]
-pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: StoreSetString) {
-    map.tx_components
+pub fn store_component_tokens(map: BlockChanges, store: StoreSetString) {
+    map.changes
         .iter()
-        .flat_map(|tx_components| &tx_components.components)
+        .flat_map(|tx_changes| &tx_changes.component_changes)
         .for_each(|component| {
             store.set(
                 0,
@@ -96,6 +109,29 @@ pub fn store_component_tokens(map: BlockTransactionProtocolComponents, store: St
                     .map(hex::encode)
                     .join(":"),
             );
+        });
+}
+
+/// Stores contracts required by components, for example LP tokens if they are different from the
+/// pool.
+/// This is later used to index them with `extract_contract_changes`
+#[substreams::handlers::store]
+pub fn store_non_component_accounts(map: BlockChanges, store: StoreSetInt64) {
+    map.changes
+        .iter()
+        .flat_map(|tx_changes| &tx_changes.component_changes)
+        .for_each(|component| {
+            // Crypto pool factory creates LP token separated from the pool, we need to index it so
+            // we add it to the store if the new protocol component comes from this factory
+            if component.has_attributes(&[
+                ("pool_type", "crypto_pool".into()),
+                ("factory_name", "crypto_pool_factory".into()),
+            ]) {
+                let lp_token = component
+                    .get_attribute_value("lp_token")
+                    .expect("didn't find lp_token attribute");
+                store.set(0, hex::encode(lp_token), &1);
+            }
         });
 }
 
@@ -113,15 +149,29 @@ pub fn map_relative_balances(
                 .flat_map(|tx| {
                     emit_eth_deltas(tx, &tokens_store)
                         .into_iter()
-                        .chain(extract_balance_deltas_from_tx(tx, |token, transactor| {
-                            let pool_key = format!("pool:{}", hex::encode(transactor));
-                            if let Some(tokens) = tokens_store.get_last(pool_key) {
-                                let token_id = hex::encode(token);
-                                tokens.split(':').any(|t| t == token_id)
-                            } else {
-                                false
-                            }
-                        }))
+                        .chain(
+                            extract_balance_deltas_from_tx(tx, |token, transactor| {
+                                let pool_key = format!("pool:{}", hex::encode(transactor));
+                                if let Some(tokens) = tokens_store.get_last(pool_key) {
+                                    let token_id = if token == OLD_SUSD {
+                                        hex::encode(NEW_SUSD)
+                                    } else {
+                                        hex::encode(token)
+                                    };
+                                    tokens.split(':').any(|t| t == token_id)
+                                } else {
+                                    false
+                                }
+                            })
+                            .into_iter()
+                            .map(|mut balance| {
+                                if balance.token == OLD_SUSD {
+                                    balance.token = NEW_SUSD.into();
+                                }
+                                balance
+                            })
+                            .collect::<Vec<_>>(),
+                        )
                 })
                 .collect();
 
@@ -150,23 +200,24 @@ pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
 #[substreams::handlers::map]
 pub fn map_protocol_changes(
     block: eth::v2::Block,
-    grouped_components: BlockTransactionProtocolComponents,
+    grouped_components: BlockChanges,
     deltas: BlockBalanceDeltas,
     components_store: StoreGetString,
+    non_component_accounts_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
 ) -> Result<BlockChanges> {
     // We merge contract changes by transaction (identified by transaction index) making it easy to
     //  sort them at the very end.
     let mut transaction_changes: HashMap<_, TransactionChanges> = HashMap::new();
 
-    // `ProtocolComponents` are gathered from `map_pools_created` which just need a bit of work to
-    //  convert into `TransactionChanges`
+    // `ProtocolComponents` are gathered with some entity changes from `map_pools_created` which
+    // just need a bit of work to  convert into `TransactionChanges`
     grouped_components
-        .tx_components
+        .changes
         .into_iter()
-        .for_each(|tx_component| {
-            let tx = tx_component.tx.as_ref().unwrap();
-            transaction_changes
+        .for_each(|tx_changes| {
+            let tx = tx_changes.tx.as_ref().unwrap();
+            let transaction_entry = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChanges {
                     tx: Some(tx.clone()),
@@ -174,18 +225,23 @@ pub fn map_protocol_changes(
                     component_changes: vec![],
                     balance_changes: vec![],
                     entity_changes: vec![],
-                })
+                });
+
+            let formated_components: Vec<_> = tx_changes //TODO: format directly at creation
                 .component_changes
-                .extend_from_slice(
-                    &(tx_component
-                        .components
-                        .into_iter()
-                        .map(|mut component| {
-                            component.id = format!("0x{}", component.id);
-                            component
-                        })
-                        .collect::<Vec<_>>()),
-                );
+                .into_iter()
+                .map(|mut component| {
+                    component.id = format!("0x{}", component.id);
+                    component
+                })
+                .collect();
+
+            transaction_entry
+                .component_changes
+                .extend(formated_components);
+            transaction_entry
+                .entity_changes
+                .extend(tx_changes.entity_changes);
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `TokenExchange`, etc. creating
@@ -242,7 +298,14 @@ pub fn map_protocol_changes(
         |addr| {
             components_store
                 .get_last(format!("pool:{0}", hex::encode(addr)))
-                .is_some()
+                .is_some() ||
+                non_component_accounts_store
+                    .get_last(hex::encode(addr))
+                    .is_some() ||
+                CONTRACTS_TO_INDEX.contains(
+                    addr.try_into()
+                        .expect("address should be 20 bytes long"),
+                )
         },
         &mut transaction_changes,
     );
