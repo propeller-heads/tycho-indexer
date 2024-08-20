@@ -22,3 +22,6 @@ the package you'd like to pre release. This will create a
 `[package]-[semver].pre-[commit-sha]` release in our spkg repository which you can use 
 to run the substream´.
 
+## Test your implementation
+
+To run a full end-to-end integration test you can refer to the [testing script documentation](../testing/README.md)

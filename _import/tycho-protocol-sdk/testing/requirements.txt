@@ -2,5 +2,5 @@ psycopg2==2.9.9
 PyYAML==6.0.1
 Requests==2.32.2
 web3==5.31.3
-tycho-indexer-client>=0.7.0
-protosim_py>=0.5.0
+tycho-indexer-client>=0.7.2
+protosim_py>=0.6.3

@@ -27,12 +27,15 @@ def find_binary_file(file_name):
 
     # Check each location
     for location in locations:
-        potential_path = location + "/" + file_name
+        potential_path = os.path.join(location, file_name)
         if os.path.exists(potential_path):
             return potential_path
 
     # If binary is not found in the usual locations, return None
-    raise RuntimeError("Unable to locate tycho-indexer binary")
+    searched_paths = "\n".join(locations)
+    raise RuntimeError(
+        f"Unable to locate {file_name} binary. Searched paths:\n{searched_paths}"
+    )
 
 
 binary_path = find_binary_file("tycho-indexer")

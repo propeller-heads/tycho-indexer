@@ -14,7 +14,7 @@ from protosim_py.evm.decoders import ThirdPartyPoolTychoDecoder
 from protosim_py.evm.storage import TychoDBSingleton
 from protosim_py.models import EVMBlock
 from pydantic import BaseModel
-from tycho_client.dto import (
+from tycho_indexer_client.dto import (
     Chain,
     ProtocolComponentsParams,
     ProtocolStateParams,
@@ -26,7 +26,7 @@ from tycho_client.dto import (
     Snapshot,
     ContractId,
 )
-from tycho_client.rpc_client import TychoRPCClient
+from tycho_indexer_client.rpc_client import TychoRPCClient
 
 from models import (
     IntegrationTestsConfig,

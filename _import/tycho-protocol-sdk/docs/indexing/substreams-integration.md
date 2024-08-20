@@ -18,29 +18,15 @@ So basically when processing a block we need to emit the block itself, all trans
 
 **The data model that encodes changes, transaction and blocks in messages, can be found** [**here**](https://github.com/propeller-heads/propeller-protocol-lib/tree/main/proto/tycho/evm/v1)**.**&#x20;
 
-#### Common Models
+#### Models
 
-The following models are shared for both vm and native integrations.
+The models below are used for communication between Substreams and Tycho indexer, as well as between Substreams modules.
 
-{% @github-files/github-code-block url="https://github.com/propeller-heads/propeller-protocol-lib/blob/main/proto/tycho/evm/v1/common.proto" %}
+Our indexer expects to receive a `BlockChanges` output from your Substreams package.
 
-#### VM Specific Models
+{% @github-files/github-code-block url="https://github.com/propeller-heads/propeller-protocol-lib/blob/main/proto/tycho/evm/v1/" %}
 
-The models shown below are specific to vm integrations:
-
-{% @github-files/github-code-block url="https://github.com/propeller-heads/propeller-protocol-lib/blob/main/proto/tycho/evm/v1/vm.proto" %}
-
-Please be aware that changes need to be aggregated on the transaction level, it is considered an error to emit `BlockContractChanges` with duplicated transactions present in the `changes` attributes.
-
-All attributes are expected to be set in the final message unless the docs (in the comments) indicate otherwise.
-
-#### Native Integration Models
-
-The models below are very similar to the vm integration models but have a few modifications necessary to support native integrations.
-
-{% @github-files/github-code-block url="https://github.com/propeller-heads/propeller-protocol-lib/blob/main/proto/tycho/evm/v1/entity.proto" %}
-
-Once again changes must be aggregated on a transaction level, emitting these models with duplicated transaction as the final output would be considered an error.
+Please be aware that changes need to be aggregated on the transaction level, it is considered an error to emit `BlockChanges` with duplicated transactions present in the `changes` attributes.
 
 #### Integer Byte encoding
 
@@ -50,17 +36,19 @@ Many of the types above are variable length bytes. This allows for flexibility a
 
 **Strings**: If you need to store strings, please use utf-8 encoding to store them as bytes.
 
-**Attributes:** the value encoding for attributes in the native implementation messages is variable. It depends on the use case. Since the attributes are highly dynamic they are only used by the corresponding logic components, so the encoding can be tailored to the logic implementation: E.g. since Rust uses little endian one may choose to use little endian encoding for integers if the native logic module is written in Rust.
+**Attributes:** the value encoding for attributes is variable. It depends on the use case. Since the attributes are highly dynamic they are only used by the corresponding logic components, so the encoding can be tailored to the logic implementation: E.g. since Rust uses little endian one may choose to use little endian encoding for integers if the native logic module is written in Rust.
 
+#### Special attribute names
 
+Certain attribute names are reserved exclusively for specific purposes in our simulation process. Please use them only for their intended functions. See the [list of reserved attributes](./reserved-attributes.md)
 
 ### Changes of interest
 
 PropellerHeads integration should at least communicate the following changes:
 
-* Any changes to the protocol state, for VM integrations that usually means contract storage changes of all contracts whose state may be accessed during a swap operation.
-* Any newly added protocol component such as a pool, pair, market, etc. Basically anything that signifies that a new operation can be executed now using the protocol.
-* ERC20 Balances, whenever the balances of one contracts involved with the protocol change, this change should be communicated in terms of absolute balances.
+- Any changes to the protocol state, for VM integrations that usually means contract storage changes of all contracts whose state may be accessed during a swap operation.
+- Any newly added protocol component such as a pool, pair, market, etc. Basically anything that signifies that a new operation can be executed now using the protocol.
+- ERC20 Balances, whenever the balances of one contracts involved with the protocol change, this change should be communicated in terms of absolute balances.
 
 In the next section we will show a few common techniques that can be leveraged to quickly implement an integration.
 
@@ -70,9 +58,9 @@ Before starting, it is important to be aware of the protocol we are aiming to in
 
 It is especially important to know:
 
-* Which contracts are involved in the protocol and what functions do they serve. How do they affect the behaviour of the component being integrated?
-* What conditions (e.g. oracle update) or what kind of method calls can lead to a relevant state change on the protocol, which ultimately changes the protocols behaviour if observed externally.
-* Are there components added or removed, and how are they added. Most protocols use either a factory contract, which can be used to deploy new components, or they use a method call that provisiona a new component within the overall system.
+- Which contracts are involved in the protocol and what functions do they serve. How do they affect the behaviour of the component being integrated?
+- What conditions (e.g. oracle update) or what kind of method calls can lead to a relevant state change on the protocol, which ultimately changes the protocols behaviour if observed externally.
+- Are there components added or removed, and how are they added. Most protocols use either a factory contract, which can be used to deploy new components, or they use a method call that provisiona a new component within the overall system.
 
 Once the workings of the protocol are clear the implementation can start.
 
@@ -94,44 +82,45 @@ You are ready to start coding. Please refer to the substreams documentation for 
 
 Usually the first step consists in detecting the creation of new components and store their contract addresses in a store, so they can be properly tracked further downstream.
 
-Later we'll have to emit balance and state changes based on the set of  currently tracked components.
+Later we'll have to emit balance and state changes based on the set of currently tracked components.
 
 {% hint style="info" %}
-Note that emitting state changes of components that have not been previously announced  is considered an error.
+Note that emitting state changes of components that have not been previously announced is considered an error.
 {% endhint %}
 
 Newly created components are detected by mapping over the `sf.ethereum.type.v2.Block model`.&#x20;
 
 The output message should usually contain as much information about the component available at that time as well as the transaction that created the protocol component.
 
-We have found that using the final model prefilled with only component changes is usually good enough since it holds all the information that will be necessary at the end.&#x20;
-
-For VM Integrations the final model is `BlockContractChanges`:
+We have found that using the final model (see `BlockChanges` below) prefilled with only component changes is usually good enough since it holds all the information that will be necessary at the end.&#x20;
 
 ```protobuf
 // A set of changes aggregated by transaction.
-message TransactionContractChanges {
+message TransactionChanges {
   // The transaction instance that results in the changes.
   Transaction tx = 1;
   // Contains the changes induced by the above transaction, aggregated on a per-contract basis.
-  // Must include changes to every contract that is tracked by all ProtocolComponents.
+  // Contains the contract changes induced by the above transaction, usually for tracking VM components.
   repeated ContractChange contract_changes = 2;
-  // An array of any component changes.
-  repeated ProtocolComponent component_changes = 3;
+  // Contains the entity changes induced by the above transaction.
+  // Usually for tracking native components or used for VM extensions (plugins).
+  repeated EntityChanges entity_changes = 3;
+  // An array of newly added components.
+  repeated ProtocolComponent component_changes = 4;
   // An array of balance changes to components.
-  repeated BalanceChange balance_changes = 4;
+  repeated BalanceChange balance_changes = 5;
 }
-
 // A set of transaction changes within a single block.
-message BlockContractChanges {
+// This message must be the output of your substreams module.
+message BlockChanges {
   // The block for which these changes are collectively computed.
   Block block = 1;
   // The set of transaction changes observed in the specified block.
-  repeated TransactionContractChanges changes = 2;
+  repeated TransactionChanges changes = 2;
 }
 ```
 
-Note that a single transaction may emit multiple newly created components. In this case it is expected that the `TransactionContractChanges.component_changes`, contains multiple `ProtocolComponents`.
+Note that a single transaction may emit multiple newly created components. In this case it is expected that the `TransactionChanges.component_changes`, contains multiple `ProtocolComponents`.
 
 Once emitted, the protocol components should be stored in a Store, since we will later have to use this store to decide whether a contract is interesting to us or not.
 
@@ -143,11 +132,12 @@ This means the relative values have to be aggregated by component, to arrive at 
 
 Since this is challenging the following approach is recommended:
 
-* Use a handler to process a block and emit the `BalanceDeltas` struct. Make sure to sort the balance deltas by `component_id, token_address`
-* Aggregate the BalanceDelta messages using a `BigIntAddStore`.
-* In a final handler, use as inputs: A `DeltaStore` input from step 2 and the `BalanceDeltas` from step 1. You can now zip the deltas from the store with the balance deltas from step 1. The store deltas contains the aggregated (absolute) balance at each version and the balance deltas contain the corresponding transaction.
+- Use a handler to process a block and emit the `BlockBalanceDeltas` struct. Make sure to sort the balance deltas by `component_id, token_address`
+- Aggregate the BalanceDelta messages using a `BigIntAddStore`.
+- In a final handler, use as inputs: A `DeltaStore` input from step 2 and the `BlockBalanceDeltas` from step 1. You can now zip the deltas from the store with the balance deltas from step 1. The store deltas contains the aggregated (absolute) balance at each version and the balance deltas contain the corresponding transaction.
+
+Our Substreams SDK provides the `extract_balance_deltas_from_tx` function that extracts all relevant `BalanceDelta` from ERC20 `Transfer` events for a given transaction (see Curve implementation).
 
 #### Tracking State Changes
 
 To track contract changes, you can simply use the `extract_contract_changes` function (see balancer implementation). This function will extract all relevant contract storage changes given the full block model and a store that flags contract addresses as relevant.
-

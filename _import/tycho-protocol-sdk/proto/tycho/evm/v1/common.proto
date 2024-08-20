@@ -83,7 +83,8 @@ message ProtocolComponent {
   // Addresses of the contracts used by the component.
   // Usually it is a single contract, but some protocols use multiple contracts.
   repeated bytes contracts = 3;
-  // Attributes of the component. Used mainly be the native integration.
+  // Static attributes of the component.
+  // These attributes MUST be immutable. If it can ever change, it should be given as an EntityChanges for this component id.
   // The inner ChangeType of the attribute has to match the ChangeType of the ProtocolComponent.
   repeated Attribute static_att = 4;
   // Type of change the component underwent.
@@ -160,6 +161,7 @@ message TransactionChanges {
 }
 
 // A set of transaction changes within a single block.
+// This message must be the output of your substreams module.
 message BlockChanges {
   // The block for which these changes are collectively computed.
   Block block = 1;

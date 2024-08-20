@@ -8,10 +8,13 @@ def main() -> None:
     )
     parser.add_argument("--package", type=str, help="Name of the package to test.")
     parser.add_argument(
-        "--tycho-logs", action="store_true", help="Flag to activate logs from Tycho."
+        "--tycho-logs", action="store_true", help="Enable Tycho logs."
     )
     parser.add_argument(
-        "--db-url", type=str, help="Postgres database URL for the Tycho indexer."
+        "--db-url",
+        default="postgres://postgres:mypassword@localhost:5431/tycho_indexer_0",
+        type=str,
+        help="Postgres database URL for the Tycho indexer. Default: postgres://postgres:mypassword@localhost:5431/tycho_indexer_0",
     )
     parser.add_argument(
         "--vm-traces", action="store_true", help="Enable tracing during vm simulations."
