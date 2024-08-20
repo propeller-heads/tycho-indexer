@@ -5,7 +5,7 @@ on:
     types:
       - prereleased
       - released
-  workflow_dispatch: {}
+  workflow_dispatch: { }
 
 permissions:
   id-token: write
@@ -21,71 +21,30 @@ jobs:
       gh_token: ${{ secrets.GH_TOKEN }}
       infura_api_key: ${{ secrets.INFURA_API_KEY }}
 
-  protosim_py_release:
-    name: Protosim-Py Build Wheel
-    runs-on: ubuntu-latest
+  build_python_wheel_linux:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
     needs:
       - tests-and-lints
-    steps:
-      - name: Check out Repo
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-            
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::827659017777:role/github-actions
-          audience: sts.amazonaws.com
-          aws-region: eu-central-1      
-      
-      - name: install-aws-cli
-        uses: unfor19/install-aws-cli-action@v1
-        with:
-          version: 2
-          verbose: false
-          arch: amd64
-          rootdir: ""
-          workdir: ""
-        
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
-
-      - name: Install twine
-        run: |
-          python -m pip install --upgrade pip
-          pip install twine
-
-      - uses: docker/build-push-action@v2
-        with:
-          tags: protosim-py-build:latest
-          file: protosim_py/protosim_py.Dockerfile
-          push: false
-
-      - uses: addnab/docker-run-action@v3
-        with:
-          image: protosim-py-build:latest
-          options: -v ${{ github.workspace }}:/prop-builder
-          run: |
-            git config --global credential.helper store
-            echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
-            git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
-
-            /opt/python/cp39-cp39/bin/python -m maturin build --release --compatibility manylinux2014 -i /opt/python/cp39-cp39/bin/python
-      
-      - name: Publish Python 🐍 distribution 📦 to AWS CodeArtifact
-        shell: bash
-        run: |
-          aws codeartifact login --tool twine --domain propeller --domain-owner 827659017777 --repository protosim
-
-          twine upload --repository codeartifact ./target/wheels/protosim_py*.whl
-
-      - name: Archive production artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: protosim-py
-          path: |
-            ./protosim_py/target/wheels/*.whl
-  
+    permissions:
+      id-token: write
+      contents: read
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    with:
+      runs_on: 'ubuntu-latest'
+      yum_packages: "pkgconfig openssl-devel"
+      package_root: "protosim_py"
+      use_maturin: true
+  build_python_wheel_macos:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
+    needs:
+      - tests-and-lints
+    permissions:
+      id-token: write
+      contents: read
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    with:
+      runs_on: 'macos-latest'
+      package_root: "protosim_py"
+      use_maturin: true
