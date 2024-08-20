@@ -6,26 +6,6 @@ Certain attribute names are reserved exclusively for specific purposes. Please u
 
 The following attributes names are reserved and must be given using `ProtocolComponent.static_att`. These attributes MUST be immutable. If it can ever change, it should be given as a state attribute (see below) for this component id.
 
-- ### <u>**pool_id**</u>
-
-#### Description
-
-The `pool_id` static attribute is used to specify the identifier of the pool when it differs from the `ProtocolComponent.id`. For example, Balancer pools have a component ID that corresponds to their contract address, and a separate pool ID used for registration on the Balancer Vault contract.
-
-#### Type
-
-This attribute value must be provided as a UTF-8 encoded string in bytes.
-
-#### Example Usage
-
-```rust
-Attribute {
-name: "pool_id".to_string(),
-value: format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
-change: ChangeType::Creation.into(),
-}
-```
-
 - ### <u>**manual_updates**</u>
 
 #### Description
@@ -44,6 +24,28 @@ This attribute must be set to [1u8] to enable manual updates.
 Attribute {
 name: "manual_updates".to_string(),
 value: [1u8],
+change: ChangeType::Creation.into(),
+}
+```
+
+- ### <u>**pool_id**</u>
+
+#### Description
+
+The `pool_id` static attribute is used to specify the identifier of the pool when it differs from the `ProtocolComponent.id`. For example, Balancer pools have a component ID that corresponds to their contract address, and a separate pool ID used for registration on the Balancer Vault contract.
+
+**Notice**: In most of the cases, using `ProtocolComponent.id` directly is preferred over `pool_id`.
+
+#### Type
+
+This attribute value must be provided as a UTF-8 encoded string in bytes.
+
+#### Example Usage
+
+```rust
+Attribute {
+name: "pool_id".to_string(),
+value: format!("0x{}", hex::encode(pool_registered.pool_id)).as_bytes(),
 change: ChangeType::Creation.into(),
 }
 ```
