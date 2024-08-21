@@ -11,3 +11,6 @@
 ## Indexing
 
 * [Substreams Integration](indexing/substreams-integration.md)
+  * [VM Integration](indexing/vm-integration/README.md)
+  * [Native Integration](indexing/native-integration.md)
+  * [Reserved Attributes](indexing/reserved-attributes.md)
