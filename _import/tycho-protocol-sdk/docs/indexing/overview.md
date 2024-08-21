@@ -24,7 +24,7 @@ The models below are used for communication between Substreams and Tycho indexer
 
 Our indexer expects to receive a `BlockChanges` output from your Substreams package.
 
-{% @github-files/github-code-block url="https://github.com/propeller-heads/propeller-protocol-lib/blob/main/proto/tycho/evm/v1/" %}
+{% @github-files/github-code-block url="https://github.com/propeller-heads/propeller-protocol-lib/blob/main/proto/tycho/evm/v1/common.proto" %}
 
 Please be aware that changes need to be aggregated on the transaction level, it is considered an error to emit `BlockChanges` with duplicated transactions present in the `changes` attributes.
 
