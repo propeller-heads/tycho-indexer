@@ -29,6 +29,12 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 ] }
 tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.9.1" }
 tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.9.1" }
+anyhow = "1.0.79"
+console-subscriber = "0.2.0"
+tracing-opentelemetry = { version = "0.22", default-features = false }
+opentelemetry = { version = "0.21" }
+opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.14", default-features = false, features = ["trace", "grpc-tonic"] }
 
 [dev-dependencies]
 rstest = "0.18.2"
