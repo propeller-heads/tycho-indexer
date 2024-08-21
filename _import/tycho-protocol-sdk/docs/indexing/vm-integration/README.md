@@ -96,4 +96,4 @@ Read our [Substreams README.md](../../../substreams/README.md) for more informat
 
 ### Testing
 
-Read the [Substreams testing docs](../../../substreams/README.md#test-your-implementation) for more information on how to test your integration.
+Read the [Substreams testing docs](https://github.com/propeller-heads/propeller-venue-lib/blob/main/testing/README.md) for more information on how to test your integration.
