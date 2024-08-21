@@ -46,6 +46,7 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt,
+    fmt::Write,
 };
 
 use ethers::types::{H160, U256};
@@ -209,6 +210,36 @@ impl<'a> Route<'a> {
             current_amount = res.amount;
         }
         Ok((swaps, res.gas))
+    }
+
+    pub fn format_route(&self) -> String {
+        let mut result = String::new();
+
+        for i in 0..self.pairs.len() {
+            let pair = &self.pairs[i];
+            let protocol_component = &pair.0;
+
+            if i < self.tokens.len() {
+                write!(
+                    &mut result,
+                    "{} -> 0x{:x}",
+                    self.tokens[i].symbol, protocol_component.address
+                )
+                .unwrap();
+            }
+
+            // Add next arrow if not the last pair
+            if i < self.pairs.len() - 1 {
+                result.push_str(" -> ");
+            }
+        }
+
+        // Add the last token
+        if self.tokens.len() > self.pairs.len() {
+            write!(&mut result, " -> {}", self.tokens[self.pairs.len()].symbol).unwrap();
+        }
+
+        result
     }
 }
 
@@ -1488,5 +1519,29 @@ mod tests {
 
         assert_eq!(res.gas, U256::from(240_000));
         assert_eq!(res.amount, U256::from(244_248));
+    }
+
+    #[test]
+    fn test_route_format() {
+        let pair_0 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            10_000_000,
+        );
+        let pair_1 = make_pair(
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000002",
+            20_000_000,
+            25_000_000,
+        );
+        let Pair(props, _) = &pair_0;
+        let tokens = vec![&props.tokens[0], &props.tokens[1], &props.tokens[0]];
+        let pairs = vec![&pair_0, &pair_1];
+        let route = Route::new(1, &tokens, &pairs);
+
+        assert_eq!(route.format_route(), "T0 -> 0x0000000000000000000000000000000000000001 -> T1 -> 0x0000000000000000000000000000000000000001 -> T0");
     }
 }
