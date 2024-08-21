@@ -15,7 +15,7 @@ To propose an integration, create a pull request in this repository with the abo
 
 PropellerHeads currently exposes two integration modes to specify the protocols' underlying logic:
 
-* **VM Integration:** This integration type requires implementing an adapter interface in any language that compiles to the respective vm byte code. This SDK provides the interface only in Solidity. **[Read more here.](logic/vm-integration/README.md)**
+* **VM Integration:** This integration type requires implementing an adapter interface in any language that compiles to the respective vm byte code. This SDK provides the interface only in Solidity. [**Read more here.**](logic/vm-integration/)
 * **Native Rust Integration:** Coming soon, this integration type requires implementing a Rust trait that describes the protocol logic.
 
 While VM integration is certainly the quickest and probably most accessible one for protocol developers, native implementations are much faster and allow us to consider the protocol for more time-sensitive use cases - e.g. quoting.
@@ -24,5 +24,4 @@ While VM integration is certainly the quickest and probably most accessible one 
 
 For indexing purposes, it is required that you provide a [substreams](https://substreams.streamingfast.io/) package that emits a specified set of messages. If your protocol already has a [substreams package](https://github.com/messari/substreams) for indexing implemented, you can adjust it to emit the required messages.
 
-**VM Integration** Currently the only supported integration is for EVM protocols in order to complement the Solidity protocol logic. **[Read more here.](indexing/vm-integration/README.md)**
-**Custom Entity Integration** Coming soon, this integration will complement the upcoming native Rust protocol logic.
+**VM Integration** Currently the only supported integration is for EVM protocols in order to complement the Solidity protocol logic. [**Read more here.**](https://github.com/propeller-heads/propeller-venue-lib/blob/main/docs/indexing/vm-integration/README.md) **Custom Entity Integration** Coming soon, this integration will complement the upcoming native Rust protocol logic.
