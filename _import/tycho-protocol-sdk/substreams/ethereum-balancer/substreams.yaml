@@ -28,8 +28,8 @@ modules:
   - name: store_components
     kind: store
     initialBlock: 12272146
-    updatePolicy: add
-    valueType: int64
+    updatePolicy: set
+    valueType: string
     inputs:
       - map: map_components
 
