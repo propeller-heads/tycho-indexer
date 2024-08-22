@@ -361,7 +361,7 @@ pub trait RouteProcessor {
     ///
     /// * `graph` - a mutable reference to the graph to configure
     /// * `tokens` - a vec of tokens considered as acceptable start/end tokens for routes to build
-    fn set_up(&self, graph: &mut ProtoGraph, tokens: &[H160]);
+    fn set_up(&mut self, graph: &mut ProtoGraph, tokens: &[H160]);
 
     /// Processes the given route and updates the processor's internal result.
     ///
@@ -771,9 +771,9 @@ impl ProtoGraph {
         let route_iter =
             RouteIdSubsetsByMembership::new(involved_addresses, &self.route_memberships)
                 .unique()
-                .map(|idx| &self.routes[idx]);
+                .map(|idx| (idx, &self.routes[idx]));
         let mut n_routes_evaluated: u64 = 0;
-        for (id, route) in route_iter.enumerate() {
+        for (id, route) in route_iter {
             pairs.clear();
             tokens.clear();
             let mut prev_node_idx = route.start;
