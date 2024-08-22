@@ -28,4 +28,5 @@ For indexing purposes, it is required that you provide a [substreams](https://su
 
 ### Execution
 
-The execution component involves the implementation of the `SwapExecutor` interface, enabling token swaps within the protocol. The `SwapExecutor` is responsible for performing swaps by interacting with the underlying liquidity pools, handling token approvals, managing input/output amounts, and ensuring gas-efficient and secure execution. Each protocol must implement its own `SwapExecutor`, tailored to its specific logic and requirements.
+For execution purposes, the implementation of the `SwapExecutor` interface is required. Without this component, trades cannot be executed on-chain, making it a critical part of the integration. 
+The `SwapExecutor` is responsible for performing swaps by interacting with the underlying liquidity pools, handling token approvals, managing input/output amounts, and ensuring gas-efficient and secure execution. Each protocol must implement its own `SwapExecutor`, tailored to its specific logic and requirements.
