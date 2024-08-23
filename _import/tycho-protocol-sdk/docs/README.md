@@ -25,3 +25,8 @@ While VM integration is certainly the quickest and probably most accessible one 
 For indexing purposes, it is required that you provide a [substreams](https://substreams.streamingfast.io/) package that emits a specified set of messages. If your protocol already has a [substreams package](https://github.com/messari/substreams) for indexing implemented, you can adjust it to emit the required messages.
 
 **VM Integration** Currently the only supported integration is for EVM protocols in order to complement the Solidity protocol logic. [**Read more here.**](https://github.com/propeller-heads/propeller-venue-lib/blob/main/docs/indexing/vm-integration/README.md) **Custom Entity Integration** Coming soon, this integration will complement the upcoming native Rust protocol logic.
+
+### Execution
+
+For execution purposes, the implementation of the `SwapExecutor` interface is required. Without this component, trades cannot be executed on-chain, making it a critical part of the integration. 
+The `SwapExecutor` is responsible for performing swaps by interacting with the underlying liquidity pools, handling token approvals, managing input/output amounts, and ensuring gas-efficient and secure execution. Each protocol must implement its own `SwapExecutor`, tailored to its specific logic and requirements.

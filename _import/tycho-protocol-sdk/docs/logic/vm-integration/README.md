@@ -40,7 +40,7 @@ Following exchanges have been integrated using VM approach:
 
 ### Understanding the ISwapAdapter
 
-Read the the documentation of the [Ethereum Solidity interface](ethereum-solidity.md). It describes the functions that need to be implemented as well as the manifest file. Additionally read through the docstring of the [ISwapAdapter.sol](https://github.com/propeller-heads/propeller-venue-lib/blob/main/evm/src/interfaces/ISwapAdapter.sol) interface and the [ISwapAdapterTypes.sol](https://github.com/propeller-heads/propeller-venue-lib/blob/main/evm/src/interfaces/ISwapAdapterTypes.sol) interface which defines the data types and errors used by the adapter interface. You can also generate the documentation locally and the look at the generated documentation in the `./docs` folder:
+Read the documentation of the [Ethereum Solidity interface](ethereum-solidity.md). It describes the functions that need to be implemented as well as the manifest file. Additionally read through the docstring of the [ISwapAdapter.sol](https://github.com/propeller-heads/propeller-venue-lib/blob/main/evm/src/interfaces/ISwapAdapter.sol) interface and the [ISwapAdapterTypes.sol](https://github.com/propeller-heads/propeller-venue-lib/blob/main/evm/src/interfaces/ISwapAdapterTypes.sol) interface which defines the data types and errors used by the adapter interface. You can also generate the documentation locally and the look at the generated documentation in the `./docs` folder:
 
 ```bash
 cd ./evm/
