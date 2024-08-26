@@ -28,7 +28,8 @@ errors, such as invalid parameter lengths or unknown pool types in the swap logi
 manage these approvals within the implementation to ensure smooth execution of the swap.
 5. **Token Transfer Support**: Ensure that the implementation supports transferring received tokens to a designated 
 receiver address, either within the swap function or through an additional transfer step.
-6. **Gas Efficiency**: Ensure the implementation is gas-efficient. Strive for optimal performance in the swap logic.
+6. **Gas Efficiency**: Ensure the implementation is gas-efficient. Strive for optimal performance in the swap logic. 
+The usage of assembly is not necessary.
 7. **Security Considerations**: Follow common security best practices, such as validating inputs, ensuring proper 
 access control, and safeguarding against reentrancy attacks.
 
@@ -36,4 +37,4 @@ access control, and safeguarding against reentrancy attacks.
 
 ## Example Implementation
 
-See the example implementation of a `SwapExecutor` for Balancer here (TODO: paste link)
+See the example implementation of a `SwapExecutor` for Balancer [here](../../evm/src/balancer-v2/BalancerSwapExecutor.sol).
