@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./SwapExecutorTest.sol";
+import "./SwapExecutor.t.sol";
 import "../src/balancer-v2/BalancerSwapExecutor.sol";
 
 contract TestBalancerSwapExecutor is SwapExecutorTest {
