@@ -36,6 +36,38 @@ class TychoDecoder(ABC):
         return component_id
 
 
+def handle_vm_updates(
+    block: EVMBlock,
+    account_updates: Union[
+        dict[dto.HexBytes, dto.AccountUpdate],
+        dict[dto.HexBytes, dto.ResponseAccount],
+    ],
+) -> list[AccountUpdate]:
+    vm_updates = []
+    for address, account_update in account_updates.items():
+        # collect contract updates to apply to simulation db
+        slots = {int(k): int(v) for k, v in account_update.slots.items()}
+        balance = account_update.balance
+        code = account_update.code
+
+        vm_updates.append(
+            AccountUpdate(
+                address=address.hex(),
+                chain=account_update.chain,
+                slots=slots,
+                balance=int(balance) if balance is not None else None,
+                code=bytearray(code) if code is not None else None,
+                change=account_update.change,
+            )
+        )
+    if vm_updates:
+        # apply updates to simulation db
+        db = TychoDBSingleton.get_instance()
+        block_header = BlockHeader(block.id, block.hash_, int(block.ts.timestamp()))
+        db.update(vm_updates, block_header)
+    return vm_updates
+
+
 class ThirdPartyPoolTychoDecoder(TychoDecoder):
     """ThirdPartyPool decoder for protocol messages from the Tycho feed"""
 
@@ -63,7 +95,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         self, snapshot: dto.Snapshot, block: EVMBlock
     ) -> dict[str, ThirdPartyPool]:
         pools = {}
-        self._handle_vm_updates(block, snapshot.vm_storage)
+        handle_vm_updates(block, snapshot.vm_storage)
         for snap in snapshot.states.values():
             try:
                 pool = self.decode_pool_state(snap, block)
@@ -102,16 +134,19 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         pool_id = component.id
         if "pool_id" in static_attributes:
             pool_id = static_attributes.pop("pool_id").decode("utf-8")
-        manual_updates = static_attributes.get("manual_updates", False)
+        manual_updates = static_attributes.get(
+            "manual_updates", HexBytes("0x00")
+        ) > HexBytes("0x00")
 
         if not manual_updates:
             # do not trigger pool updates on contract changes for exchanges configured to listen for manual updates
             for address in component.contract_ids:
                 self.contract_pools[address.hex()].append(pool_id)
+        self.component_pool_id[component.id] = pool_id
 
         return ThirdPartyPool(
             id_=pool_id,
-            tokens=tokens,
+            tokens=tuple(tokens),
             balances=balances,
             block=block,
             marginal_prices={},
@@ -173,7 +208,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         balance_updates = delta_msg.component_balances
 
         # Update contract changes
-        vm_updates = self._handle_vm_updates(block, account_updates)
+        vm_updates = handle_vm_updates(block, account_updates)
 
         # add affected pools to update list
         for account in vm_updates:
@@ -201,7 +236,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             pool_id = self.component_pool_id.get(component_id, component_id)
             pool = updated_pools.get(pool_id) or pools[pool_id]
 
-            attributes = pool_update.get("updated_attributes")
+            attributes = pool_update.updated_attributes
             if "balance_owner" in attributes:
                 pool.balance_owner = attributes["balance_owner"]
             # TODO: handle stateless_contracts updates
@@ -216,36 +251,3 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             updated_pools[pool_id] = pool
 
         return updated_pools
-
-    def _handle_vm_updates(
-        self,
-        block,
-        account_updates: Union[
-            dict[dto.HexBytes, dto.AccountUpdate],
-            dict[dto.HexBytes, dto.ResponseAccount],
-        ],
-    ) -> list[AccountUpdate]:
-        vm_updates = []
-        for address, account_update in account_updates.items():
-            # collect contract updates to apply to simulation db
-            slots = {int(k): int(v) for k, v in account_update.slots.items()}
-            balance = account_update.balance
-            code = account_update.code
-            change = account_update.change.value
-
-            vm_updates.append(
-                AccountUpdate(
-                    address=address.hex(),
-                    chain=account_update.chain,
-                    slots=slots,
-                    balance=int(balance) if balance is not None else None,
-                    code=bytearray(code) if code is not None else None,
-                    change=account_update.change,
-                )
-            )
-        if vm_updates:
-            # apply updates to simulation db
-            db = TychoDBSingleton.get_instance()
-            block_header = BlockHeader(block.id, block.hash_, int(block.ts.timestamp()))
-            db.update(vm_updates, block_header)
-        return vm_updates
