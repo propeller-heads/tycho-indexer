@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "protosim-py"
-version = "0.8.1"
+version = "0.9.0"
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
