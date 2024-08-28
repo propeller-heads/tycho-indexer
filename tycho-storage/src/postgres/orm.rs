@@ -26,7 +26,7 @@ use tycho_core::{
     models,
     models::{
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
-        StoreVal, TxHash,
+        PaginationParams, StoreVal, TxHash,
     },
     storage::{BlockIdentifier, StorageError},
     Bytes,
@@ -625,6 +625,7 @@ impl ProtocolState {
         component_ids: &[&str],
         chain_id: i64,
         version_ts: Option<NaiveDateTime>,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(Self, ComponentId)>> {
         let mut query = protocol_state::table
@@ -638,9 +639,16 @@ impl ProtocolState {
         if let Some(ts) = version_ts {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
+        query = query.order_by(protocol_component::external_id);
+
+        // Apply pagination if provided
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
+        }
 
         query
-            .order_by(protocol_component::external_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
             .await
@@ -659,6 +667,7 @@ impl ProtocolState {
         system: String,
         chain_id: i64,
         version_ts: Option<NaiveDateTime>,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(Self, ComponentId)>> {
         let mut query = protocol_state::table
@@ -677,8 +686,16 @@ impl ProtocolState {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
 
+        query = query.order_by(protocol_state::protocol_component_id);
+
+        // Apply pagination if provided
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
+        }
+
         query
-            .order_by(protocol_state::protocol_component_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
             .await
@@ -695,6 +712,7 @@ impl ProtocolState {
     pub async fn by_chain(
         chain_id: i64,
         version_ts: Option<NaiveDateTime>,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(Self, ComponentId)>> {
         let mut query = protocol_state::table
@@ -706,6 +724,13 @@ impl ProtocolState {
         // if a version timestamp is provided, we want to filter by valid_from <= version_ts
         if let Some(ts) = version_ts {
             query = query.filter(protocol_state::valid_from.le(ts));
+        }
+
+        query = query.order_by(protocol_state::protocol_component_id);
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
         }
 
         query

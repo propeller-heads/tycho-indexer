@@ -15,7 +15,7 @@ use tycho_core::{
     keccak256,
     models::{
         self, contract::AccountDelta, AccountToContractStore, Address, Balance, Chain, ChangeType,
-        Code, ContractId, ContractStore, StoreKey, StoreVal, TxHash,
+        Code, ContractId, ContractStore, PaginationParams, StoreKey, StoreVal, TxHash,
     },
     storage::{BlockOrTimestamp, StorageError, Version},
     Bytes,
@@ -281,13 +281,13 @@ impl PostgresGateway {
     /// Fetch deleted or created account deltas
     ///
     /// # Operations
-    ///   
+    ///
     /// 1. Going Forward (`start < target`):
     ///     - a) If an account was deleted, emit an empty delta with [ChangeType::Deletion].
     ///     - b) If an account was created, emit an already collected update delta but with
     ///       [ChangeType::Creation].. No need to fetch the state at the `target_version` as by
     ///       design we emit newly created contracts and their components when going forward.
-    ///  
+    ///
     /// 2. Going Backward (`target < start`):
     ///     - a) If an account was deleted, it restores the account. Therefore, it needs to retrieve
     ///       the account state at `target` and emits the account with [ChangeType::Creation].
@@ -301,7 +301,7 @@ impl PostgresGateway {
     ///     (1a & 2b)
     ///
     /// # Returns
-    ///     
+    ///
     /// The CreatedOrDeleted struct. It contains accounts that fall under 1a within it's created
     /// attribute. We can use this attribute to satisfy the first operation. It also contains new
     /// restored / deleted delta structs withing the `restored` attribute with which we can satisfy
@@ -396,7 +396,7 @@ impl PostgresGateway {
             // Restore full state delta at from target version for accounts that were deleted
             let version = Some(Version::from_ts(*target_version_ts));
             let restored: HashMap<Address, AccountDelta> = self
-                .get_contracts(chain, Some(&deleted_addresses), version.as_ref(), true, conn)
+                .get_contracts(chain, Some(&deleted_addresses), version.as_ref(), true, None, conn)
                 .await
                 .map_err(PostgresError::from)?
                 .into_iter()
@@ -783,6 +783,7 @@ impl PostgresGateway {
         ids: Option<&[Address]>,
         version: Option<&Version>,
         include_slots: bool,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<models::contract::Account>, StorageError> {
         let chain_db_id = self.get_chain_id(chain);
@@ -813,6 +814,14 @@ impl PostgresGateway {
             if let Some(contract_ids) = ids {
                 q = q.filter(address.eq_any(contract_ids));
             }
+
+            // Apply pagination if provided
+            if let Some(pagination) = pagination_params {
+                q = q
+                    .limit(pagination.page_size)
+                    .offset(pagination.offset());
+            }
+
             q.get_results::<(orm::Account, Option<Bytes>)>(conn)
                 .await
                 .map_err(PostgresError::from)?
@@ -1716,7 +1725,7 @@ mod test {
         let addresses = ids.as_deref();
 
         let results = gw
-            .get_contracts(&Chain::Ethereum, addresses, version.as_ref(), true, &mut conn)
+            .get_contracts(&Chain::Ethereum, addresses, version.as_ref(), true, None, &mut conn)
             .await
             .unwrap();
 

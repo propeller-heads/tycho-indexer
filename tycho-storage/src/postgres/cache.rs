@@ -706,13 +706,14 @@ impl ContractStateGateway for CachedGateway {
         addresses: Option<&[Address]>,
         version: Option<&Version>,
         include_slots: bool,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<Account>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_contracts(chain, addresses, version, include_slots, &mut conn)
+            .get_contracts(chain, addresses, version, include_slots, pagination_params, &mut conn)
             .await
     }
 
@@ -762,13 +763,14 @@ impl ProtocolGateway for CachedGateway {
         system: Option<String>,
         ids: Option<&[&str]>,
         min_tvl: Option<f64>,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<ProtocolComponent>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_protocol_components(chain, system, ids, min_tvl, &mut conn)
+            .get_protocol_components(chain, system, ids, min_tvl, pagination_params, &mut conn)
             .await
     }
 
@@ -827,13 +829,22 @@ impl ProtocolGateway for CachedGateway {
         system: Option<String>,
         id: Option<&[&str]>,
         retrieve_balances: bool,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<ProtocolComponentState>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_protocol_states(chain, at, system, id, retrieve_balances, &mut conn)
+            .get_protocol_states(
+                chain,
+                at,
+                system,
+                id,
+                retrieve_balances,
+                pagination_params,
+                &mut conn,
+            )
             .await
     }
 

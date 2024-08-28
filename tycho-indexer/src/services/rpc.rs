@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use actix_web::{web, HttpResponse};
 use anyhow::Error;
 use chrono::{Duration, Utc};
+use clap::builder::Str;
 use diesel_async::pooled_connection::deadpool;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -47,6 +48,9 @@ pub struct RpcHandler<G> {
     db_gateway: G,
     pending_deltas: PendingDeltas,
     token_cache: Arc<RwLock<Cache<String, dto::TokensRequestResponse>>>,
+    contract_state_cache: Arc<RwLock<Cache<String, dto::StateRequestResponse>>>,
+    protocol_state_cache: Arc<RwLock<Cache<String, dto::ProtocolStateRequestResponse>>>,
+    protocol_components_cache: Arc<RwLock<Cache<String, dto::ProtocolComponentRequestResponse>>>,
 }
 
 impl<G> RpcHandler<G>
@@ -59,7 +63,30 @@ where
             .time_to_live(std::time::Duration::from_secs(7 * 60))
             .build();
 
-        Self { db_gateway, pending_deltas, token_cache: Arc::new(RwLock::new(token_cache)) }
+        // TODO: Remember to invalidate the cache whenever the db is updated
+        let contract_state_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(7 * 60))
+            .build();
+
+        let protocol_state_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(7 * 60))
+            .build();
+
+        let protocol_components_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(7 * 60))
+            .build();
+
+        Self {
+            db_gateway,
+            pending_deltas,
+            token_cache: Arc::new(RwLock::new(token_cache)),
+            contract_state_cache: Arc::new(RwLock::new(contract_state_cache)),
+            protocol_state_cache: Arc::new(RwLock::new(protocol_state_cache)),
+            protocol_components_cache: Arc::new(RwLock::new(protocol_components_cache)),
+        }
     }
 
     #[instrument(skip(self, request))]
@@ -82,6 +109,8 @@ where
             .calculate_versions(&at, &request.protocol_system.clone(), chain)
             .await?;
 
+        let pagination_parameters: PaginationParams = (&request.pagination).into();
+
         // Get the contract IDs from the request
         let addresses = request.contract_ids.clone();
         debug!(?addresses, "Getting contract states.");
@@ -90,7 +119,7 @@ where
         // Get the contract states from the database
         let mut accounts = self
             .db_gateway
-            .get_contracts(&chain, addresses, Some(&db_version), true)
+            .get_contracts(&chain, addresses, Some(&db_version), true, Some(&pagination_parameters))
             .await
             .map_err(|err| {
                 error!(error = %err, "Error while getting contract states.");
@@ -106,6 +135,7 @@ where
                 .into_iter()
                 .map(dto::ResponseAccount::from)
                 .collect(),
+            request.pagination.clone(),
         ))
     }
 
@@ -208,6 +238,8 @@ where
             .calculate_versions(&at, &request.protocol_system.clone(), chain)
             .await?;
 
+        let pagination_parameters: PaginationParams = (&request.pagination).into();
+
         // Get the protocol IDs from the request
         let protocol_ids: Option<Vec<dto::ProtocolId>> = request.protocol_ids.clone();
         let ids: Option<Vec<&str>> = protocol_ids.as_ref().map(|ids| {
@@ -227,6 +259,7 @@ where
                 request.protocol_system.clone(),
                 ids,
                 request.include_balances,
+                Some(&pagination_parameters),
             )
             .await
             .map_err(|err| {
@@ -245,6 +278,7 @@ where
                 .into_iter()
                 .map(dto::ResponseProtocolState::from)
                 .collect(),
+            request.pagination.clone(),
         ))
     }
 
@@ -255,6 +289,7 @@ where
         info!(?request, "Getting tokens.");
 
         let cache_key = format!("{:?}", request);
+        let mut cache_entry_count: u64 = 0;
 
         // Cache entry count is only used for logging purposes
         #[allow(unused_assignments)]
@@ -360,6 +395,8 @@ where
         request: &dto::ProtocolComponentsRequestBody,
     ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
         let system = request.protocol_system.clone();
+        let pagination_parameters: PaginationParams = (&request.pagination).into();
+
         let ids_strs: Option<Vec<&str>> = request
             .component_ids
             .as_ref()
@@ -384,13 +421,19 @@ where
                     .map(dto::ProtocolComponent::from)
                     .collect::<Vec<dto::ProtocolComponent>>();
 
-                return Ok(dto::ProtocolComponentRequestResponse::new(response_components));
+                return Ok(dto::ProtocolComponentRequestResponse::new(response_components, request.pagination.clone()));
             }
         }
 
         match self
             .db_gateway
-            .get_protocol_components(&request.chain.into(), system, ids_slice, request.tvl_gt)
+            .get_protocol_components(
+                &request.chain.into(),
+                system,
+                ids_slice,
+                request.tvl_gt,
+                Some(&pagination_parameters),
+            )
             .await
         {
             Ok(comps) => {
@@ -399,7 +442,10 @@ where
                     .into_iter()
                     .map(dto::ProtocolComponent::from)
                     .collect::<Vec<dto::ProtocolComponent>>();
-                Ok(dto::ProtocolComponentRequestResponse::new(response_components))
+                Ok(dto::ProtocolComponentRequestResponse::new(
+                    response_components,
+                    request.pagination.clone(),
+                ))
             }
             Err(err) => {
                 error!(error = %err, "Error while getting protocol components.");
@@ -710,7 +756,7 @@ pub async fn protocol_state<G: Gateway>(
 /// This endpoint is used to check the health of the service.
 #[utoipa::path(
     get,
-    path="/v1/health",
+    path = "/v1/health",
     responses(
         (status = 200, description = "OK", body=Health),
     ),
@@ -812,6 +858,7 @@ mod tests {
             protocol_system: None,
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
             chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::default(),
         };
 
         let time_difference = expected
@@ -870,6 +917,7 @@ mod tests {
             protocol_system: None,
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
             chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::default(),
         };
         let state = req_handler
             .get_contract_state_inner(&request)
@@ -893,6 +941,7 @@ mod tests {
             protocol_system: None,
             version: dto::VersionParam::default(),
             chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::default(),
         };
 
         // Serialize the request body to JSON
@@ -975,6 +1024,7 @@ mod tests {
             chain: dto::Chain::Ethereum,
             include_balances: true,
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
+            pagination: dto::PaginationParams::default(),
         };
         let res = req_handler
             .get_protocol_state_inner(&request)
@@ -986,7 +1036,7 @@ mod tests {
     }
 
     fn protocol_attributes<'a>(
-        data: impl IntoIterator<Item = (&'a str, i32)>,
+        data: impl IntoIterator<Item=(&'a str, i32)>,
     ) -> HashMap<String, Bytes> {
         data.into_iter()
             .map(|(s, v)| (s.to_owned(), Bytes::from(u32::try_from(v).unwrap()).lpad(32, 0)))

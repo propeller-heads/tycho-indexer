@@ -136,6 +136,7 @@ impl PostgresGateway {
         system: Option<String>,
         ids: Option<&[&str]>,
         min_tvl: Option<f64>,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<models::protocol::ProtocolComponent>, StorageError> {
         use super::schema::{protocol_component::dsl::*, transaction::dsl::*};
@@ -180,6 +181,13 @@ impl PostgresGateway {
 
         if let Some(thr) = min_tvl {
             query = query.filter(schema::component_tvl::tvl.gt(thr));
+        }
+
+        // Apply optional pagination when loading protocol components to ensure consistency
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
         }
 
         let orm_protocol_components = query
@@ -640,6 +648,7 @@ impl PostgresGateway {
         system: Option<String>,
         ids: Option<&[&str]>,
         retrieve_balances: bool,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError> {
         let chain_db_id = self.get_chain_id(chain);
@@ -660,13 +669,21 @@ impl PostgresGateway {
                 warn!("Both protocol IDs and system were provided. System will be ignored.");
                 self._decode_protocol_states(
                     balances,
-                    orm::ProtocolState::by_id(ids, chain_db_id, version_ts, conn).await,
+                    orm::ProtocolState::by_id(
+                        ids,
+                        chain_db_id,
+                        version_ts,
+                        pagination_params,
+                        conn,
+                    )
+                    .await,
                     ids.join(",").as_str(),
                 )
             }
             (Some(ids), _) => self._decode_protocol_states(
                 balances,
-                orm::ProtocolState::by_id(ids, chain_db_id, version_ts, conn).await,
+                orm::ProtocolState::by_id(ids, chain_db_id, version_ts, pagination_params, conn)
+                    .await,
                 ids.join(",").as_str(),
             ),
             (_, Some(system)) => self._decode_protocol_states(
@@ -675,6 +692,7 @@ impl PostgresGateway {
                     system.clone(),
                     chain_db_id,
                     version_ts,
+                    pagination_params,
                     conn,
                 )
                 .await,
@@ -682,7 +700,8 @@ impl PostgresGateway {
             ),
             _ => self._decode_protocol_states(
                 balances,
-                orm::ProtocolState::by_chain(chain_db_id, version_ts, conn).await,
+                orm::ProtocolState::by_chain(chain_db_id, version_ts, pagination_params, conn)
+                    .await,
                 chain.to_string().as_str(),
             ),
         }
@@ -855,10 +874,9 @@ impl PostgresGateway {
         }
 
         if let Some(pagination) = pagination_params {
-            let offset = pagination.page * pagination.page_size;
             query = query
                 .limit(pagination.page_size)
-                .offset(offset);
+                .offset(pagination.offset());
         }
 
         let results = query

@@ -79,7 +79,7 @@ async fn analyze_batch(
         .map(|(cid, _)| cid.as_str())
         .collect::<Vec<_>>();
     let components = gw
-        .get_protocol_components(&chain, None, Some(&component_ids), None)
+        .get_protocol_components(&chain, None, Some(&component_ids), None, None)
         .await?
         .into_iter()
         .map(|pc| (pc.id.clone(), pc))

@@ -1231,7 +1231,7 @@ impl HybridGateway for HybridPgGateway {
         component_ids: &[models::Address],
     ) -> Result<Vec<Account>, StorageError> {
         self.state_gateway
-            .get_contracts(&self.chain, Some(component_ids), None, true)
+            .get_contracts(&self.chain, Some(component_ids), None, true, None)
             .await
     }
 
@@ -2168,6 +2168,7 @@ mod test_serial_db {
                     None,
                     Some([NATIVE_CREATED_CONTRACT].as_slice()),
                     None,
+                    None,
                 )
                 .await
                 .expect("test successfully inserted native contract");
@@ -2206,7 +2207,7 @@ mod test_serial_db {
             assert_eq!(tokens.len(), 2);
 
             let protocol_components = cached_gw
-                .get_protocol_components(&Chain::Ethereum, None, None, None)
+                .get_protocol_components(&Chain::Ethereum, None, None, None, None)
                 .await
                 .unwrap();
             assert_eq!(protocol_components.len(), 1);

@@ -205,6 +205,10 @@ impl PaginationParams {
     pub fn new(page: i64, page_size: i64) -> Self {
         Self { page, page_size }
     }
+
+    pub fn offset(&self) -> i64 {
+        self.page * self.page_size
+    }
 }
 
 impl From<&dto::PaginationParams> for PaginationParams {

@@ -93,7 +93,7 @@ impl ProtocolMemoryCache {
         {
             let mut cached_components = self.components.write().await;
             self.gateway
-                .get_protocol_components(&self.chain, None, None, None)
+                .get_protocol_components(&self.chain, None, None, None, None)
                 .await?
                 .into_iter()
                 .for_each(|pc| {
@@ -231,6 +231,7 @@ impl ProtocolDataCache for ProtocolMemoryCache {
                             .map(|id| id.as_str())
                             .collect::<Vec<_>>(),
                     ),
+                    None,
                     None,
                 )
                 .await?

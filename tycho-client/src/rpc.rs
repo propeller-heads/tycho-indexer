@@ -4,7 +4,7 @@
 //! Call (RPC) endpoints of Tycho. These endpoints are chiefly responsible for facilitating data
 //! queries, especially querying snapshots of data.
 //!
-//! Currently we provide only a HTTP implementation.
+//! Currently, we provide only a HTTP implementation.
 use hyper::{client::HttpConnector, Body, Client, Request, Uri};
 #[cfg(test)]
 use mockall::automock;
@@ -77,11 +77,15 @@ pub trait RPCClient {
         let chunked_bodies = ids
             .chunks(chunk_size)
             .map(|c| ProtocolStateRequestBody {
-                protocol_ids: Some(c.to_vec()),
+                protocol_ids: Some(ids.to_vec()),
                 protocol_system: protocol_system.clone(),
                 chain,
                 include_balances,
                 version: version.clone(),
+                pagination: PaginationParams {
+                    page: 0,
+                    page_size: chunk_size as i64
+                },
             })
             .collect::<Vec<_>>();
 
@@ -104,6 +108,11 @@ pub trait RPCClient {
                     .into_iter()
                     .flat_map(|r| r.states.into_iter())
                     .collect(),
+                // TODO: Should use the response from the task
+                pagination: PaginationParams {
+                    page: 0,
+                    page_size: chunk_size as i64,
+                },
             })
     }
 
@@ -218,7 +227,7 @@ impl RPCClient for HttpRPCClient {
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         if body.is_empty() {
             // Pure native protocols will return empty contract states
-            return Ok(StateRequestResponse { accounts: vec![] });
+            return Ok(StateRequestResponse { accounts: vec![], pagination: Default::default() });
         }
         let accounts: StateRequestResponse =
             serde_json::from_slice(&body).map_err(|e| RPCError::ParseResponse(e.to_string()))?;
@@ -315,7 +324,7 @@ impl RPCClient for HttpRPCClient {
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         if body.is_empty() {
             // Pure VM protocols will return empty states
-            return Ok(ProtocolStateRequestResponse { states: vec![] });
+            return Ok(ProtocolStateRequestResponse { states: vec![], pagination: Default::default() });
         }
         let states: ProtocolStateRequestResponse =
             serde_json::from_slice(&body).map_err(|e| RPCError::ParseResponse(e.to_string()))?;

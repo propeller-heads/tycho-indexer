@@ -197,7 +197,9 @@ impl TryFrom<&dto::VersionParam> for BlockOrTimestamp {
                         BlockIdentifier::Number((Chain::from(*chain), *number))
                     }
                     _ => {
-                        return Err(anyhow::format_err!("Insufficient block information".to_owned()))
+                        return Err(
+                            anyhow::format_err!("Insufficient block information".to_owned()),
+                        )
                     }
                 };
                 Ok(BlockOrTimestamp::Block(block_identifier))
@@ -270,6 +272,7 @@ pub trait ProtocolGateway {
         system: Option<String>,
         ids: Option<&[&str]>,
         min_tvl: Option<f64>,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<models::protocol::ProtocolComponent>, StorageError>;
 
     /// Retrieves owners of tokens
@@ -336,6 +339,7 @@ pub trait ProtocolGateway {
         system: Option<String>,
         id: Option<&[&str]>,
         retrieve_balances: bool,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError>;
 
     async fn update_protocol_states(
@@ -505,6 +509,7 @@ pub trait ContractStateGateway {
         addresses: Option<&[Address]>,
         version: Option<&Version>,
         include_slots: bool,
+        pagination_params: Option<&PaginationParams>,
     ) -> Result<Vec<models::contract::Account>, StorageError>;
 
     /// Inserts a new contract into the database.
