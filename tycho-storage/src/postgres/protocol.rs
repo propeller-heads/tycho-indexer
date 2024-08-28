@@ -1539,8 +1539,8 @@ impl PostgresGateway {
 
                 // Iterate over states until the component_id no longer matches the current
                 // component id
-                while updates_index < state_updates.len() &&
-                    &state_updates[updates_index].1 == current_component_id
+                while updates_index < state_updates.len()
+                    && &state_updates[updates_index].1 == current_component_id
                 {
                     updates_index += 1;
                 }
@@ -1548,8 +1548,8 @@ impl PostgresGateway {
                 let deleted_start = deletes_index;
                 // Iterate over deleted attributes until the component_id no longer matches the
                 // current component id
-                while deletes_index < deleted_attrs.len() &&
-                    &deleted_attrs[deletes_index].0 == current_component_id
+                while deletes_index < deleted_attrs.len()
+                    && &deleted_attrs[deletes_index].0 == current_component_id
                 {
                     deletes_index += 1;
                 }

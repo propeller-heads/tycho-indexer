@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use actix_web::{web, HttpResponse};
 use anyhow::Error;
 use chrono::{Duration, Utc};
+use clap::builder::Str;
 use diesel_async::pooled_connection::deadpool;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -47,6 +48,9 @@ pub struct RpcHandler<G> {
     db_gateway: G,
     pending_deltas: Arc<dyn PendingDeltasBuffer + Send + Sync>,
     token_cache: Arc<RwLock<Cache<String, dto::TokensRequestResponse>>>,
+    contract_state_cache: Arc<RwLock<Cache<String, dto::StateRequestResponse>>>,
+    protocol_state_cache: Arc<RwLock<Cache<String, dto::ProtocolStateRequestResponse>>>,
+    protocol_components_cache: Arc<RwLock<Cache<String, dto::ProtocolComponentRequestResponse>>>,
 }
 
 impl<G> RpcHandler<G>
@@ -59,7 +63,30 @@ where
             .time_to_live(std::time::Duration::from_secs(7 * 60))
             .build();
 
-        Self { db_gateway, pending_deltas, token_cache: Arc::new(RwLock::new(token_cache)) }
+        // TODO: Remember to invalidate the cache whenever the db is updated
+        let contract_state_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(7 * 60))
+            .build();
+
+        let protocol_state_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(7 * 60))
+            .build();
+
+        let protocol_components_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(7 * 60))
+            .build();
+
+        Self {
+            db_gateway,
+            pending_deltas,
+            token_cache: Arc::new(RwLock::new(token_cache)),
+            contract_state_cache: Arc::new(RwLock::new(contract_state_cache)),
+            protocol_state_cache: Arc::new(RwLock::new(protocol_state_cache)),
+            protocol_components_cache: Arc::new(RwLock::new(protocol_components_cache)),
+        }
     }
 
     #[instrument(skip(self, request))]
@@ -313,6 +340,7 @@ where
         info!(?request, "Getting tokens.");
 
         let cache_key = format!("{:?}", request);
+        let mut cache_entry_count: u64 = 0;
 
         // Cache entry count is only used for logging purposes
         #[allow(unused_assignments)]
@@ -985,8 +1013,8 @@ mod tests {
             .version
             .timestamp
             .unwrap()
-            .timestamp_millis() -
-            result
+            .timestamp_millis()
+            - result
                 .version
                 .timestamp
                 .unwrap()

@@ -664,6 +664,14 @@ impl ProtocolState {
         if let Some(ts) = version_ts {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
+        query = query.order_by(protocol_component::external_id);
+
+        // Apply pagination if provided
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
+        }
 
         // Fetch the results
         let res = query
@@ -733,6 +741,15 @@ impl ProtocolState {
         // Apply additional filtering by timestamp if provided
         if let Some(ts) = version_ts {
             query = query.filter(protocol_state::valid_from.le(ts));
+        }
+
+        query = query.order_by(protocol_state::protocol_component_id);
+
+        // Apply pagination if provided
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
         }
 
         // Fetch the results

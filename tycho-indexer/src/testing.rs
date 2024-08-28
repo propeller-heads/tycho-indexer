@@ -7,6 +7,7 @@ use chrono::NaiveDateTime;
 use mockall::mock;
 
 use tycho_core::{
+    models,
     models::{
         blockchain::{Block, Transaction},
         contract::{Account, AccountDelta},
