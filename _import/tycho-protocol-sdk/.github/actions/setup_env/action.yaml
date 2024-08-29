@@ -1,0 +1,32 @@
+name: Setup/Cache Env
+description: 'Sets up and caches a python env. Will only install dependencies if no cache was hit.'
+
+runs:
+    using: composite
+    steps:
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.9"
+
+    - name: Cache Env
+      uses: actions/cache@v3
+      id: env-cache
+      with:
+        path: ${{ env.pythonLocation }}
+        key: ${{ env.pythonLocation }}-${{ hashFiles('./requirements/requirements_dev.txt') }}-${{ hashFiles('./requirements/requirements_data.txt') }}-${{ hashFiles('./requirements/requirements_api.txt') }}-${{ hashFiles('./requirements/requirements.txt') }}-${{ hashFiles('./requirements/requirements_internal.txt') }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4.0.1
+      with:
+        role-to-assume: arn:aws:iam::827659017777:role/github-actions
+        audience: sts.amazonaws.com
+        aws-region: eu-central-1
+
+    - name: Install Dependencies
+      if: ${{ steps.env-cache.outputs.cache-hit != 'true' }}
+      run: |
+        aws codeartifact login --tool pip --domain propeller --domain-owner 827659017777 --repository protosim
+        python -m pip install --upgrade pip
+        pip install -r propeller-swap-encoders/requirements.txt
+      shell: bash

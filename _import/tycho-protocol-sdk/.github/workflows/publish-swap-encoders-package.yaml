@@ -1,0 +1,29 @@
+name: Publish Propeller Swap Encoders Python Packages to AWS CodeArtifact
+
+on:
+  release:
+    types:
+      - prereleased
+      - released
+  workflow_dispatch: { }
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish_propeller_solver_core:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      package_root: "propeller-solver-core"
+
+  publish_propeller_swap_encoders:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      package_root: "propeller-swap-encoders"

@@ -7,13 +7,17 @@ It allows for flexible interaction by accepting either the amount of the input t
 as parameters, returning the corresponding swapped amount. 
 This interface is essential for creating a `SwapExecutor` specific to a protocol.
 
+The `SwapExecutor` works in conjunction with the `SwapStructEncoder`, which encodes the necessary data required for the swap. 
+This encoded data is passed to the `SwapExecutor`, enabling it to perform the swap according to the protocol's specific logic.
+
 ## Key Methods
 
 - **swap(uint256 givenAmount, bytes calldata data)**
   - **Purpose**: To perform a token swap, either specifying the input amount to get the output amount or vice versa.
   - **Parameters**:
     - `givenAmount`: The amount of the token (input or output) for the swap.
-    - `data`: Encoded information necessary for the swap (e.g., pool address, token addresses - depends on the protocol).
+    - `data`: Encoded information necessary for the swap (e.g., pool address, token addresses - depends on the protocol), 
+provided by the `SwapStructEncoder`.
   - **Returns**: The amount of the token swapped.
 
 ## Implementation Steps
