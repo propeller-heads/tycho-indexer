@@ -14,7 +14,7 @@ runs:
       id: env-cache
       with:
         path: ${{ env.pythonLocation }}
-        key: ${{ env.pythonLocation }}-${{ hashFiles('./requirements/requirements_dev.txt') }}-${{ hashFiles('./requirements/requirements_data.txt') }}-${{ hashFiles('./requirements/requirements_api.txt') }}-${{ hashFiles('./requirements/requirements.txt') }}-${{ hashFiles('./requirements/requirements_internal.txt') }}
+        key: ${{ env.pythonLocation }}-${{ hashFiles('./propeller-swap-encoders/requirements.txt') }}
 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4.0.1
@@ -28,5 +28,5 @@ runs:
       run: |
         aws codeartifact login --tool pip --domain propeller --domain-owner 827659017777 --repository protosim
         python -m pip install --upgrade pip
-        pip install -r propeller-swap-encoders/requirements.txt
+        pip install -r propeller-swap-encoders/requirements.txt --no-cache
       shell: bash

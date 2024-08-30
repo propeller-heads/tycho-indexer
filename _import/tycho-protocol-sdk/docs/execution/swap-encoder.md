@@ -31,16 +31,59 @@ class SwapStructEncoder(ABC):
 
     @abstractmethod
     def encode_swap_struct(
-        self, swap: dict[str, Any], receiver: Address, **kwargs
+        self, swap: dict[str, Any], receiver: Address, encoding_context: EncodingContext
     ) -> bytes:
+        """
+        Parameters:
+        ----------
+        swap
+            The swap to encode
+        receiver
+            The receiver of the buy token
+        encoding_context
+            Additional context information necessary for encoding
+        """
         pass
 ```
 
 - **encode_swap_struct**
   - **Purpose**: To encode the swap details into a bytes object that the SwapExecutor can use to execute the swap.
   - **Parameters**:
-    - `swap`: A dictionary containing the swap details, such as input/output token addresses, amounts, and pool information.
+    - `swap`: A dictionary containing the swap details. These are the fields present in this dict:
+      - `pool_id: str`: The identifier for the liquidity pool where the swap will occur.
+      - `sell_token: EthereumToken`: The token that will be sold in the swap (e.g., DAI).
+      - `buy_token: EthereumToken`: The token that will be bought in the swap (e.g., WETH).
+      - `split: float`: Indicates how the swap should be split between pools (often set to 0).
+      - `sell_amount: int`: The amount of the sell token to be used in the swap.
+      - `buy_amount: int`: The amount of the buy token to be received from the swap.
+      - `token_approval_needed: bool`: A boolean indicating if token approval is needed before the swap.
+      - `pool_tokens`: An optional tuple containing additional token data specific to the pool.
+      - `pool_type: str`: The type of pool where the swap will be executed (e.g., "BalancerStablePoolState").
     - `receiver`: The address that will receive the output tokens from the swap.
+    - `encoding_context`: Additional context information necessary for encoding.
+    ```python
+    class EncodingContext(DefibotBaseModel):
+        exact_out: Optional[bool] = None
+        """Whether the amount encoded is the exact amount out"""
+    
+        in_transfer: bool = False
+        """Whether we need to transfer to the pool"""
+    
+        payment: bool = False
+        """Whether this is a payment (if so the pool will use transferFrom(msg.sender, ..))"""
+    
+        supply_owed_action_data: bytes = b""
+        """Actions to perform with the owed amount using the USV3 callback."""
+    
+        forward_received_action_data: bytes = b""
+        """Actions to perform with the received amount using the USV3 callback."""
+    
+        supply_owed_action_type: BatchRouterActionType = BatchRouterActionType.TRANSFER
+        """The action kind to take with the owed amount"""
+    
+        forward_received_action_type: BatchRouterActionType = BatchRouterActionType.SWAP
+        """The action kind to take with the received amount"""
+    ```
     - `**kwargs`: Any additional protocol-specific parameters that need to be included in the encoding.
   - **Returns**: A bytes object containing the encoded swap data.
 

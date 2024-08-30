@@ -1,5 +1,6 @@
 from core.models.evm.ethereum_token import EthereumToken
 from propeller_swap_encoders.balancer import BalancerSwapStructEncoder
+from core.encoding.interface import EncodingContext
 
 
 def test_encode_balancer():
@@ -29,7 +30,9 @@ def test_encode_balancer():
         "pool_fee": None,
     }
     balancer_encoder = BalancerSwapStructEncoder()
-    encoded = balancer_encoder.encode_swap_struct(swap, receiver=bob, exact_out=False)
+    encoded = balancer_encoder.encode_swap_struct(
+        swap, receiver=bob, encoding_context=EncodingContext(exact_out=False)
+    )
     assert (
         encoded.hex()
         ==
