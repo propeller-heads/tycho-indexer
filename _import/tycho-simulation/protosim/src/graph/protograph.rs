@@ -1033,8 +1033,8 @@ mod tests {
     }
 
     fn make_pair(pair: &str, t0: &str, t1: &str, r0: u64, r1: u64) -> Pair {
-        let t0 = ERC20Token::new(t0, 3, "T0");
-        let t1 = ERC20Token::new(t1, 3, "T1");
+        let t0 = ERC20Token::new(t0, 3, "T0", U256::from(10_000));
+        let t1 = ERC20Token::new(t1, 3, "T1", U256::from(10_000));
         let props = ProtocolComponent::new(H160::from_str(pair).unwrap(), vec![t0, t1]);
         let state = UniswapV2State::new(U256::from(r0), U256::from(r1)).into();
         Pair(props, state)

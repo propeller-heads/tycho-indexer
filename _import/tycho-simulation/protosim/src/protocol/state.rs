@@ -28,8 +28,8 @@
 //!     U256::from_dec_str("36925554990922").unwrap(),
 //!     U256::from_dec_str("30314846538607556521556").unwrap(),
 //! ).into();
-//! let usdc = ERC20Token::new("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC");
-//! let weth = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ", 18, "WETH");
+//! let usdc = ERC20Token::new("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", U256::from(10_000));
+//! let weth = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ", 18, "WETH", U256::from(10_000));
 //!
 //! let out = state.get_amount_out(weth.one(), &weth, &usdc).unwrap().amount;
 //! assert_eq!(state.spot_price(&weth, &usdc), 1218.0683462769755f64);

@@ -408,8 +408,18 @@ mod tests {
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {
-        let token_x = ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "X");
-        let token_y = ERC20Token::new("0xf1ca9cb74685755965c7458528a36934df52a3ef", 18, "Y");
+        let token_x = ERC20Token::new(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            18,
+            "X",
+            U256::from(10_000),
+        );
+        let token_y = ERC20Token::new(
+            "0xf1ca9cb74685755965c7458528a36934df52a3ef",
+            18,
+            "Y",
+            U256::from(10_000),
+        );
 
         let pool = UniswapV3State::new(
             8330443394424070888454257,
@@ -436,8 +446,18 @@ mod tests {
 
     #[test]
     fn test_get_amount_out() {
-        let wbtc = ERC20Token::new("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", 8, "WBTC");
-        let weth = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH");
+        let wbtc = ERC20Token::new(
+            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            8,
+            "WBTC",
+            U256::from(10_000),
+        );
+        let weth = ERC20Token::new(
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            18,
+            "WETH",
+            U256::from(10_000),
+        );
         let pool = UniswapV3State::new(
             377952820878029838,
             U256::from_dec_str("28437325270877025820973479874632004").unwrap(),
@@ -523,8 +543,18 @@ mod tests {
 
     #[test]
     fn test_err_with_partial_trade() {
-        let dai = ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI");
-        let usdc = ERC20Token::new("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, "USDC");
+        let dai = ERC20Token::new(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            18,
+            "DAI",
+            U256::from(10_000),
+        );
+        let usdc = ERC20Token::new(
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            6,
+            "USDC",
+            U256::from(10_000),
+        );
         let pool = UniswapV3State::new(
             73015811375239994,
             U256::from_dec_str("148273042406850898575413").unwrap(),
