@@ -80,8 +80,12 @@ impl TryFrom<ResponseToken> for ERC20Token {
             gas: U256::from(
                 value
                     .gas
-                    .first()
-                    .and_then(|opt| *opt)
+                    .into_iter()
+                    .filter_map(|opt| opt)
+                    .collect::<Vec<u64>>()
+                    .iter()
+                    .min()
+                    .copied()
                     .expect("Expected a value in gas"),
             ),
         })
