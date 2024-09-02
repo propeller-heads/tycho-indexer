@@ -30,7 +30,7 @@ For indexing purposes, it is required that you provide a [substreams](https://su
 
 For execution purposes, the implementation of the `SwapExecutor` and `SwapStructEncoder` interfaces is required. Without these components, trades cannot be executed on-chain, making them critical parts of the integration.
 
-**SwapExecutor**: The SwapExecutor is responsible for performing swaps by interacting with the underlying liquidity pools, handling token approvals, managing input/output amounts, and ensuring gas-efficient and secure execution. Each protocol must implement its own `SwapExecutor`, tailored to its specific logic and requirements.
+**SwapExecutor**: The SwapExecutor is responsible for performing swaps by interacting with the underlying liquidity pools, handling token approvals, managing input/output amounts, and ensuring gas-efficient and secure execution. Each protocol must implement its own `SwapExecutor` (Solidity contract), tailored to its specific logic and requirements.
 
-**SwapStructEncoder**: The `SwapStructEncoder` encodes the necessary data structures required for the `SwapExecutor` to perform swaps. It ensures that the swap details, including input/output tokens, pool addresses, and other protocol-specific parameters, are correctly formatted and encoded before being passed to the `SwapExecutor`. Each protocol must implement its own `SwapStructEncoder` and ensure compatibility with its `SwapExecutor`.
+**SwapStructEncoder**: The `SwapStructEncoder` encodes the necessary data structures required for the `SwapExecutor` to perform swaps. It ensures that the swap details, including input/output tokens, pool addresses, and other protocol-specific parameters, are correctly formatted and encoded before being passed to the `SwapExecutor`. Each protocol must implement its own `SwapStructEncoder` Python class and ensure compatibility with its `SwapExecutor`.
 

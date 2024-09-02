@@ -21,30 +21,7 @@ from core.encoding.interface import SwapStructEncoder
 
 ## Key Methods
 
-This is the `SwapStructEncoder` interface:
-
-```python
-class SwapStructEncoder(ABC):
-    """Encodes a PercentageSwap of a certain protocol to be used in our SwapRouterV2
-    Should be subclassed for each protocol that we support.
-    """
-
-    @abstractmethod
-    def encode_swap_struct(
-        self, swap: dict[str, Any], receiver: Address, encoding_context: EncodingContext
-    ) -> bytes:
-        """
-        Parameters:
-        ----------
-        swap
-            The swap to encode
-        receiver
-            The receiver of the buy token
-        encoding_context
-            Additional context information necessary for encoding
-        """
-        pass
-```
+This is the `SwapStructEncoder` interface can be found [here](https://github.com/propeller-heads/defibot/blob/7ea38b92e60e182471f513c2aeef0370c4b3766a/propeller-solver-core/core/encoding/interface.py#L31).
 
 - **encode_swap_struct**
   - **Purpose**: To encode the swap details into a bytes object that the SwapExecutor can use to execute the swap.
@@ -60,30 +37,7 @@ class SwapStructEncoder(ABC):
       - `pool_tokens`: An optional tuple containing additional token data specific to the pool.
       - `pool_type: str`: The type of pool where the swap will be executed (e.g., "BalancerStablePoolState").
     - `receiver`: The address that will receive the output tokens from the swap.
-    - `encoding_context`: Additional context information necessary for encoding.
-    ```python
-    class EncodingContext(DefibotBaseModel):
-        exact_out: Optional[bool] = None
-        """Whether the amount encoded is the exact amount out"""
-    
-        in_transfer: bool = False
-        """Whether we need to transfer to the pool"""
-    
-        payment: bool = False
-        """Whether this is a payment (if so the pool will use transferFrom(msg.sender, ..))"""
-    
-        supply_owed_action_data: bytes = b""
-        """Actions to perform with the owed amount using the USV3 callback."""
-    
-        forward_received_action_data: bytes = b""
-        """Actions to perform with the received amount using the USV3 callback."""
-    
-        supply_owed_action_type: BatchRouterActionType = BatchRouterActionType.TRANSFER
-        """The action kind to take with the owed amount"""
-    
-        forward_received_action_type: BatchRouterActionType = BatchRouterActionType.SWAP
-        """The action kind to take with the received amount"""
-    ```
+    - `encoding_context`: Additional context information necessary for encoding (see more [here](https://github.com/propeller-heads/defibot/blob/7ea38b92e60e182471f513c2aeef0370c4b3766a/propeller-solver-core/core/encoding/interface.py#L9))
     - `**kwargs`: Any additional protocol-specific parameters that need to be included in the encoding.
   - **Returns**: A bytes object containing the encoded swap data.
 
