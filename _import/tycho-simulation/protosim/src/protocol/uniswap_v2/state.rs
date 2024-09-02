@@ -198,8 +198,18 @@ mod tests {
         #[case] amount_in: U256,
         #[case] exp: U256,
     ) {
-        let t0 = ERC20Token::new("0x0000000000000000000000000000000000000000", t0d, "T0");
-        let t1 = ERC20Token::new("0x0000000000000000000000000000000000000001", t1d, "T0");
+        let t0 = ERC20Token::new(
+            "0x0000000000000000000000000000000000000000",
+            t0d,
+            "T0",
+            U256::from(10_000),
+        );
+        let t1 = ERC20Token::new(
+            "0x0000000000000000000000000000000000000001",
+            t1d,
+            "T0",
+            U256::from(10_000),
+        );
         let state = UniswapV2State::new(r0, r1);
 
         let res = state
@@ -216,8 +226,18 @@ mod tests {
         let amount_in = U256::max_value();
         let t0d = 18;
         let t1d = 16;
-        let t0 = ERC20Token::new("0x0000000000000000000000000000000000000000", t0d, "T0");
-        let t1 = ERC20Token::new("0x0000000000000000000000000000000000000001", t1d, "T0");
+        let t0 = ERC20Token::new(
+            "0x0000000000000000000000000000000000000000",
+            t0d,
+            "T0",
+            U256::from(10_000),
+        );
+        let t1 = ERC20Token::new(
+            "0x0000000000000000000000000000000000000001",
+            t1d,
+            "T0",
+            U256::from(10_000),
+        );
         let state = UniswapV2State::new(r0, r1);
 
         let res = state.get_amount_out(amount_in, &t0, &t1);
@@ -230,8 +250,18 @@ mod tests {
     #[case(false, 1218.0683462769755f64)]
     fn test_spot_price(#[case] zero_to_one: bool, #[case] exp: f64) {
         let state = UniswapV2State::new(u256("36925554990922"), u256("30314846538607556521556"));
-        let usdc = ERC20Token::new("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC");
-        let weth = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ", 18, "WETH");
+        let usdc = ERC20Token::new(
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            6,
+            "USDC",
+            U256::from(10_000),
+        );
+        let weth = ERC20Token::new(
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ",
+            18,
+            "WETH",
+            U256::from(10_000),
+        );
 
         let res = if zero_to_one {
             state.spot_price(&usdc, &weth)

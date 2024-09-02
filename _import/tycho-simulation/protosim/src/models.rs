@@ -21,6 +21,8 @@ pub struct ERC20Token {
     pub decimals: usize,
     /// The symbol of the token
     pub symbol: String,
+    /// The amount of gas it takes to transfer the token
+    pub gas: U256,
 }
 
 impl ERC20Token {
@@ -32,16 +34,17 @@ impl ERC20Token {
     /// - `address`: token address as string
     /// - `decimals`: token decimal as usize
     /// - `symbol`: token symbol as string
+    /// - `gas`: token gas as U256
     ///
     /// ## Return
     /// Return a new ERC20 token struct
     ///
     /// ## Panic
     /// - Panics if the token address string is not in valid format
-    pub fn new(address: &str, decimals: usize, symbol: &str) -> Self {
+    pub fn new(address: &str, decimals: usize, symbol: &str, gas: U256) -> Self {
         let addr = H160::from_str(address).expect("Failed to parse token address");
         let sym = symbol.to_string();
-        ERC20Token { address: addr, decimals, symbol: sym }
+        ERC20Token { address: addr, decimals, symbol: sym, gas }
     }
 
     /// One
@@ -74,6 +77,17 @@ impl TryFrom<ResponseToken> for ERC20Token {
             address: value.address.into(),
             decimals: value.decimals.try_into()?,
             symbol: value.symbol,
+            gas: U256::from(
+                value
+                    .gas
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<u64>>()
+                    .iter()
+                    .min()
+                    .copied()
+                    .expect("Expected a value in gas"),
+            ),
         })
     }
 }
@@ -174,7 +188,12 @@ mod tests {
 
     #[test]
     fn test_constructor() {
-        let token = ERC20Token::new("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, "USDC");
+        let token = ERC20Token::new(
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            6,
+            "USDC",
+            U256::from(10000),
+        );
 
         assert_eq!(token.symbol, "USDC");
         assert_eq!(token.decimals, 6);
@@ -183,9 +202,24 @@ mod tests {
 
     #[test]
     fn test_cmp() {
-        let usdc = ERC20Token::new("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, "USDC");
-        let usdc2 = ERC20Token::new("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, "USDC2");
-        let weth = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH");
+        let usdc = ERC20Token::new(
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            6,
+            "USDC",
+            U256::from(10000),
+        );
+        let usdc2 = ERC20Token::new(
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            6,
+            "USDC2",
+            U256::from(10000),
+        );
+        let weth = ERC20Token::new(
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            18,
+            "WETH",
+            U256::from(15000),
+        );
 
         assert!(usdc < weth);
         assert_eq!(usdc, usdc2);
@@ -193,7 +227,12 @@ mod tests {
 
     #[test]
     fn test_one() {
-        let usdc = ERC20Token::new("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, "USDC");
+        let usdc = ERC20Token::new(
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            6,
+            "USDC",
+            U256::from(10000),
+        );
 
         assert_eq!(usdc.one().as_u64(), 1000000);
     }
