@@ -81,7 +81,7 @@ impl TryFrom<ResponseToken> for ERC20Token {
                 value
                     .gas
                     .into_iter()
-                    .filter_map(|opt| opt)
+                    .flatten()
                     .collect::<Vec<u64>>()
                     .iter()
                     .min()
