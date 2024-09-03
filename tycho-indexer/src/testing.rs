@@ -258,7 +258,7 @@ mock! {
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn get_protocol_states<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
+        fn get_protocol_states<'life0, 'life1, 'life2, 'life3, 'life4, 'life5, 'async_trait>(
             &'life0 self,
             chain: &'life1 Chain,
             at: Option<Version>,
@@ -282,6 +282,7 @@ mock! {
             'life2: 'async_trait,
             'life3: 'async_trait,
             'life4: 'async_trait,
+            'life5: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
