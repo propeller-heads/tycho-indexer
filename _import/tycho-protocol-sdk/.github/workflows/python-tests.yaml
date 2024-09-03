@@ -1,0 +1,32 @@
+name: Test code using pytest
+
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        required: false
+        type: string
+        default: ubuntu-latest
+      timeout_minutes:
+        required: false
+        type: number
+        default: 15
+
+jobs:
+  test-python:
+    runs-on: "${{ inputs.runs_on }}"
+    timeout-minutes: "${{ inputs.timeout_minutes }}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Env
+        uses: ./.github/actions/setup_env
+
+      - name: Test with pytest
+        id: tests
+        run: |
+            export PYTHONPATH=$PYTHONPATH:$GITHUB_WORKSPACE/propeller-swap-encoders
+            pytest --disable-warnings ./propeller-swap-encoders

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=60", "setuptools-scm>=8.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "propeller-swap-encoders"
+version = "0.1.0"
+description = ""
+authors = [
+    { name = "Propeller Heads" }
+]
+keywords = ["propeller-swap-encoders"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.7",
+]
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "propeller-solver-core==0.1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["propeller_swap_encoders"]
+
+[project.optional-dependencies]
+testing = [
+    "pytest",
+    "pytest-runner"
+]
+
+[project.urls]
+homepage = "https://github.com/propeller-heads/propeller-protocol-lib"
+
