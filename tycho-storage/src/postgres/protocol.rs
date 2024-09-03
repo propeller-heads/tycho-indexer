@@ -1993,7 +1993,7 @@ mod test {
         let gateway = EVMGateway::from_connection(&mut conn).await;
 
         let result = gateway
-            .get_protocol_states(&Chain::Ethereum, None, system, ids.as_deref(), false, &mut conn)
+            .get_protocol_states(&Chain::Ethereum, None, system, ids.as_deref(), false, None, &mut conn)
             .await
             .unwrap();
 
@@ -2045,6 +2045,7 @@ mod test {
                 None,
                 None,
                 true,
+                None,
                 &mut conn,
             )
             .await
@@ -2150,6 +2151,7 @@ mod test {
                 None,
                 Some(&[new_state1.component_id.as_str()]),
                 true,
+                None,
                 &mut conn,
             )
             .await
@@ -3116,7 +3118,7 @@ mod test {
         let chain = Chain::Starknet;
 
         let result = gw
-            .get_protocol_components(&chain, system.clone(), None, None, &mut conn)
+            .get_protocol_components(&chain, system.clone(), None, None, None, &mut conn)
             .await;
 
         assert!(result.is_ok());
@@ -3154,7 +3156,7 @@ mod test {
         let chain = Chain::Ethereum;
 
         let result = gw
-            .get_protocol_components(&chain, None, ids, None, &mut conn)
+            .get_protocol_components(&chain, None, ids, None, None, &mut conn)
             .await;
 
         match external_id.as_str() {
@@ -3186,7 +3188,7 @@ mod test {
         let ids = Some(["state1", "state2"].as_slice());
         let chain = Chain::Ethereum;
         let result = gw
-            .get_protocol_components(&chain, Some(system), ids, None, &mut conn)
+            .get_protocol_components(&chain, Some(system), ids, None, None, &mut conn)
             .await;
 
         let components = result.unwrap();
@@ -3216,7 +3218,7 @@ mod test {
             .collect::<HashSet<_>>();
 
         let components = gw
-            .get_protocol_components(&chain, None, None, None, &mut conn)
+            .get_protocol_components(&chain, None, None, None, None, &mut conn)
             .await
             .expect("failed retrieving components")
             .into_iter()
@@ -3245,7 +3247,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let res = gw
-            .get_protocol_components(&Chain::Ethereum, None, None, min_tvl, &mut conn)
+            .get_protocol_components(&Chain::Ethereum, None, None, min_tvl, None, &mut conn)
             .await
             .expect("failed retrieving components")
             .into_iter()

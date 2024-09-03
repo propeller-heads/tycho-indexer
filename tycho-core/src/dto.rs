@@ -951,8 +951,8 @@ impl ProtocolComponentsRequestBody {
         }
     }
 
-    pub fn id_filtered(ids: Vec<String>) -> Self {
-        Self { protocol_system: None, component_ids: Some(ids), pagination: Default::default() }
+    pub fn id_filtered(ids: Vec<String>, chain: Chain) -> Self {
+        Self { protocol_system: None, component_ids: Some(ids), tvl_gt: None, chain, pagination: Default::default() }
     }
 }
 
@@ -1163,6 +1163,7 @@ mod test {
                 }),
             },
             chain: Chain::Ethereum,
+            pagination: PaginationParams{ page: 0, page_size: 20 },
         };
 
         assert_eq!(result, expected);
@@ -1267,6 +1268,7 @@ mod test {
                 }),
             },
             chain: Chain::Ethereum,
+            pagination: PaginationParams{ page: 0, page_size: 20 },
         };
 
         assert_eq!(result, expected);

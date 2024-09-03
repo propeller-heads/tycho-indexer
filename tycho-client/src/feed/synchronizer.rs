@@ -6,6 +6,12 @@ use std::{
     time::Duration,
 };
 
+use super::Header;
+use crate::{
+    deltas::{DeltasClient, SubscriptionOptions},
+    feed::component_tracker::{ComponentFilter, ComponentTracker},
+    rpc::RPCClient,
+};
 use tokio::{
     select,
     sync::{
@@ -19,16 +25,9 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_core::{
     dto::{
         BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent, ProtocolId,
-        ResponseAccount, ResponseProtocolState, StateRequestBody, VersionParam,
+        ResponseAccount, ResponseProtocolState, VersionParam,
     },
     Bytes,
-};
-
-use super::Header;
-use crate::{
-    deltas::{DeltasClient, SubscriptionOptions},
-    feed::component_tracker::{ComponentFilter, ComponentTracker},
-    rpc::RPCClient,
 };
 
 pub type SyncResult<T> = anyhow::Result<T>;
@@ -77,7 +76,7 @@ impl Snapshot {
 
 #[derive(Clone, PartialEq, Debug, Default, Serialize)]
 pub struct StateSyncMessage {
-    /// The block information for this update.
+    /// The bloc information for this update.
     pub header: Header,
     /// Snapshot for new components.
     pub snapshots: Snapshot,
@@ -246,19 +245,20 @@ where
 
         let contract_ids = tracked_components.get_contracts_by_component(component_ids.clone());
         let vm_storage = if !contract_ids.is_empty() {
+            let ids: [ContractId] = contract_ids
+                .iter()
+                .map(|id| ContractId { address: id.clone(), chain: self.extractor_id.chain })
+                .collect();
             let contract_states = self
                 .rpc_client
-                .get_contract_state(&StateRequestBody::new(
-                    Some(
-                        contract_ids
-                            .clone()
-                            .into_iter()
-                            .collect(),
-                    ),
-                    Some(self.extractor_id.name.clone()),
-                    version,
+                .get_contract_state_paginated(
                     self.extractor_id.chain,
-                ))
+                    &ids,
+                    &Some(self.extractor_id.name.clone()),
+                    &version,
+                    50,
+                    4,
+                )
                 .await?
                 .accounts
                 .into_iter()
@@ -318,7 +318,7 @@ where
     }
 
     /// Main method that does all the work.
-    #[instrument(skip(self, block_tx),fields(extractor_id = %self.extractor_id))]
+    #[instrument(skip(self, block_tx), fields(extractor_id = %self.extractor_id))]
     async fn state_sync(self, block_tx: &mut Sender<StateSyncMessage>) -> SyncResult<()> {
         // initialisation
         let mut tracker = ComponentTracker::new(
@@ -663,6 +663,7 @@ mod test {
                 component_id: "Component1".to_string(),
                 ..Default::default()
             }],
+            pagination: Default::default(),
         }
     }
 
@@ -717,6 +718,7 @@ mod test {
                 ResponseAccount { address: Bytes::from("0x0badc0ffee"), ..Default::default() },
                 ResponseAccount { address: Bytes::from("0xbabe42"), ..Default::default() },
             ],
+            pagination: Default::default(),
         }
     }
 
@@ -799,6 +801,7 @@ mod test {
                         // this component shall have a tvl update above threshold
                         ProtocolComponent { id: "Component3".to_string(), ..Default::default() },
                     ],
+                    pagination: Default::default(),
                 })
             });
         rpc_client
@@ -819,6 +822,7 @@ mod test {
                         component_id: "Component3".to_string(),
                         ..Default::default()
                     }],
+                    pagination: Default::default(),
                 })
             });
 
@@ -835,6 +839,7 @@ mod test {
                         ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
                         // a third component will have a tvl update above threshold
                     ],
+                    pagination: Default::default(),
                 })
             });
         rpc_client
@@ -852,6 +857,7 @@ mod test {
                             ..Default::default()
                         },
                     ],
+                    pagination: Default::default(),
                 })
             });
         // Mock deltas client and messages
@@ -1086,6 +1092,7 @@ mod test {
                         id: "Component3".to_string(),
                         ..Default::default()
                     }],
+                    pagination: Default::default(),
                 })
             });
 
@@ -1106,6 +1113,7 @@ mod test {
                         component_id: "Component3".to_string(),
                         ..Default::default()
                     }],
+                    pagination: Default::default(),
                 })
             });
 
@@ -1118,6 +1126,7 @@ mod test {
                         ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
                         ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
                     ],
+                    pagination: Default::default(),
                 })
             });
 
@@ -1135,6 +1144,7 @@ mod test {
                             ..Default::default()
                         },
                     ],
+                    pagination: Default::default(),
                 })
             });
 

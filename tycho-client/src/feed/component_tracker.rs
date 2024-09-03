@@ -239,6 +239,7 @@ mod test {
             .returning(move |_| {
                 Ok(ProtocolComponentRequestResponse {
                     protocol_components: vec![component.clone()],
+                    pagination: Default::default(),
                 })
             });
 
@@ -270,6 +271,7 @@ mod test {
             .returning(move |_| {
                 Ok(ProtocolComponentRequestResponse {
                     protocol_components: vec![component.clone()],
+                    pagination: Default::default(),
                 })
             });
 

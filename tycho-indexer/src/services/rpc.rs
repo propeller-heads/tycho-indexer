@@ -421,7 +421,10 @@ where
                     .map(dto::ProtocolComponent::from)
                     .collect::<Vec<dto::ProtocolComponent>>();
 
-                return Ok(dto::ProtocolComponentRequestResponse::new(response_components, request.pagination.clone()));
+                return Ok(dto::ProtocolComponentRequestResponse::new(
+                    response_components,
+                    request.pagination.clone(),
+                ));
             }
         }
 
@@ -1036,7 +1039,7 @@ mod tests {
     }
 
     fn protocol_attributes<'a>(
-        data: impl IntoIterator<Item=(&'a str, i32)>,
+        data: impl IntoIterator<Item = (&'a str, i32)>,
     ) -> HashMap<String, Bytes> {
         data.into_iter()
             .map(|(s, v)| (s.to_owned(), Bytes::from(u32::try_from(v).unwrap()).lpad(32, 0)))
