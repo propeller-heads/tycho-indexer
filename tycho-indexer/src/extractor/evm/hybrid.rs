@@ -1222,7 +1222,7 @@ impl HybridGateway for HybridPgGateway {
         component_ids: &[&'a str],
     ) -> Result<Vec<ProtocolComponentState>, StorageError> {
         self.state_gateway
-            .get_protocol_states(&self.chain, None, None, Some(component_ids), false)
+            .get_protocol_states(&self.chain, None, None, Some(component_ids), false, None)
             .await
     }
 

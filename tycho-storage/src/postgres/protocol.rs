@@ -640,6 +640,7 @@ impl PostgresGateway {
     // The filters are applied in the following order: component ids, protocol system, chain. If
     // component ids are provided, the protocol system filter is ignored. The chain filter is
     // always applied.
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_protocol_states(
         &self,
         chain: &Chain,
@@ -1993,7 +1994,15 @@ mod test {
         let gateway = EVMGateway::from_connection(&mut conn).await;
 
         let result = gateway
-            .get_protocol_states(&Chain::Ethereum, None, system, ids.as_deref(), false, None, &mut conn)
+            .get_protocol_states(
+                &Chain::Ethereum,
+                None,
+                system,
+                ids.as_deref(),
+                false,
+                None,
+                &mut conn,
+            )
             .await
             .unwrap();
 

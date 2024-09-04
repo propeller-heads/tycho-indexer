@@ -387,7 +387,7 @@ mod tests {
         let ret_components = components.clone();
         gateway
             .expect_get_protocol_components()
-            .return_once(move |_, _, _, _| Box::pin(async { Ok(ret_components) }));
+            .return_once(move |_, _, _, _, _| Box::pin(async { Ok(ret_components) }));
 
         let cache = ProtocolMemoryCache::new(chain, max_price_age, Arc::new(gateway));
         let component_ids = components
@@ -414,7 +414,7 @@ mod tests {
             .return_once(|_, _, _, _, _| Box::pin(async { Ok(tokens()) }));
         gateway
             .expect_get_protocol_components()
-            .return_once(|_, _, _, _| Box::pin(async { Ok(components()) }));
+            .return_once(|_, _, _, _, _| Box::pin(async { Ok(components()) }));
         gateway
             .expect_get_token_prices()
             .with(eq(chain))

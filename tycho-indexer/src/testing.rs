@@ -7,7 +7,6 @@ use chrono::NaiveDateTime;
 use mockall::mock;
 
 use tycho_core::{
-    models,
     models::{
         blockchain::{Block, Transaction},
         contract::{Account, AccountDelta},
@@ -64,12 +63,13 @@ mock! {
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn get_contracts<'life0, 'life1, 'life2, 'life3, 'async_trait>(
+        fn get_contracts<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
             &'life0 self,
             chain: &'life1 Chain,
             addresses: Option<&'life2 [Address]>,
             version: Option<&'life3 Version>,
             include_slots: bool,
+            pagination_params: Option<&'life4 PaginationParams>,
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
@@ -82,6 +82,7 @@ mock! {
             'life1: 'async_trait,
             'life2: 'async_trait,
             'life3: 'async_trait,
+            'life4: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
@@ -159,12 +160,13 @@ mock! {
     impl ProtocolGateway for Gateway {
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn get_protocol_components<'life0, 'life1, 'life2, 'life3, 'async_trait>(
+        fn get_protocol_components<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
             &'life0 self,
             chain: &'life1 Chain,
             system: Option<String>,
             ids: Option<&'life2 [&'life3 str]>,
             min_tvl: Option<f64>,
+            pagination_params: Option<&'life4 PaginationParams>,
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
@@ -180,6 +182,7 @@ mock! {
             'life1: 'async_trait,
             'life2: 'async_trait,
             'life3: 'async_trait,
+            'life4: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
@@ -254,14 +257,14 @@ mock! {
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn get_protocol_states<'life0, 'life1, 'life2, 'life3, 'life4, 'life5, 'async_trait>(
+        fn get_protocol_states<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
             &'life0 self,
             chain: &'life1 Chain,
             at: Option<Version>,
             system: Option<String>,
             id: Option<&'life2 [&'life3 str]>,
             retrieve_balances: bool,
-            pagination_params: Option<&PaginationParams>,
+            pagination_params: Option<&'life4 PaginationParams>,
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
@@ -278,7 +281,6 @@ mock! {
             'life2: 'async_trait,
             'life3: 'async_trait,
             'life4: 'async_trait,
-            'life5: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]

@@ -245,15 +245,15 @@ where
 
         let contract_ids = tracked_components.get_contracts_by_component(component_ids.clone());
         let vm_storage = if !contract_ids.is_empty() {
-            let ids: [ContractId] = contract_ids
+            let ids: Vec<ContractId> = contract_ids
                 .iter()
                 .map(|id| ContractId { address: id.clone(), chain: self.extractor_id.chain })
-                .collect();
+                .collect::<Vec<ContractId>>();
             let contract_states = self
                 .rpc_client
                 .get_contract_state_paginated(
                     self.extractor_id.chain,
-                    &ids,
+                    ids.as_slice(),
                     &Some(self.extractor_id.name.clone()),
                     &version,
                     50,

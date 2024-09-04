@@ -213,7 +213,7 @@ mod test {
                 })
             });
         gw.expect_get_protocol_components()
-            .returning(|_, _, _, _| {
+            .returning(|_, _, _, _, _| {
                 Box::pin(async move {
                     Ok(vec![ProtocolComponent::new(
                         "0xe25a329d385f77df5d4ed56265babe2b99a5436e",

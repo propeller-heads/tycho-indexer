@@ -15,7 +15,12 @@ use tracing::{debug, error, instrument, trace, warn};
 use async_trait::async_trait;
 use futures03::future::try_join_all;
 
-use tycho_core::dto::{Chain, ContractId, PaginationParams, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolId, ProtocolStateRequestBody, ProtocolStateRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse, VersionParam};
+use tycho_core::dto::{
+    Chain, ContractId, PaginationParams, ProtocolComponentRequestResponse,
+    ProtocolComponentsRequestBody, ProtocolId, ProtocolStateRequestBody,
+    ProtocolStateRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
+    TokensRequestBody, TokensRequestResponse, VersionParam,
+};
 
 use tokio::sync::Semaphore;
 
@@ -442,7 +447,11 @@ mod tests {
                     "code_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
                     "creation_tx": null
                 }
-            ]
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 20
+            }
         }
         "#;
         // test that the response is deserialized correctly
@@ -500,7 +509,11 @@ mod tests {
                     "creation_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
                     "created_at": "2022-01-01T00:00:00"
                 }
-            ]
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 20
+            }
         }
         "#;
         // test that the response is deserialized correctly
@@ -550,7 +563,11 @@ mod tests {
                         "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"
                     }
                 }
-            ]
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 20
+            }
         }
         "#;
         // test that the response is deserialized correctly
