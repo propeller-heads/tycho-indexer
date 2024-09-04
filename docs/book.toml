@@ -1,0 +1,6 @@
+[book]
+authors = ["Louise Poole"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Tycho Indexer: Developer Guide"
