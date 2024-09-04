@@ -6,12 +6,11 @@
 //! ERC20Tokens provide instructions on how to handle prices and amounts,
 //! while Swap and SwapSequence are usually used as results types.
 
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
-use tycho_core::dto::ResponseToken;
+use std::{convert::TryFrom, str::FromStr};
 
 use ethers::types::{H160, U256};
-use std::convert::TryFrom;
+use serde::{Deserialize, Serialize};
+use tycho_core::dto::ResponseToken;
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {

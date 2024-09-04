@@ -386,6 +386,9 @@ pub trait RouteProcessor {
     /// Updates the current tick. The processor will typically use the tick to set the target
     /// block for the opportunities it produces.
     fn set_tick(&mut self, tick: u64);
+
+    // Update the gas price for the processor
+    fn set_gas_price(&mut self, gas_price: U256);
 }
 
 #[derive(Debug)]
