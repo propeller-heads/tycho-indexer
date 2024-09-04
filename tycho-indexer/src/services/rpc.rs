@@ -490,6 +490,9 @@ pub async fn contract_state<G: Gateway>(
 ) -> HttpResponse {
     // Note - filtering by protocol system is not supported on this endpoint. This is due to the
     // complexity of paginating this endpoint with the current design.
+    if body.pagination.page_size > 100 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
+    }
 
     // Call the handler to get the state
     let response = handler
@@ -559,6 +562,10 @@ pub async fn tokens<G: Gateway>(
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    if body.pagination.page_size > 3000 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 3000.");
+    }
+
     // Call the handler to get tokens
     let response = handler
         .into_inner()
@@ -630,6 +637,10 @@ pub async fn protocol_components<G: Gateway>(
     body: web::Json<dto::ProtocolComponentsRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    if body.pagination.page_size > 100 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
+    }
+
     // Call the handler to get tokens
     let response = handler
         .into_inner()
@@ -711,6 +722,10 @@ pub async fn protocol_state<G: Gateway>(
     body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    if body.pagination.page_size > 100 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
+    }
+
     // Call the handler to get protocol states
     let response = handler
         .into_inner()
