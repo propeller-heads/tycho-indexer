@@ -629,6 +629,7 @@ impl<'de> Deserialize<'de> for StateRequestBody {
                     protocol_system: protocol_system.unwrap_or_default(),
                     version: version.unwrap_or_else(VersionParam::default),
                     chain: chain.unwrap_or_else(Chain::default),
+                    pagination: Default::default(),
                 })
             }
         }

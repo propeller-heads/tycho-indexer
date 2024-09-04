@@ -16,15 +16,14 @@ use async_trait::async_trait;
 use futures03::future::try_join_all;
 
 use tycho_core::dto::{
-    Chain, ContractId, PaginationParams, ProtocolComponentRequestResponse,
-    ProtocolComponentsRequestBody, ProtocolId, ProtocolStateRequestBody,
-    ProtocolStateRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
-    TokensRequestBody, TokensRequestResponse, VersionParam,
+    Chain, PaginationParams, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
+    ProtocolId, ProtocolStateRequestBody, ProtocolStateRequestResponse, ResponseToken,
+    StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse, VersionParam,
 };
 
-use tokio::sync::Semaphore;
-
 use crate::TYCHO_SERVER_VERSION;
+use tokio::sync::Semaphore;
+use tycho_core::Bytes;
 
 #[derive(Error, Debug)]
 pub enum RPCError {
@@ -57,7 +56,7 @@ pub trait RPCClient {
     async fn get_contract_state_paginated(
         &self,
         chain: Chain,
-        ids: &[ContractId],
+        ids: &[Bytes],
         protocol_system: &Option<String>,
         version: &VersionParam,
         chunk_size: usize,
@@ -421,8 +420,6 @@ impl RPCClient for HttpRPCClient {
 
 #[cfg(test)]
 mod tests {
-    use tycho_core::Bytes;
-
     use super::*;
 
     use mockito::Server;
