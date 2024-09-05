@@ -16,9 +16,10 @@ use async_trait::async_trait;
 use futures03::future::try_join_all;
 
 use tycho_core::dto::{
-    Chain, PaginationParams, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-    ProtocolId, ProtocolStateRequestBody, ProtocolStateRequestResponse, ResponseToken,
-    StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse, VersionParam,
+    Chain, ContractId, PaginationParams, ProtocolComponentRequestResponse,
+    ProtocolComponentsRequestBody, ProtocolId, ProtocolStateRequestBody,
+    ProtocolStateRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
+    TokensRequestBody, TokensRequestResponse, VersionParam,
 };
 
 use crate::TYCHO_SERVER_VERSION;
@@ -63,14 +64,19 @@ pub trait RPCClient {
         concurrency: usize,
     ) -> Result<StateRequestResponse, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
+
         let chunked_bodies = ids
             .chunks(chunk_size)
-            .map(|_| StateRequestBody {
-                contract_ids: Some(ids.to_vec()),
+            .enumerate() // Use enumerate to get the index for pagination
+            .map(|(index, chunk)| StateRequestBody {
+                contract_ids: Some(chunk.to_vec()), // use the current chunk instead of all ids
                 protocol_system: protocol_system.clone(),
                 chain,
                 version: version.clone(),
-                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+                pagination: PaginationParams {
+                    page: index as i64, // Use the index as the page number
+                    page_size: chunk_size as i64,
+                },
             })
             .collect::<Vec<_>>();
 
