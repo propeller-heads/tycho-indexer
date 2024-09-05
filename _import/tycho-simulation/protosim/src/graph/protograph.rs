@@ -388,7 +388,7 @@ pub trait RouteProcessor {
     fn set_tick(&mut self, tick: u64);
 
     // Update the gas price for the processor
-    fn set_gas_price(&mut self, gas_price: U256);
+    fn set_gas_price(&mut self, gas_price: U256, timestamp: i64);
 }
 
 #[derive(Debug)]
