@@ -31,7 +31,7 @@ jobs:
       - name: Run Forge build
         run: |
           forge --version
-          forge build --sizes
+          forge build --sizes --via-ir
         id: build
 
       - name: Run Forge format check
@@ -42,7 +42,7 @@ jobs:
 
       - name: Run Forge tests
         run: |
-          forge test -vvv
+          forge test -vvv --via-ir
         id: test
         env:
           ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}

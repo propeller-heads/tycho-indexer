@@ -12,7 +12,7 @@ env:
 
 jobs:
   tests:
-    uses: propeller-heads/propeller-protocol-lib/.github/workflows/python-tests.yaml@dc/ENG-3545-make-encoders-lib
+    uses: propeller-heads/propeller-protocol-lib/.github/workflows/python-tests.yaml@main
 
   formatting:
     name: Formatting
