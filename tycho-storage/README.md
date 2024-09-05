@@ -8,7 +8,7 @@ This tycho-storage crate handles all data storage and communication with the dat
 
 ### Database
 
-Tycho currently uses PostgresSQL as its storage backend. The full schema can be found in [schema.rs](./src/postgres/schema.rs).
+Tycho currently uses PostgresSQL as its storage backend. The full schema can be found in [schema.rs](https://github.com/propeller-heads/tycho-indexer/blob/main/tycho-storage/src/postgres/schema.rs).
 
 Below is the Entity Relationship (ER) diagram illustrating the tables used for this project:
 
@@ -16,13 +16,13 @@ Below is the Entity Relationship (ER) diagram illustrating the tables used for t
 
 ### Gateways
 
-Database interactions are managed through multiple gateways, including [cache](./src/postgres/cache.rs), [chain](./src/postgres/chain.rs), [contract](./src/postgres/contract.rs), [extraction_state](./src/postgres/extraction_state.rs) and [protocol](./src/postgres/protocol.rs). 
+Database interactions are managed through multiple gateways, including [cache](https://github.com/propeller-heads/tycho-indexer/blob/main/tycho-storage/src/postgres/cache.rs), [chain](https://github.com/propeller-heads/tycho-indexer/blob/main/tycho-storage/src/postgres/chain.rs), [contract](https://github.com/propeller-heads/tycho-indexer/blob/main/tycho-storage/src/postgres/contract.rs), [extraction_state](https://github.com/propeller-heads/tycho-indexer/blob/main/tycho-storage/src/postgres/extraction_state.rs) and [protocol](https://github.com/propeller-heads/tycho-indexer/blob/main/tycho-storage/src/postgres/protocol.rs). 
 
 The CachedGateway serves as the main entry point for all database communications. It is designed to efficiently manage and execute database operations by utilizing an in-memory cache and ensuring data consistency through transactional writes. Writes are batched and deduplicated to improve performance and reduce load on the database.
 
 ### Versioning
 
-Tycho employs a robust versioning system to track historical data within the database. The [versioning](./src/postgres/versioning.rs) module provides tools to handle historical data, ensuring that each version of an entity is tracked and stored appropriately.
+Tycho employs a robust versioning system to track historical data within the database. The [versioning](https://github.com/propeller-heads/tycho-indexer/blob/main/tycho-storage/src/postgres/extraction_state.rs) module provides tools to handle historical data, ensuring that each version of an entity is tracked and stored appropriately.
 
 #### Key Concepts
 - VersionedRow: A trait for structs that can be inserted into a versioned table. It automates the valid_to attribute management, facilitating batch insertions.
