@@ -4,3 +4,6 @@ language = "en"
 multilingual = false
 src = "src"
 title = "Tycho Indexer: Developer Guide"
+
+[output.html]
+additional-js = ["./theme/open-links-in-new-tab.js", "./theme/redirect-doc-links.js"]
