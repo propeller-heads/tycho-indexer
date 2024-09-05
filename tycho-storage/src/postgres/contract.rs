@@ -1356,7 +1356,6 @@ impl PostgresGateway {
 /// The tests below test the functionality using the concrete EVM types.
 #[cfg(test)]
 mod test {
-
     use crate::postgres::{
         db_fixtures,
         db_fixtures::{yesterday_midnight, yesterday_one_am},
@@ -1732,6 +1731,67 @@ mod test {
         assert_eq!(results, exp);
     }
 
+    #[rstest]
+    #[case::empty(
+    None,
+    Some(Version::from_ts("2019-01-01T00:00:00".parse().unwrap())),
+    vec ! [],
+    )]
+    #[case::only_c2_block_1(
+    Some(vec ! [Bytes::from("94a3f312366b8d0a32a00986194053c0ed0cddb1")]),
+    Some(Version::from_block_number(Chain::Ethereum, 1)),
+    vec ! [
+    account_c2(1)
+    ],
+    )]
+    #[case::all_ids_block_1(
+    None,
+    Some(Version::from_block_number(Chain::Ethereum, 1)),
+    vec ! [
+    account_c0(1),
+    ],
+    )]
+    #[case::only_c0_latest(
+    Some(vec ! [Bytes::from("6B175474E89094C44Da98b954EedeAC495271d0F")]),
+    None,
+    vec ! [
+    account_c0(2)
+    ],
+    )]
+    #[case::all_ids_latest(
+    None,
+    None,
+    vec ! [
+    account_c0(2),
+    ],
+    )]
+    #[tokio::test]
+    async fn test_get_contracts_with_pagination(
+        #[case] ids: Option<Vec<Bytes>>,
+        #[case] version: Option<Version>,
+        #[case] exp: Vec<models::contract::Contract>,
+    ) {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EvmGateway::from_connection(&mut conn).await;
+        let addresses = ids.as_deref();
+
+        let results = gw
+            .get_contracts(
+                &Chain::Ethereum,
+                addresses,
+                version.as_ref(),
+                true,
+                Some(&PaginationParams { page: 0, page_size: 1 }),
+                &mut conn,
+            )
+            .await
+            .unwrap();
+
+        assert!(results.len() <= 1);
+        assert_eq!(results, exp);
+    }
+
     #[tokio::test]
     async fn test_get_missing_account() {
         let mut conn = setup_db().await;
@@ -1982,9 +2042,12 @@ mod test {
     .collect::< HashMap < _, _ >> ()
     )]
     #[case::before_block_one(
-    Some(Version(BlockOrTimestamp::Timestamp("2019-01-01T00:00:00".parse().unwrap()), VersionKind::Last)),
-    None,
-    HashMap::new())
+        Some(Version(
+            BlockOrTimestamp::Timestamp("2019-01-01T00:00:00".parse().unwrap()),
+            VersionKind::Last
+        )),
+        None,
+        HashMap::new())
     ]
     #[tokio::test]
     async fn test_get_slots(
@@ -2280,7 +2343,7 @@ mod test {
 
     #[rstest]
     #[case::with_start_version(
-    Some(BlockOrTimestamp::Block(BlockIdentifier::Number((Chain::Ethereum, 2))))
+        Some(BlockOrTimestamp::Block(BlockIdentifier::Number((Chain::Ethereum, 2))))
     )]
     #[case::no_start_version(None)]
     #[tokio::test]

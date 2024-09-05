@@ -52,6 +52,7 @@ impl PostgresGateway {
         let data_vec = states_result
             .map_err(|err| storage_error_from_diesel(err, "ProtocolStates", context, None))?;
 
+        println!("data_vec: {:?}", data_vec);
         // Decode final state deltas. We can assume result is sorted by component_id.
         // Therefore we can use slices to iterate over the data in groups of
         // component_id.
@@ -2006,6 +2007,34 @@ mod test {
             .await
             .unwrap();
 
+        assert_eq!(result, expected)
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_states_with_pagination() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+
+        let mut protocol_state = protocol_state();
+        protocol_state.balances = HashMap::new();
+        let expected = vec![protocol_state];
+
+        let gateway = EVMGateway::from_connection(&mut conn).await;
+
+        let result = gateway
+            .get_protocol_states(
+                &Chain::Ethereum,
+                None,
+                None,
+                None,
+                false,
+                Some(&PaginationParams { page: 0, page_size: 1 }),
+                &mut conn,
+            )
+            .await
+            .unwrap();
+
+        println!("{:?}", result);
         assert_eq!(result, expected)
     }
 

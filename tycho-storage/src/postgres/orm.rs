@@ -628,26 +628,38 @@ impl ProtocolState {
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(Self, ComponentId)>> {
-        let mut query = protocol_state::table
-            .inner_join(protocol_component::table)
+        // Subquery to get distinct component external IDs based on pagination
+        let mut component_query = protocol_component::table
             .filter(protocol_component::external_id.eq_any(component_ids))
             .filter(protocol_component::chain_id.eq(chain_id))
+            .select(protocol_component::external_id)
+            .distinct()
+            .into_boxed();
+
+        if let Some(pagination) = pagination_params {
+            component_query = component_query
+                .limit(pagination.page_size)
+                .offset(pagination.page * pagination.page_size);
+        }
+
+        // Main query to get ProtocolStates for the selected component external IDs
+        let mut query = protocol_state::table
+            .inner_join(
+                protocol_component::table
+                    .on(protocol_state::protocol_component_id.eq(protocol_component::id)),
+            )
+            .filter(protocol_component::external_id.eq_any(component_query))
             .filter(protocol_state::valid_to.gt(version_ts.unwrap_or(*MAX_VERSION_TS)))
             .into_boxed();
 
-        // if a version timestamp is provided, we want to filter by valid_from <= version_ts
+        // Apply additional filtering by timestamp if provided
         if let Some(ts) = version_ts {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
+
         query = query.order_by(protocol_component::external_id);
 
-        // Apply pagination if provided
-        if let Some(pagination) = pagination_params {
-            query = query
-                .limit(pagination.page_size)
-                .offset(pagination.offset());
-        }
-
+        // Fetch the results
         query
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
@@ -670,31 +682,42 @@ impl ProtocolState {
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(Self, ComponentId)>> {
-        let mut query = protocol_state::table
-            .inner_join(protocol_component::table)
+        // Subquery to get distinct component IDs based on pagination
+        let mut component_query = protocol_component::table
             .inner_join(
                 protocol_system::table
                     .on(protocol_component::protocol_system_id.eq(protocol_system::id)),
             )
-            .filter(protocol_system::name.eq(system.to_string()))
+            .filter(protocol_system::name.eq(system))
             .filter(protocol_component::chain_id.eq(chain_id))
+            .select(protocol_component::id)
+            .distinct()
+            .into_boxed();
+
+        if let Some(pagination) = pagination_params {
+            component_query = component_query
+                .limit(pagination.page_size)
+                .offset(pagination.page * pagination.page_size);
+        }
+
+        // Main query to get ProtocolStates for the selected components
+        let mut query = protocol_state::table
+            .inner_join(
+                protocol_component::table
+                    .on(protocol_state::protocol_component_id.eq(protocol_component::id)),
+            )
+            .filter(protocol_component::id.eq_any(component_query))
             .filter(protocol_state::valid_to.gt(version_ts.unwrap_or(*MAX_VERSION_TS)))
             .into_boxed();
 
-        // if a version timestamp is provided, we want to filter by valid_from <= version_ts
+        // Apply additional filtering by timestamp if provided
         if let Some(ts) = version_ts {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
 
         query = query.order_by(protocol_state::protocol_component_id);
 
-        // Apply pagination if provided
-        if let Some(pagination) = pagination_params {
-            query = query
-                .limit(pagination.page_size)
-                .offset(pagination.offset());
-        }
-
+        // Fetch the results
         query
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
@@ -715,26 +738,38 @@ impl ProtocolState {
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(Self, ComponentId)>> {
-        let mut query = protocol_state::table
-            .inner_join(protocol_component::table)
+        // Subquery to get distinct component IDs based on pagination
+        let mut component_query = protocol_component::table
             .filter(protocol_component::chain_id.eq(chain_id))
+            .select(protocol_component::id)
+            .distinct()
+            .into_boxed();
+
+        if let Some(pagination) = pagination_params {
+            component_query = component_query
+                .limit(pagination.page_size)
+                .offset(pagination.page * pagination.page_size);
+        }
+
+        // Main query to get ProtocolStates for the selected components
+        let mut query = protocol_state::table
+            .inner_join(
+                protocol_component::table
+                    .on(protocol_state::protocol_component_id.eq(protocol_component::id)),
+            )
+            .filter(protocol_component::id.eq_any(component_query))
             .filter(protocol_state::valid_to.gt(version_ts.unwrap_or(*MAX_VERSION_TS)))
             .into_boxed();
 
-        // if a version timestamp is provided, we want to filter by valid_from <= version_ts
+        // Apply additional filtering by timestamp if provided
         if let Some(ts) = version_ts {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
 
         query = query.order_by(protocol_state::protocol_component_id);
-        if let Some(pagination) = pagination_params {
-            query = query
-                .limit(pagination.page_size)
-                .offset(pagination.offset());
-        }
 
+        // Fetch the results
         query
-            .order_by(protocol_state::protocol_component_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
             .await
