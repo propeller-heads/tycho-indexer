@@ -76,7 +76,7 @@ impl Snapshot {
 
 #[derive(Clone, PartialEq, Debug, Default, Serialize)]
 pub struct StateSyncMessage {
-    /// The bloc information for this update.
+    /// The block information for this update.
     pub header: Header,
     /// Snapshot for new components.
     pub snapshots: Snapshot,

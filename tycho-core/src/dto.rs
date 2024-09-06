@@ -679,16 +679,13 @@ pub struct ResponseAccount {
     #[schema(value_type=HashMap<String, String>, example="0x123456789")]
     #[serde(with = "hex_bytes")]
     pub code_hash: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4"
-    )]
+    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes")]
     pub balance_modify_tx: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4"
-    )]
+    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes")]
     pub code_modify_tx: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4"
-    )]
+    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes_option")]
     pub creation_tx: Option<Bytes>,
 }
