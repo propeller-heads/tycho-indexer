@@ -67,16 +67,12 @@ pub trait RPCClient {
 
         let chunked_bodies = ids
             .chunks(chunk_size)
-            .enumerate() // Use enumerate to get the index for pagination
-            .map(|(index, chunk)| StateRequestBody {
-                contract_ids: Some(chunk.to_vec()), // use the current chunk instead of all ids
+            .map(|chunk| StateRequestBody {
+                contract_ids: Some(chunk.to_vec()),
                 protocol_system: protocol_system.clone(),
                 chain,
                 version: version.clone(),
-                pagination: PaginationParams {
-                    page: index as i64, // Use the index as the page number
-                    page_size: chunk_size as i64,
-                },
+                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
             })
             .collect::<Vec<_>>();
 
