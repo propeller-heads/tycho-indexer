@@ -3144,6 +3144,29 @@ mod test {
             .for_each(|ts| assert!(ts.is_some(), "Found None in updated_ts"));
     }
 
+    #[tokio::test]
+    async fn test_get_protocol_components_with_pagination() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let components = gw
+            .get_protocol_components(
+                &Chain::Ethereum,
+                None,
+                None,
+                None,
+                // Without pagination should return 3 components
+                Some(&PaginationParams { page: 0, page_size: 2 }),
+                &mut conn,
+            )
+            .await
+            .unwrap();
+
+        print!("{:?}", components);
+        assert_eq!(components.len(), 2);
+    }
+
     #[rstest]
     #[case::get_one(Some("zigzag".to_string()))]
     #[case::get_none(Some("ambient".to_string()))]
