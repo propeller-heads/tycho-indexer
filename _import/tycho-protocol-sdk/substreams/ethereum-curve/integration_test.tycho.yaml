@@ -188,12 +188,12 @@ tests:
     start_block: 19162590
     stop_block: 19163633
     expected_components:
-      - id: "0x71db3764d6841d8b01dc27c0fd4a66a8a34b2be0" #TODO: ADD TEST THAT USE WETH
+      - id: "0x71db3764d6841d8b01dc27c0fd4a66a8a34b2be0"
         tokens:
           - "0x04c154b66cb340f3ae24111cc767e0184ed00cc6"
           - "0x4591dbff62656e7859afe5e45f6f47d3669fbb28"
         static_attributes:
-          name: "0x343030303030" # 400000
+          name: "0x70784554482f6d6b555344" # pxETH/mkUS
           pool_type: "0x63727970746f5f706f6f6c" # crypto_pool
           factory: "0x307866313830353662626433323065393661343865336662663862633036313332323533316161633939" # 0xf18056bbd320e96a48e3fb8bc061322531aacc99
           factory_name: "0x63727970746f5f706f6f6c5f666163746f7279" # crypto_pool_factory
@@ -205,7 +205,7 @@ tests:
           - "0x35fA164735182de50811E8e2E824cFb9B6118ac2"
           - "0xf951E335afb289353dc249e82926178EaC7DEd78"
         static_attributes:
-          name: "0x343030303030" # 400000
+          name: "0x654554482f7377455448" # eETH/swETH
           pool_type: "0x63727970746f5f706f6f6c" # crypto_pool
           factory: "0x307866313830353662626433323065393661343865336662663862633036313332323533316161633939" # 0xf18056bbd320e96a48e3fb8bc061322531aacc99
           factory_name: "0x63727970746f5f706f6f6c5f666163746f7279" # crypto_pool_factory
@@ -214,7 +214,7 @@ tests:
         skip_simulation: true # Reason: this pool has no liquidity at stop_block
 
   # CryptoPool factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99 - with ETH
-  - name: test_cryptopool_factory
+  - name: test_cryptopool_factory_with_eth
     start_block: 19278886
     stop_block: 19278926
     expected_components:
@@ -223,7 +223,7 @@ tests:
           - "0x0000000000000000000000000000000000000000"
           - "0x55296f69f40Ea6d20E478533C15A6B08B654E758"
         static_attributes:
-          name: "0x343030303030" # 400000
+          name: "0x4554482f58594f" # ETH/XYO
           pool_type: "0x63727970746f5f706f6f6c" # crypto_pool
           factory: "0x307866313830353662626433323065393661343865336662663862633036313332323533316161633939" # 0xf18056bbd320e96a48e3fb8bc061322531aacc99
           factory_name: "0x63727970746f5f706f6f6c5f666163746f7279" # crypto_pool_factory
@@ -307,7 +307,7 @@ tests:
           - "0x853d955aCEf822Db058eb8505911ED77F175b99e"
           - "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490"
         static_attributes:
-          factory_name: "0x6d6574615f706f6f6c5f666163746f7279" # meta_pool_factory
+          factory_name: "0x6d6574615f706f6f6c5f666163746f72795f6f6c64" # meta_pool_factory_old
           base_pool: "0x307862656263343437383263376462306131613630636236666539376430623438333033326666316337" # 0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7
           factory: "0x307830393539313538623630343064333264303463333031613732636266643662333965323163396165" # 0x0959158b6040d32d04c301a72cbfd6b39e21c9ae
           pool_type: "0x6d657461706f6f6c" # metapool

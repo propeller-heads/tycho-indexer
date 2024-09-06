@@ -84,6 +84,9 @@ pub fn address_map(
             let pool_added =
                 abi::crypto_pool_factory::events::CryptoPoolDeployed::match_and_decode(log)?;
 
+            let pool_name = abi::crypto_pool_factory::functions::DeployPool::match_and_decode(call)
+                .map_or("none".to_string(), |call| call.name);
+
             let tokens = swap_weth_for_eth(pool_added.coins.into());
 
             let component_id = &call.return_data[12..];
@@ -110,7 +113,7 @@ pub fn address_map(
                         },
                         Attribute {
                             name: "name".into(),
-                            value: pool_added.a.to_string().into(),
+                            value: pool_name.into(),
                             change: ChangeType::Creation.into(),
                         },
                         Attribute {
@@ -392,7 +395,7 @@ pub fn address_map(
                             },
                             Attribute {
                                 name: "factory_name".into(),
-                                value: "meta_pool_factory".into(),
+                                value: "meta_pool_factory_old".into(),
                                 change: ChangeType::Creation.into(),
                             },
                             Attribute {
