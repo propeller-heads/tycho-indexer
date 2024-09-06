@@ -24,3 +24,28 @@ contains the following fields:
 - `attributes`: A nested object of key to value that represents attributes.
 
 Please see the included 3 examples for `3pool`, `steth`, and `tricrypto2`.
+
+## Open tasks
+
+### Add underlying tokens in metapools
+
+Currently, metapools are not working properly due to the way we override token balances.
+The issue arises because when we modify token balances, we end up changing the token contract code and storage.
+This issue will be resolved once we implement a flexible method to adjust token balances without affecting the contract’s functionality.
+We will also need to index additional contract such as the base pool lp token.
+
+### Handle rebasing, ERC4644 and others special kind of tokens
+
+At the moment, we are unable to manage certain types of tokens, such as rebasing tokens or ERC4644 tokens, because they have unique behavior or specific logic that complicates simulations.
+To handle these tokens properly, we will likely need to use the dynamic contract indexer (DCI), which can track and index the full state of the token contract, allowing us to deal with their complexities effectively.
+
+## Static Attributes
+
+| name         | type  | description                                                                                                 |
+| ------------ | ----- | ----------------------------------------------------------------------------------------------------------- |
+| pool_type    | str   | A unique identifier per pool type. Set depending on the factory.                                            |
+| name         | str   | A string representing the name of the pool, set if there is one.                                            |
+| factory_name | str   | A string representing the name of the factory that created the pool. "na" if the pool was manually created. |
+| factory      | bytes | The address of the factory that created the pool. "0x000..." if the pool was manually created.              |
+| lp_token     | bytes | The pool lp token, set if the lp token is not the pool itself                                               |
+| base_pool    | bytes | The base pool related to this pool, set only for metapools.                                                 |
