@@ -30,7 +30,9 @@ class ProtocolComponentExpectation(BaseModel):
 
     @validator("static_attributes", pre=True, always=True)
     def convert_static_attributes_to_hexbytes(cls, v):
-        return {k: HexBytes(v[k].lower()) for k in v} if v else {}
+        if v:
+            return {k: v[k] if isinstance(v[k], HexBytes) else HexBytes(v[k].lower()) for k in v}
+        return {}
 
     @validator("creation_tx", pre=True, always=True)
     def convert_creation_tx_to_hexbytes(cls, v):

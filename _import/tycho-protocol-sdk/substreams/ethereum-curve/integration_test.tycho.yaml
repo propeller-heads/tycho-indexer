@@ -16,7 +16,7 @@ tests:
           - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
           - "0x6b175474e89094c44da98b954eedeac495271d0f"
         static_attributes:
-          factory_name: "0x6e61" # na
+          factory_name: "0x4e41" # NA
           name: "0x33706f6f6c" # 3pool
           factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030" # 0x0000000000000000000000000000000000000000
         creation_tx: "0x20793bbf260912aae189d5d261ff003c9b9166da8191d8f9d63ff1c7722f3ac6"
@@ -34,7 +34,7 @@ tests:
         static_attributes:
           factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030" # 0x0000000000000000000000000000000000000000
           name: "0x7374657468" # steth
-          factory_name: "0x6e61" # na
+          factory_name: "0x4e41" # NA
         creation_tx: "0xfac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa"
         skip_simulation: false
 
@@ -50,7 +50,7 @@ tests:
           - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
         static_attributes:
           factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030" # 0x0000000000000000000000000000000000000000
-          factory_name: "0x6e61" # na
+          factory_name: "0x4e41" # NA
           name: "0x74726963727970746f32" # tricrypto2
         creation_tx: "0xdafb6385ed988ce8aacecfe1d97b38ea5e60b1ebce74d2423f71ddd621680138"
         skip_simulation: false
@@ -68,7 +68,7 @@ tests:
           - "0x57ab1ec28d129707052df4df418d58a2d46d5f51"
         static_attributes:
           factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030" # 0x0000000000000000000000000000000000000000
-          factory_name: "0x6e61" # na
+          factory_name: "0x4e41" # NA
           name: "0x73757364" # susd
         creation_tx: "0x51aca4a03a395de8855fa2ca59b7febe520c2a223e69c502066162f7c1a95ec2"
         skip_simulation: false
@@ -84,7 +84,7 @@ tests:
           - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
         static_attributes:
           name: "0x6672617875736463" # fraxusdc
-          factory_name: "0x6e61" # na
+          factory_name: "0x4e41" # NA
           factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030" # 0x0000000000000000000000000000000000000000
         creation_tx: "0x1f4254004ce9e19d4eb742ee5a69d30f29085902d976f73e97c44150225ef775"
         skip_simulation: false
@@ -106,7 +106,7 @@ tests:
         static_attributes:
           factory: "0x307836613863626564373536383034623136653035653734316564616264356362353434616532316266" # 0x6a8cbed756804b16e05e741edabd5cb544ae21bf
           factory_name: "0x63727970746f5f737761705f6e675f666163746f7279" # crypto_swap_ng_factory
-          name: "0x757364652d75736463" # usde-usdc
+          name: "0x555344652d55534443" # USDe-USDC
           pool_type: "0x706c61696e5f706f6f6c" # plain_pool
         creation_tx: "0x6f4438aa1785589e2170599053a0cdc740d8987746a4b5ad9614b6ab7bb4e550"
         skip_simulation: false
@@ -125,7 +125,7 @@ tests:
           - "0xa5588f7cdf560811710a2d82d3c9c99769db1dcb"
         static_attributes:
           factory_name: "0x63727970746f5f737761705f6e675f666163746f7279" # crypto_swap_ng_factory
-          name: "0x646f6c612f667261787079757364" # dola/fraxpyusd
+          name: "0x444f4c412f465241585059555344" # DOLA/FRAXPYUSD
           pool_type: "0x6d657461706f6f6c" # metapool
           base_pool: "0x307861353538386637636466353630383131373130613264383264336339633939373639646231646362" # 0xa5588f7cdf560811710a2d82d3c9c99769db1dcb
           factory: "0x307836613863626564373536383034623136653035653734316564616264356362353434616532316266" # 0x6a8cbed756804b16e05e741edabd5cb544ae21bf
@@ -145,7 +145,7 @@ tests:
           - "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
           - "0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC"
         static_attributes:
-          name: "0x70617970616c667261786270" # paypalfraxbp
+          name: "0x50415950414c465241584250" # PAYPALFRAXBP
           factory_name: "0x6d6574615f706f6f6c5f666163746f7279" # meta_pool_factory
           base_pool: "0x307864636566393638643431366134316364616330656438373032666163383132386136343234316132" # 0xdcfe968d416ac0ed8702fac8128a64241a2
           factory: "0x307862396663313537333934616638303461333537383133346136353835633064633963633939306434" # 0xb9fc157394af804a3578134a6585c0dcc993099d
@@ -165,7 +165,7 @@ tests:
           - "0xe9633C52f4c8B7BDeb08c4A7fE8a5c1B84AFCf67"
           - "0x77E06c9eCCf2E797fd462A92B6D7642EF85b0A44"
         static_attributes:
-          name: "0x77737474616f2f7774616f" # wsttao/wtao
+          name: "0x77737454414f2f7754414f" # wstTAO/wTAO
           factory: "0x307862396663313537333934616638303461333537383133346136353835633064633963633939306434" # 0xb9fc157394af804a3578134a6585c0dcc993099d
           factory_name: "0x6d6574615f706f6f6c5f666163746f7279" # meta_pool_factory
           pool_type: "0x706c61696e5f706f6f6c" # plain_pool
@@ -176,7 +176,7 @@ tests:
           - "0xe9633C52f4c8B7BDeb08c4A7fE8a5c1B84AFCf67"
           - "0x77E06c9eCCf2E797fd462A92B6D7642EF85b0A44"
         static_attributes:
-          name: "0x77737474616f2f7774616f" # wsttao/wtao
+          name: "0x77737454414f2f7754414f" # wstTAO/wTAO
           factory: "0x307862396663313537333934616638303461333537383133346136353835633064633963633939306434" # 0xb9fc157394af804a3578134a6585c0dcc993099d
           factory_name: "0x6d6574615f706f6f6c5f666163746f7279" # meta_pool_factory
           pool_type: "0x706c61696e5f706f6f6c" # plain_pool
@@ -197,7 +197,7 @@ tests:
           pool_type: "0x63727970746f5f706f6f6c" # crypto_pool
           factory: "0x307866313830353662626433323065393661343865336662663862633036313332323533316161633939" # 0xf18056bbd320e96a48e3fb8bc061322531aacc99
           factory_name: "0x63727970746f5f706f6f6c5f666163746f7279" # crypto_pool_factory
-          lp_token: "0x6ade6971ca3d90990c30d39c78b0736c7166e07b" # 0x6ade6971ca3d90990c30d39c78b0736c7166e07b
+          lp_token: "0x6ade6971ca3d90990c30d39c78b0534c7166e07b" # 0x6ade6971ca3d90990c30d39c78b0534c7166e07b
         creation_tx: "0xa89c09a7e0dfd84f3a294b8df4f33cc4a623e6d52deee357457afe2591ea596f"
         skip_simulation: false
       - id: "0x6c9Fe53cC13b125d6476E5Ce2b76983bd5b7A112"
@@ -209,7 +209,7 @@ tests:
           pool_type: "0x63727970746f5f706f6f6c" # crypto_pool
           factory: "0x307866313830353662626433323065393661343865336662663862633036313332323533316161633939" # 0xf18056bbd320e96a48e3fb8bc061322531aacc99
           factory_name: "0x63727970746f5f706f6f6c5f666163746f7279" # crypto_pool_factory
-          lp_token: "0x94c4eba4f4b97be8d778f8c27027d676270e87a6" # 0x94c4eba4f4b97be8d778f8c27027d676270e87a6
+          lp_token: "0x94c4eba4f4b97be8d758f8c27027d656270e87a6" # 0x94c4eba4f4b97be8d758f8c27027d656270e87a6
         creation_tx: "0xa5b13d50c56242f7994b8e1339032bb4c6f9ac3af3054d4eae3ce9e32e3c1a50"
         skip_simulation: true # Reason: this pool has no liquidity at stop_block
 
@@ -247,7 +247,7 @@ tests:
         static_attributes:
           factory: "0x307830633065356632666630666631386133626539623833353633353033393235366463346234393633" # 0x0c0e5f2ff0ff18a3be9b8356335039256dc4b4963
           factory_name: "0x74726963727970746f5f666163746f7279" # tricrypto_factory
-          name: "0x74726963727970746f75736463" # tricrypto_usdc
+          name: "0x54726963727970746f55534443" # TricryptoUSDC
           pool_type: "0x74726963727970746f" # tricrypto
         creation_tx: "0x2bd59c19f993b83729fb23498f897a58567c6f0b3ee2f00613ba515a7b19fe23"
         skip_simulation: false
@@ -267,7 +267,7 @@ tests:
           factory: "0x307839386565383531613030616265653064393564303863663463613262646365333261656161663766" # 0x98ee851a00abee0d95d08cf4ca2bdce32aea7f7f
           pool_type: "0x74776f63727970746f" # twocrypto
           factory_name: "0x74776f63727970746f5f666163746f7279" # twocrypto_factory
-          name: "0x7577752f77657468" # uwu/weth
+          name: "0x5577552f57455448" # UwU/WETH
         creation_tx: "0x61d563e2627437da172fdd60ab54e5cc955fcb75829fd819486e857bac31cad2"
         skip_simulation: false
 
@@ -283,7 +283,7 @@ tests:
           - "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
           - "0xdAC17F958D2ee523a2206206994597C13D831ec7"
         static_attributes:
-          name: "0x6372767573642f75736474" # crvusd/usdt
+          name: "0x6372765553442f55534454" # crvUSD/USDT
           pool_type: "0x706c61696e5f706f6f6c" # plain_pool
           factory: "0x307834663838343661653933383062393064326537316435653364303432646666336537656262343064" # 0x4f8846ae9380b90d2e71d5e3d042dff3e7ebb40d
           factory_name: "0x737461626c655f737761705f666163746f7279" # stable_swap_factory
@@ -311,6 +311,6 @@ tests:
           base_pool: "0x307862656263343437383263376462306131613630636236666539376430623438333033326666316337" # 0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7
           factory: "0x307830393539313538623630343064333264303463333031613732636266643662333965323163396165" # 0x0959158b6040d32d04c301a72cbfd6b39e21c9ae
           pool_type: "0x6d657461706f6f6c" # metapool
-          name: "0x66726178" # frax
+          name: "0x46726178" # Frax
         creation_tx: "0x1f2a0d4e1c1eca594bd7f27f9952480ccda422c3453e0c5074a63aa46a2ed628"
         skip_simulation: true # Reason: this pool calls `totalSupply()` on the LP token during simulation. But this token is overridden and doesn't have anything for totalSupply
