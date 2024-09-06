@@ -90,10 +90,10 @@ pub fn map_relative_balances(
                     }
                 }
             } else if let Some(ev) = abi::vault::events::Swap::match_and_decode(vault_log.log) {
-                let component_id = format!("0x{}", hex::encode(&ev.pool_id[..20]));
+                let component_id = format!("0x{}", hex::encode(ev.pool_id));
 
                 if store
-                    .get_last(format!("pool:{}", component_id))
+                    .get_last(format!("pool:{}", &component_id[..42]))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
