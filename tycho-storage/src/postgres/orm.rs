@@ -632,8 +632,7 @@ impl ProtocolState {
         let mut component_query = protocol_component::table
             .filter(protocol_component::external_id.eq_any(component_ids))
             .filter(protocol_component::chain_id.eq(chain_id))
-            .select(protocol_component::external_id)
-            .distinct()
+            .select(protocol_component::id)
             .into_boxed();
 
         if let Some(pagination) = pagination_params {
@@ -648,7 +647,7 @@ impl ProtocolState {
                 protocol_component::table
                     .on(protocol_state::protocol_component_id.eq(protocol_component::id)),
             )
-            .filter(protocol_component::external_id.eq_any(component_query))
+            .filter(protocol_component::id.eq_any(component_query))
             .filter(protocol_state::valid_to.gt(version_ts.unwrap_or(*MAX_VERSION_TS)))
             .into_boxed();
 
@@ -657,10 +656,9 @@ impl ProtocolState {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
 
-        query = query.order_by(protocol_component::external_id);
-
         // Fetch the results
         query
+            .order_by(protocol_component::external_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
             .await
@@ -691,7 +689,6 @@ impl ProtocolState {
             .filter(protocol_system::name.eq(system))
             .filter(protocol_component::chain_id.eq(chain_id))
             .select(protocol_component::id)
-            .distinct()
             .into_boxed();
 
         if let Some(pagination) = pagination_params {
@@ -715,10 +712,9 @@ impl ProtocolState {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
 
-        query = query.order_by(protocol_state::protocol_component_id);
-
         // Fetch the results
         query
+            .order_by(protocol_state::protocol_component_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
             .await
@@ -742,7 +738,6 @@ impl ProtocolState {
         let mut component_query = protocol_component::table
             .filter(protocol_component::chain_id.eq(chain_id))
             .select(protocol_component::id)
-            .distinct()
             .into_boxed();
 
         if let Some(pagination) = pagination_params {
