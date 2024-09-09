@@ -112,6 +112,130 @@ pub trait RPCClient {
         request: &ProtocolComponentsRequestBody,
     ) -> Result<ProtocolComponentRequestResponse, RPCError>;
 
+    async fn get_protocol_components_paginated(
+        &self,
+        request: &ProtocolComponentsRequestBody,
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<ProtocolComponentRequestResponse, RPCError> {
+        let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        // If a set of component IDs is specified, the maximum return size is already known,
+        // allowing us to pre-compute the number of requests to be made.
+        match request.component_ids {
+            Some(ref ids) => {
+                // We can divide the component_ids into chunks of size chunk_size
+                let chunked_bodies = ids
+                    .chunks(chunk_size)
+                    .enumerate()
+                    .map(|(index, _)| ProtocolComponentsRequestBody {
+                        protocol_system: request.protocol_system.clone(),
+                        component_ids: request.component_ids.clone(),
+                        tvl_gt: request.tvl_gt,
+                        chain: request.chain,
+                        pagination: PaginationParams {
+                            page: index as i64,
+                            page_size: chunk_size as i64,
+                        },
+                    })
+                    .collect::<Vec<_>>();
+
+                let mut tasks = Vec::new();
+                for body in chunked_bodies.iter() {
+                    let sem = semaphore.clone();
+                    tasks.push(async move {
+                        let _permit = sem
+                            .acquire()
+                            .await
+                            .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                        self.get_protocol_components(body).await
+                    });
+                }
+
+                try_join_all(tasks)
+                    .await
+                    .map(|responses| ProtocolComponentRequestResponse {
+                        protocol_components: responses
+                            .into_iter()
+                            .flat_map(|r| r.protocol_components.into_iter())
+                            .collect(),
+                        pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+                    })
+            }
+            _ => {
+                // If no component ids is specified, we need to make the requests considering the
+                // concurrency limit and abort when we receive an empty response.
+
+                let mut ans: Option<ProtocolComponentRequestResponse> = None;
+                let mut page: i64 = 0;
+
+                loop {
+                    // Create request bodies in chunks with adjusted page numbers for parallel
+                    // requests
+                    let chunked_bodies = (0..concurrency)
+                        .map(|iter| ProtocolComponentsRequestBody {
+                            protocol_system: request.protocol_system.clone(),
+                            component_ids: request.component_ids.clone(),
+                            tvl_gt: request.tvl_gt,
+                            chain: request.chain,
+                            pagination: PaginationParams {
+                                page: page + iter as i64,
+                                page_size: chunk_size as i64,
+                            },
+                        })
+                        .collect::<Vec<_>>();
+
+                    let tasks: Vec<_> = chunked_bodies
+                        .iter()
+                        .map(|body| {
+                            let sem = semaphore.clone();
+                            async move {
+                                let _permit = sem.acquire().await.map_err(|_| {
+                                    RPCError::Fatal("Semaphore dropped".to_string())
+                                })?;
+                                self.get_protocol_components(body).await
+                            }
+                        })
+                        .collect();
+
+                    let responses = try_join_all(tasks)
+                        .await
+                        .map(|responses| ProtocolComponentRequestResponse {
+                            protocol_components: responses
+                                .into_iter()
+                                .flat_map(|r| r.protocol_components.into_iter())
+                                .collect(),
+                            pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+                        });
+
+                    // Update the accumulated response or set the initial response
+                    match responses {
+                        Ok(mut resp) => {
+                            let is_finished = resp.protocol_components.len() < chunk_size;
+
+                            if let Some(ref mut a) = ans {
+                                a.protocol_components
+                                    .append(&mut resp.protocol_components);
+                            } else {
+                                ans = Some(resp);
+                            }
+
+                            // If the response is less than the chunk size, we have reached the end
+                            // of the list
+                            if is_finished {
+                                break;
+                            }
+                        }
+                        Err(e) => return Err(e),
+                    }
+
+                    page += concurrency as i64;
+                }
+                ans.ok_or_else(|| RPCError::Fatal("No response received".to_string()))
+            }
+        }
+    }
+
     async fn get_protocol_states(
         &self,
         request: &ProtocolStateRequestBody,
