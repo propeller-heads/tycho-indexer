@@ -13,7 +13,7 @@ jobs:
       infura_api_key: ${{ secrets.INFURA_API_KEY }}
 
   check-release:
-    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v3.yaml@main
     with:
       args: --dry-run --no-ci
     permissions:
@@ -30,7 +30,7 @@ jobs:
       - tests-and-lints
       - check-release
     if: needs.check-release.outputs.verify_release_version != ''
-    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v3.yaml@main
     permissions:
       contents: write # to be able to publish a GitHub release
       issues: write # to be able to comment on released issues
