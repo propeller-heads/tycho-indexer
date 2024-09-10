@@ -29,6 +29,7 @@ class TychoDecoder(ABC):
     def __init__(self):
         self.pool_states = {}
         self.ignored_pools = set()
+        TychoDBSingleton.initialize()
 
     @staticmethod
     def decode_id(component_id: str) -> str:
@@ -39,8 +40,7 @@ class TychoDecoder(ABC):
 def handle_vm_updates(
     block: EVMBlock,
     account_updates: Union[
-        dict[dto.HexBytes, dto.AccountUpdate],
-        dict[dto.HexBytes, dto.ResponseAccount],
+        dict[dto.HexBytes, dto.AccountUpdate], dict[dto.HexBytes, dto.ResponseAccount]
     ],
 ) -> list[AccountUpdate]:
     vm_updates = []
