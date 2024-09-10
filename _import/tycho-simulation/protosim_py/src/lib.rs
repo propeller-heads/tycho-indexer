@@ -1,9 +1,9 @@
 use pyo3::prelude::*;
 use simulation_py::SimulationEngine;
-use starknet_simulation_py::StarknetSimulationEngine;
-use starknet_structs_py::{
-    StarknetContractOverride, StarknetSimulationParameters, StarknetSimulationResult,
-};
+// use starknet_simulation_py::StarknetSimulationEngine;
+// use starknet_structs_py::{
+//     StarknetContractOverride, StarknetSimulationParameters, StarknetSimulationResult,
+// };
 use structs_py::{
     AccountInfo, AccountUpdate, BlockHeader, SimulationDB, SimulationParameters, SimulationResult,
     StateUpdate, TychoDB,
@@ -11,8 +11,8 @@ use structs_py::{
 use tracing_subscriber::EnvFilter;
 
 mod simulation_py;
-mod starknet_simulation_py;
-mod starknet_structs_py;
+// mod starknet_simulation_py;
+// mod starknet_structs_py;
 mod structs_py;
 
 /// Transaction simulation using EVM implemented in Rust
@@ -49,10 +49,10 @@ fn _protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<SimulationDB>()?;
     m.add_class::<TychoDB>()?;
     m.add_class::<AccountUpdate>()?;
-    m.add_class::<StarknetSimulationEngine>()?;
-    m.add_class::<StarknetContractOverride>()?;
-    m.add_class::<StarknetSimulationParameters>()?;
-    m.add_class::<StarknetSimulationResult>()?;
+    // m.add_class::<StarknetSimulationEngine>()?;
+    // m.add_class::<StarknetContractOverride>()?;
+    // m.add_class::<StarknetSimulationParameters>()?;
+    // m.add_class::<StarknetSimulationResult>()?;
 
     Ok(())
 }
