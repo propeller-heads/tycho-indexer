@@ -29,7 +29,6 @@ class TychoDecoder(ABC):
     def __init__(self):
         self.pool_states = {}
         self.ignored_pools = set()
-        TychoDBSingleton.initialize()
 
     @staticmethod
     def decode_id(component_id: str) -> str:
@@ -90,6 +89,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         self.adapter_contract = adapter_contract
         self.minimum_gas = minimum_gas
         self.trace = trace
+        TychoDBSingleton.initialize()
 
     def decode_snapshot(
         self, snapshot: dto.Snapshot, block: EVMBlock
