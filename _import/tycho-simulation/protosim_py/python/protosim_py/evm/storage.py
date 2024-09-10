@@ -12,9 +12,9 @@ class TychoDBSingleton:
     _instance = None
 
     @classmethod
-    def initialize(cls):
+    def initialize(cls, tycho_http_url: str = ""):
         """
-        Initialize the TychoDB instance with the given URLs.
+        Initialize the TychoDB instance with the given URLs. Does nothing if an instance already exists.
 
         Parameters
         ----------
@@ -22,15 +22,15 @@ class TychoDBSingleton:
             The URL of the Tycho HTTP server.
 
         """
-        cls._instance = TychoDB("")
+        if cls._instance is None:
+            cls._instance = TychoDB(tycho_http_url)
 
     @classmethod
     def get_instance(cls) -> TychoDB:
         """
         Retrieve the singleton instance of TychoDB.
 
-        If the TychoDB instance does not exist, it creates a new one.
-        If it already exists, it returns the existing instance.
+        Errors if an instance does not exist.
 
         Returns
         -------
