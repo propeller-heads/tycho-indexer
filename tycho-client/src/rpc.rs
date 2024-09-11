@@ -46,7 +46,7 @@ pub enum RPCError {
 
 #[cfg_attr(test, automock)]
 #[async_trait]
-pub trait RPCClient {
+pub trait RPCClient: Send + Sync {
     /// Retrieves a snapshot of contract state.
     async fn get_contract_state(
         &self,
