@@ -107,7 +107,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 continue
 
         if decoded_pools or failed_pools:
-            self.ignored_pools.union(failed_pools)
+            self.ignored_pools.update(failed_pools)
             exchange = decode_tycho_exchange(
                 next(iter(snapshot.states.values())).component.protocol_system
             )
