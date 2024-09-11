@@ -22,9 +22,9 @@ from .storage import TychoDBSingleton
 log = getLogger(__name__)
 
 
-def decode_tycho_exchange(exchange: str) -> (str, bool):
-    # removes vm prefix if present, returns True if vm prefix was present (vm protocol) or False if native protocol
-    return (exchange.split(":")[1], False) if "vm:" in exchange else (exchange, True)
+def decode_tycho_exchange(exchange: str) -> str:
+    # removes vm prefix if present
+    return exchange.split(":")[1] if "vm:" in exchange else exchange
 
 
 def create_engine(

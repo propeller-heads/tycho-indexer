@@ -94,18 +94,28 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
     def decode_snapshot(
         self, snapshot: dto.Snapshot, block: EVMBlock
     ) -> dict[str, ThirdPartyPool]:
-        pools = {}
+        decoded_pools = {}
+        failed_pools = set()
         handle_vm_updates(block, snapshot.vm_storage)
         for snap in snapshot.states.values():
             try:
                 pool = self.decode_pool_state(snap, block)
-                pools[pool.id_] = pool
+                decoded_pools[pool.id_] = pool
             except TychoDecodeError as e:
                 log.error(f"Failed to decode third party snapshot: {e}")
-                self.ignored_pools.add(snap.component.id)
+                failed_pools.add(snap.component.id)
                 continue
 
-        return pools
+        if decoded_pools or failed_pools:
+            self.ignored_pools.union(failed_pools)
+            exchange = decode_tycho_exchange(
+                next(iter(snapshot.states.values())).component.protocol_system
+            )
+            log.debug(
+                f"Finished decoding {exchange} snapshots: {len(decoded_pools)} succeeded, {len(failed_pools)} failed"
+            )
+
+        return decoded_pools
 
     def decode_pool_state(
         self, snapshot: ComponentWithState, block: EVMBlock
