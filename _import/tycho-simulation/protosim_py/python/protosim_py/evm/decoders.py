@@ -105,14 +105,6 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 self.ignored_pools.add(snap.component.id)
                 continue
 
-        if pools:
-            exchange = decode_tycho_exchange(
-                next(iter(snapshot.states.values())).component.protocol_system
-            )
-            log.debug(
-                f"Finished decoding {exchange} snapshots: {len(pools)} succeeded, {len(self.ignored_pools)} failed"
-            )
-
         return pools
 
     def decode_pool_state(
@@ -132,17 +124,18 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         optional_attributes = self.decode_optional_attributes(state_attributes)
         pool_id = component.id
+        # kept for backwards compatibility, pool_id is now the component id
         if "pool_id" in static_attributes:
             pool_id = static_attributes.pop("pool_id").decode("utf-8")
+            self.component_pool_id[component.id] = pool_id
+
         manual_updates = static_attributes.get(
             "manual_updates", HexBytes("0x00")
         ) > HexBytes("0x00")
-
         if not manual_updates:
-            # do not trigger pool updates on contract changes for exchanges configured to listen for manual updates
+            # trigger pool updates on contract changes
             for address in component.contract_ids:
                 self.contract_pools[address.hex()].append(pool_id)
-        self.component_pool_id[component.id] = pool_id
 
         return ThirdPartyPool(
             id_=pool_id,
@@ -219,6 +212,8 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         # Update balances
         for component_id, balance_update in balance_updates.items():
+            if component_id in self.ignored_pools:
+                continue
             pool_id = self.component_pool_id.get(component_id, component_id)
             pool = pools[pool_id]
             for addr, token_balance in balance_update.items():
@@ -233,6 +228,8 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         # Update state attributes
         for component_id, pool_update in state_updates.items():
+            if component_id in self.ignored_pools:
+                continue
             pool_id = self.component_pool_id.get(component_id, component_id)
             pool = updated_pools.get(pool_id) or pools[pool_id]
 
