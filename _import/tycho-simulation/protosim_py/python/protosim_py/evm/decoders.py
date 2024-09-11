@@ -102,7 +102,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 pool = self.decode_pool_state(snap, block)
                 decoded_pools[pool.id_] = pool
             except TychoDecodeError as e:
-                log.error(f"Failed to decode third party snapshot: {e}")
+                log.error(f"Failed to decode third party snapshot with id {snap.component.id}: {e}")
                 failed_pools.add(snap.component.id)
                 continue
 
@@ -249,7 +249,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             # TODO: handle stateless_contracts updates
             pool.block = block
 
-            if not pool.manual_attributes or attributes.get("update_marker", False):
+            if not pool.manual_updates or attributes.get("update_marker", False):
                 # NOTE - the "update_marker" attribute is used to trigger recalculation of spot prices ect. on
                 # protocols with custom update rules (i.e. core contract changes only trigger updates on certain pools
                 # ect). This allows us to skip unnecessary simulations when the deltas do not affect prices.

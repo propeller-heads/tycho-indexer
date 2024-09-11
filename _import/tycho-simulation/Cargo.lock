@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.16.1"
+version = "0.16.3"
 dependencies = [
  "ethers",
  "hex",
@@ -6257,7 +6257,7 @@ dependencies = [
 
 [[package]]
 name = "prop-builder"
-version = "0.16.1"
+version = "0.16.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6394,7 +6394,7 @@ dependencies = [
 
 [[package]]
 name = "protosim"
-version = "0.16.1"
+version = "0.16.3"
 dependencies = [
  "approx",
  "async-trait",
