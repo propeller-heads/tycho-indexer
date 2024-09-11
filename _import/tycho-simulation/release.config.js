@@ -43,6 +43,9 @@ const config = {
           "toml set --toml-path protosim/Cargo.toml package.version ${nextRelease.version}",
           "toml set --toml-path protosim_py/Cargo.toml package.version ${nextRelease.version}",
           "toml set --toml-path protosim_py/pyproject.toml project.version ${nextRelease.version}",
+          "cargo update -p protosim",
+          "cargo update -p _protosim_py",
+          "cargo update -p prop-builder",
         ].join(" && "),
       },
     ],
@@ -78,6 +81,7 @@ if (
       assets: [
         "CHANGELOG.md",
         "Cargo.toml",
+        "Cargo.lock",
         "protosim/Cargo.toml",
         "protosim_py/Cargo.toml",
         "protosim_py/pyproject.toml",
