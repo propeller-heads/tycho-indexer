@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.16.3"
+version = "0.16.4"
 dependencies = [
  "ethers",
  "hex",
@@ -6257,7 +6257,7 @@ dependencies = [
 
 [[package]]
 name = "prop-builder"
-version = "0.16.3"
+version = "0.16.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6394,7 +6394,7 @@ dependencies = [
 
 [[package]]
 name = "protosim"
-version = "0.16.3"
+version = "0.16.4"
 dependencies = [
  "approx",
  "async-trait",
@@ -9038,8 +9038,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.7.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.9.1#cea6bba8f95291b4be8328487bcbe0ec679f189c"
+version = "0.17.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?rev=0f7e6ba#0f7e6ba1ca5243e71bdf09ec066dbde9499e6105"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9063,20 +9063,22 @@ dependencies = [
 
 [[package]]
 name = "tycho-core"
-version = "0.4.0"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.9.1#cea6bba8f95291b4be8328487bcbe0ec679f189c"
+version = "0.17.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?rev=0f7e6ba#0f7e6ba1ca5243e71bdf09ec066dbde9499e6105"
 dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
  "chrono",
- "ethers",
  "hex",
+ "rand",
  "serde",
  "serde_json",
  "strum 0.25.0",
  "strum_macros 0.25.2",
  "thiserror",
+ "tiny-keccak",
+ "tracing",
  "typetag",
  "utoipa",
  "uuid 1.4.1",
