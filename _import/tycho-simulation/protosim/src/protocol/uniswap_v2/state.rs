@@ -9,6 +9,7 @@ use crate::{
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::ProtocolSim,
+        BytesConvertible,
     },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
 };
@@ -137,19 +138,17 @@ impl ProtocolSim for UniswapV2State {
     ) -> Result<(), TransitionError<String>> {
         // reserve0 and reserve1 are considered required attributes and are expected in every delta
         // we process
-        self.reserve0 = U256::from(
+        self.reserve0 = U256::from_bytes(
             delta
                 .updated_attributes
                 .get("reserve0")
-                .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?
-                .clone(),
+                .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?,
         );
-        self.reserve1 = U256::from(
+        self.reserve1 = U256::from_bytes(
             delta
                 .updated_attributes
                 .get("reserve1")
-                .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?
-                .clone(),
+                .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?,
         );
         Ok(())
     }

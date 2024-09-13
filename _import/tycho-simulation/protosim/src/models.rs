@@ -12,6 +12,8 @@ use ethers::types::{H160, U256};
 use serde::{Deserialize, Serialize};
 use tycho_core::dto::ResponseToken;
 
+use crate::protocol::BytesConvertible;
+
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
     /// The address of the token on the blockchain network
@@ -73,7 +75,7 @@ impl TryFrom<ResponseToken> for ERC20Token {
 
     fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: value.address.into(),
+            address: H160::from_bytes(&value.address),
             decimals: value.decimals.try_into()?,
             symbol: value.symbol,
             gas: U256::from(
