@@ -12,7 +12,7 @@ use crate::postgres::versioning::PartitionedVersionedRow;
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use diesel::{
-    dsl::sql,
+    dsl::{exists, sql},
     pg::Pg,
     prelude::*,
     query_builder::{BoxedSqlQuery, SqlQuery},
@@ -734,25 +734,52 @@ impl ProtocolState {
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(Self, ComponentId)>> {
-        // Subquery to get distinct component IDs based on pagination
-        let mut component_query = protocol_component::table
+        // Step 1: Get IDs of components that have associated states
+        let mut component_ids_query = protocol_component::table
             .filter(protocol_component::chain_id.eq(chain_id))
+            .filter(exists(
+                protocol_state::table
+                    .filter(protocol_state::protocol_component_id.eq(protocol_component::id))
+                    .filter(protocol_state::valid_to.gt(version_ts.unwrap_or(*MAX_VERSION_TS))),
+            ))
             .select(protocol_component::id)
+            .order_by(protocol_component::id)
             .into_boxed();
 
+        // Step 2: Conditionally apply the `valid_from` filter within EXISTS
+        if let Some(ts) = version_ts {
+            component_ids_query = component_ids_query.filter(exists(
+                protocol_state::table
+                    .filter(protocol_state::protocol_component_id.eq(protocol_component::id))
+                    .filter(protocol_state::valid_to.gt(*MAX_VERSION_TS))
+                    .filter(protocol_state::valid_from.le(ts)),
+            ));
+        }
+
+        // Step 3: Apply pagination
         if let Some(pagination) = pagination_params {
-            component_query = component_query
+            component_ids_query = component_ids_query
                 .limit(pagination.page_size)
                 .offset(pagination.page * pagination.page_size);
         }
 
-        // Main query to get ProtocolStates for the selected components
+        // Fetch the component IDs
+        let component_ids = component_ids_query
+            .load::<i64>(conn)
+            .await?;
+
+        // If no components found, return empty result
+        if component_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Step 4: Fetch all ProtocolStates for the selected components
         let mut query = protocol_state::table
             .inner_join(
                 protocol_component::table
                     .on(protocol_state::protocol_component_id.eq(protocol_component::id)),
             )
-            .filter(protocol_component::id.eq_any(component_query))
+            .filter(protocol_component::id.eq_any(&component_ids))
             .filter(protocol_state::valid_to.gt(version_ts.unwrap_or(*MAX_VERSION_TS)))
             .into_boxed();
 
@@ -761,10 +788,9 @@ impl ProtocolState {
             query = query.filter(protocol_state::valid_from.le(ts));
         }
 
-        query = query.order_by(protocol_state::protocol_component_id);
-
         // Fetch the results
         query
+            .order_by(protocol_state::protocol_component_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
             .await
