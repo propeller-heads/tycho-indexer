@@ -1,6 +1,6 @@
 [package]
 name = "prop-builder"
-version = "0.16.4"
+version = "0.16.5"
 edition = "2021"
 [[bin]]
 name = "prop-builder"
