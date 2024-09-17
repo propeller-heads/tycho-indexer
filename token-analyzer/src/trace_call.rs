@@ -55,7 +55,7 @@ impl BadTokenDetecting for TraceCallDetector {
 
 enum TraceRequestType {
     SimpleTransfer,
-    DoubleTransfer(U256),
+    DoubleTransfer(U256, H160),
 }
 
 impl TraceCallDetector {
@@ -140,12 +140,26 @@ impl TraceCallDetector {
             token,
             amount,
             take_from,
-            TraceRequestType::DoubleTransfer(middle_balance),
+            TraceRequestType::DoubleTransfer(middle_balance, take_from),
         );
         let traces = trace_many::trace_many(request, &self.web3, block)
             .await
             .context("trace_many")?;
-        Self::handle_response(&traces, amount, middle_balance, take_from)
+        match Self::handle_response(&traces, amount, middle_balance, take_from) {
+            Ok((TokenQuality::Good, _, _)) => {
+                let request = self.create_trace_request(
+                    token,
+                    amount,
+                    take_from,
+                    TraceRequestType::DoubleTransfer(middle_balance, Self::arbitrary_recipient()),
+                );
+                let traces = trace_many::trace_many(request, &self.web3, block)
+                    .await
+                    .context("trace_many")?;
+                Self::handle_response(&traces, amount, middle_balance, take_from)
+            }
+            res => res,
+        }
     }
 
     // For the out transfer we use an arbitrary address without balance to detect
@@ -185,15 +199,14 @@ impl TraceCallDetector {
             .m
             .tx;
         requests.push(call_request(None, token, tx));
-        // 3 Get balance of arbitrary_recipient before
-        let recipient = Self::arbitrary_recipient();
-        let tx = instance.balance_of(recipient).m.tx;
-        requests.push(call_request(None, token, tx));
 
         match request_type {
             TraceRequestType::SimpleTransfer => requests,
-            TraceRequestType::DoubleTransfer(middle_amount) => {
-                // 4 Transfer from settlement_contract to arbitrary_recipient
+            TraceRequestType::DoubleTransfer(middle_amount, recipient) => {
+                // 3 Get balance of recipient before
+                let tx = instance.balance_of(recipient).m.tx;
+                requests.push(call_request(None, token, tx));
+                // 4 Transfer from settlement_contract to recipient
                 let tx = instance
                     .transfer(recipient, middle_amount)
                     .tx;
@@ -204,7 +217,7 @@ impl TraceCallDetector {
                     .m
                     .tx;
                 requests.push(call_request(None, token, tx));
-                // 6 Get balance of arbitrary_recipient after
+                // 6 Get balance of recipient after
                 let tx = instance.balance_of(recipient).m.tx;
                 requests.push(call_request(None, token, tx));
 
