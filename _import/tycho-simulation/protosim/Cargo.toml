@@ -1,6 +1,6 @@
 [package]
 name = "protosim"
-version = "0.16.4"
+version = "0.16.6"
 edition = "2021"
 
 
