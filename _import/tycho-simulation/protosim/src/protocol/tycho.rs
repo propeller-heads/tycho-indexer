@@ -1,4 +1,4 @@
-use ethers::types::{H256, U256};
+use ethers::types::U256;
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_core::Bytes;
 
@@ -8,7 +8,7 @@ use crate::protocol::{
     uniswap_v3::{enums::FeeAmount, state::UniswapV3State},
 };
 
-use super::uniswap_v3::tick_list::TickInfo;
+use super::{uniswap_v3::tick_list::TickInfo, BytesConvertible};
 
 impl TryFrom<ComponentWithState> for UniswapV2State {
     type Error = InvalidSnapshotError;
@@ -16,22 +16,20 @@ impl TryFrom<ComponentWithState> for UniswapV2State {
     /// Decodes a `ComponentWithState` into a `UniswapV2State`. Errors with a `InvalidSnapshotError`
     /// if either reserve0 or reserve1 attributes are missing.
     fn try_from(snapshot: ComponentWithState) -> Result<Self, Self::Error> {
-        let reserve0 = U256::from(
+        let reserve0 = U256::from_bytes(
             snapshot
                 .state
                 .attributes
                 .get("reserve0")
-                .ok_or(InvalidSnapshotError::MissingAttribute("reserve0".to_string()))?
-                .clone(),
+                .ok_or(InvalidSnapshotError::MissingAttribute("reserve0".to_string()))?,
         );
 
-        let reserve1 = U256::from(
+        let reserve1 = U256::from_bytes(
             snapshot
                 .state
                 .attributes
                 .get("reserve1")
-                .ok_or(InvalidSnapshotError::MissingAttribute("reserve1".to_string()))?
-                .clone(),
+                .ok_or(InvalidSnapshotError::MissingAttribute("reserve1".to_string()))?,
         );
 
         Ok(UniswapV2State::new(reserve0, reserve1))
@@ -56,7 +54,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
         // We can remove this once it has been fixed on the tycho side.
         let liq_16_bytes = if liq.len() == 32 {
             // Make sure it only happens for 0 values, otherwise error.
-            if liq == Bytes::from(H256::zero()) {
+            if liq == Bytes::zero(32) {
                 Bytes::from([0; 16])
             } else {
                 return Err(InvalidSnapshotError::ValueError(format!(
@@ -70,13 +68,12 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
 
         let liquidity = u128::from(liq_16_bytes);
 
-        let sqrt_price = U256::from(
+        let sqrt_price = U256::from_bytes(
             snapshot
                 .state
                 .attributes
                 .get("sqrt_price_x96")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?
-                .clone(),
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?,
         );
 
         let fee_value = i32::from(
@@ -102,7 +99,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
         // remove this this will be fixed on the tycho side.
         let ticks_4_bytes = if tick.len() == 32 {
             // Make sure it only happens for 0 values, otherwise error.
-            if tick == Bytes::from(H256::zero()) {
+            if tick == Bytes::zero(32) {
                 Bytes::from([0; 4])
             } else {
                 return Err(InvalidSnapshotError::ValueError(format!(
@@ -218,7 +215,7 @@ mod tests {
             protocol_type_name: "typename1".to_string(),
             chain: Chain::Ethereum,
             tokens: Vec::new(),
-            contract_ids: Vec::new(),
+            contract_addresses: Vec::new(),
             static_attributes: HashMap::new(),
             change: ChangeType::Creation,
             creation_tx: Bytes::from_str("0x0000").unwrap(),
@@ -290,7 +287,7 @@ mod tests {
             protocol_type_name: "typename1".to_string(),
             chain: Chain::Ethereum,
             tokens: Vec::new(),
-            contract_ids: Vec::new(),
+            contract_addresses: Vec::new(),
             static_attributes,
             change: ChangeType::Creation,
             creation_tx: Bytes::from_str("0x0000").unwrap(),

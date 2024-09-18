@@ -1,4 +1,4 @@
-use ethers::types::{Sign, H256, I256, U256};
+use ethers::types::{Sign, I256, U256};
 
 use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
@@ -11,6 +11,7 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
         tycho::i24_le_bytes_to_i32,
+        BytesConvertible,
     },
     safe_math::{safe_add_u256, safe_sub_u256},
 };
@@ -320,7 +321,7 @@ impl ProtocolSim for UniswapV3State {
             // We can remove this once it has been fixed on the tycho side.
             let liq_16_bytes = if liquidity.len() == 32 {
                 // Make sure it only happens for 0 values, otherwise error.
-                if liquidity == &Bytes::from(H256::zero()) {
+                if liquidity == &Bytes::zero(32) {
                     Bytes::from([0; 16])
                 } else {
                     return Err(TransitionError::DecodeError(format!(
@@ -338,7 +339,7 @@ impl ProtocolSim for UniswapV3State {
             .updated_attributes
             .get("sqrt_price_x96")
         {
-            self.sqrt_price = U256::from(sqrt_price.clone());
+            self.sqrt_price = U256::from_bytes(sqrt_price);
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
             // This is a hotfix because if the tick has never been updated after creation, it's
@@ -346,7 +347,7 @@ impl ProtocolSim for UniswapV3State {
             // We can remove this once it has been fixed on the tycho side.
             let ticks_4_bytes = if tick.len() == 32 {
                 // Make sure it only happens for 0 values, otherwise error.
-                if tick == &Bytes::from(H256::zero()) {
+                if tick == &Bytes::zero(32) {
                     Bytes::from([0; 4])
                 } else {
                     return Err(TransitionError::DecodeError(format!(
