@@ -27,14 +27,17 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
-tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "0f7e6ba" }
-tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", rev = "0f7e6ba" }
+tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "b4ce3fa" }
+tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", rev = "b4ce3fa" }
 anyhow = "1.0.79"
 console-subscriber = "0.2.0"
 tracing-opentelemetry = { version = "0.22", default-features = false }
 opentelemetry = { version = "0.21" }
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.14", default-features = false, features = ["trace", "grpc-tonic"] }
+opentelemetry-otlp = { version = "0.14", default-features = false, features = [
+    "trace",
+    "grpc-tonic",
+] }
 chrono = { version = "0.4.26", features = ["serde"] }
 
 [dev-dependencies]
