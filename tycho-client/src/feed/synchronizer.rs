@@ -267,7 +267,7 @@ where
                 .filter_map(|(id, comp)| {
                     if component_ids.contains(&id) {
                         Some(
-                            comp.contract_ids
+                            comp.contract_addresses
                                 .iter()
                                 .map(|address| (address.clone(), comp.id.clone())),
                         )
@@ -731,7 +731,7 @@ mod test {
         );
         let component = ProtocolComponent {
             id: "Component1".to_string(),
-            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
+            contract_addresses: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
             ..Default::default()
         };
         tracker

@@ -220,9 +220,10 @@ pub struct BlockChanges {
     pub revert: bool,
     #[serde(with = "hex_hashmap_key", default)]
     pub new_tokens: HashMap<Bytes, ResponseToken>,
-    #[serde(with = "hex_hashmap_key")]
-    pub account_updates: HashMap<Bytes, AccountUpdate>,
-    pub state_updates: HashMap<String, ProtocolStateDelta>,
+    #[serde(alias = "account_updates", with = "hex_hashmap_key")]
+    pub account_deltas: HashMap<Bytes, AccountUpdate>,
+    #[serde(alias = "state_updates")]
+    pub state_deltas: HashMap<String, ProtocolStateDelta>,
     pub new_protocol_components: HashMap<String, ProtocolComponent>,
     pub deleted_protocol_components: HashMap<String, ProtocolComponent>,
     pub component_balances: HashMap<String, TokenBalances>,
@@ -237,8 +238,8 @@ impl BlockChanges {
         block: Block,
         finalized_block_height: u64,
         revert: bool,
-        account_updates: HashMap<Bytes, AccountUpdate>,
-        state_updates: HashMap<String, ProtocolStateDelta>,
+        account_deltas: HashMap<Bytes, AccountUpdate>,
+        state_deltas: HashMap<String, ProtocolStateDelta>,
         new_protocol_components: HashMap<String, ProtocolComponent>,
         deleted_protocol_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>>,
@@ -250,8 +251,8 @@ impl BlockChanges {
             finalized_block_height,
             revert,
             new_tokens: HashMap::new(),
-            account_updates,
-            state_updates,
+            account_deltas,
+            state_deltas,
             new_protocol_components,
             deleted_protocol_components,
             component_balances: component_balances
@@ -264,10 +265,10 @@ impl BlockChanges {
 
     pub fn merge(mut self, other: Self) -> Self {
         other
-            .account_updates
+            .account_deltas
             .into_iter()
             .for_each(|(k, v)| {
-                self.account_updates
+                self.account_deltas
                     .entry(k)
                     .and_modify(|e| {
                         e.merge(&v);
@@ -276,10 +277,10 @@ impl BlockChanges {
             });
 
         other
-            .state_updates
+            .state_deltas
             .into_iter()
             .for_each(|(k, v)| {
-                self.state_updates
+                self.state_deltas
                     .entry(k)
                     .and_modify(|e| {
                         e.merge(&v);
@@ -318,8 +319,7 @@ impl BlockChanges {
     }
 
     pub fn filter_by_component<F: Fn(&str) -> bool>(&mut self, keep: F) {
-        self.state_updates
-            .retain(|k, _| keep(k));
+        self.state_deltas.retain(|k, _| keep(k));
         self.component_balances
             .retain(|k, _| keep(k));
         self.component_tvl
@@ -327,12 +327,12 @@ impl BlockChanges {
     }
 
     pub fn filter_by_contract<F: Fn(&Bytes) -> bool>(&mut self, keep: F) {
-        self.account_updates
+        self.account_deltas
             .retain(|k, _| keep(k));
     }
 
     pub fn n_changes(&self) -> usize {
-        self.account_updates.len() + self.state_updates.len()
+        self.account_deltas.len() + self.state_deltas.len()
     }
 }
 
@@ -406,8 +406,9 @@ pub struct ProtocolComponent {
     pub chain: Chain,
     #[schema(value_type=Vec<String>)]
     pub tokens: Vec<Bytes>,
+    #[serde(alias = "contract_ids")]
     #[schema(value_type=Vec<String>)]
-    pub contract_ids: Vec<Bytes>,
+    pub contract_addresses: Vec<Bytes>,
     #[serde(with = "hex_hashmap_value")]
     #[schema(value_type=HashMap<String, String>)]
     pub static_attributes: HashMap<String, Bytes>,
@@ -426,7 +427,7 @@ impl From<models::protocol::ProtocolComponent> for ProtocolComponent {
             protocol_type_name: value.protocol_type_name,
             chain: value.chain.into(),
             tokens: value.tokens,
-            contract_ids: value.contract_addresses,
+            contract_addresses: value.contract_addresses,
             static_attributes: value.static_attributes,
             change: value.change.into(),
             creation_tx: value.creation_tx,
@@ -1061,6 +1062,8 @@ pub enum Health {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use maplit::hashmap;
     use rstest::rstest;
 
@@ -1237,6 +1240,104 @@ mod test {
         };
 
         assert_eq!(result, expected);
+    }
+
+    fn create_models_block_entity_changes() -> crate::models::blockchain::BlockAggregatedChanges {
+        let base_ts = 1694534400; // Example base timestamp for 2023-09-14T00:00:00
+
+        crate::models::blockchain::BlockAggregatedChanges {
+            extractor: "native_name".to_string(),
+            chain: models::Chain::Ethereum,
+            block: models::blockchain::Block::new(
+                3,
+                models::Chain::Ethereum,
+                Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
+                NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+            ),
+            finalized_block_height: 1,
+            revert: true,
+            state_deltas: HashMap::from([
+                ("pc_1".to_string(), models::protocol::ProtocolComponentStateDelta {
+                    component_id: "pc_1".to_string(),
+                    updated_attributes: HashMap::from([
+                        ("attr_2".to_string(), Bytes::from("0x0000000000000002")),
+                        ("attr_1".to_string(), Bytes::from("0x00000000000003e8")),
+                    ]),
+                    deleted_attributes: HashSet::new(),
+                }),
+            ]),
+            new_tokens: HashMap::new(),
+            new_protocol_components: HashMap::from([
+                ("pc_2".to_string(), crate::models::protocol::ProtocolComponent {
+                    id: "pc_2".to_string(),
+                    protocol_system: "native_protocol_system".to_string(),
+                    protocol_type_name: "pt_1".to_string(),
+                    chain: models::Chain::Ethereum,
+                    tokens: vec![
+                        Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+                        Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                    ],
+                    contract_addresses: vec![],
+                    static_attributes: HashMap::new(),
+                    change: models::ChangeType::Creation,
+                    creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
+                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                }),
+            ]),
+            deleted_protocol_components: HashMap::from([
+                ("pc_3".to_string(), crate::models::protocol::ProtocolComponent {
+                    id: "pc_3".to_string(),
+                    protocol_system: "native_protocol_system".to_string(),
+                    protocol_type_name: "pt_2".to_string(),
+                    chain: models::Chain::Ethereum,
+                    tokens: vec![
+                        Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+                        Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                    ],
+                    contract_addresses: vec![],
+                    static_attributes: HashMap::new(),
+                    change: models::ChangeType::Deletion,
+                    creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
+                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                }),
+            ]),
+            component_balances: HashMap::from([
+                ("pc_1".to_string(), HashMap::from([
+                    (Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), models::protocol::ComponentBalance {
+                        token: Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                        balance: Bytes::from("0x00000001"),
+                        balance_float: 1.0,
+                        modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+                        component_id: "pc_1".to_string(),
+                    }),
+                    (Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), models::protocol::ComponentBalance {
+                        token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                        balance: Bytes::from("0x000003e8"),
+                        balance_float: 1000.0,
+                        modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000007531").unwrap(),
+                        component_id: "pc_1".to_string(),
+                    }),
+                ])),
+            ]),
+            component_tvl: HashMap::new(),
+            account_deltas: Default::default(),
+        }
+    }
+
+    #[test]
+    fn test_serialize_deserialize_block_changes() {
+        // Test that models::BlockAggregatedChanges serialized as json can be deserialized as
+        // dto::BlockChanges.
+
+        // Create a models::BlockAggregatedChanges instance
+        let block_entity_changes = create_models_block_entity_changes();
+
+        // Serialize the struct into JSON
+        let json_data = serde_json::to_string(&block_entity_changes).expect("Failed to serialize");
+
+        // Deserialize the JSON back into a dto::BlockChanges struct
+        serde_json::from_str::<BlockChanges>(&json_data).expect("parsing failed");
     }
 
     #[test]
@@ -1610,7 +1711,7 @@ mod test {
             block: Block::default(),
             revert: false,
             new_tokens: HashMap::new(),
-            state_updates: hashmap! { "state1".to_string() => ProtocolStateDelta::default() },
+            state_deltas: hashmap! { "state1".to_string() => ProtocolStateDelta::default() },
             new_protocol_components: hashmap! { "component1".to_string() => ProtocolComponent::default() },
             deleted_protocol_components: HashMap::new(),
             component_balances: hashmap! {
@@ -1641,7 +1742,7 @@ mod test {
             block: Block::default(),
             revert: true,
             new_tokens: HashMap::new(),
-            state_updates: hashmap! { "state2".to_string() => ProtocolStateDelta::default() },
+            state_deltas: hashmap! { "state2".to_string() => ProtocolStateDelta::default() },
             new_protocol_components: hashmap! { "component2".to_string() => ProtocolComponent::default() },
             deleted_protocol_components: hashmap! { "component3".to_string() => ProtocolComponent::default() },
             component_balances: hashmap! {
@@ -1660,7 +1761,7 @@ mod test {
             block: Block::default(),
             revert: true,
             new_tokens: HashMap::new(),
-            state_updates: hashmap! {
+            state_deltas: hashmap! {
                 "state1".to_string() => ProtocolStateDelta::default(),
                 "state2".to_string() => ProtocolStateDelta::default(),
             },

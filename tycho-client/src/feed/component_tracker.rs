@@ -105,7 +105,7 @@ where
         self.contracts.extend(
             self.components
                 .values()
-                .flat_map(|comp| comp.contract_ids.iter().cloned()),
+                .flat_map(|comp| comp.contract_addresses.iter().cloned()),
         );
     }
 
@@ -149,7 +149,7 @@ where
                 let comp = self.components.remove(k);
                 if let Some(component) = &comp {
                     n_components += 1;
-                    for contract in component.contract_ids.iter() {
+                    for contract in component.contract_addresses.iter() {
                         self.contracts.remove(contract);
                     }
                 }
@@ -170,7 +170,7 @@ where
                     .components
                     .get(cid)
                     .unwrap_or_else(|| panic!("requested component that is not present: {cid}"));
-                comp.contract_ids.iter().cloned()
+                comp.contract_addresses.iter().cloned()
             })
             .collect()
     }
@@ -222,7 +222,7 @@ mod test {
         let contract_ids = vec![Bytes::from("0x1234"), Bytes::from("0xbabe")];
         let component = ProtocolComponent {
             id: "Component1".to_string(),
-            contract_ids: contract_ids.clone(),
+            contract_addresses: contract_ids.clone(),
             ..Default::default()
         };
         (contract_ids, component)
