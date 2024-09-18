@@ -102,9 +102,16 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 pool = self.decode_pool_state(snap, block)
                 decoded_pools[pool.id_] = pool
             except TychoDecodeError as e:
-                log.error(f"Failed to decode third party snapshot with id {snap.component.id}: {e}")
+                log.log(
+                    5,
+                    f"Failed to decode third party snapshot with id {snap.component.id}: {e}",
+                )
                 failed_pools.add(snap.component.id)
                 continue
+            except Exception as e:
+                log.error(
+                    f"Failed to decode third party snapshot with id {snap.component.id}: {e}"
+                )
 
         if decoded_pools or failed_pools:
             self.ignored_pools.update(failed_pools)
