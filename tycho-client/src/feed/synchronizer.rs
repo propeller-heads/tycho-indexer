@@ -18,7 +18,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_core::{
     dto::{
-        BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent, ProtocolId,
+        BlockAggregatedChanges, BlockParam, ExtractorIdentity, ProtocolComponent, ProtocolId,
         ResponseAccount, ResponseProtocolState, StateRequestBody, VersionParam,
     },
     Bytes,
@@ -84,7 +84,7 @@ pub struct StateSyncMessage {
     /// A single delta contains state updates for all tracked components, as well as additional
     /// information about the system components e.g. newly added components (even below tvl), tvl
     /// updates, balance updates.
-    pub deltas: Option<BlockChanges>,
+    pub deltas: Option<BlockAggregatedChanges>,
     /// Components that stopped being tracked.
     pub removed_components: HashMap<String, ProtocolComponent>,
 }
@@ -433,7 +433,11 @@ where
         }
     }
 
-    fn filter_deltas(&self, second_msg: &mut BlockChanges, tracker: &ComponentTracker<R>) {
+    fn filter_deltas(
+        &self,
+        second_msg: &mut BlockAggregatedChanges,
+        tracker: &ComponentTracker<R>,
+    ) {
         second_msg.filter_by_component(|id| tracker.components.contains_key(id));
         second_msg.filter_by_contract(|id| tracker.contracts.contains(id));
     }
@@ -533,7 +537,7 @@ mod test {
     };
     use tycho_core::{
         dto::{
-            Block, BlockChanges, Chain, ExtractorIdentity, ProtocolComponent,
+            Block, BlockAggregatedChanges, Chain, ExtractorIdentity, ProtocolComponent,
             ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolId,
             ProtocolStateRequestBody, ProtocolStateRequestResponse, ResponseAccount,
             ResponseProtocolState, StateRequestBody, StateRequestResponse, TokensRequestBody,
@@ -610,7 +614,7 @@ mod test {
             &self,
             extractor_id: ExtractorIdentity,
             options: SubscriptionOptions,
-        ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError> {
+        ) -> Result<(Uuid, Receiver<BlockAggregatedChanges>), DeltasError> {
             self.0
                 .subscribe(extractor_id, options)
                 .await
@@ -771,7 +775,8 @@ mod test {
         assert_eq!(snap, exp);
     }
 
-    fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<BlockChanges>) {
+    fn mock_clients_for_state_sync(
+    ) -> (MockRPCClient, MockDeltasClient, Sender<BlockAggregatedChanges>) {
         let mut rpc_client = MockRPCClient::new();
         // Mocks for the start_tracking call, these need to come first because they are more
         // specific, see: https://docs.rs/mockall/latest/mockall/#matching-multiple-calls
@@ -870,7 +875,7 @@ mod test {
     async fn test_state_sync() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let deltas = [
-            BlockChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -883,7 +888,7 @@ mod test {
                 revert: false,
                 ..Default::default()
             },
-            BlockChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -896,7 +901,7 @@ mod test {
                 revert: false,
                 ..Default::default()
             },
-            BlockChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1021,7 +1026,7 @@ mod test {
             },
             // Our deltas are empty and since merge methods are
             // tested in tycho-core we don't have much to do here.
-            deltas: Some(BlockChanges {
+            deltas: Some(BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1149,7 +1154,7 @@ mod test {
 
         // Simulate the incoming BlockChanges
         let deltas = [
-            BlockChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1162,7 +1167,7 @@ mod test {
                 revert: false,
                 ..Default::default()
             },
-            BlockChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1175,7 +1180,7 @@ mod test {
                 revert: false,
                 ..Default::default()
             },
-            BlockChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1255,7 +1260,7 @@ mod test {
                 .collect(),
                 vm_storage: HashMap::new(),
             },
-            deltas: Some(BlockChanges {
+            deltas: Some(BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {

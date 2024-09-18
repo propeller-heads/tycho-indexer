@@ -41,7 +41,9 @@ use tokio::{
 };
 use tokio_tungstenite::{connect_async, tungstenite, MaybeTlsStream, WebSocketStream};
 use tracing::{debug, error, info, instrument, trace, warn};
-use tycho_core::dto::{BlockChanges, Command, ExtractorIdentity, Response, WebSocketMessage};
+use tycho_core::dto::{
+    BlockAggregatedChanges, Command, ExtractorIdentity, Response, WebSocketMessage,
+};
 use uuid::Uuid;
 
 use crate::TYCHO_SERVER_VERSION;
@@ -119,7 +121,7 @@ pub trait DeltasClient {
         &self,
         extractor_id: ExtractorIdentity,
         options: SubscriptionOptions,
-    ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError>;
+    ) -> Result<(Uuid, Receiver<BlockAggregatedChanges>), DeltasError>;
 
     /// Unsubscribe from an subscription
     async fn unsubscribe(&self, subscription_id: Uuid) -> Result<(), DeltasError>;
@@ -166,7 +168,7 @@ type WebSocketSink =
 #[derive(Debug)]
 enum SubscriptionInfo {
     /// Subscription was requested we wait for server confirmation and uuid assignment.
-    RequestedSubscription(oneshot::Sender<(Uuid, Receiver<BlockChanges>)>),
+    RequestedSubscription(oneshot::Sender<(Uuid, Receiver<BlockAggregatedChanges>)>),
     /// Subscription is active.
     Active,
     /// Unsubscription was requested, we wait for server confirmation.
@@ -185,7 +187,7 @@ struct Inner {
     subscriptions: HashMap<Uuid, SubscriptionInfo>,
     /// For eachs subscription we keep a sender handle, the receiver is returned to the caller of
     /// subscribe.
-    sender: HashMap<Uuid, Sender<BlockChanges>>,
+    sender: HashMap<Uuid, Sender<BlockAggregatedChanges>>,
     /// How many messages to buffer per subscription before starting to drop new messages.
     buffer_size: usize,
 }
@@ -209,7 +211,7 @@ impl Inner {
     fn new_subscription(
         &mut self,
         id: &ExtractorIdentity,
-        ready_tx: oneshot::Sender<(Uuid, Receiver<BlockChanges>)>,
+        ready_tx: oneshot::Sender<(Uuid, Receiver<BlockAggregatedChanges>)>,
     ) -> Result<(), DeltasError> {
         if self.pending.contains_key(id) {
             return Err(DeltasError::SubscriptionAlreadyPending);
@@ -256,7 +258,7 @@ impl Inner {
     }
 
     /// Sends a message to a subscription's receiver.
-    fn send(&mut self, id: &Uuid, msg: BlockChanges) -> Result<(), DeltasError> {
+    fn send(&mut self, id: &Uuid, msg: BlockAggregatedChanges) -> Result<(), DeltasError> {
         if let Some(sender) = self.sender.get_mut(id) {
             sender
                 .try_send(msg)
@@ -526,7 +528,7 @@ impl DeltasClient for WsDeltasClient {
         &self,
         extractor_id: ExtractorIdentity,
         options: SubscriptionOptions,
-    ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError> {
+    ) -> Result<(Uuid, Receiver<BlockAggregatedChanges>), DeltasError> {
         trace!("Starting subscribe");
         self.ensure_connection().await;
         let (ready_tx, ready_rx) = oneshot::channel();
@@ -798,7 +800,7 @@ mod tests {
                         "finalized_block_height": 0,
                         "revert": false,
                         "new_tokens": {},
-                        "account_updates": {
+                        "account_deltas": {
                             "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
                                 "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
                                 "chain": "ethereum",
@@ -808,7 +810,7 @@ mod tests {
                                 "change": "Update"
                             }
                         },
-                        "state_updates": {
+                        "state_deltas": {
                             "component_1": {
                                 "component_id": "component_1",
                                 "updated_attributes": {"attr1": "0x01"},
@@ -1091,7 +1093,7 @@ mod tests {
                         "finalized_block_height": 0,
                         "revert": false,
                         "new_tokens": {},
-                        "account_updates": {
+                        "account_deltas": {
                             "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
                                 "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
                                 "chain": "ethereum",
@@ -1101,7 +1103,7 @@ mod tests {
                                 "change": "Update"
                             }
                         },
-                        "state_updates": {
+                        "state_deltas": {
                             "component_1": {
                                 "component_id": "component_1",
                                 "updated_attributes": {"attr1": "0x01"},

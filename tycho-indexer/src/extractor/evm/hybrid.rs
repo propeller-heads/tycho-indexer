@@ -419,7 +419,7 @@ where
                         map_vault(&change.protocol_system)
                             .or_else(|| {
                                 change
-                                    .contract_addresses
+                                    .contract_ids
                                     // TODO: Currently, it's assumed that the pool is always the
                                     // first contract in the
                                     // protocol component. This approach is a temporary
@@ -2015,7 +2015,7 @@ mod test_serial_db {
                             Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
                             Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
                         ],
-                        contract_addresses: vec![],
+                        contract_ids: vec![],
                         creation_tx: Default::default(),
                         static_attributes: Default::default(),
                         created_at: Default::default(),
@@ -2072,7 +2072,7 @@ mod test_serial_db {
                             protocol_type_name: "vm:pool".to_string(),
                             chain: Chain::Ethereum,
                             tokens: vec![base_token.clone(), quote_token],
-                            contract_addresses: vec![Bytes::from(VM_CONTRACT)],
+                            contract_ids: vec![Bytes::from(VM_CONTRACT)],
                             static_attributes: Default::default(),
                             change: Default::default(),
                             creation_tx: VM_TX_HASH_0.parse().unwrap(),
@@ -2162,7 +2162,7 @@ mod test_serial_db {
                     Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
                     Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
                 ],
-                contract_addresses: vec![],
+                contract_ids: vec![],
                 creation_tx: Bytes::from_str(
                     "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
                 )
@@ -2377,7 +2377,7 @@ mod test_serial_db {
                             Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
                             Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
                         ],
-                        contract_addresses: vec![],
+                        contract_ids: vec![],
                         static_attributes: HashMap::new(),
                         change: ChangeType::Creation,
                         creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
@@ -2394,7 +2394,7 @@ mod test_serial_db {
                             Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
                             Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
                         ],
-                        contract_addresses: vec![],
+                        contract_ids: vec![],
                         static_attributes: HashMap::new(),
                         change: ChangeType::Deletion,
                         creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
@@ -2572,7 +2572,7 @@ mod test_serial_db {
                             Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
                             Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
                         ],
-                        contract_addresses: vec![
+                        contract_ids: vec![
                             Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
                         ],
                         static_attributes: HashMap::new(),

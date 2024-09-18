@@ -199,7 +199,7 @@ impl TryFromMessage for ProtocolComponent {
             protocol_type_name: protocol_type.name,
             protocol_system: protocol_system.to_owned(),
             tokens,
-            contract_addresses: contract_ids,
+            contract_ids,
             static_attributes,
             chain,
             change: msg.change().into(),
@@ -2814,7 +2814,7 @@ mod test {
                 Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                 Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
             ],
-            contract_addresses: vec![
+            contract_ids: vec![
                 Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
                 Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
             ],
@@ -3283,10 +3283,9 @@ mod test {
                     Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                 ],
                 static_attributes: static_attr,
-                contract_addresses: vec![Bytes::from_str(
-                    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                )
-                .unwrap()],
+                contract_ids: vec![
+                    Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()
+                ],
                 change: ChangeType::Creation,
                 creation_tx: tx.hash.clone(),
                 created_at: yesterday_midnight(),
@@ -3485,7 +3484,7 @@ mod test {
             ]
         );
         assert_eq!(
-            protocol_component.contract_addresses,
+            protocol_component.contract_ids,
             vec![
                 Bytes::from_str("31fF2589Ee5275a2038beB855F44b9Be993aA804").unwrap(),
                 Bytes::from_str("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),

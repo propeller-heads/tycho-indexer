@@ -1089,7 +1089,7 @@ mod test_serial_db {
                 protocol_type_name: "ambient_pool".to_string(),
                 chain: Default::default(),
                 tokens: vec![usdc_address.clone()],
-                contract_addresses: vec![],
+                contract_ids: vec![],
                 change: ChangeType::Creation,
                 creation_tx: tx_1.hash.clone(),
                 static_attributes: Default::default(),

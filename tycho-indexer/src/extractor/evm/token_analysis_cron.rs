@@ -90,7 +90,7 @@ async fn analyze_batch(
         .filter_map(|(address, (cid, balance))| {
             if let Some(pc) = components.get(&cid) {
                 let liq_owner = map_vault(&pc.protocol_system).or_else(|| {
-                    pc.contract_addresses
+                    pc.contract_ids
                         // TODO: Currently, it's assumed that the pool is always the first
                         // contract in the protocol component. This approach is a temporary
                         // workaround and needs to be revisited for a more robust solution.

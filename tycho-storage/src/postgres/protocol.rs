@@ -502,7 +502,7 @@ impl PostgresGateway {
         // establish component-contract junction
         let contract_addresses: HashSet<Address> = new
             .iter()
-            .flat_map(|pc| pc.contract_addresses.clone())
+            .flat_map(|pc| pc.contract_ids.clone())
             .collect();
 
         let pc_contract_map = new
@@ -519,7 +519,7 @@ impl PostgresGateway {
                 // However, trying to handle this via Results is needlessly difficult, because you
                 // can not use flat_map on a Result.
 
-                pc.contract_addresses
+                pc.contract_ids
                     .iter()
                     .cloned()
                     .map(move |add| (*pc_id, add))

@@ -2,7 +2,9 @@ use crate::{rpc::RPCClient, RPCError};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, instrument, warn};
 use tycho_core::{
-    dto::{BlockChanges, Chain, ProtocolComponent, ProtocolComponentsRequestBody, ProtocolId},
+    dto::{
+        BlockAggregatedChanges, Chain, ProtocolComponent, ProtocolComponentsRequestBody, ProtocolId,
+    },
     Bytes,
 };
 
@@ -184,7 +186,10 @@ where
 
     /// Given BlockChanges, filter out components that are no longer relevant and return the
     /// components that need to be added or removed.
-    pub fn filter_updated_components(&self, deltas: &BlockChanges) -> (Vec<String>, Vec<String>) {
+    pub fn filter_updated_components(
+        &self,
+        deltas: &BlockAggregatedChanges,
+    ) -> (Vec<String>, Vec<String>) {
         match &self.filter.variant {
             ComponentFilterVariant::Ids(_) => (Default::default(), Default::default()),
             ComponentFilterVariant::MinimumTVLRange((remove_tvl, add_tvl)) => deltas
