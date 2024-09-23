@@ -138,7 +138,9 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
                 .into_iter()
                 .filter(|t| t.net_liquidity != 0)
                 .collect::<Vec<_>>(),
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            _ => {
+                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);
@@ -215,7 +217,7 @@ mod tests {
             protocol_type_name: "typename1".to_string(),
             chain: Chain::Ethereum,
             tokens: Vec::new(),
-            contract_addresses: Vec::new(),
+            contract_ids: Vec::new(),
             static_attributes: HashMap::new(),
             change: ChangeType::Creation,
             creation_tx: Bytes::from_str("0x0000").unwrap(),
@@ -287,7 +289,7 @@ mod tests {
             protocol_type_name: "typename1".to_string(),
             chain: Chain::Ethereum,
             tokens: Vec::new(),
-            contract_addresses: Vec::new(),
+            contract_ids: Vec::new(),
             static_attributes,
             change: ChangeType::Creation,
             creation_tx: Bytes::from_str("0x0000").unwrap(),
