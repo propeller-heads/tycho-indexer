@@ -16,9 +16,10 @@ use async_trait::async_trait;
 use futures03::future::try_join_all;
 
 use tycho_core::dto::{
-    Chain, PaginationParams, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-    ProtocolId, ProtocolStateRequestBody, ProtocolStateRequestResponse, ResponseToken,
-    StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse, VersionParam,
+    Chain, PaginationParams, PaginationResponse, ProtocolComponentRequestResponse,
+    ProtocolComponentsRequestBody, ProtocolId, ProtocolStateRequestBody,
+    ProtocolStateRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
+    TokensRequestBody, TokensRequestResponse, VersionParam,
 };
 
 use crate::TYCHO_SERVER_VERSION;
@@ -87,15 +88,23 @@ pub trait RPCClient {
             });
         }
 
-        try_join_all(tasks)
-            .await
-            .map(|responses| StateRequestResponse {
-                accounts: responses
-                    .into_iter()
-                    .flat_map(|r| r.accounts.into_iter())
-                    .collect(),
-                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
-            })
+        // Execute all tasks concurrently with the defined concurrency limit.
+        let responses = try_join_all(tasks).await?;
+
+        // Aggregate the responses into a single result.
+        let accounts = responses
+            .iter()
+            .flat_map(|r| r.accounts.clone())
+            .collect();
+        let total: i64 = responses
+            .iter()
+            .map(|r| r.pagination.total)
+            .sum();
+
+        Ok(StateRequestResponse {
+            accounts,
+            pagination: PaginationResponse { page: 0, page_size: chunk_size as i64, total },
+        })
     }
 
     async fn get_protocol_components(
@@ -151,7 +160,11 @@ pub trait RPCClient {
                     .into_iter()
                     .flat_map(|r| r.states.into_iter())
                     .collect(),
-                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+                pagination: PaginationResponse {
+                    page: 0,
+                    page_size: chunk_size as i64,
+                    total: 7171722,
+                },
             })
     }
 
@@ -266,7 +279,14 @@ impl RPCClient for HttpRPCClient {
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         if body.is_empty() {
             // Pure native protocols will return empty contract states
-            return Ok(StateRequestResponse { accounts: vec![], pagination: Default::default() });
+            return Ok(StateRequestResponse {
+                accounts: vec![],
+                pagination: PaginationResponse {
+                    page: request.pagination.page,
+                    page_size: request.pagination.page,
+                    total: 0,
+                },
+            });
         }
         let accounts: StateRequestResponse =
             serde_json::from_slice(&body).map_err(|e| RPCError::ParseResponse(e.to_string()))?;
@@ -365,7 +385,11 @@ impl RPCClient for HttpRPCClient {
             // Pure VM protocols will return empty states
             return Ok(ProtocolStateRequestResponse {
                 states: vec![],
-                pagination: Default::default(),
+                pagination: PaginationResponse {
+                    page: request.pagination.page,
+                    page_size: request.pagination.page_size,
+                    total: 0,
+                },
             });
         }
         let states: ProtocolStateRequestResponse =
@@ -446,7 +470,8 @@ mod tests {
             ],
             "pagination": {
                 "page": 0,
-                "page_size": 20
+                "page_size": 20,
+                "total": 10
             }
         }
         "#;
@@ -508,7 +533,8 @@ mod tests {
             ],
             "pagination": {
                 "page": 0,
-                "page_size": 20
+                "page_size": 20,
+                "total": 10
             }
         }
         "#;
@@ -562,7 +588,8 @@ mod tests {
             ],
             "pagination": {
                 "page": 0,
-                "page_size": 20
+                "page_size": 20,
+                "total": 10
             }
         }
         "#;
@@ -634,7 +661,8 @@ mod tests {
             ],
             "pagination": {
               "page": 0,
-              "page_size": 2
+              "page_size": 20,
+              "total": 10
             }
           }
         "#;
@@ -677,6 +705,6 @@ mod tests {
 
         mocked_server.assert();
         assert_eq!(response.tokens, expected);
-        assert_eq!(response.pagination, PaginationParams { page: 0, page_size: 2 });
+        assert_eq!(response.pagination, PaginationResponse { page: 0, page_size: 20, total: 10 });
     }
 }

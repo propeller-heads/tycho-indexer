@@ -399,6 +399,7 @@ impl PostgresGateway {
                 .get_contracts(chain, Some(&deleted_addresses), version.as_ref(), true, None, conn)
                 .await
                 .map_err(PostgresError::from)?
+                .1
                 .into_iter()
                 .map(|acc| (acc.address.clone(), acc.into()))
                 .collect();
@@ -785,12 +786,43 @@ impl PostgresGateway {
         include_slots: bool,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<models::contract::Account>, StorageError> {
+    ) -> Result<(i64, Vec<models::contract::Account>), StorageError> {
         let chain_db_id = self.get_chain_id(chain);
         let version_ts = match &version {
             Some(version) => maybe_lookup_version_ts(version, conn).await?,
             None => Utc::now().naive_utc(),
         };
+
+        // TODO: Try to reduce the duplication
+        // Total number of items, required for pagination.
+        let total_count = {
+            use schema::account::dsl::*;
+            let mut count_q = account
+                .left_join(
+                    schema::transaction::table
+                        .on(creation_tx.eq(schema::transaction::id.nullable())),
+                )
+                .filter(chain_id.eq(chain_db_id))
+                .filter(created_at.le(version_ts))
+                .filter(
+                    deleted_at
+                        .is_null()
+                        .or(deleted_at.gt(version_ts)),
+                )
+                .select(diesel::dsl::count_star())
+                .into_boxed();
+
+            // Apply contract id filters if provided
+            if let Some(contract_ids) = ids {
+                count_q = count_q.filter(address.eq_any(contract_ids));
+            }
+
+            count_q
+                .get_result::<i64>(conn)
+                .await
+                .map_err(PostgresError::from)?
+        };
+
         let accounts = {
             use schema::account::dsl::*;
             let mut q = account
@@ -898,7 +930,7 @@ impl PostgresGateway {
             )));
         }
 
-        accounts
+        let res = accounts
             .into_iter()
             .zip(native_balances.into_iter().zip(codes))
             .map(|(account, (balance, code))| -> Result<models::contract::Account, StorageError> {
@@ -940,7 +972,8 @@ impl PostgresGateway {
 
                 Ok(contract)
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((total_count, res))
     }
 
     /// Upsert contract
@@ -1723,7 +1756,7 @@ mod test {
         let gw = EvmGateway::from_connection(&mut conn).await;
         let addresses = ids.as_deref();
 
-        let results = gw
+        let (_, results) = gw
             .get_contracts(&Chain::Ethereum, addresses, version.as_ref(), true, None, &mut conn)
             .await
             .unwrap();
@@ -1736,6 +1769,7 @@ mod test {
     None,
     Some(Version::from_ts("2019-01-01T00:00:00".parse().unwrap())),
     vec ! [],
+    0
     )]
     #[case::only_c2_block_1(
     Some(vec ! [Bytes::from("94a3f312366b8d0a32a00986194053c0ed0cddb1")]),
@@ -1743,6 +1777,7 @@ mod test {
     vec ! [
     account_c2(1)
     ],
+    1
     )]
     #[case::all_ids_block_1(
     None,
@@ -1750,6 +1785,7 @@ mod test {
     vec ! [
     account_c0(1),
     ],
+    2
     )]
     #[case::only_c0_latest(
     Some(vec ! [Bytes::from("6B175474E89094C44Da98b954EedeAC495271d0F")]),
@@ -1757,6 +1793,7 @@ mod test {
     vec ! [
     account_c0(2)
     ],
+    1
     )]
     #[case::all_ids_latest(
     None,
@@ -1764,19 +1801,21 @@ mod test {
     vec ! [
     account_c0(2),
     ],
+    2
     )]
     #[tokio::test]
     async fn test_get_contracts_with_pagination(
         #[case] ids: Option<Vec<Bytes>>,
         #[case] version: Option<Version>,
         #[case] exp: Vec<models::contract::Contract>,
+        #[case] exp_total: i64,
     ) {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
         let gw = EvmGateway::from_connection(&mut conn).await;
         let addresses = ids.as_deref();
 
-        let results = gw
+        let (total, results) = gw
             .get_contracts(
                 &Chain::Ethereum,
                 addresses,
@@ -1789,6 +1828,7 @@ mod test {
             .unwrap();
 
         assert!(results.len() <= 1);
+        assert_eq!(total, exp_total);
         assert_eq!(results, exp);
     }
 

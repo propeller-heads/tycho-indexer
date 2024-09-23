@@ -204,7 +204,10 @@ mod test {
         rpc::MockRPCClient,
     };
     use tycho_core::{
-        dto::{Chain, ProtocolComponent, ProtocolComponentRequestResponse, ProtocolId},
+        dto::{
+            Chain, PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
+            ProtocolId,
+        },
         Bytes,
     };
 
@@ -239,7 +242,7 @@ mod test {
             .returning(move |_| {
                 Ok(ProtocolComponentRequestResponse {
                     protocol_components: vec![component.clone()],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 
@@ -271,7 +274,7 @@ mod test {
             .returning(move |_| {
                 Ok(ProtocolComponentRequestResponse {
                     protocol_components: vec![component.clone()],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 

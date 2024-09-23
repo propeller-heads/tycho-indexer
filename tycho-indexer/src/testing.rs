@@ -73,7 +73,7 @@ mock! {
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
-                    Output = Result<Vec<Account>, StorageError>,
+                    Output = Result<(i64, Vec<Account>), StorageError>,
                 > + ::core::marker::Send + 'async_trait,
             >,
         >

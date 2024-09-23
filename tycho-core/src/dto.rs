@@ -646,11 +646,11 @@ impl<'de> Deserialize<'de> for StateRequestBody {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct StateRequestResponse {
     pub accounts: Vec<ResponseAccount>,
-    pub pagination: PaginationParams,
+    pub pagination: PaginationResponse,
 }
 
 impl StateRequestResponse {
-    pub fn new(accounts: Vec<ResponseAccount>, pagination: PaginationParams) -> Self {
+    pub fn new(accounts: Vec<ResponseAccount>, pagination: PaginationResponse) -> Self {
         Self { accounts, pagination }
     }
 }
@@ -860,11 +860,11 @@ pub struct TokensRequestBody {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct TokensRequestResponse {
     pub tokens: Vec<ResponseToken>,
-    pub pagination: PaginationParams,
+    pub pagination: PaginationResponse,
 }
 
 impl TokensRequestResponse {
-    pub fn new(tokens: Vec<ResponseToken>, pagination_request: &PaginationParams) -> Self {
+    pub fn new(tokens: Vec<ResponseToken>, pagination_request: &PaginationResponse) -> Self {
         Self { tokens, pagination: pagination_request.clone() }
     }
 }
@@ -890,6 +890,19 @@ impl Default for PaginationParams {
             page: 0,       // Default page number
             page_size: 20, // Default page size
         }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PaginationResponse {
+    pub page: i64,
+    pub page_size: i64,
+    pub total: i64,
+}
+impl PaginationResponse {
+    pub fn new(page: i64, page_size: i64, total: i64) -> Self {
+        Self { page, page_size, total }
     }
 }
 
@@ -999,11 +1012,14 @@ impl ProtocolComponentRequestParameters {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ProtocolComponentRequestResponse {
     pub protocol_components: Vec<ProtocolComponent>,
-    pub pagination: PaginationParams,
+    pub pagination: PaginationResponse,
 }
 
 impl ProtocolComponentRequestResponse {
-    pub fn new(protocol_components: Vec<ProtocolComponent>, pagination: PaginationParams) -> Self {
+    pub fn new(
+        protocol_components: Vec<ProtocolComponent>,
+        pagination: PaginationResponse,
+    ) -> Self {
         Self { protocol_components, pagination }
     }
 }
@@ -1069,11 +1085,11 @@ impl ProtocolStateRequestBody {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ProtocolStateRequestResponse {
     pub states: Vec<ResponseProtocolState>,
-    pub pagination: PaginationParams,
+    pub pagination: PaginationResponse,
 }
 
 impl ProtocolStateRequestResponse {
-    pub fn new(states: Vec<ResponseProtocolState>, pagination: PaginationParams) -> Self {
+    pub fn new(states: Vec<ResponseProtocolState>, pagination: PaginationResponse) -> Self {
         Self { states, pagination }
     }
 }

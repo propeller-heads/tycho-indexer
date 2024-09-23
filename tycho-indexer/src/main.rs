@@ -454,7 +454,7 @@ mod test_serial_db {
                 .expect("Failed to create Gateway");
             initialize_accounts(accounts, block_id, rpc_url.as_str(), chain, &cached_gw).await;
 
-            let contracts = cached_gw
+            let (_, contracts) = cached_gw
                 .get_contracts(&chain, None, None, true, None)
                 .await
                 .unwrap();
@@ -486,7 +486,7 @@ mod test_serial_db {
 
             initialize_accounts(accounts, block_id, rpc_url.as_str(), chain, &cached_gw).await;
 
-            let contracts = cached_gw
+            let (_, contracts) = cached_gw
                 .get_contracts(&chain, None, None, true, None)
                 .await
                 .unwrap();
@@ -519,7 +519,7 @@ mod test_serial_db {
                 vec![Address::from_str("0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC").unwrap()];
             initialize_accounts(accounts, 20378315, rpc_url.as_str(), chain, &cached_gw).await;
 
-            let contracts = cached_gw
+            let (_, contracts) = cached_gw
                 .get_contracts(&chain, None, None, true, None)
                 .await
                 .unwrap();

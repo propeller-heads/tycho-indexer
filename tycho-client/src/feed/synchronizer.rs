@@ -539,7 +539,7 @@ mod test {
     };
     use tycho_core::{
         dto::{
-            Block, BlockChanges, Chain, ExtractorIdentity, ProtocolComponent,
+            Block, BlockChanges, Chain, ExtractorIdentity, PaginationResponse, ProtocolComponent,
             ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolId,
             ProtocolStateRequestBody, ProtocolStateRequestResponse, ResponseAccount,
             ResponseProtocolState, StateRequestBody, StateRequestResponse, TokensRequestBody,
@@ -663,7 +663,7 @@ mod test {
                 component_id: "Component1".to_string(),
                 ..Default::default()
             }],
-            pagination: Default::default(),
+            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
         }
     }
 
@@ -718,7 +718,7 @@ mod test {
                 ResponseAccount { address: Bytes::from("0x0badc0ffee"), ..Default::default() },
                 ResponseAccount { address: Bytes::from("0xbabe42"), ..Default::default() },
             ],
-            pagination: Default::default(),
+            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
         }
     }
 
@@ -801,7 +801,7 @@ mod test {
                         // this component shall have a tvl update above threshold
                         ProtocolComponent { id: "Component3".to_string(), ..Default::default() },
                     ],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
         rpc_client
@@ -822,7 +822,7 @@ mod test {
                         component_id: "Component3".to_string(),
                         ..Default::default()
                     }],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 
@@ -839,7 +839,7 @@ mod test {
                         ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
                         // a third component will have a tvl update above threshold
                     ],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
         rpc_client
@@ -857,7 +857,7 @@ mod test {
                             ..Default::default()
                         },
                     ],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
         // Mock deltas client and messages
@@ -1092,7 +1092,7 @@ mod test {
                         id: "Component3".to_string(),
                         ..Default::default()
                     }],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 
@@ -1113,7 +1113,7 @@ mod test {
                         component_id: "Component3".to_string(),
                         ..Default::default()
                     }],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 
@@ -1126,7 +1126,7 @@ mod test {
                         ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
                         ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
                     ],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 
@@ -1144,7 +1144,7 @@ mod test {
                             ..Default::default()
                         },
                     ],
-                    pagination: Default::default(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 

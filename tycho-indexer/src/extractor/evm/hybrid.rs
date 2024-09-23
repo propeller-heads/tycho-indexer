@@ -1233,6 +1233,7 @@ impl HybridGateway for HybridPgGateway {
         self.state_gateway
             .get_contracts(&self.chain, Some(component_ids), None, true, None)
             .await
+            .map(|(_, contracts)| contracts)
     }
 
     async fn get_components_balances<'a>(

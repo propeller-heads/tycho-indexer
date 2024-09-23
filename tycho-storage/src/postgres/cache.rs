@@ -707,7 +707,7 @@ impl ContractStateGateway for CachedGateway {
         version: Option<&Version>,
         include_slots: bool,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<Vec<Account>, StorageError> {
+    ) -> Result<(i64, Vec<Account>), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))

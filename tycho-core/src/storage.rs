@@ -510,7 +510,7 @@ pub trait ContractStateGateway {
         version: Option<&Version>,
         include_slots: bool,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<Vec<models::contract::Account>, StorageError>;
+    ) -> Result<(i64, Vec<models::contract::Account>), StorageError>;
 
     /// Inserts a new contract into the database.
     ///
