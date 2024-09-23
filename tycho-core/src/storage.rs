@@ -340,7 +340,7 @@ pub trait ProtocolGateway {
         id: Option<&[&str]>,
         retrieve_balances: bool,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError>;
+    ) -> Result<(i64, Vec<models::protocol::ProtocolComponentState>), StorageError>;
 
     async fn update_protocol_states(
         &self,

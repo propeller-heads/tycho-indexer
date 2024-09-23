@@ -225,7 +225,7 @@ where
         let ids = ids.as_deref();
 
         // Get the protocol states from the database
-        let mut states = self
+        let (total, mut states) = self
             .db_gateway
             .get_protocol_states(
                 &chain,
@@ -252,7 +252,7 @@ where
                 .into_iter()
                 .map(dto::ResponseProtocolState::from)
                 .collect(),
-            PaginationResponse::new(request.pagination.page_size, request.pagination.page, 7171722),
+            PaginationResponse::new(request.pagination.page_size, request.pagination.page, total),
         ))
     }
 
@@ -1013,7 +1013,7 @@ mod tests {
             protocol_attributes([("reserve1", 1000), ("reserve2", 500)]),
             HashMap::new(),
         );
-        let mock_response = Ok(vec![expected.clone()]);
+        let mock_response = Ok((1, vec![expected.clone()]));
         gw.expect_get_protocol_states()
             .return_once(|_, _, _, _, _, _| Box::pin(async move { mock_response }));
         let req_handler = RpcHandler::new(gw, PendingDeltas::new([]));

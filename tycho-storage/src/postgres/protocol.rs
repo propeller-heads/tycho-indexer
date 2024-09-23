@@ -46,10 +46,12 @@ impl PostgresGateway {
     fn _decode_protocol_states(
         &self,
         mut balances: HashMap<ComponentId, HashMap<Address, models::protocol::ComponentBalance>>,
-        states_result: Result<Vec<(orm::ProtocolState, ComponentId)>, diesel::result::Error>,
+        states_result: (i64, Result<Vec<(orm::ProtocolState, ComponentId)>, diesel::result::Error>),
         context: &str,
-    ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError> {
+    ) -> Result<(i64, Vec<models::protocol::ProtocolComponentState>), StorageError> {
+        let count = states_result.0;
         let data_vec = states_result
+            .1
             .map_err(|err| storage_error_from_diesel(err, "ProtocolStates", context, None))?;
 
         // Decode final state deltas. We can assume result is sorted by component_id.
@@ -99,7 +101,7 @@ impl PostgresGateway {
             ))
         }
 
-        Ok(protocol_states)
+        Ok((count, protocol_states))
     }
 
     async fn _get_or_create_protocol_system_id(
@@ -651,7 +653,7 @@ impl PostgresGateway {
         retrieve_balances: bool,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError> {
+    ) -> Result<(i64, Vec<models::protocol::ProtocolComponentState>), StorageError> {
         let chain_db_id = self.get_chain_id(chain);
         let version_ts = match &at {
             Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),
@@ -672,7 +674,7 @@ impl PostgresGateway {
                     balances,
                     orm::ProtocolState::by_id(
                         ids,
-                        chain_db_id,
+                        &chain_db_id,
                         version_ts,
                         pagination_params,
                         conn,
@@ -683,15 +685,15 @@ impl PostgresGateway {
             }
             (Some(ids), _) => self._decode_protocol_states(
                 balances,
-                orm::ProtocolState::by_id(ids, chain_db_id, version_ts, pagination_params, conn)
+                orm::ProtocolState::by_id(ids, &chain_db_id, version_ts, pagination_params, conn)
                     .await,
                 ids.join(",").as_str(),
             ),
             (_, Some(system)) => self._decode_protocol_states(
                 balances,
                 orm::ProtocolState::by_protocol_system(
-                    system.clone(),
-                    chain_db_id,
+                    &system.to_string(),
+                    &chain_db_id,
                     version_ts,
                     pagination_params,
                     conn,
@@ -701,7 +703,7 @@ impl PostgresGateway {
             ),
             _ => self._decode_protocol_states(
                 balances,
-                orm::ProtocolState::by_chain(chain_db_id, version_ts, pagination_params, conn)
+                orm::ProtocolState::by_chain(&chain_db_id, version_ts, pagination_params, conn)
                     .await,
                 chain.to_string().as_str(),
             ),
@@ -1993,7 +1995,7 @@ mod test {
 
         let gateway = EVMGateway::from_connection(&mut conn).await;
 
-        let result = gateway
+        let (_, result) = gateway
             .get_protocol_states(
                 &Chain::Ethereum,
                 None,
@@ -2020,7 +2022,7 @@ mod test {
 
         let gateway = EVMGateway::from_connection(&mut conn).await;
 
-        let result = gateway
+        let (count, result) = gateway
             .get_protocol_states(
                 &Chain::Ethereum,
                 None,
@@ -2034,7 +2036,8 @@ mod test {
             .unwrap();
 
         println!("{:?}", result);
-        assert_eq!(result, expected)
+        assert_eq!(result, expected);
+        assert_eq!(count, 1);
     }
 
     #[tokio::test]
@@ -2075,7 +2078,7 @@ mod test {
             ),
         ];
 
-        let result = gateway
+        let (_, result) = gateway
             .get_protocol_states(
                 &Chain::Ethereum,
                 Some(Version::from_block_number(Chain::Ethereum, 1)),
@@ -2181,7 +2184,7 @@ mod test {
             .expect("Failed to update protocol states");
 
         // check the correct state is considered the valid one
-        let db_states = gateway
+        let (_, db_states) = gateway
             .get_protocol_states(
                 &chain,
                 None,

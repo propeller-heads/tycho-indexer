@@ -623,11 +623,20 @@ impl ProtocolState {
     /// updates for a given component are sequential.
     pub async fn by_id(
         component_ids: &[&str],
-        chain_id: i64,
+        chain_id: &i64,
         version_ts: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> QueryResult<Vec<(Self, ComponentId)>> {
+    ) -> (i64, QueryResult<Vec<(Self, ComponentId)>>) {
+        // Count the total number of matching components
+        let count: i64 = protocol_component::table
+            .filter(protocol_component::external_id.eq_any(component_ids))
+            .filter(protocol_component::chain_id.eq(chain_id))
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .unwrap_or(0);
+
         // Subquery to get distinct component external IDs based on pagination
         let mut component_query = protocol_component::table
             .filter(protocol_component::external_id.eq_any(component_ids))
@@ -657,11 +666,13 @@ impl ProtocolState {
         }
 
         // Fetch the results
-        query
+        let res = query
             .order_by(protocol_component::external_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
-            .await
+            .await;
+
+        (count, res)
     }
 
     /// Used to fetch the full state of a component at a given version, filtered by protocol system.
@@ -674,12 +685,24 @@ impl ProtocolState {
     /// Note - follows the same logic as by_ids, but filters by protocol system instead of component
     /// ids.
     pub async fn by_protocol_system(
-        system: String,
-        chain_id: i64,
+        system: &str,
+        chain_id: &i64,
         version_ts: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> QueryResult<Vec<(Self, ComponentId)>> {
+    ) -> (i64, QueryResult<Vec<(Self, ComponentId)>>) {
+        let count: i64 = protocol_component::table
+            .inner_join(
+                protocol_system::table
+                    .on(protocol_component::protocol_system_id.eq(protocol_system::id)),
+            )
+            .filter(protocol_system::name.eq(system))
+            .filter(protocol_component::chain_id.eq(chain_id))
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .unwrap_or(0);
+
         // Subquery to get distinct component IDs based on pagination
         let mut component_query = protocol_component::table
             .inner_join(
@@ -713,11 +736,13 @@ impl ProtocolState {
         }
 
         // Fetch the results
-        query
+        let res = query
             .order_by(protocol_state::protocol_component_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
-            .await
+            .await;
+
+        (count, res)
     }
 
     /// Used to fetch the full state of a component at a given version, filtered by chain.
@@ -729,11 +754,20 @@ impl ProtocolState {
     ///
     /// Note - follows the same logic as by_ids, but filters by chain instead of component ids.
     pub async fn by_chain(
-        chain_id: i64,
+        chain_id: &i64,
         version_ts: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> QueryResult<Vec<(Self, ComponentId)>> {
+    ) -> (i64, QueryResult<Vec<(Self, ComponentId)>>) {
+        let mut count_query = protocol_component::table
+            .filter(protocol_component::chain_id.eq(chain_id))
+            .filter(exists(
+                protocol_state::table
+                    .filter(protocol_state::protocol_component_id.eq(protocol_component::id))
+                    .filter(protocol_state::valid_to.gt(version_ts.unwrap_or(*MAX_VERSION_TS))),
+            ))
+            .into_boxed();
+
         // Step 1: Get IDs of components that have associated states
         let mut component_ids_query = protocol_component::table
             .filter(protocol_component::chain_id.eq(chain_id))
@@ -754,7 +788,20 @@ impl ProtocolState {
                     .filter(protocol_state::valid_to.gt(*MAX_VERSION_TS))
                     .filter(protocol_state::valid_from.le(ts)),
             ));
+
+            count_query = count_query.filter(exists(
+                protocol_state::table
+                    .filter(protocol_state::protocol_component_id.eq(protocol_component::id))
+                    .filter(protocol_state::valid_to.gt(*MAX_VERSION_TS))
+                    .filter(protocol_state::valid_from.le(ts)),
+            ));
         }
+
+        let count: i64 = count_query
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .unwrap_or(0);
 
         // Step 3: Apply pagination
         if let Some(pagination) = pagination_params {
@@ -766,11 +813,18 @@ impl ProtocolState {
         // Fetch the component IDs
         let component_ids = component_ids_query
             .load::<i64>(conn)
-            .await?;
+            .await;
+
+        let component_ids = match component_ids {
+            Ok(ids) => ids,
+            Err(err) => {
+                return (0, Err(err));
+            }
+        };
 
         // If no components found, return empty result
         if component_ids.is_empty() {
-            return Ok(Vec::new());
+            return (0, Ok(Vec::new()));
         }
 
         // Step 4: Fetch all ProtocolStates for the selected components
@@ -789,11 +843,13 @@ impl ProtocolState {
         }
 
         // Fetch the results
-        query
+        let res = query
             .order_by(protocol_state::protocol_component_id)
             .select((Self::as_select(), protocol_component::external_id))
             .get_results::<(Self, String)>(conn)
-            .await
+            .await;
+
+        (count, res)
     }
 
     /// Used to fetch all protocol state changes within the given timeframe.

@@ -1224,6 +1224,7 @@ impl HybridGateway for HybridPgGateway {
         self.state_gateway
             .get_protocol_states(&self.chain, None, None, Some(component_ids), false, None)
             .await
+            .map(|(_, states)| states)
     }
 
     async fn get_contracts(

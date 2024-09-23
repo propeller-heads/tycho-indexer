@@ -830,7 +830,7 @@ impl ProtocolGateway for CachedGateway {
         id: Option<&[&str]>,
         retrieve_balances: bool,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<Vec<ProtocolComponentState>, StorageError> {
+    ) -> Result<(i64, Vec<ProtocolComponentState>), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
