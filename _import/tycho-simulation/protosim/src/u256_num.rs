@@ -30,7 +30,7 @@ use ethers::types::U256;
 pub fn u256_to_f64(x: U256) -> f64 {
     let res = panic::catch_unwind(|| {
         if x == U256::zero() {
-            return 0.0
+            return 0.0;
         }
 
         let x_bits = x.bits();

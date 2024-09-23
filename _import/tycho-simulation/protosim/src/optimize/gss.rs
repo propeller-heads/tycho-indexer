@@ -54,7 +54,7 @@ pub fn golden_section_search<F: Fn(I256) -> I256>(
 
     let mut h = max_bound - min_bound;
     if h <= tol {
-        return Ok((i256_to_u256(min_bound), i256_to_u256(max_bound)))
+        return Ok((i256_to_u256(min_bound), i256_to_u256(max_bound)));
     }
 
     let mut yc;
@@ -184,7 +184,7 @@ mod tests {
 
 fn i256_to_u256(to_convert: I256) -> U256 {
     if to_convert <= I256::zero() {
-        return U256::zero()
+        return U256::zero();
     }
 
     U256::from_dec_str(&to_convert.to_string()).unwrap()
@@ -258,11 +258,11 @@ pub fn bracket<F: Fn(I256) -> I256>(
             if yw > yc {
                 let min_bound = xb;
                 let max_bound = w;
-                return Ok((max_bound, min_bound, xc, yc))
+                return Ok((max_bound, min_bound, xc, yc));
             } else if yw < yb {
                 let xc = w;
                 let yc = yw;
-                return Ok((xa, xb, xc, yc))
+                return Ok((xa, xb, xc, yc));
             }
             w = safe_add_i256(xc, mul_div(_golden_ratio, safe_sub_i256(xc, xb)?, DENOM)?)?;
             yw = f(w);

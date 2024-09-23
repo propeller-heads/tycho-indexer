@@ -112,6 +112,8 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 log.error(
                     f"Failed to decode third party snapshot with id {snap.component.id}: {e}"
                 )
+                failed_pools.add(snap.component.id)
+                continue
 
         if decoded_pools or failed_pools:
             self.ignored_pools.update(failed_pools)
