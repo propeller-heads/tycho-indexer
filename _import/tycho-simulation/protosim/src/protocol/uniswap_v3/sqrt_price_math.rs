@@ -104,7 +104,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
     add: bool,
 ) -> Result<U256, TradeSimulationError> {
     if amount == U256::zero() {
-        return Ok(sqrt_price)
+        return Ok(sqrt_price);
     }
     let numerator1 = U256::from(liquidity) << RESOLUTION;
 
@@ -114,7 +114,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
             // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
             let denominator = safe_add_u256(numerator1, product)?;
             if denominator >= numerator1 {
-                return mul_div_rounding_up(numerator1, sqrt_price, denominator)
+                return mul_div_rounding_up(numerator1, sqrt_price, denominator);
             }
         }
         // Overflow: liquidity / (liquidity / sqrtPX96 +- amount)
