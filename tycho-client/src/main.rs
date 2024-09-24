@@ -1,7 +1,7 @@
 use std::{str::FromStr, time::Duration};
 
 use clap::Parser;
-use tracing::debug;
+use tracing::{debug, warn};
 use tracing_appender::rolling::{self};
 
 use tycho_client::{
@@ -15,11 +15,27 @@ use tycho_client::{
 use tycho_core::dto::{Chain, ExtractorIdentity};
 
 #[derive(Parser, Debug, Clone, PartialEq)]
+struct TychoUrls {
+    /// Tycho server rpc URL. Example: http://localhost:4242
+    #[clap(long, requires("tycho_ws_url"))]
+    tycho_rpc_url: Option<String>,
+
+    /// Tycho server websocket URL. Example: ws://localhost:4242
+    #[clap(long, requires("tycho_rpc_url"))]
+    tycho_ws_url: Option<String>,
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
 #[clap(version = env!("CARGO_PKG_VERSION"))]
 struct CliArgs {
+    /// DEPRECATED (please use `tycho_rpc_url` and `tycho_ws_url` instead).
     /// Tycho server URL, without protocol. Example: localhost:4242
-    #[clap(long, default_value = "localhost:4242")]
-    tycho_url: String,
+    #[clap(long, hide = true, conflicts_with_all = ["tycho_rpc_url","tycho_ws_url"])]
+    tycho_url: Option<String>,
+
+    /// Tycho server URLs.
+    #[clap(flatten)]
+    tycho_urls: TychoUrls,
 
     /// The blockchain to index on
     #[clap(long, default_value = "ethereum")]
@@ -30,7 +46,7 @@ struct CliArgs {
     exchange: Vec<String>,
 
     /// Specifies the minimum TVL to filter the components. Ignored if addresses are provided.
-    #[clap(long, default_value = "10")]
+    #[clap(long, default_value = "10", hide = true)]
     min_tvl: u32,
 
     /// Specifies the lower bound of the TVL threshold range. Components below this TVL will be
@@ -81,15 +97,37 @@ impl CliArgs {
         }
         Ok(())
     }
+
+    fn maybe_emit_deprecated_warn(&self) {
+        if self.tycho_url.is_some() {
+            warn!("\"tycho_url\" cli arg is deprecated, please use \"tycho_rpc_url\" and \"tycho_ws_url\" instead");
+        }
+    }
+
+    /// Utils function to get websocket and rpc urls. Can be removed when `tycho_url` has been
+    /// removed from `CliArgs`.
+    /// Returns a tuple containing (ws_url, rpc_url)
+    fn get_tycho_urls(&self) -> (String, String) {
+        let (tycho_ws_url, tycho_rpc_url) = if let (Some(ws_url), Some(rpc_url)) =
+            (&self.tycho_urls.tycho_ws_url, &self.tycho_urls.tycho_rpc_url)
+        {
+            (ws_url.clone(), rpc_url.clone())
+        } else if let Some(url) = &self.tycho_url {
+            (format!("ws://{}", url), format!("http://{}", url))
+        } else {
+            // Return old default value
+            ("ws://localhost:4242".to_string(), "http://localhost:4242".to_string())
+        };
+        (tycho_ws_url, tycho_rpc_url)
+    }
 }
 
 #[tokio::main]
 async fn main() {
     // Parse CLI Args
     let args: CliArgs = CliArgs::parse();
-    if let Err(e) = args.validate() {
-        panic!("{}", e);
-    }
+    args.validate()
+        .unwrap_or_else(|e| panic!("{}", e));
 
     // Setup Logging
     let (non_blocking, _guard) =
@@ -104,6 +142,8 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber)
         .expect("Failed to set up logging subscriber");
+
+    args.maybe_emit_deprecated_warn();
 
     // Runs example if flag is set.
     if args.example {
@@ -154,8 +194,7 @@ async fn main() {
 
 #[allow(deprecated)]
 async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
-    let tycho_ws_url = format!("ws://{}", &args.tycho_url);
-    let tycho_rpc_url = format!("http://{}", &args.tycho_url);
+    let (tycho_ws_url, tycho_rpc_url) = args.get_tycho_urls();
     let ws_client = WsDeltasClient::new(&tycho_ws_url).unwrap();
     let ws_jh = ws_client
         .connect()
@@ -257,7 +296,7 @@ mod cli_tests {
             "1",
         ]);
         let exchanges: Vec<String> = vec!["uniswap_v2".to_string()];
-        assert_eq!(args.tycho_url, "localhost:5000");
+        assert_eq!(args.tycho_url, Some("localhost:5000".to_string()));
         assert_eq!(args.exchange, exchanges);
         assert_eq!(args.min_tvl, 3000);
         assert_eq!(args.block_time, 50);
@@ -265,5 +304,65 @@ mod cli_tests {
         assert_eq!(args.log_folder, "test_logs");
         assert_eq!(args.max_messages, Some(1));
         assert!(args.example);
+    }
+
+    #[tokio::test]
+    async fn test_cli_args_conflict() {
+        // Base arguments
+        let base_args = [
+            "tycho-client",
+            "--exchange",
+            "uniswap_v2",
+            "--min-tvl",
+            "3000",
+            "--block-time",
+            "50",
+            "--timeout",
+            "5",
+            "--log-folder",
+            "test_logs",
+            "--example",
+            "--max-messages",
+            "1",
+        ];
+
+        fn try_parse_args(base_args: &[&str], additional_args: &[&str]) -> Result<CliArgs, String> {
+            let mut args = base_args.to_vec();
+            args.extend_from_slice(additional_args);
+            CliArgs::try_parse_from(args).map_err(|e| e.to_string())
+        }
+
+        // Case 1: Tycho RPC without Tycho WS.
+        let result = try_parse_args(&base_args, &["--tycho-rpc-url", "url"]);
+        assert!(result.is_err(), "Expected an error when only --tycho-rpc-url is provided.");
+        assert!(
+            result.unwrap_err().contains("error: the following required arguments were not provided:\n  --tycho-ws-url <TYCHO_WS_URL>"),
+            "Unexpected error message for missing --tycho-ws-url."
+        );
+
+        // Case 2: Tycho WS without Tycho RPC.
+        let result = try_parse_args(&base_args, &["--tycho-ws-url", "url"]);
+        assert!(result.is_err(), "Expected an error when only --tycho-ws-url is provided.");
+
+        assert!(
+            result.unwrap_err().contains("error: the following required arguments were not provided:\n  --tycho-rpc-url <TYCHO_RPC_URL>"),
+            "Unexpected error message for missing --tycho-rpc-url."
+        );
+
+        // Case 3: Both Tycho RPC and Tycho WS provided.
+        let result =
+            try_parse_args(&base_args, &["--tycho-ws-url", "url", "--tycho-rpc-url", "url"]);
+        assert!(result.is_ok(), "Expected success when both --add-tvl-threshold and --remove-tvl-threshold are provided.");
+
+        // Case 4: Both old and new URLs are provided. In that case, we error to avoid confusion.
+        let result = try_parse_args(
+            &base_args,
+            &["--tycho-ws-url", "url", "--tycho-rpc-url", "url", "--tycho-url", "url"],
+        );
+        assert!(result.is_err(), "Expected an error when both old an new url are provided.");
+        assert!(
+            result.unwrap_err().contains("error: the argument '--tycho-ws-url <TYCHO_WS_URL>' cannot be used with '--tycho-url <TYCHO_URL>"),
+            "Unexpected error message when both old and new URLs are provided."
+        );
     }
 }
