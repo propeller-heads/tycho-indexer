@@ -197,9 +197,7 @@ impl TryFrom<&dto::VersionParam> for BlockOrTimestamp {
                         BlockIdentifier::Number((Chain::from(*chain), *number))
                     }
                     _ => {
-                        return Err(
-                            anyhow::format_err!("Insufficient block information".to_owned()),
-                        )
+                        return Err(anyhow::format_err!("Insufficient block information".to_owned()))
                     }
                 };
                 Ok(BlockOrTimestamp::Block(block_identifier))

@@ -1807,7 +1807,7 @@ mod test {
     async fn test_get_contracts_with_pagination(
         #[case] ids: Option<Vec<Bytes>>,
         #[case] version: Option<Version>,
-        #[case] exp: Vec<models::contract::Contract>,
+        #[case] exp: Vec<models::contract::Account>,
         #[case] exp_total: i64,
     ) {
         let mut conn = setup_db().await;

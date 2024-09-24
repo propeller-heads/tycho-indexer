@@ -20,7 +20,6 @@ use tycho_core::{
     dto::PaginationResponse,
     models::{Address, Chain, PaginationParams},
     storage::{BlockIdentifier, BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
-    Bytes,
 };
 
 #[derive(Error, Debug)]
@@ -870,8 +869,8 @@ mod tests {
             .version
             .timestamp
             .unwrap()
-            .timestamp_millis()
-            - result
+            .timestamp_millis() -
+            result
                 .version
                 .timestamp
                 .unwrap()
