@@ -64,7 +64,8 @@ tycho-client \
     --exchange vm:ambient \
     --exchange vm:balancer \
     --min-tvl 100
-    --tycho-url {TYCHO_INDEXER_URL}
+    --tycho-rpc-url {TYCHO_INDEXER_RPC_URL}
+    --tycho-ws-url {TYCHO_INDEXER_WS_URL}
 ```
  - TYCHO_INDEXER_URL defaults to `localhost:4242`
 
