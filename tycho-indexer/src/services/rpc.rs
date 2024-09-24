@@ -340,7 +340,7 @@ where
             )
             .await
         {
-            Ok(tokens) => Ok(dto::TokensRequestResponse::new(
+            Ok((total, tokens)) => Ok(dto::TokensRequestResponse::new(
                 tokens
                     .into_iter()
                     .map(dto::ResponseToken::from)
@@ -348,7 +348,7 @@ where
                 &PaginationResponse::new(
                     request.pagination.page_size,
                     request.pagination.page,
-                    7171722,
+                    total,
                 ),
             )),
             Err(err) => {
@@ -966,7 +966,7 @@ mod tests {
             CurrencyToken::new(&(WETH.parse().unwrap()), "WETH", 18, 0, &[], Chain::Ethereum, 100),
         ];
         let mut gw = MockGateway::new();
-        let mock_response = Ok(expected.clone());
+        let mock_response = Ok((2, expected.clone()));
         // ensure the gateway is only accessed once - the second request should hit cache
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));

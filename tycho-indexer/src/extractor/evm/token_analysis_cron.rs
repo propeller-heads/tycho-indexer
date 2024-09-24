@@ -29,7 +29,8 @@ pub async fn analyze_tokens(
         let pagination_params = PaginationParams::new(page, page_size);
         tokens.clone_from(
             &(gw.get_tokens(analyze_args.chain, None, None, None, Some(&pagination_params))
-                .await?),
+                .await?
+                .1),
         );
         let sem = Arc::new(Semaphore::new(analyze_args.concurrency));
         let tasks = tokens
@@ -181,15 +182,18 @@ mod test {
         gw.expect_get_tokens()
             .returning(|_, _, _, _, _| {
                 Box::pin(async {
-                    Ok(vec![CurrencyToken::new(
-                        &Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78"),
-                        "PAXG",
-                        18,
-                        0,
-                        &[],
-                        Chain::Ethereum,
-                        10,
-                    )])
+                    Ok((
+                        1,
+                        vec![CurrencyToken::new(
+                            &Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78"),
+                            "PAXG",
+                            18,
+                            0,
+                            &[],
+                            Chain::Ethereum,
+                            10,
+                        )],
+                    ))
                 })
             });
         let exp = vec![CurrencyToken::new(

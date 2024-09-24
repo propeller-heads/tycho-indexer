@@ -2205,7 +2205,8 @@ mod test_serial_db {
             let tokens = cached_gw
                 .get_tokens(Chain::Ethereum, None, None, None, None)
                 .await
-                .unwrap();
+                .unwrap()
+                .1;
             assert_eq!(tokens.len(), 2);
 
             let (_, protocol_components) = cached_gw
