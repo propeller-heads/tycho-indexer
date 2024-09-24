@@ -170,8 +170,8 @@ mock! {
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
-                    Output = Result<
-                        Vec<ProtocolComponent>,
+                    Output = Result<(i64,
+                        Vec<ProtocolComponent>),
                         StorageError,
                     >,
                 > + ::core::marker::Send + 'async_trait,

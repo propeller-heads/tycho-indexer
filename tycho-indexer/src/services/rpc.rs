@@ -392,6 +392,8 @@ where
                 .map(|comp| comp.id.as_str())
                 .collect();
 
+            let total = components.len() as i64;
+
             if requested_ids.len() == fetched_ids.len() {
                 let response_components = components
                     .into_iter()
@@ -403,7 +405,7 @@ where
                     PaginationResponse::new(
                         request.pagination.page_size,
                         request.pagination.page,
-                        7171722,
+                        total,
                     ),
                 ));
             }
@@ -420,7 +422,7 @@ where
             )
             .await
         {
-            Ok(comps) => {
+            Ok((total, comps)) => {
                 components.extend(comps);
                 let response_components = components
                     .into_iter()
@@ -431,7 +433,7 @@ where
                     PaginationResponse::new(
                         request.pagination.page_size,
                         request.pagination.page,
-                        7171722,
+                        total,
                     ),
                 ))
             }
@@ -1063,7 +1065,7 @@ mod tests {
                 .unwrap(),
             NaiveDateTime::default(),
         );
-        let mock_response = Ok(vec![expected.clone()]);
+        let mock_response = Ok((1, vec![expected.clone()]));
         gw.expect_get_protocol_components()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         let req_handler = RpcHandler::new(gw, PendingDeltas::new([]));

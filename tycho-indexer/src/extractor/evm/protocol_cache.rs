@@ -95,6 +95,7 @@ impl ProtocolMemoryCache {
             self.gateway
                 .get_protocol_components(&self.chain, None, None, None, None)
                 .await?
+                .1
                 .into_iter()
                 .for_each(|pc| {
                     n_components += 1;
@@ -235,6 +236,7 @@ impl ProtocolDataCache for ProtocolMemoryCache {
                     None,
                 )
                 .await?
+                .1
                 .into_iter()
                 .for_each(|c| {
                     n_fetched += 1;
@@ -387,7 +389,7 @@ mod tests {
         let ret_components = components.clone();
         gateway
             .expect_get_protocol_components()
-            .return_once(move |_, _, _, _, _| Box::pin(async { Ok(ret_components) }));
+            .return_once(move |_, _, _, _, _| Box::pin(async { Ok((10, ret_components)) }));
 
         let cache = ProtocolMemoryCache::new(chain, max_price_age, Arc::new(gateway));
         let component_ids = components
@@ -414,7 +416,7 @@ mod tests {
             .return_once(|_, _, _, _, _| Box::pin(async { Ok(tokens()) }));
         gateway
             .expect_get_protocol_components()
-            .return_once(|_, _, _, _, _| Box::pin(async { Ok(components()) }));
+            .return_once(|_, _, _, _, _| Box::pin(async { Ok((10, components())) }));
         gateway
             .expect_get_token_prices()
             .with(eq(chain))

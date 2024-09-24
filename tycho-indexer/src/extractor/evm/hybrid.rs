@@ -2164,7 +2164,7 @@ mod test_serial_db {
                 .expect("upsert should succeed");
 
             let cached_gw: CachedGateway = gw.state_gateway;
-            let res = cached_gw
+            let (_, res) = cached_gw
                 .get_protocol_components(
                     &Chain::Ethereum,
                     None,
@@ -2208,7 +2208,7 @@ mod test_serial_db {
                 .unwrap();
             assert_eq!(tokens.len(), 2);
 
-            let protocol_components = cached_gw
+            let (_, protocol_components) = cached_gw
                 .get_protocol_components(&Chain::Ethereum, None, None, None, None)
                 .await
                 .unwrap();

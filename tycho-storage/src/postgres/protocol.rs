@@ -140,9 +140,14 @@ impl PostgresGateway {
         min_tvl: Option<f64>,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<models::protocol::ProtocolComponent>, StorageError> {
+    ) -> Result<(i64, Vec<models::protocol::ProtocolComponent>), StorageError> {
         use super::schema::{protocol_component::dsl::*, transaction::dsl::*};
         let chain_id_value = self.get_chain_id(chain);
+
+        let mut count_query = protocol_component
+            .inner_join(transaction.on(creation_tx.eq(schema::transaction::id)))
+            .left_join(schema::component_tvl::table)
+            .into_boxed();
 
         let mut query = protocol_component
             .inner_join(transaction.on(creation_tx.eq(schema::transaction::id)))
@@ -158,9 +163,19 @@ impl PostgresGateway {
                         .eq(chain_id_value)
                         .and(protocol_system_id.eq(protocol_system)),
                 );
+                count_query = count_query.filter(
+                    chain_id
+                        .eq(chain_id_value)
+                        .and(protocol_system_id.eq(protocol_system)),
+                );
             }
             (None, Some(external_ids)) => {
                 query = query.filter(
+                    chain_id
+                        .eq(chain_id_value)
+                        .and(external_id.eq_any(external_ids)),
+                );
+                count_query = count_query.filter(
                     chain_id
                         .eq(chain_id_value)
                         .and(external_id.eq_any(external_ids)),
@@ -175,15 +190,30 @@ impl PostgresGateway {
                             .and(protocol_system_id.eq(protocol_system)),
                     ),
                 );
+                count_query = count_query.filter(
+                    chain_id.eq(chain_id_value).and(
+                        external_id
+                            .eq_any(external_ids)
+                            .and(protocol_system_id.eq(protocol_system)),
+                    ),
+                );
             }
             (_, _) => {
                 query = query.filter(chain_id.eq(chain_id_value));
+                count_query = count_query.filter(chain_id.eq(chain_id_value));
             }
         }
 
         if let Some(thr) = min_tvl {
             query = query.filter(schema::component_tvl::tvl.gt(thr));
+            count_query = count_query.filter(schema::component_tvl::tvl.gt(thr));
         }
+
+        let count = count_query
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
 
         // Apply optional pagination when loading protocol components to ensure consistency
         if let Some(pagination) = pagination_params {
@@ -200,8 +230,11 @@ impl PostgresGateway {
             .map(|(pc, txh)| (pc, Some(txh)))
             .collect();
 
-        self.build_protocol_components(orm_protocol_components, chain, conn)
-            .await
+        let res = self
+            .build_protocol_components(orm_protocol_components, chain, conn)
+            .await;
+
+        Ok((count, res?))
     }
 
     async fn build_protocol_components(
@@ -3152,7 +3185,7 @@ mod test {
         setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
-        let components = gw
+        let (count, components) = gw
             .get_protocol_components(
                 &Chain::Ethereum,
                 None,
@@ -3167,6 +3200,7 @@ mod test {
 
         print!("{:?}", components);
         assert_eq!(components.len(), 2);
+        assert_eq!(count, 3);
     }
 
     #[rstest]
@@ -3188,7 +3222,7 @@ mod test {
 
         match system.unwrap().as_str() {
             "zigzag" => {
-                let components = result.unwrap();
+                let components = result.unwrap().1;
                 assert_eq!(components.len(), 1);
 
                 let pc = &components[0];
@@ -3198,7 +3232,7 @@ mod test {
                 assert_eq!(pc.creation_tx, Bytes::from(tx_hashes.get(1).unwrap().as_str()));
             }
             "ambient" => {
-                let components = result.unwrap();
+                let components = result.unwrap().1;
                 assert_eq!(components.len(), 0)
             }
             _ => {}
@@ -3220,22 +3254,22 @@ mod test {
 
         let result = gw
             .get_protocol_components(&chain, None, ids, None, None, &mut conn)
-            .await;
+            .await
+            .unwrap()
+            .1;
 
         match external_id.as_str() {
             "state1" => {
-                let components = result.unwrap();
-                assert_eq!(components.len(), 1);
+                assert_eq!(result.len(), 1);
 
-                let pc = &components[0];
+                let pc = &result[0];
                 assert_eq!(pc.id, external_id.to_string());
                 assert_eq!(pc.protocol_system, "ambient");
                 assert_eq!(pc.chain, Chain::Ethereum);
                 assert_eq!(pc.creation_tx, Bytes::from(tx_hashes[0].as_str()));
             }
             "state2" => {
-                let components = result.unwrap();
-                assert_eq!(components.len(), 0)
+                assert_eq!(result.len(), 0)
             }
             _ => {}
         }
@@ -3254,7 +3288,7 @@ mod test {
             .get_protocol_components(&chain, Some(system), ids, None, None, &mut conn)
             .await;
 
-        let components = result.unwrap();
+        let components = result.unwrap().1;
         assert_eq!(components.len(), 1);
 
         let pc = &components[0];
@@ -3284,6 +3318,7 @@ mod test {
             .get_protocol_components(&chain, None, None, None, None, &mut conn)
             .await
             .expect("failed retrieving components")
+            .1
             .into_iter()
             .map(|c| c.id)
             .collect::<HashSet<_>>();
@@ -3313,6 +3348,7 @@ mod test {
             .get_protocol_components(&Chain::Ethereum, None, None, min_tvl, None, &mut conn)
             .await
             .expect("failed retrieving components")
+            .1
             .into_iter()
             .map(|comp| comp.id)
             .collect::<HashSet<_>>();

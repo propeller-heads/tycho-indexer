@@ -81,6 +81,7 @@ async fn analyze_batch(
     let components = gw
         .get_protocol_components(&chain, None, Some(&component_ids), None, None)
         .await?
+        .1
         .into_iter()
         .map(|pc| (pc.id.clone(), pc))
         .collect::<HashMap<_, _>>();
@@ -215,18 +216,21 @@ mod test {
         gw.expect_get_protocol_components()
             .returning(|_, _, _, _, _| {
                 Box::pin(async move {
-                    Ok(vec![ProtocolComponent::new(
-                        "0xe25a329d385f77df5d4ed56265babe2b99a5436e",
-                        "uniswap_v2",
-                        "pool",
-                        Chain::Ethereum,
-                        vec![Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78")],
-                        vec![],
-                        HashMap::new(),
-                        ChangeType::Creation,
-                        Bytes::from("0x00"),
-                        NaiveDateTime::default(),
-                    )])
+                    Ok((
+                        1,
+                        vec![ProtocolComponent::new(
+                            "0xe25a329d385f77df5d4ed56265babe2b99a5436e",
+                            "uniswap_v2",
+                            "pool",
+                            Chain::Ethereum,
+                            vec![Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78")],
+                            vec![],
+                            HashMap::new(),
+                            ChangeType::Creation,
+                            Bytes::from("0x00"),
+                            NaiveDateTime::default(),
+                        )],
+                    ))
                 })
             });
         gw.expect_update_tokens()

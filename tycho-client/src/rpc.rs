@@ -155,16 +155,20 @@ pub trait RPCClient {
 
         try_join_all(tasks)
             .await
-            .map(|responses| ProtocolStateRequestResponse {
-                states: responses
+            .map(|responses| {
+                let states = responses
+                    .clone()
                     .into_iter()
-                    .flat_map(|r| r.states.into_iter())
-                    .collect(),
-                pagination: PaginationResponse {
-                    page: 0,
-                    page_size: chunk_size as i64,
-                    total: 7171722,
-                },
+                    .flat_map(|r| r.states)
+                    .collect();
+                let total = responses
+                    .iter()
+                    .map(|r| r.pagination.total)
+                    .sum();
+                ProtocolStateRequestResponse {
+                    states,
+                    pagination: PaginationResponse { page: 0, page_size: chunk_size as i64, total },
+                }
             })
     }
 

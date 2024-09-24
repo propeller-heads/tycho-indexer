@@ -273,7 +273,7 @@ pub trait ProtocolGateway {
         ids: Option<&[&str]>,
         min_tvl: Option<f64>,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<Vec<models::protocol::ProtocolComponent>, StorageError>;
+    ) -> Result<(i64, Vec<models::protocol::ProtocolComponent>), StorageError>;
 
     /// Retrieves owners of tokens
     ///
