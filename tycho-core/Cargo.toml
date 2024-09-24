@@ -23,7 +23,7 @@ bytes.workspace = true
 tracing.workspace = true
 # share with workspace?
 typetag = "0.2"
-tiny-keccak = "2.0.2"
+tiny-keccak = { version = "2.0.0", features = ["keccak"] }
 rand = "0.8.5"
 
 [dev-dependencies]
