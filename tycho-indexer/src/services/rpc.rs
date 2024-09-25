@@ -13,7 +13,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
-    services::deltas_buffer::{PendingDeltas, PendingDeltasError},
+    services::deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
 };
 use tycho_core::{
     dto,
@@ -45,7 +45,7 @@ impl From<anyhow::Error> for RpcError {
 
 pub struct RpcHandler<G> {
     db_gateway: G,
-    pending_deltas: PendingDeltas,
+    pending_deltas: Arc<dyn PendingDeltasBuffer + Send + Sync>,
     token_cache: Arc<RwLock<Cache<String, dto::TokensRequestResponse>>>,
 }
 
@@ -53,7 +53,7 @@ impl<G> RpcHandler<G>
 where
     G: Gateway,
 {
-    pub fn new(db_gateway: G, pending_deltas: PendingDeltas) -> Self {
+    pub fn new(db_gateway: G, pending_deltas: Arc<dyn PendingDeltasBuffer + Send + Sync>) -> Self {
         let token_cache = Cache::builder()
             .max_capacity(50)
             .time_to_live(std::time::Duration::from_secs(7 * 60))
@@ -912,7 +912,7 @@ mod tests {
         let mock_response = Ok((10_i64, vec![expected.clone()]));
         gw.expect_get_contracts()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([]));
+        let req_handler = RpcHandler::new(gw, Arc::new(PendingDeltas::new([])));
 
         let request = dto::StateRequestBody {
             contract_ids: Some(vec![
@@ -969,7 +969,7 @@ mod tests {
         // ensure the gateway is only accessed once - the second request should hit cache
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([]));
+        let req_handler = RpcHandler::new(gw, Arc::new(PendingDeltas::new([])));
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -1017,7 +1017,7 @@ mod tests {
         let mock_response = Ok((1, vec![expected.clone()]));
         gw.expect_get_protocol_states()
             .return_once(|_, _, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([]));
+        let req_handler = RpcHandler::new(gw, Arc::new(PendingDeltas::new([])));
 
         let request = dto::ProtocolStateRequestBody {
             protocol_ids: Some(vec![dto::ProtocolId {

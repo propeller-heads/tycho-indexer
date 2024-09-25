@@ -135,7 +135,8 @@ where
             }
         });
         let ws_data = web::Data::new(ws::WsData::new(self.extractor_handles));
-        let rpc_data = web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas));
+        let rpc_data =
+            web::Data::new(rpc::RpcHandler::new(self.db_gateway, Arc::new(pending_deltas)));
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(rpc_data.clone())

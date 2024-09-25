@@ -50,6 +50,35 @@ pub enum PendingDeltasError {
 
 pub type Result<T> = std::result::Result<T, PendingDeltasError>;
 
+#[async_trait::async_trait]
+pub trait PendingDeltasBuffer {
+    fn merge_native_states(
+        &self,
+        protocol_ids: Option<&[&str]>,
+        db_states: &mut Vec<ProtocolComponentState>,
+        version: Option<BlockNumberOrTimestamp>,
+    ) -> Result<()>;
+
+    fn update_vm_states(
+        &self,
+        addresses: Option<&[Bytes]>,
+        db_states: &mut Vec<Account>,
+        version: Option<BlockNumberOrTimestamp>,
+    ) -> Result<()>;
+
+    fn get_new_components(
+        &self,
+        ids: Option<&[&str]>,
+        protocol_system: Option<&str>,
+    ) -> Result<Vec<ProtocolComponent>>;
+
+    fn get_block_finality(
+        &self,
+        version: BlockNumberOrTimestamp,
+        protocol_system: Option<String>,
+    ) -> Result<Option<FinalityStatus>>;
+}
+
 impl PendingDeltas {
     pub fn new<'a>(extractors: impl IntoIterator<Item = &'a str>) -> Self {
         Self {
@@ -93,46 +122,6 @@ impl PendingDeltas {
         Ok(())
     }
 
-    /// Merges the buffered deltas with given db states. If a requested component is not in the
-    /// db yet, it creates a new state for it out of the buffered deltas.
-    ///
-    /// Arguments:
-    ///
-    /// * `protocol_ids`: A list of the requested protocol ids. Note: `None` is not supported yet.
-    /// * `db_states`: A mutable reference to the states fetched from the db.
-    /// * `version`: The version of the state to be fetched. If `None`, the latest state will be
-    ///   fetched.
-    pub fn merge_native_states(
-        &self,
-        protocol_ids: Option<&[&str]>,
-        db_states: &mut Vec<ProtocolComponentState>,
-        version: Option<BlockNumberOrTimestamp>,
-    ) -> Result<()> {
-        // TODO: handle when no id is specified with filters
-
-        let mut missing_ids: HashSet<&str> = protocol_ids
-            .unwrap_or_default()
-            .iter()
-            .cloned()
-            .collect();
-
-        // update db states with buffered deltas
-        for state in db_states.iter_mut() {
-            self.update_native_state(state, version)?;
-            missing_ids.remove(state.component_id.as_str());
-        }
-
-        // for new components (not in the db yet), create an empty state and apply buffered deltas
-        // to it
-        for id in missing_ids {
-            let mut state = ProtocolComponentState::new(id, HashMap::new(), HashMap::new());
-            self.update_native_state(&mut state, version)?;
-            db_states.push(state);
-        }
-
-        Ok(())
-    }
-
     fn update_native_state(
         &self,
         db_state: &mut ProtocolComponentState,
@@ -168,43 +157,6 @@ impl PendingDeltas {
             }
         }
         Ok(change_found)
-    }
-
-    /// Updates the given db states with the buffered deltas. If a requested account is not in the
-    /// db yet, it creates a new state for it out of the buffered deltas.
-    ///
-    /// Arguments:
-    ///
-    /// * `addresses`: A list of the requested account addresses.
-    /// * `db_states`: A mutable reference to the states fetched from the db.
-    /// * `version`: The version of the state to be fetched. If `None`, the latest state will be
-    ///   fetched.
-    pub fn update_vm_states(
-        &self,
-        addresses: Option<&[Bytes]>,
-        db_states: &mut Vec<Account>,
-        version: Option<BlockNumberOrTimestamp>,
-    ) -> Result<()> {
-        let mut missing_addresses: HashSet<Bytes> = addresses
-            .unwrap_or_default()
-            .iter()
-            .cloned()
-            .collect();
-
-        // update db states with buffered deltas
-        for state in db_states.iter_mut() {
-            self.update_vm_state(state, version)?;
-            missing_addresses.remove(&state.address);
-        }
-
-        // for new accounts (not in the db yet), build a new state from the buffered deltas
-        // and add it to the db states
-        for address in missing_addresses {
-            let account = self.get_account(address, version)?;
-            db_states.push(account);
-        }
-
-        Ok(())
     }
 
     // Updates a given db account state with the buffered deltas.
@@ -266,6 +218,108 @@ impl PendingDeltas {
         )))
     }
 
+    pub async fn run(
+        self,
+        extractors: impl IntoIterator<Item = Arc<dyn MessageSender + Send + Sync>>,
+    ) -> anyhow::Result<()> {
+        let mut rxs = Vec::new();
+        for extractor in extractors.into_iter() {
+            let res = ReceiverStream::new(extractor.subscribe().await?);
+            rxs.push(res);
+        }
+
+        let all_messages = stream::select_all(rxs);
+
+        // What happens if an extractor restarts - it might just end here and be dropped?
+        // Ideally the Runner should never restart.
+        all_messages
+            .for_each(|message| async {
+                self.insert(message).unwrap();
+            })
+            .await;
+
+        Ok(())
+    }
+}
+
+impl PendingDeltasBuffer for PendingDeltas {
+    /// Merges the buffered deltas with given db states. If a requested component is not in the
+    /// db yet, it creates a new state for it out of the buffered deltas.
+    ///
+    /// Arguments:
+    ///
+    /// * `protocol_ids`: A list of the requested protocol ids. Note: `None` is not supported yet.
+    /// * `db_states`: A mutable reference to the states fetched from the db.
+    /// * `version`: The version of the state to be fetched. If `None`, the latest state will be
+    ///   fetched.
+    fn merge_native_states(
+        &self,
+        protocol_ids: Option<&[&str]>,
+        db_states: &mut Vec<ProtocolComponentState>,
+        version: Option<BlockNumberOrTimestamp>,
+    ) -> Result<()> {
+        // TODO: handle when no id is specified with filters
+
+        let mut missing_ids: HashSet<&str> = protocol_ids
+            .unwrap_or_default()
+            .iter()
+            .cloned()
+            .collect();
+
+        // update db states with buffered deltas
+        for state in db_states.iter_mut() {
+            self.update_native_state(state, version)?;
+            missing_ids.remove(state.component_id.as_str());
+        }
+
+        // for new components (not in the db yet), create an empty state and apply buffered deltas
+        // to it
+        for id in missing_ids {
+            let mut state = ProtocolComponentState::new(id, HashMap::new(), HashMap::new());
+            self.update_native_state(&mut state, version)?;
+            db_states.push(state);
+        }
+
+        Ok(())
+    }
+
+    /// Updates the given db states with the buffered deltas. If a requested account is not in the
+    /// db yet, it creates a new state for it out of the buffered deltas.
+    ///
+    /// Arguments:
+    ///
+    /// * `addresses`: A list of the requested account addresses.
+    /// * `db_states`: A mutable reference to the states fetched from the db.
+    /// * `version`: The version of the state to be fetched. If `None`, the latest state will be
+    ///   fetched.
+    fn update_vm_states(
+        &self,
+        addresses: Option<&[Bytes]>,
+        db_states: &mut Vec<Account>,
+        version: Option<BlockNumberOrTimestamp>,
+    ) -> Result<()> {
+        let mut missing_addresses: HashSet<Bytes> = addresses
+            .unwrap_or_default()
+            .iter()
+            .cloned()
+            .collect();
+
+        // update db states with buffered deltas
+        for state in db_states.iter_mut() {
+            self.update_vm_state(state, version)?;
+            missing_addresses.remove(&state.address);
+        }
+
+        // for new accounts (not in the db yet), build a new state from the buffered deltas
+        // and add it to the db states
+        for address in missing_addresses {
+            let account = self.get_account(address, version)?;
+            db_states.push(account);
+        }
+
+        Ok(())
+    }
+
     /// Retrieves a list of new protocol components that match all the provided criteria.
     /// (The filters are combined using an AND logic.)
     ///
@@ -286,7 +340,7 @@ impl PendingDeltas {
     /// ```
     /// let components = get_new_components(Some(&["id1", "id2"]), Some("system1"))?;
     /// ```
-    pub fn get_new_components(
+    fn get_new_components(
         &self,
         ids: Option<&[&str]>,
         protocol_system: Option<&str>,
@@ -328,7 +382,7 @@ impl PendingDeltas {
     /// timestamp is used.
     /// Note - if no protocol system is provided, we choose a random extractor to get the finality
     /// status from. This is particularly risky when there is an extractor syncing.
-    pub fn get_block_finality(
+    fn get_block_finality(
         &self,
         version: BlockNumberOrTimestamp,
         protocol_system: Option<String>,
@@ -360,29 +414,6 @@ impl PendingDeltas {
                 }
             }
         }
-    }
-
-    pub async fn run(
-        self,
-        extractors: impl IntoIterator<Item = Arc<dyn MessageSender + Send + Sync>>,
-    ) -> anyhow::Result<()> {
-        let mut rxs = Vec::new();
-        for extractor in extractors.into_iter() {
-            let res = ReceiverStream::new(extractor.subscribe().await?);
-            rxs.push(res);
-        }
-
-        let all_messages = stream::select_all(rxs);
-
-        // What happens if an extractor restarts - it might just end here and be dropped?
-        // Ideally the Runner should never restart.
-        all_messages
-            .for_each(|message| async {
-                self.insert(message).unwrap();
-            })
-            .await;
-
-        Ok(())
     }
 }
 
