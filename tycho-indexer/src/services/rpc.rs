@@ -380,30 +380,35 @@ where
 
         let ids_slice = ids_strs.as_deref();
 
-        let mut components = self
+        let buffered_components = self
             .pending_deltas
             .get_new_components(ids_slice, system.as_deref())?;
 
         // Check if we have all requested components in the cache
         if let Some(requested_ids) = ids_slice {
-            let fetched_ids: HashSet<_> = components
+            let fetched_ids: HashSet<_> = buffered_components
                 .iter()
                 .map(|comp| comp.id.as_str())
                 .collect();
 
-            let total = components.len() as i64;
+            let total = buffered_components.len() as i64;
 
             if requested_ids.len() == fetched_ids.len() {
-                let response_components = components
+                let response_components: Vec<dto::ProtocolComponent> = buffered_components
                     .into_iter()
+                    .skip(
+                        ((pagination_parameters.page * pagination_parameters.page_size) as usize)
+                            .min(total as usize),
+                    )
+                    .take(pagination_parameters.page_size as usize)
                     .map(dto::ProtocolComponent::from)
-                    .collect::<Vec<dto::ProtocolComponent>>();
+                    .collect();
 
                 return Ok(dto::ProtocolComponentRequestResponse::new(
                     response_components,
                     PaginationResponse::new(
-                        request.pagination.page_size,
                         request.pagination.page,
+                        request.pagination.page_size,
                         total,
                     ),
                 ));
@@ -421,8 +426,32 @@ where
             )
             .await
         {
-            Ok((total, comps)) => {
-                components.extend(comps);
+            Ok((db_total, mut components)) => {
+                let total = db_total + buffered_components.len() as i64;
+
+                // Handle adding buffered components to the response
+                let buffer_offset = pagination_parameters.offset() - db_total;
+                if buffer_offset > 0 {
+                    // Pagination page is greater than that provided by the db query - respond with
+                    // buffered data only
+                    components = buffered_components
+                        .into_iter()
+                        .skip(buffer_offset as usize)
+                        .take(pagination_parameters.page_size as usize)
+                        .collect();
+                } else {
+                    let remaining_capacity =
+                        pagination_parameters.page_size as usize - components.len();
+                    if remaining_capacity > 0 {
+                        // The db response does not fill a page - add buffered components to the
+                        // response
+                        let buf_comps = buffered_components
+                            .into_iter()
+                            .take(remaining_capacity);
+                        components.extend(buf_comps);
+                    }
+                }
+
                 let response_components = components
                     .into_iter()
                     .map(dto::ProtocolComponent::from)
@@ -776,6 +805,7 @@ mod tests {
     use actix_web::test;
     use chrono::NaiveDateTime;
 
+    use mockall::mock;
     use tycho_core::{
         models::{
             contract::Account,
@@ -786,12 +816,47 @@ mod tests {
         Bytes,
     };
 
-    use crate::testing::{evm_contract_slots, MockGateway};
+    use crate::{
+        services::deltas_buffer::PendingDeltas,
+        testing::{evm_contract_slots, MockGateway},
+    };
 
     use super::*;
 
     const WETH: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const USDC: &str = "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+
+    mock! {
+        pub PendingDeltas {}
+
+        impl PendingDeltasBuffer for PendingDeltas {
+            fn merge_native_states<'a>(
+                &self,
+                protocol_ids: Option<&'a [&'a str]>,
+                db_states: &mut Vec<ProtocolComponentState>,
+                version: Option<BlockNumberOrTimestamp>,
+            ) -> Result<(), PendingDeltasError>;
+
+            fn update_vm_states<'a>(
+                &self,
+                addresses: Option<&'a [Bytes]>,
+                db_states: &mut Vec<Account>,
+                version: Option<BlockNumberOrTimestamp>,
+            ) -> Result<(), PendingDeltasError>;
+
+            fn get_new_components<'a>(
+                &self,
+                ids: Option<&'a [&'a str]>,
+                protocol_system: Option<&'a str>,
+            ) -> Result<Vec<ProtocolComponent>, PendingDeltasError>;
+
+            fn get_block_finality(
+                &self,
+                version: BlockNumberOrTimestamp,
+                protocol_system: Option<String>,
+            ) -> Result<Option<FinalityStatus>, PendingDeltasError>;
+        }
+    }
 
     #[test]
     async fn test_validate_version_priority() {
@@ -1067,14 +1132,38 @@ mod tests {
         let mock_response = Ok((1, vec![expected.clone()]));
         gw.expect_get_protocol_components()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([]));
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected = ProtocolComponent::new(
+            "comp_buff",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
+        );
+
+        mock_buffer
+            .expect_get_new_components()
+            .return_once({
+                let buf_expected_clone = buf_expected.clone();
+                move |_, _| Ok(vec![buf_expected_clone])
+            });
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: Option::from("ambient".to_string()),
             component_ids: None,
             tvl_gt: None,
             chain: dto::Chain::Ethereum,
-            pagination: Default::default(),
+            pagination: dto::PaginationParams::new(0, 2),
         };
 
         let components = req_handler
@@ -1082,6 +1171,117 @@ mod tests {
             .await
             .unwrap();
 
+        assert_eq!(components.protocol_components.len(), 2);
         assert_eq!(components.protocol_components[0], expected.into());
+        assert_eq!(components.protocol_components[1], buf_expected.into());
+        assert_eq!(components.pagination.total, 2);
+        assert_eq!(components.pagination.page, 0);
+        assert_eq!(components.pagination.page_size, 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_components_pagination() {
+        let mut gw = MockGateway::new();
+        let expected = ProtocolComponent::new(
+            "comp1",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
+        );
+        gw.expect_get_protocol_components()
+            .returning({
+                let mock_response: Result<(i64, Vec<ProtocolComponent>), StorageError> =
+                    Ok((1, vec![expected.clone()]));
+                move |_, _, _, _, _| {
+                    let mock_response_clone = match &mock_response {
+                        Ok((num, components)) => Ok((*num, components.clone())),
+                        Err(_) => Err(StorageError::Unexpected("Mock Error".to_string())),
+                    };
+                    Box::pin(async move { mock_response_clone })
+                }
+            });
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected1 = ProtocolComponent::new(
+            "comp_buff1",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            "0x2b493d2596845046d3769c6a9c763a6f983efdbd4209c62be1d024d564aa4df7"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
+        );
+        let buf_expected2 = ProtocolComponent::new(
+            "comp_buff2",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            "0x2b493d2596845046d3769c6a9c763a6f983efdbd4209c62be1d024d564aa4df7"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
+        );
+
+        mock_buffer
+            .expect_get_new_components()
+            .returning({
+                let buf_expected1_clone = buf_expected1.clone();
+                let buf_expected2_clone = buf_expected2.clone();
+                move |_, _| Ok(vec![buf_expected1_clone.clone(), buf_expected2_clone.clone()])
+            });
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
+
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: Option::from("ambient".to_string()),
+            component_ids: None,
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 2),
+        };
+
+        let response1 = req_handler
+            .get_protocol_components_inner(&request)
+            .await
+            .unwrap();
+
+        assert_eq!(response1.protocol_components.len(), 2);
+        assert_eq!(response1.protocol_components[0], expected.into());
+        assert_eq!(response1.protocol_components[1], buf_expected1.into());
+        assert_eq!(response1.pagination.total, 3);
+
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: Option::from("ambient".to_string()),
+            component_ids: None,
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(1, 2),
+        };
+
+        let response2 = req_handler
+            .get_protocol_components_inner(&request)
+            .await
+            .unwrap();
+
+        assert_eq!(response2.protocol_components.len(), 1);
+        assert_eq!(response2.protocol_components[0], buf_expected2.into());
+        assert_eq!(response2.pagination.total, 3);
     }
 }
