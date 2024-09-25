@@ -16,10 +16,10 @@ use crate::{
     services::deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
 };
 use tycho_core::{
-    dto,
-    dto::PaginationResponse,
+    dto::{self, PaginationResponse},
     models::{Address, Chain, PaginationParams},
     storage::{BlockIdentifier, BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
+    Bytes,
 };
 
 #[derive(Error, Debug)]
@@ -82,17 +82,35 @@ where
             .calculate_versions(&at, &request.protocol_system.clone(), chain)
             .await?;
 
-        let pagination_parameters: PaginationParams = (&request.pagination).into();
+        let pagination_params: PaginationParams = (&request.pagination).into();
 
         // Get the contract IDs from the request
         let addresses = request.contract_ids.clone();
         debug!(?addresses, "Getting contract states.");
         let addresses = addresses.as_deref();
 
+        // Apply pagination to the contract addresses. This is done so that we can determine which
+        // contracts were not returned from the db and get them from the buffer instead.
+        let mut paginated_addrs: Vec<Bytes> = Vec::new();
+        if let Some(adrs) = addresses {
+            paginated_addrs = adrs
+                .iter()
+                .skip(pagination_params.offset() as usize)
+                .take(pagination_params.page_size as usize)
+                .cloned()
+                .collect();
+        }
+
         // Get the contract states from the database
-        let (total, mut accounts) = self
+        let (db_total, mut accounts) = self
             .db_gateway
-            .get_contracts(&chain, addresses, Some(&db_version), true, Some(&pagination_parameters))
+            .get_contracts(
+                &chain,
+                Some(&paginated_addrs),
+                Some(&db_version),
+                true,
+                Some(&pagination_params),
+            )
             .await
             .map_err(|err| {
                 error!(error = %err, "Error while getting contract states.");
@@ -100,15 +118,27 @@ where
             })?;
 
         if let Some(at) = deltas_version {
-            self.pending_deltas
-                .update_vm_states(addresses, &mut accounts, Some(at))?;
+            self.pending_deltas.update_vm_states(
+                Some(&paginated_addrs),
+                &mut accounts,
+                Some(at),
+            )?;
         }
+
+        let total = match addresses {
+            Some(adrs) => {
+                // If contract addresses are specified, the total count is the number of addresses
+                adrs.len() as i64
+            }
+            None => db_total, // TODO: handle case where contract addresses are not specified
+        };
+
         Ok(dto::StateRequestResponse::new(
             accounts
                 .into_iter()
                 .map(dto::ResponseAccount::from)
                 .collect(),
-            PaginationResponse::new(request.pagination.page, request.pagination.page_size, total),
+            PaginationResponse::new(pagination_params.page, pagination_params.page_size, total),
         ))
     }
 
@@ -211,7 +241,7 @@ where
             .calculate_versions(&at, &request.protocol_system.clone(), chain)
             .await?;
 
-        let pagination_parameters: PaginationParams = (&request.pagination).into();
+        let pagination_params: PaginationParams = (&request.pagination).into();
 
         // Get the protocol IDs from the request
         let protocol_ids: Option<Vec<dto::ProtocolId>> = request.protocol_ids.clone();
@@ -223,15 +253,15 @@ where
         debug!(?ids, "Getting protocol states.");
         let ids = ids.as_deref();
 
-        // Apply pagination to the protocol IDs. This is done so that we can determine which ids
+        // Apply pagination to the protocol ids. This is done so that we can determine which ids
         // were not returned from the db and get them from the buffer instead. For component ids
         // that do not exist in either the db or the buffer, we will return an empty state.
         let mut paginated_ids: Vec<&str> = Vec::new();
         if let Some(ids) = ids {
             paginated_ids = ids
                 .iter()
-                .skip(pagination_parameters.offset() as usize)
-                .take(pagination_parameters.page_size as usize)
+                .skip(pagination_params.offset() as usize)
+                .take(pagination_params.page_size as usize)
                 .cloned()
                 .collect();
         }
@@ -245,7 +275,7 @@ where
                 request.protocol_system.clone(),
                 Some(&paginated_ids),
                 request.include_balances,
-                Some(&pagination_parameters),
+                Some(&pagination_params),
             )
             .await
             .map_err(|err| {
@@ -272,11 +302,7 @@ where
                 .into_iter()
                 .map(dto::ResponseProtocolState::from)
                 .collect(),
-            PaginationResponse::new(
-                pagination_parameters.page,
-                pagination_parameters.page_size,
-                total,
-            ),
+            PaginationResponse::new(pagination_params.page, pagination_params.page_size, total),
         ))
     }
 
@@ -396,7 +422,7 @@ where
         request: &dto::ProtocolComponentsRequestBody,
     ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
         let system = request.protocol_system.clone();
-        let pagination_parameters: PaginationParams = (&request.pagination).into();
+        let pagination_params: PaginationParams = (&request.pagination).into();
 
         let ids_strs: Option<Vec<&str>> = request
             .component_ids
@@ -422,18 +448,18 @@ where
                 let response_components: Vec<dto::ProtocolComponent> = buffered_components
                     .into_iter()
                     .skip(
-                        ((pagination_parameters.page * pagination_parameters.page_size) as usize)
+                        ((pagination_params.page * pagination_params.page_size) as usize)
                             .min(total as usize),
                     )
-                    .take(pagination_parameters.page_size as usize)
+                    .take(pagination_params.page_size as usize)
                     .map(dto::ProtocolComponent::from)
                     .collect();
 
                 return Ok(dto::ProtocolComponentRequestResponse::new(
                     response_components,
                     PaginationResponse::new(
-                        request.pagination.page,
-                        request.pagination.page_size,
+                        pagination_params.page,
+                        pagination_params.page_size,
                         total,
                     ),
                 ));
@@ -447,7 +473,7 @@ where
                 system,
                 ids_slice,
                 request.tvl_gt,
-                Some(&pagination_parameters),
+                Some(&pagination_params),
             )
             .await
         {
@@ -455,18 +481,18 @@ where
                 let total = db_total + buffered_components.len() as i64;
 
                 // Handle adding buffered components to the response
-                let buffer_offset = pagination_parameters.offset() - db_total;
+                let buffer_offset = pagination_params.offset() - db_total;
                 if buffer_offset > 0 {
                     // Pagination page is greater than that provided by the db query - respond with
                     // buffered data only
                     components = buffered_components
                         .into_iter()
                         .skip(buffer_offset as usize)
-                        .take(pagination_parameters.page_size as usize)
+                        .take(pagination_params.page_size as usize)
                         .collect();
                 } else {
                     let remaining_capacity =
-                        pagination_parameters.page_size as usize - components.len();
+                        pagination_params.page_size as usize - components.len();
                     if remaining_capacity > 0 {
                         // The db response does not fill a page - add buffered components to the
                         // response
@@ -484,8 +510,8 @@ where
                 Ok(dto::ProtocolComponentRequestResponse::new(
                     response_components,
                     PaginationResponse::new(
-                        pagination_parameters.page,
-                        pagination_parameters.page_size,
+                        pagination_params.page,
+                        pagination_params.page_size,
                         total,
                     ),
                 ))
@@ -1049,7 +1075,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_tokens_rpc() {
+    async fn test_get_tokens() {
         let expected = vec![
             CurrencyToken::new(&(USDC.parse().unwrap()), "USDC", 6, 0, &[], Chain::Ethereum, 100),
             CurrencyToken::new(&(WETH.parse().unwrap()), "WETH", 18, 0, &[], Chain::Ethereum, 100),
