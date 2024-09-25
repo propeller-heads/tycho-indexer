@@ -785,14 +785,12 @@ impl ProtocolState {
             component_ids_query = component_ids_query.filter(exists(
                 protocol_state::table
                     .filter(protocol_state::protocol_component_id.eq(protocol_component::id))
-                    .filter(protocol_state::valid_to.gt(*MAX_VERSION_TS))
                     .filter(protocol_state::valid_from.le(ts)),
             ));
 
             count_query = count_query.filter(exists(
                 protocol_state::table
                     .filter(protocol_state::protocol_component_id.eq(protocol_component::id))
-                    .filter(protocol_state::valid_to.gt(*MAX_VERSION_TS))
                     .filter(protocol_state::valid_from.le(ts)),
             ));
         }
