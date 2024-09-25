@@ -223,14 +223,27 @@ where
         debug!(?ids, "Getting protocol states.");
         let ids = ids.as_deref();
 
+        // Apply pagination to the protocol IDs. This is done so that we can determine which ids
+        // were not returned from the db and get them from the buffer instead. For component ids
+        // that do not exist in either the db or the buffer, we will return an empty state.
+        let mut paginated_ids: Vec<&str> = Vec::new();
+        if let Some(ids) = ids {
+            paginated_ids = ids
+                .iter()
+                .skip(pagination_parameters.offset() as usize)
+                .take(pagination_parameters.page_size as usize)
+                .cloned()
+                .collect();
+        }
+
         // Get the protocol states from the database
-        let (total, mut states) = self
+        let (db_total, mut states) = self
             .db_gateway
             .get_protocol_states(
                 &chain,
                 Some(db_version),
                 request.protocol_system.clone(),
-                ids,
+                Some(&paginated_ids),
                 request.include_balances,
                 Some(&pagination_parameters),
             )
@@ -243,15 +256,27 @@ where
         // merge db states with pending deltas
         if let Some(at) = deltas_version {
             self.pending_deltas
-                .merge_native_states(ids, &mut states, Some(at))?;
+                .merge_native_states(Some(&paginated_ids), &mut states, Some(at))?;
         }
+
+        let total = match ids {
+            Some(ids) => {
+                // If protocol IDs are specified, the total count is the number of IDs
+                ids.len() as i64
+            }
+            None => db_total, // TODO: handle case where protocol ids are not specified
+        };
 
         Ok(dto::ProtocolStateRequestResponse::new(
             states
                 .into_iter()
                 .map(dto::ResponseProtocolState::from)
                 .collect(),
-            PaginationResponse::new(request.pagination.page, request.pagination.page_size, total),
+            PaginationResponse::new(
+                pagination_parameters.page,
+                pagination_parameters.page_size,
+                total,
+            ),
         ))
     }
 
@@ -1082,13 +1107,33 @@ mod tests {
         let mock_response = Ok((1, vec![expected.clone()]));
         gw.expect_get_protocol_states()
             .return_once(|_, _, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, Arc::new(PendingDeltas::new([])));
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected = ProtocolComponentState::new(
+            "state_buff",
+            protocol_attributes([("reserve1", 100), ("reserve2", 200)]),
+            HashMap::new(),
+        );
+        mock_buffer
+            .expect_merge_native_states()
+            .return_once({
+                let buf_expected_clone = buf_expected.clone();
+                move |_, db_states: &mut Vec<ProtocolComponentState>, _| {
+                    db_states.push(buf_expected_clone);
+                    Ok(())
+                }
+            });
+        mock_buffer
+            .expect_get_block_finality()
+            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
 
         let request = dto::ProtocolStateRequestBody {
-            protocol_ids: Some(vec![dto::ProtocolId {
-                id: "state1".to_owned(),
-                chain: dto::Chain::Ethereum,
-            }]),
+            protocol_ids: Some(vec![
+                dto::ProtocolId { id: "state1".to_owned(), chain: dto::Chain::Ethereum },
+                dto::ProtocolId { id: "state_buff".to_owned(), chain: dto::Chain::Ethereum },
+            ]),
             protocol_system: None,
             chain: dto::Chain::Ethereum,
             include_balances: true,
@@ -1100,8 +1145,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(res.states.len(), 1);
+        assert_eq!(res.states.len(), 2);
         assert_eq!(res.states[0], expected.into());
+        assert_eq!(res.states[1], buf_expected.into());
+        assert_eq!(res.pagination.total, 2);
     }
 
     fn protocol_attributes<'a>(
@@ -1148,7 +1195,6 @@ mod tests {
                 .unwrap(),
             NaiveDateTime::default(),
         );
-
         mock_buffer
             .expect_get_new_components()
             .return_once({
