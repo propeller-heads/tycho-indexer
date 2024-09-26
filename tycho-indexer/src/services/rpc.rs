@@ -999,7 +999,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_state() {
+    async fn test_get_contract_state() {
         let expected = Account::new(
             Chain::Ethereum,
             "0x6b175474e89094c44da98b954eedeac495271d0f"
@@ -1028,11 +1028,51 @@ mod tests {
         let mock_response = Ok((10_i64, vec![expected.clone()]));
         gw.expect_get_contracts()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, Arc::new(PendingDeltas::new([])));
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected = Account::new(
+            Chain::Ethereum,
+            "0x388C818CA8B9251b393131C08a736A67ccB19297"
+                .parse()
+                .unwrap(),
+            "account1".to_owned(),
+            evm_contract_slots([(6, 30), (5, 25), (1, 3), (2, 1), (0, 2)]),
+            Bytes::from(101u8).lpad(32, 0),
+            Bytes::from("C0C0C0"),
+            "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
+                .parse()
+                .unwrap(),
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
+                .parse()
+                .unwrap(),
+            "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
+                .parse()
+                .unwrap(),
+            Some(
+                "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
+                    .parse()
+                    .unwrap(),
+            ),
+        );
+        mock_buffer
+            .expect_update_vm_states()
+            .return_once({
+                let buf_expected_clone = buf_expected.clone();
+                move |_, db_states: &mut Vec<Account>, _| {
+                    db_states.push(buf_expected_clone);
+                    Ok(())
+                }
+            });
+        mock_buffer
+            .expect_get_block_finality()
+            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
 
         let request = dto::StateRequestBody {
             contract_ids: Some(vec![
-                Bytes::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap()
+                Bytes::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                Bytes::from_str("388C818CA8B9251b393131C08a736A67ccB19297").unwrap(),
             ]),
             protocol_system: None,
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
@@ -1044,8 +1084,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(state.accounts.len(), 1);
+        assert_eq!(state.accounts.len(), 2);
         assert_eq!(state.accounts[0], expected.into());
+        assert_eq!(state.accounts[1], buf_expected.into());
+        assert_eq!(state.pagination.total, 2);
     }
 
     #[test]
