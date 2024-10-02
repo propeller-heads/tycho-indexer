@@ -609,7 +609,7 @@ checksum = "6d8f1eefa8cb9e7550740ee330feba4fed303a77ad3085707546f9152a88c380"
 dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "serde_json",
  "tower",
  "tracing",
@@ -3594,7 +3594,7 @@ dependencies = [
  "alloy-json-abi",
  "alloy-primitives",
  "foundry-compilers",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "semver 1.0.17",
  "serde",
  "serde_json",
@@ -3682,7 +3682,7 @@ dependencies = [
  "foundry-config",
  "num-format",
  "once_cell",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "rustc-hash 2.0.0",
  "semver 1.0.17",
  "serde",
@@ -3840,7 +3840,7 @@ dependencies = [
  "once_cell",
  "path-slash",
  "regex",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "revm-primitives",
  "semver 1.0.17",
  "serde",
@@ -6303,7 +6303,7 @@ dependencies = [
  "protosim",
  "rdkafka",
  "redis",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "rstest",
  "serde",
  "serde_json",
@@ -6443,7 +6443,7 @@ dependencies = [
  "mockito",
  "num-traits 0.2.17",
  "petgraph",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "revm",
  "revm-inspectors",
  "rpc_state_reader",
@@ -6880,9 +6880,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.7"
+version = "0.12.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8f4955649ef5c38cc7f9e8aa41761d48fb9677197daea9984dc54f56aad5e63"
+checksum = "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -6908,7 +6908,7 @@ dependencies = [
  "pin-project-lite",
  "quinn",
  "rustls 0.23.12",
- "rustls-native-certs 0.7.1",
+ "rustls-native-certs 0.8.0",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "serde",
@@ -7297,6 +7297,19 @@ name = "rustls-native-certs"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a88d6d420651b496bdd98684116959239430022a115c1240e6c3993be0b15fba"
+dependencies = [
+ "openssl-probe",
+ "rustls-pemfile 2.1.2",
+ "rustls-pki-types",
+ "schannel",
+ "security-framework",
+]
+
+[[package]]
+name = "rustls-native-certs"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcaf18a4f2be7326cd874a5fa579fae794320a0f388d365dca7e480e55f83f8a"
 dependencies = [
  "openssl-probe",
  "rustls-pemfile 2.1.2",
@@ -8386,7 +8399,7 @@ dependencies = [
  "dirs",
  "fs4",
  "once_cell",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "semver 1.0.17",
  "serde",
  "serde_json",
@@ -9095,8 +9108,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.22.1"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.22.1#26ff5fbd5490e150a2db907b1027c222b2984305"
+version = "0.24.1"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.24.1#9cccd115284e00983d2a6b43e0ef56ce8833aff6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9106,7 +9119,7 @@ dependencies = [
  "hex",
  "hyper 0.14.27",
  "lru 0.12.2",
- "reqwest 0.12.7",
+ "reqwest 0.12.8",
  "serde",
  "serde_json",
  "thiserror",
@@ -9121,8 +9134,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-core"
-version = "0.22.1"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.22.1#26ff5fbd5490e150a2db907b1027c222b2984305"
+version = "0.24.1"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.24.1#9cccd115284e00983d2a6b43e0ef56ce8833aff6"
 dependencies = [
  "anyhow",
  "async-trait",
