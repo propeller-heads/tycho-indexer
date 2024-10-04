@@ -1,5 +1,5 @@
 use futures03::Future;
-use mini_moka::sync::Cache;
+use mini_moka::sync::{Cache, ConcurrentCacheExt};
 use std::{error::Error, fmt::Debug, hash::Hash, sync::Arc};
 use tracing::{instrument, trace, Level};
 
@@ -71,6 +71,7 @@ where
                 e
             })?;
 
+        self.cache.sync();
         // PERF: unnecessary lock if we don't cache the value, could be improved
         //  if `should_cache` value can be determined beforehand.
         if should_cache {
