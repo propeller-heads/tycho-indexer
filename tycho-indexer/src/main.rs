@@ -46,7 +46,10 @@ use tycho_indexer::{
     },
     services::ServicesBuilder,
 };
-use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
+use tycho_storage::postgres::{
+    builder::{GatewayBuilder, GatewayMode},
+    cache::CachedGateway,
+};
 
 mod ot;
 
@@ -262,6 +265,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
     let cached_gw = GatewayBuilder::new(&global_args.database_url)
+        .set_mode(GatewayMode::ReadOnly)
         .build_gw()
         .await?;
 
@@ -304,10 +308,12 @@ async fn create_indexing_tasks(
 
     let (cached_gw, gw_writer_handle) = GatewayBuilder::new(&global_args.database_url)
         .set_chains(chains)
+        .set_mode(GatewayMode::ReadOnly)
         .set_protocol_systems(&protocol_systems)
         .set_retention_horizon(retention_horizon)
         .build()
         .await?;
+    debug!("here1");
     let token_processor = EthereumTokenPreProcessor::new_from_url(
         rpc_url,
         *chains

@@ -241,11 +241,12 @@ trait FromPool<T> {
 
 impl FromPool<ChainEnumCache> for ChainEnumCache {
     async fn from_pool(pool: Pool<AsyncPgConnection>) -> Result<ChainEnumCache, StorageError> {
+        dbg!("here");
         let mut conn = pool
             .get()
             .await
             .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
-
+        dbg!("here");
         let results = async {
             use schema::chain::dsl::*;
             chain
@@ -255,6 +256,7 @@ impl FromPool<ChainEnumCache> for ChainEnumCache {
                 .expect("Failed to load chain ids!")
         }
         .await;
+        dbg!("here1");
         Ok(Self::from_tuples(results))
     }
 }
@@ -267,7 +269,8 @@ impl FromPool<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
             .get()
             .await
             .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
-
+        dbg!("h");
+        dbg!("h");
         let results = async {
             use schema::protocol_system::dsl::*;
             protocol_system
@@ -277,6 +280,7 @@ impl FromPool<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
                 .expect("Failed to load protocol system ids!")
         }
         .await;
+        dbg!("hi");
         Ok(Self::from_tuples(results))
     }
 }
@@ -475,7 +479,9 @@ impl PostgresGateway {
         pool: Pool<AsyncPgConnection>,
         retention_horizon: NaiveDateTime,
     ) -> Result<Self, StorageError> {
+        dbg!("hh");
         let cache = ChainEnumCache::from_pool(pool.clone()).await?;
+        dbg!("hhh");
         let protocol_system_cache: ValueIdTableCache<String> =
             ProtocolSystemEnumCache::from_pool(pool.clone()).await?;
         let gw = PostgresGateway::with_cache(
@@ -511,7 +517,7 @@ async fn connect(db_url: &str) -> Result<Pool<AsyncPgConnection>, StorageError> 
     let pool = Pool::builder(config)
         .build()
         .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
-    run_migrations(db_url);
+    // run_migrations(db_url);
     Ok(pool)
 }
 

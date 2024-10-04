@@ -52,9 +52,21 @@ extractors:
     chain: "ethereum"
     implementation_type: "Vm"
     sync_batch_size: 1000
-    start_block: 12369300
+    start_block: 12272146
     protocol_types:
       - name: "balancer_pool"
         financial_type: "Swap"
-    spkg: "substreams/ethereum-balancer/ethereum-balancer-v0.1.0.spkg"
+    spkg: "substreams/ethereum-balancer/ethereum-balancer-v0.2.1.spkg"
+    module_name: "map_protocol_changes"
+
+  vm:curve:
+    name: "vm:curve"
+    chain: "ethereum"
+    implementation_type: "Vm"
+    sync_batch_size: 1000
+    start_block: 9906598
+    protocol_types:
+      - name: "curve_pool"
+        financial_type: "Swap"
+    spkg: "substreams/ethereum-curve/ethereum-curve-v0.1.0.spkg"
     module_name: "map_protocol_changes"

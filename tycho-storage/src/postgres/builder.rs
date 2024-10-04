@@ -4,7 +4,18 @@ use crate::{
 };
 use chrono::NaiveDateTime;
 use tokio::{sync::mpsc, task::JoinHandle};
+use tracing::debug;
 use tycho_core::{models::Chain, storage::StorageError};
+
+/// Different mode this gateway can be use with. Depending on the mode it will have different
+/// behaviour.
+#[derive(Clone, Default, PartialEq)]
+pub enum GatewayMode {
+    /// Gateway read-only mode. If set to this mode the gateway will never commit to the db.
+    ReadOnly,
+    #[default]
+    ReadWrite,
+}
 
 #[derive(Default)]
 pub struct GatewayBuilder {
@@ -12,6 +23,7 @@ pub struct GatewayBuilder {
     protocol_systems: Vec<String>,
     retention_horizon: NaiveDateTime,
     chains: Vec<Chain>,
+    mode: GatewayMode,
 }
 
 impl GatewayBuilder {
@@ -34,17 +46,25 @@ impl GatewayBuilder {
         self
     }
 
+    pub fn set_mode(mut self, mode: GatewayMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
     pub async fn build(self) -> Result<(CachedGateway, JoinHandle<()>), StorageError> {
         let pool = postgres::connect(&self.database_url).await?;
-        postgres::ensure_chains(&self.chains, pool.clone()).await;
-        postgres::ensure_protocol_systems(&self.protocol_systems, pool.clone()).await;
+        // postgres::ensure_chains(&self.chains, pool.clone()).await;
+        // postgres::ensure_protocol_systems(&self.protocol_systems, pool.clone()).await;
 
+        debug!("here");
         let inner_gw = PostgresGateway::new(pool.clone(), self.retention_horizon).await?;
+        debug!("here");
         let (tx, rx) = mpsc::channel(10);
         let chain = self
             .chains
             .first()
             .expect("No chains provided"); //TODO: handle multichain?
+        debug!("here");
         let write_executor = postgres::cache::DBCacheWriteExecutor::new(
             chain.to_string(),
             *chain,
@@ -53,9 +73,11 @@ impl GatewayBuilder {
             rx,
         )
         .await;
+        debug!("here");
         let handle = write_executor.run();
+        debug!("here");
 
-        let cached_gw = CachedGateway::new(tx, pool.clone(), inner_gw.clone());
+        let cached_gw = CachedGateway::new(tx, pool.clone(), inner_gw.clone(), self.mode);
         Ok((cached_gw, handle))
     }
 
@@ -65,7 +87,8 @@ impl GatewayBuilder {
         let inner_gw = PostgresGateway::new(pool.clone(), self.retention_horizon).await?;
         let (tx, _) = mpsc::channel(10);
 
-        let cached_gw = CachedGateway::new(tx, pool.clone(), inner_gw.clone());
+        let cached_gw =
+            CachedGateway::new(tx, pool.clone(), inner_gw.clone(), GatewayMode::ReadWrite);
         Ok(cached_gw)
     }
 }

@@ -37,7 +37,7 @@ use tycho_core::{
     Bytes,
 };
 
-use super::{PostgresError, PostgresGateway};
+use super::{builder::GatewayMode, PostgresError, PostgresGateway};
 
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
@@ -463,6 +463,7 @@ pub struct CachedGateway {
     pool: Pool<AsyncPgConnection>,
     state_gateway: PostgresGateway,
     lru_cache: Arc<Mutex<DeltasCache>>,
+    mode: GatewayMode,
 }
 
 impl Clone for CachedGateway {
@@ -474,6 +475,7 @@ impl Clone for CachedGateway {
             pool: self.pool.clone(),
             state_gateway: self.state_gateway.clone(),
             lru_cache: self.lru_cache.clone(),
+            mode: self.mode.clone(),
         }
     }
 }
@@ -535,12 +537,24 @@ impl CachedGateway {
                                 .collect::<Vec<_>>(),
                             "Submitting db operation batch!"
                         );
-                        self.tx
-                            .send(DBCacheMessage::Write(db_txn))
-                            .await
-                            .expect("Send message to receiver ok");
-                        rx.await
-                            .map_err(|_| StorageError::WriteCacheGoneAway())??;
+                        match self.mode {
+                            GatewayMode::ReadOnly => {
+                                // Don't commit to the db
+                                debug!(ops = ?db_txn
+                                    .operations
+                                    .iter()
+                                    .map(WriteOp::variant_name)
+                                    .collect::<Vec<_>>(), "DroppingDbTx");
+                            }
+                            GatewayMode::ReadWrite => {
+                                self.tx
+                                    .send(DBCacheMessage::Write(db_txn))
+                                    .await
+                                    .expect("Send message to receiver ok");
+                                rx.await
+                                    .map_err(|_| StorageError::WriteCacheGoneAway())??;
+                            }
+                        }
 
                         Ok::<(), StorageError>(())
                     }
@@ -560,6 +574,7 @@ impl CachedGateway {
         tx: mpsc::Sender<DBCacheMessage>,
         pool: Pool<AsyncPgConnection>,
         state_gateway: PostgresGateway,
+        mode: GatewayMode,
     ) -> Self {
         CachedGateway {
             tx,
@@ -567,6 +582,7 @@ impl CachedGateway {
             pool,
             state_gateway,
             lru_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(5).unwrap()))),
+            mode,
         }
     }
 
@@ -623,6 +639,13 @@ impl CachedGateway {
             .put(key, (accounts_delta.clone(), protocol_delta.clone(), balance_deltas.clone()));
 
         Ok((accounts_delta, protocol_delta, balance_deltas))
+    }
+
+    // Used as a check before writing to the database. Panics if the mode is read-only.
+    fn check_write_mode(&self) {
+        if self.mode != GatewayMode::ReadWrite {
+            panic!("Cannot perform write operation in a non-write mode");
+        }
     }
 }
 
@@ -685,6 +708,7 @@ impl ChainGateway for CachedGateway {
 
     #[instrument(skip_all)]
     async fn revert_state(&self, to: &BlockIdentifier) -> Result<(), StorageError> {
+        self.check_write_mode();
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -747,6 +771,7 @@ impl ContractStateGateway for CachedGateway {
 
     #[instrument(skip_all)]
     async fn delete_contract(&self, id: &ContractId, at_tx: &TxHash) -> Result<(), StorageError> {
+        self.check_write_mode();
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -822,6 +847,7 @@ impl ProtocolGateway for CachedGateway {
         to_delete: &[ProtocolComponent],
         block_ts: NaiveDateTime,
     ) -> Result<(), StorageError> {
+        self.check_write_mode();
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -836,6 +862,7 @@ impl ProtocolGateway for CachedGateway {
         &self,
         new_protocol_types: &[ProtocolType],
     ) -> Result<(), StorageError> {
+        self.check_write_mode();
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -935,6 +962,7 @@ impl ProtocolGateway for CachedGateway {
     /// for these use cases that creates a single transactions and emits them immediately.
     #[instrument(skip_all)]
     async fn update_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError> {
+        self.check_write_mode();
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -1019,6 +1047,7 @@ impl ProtocolGateway for CachedGateway {
         chain: &Chain,
         tvl_values: &HashMap<String, f64>,
     ) -> Result<(), StorageError> {
+        self.check_write_mode();
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -1266,7 +1295,8 @@ mod test_serial_db {
             .await;
 
             let handle = write_executor.run();
-            let cached_gw = CachedGateway::new(tx, connection_pool.clone(), gateway);
+            let cached_gw =
+                CachedGateway::new(tx, connection_pool.clone(), gateway, GatewayMode::ReadWrite);
 
             // Send first block messages
             let block_1 = get_sample_block(1);
