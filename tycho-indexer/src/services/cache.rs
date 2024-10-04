@@ -13,11 +13,12 @@ where
     R: Clone + Hash + Eq + Send + Sync + Debug + 'static,
     V: Clone + Send + Sync + 'static,
 {
+    #[allow(unused_variables)]
     pub fn new(name: &str, capacity: u64, ttl: u64) -> Self {
         let cache = Arc::new(
             Cache::builder()
-                .max_capacity(capacity)
-                .time_to_live(std::time::Duration::from_secs(ttl))
+                // .max_capacity(capacity)
+                // .time_to_live(std::time::Duration::from_secs(ttl))
                 .build(),
         );
         Self { name: name.to_string(), cache }
