@@ -1,6 +1,11 @@
 use futures03::Future;
 use mini_moka::sync::Cache;
-use std::{error::Error, fmt::Debug, hash::Hash, sync::Arc};
+use std::{
+    error::Error,
+    fmt::Debug,
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::Arc,
+};
 use tracing::{instrument, trace, Level};
 
 pub struct RpcCache<R, V> {
@@ -26,7 +31,7 @@ where
     #[instrument(
         name = "rpc.cache.get",
         level = Level::TRACE,
-        fields(miss, should_cache, size, resource = self.name),
+        fields(miss, should_cache, size, hash, resource = self.name),
         skip(self, fallback))
     ]
     pub async fn get<
@@ -40,6 +45,9 @@ where
         fallback: F,
     ) -> Result<V, E> {
         tracing::Span::current().record("size", self.cache.entry_count());
+        let mut hasher = DefaultHasher::new();
+        request.hash(&mut hasher);
+        tracing::Span::current().record("hash", format!("{:x}", hasher.finish()));
         // Check the cache for a cached response
         if let Some(inflight_val) = self.cache.get(&request) {
             // the value is present or is being written to
