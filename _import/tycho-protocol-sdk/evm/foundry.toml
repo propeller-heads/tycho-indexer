@@ -2,6 +2,7 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+via_ir = true
 
 [rpc_endpoints]
 mainnet = "${ETH_RPC_URL}"
