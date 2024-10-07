@@ -5819,9 +5819,9 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "ordered-float"
-version = "4.2.2"
+version = "4.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a91171844676f8c7990ce64959210cd2eaef32c2612c50f9fae9f8aaa6065a6"
+checksum = "44d501f1a72f71d3c063a6bbc8f7271fa73aa09fe5d6283b6571e2ed176a2537"
 dependencies = [
  "num-traits 0.2.17",
 ]
@@ -6312,8 +6312,8 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
- "tycho-client",
- "tycho-core",
+ "tycho-client 0.26.0",
+ "tycho-core 0.26.0",
 ]
 
 [[package]]
@@ -6461,8 +6461,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tungstenite 0.20.1",
- "tycho-client",
- "tycho-core",
+ "tycho-client 0.24.1",
+ "tycho-core 0.24.1",
  "uuid 1.4.1",
  "warp",
 ]
@@ -9128,7 +9128,33 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "tycho-core",
+ "tycho-core 0.24.1",
+ "uuid 1.4.1",
+]
+
+[[package]]
+name = "tycho-client"
+version = "0.26.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.26.0#db9ebe656835b4103aa433ca1df9529c403e7bb1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "futures 0.3.28",
+ "hex",
+ "hyper 0.14.27",
+ "lru 0.12.2",
+ "reqwest 0.12.8",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite 0.20.1",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "tycho-core 0.26.0",
  "uuid 1.4.1",
 ]
 
@@ -9136,6 +9162,29 @@ dependencies = [
 name = "tycho-core"
 version = "0.24.1"
 source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.24.1#9cccd115284e00983d2a6b43e0ef56ce8833aff6"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "hex",
+ "rand",
+ "serde",
+ "serde_json",
+ "strum 0.25.0",
+ "strum_macros 0.25.2",
+ "thiserror",
+ "tiny-keccak",
+ "tracing",
+ "typetag",
+ "utoipa",
+ "uuid 1.4.1",
+]
+
+[[package]]
+name = "tycho-core"
+version = "0.26.0"
+source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.26.0#db9ebe656835b4103aa433ca1df9529c403e7bb1"
 dependencies = [
  "anyhow",
  "async-trait",
