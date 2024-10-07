@@ -1,3 +1,10 @@
+## [0.18.0](https://github.com/propeller-heads/protosim/compare/0.17.0...0.18.0) (2024-10-07)
+
+
+### Features
+
+* **ntq:** Update tycho-client. ([f8df5bd](https://github.com/propeller-heads/protosim/commit/f8df5bd550a8dd78e52fc05d26a593c335d75bc9))
+
 ## [0.17.0](https://github.com/propeller-heads/protosim/compare/0.16.12...0.17.0) (2024-10-07)
 
 
