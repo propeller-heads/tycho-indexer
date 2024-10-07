@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.16.12"
+version = "0.17.0"
 dependencies = [
  "ethers",
  "hex",
@@ -6286,7 +6286,7 @@ dependencies = [
 
 [[package]]
 name = "prop-builder"
-version = "0.16.12"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6312,8 +6312,8 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
- "tycho-client 0.26.0",
- "tycho-core 0.26.0",
+ "tycho-client",
+ "tycho-core",
 ]
 
 [[package]]
@@ -6424,7 +6424,7 @@ dependencies = [
 
 [[package]]
 name = "protosim"
-version = "0.16.12"
+version = "0.17.0"
 dependencies = [
  "approx",
  "async-trait",
@@ -6461,8 +6461,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tungstenite 0.20.1",
- "tycho-client 0.24.1",
- "tycho-core 0.24.1",
+ "tycho-client",
+ "tycho-core",
  "uuid 1.4.1",
  "warp",
 ]
@@ -9108,32 +9108,6 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.24.1"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.24.1#9cccd115284e00983d2a6b43e0ef56ce8833aff6"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "clap",
- "futures 0.3.28",
- "hex",
- "hyper 0.14.27",
- "lru 0.12.2",
- "reqwest 0.12.8",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-tungstenite 0.20.1",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "tycho-core 0.24.1",
- "uuid 1.4.1",
-]
-
-[[package]]
-name = "tycho-client"
 version = "0.26.0"
 source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.26.0#db9ebe656835b4103aa433ca1df9529c403e7bb1"
 dependencies = [
@@ -9154,30 +9128,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "tycho-core 0.26.0",
- "uuid 1.4.1",
-]
-
-[[package]]
-name = "tycho-core"
-version = "0.24.1"
-source = "git+ssh://github.com/propeller-heads/tycho-indexer.git?tag=0.24.1#9cccd115284e00983d2a6b43e0ef56ce8833aff6"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "chrono",
- "hex",
- "rand",
- "serde",
- "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.2",
- "thiserror",
- "tiny-keccak",
- "tracing",
- "typetag",
- "utoipa",
+ "tycho-core",
  "uuid 1.4.1",
 ]
 
