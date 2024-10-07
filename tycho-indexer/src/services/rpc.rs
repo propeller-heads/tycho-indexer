@@ -84,7 +84,7 @@ where
         let component_cache = RpcCache::<
             dto::ProtocolComponentsRequestBody,
             dto::ProtocolComponentRequestResponse,
-        >::new("protocol_components", 50, 7 * 60);
+        >::new("protocol_components", 10_000, 24 * 60 * 60);
 
         Self {
             db_gateway,
