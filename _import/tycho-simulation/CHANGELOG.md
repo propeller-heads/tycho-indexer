@@ -1,3 +1,10 @@
+## [0.18.1](https://github.com/propeller-heads/protosim/compare/0.18.0...0.18.1) (2024-10-08)
+
+
+### Bug Fixes
+
+* remove spammy otel span ([a516478](https://github.com/propeller-heads/protosim/commit/a5164781446406fae493afbc827afa2cf7228c07))
+
 ## [0.18.0](https://github.com/propeller-heads/protosim/compare/0.17.0...0.18.0) (2024-10-07)
 
 
