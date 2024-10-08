@@ -1,5 +1,6 @@
-use ethers::types::{Sign, I256, U256};
+use std::any::Any;
 
+use ethers::types::{Sign, I256, U256};
 use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
@@ -9,7 +10,7 @@ use crate::{
         errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
-        state::ProtocolSim,
+        state::{ProtocolEvent, ProtocolSim},
         tycho::i24_le_bytes_to_i32,
         BytesConvertible,
     },
@@ -87,30 +88,6 @@ impl UniswapV3State {
             FeeAmount::Medium => 60,
             FeeAmount::High => 200,
         }
-    }
-
-    pub fn event_transition(
-        &mut self,
-        event: &UniswapV3Event,
-        log_meta: &EVMLogMeta,
-    ) -> Result<(), TransitionError<LogIndex>> {
-        check_log_idx(self.log_index, log_meta)?;
-        match event {
-            UniswapV3Event::Mint(data) => {
-                let amount = data.amount as i128;
-                self.handle_liquidity_change(data.tick_lower, data.tick_upper, amount);
-            }
-            UniswapV3Event::Burn(data) => {
-                let amount = data.amount as i128;
-                self.handle_liquidity_change(data.tick_lower, data.tick_upper, -amount);
-            }
-            UniswapV3Event::Swap(data) => {
-                self.liquidity = data.liquidity;
-                self.tick = data.tick;
-                self.sqrt_price = data.sqrt_price;
-            }
-        }
-        Ok(())
     }
 
     fn handle_liquidity_change(&mut self, lower: i32, upper: i32, amount: i128) {
@@ -389,6 +366,58 @@ impl ProtocolSim for UniswapV3State {
         }
         Ok(())
     }
+    fn event_transition(
+        &mut self,
+        protocol_event: Box<dyn ProtocolEvent>,
+        log_meta: &EVMLogMeta,
+    ) -> Result<(), TransitionError<LogIndex>> {
+        if let Some(event) = protocol_event
+            .as_any()
+            .downcast_ref::<UniswapV3Event>()
+        {
+            check_log_idx(self.log_index, log_meta)?;
+            match event {
+                UniswapV3Event::Mint(data) => {
+                    let amount = data.amount as i128;
+                    self.handle_liquidity_change(data.tick_lower, data.tick_upper, amount);
+                }
+                UniswapV3Event::Burn(data) => {
+                    let amount = data.amount as i128;
+                    self.handle_liquidity_change(data.tick_lower, data.tick_upper, -amount);
+                }
+                UniswapV3Event::Swap(data) => {
+                    self.liquidity = data.liquidity;
+                    self.tick = data.tick;
+                    self.sqrt_price = data.sqrt_price;
+                }
+            }
+            Ok(())
+        } else {
+            Err(TransitionError::InvalidEventType())
+        }
+    }
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
+        if let Some(other_state) = other
+            .as_any()
+            .downcast_ref::<UniswapV3State>()
+        {
+            self.liquidity == other_state.liquidity &&
+                self.sqrt_price == other_state.sqrt_price &&
+                self.fee == other_state.fee &&
+                self.tick == other_state.tick &&
+                self.ticks == other_state.ticks
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -398,10 +427,9 @@ mod tests {
         str::FromStr,
     };
 
-    use tycho_core::hex_bytes::Bytes;
-
     use ethers::types::{H160, H256};
     use rstest::rstest;
+    use tycho_core::hex_bytes::Bytes;
 
     use crate::protocol::uniswap_v3::events::{BurnEvent, MintEvent, SwapEvent};
 
@@ -667,7 +695,7 @@ mod tests {
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
         );
 
-        pool.event_transition(&event, &logmeta())
+        pool.event_transition(Box::new(event), &logmeta())
             .unwrap();
 
         if let (tick, Some(liq_lower)) = exp_lower {
@@ -702,9 +730,10 @@ mod tests {
             100,
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
         );
-        let event = SwapEvent::new(U256::from(1001), 2000, 120).into();
+        let swap_event = SwapEvent::new(U256::from(1001), 2000, 120);
+        let event = Box::new(UniswapV3Event::Swap(swap_event));
 
-        pool.event_transition(&event, &logmeta())
+        pool.event_transition(event, &logmeta())
             .unwrap();
 
         assert_eq!(pool.sqrt_price, U256::from(1001));

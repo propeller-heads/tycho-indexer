@@ -14,17 +14,15 @@
 //! The `ProtocolState` enum has currently two variants:
 //! `UniswapV2` and `UniswapV3`.
 //!
-//! By using the `enum_dispatch` macro, this module allows for a more
-//! efficient runtime dispatch of the trait methods on the enum variants.
 //!
 //! # Examples
 //! ```
 //! use ethers::types::U256;
-//! use protosim::protocol::state::{ProtocolState, ProtocolSim};
+//! use protosim::protocol::state::{ProtocolSim, ProtocolSim};
 //! use protosim::protocol::uniswap_v2::state::{UniswapV2State};
 //! use protosim::models::ERC20Token;
 //!
-//! let state: ProtocolState = UniswapV2State::new(
+//! let state: ProtocolSim = UniswapV2State::new(
 //!     U256::from_dec_str("36925554990922").unwrap(),
 //!     U256::from_dec_str("30314846538607556521556").unwrap(),
 //! ).into();
@@ -35,9 +33,9 @@
 //! assert_eq!(state.spot_price(&weth, &usdc), 1218.0683462769755f64);
 //! assert_eq!(out, U256::from(1214374202));
 //! ```
-use enum_dispatch::enum_dispatch;
-use ethers::types::U256;
+use std::any::Any;
 
+use ethers::types::U256;
 use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
@@ -46,16 +44,13 @@ use crate::{
         errors::{TradeSimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
-        uniswap_v2::{events::UniswapV2Sync, state::UniswapV2State},
-        uniswap_v3::{events::UniswapV3Event, state::UniswapV3State},
     },
 };
 
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
-#[enum_dispatch]
-pub trait ProtocolSim {
+pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// Returns the fee of the protocol as ratio
     ///
     /// E.g. if the fee is 1%, the value returned would be 0.01.
@@ -114,57 +109,32 @@ pub trait ProtocolSim {
         &mut self,
         delta: ProtocolStateDelta,
     ) -> Result<(), TransitionError<String>>;
-}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[enum_dispatch(ProtocolSim)]
-/// ProtocolState Enum
-/// This enum represents the different protocol states that can be used in the trade simulation.
-pub enum ProtocolState {
-    UniswapV2(UniswapV2State),
-    UniswapV3(UniswapV3State),
-}
-
-impl ProtocolState {
-    pub fn event_transition(
+    fn event_transition(
         &mut self,
-        protocol_event: &ProtocolEvent,
+        protocol_event: Box<dyn ProtocolEvent>,
         log: &EVMLogMeta,
-    ) -> Result<(), TransitionError<LogIndex>> {
-        match self {
-            ProtocolState::UniswapV2(state) => {
-                if let ProtocolEvent::UniswapV2(event) = protocol_event {
-                    state.event_transition(event, log)?;
-                } else {
-                    panic!("Invalid event type for address!")
-                }
-            }
-            ProtocolState::UniswapV3(state) => {
-                if let ProtocolEvent::UniswapV3(event) = protocol_event {
-                    state.event_transition(event, log)?;
-                } else {
-                    panic!("Invalid event type for address!")
-                }
-            }
-        }
-        Ok(())
+    ) -> Result<(), TransitionError<LogIndex>>;
+
+    fn clone_box(&self) -> Box<dyn ProtocolSim>;
+    fn as_any(&self) -> &dyn Any;
+
+    fn eq(&self, other: &dyn ProtocolSim) -> bool;
+}
+
+impl Clone for Box<dyn ProtocolSim> {
+    fn clone(&self) -> Box<dyn ProtocolSim> {
+        self.clone_box()
     }
 }
 
-#[derive(Debug)]
-pub enum ProtocolEvent {
-    UniswapV2(UniswapV2Sync),
-    UniswapV3(UniswapV3Event),
+pub trait ProtocolEvent: std::fmt::Debug {
+    fn as_any(&self) -> &dyn Any;
+    fn clone_box(&self) -> Box<dyn ProtocolEvent>;
 }
 
-impl From<UniswapV2Sync> for ProtocolEvent {
-    fn from(value: UniswapV2Sync) -> Self {
-        ProtocolEvent::UniswapV2(value)
-    }
-}
-
-impl From<UniswapV3Event> for ProtocolEvent {
-    fn from(value: UniswapV3Event) -> Self {
-        ProtocolEvent::UniswapV3(value)
+impl Clone for Box<dyn ProtocolEvent> {
+    fn clone(&self) -> Box<dyn ProtocolEvent> {
+        self.clone_box()
     }
 }

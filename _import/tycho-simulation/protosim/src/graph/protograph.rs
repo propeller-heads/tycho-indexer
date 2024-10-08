@@ -63,7 +63,7 @@ use crate::{
         errors::{TradeSimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
         models::{GetAmountOutResult, Pair, ProtocolComponent},
-        state::{ProtocolEvent, ProtocolSim, ProtocolState},
+        state::{ProtocolEvent, ProtocolSim},
     },
 };
 
@@ -427,7 +427,7 @@ pub struct ProtoGraph {
     //TODO: make the values a HashSet?
     route_memberships: HashMap<H160, Vec<usize>>,
     /// "workhorse collection" for state overrides
-    original_states: HashMap<H160, ProtocolState>,
+    original_states: HashMap<H160, Box<dyn ProtocolSim>>,
 }
 
 impl ProtoGraph {
@@ -481,13 +481,13 @@ impl ProtoGraph {
     /// tranistion errors or simply ignore them.
     pub fn transition_states(
         &mut self,
-        events: &[(ProtocolEvent, EVMLogMeta)],
+        events: &[(Box<dyn ProtocolEvent>, EVMLogMeta)],
         ignore_errors: bool,
     ) {
         for (ev, logmeta) in events.iter() {
             let address = logmeta.from;
             if let Some(Pair(_, state)) = self.states.get_mut(&address) {
-                let res = state.event_transition(ev, logmeta);
+                let res = state.event_transition(ev.clone(), logmeta);
                 if !ignore_errors {
                     res.unwrap_or_else(|_| {
                         panic!("Error transitioning on event {:?} from address {}", ev, address)
@@ -518,7 +518,7 @@ impl ProtoGraph {
     /// made sure that `revert_states` was called in between.
     pub fn transition_states_revertibly(
         &mut self,
-        events: &[(ProtocolEvent, EVMLogMeta)],
+        events: &[(Box<dyn ProtocolEvent>, EVMLogMeta)],
     ) -> Result<(), TransitionError<LogIndex>> {
         if !self.original_states.is_empty() {
             panic!("Original states not cleared!")
@@ -537,7 +537,7 @@ impl ProtoGraph {
             self.original_states
                 .entry(address)
                 .or_insert_with(|| old_state.clone());
-            old_state.event_transition(ev, logmeta)?;
+            old_state.event_transition(ev.clone(), logmeta)?;
         }
         Ok(())
     }
@@ -563,7 +563,7 @@ impl ProtoGraph {
     /// an error if the transtion was not successfull.
     pub fn with_states_transitioned<T, F: Fn(&ProtoGraph) -> T>(
         &mut self,
-        events: &[(ProtocolEvent, EVMLogMeta)],
+        events: &[(Box<dyn ProtocolEvent>, EVMLogMeta)],
         action: F,
     ) -> Result<T, TransitionError<LogIndex>> {
         self.transition_states_revertibly(events)?;
@@ -662,7 +662,7 @@ impl ProtoGraph {
     ///
     /// * `Option<()>` - returns `Some(())` if the state was updated, or ` None` if the pair with
     ///   that address could not be found.
-    pub fn update_state(&mut self, address: &H160, state: ProtocolState) -> Option<()> {
+    pub fn update_state(&mut self, address: &H160, state: Box<dyn ProtocolSim>) -> Option<()> {
         // TODO this should work purely on log updates and the transition
         if let Some(pair) = self.states.get_mut(address) {
             pair.1 = state;
@@ -887,7 +887,7 @@ mod tests {
         g.update_state(&address, state.clone());
         let Pair(_, updated) = &g.states[&address];
 
-        assert_eq!(updated.clone(), state);
+        assert!(updated.clone().eq(state.as_ref()));
     }
 
     fn construct_graph() -> ProtoGraph {
@@ -965,7 +965,8 @@ mod tests {
         let addr_changed = H160::from_str("0x0000000000000000000000000000000000000002").unwrap();
         let addr_untouched = H160::from_str("0x0000000000000000000000000000000000000001").unwrap();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            Box::new(UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)))
+                as Box<dyn ProtocolEvent>,
             logmeta("0x0000000000000000000000000000000000000002", (1, 1)),
         )];
 
@@ -980,7 +981,8 @@ mod tests {
     fn test_transition_err_panic() {
         let mut g = construct_graph();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            Box::new(UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)))
+                as Box<dyn ProtocolEvent>,
             logmeta("0x0000000000000000000000000000000000000002", (0, 0)),
         )];
 
@@ -992,7 +994,8 @@ mod tests {
         let mut g = construct_graph();
         let original_states = g.states.clone();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            Box::new(UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)))
+                as Box<dyn ProtocolEvent>,
             logmeta("0x0000000000000000000000000000000000000002", (0, 0)),
         )];
 
@@ -1006,7 +1009,8 @@ mod tests {
         let mut g = construct_graph();
         let original_states = g.states.clone();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            Box::new(UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)))
+                as Box<dyn ProtocolEvent>,
             logmeta("0x0000000000000000000000000000000000000002", (0, 1)),
         )];
 
@@ -1023,7 +1027,8 @@ mod tests {
         let mut g = construct_graph();
         let original_states = g.states.clone();
         let events = vec![(
-            UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)).into(),
+            Box::new(UniswapV2Sync::new(U256::from(20_000_000), U256::from(10_000_000)))
+                as Box<dyn ProtocolEvent>,
             logmeta("0x0000000000000000000000000000000000000002", (0, 1)),
         )];
 
@@ -1039,7 +1044,7 @@ mod tests {
         let t0 = ERC20Token::new(t0, 3, "T0", U256::from(10_000));
         let t1 = ERC20Token::new(t1, 3, "T1", U256::from(10_000));
         let props = ProtocolComponent::new(H160::from_str(pair).unwrap(), vec![t0, t1]);
-        let state = UniswapV2State::new(U256::from(r0), U256::from(r1)).into();
+        let state = Box::new(UniswapV2State::new(U256::from(r0), U256::from(r1)));
         Pair(props, state)
     }
 

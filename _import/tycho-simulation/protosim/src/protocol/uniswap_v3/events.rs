@@ -1,4 +1,8 @@
+use std::any::Any;
+
 use ethers::types::U256;
+
+use crate::protocol::state::ProtocolEvent;
 
 /// Underlying data structure for mint and burns
 ///
@@ -8,14 +12,14 @@ use ethers::types::U256;
 ///
 /// This means instead of having to type: `UniswapV3::Burn(LiquidityChangeData::new(...))`
 /// every time we can simply use: `BurnEvent::new(...).into()`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LiquidityChangeData {
     pub tick_upper: i32,
     pub tick_lower: i32,
     pub amount: u128,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MintEvent(LiquidityChangeData);
 
 impl MintEvent {
@@ -24,7 +28,7 @@ impl MintEvent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BurnEvent(LiquidityChangeData);
 
 impl BurnEvent {
@@ -33,7 +37,7 @@ impl BurnEvent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SwapEvent {
     pub sqrt_price: U256,
     pub liquidity: u128,
@@ -46,11 +50,20 @@ impl SwapEvent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UniswapV3Event {
     Mint(LiquidityChangeData),
     Burn(LiquidityChangeData),
     Swap(SwapEvent),
+}
+
+impl ProtocolEvent for UniswapV3Event {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn clone_box(&self) -> Box<dyn ProtocolEvent> {
+        Box::new(self.clone()) // Ensure UniswapV2Sync implements Clone
+    }
 }
 
 impl From<MintEvent> for UniswapV3Event {
