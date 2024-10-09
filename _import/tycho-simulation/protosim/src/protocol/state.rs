@@ -1,34 +1,42 @@
-//! Protocol State and Simulation
+//! Protocol Simulation
 //!
 //! This module contains the `ProtocolSim` trait, which defines the methods
-//! that a protocol state must implement in order to be used in the trade
-//! simulation. It also contains the `ProtocolState` enum, which represents
-//! the different protocol states that can be used in the trade simulation.
-//! The `ProtocolSim` trait has three methods: `fee`, `spot_price`, and
-//! `get_amount_out`.
+//! that a protocol state must implement in order to be used in trade
+//! simulations.
 //!
-//!  * `fee` - returns the fee of the protocol as ratio.
-//!  * `spot_price` - returns the protocols current spot price of two tokens.
-//!  * `get_amount_out` - returns the amount out given an amount in and input/output tokens.
-//!
-//! The `ProtocolState` enum has currently two variants:
-//! `UniswapV2` and `UniswapV3`.
+//! The `ProtocolSim` trait has several key methods:
+//!  - `fee`: Returns the protocol's fee as a ratio.
+//!  - `spot_price`: Returns the current spot price between two tokens.
+//!  - `get_amount_out`: Returns the amount of output tokens given an amount of input tokens.
+//!  - `delta_transition`: Applies a state delta to the protocol sim.
+//!  - `event_transition`: Applies an event transition to the protocol sim.
+//!  - `clone_box`: Clones the protocol sim as a trait object.
+//!  - `as_any`: Allows downcasting of the trait object.
+//!  - `eq`: Compares two protocol sims for equality.
 //!
 //!
 //! # Examples
 //! ```
 //! use ethers::types::U256;
-//! use protosim::protocol::state::{ProtocolSim, ProtocolSim};
-//! use protosim::protocol::uniswap_v2::state::{UniswapV2State};
+//! use protosim::protocol::state::{ProtocolSim};
+//! use protosim::protocol::uniswap_v2::state::UniswapV2State;
 //! use protosim::models::ERC20Token;
 //!
-//! let state: ProtocolSim = UniswapV2State::new(
+//! // Initialize the UniswapV2 state with token reserves
+//! let state: Box<dyn ProtocolSim> = Box::new(UniswapV2State::new(
 //!     U256::from_dec_str("36925554990922").unwrap(),
 //!     U256::from_dec_str("30314846538607556521556").unwrap(),
-//! ).into();
-//! let usdc = ERC20Token::new("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", U256::from(10_000));
-//! let weth = ERC20Token::new("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ", 18, "WETH", U256::from(10_000));
+//! ));
 //!
+//! // Define two ERC20 tokens: USDC and WETH
+//! let usdc = ERC20Token::new(
+//!     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", U256::from(10_000)
+//! );
+//! let weth = ERC20Token::new(
+//!     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH", U256::from(10_000)
+//! );
+//!
+//! // Get the amount out for swapping WETH to USDC
 //! let out = state.get_amount_out(weth.one(), &weth, &usdc).unwrap().amount;
 //! assert_eq!(state.spot_price(&weth, &usdc), 1218.0683462769755f64);
 //! assert_eq!(out, U256::from(1214374202));
@@ -110,15 +118,35 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
         delta: ProtocolStateDelta,
     ) -> Result<(), TransitionError<String>>;
 
+    /// Applies an event transition to the protocol's state.
+    ///
+    /// This method processes a protocol-specific event and modifies the protocol's state
+    /// accordingly.
+    ///
+    /// # Arguments
+    ///
+    /// * `protocol_event` - The event to apply to the protocol's state.
+    /// * `log` - Metadata about the EVM log that triggered the event.
+    ///
+    /// # Returns
+    ///
+    /// A `Result<(), TransitionError<LogIndex>>` indicating success or failure.
     fn event_transition(
         &mut self,
         protocol_event: Box<dyn ProtocolEvent>,
         log: &EVMLogMeta,
     ) -> Result<(), TransitionError<LogIndex>>;
 
+    /// Clones the protocol state as a trait object.
+    /// This allows the state to be cloned when it is being used as a `Box<dyn ProtocolSim>`.
     fn clone_box(&self) -> Box<dyn ProtocolSim>;
+
+    /// Allows downcasting of the trait object to its underlying type.
     fn as_any(&self) -> &dyn Any;
 
+    /// Compares two protocol states for equality.
+    /// This method must be implemented to define how two protocol states are considered equal
+    /// (used for tests).
     fn eq(&self, other: &dyn ProtocolSim) -> bool;
 }
 
@@ -128,6 +156,9 @@ impl Clone for Box<dyn ProtocolSim> {
     }
 }
 
+/// ProtocolEvent trait
+///
+/// Defines the interface for protocol-specific events that can be applied to the state.
 pub trait ProtocolEvent: std::fmt::Debug {
     fn as_any(&self) -> &dyn Any;
     fn clone_box(&self) -> Box<dyn ProtocolEvent>;
