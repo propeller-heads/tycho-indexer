@@ -1,4 +1,7 @@
-use std::{any::Any, sync::RwLock};
+use std::{
+    any::Any,
+    sync::{Arc, RwLock},
+};
 
 use ethers::{
     prelude::BaseContract,
@@ -23,7 +26,7 @@ use crate::{
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct DodoPoolState<D: DatabaseRef>
+pub struct DodoPoolState<D: DatabaseRef + std::clone::Clone>
 where
     D::Error: std::fmt::Debug,
 {
@@ -34,13 +37,27 @@ where
     base_token: H160,
     helper_address: H160,
     helper_abi: BaseContract,
-    // TODO: it would be nicer to move all the caching behind a RefCell instead of exposing it to
-    // the user
-    engine: RwLock<SimulationEngine<D>>,
-    spot_price_cache: RwLock<Option<(f64, f64)>>,
+    engine: SimulationEngine<D>,
+    spot_price_cache: Arc<RwLock<Option<(f64, f64)>>>,
+}
+impl<D: DatabaseRef + std::clone::Clone> Clone for DodoPoolState<D>
+where
+    D::Error: std::fmt::Debug,
+{
+    fn clone(&self) -> Self {
+        DodoPoolState {
+            pool_address: self.pool_address,
+            pool_abi: self.pool_abi.clone(),
+            base_token: self.base_token,
+            helper_address: self.helper_address,
+            helper_abi: self.helper_abi.clone(),
+            engine: self.engine.clone(),
+            spot_price_cache: Arc::clone(&self.spot_price_cache),
+        }
+    }
 }
 
-impl<D: DatabaseRef> DodoPoolState<D>
+impl<D: DatabaseRef + std::clone::Clone> DodoPoolState<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -64,8 +81,7 @@ where
             block_number: 0,
             timestamp: 0,
         };
-        let engine = self.engine.read().unwrap();
-        let simulation_result = engine.simulate(&params).unwrap();
+        let simulation_result = self.engine.simulate(&params).unwrap();
         let spot_price_u256 = self
             .pool_abi
             .decode_output::<U256, _>("getMidPrice", simulation_result.result)
@@ -77,7 +93,8 @@ where
     }
 }
 
-impl<D: DatabaseRef + Send + Sync + std::fmt::Debug + 'static> ProtocolSim for DodoPoolState<D>
+impl<D: DatabaseRef + Send + Sync + std::fmt::Debug + 'static + std::clone::Clone> ProtocolSim
+    for DodoPoolState<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -85,12 +102,13 @@ where
     ///
     ///  Fee rates are in slot 8 and 9 they are accessed directly.
     fn fee(&self) -> f64 {
-        let engine = self.engine.read().unwrap();
-        let lp_fee = engine
+        let lp_fee = self
+            .engine
             .state
             .storage_ref(Address::from_slice(&self.pool_address.0), rU256::from(8))
             .unwrap_or_else(|_| panic!("Error while requesting data from node."));
-        let maintainer_fee = engine
+        let maintainer_fee = self
+            .engine
             .state
             .storage_ref(Address::from_slice(&self.pool_address.0), rU256::from(8))
             .unwrap_or_else(|_| panic!("Error while requesting data from node."));
@@ -150,8 +168,7 @@ where
             block_number: 0,
             timestamp: 0,
         };
-        let engine = self.engine.read().unwrap();
-        let simulation_result = engine.simulate(&params).unwrap();
+        let simulation_result = self.engine.simulate(&params).unwrap();
         let amount_out = self
             .pool_abi
             .decode_output::<U256, _>("querySellBaseToken", simulation_result.result)
@@ -177,11 +194,11 @@ where
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
-        unimplemented!()
+        Box::new(self.clone())
     }
 
     fn as_any(&self) -> &dyn Any {
-        unimplemented!()
+        self
     }
 
     #[allow(unused_variables)]
