@@ -15,8 +15,10 @@
 //! The crate also provides optimization methods, such as golden
 //! section search, to find optimal amounts for a specific sequence.
 
+// Reexports
+pub use num_traits;
+
 pub mod evm_simulation;
-pub mod graph;
 pub mod models;
 pub mod optimize;
 pub mod protocol;
@@ -27,8 +29,6 @@ pub mod serde_helpers;
 // pub mod starknet_simulation;
 pub mod u256_num;
 
-// Reexports
-pub use num_traits;
 // #[cfg(feature = "starknet")]
 // pub use rpc_state_reader;
 // #[cfg(feature = "starknet")]
