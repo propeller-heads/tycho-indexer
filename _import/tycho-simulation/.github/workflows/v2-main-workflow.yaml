@@ -40,32 +40,3 @@ jobs:
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
-  build-and-push:
-    needs:
-      - release
-    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
-    permissions:
-      id-token: write
-      contents: read
-    with:
-      image_tag: ${{ needs.release.outputs.next_release_version }}
-      image_name: propeller-searcher
-    secrets:
-      app_id: ${{ secrets.APP_ID }}
-      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
-  promote-to-dev:
-    needs:
-      - release
-      - build-and-push
-    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-dev.yaml@main
-    with:
-      image_tag: ${{ needs.release.outputs.next_release_version }}
-      image_name: propeller-searcher
-    permissions:
-      id-token: write
-      contents: read
-    secrets:
-      app_id: ${{ secrets.APP_ID }}
-      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
