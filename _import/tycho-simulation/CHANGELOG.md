@@ -1,3 +1,10 @@
+## [0.20.0](https://github.com/propeller-heads/protosim/compare/0.19.0...0.20.0) (2024-10-10)
+
+
+### Features
+
+* Move graph (Protograph) into the NTQ src directory ([95f8e83](https://github.com/propeller-heads/protosim/commit/95f8e8367a190700ef9232dbe6fb428c90260a5e))
+
 ## [0.19.0](https://github.com/propeller-heads/protosim/compare/0.18.1...0.19.0) (2024-10-10)
 
 
