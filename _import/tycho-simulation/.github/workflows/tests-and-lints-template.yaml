@@ -12,9 +12,9 @@ on:
         type: number
         default: 15
     secrets:
-      gh_token:
+      app_id:
         required: true
-      infura_api_key:
+      app_private_key:
         required: true
 
 permissions:
@@ -23,7 +23,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  INFURA_API_KEY: ${{ secrets.infura_api_key }}
+    #INFURA_API_KEY: ${{ secrets.infura_api_key }}
 
 jobs:
   compile_and_test:
@@ -35,23 +35,38 @@ jobs:
         toolchain:
           - stable
     steps:
+      - name: Generate a token
+        id: generate-token
+        uses: getsentry/action-github-app-token@v2
+        with:
+          app_id: ${{ secrets.app_id }}
+          private_key: ${{ secrets.app_private_key }}
+
+      - name: Install git
+        run: sudo apt update && sudo apt install -y git
+
       - name: Checkout
         uses: actions/checkout@v3
+
       - name: Setup git to use https
         run: |
             git config --global credential.helper store
-            echo "https://${{ secrets.gh_token }}@github.com" > ~/.git-credentials
-            git config --global url."https://${{ secrets.gh_token }}@github.com".insteadOf ssh://github.com
+            echo "https://${{ steps.generate-token.outputs.token }}@github.com" > ~/.git-credentials
+            git config --global url."https://x-access-token:${{ steps.generate-token.outputs.token }}@github.com".insteadOf ssh://github.com
+
       - name: Setup toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
+
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
       - name: Install latest nextest release
         uses: taiki-e/install-action@nextest
+
       - name: Test
         run: cargo nextest run --workspace --all-targets --all-features
 
@@ -60,18 +75,31 @@ jobs:
     runs-on: ${{ inputs.runs_on }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
+      - name: Generate a token
+        id: generate-token
+        uses: getsentry/action-github-app-token@v2
+        with:
+          app_id: ${{ secrets.app_id }}
+          private_key: ${{ secrets.app_private_key }}
+
+      - name: Install git
+        run: sudo apt update && sudo apt install -y git
+
       - name: Checkout
         uses: actions/checkout@v3
+
       - name: Setup git to use https
         run: |
             git config --global credential.helper store
-            echo "https://${{ secrets.gh_token }}@github.com" > ~/.git-credentials
-            git config --global url."https://${{ secrets.gh_token }}@github.com".insteadOf ssh://github.com
+            echo "https://${{ steps.generate-token.outputs.token }}@github.com" > ~/.git-credentials
+            git config --global url."https://x-access-token:${{ steps.generate-token.outputs.token }}@github.com".insteadOf ssh://github.com
+
       - name: Setup clippy toolchain - stable
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           components: clippy
+
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:

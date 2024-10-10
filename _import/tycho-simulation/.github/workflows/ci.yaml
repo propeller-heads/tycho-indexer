@@ -11,5 +11,6 @@ jobs:
   tests-and-lints:
     uses: ./.github/workflows/tests-and-lints-template.yaml
     secrets:
-      gh_token: ${{ secrets.GH_TOKEN }}
-      infura_api_key: ${{ secrets.INFURA_API_KEY }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
