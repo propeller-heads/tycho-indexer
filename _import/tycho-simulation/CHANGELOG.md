@@ -1,3 +1,16 @@
+## [0.19.0](https://github.com/propeller-heads/protosim/compare/0.18.1...0.19.0) (2024-10-10)
+
+
+### Features
+
+* Don't use enum_dispatch in ProtocolSim ([e04375a](https://github.com/propeller-heads/protosim/commit/e04375a4915c19de12ead3aaabe46fa4dab5f2f2))
+
+
+### Bug Fixes
+
+* Support clone in DodoPoolState ([96f3595](https://github.com/propeller-heads/protosim/commit/96f35959e555f4b3b7d46f0024cd678f0ecb05d9))
+* Use RwLock instead of RefCell in DodoPoolState ([8aa78b6](https://github.com/propeller-heads/protosim/commit/8aa78b683b00e37eeea14bb2883944811298fc90))
+
 ## [0.18.1](https://github.com/propeller-heads/protosim/compare/0.18.0...0.18.1) (2024-10-08)
 
 
