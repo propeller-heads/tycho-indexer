@@ -1,6 +1,5 @@
 {
   "rust-analyzer.linkedProjects": [
-    "./protosim/Cargo.toml",
     "./protosim_py/Cargo.toml"
   ]
 }

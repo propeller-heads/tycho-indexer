@@ -16,7 +16,7 @@ flamegraph.svg
 .DS_Store
 
 # lib lockfiles (should not even be produced)
-/protosim/Cargo.lock
+/protosim_py/Cargo.lock
 
 # data folder
 .data/

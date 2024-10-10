@@ -33,7 +33,7 @@ Each protocol should have its own module under `protosim/src/protocol`.
 ### 1\. Adding state & behaviour
 
 Simply implement a struct that contains the state of the protocol. Only the attributes that are necessary to fulfill
-the `ProtocolSim` trait are required. Then, implement the `ProtocolSim` trait (see [here](src/protocol/state.rs)).
+the `ProtocolSim` trait are required. Then, implement the `ProtocolSim` trait (see [here](protocol/state.rs)).
 
 ### 2\. Adding Events
 

@@ -15,13 +15,6 @@ pub mod uniswap_v3;
 ///
 /// This trait provides methods to convert a type into a `Bytes` object,
 /// as well as reconstruct the original type from a `Bytes` object.
-///
-/// # Examples
-/// ```
-/// let h160_value: H160 = ...;
-/// let bytes: Bytes = h160_value.to_bytes(); // Converts H160 to Bytes
-/// let new_h160 = H160::from_bytes(bytes);   // Converts Bytes back to H160
-/// ```
 pub trait BytesConvertible {
     /// Converts the current type into a `Bytes` object.
     fn to_bytes(self) -> Bytes;
