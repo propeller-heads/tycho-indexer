@@ -1,5 +1,6 @@
-use ethers::types::U256;
+use std::any::Any;
 
+use ethers::types::U256;
 use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
         errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
-        state::ProtocolSim,
+        state::{ProtocolEvent, ProtocolSim},
         BytesConvertible,
     },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
@@ -34,18 +35,6 @@ impl UniswapV2State {
     /// * `reserve1` - Reserve of token 1.
     pub fn new(reserve0: U256, reserve1: U256) -> Self {
         UniswapV2State { reserve0, reserve1, log_index: (0, 0) }
-    }
-
-    pub fn event_transition(
-        &mut self,
-        msg: &UniswapV2Sync,
-        log_meta: &EVMLogMeta,
-    ) -> Result<(), TransitionError<LogIndex>> {
-        check_log_idx(self.log_index, log_meta)?;
-        self.reserve0 = msg.reserve0;
-        self.reserve1 = msg.reserve1;
-        self.log_index = log_meta.index();
-        Ok(())
     }
 }
 
@@ -152,6 +141,43 @@ impl ProtocolSim for UniswapV2State {
         );
         Ok(())
     }
+    fn event_transition(
+        &mut self,
+        protocol_event: Box<dyn ProtocolEvent>,
+        log_meta: &EVMLogMeta,
+    ) -> Result<(), TransitionError<LogIndex>> {
+        if let Some(sync_event) = protocol_event
+            .as_any()
+            .downcast_ref::<UniswapV2Sync>()
+        {
+            check_log_idx(self.log_index, log_meta)?;
+            self.reserve0 = sync_event.reserve0;
+            self.reserve1 = sync_event.reserve1;
+            self.log_index = log_meta.index();
+            Ok(())
+        } else {
+            Err(TransitionError::InvalidEventType())
+        }
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        Box::new(*self)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
+        if let Some(other_state) = other
+            .as_any()
+            .downcast_ref::<UniswapV2State>()
+        {
+            self.reserve0 == other_state.reserve0 && self.reserve1 == other_state.reserve1
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -161,12 +187,12 @@ mod tests {
         str::FromStr,
     };
 
-    use tycho_core::hex_bytes::Bytes;
-
-    use super::*;
     use approx::assert_ulps_eq;
     use ethers::types::{H160, H256};
     use rstest::rstest;
+    use tycho_core::hex_bytes::Bytes;
+
+    use super::*;
 
     fn u256(s: &str) -> U256 {
         U256::from_dec_str(s).unwrap()
@@ -283,7 +309,7 @@ mod tests {
     #[test]
     fn test_event_transition() {
         let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
-        let event = UniswapV2Sync::new(u256("1500"), u256("2000"));
+        let event = Box::new(UniswapV2Sync::new(u256("1500"), u256("2000")));
         let log_meta = EVMLogMeta::new(
             H160::from_str("0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5").unwrap(),
             1,
@@ -296,7 +322,7 @@ mod tests {
         );
 
         state
-            .event_transition(&event, &log_meta)
+            .event_transition(event, &log_meta)
             .unwrap();
 
         assert_eq!(state.reserve0, u256("1500"));

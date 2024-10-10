@@ -1,11 +1,6 @@
-use crate::evm_simulation::database::OverriddenSimulationDB;
+use std::collections::HashMap;
 
-use super::{
-    account_storage::StateUpdate,
-    traces::{handle_traces, TraceResult},
-};
 use ethers::types::{Bytes, U256};
-
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::TraceKind;
 use revm::{
@@ -19,9 +14,15 @@ use revm::{
     Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
-use std::collections::HashMap;
 use tokio::runtime::Runtime;
 use tracing::debug;
+
+use crate::evm_simulation::database::OverriddenSimulationDB;
+
+use super::{
+    account_storage::StateUpdate,
+    traces::{handle_traces, TraceResult},
+};
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug)]
@@ -44,12 +45,15 @@ pub struct SimulationResult {
 
 /// Simulation engine
 #[derive(Debug, Clone)]
-pub struct SimulationEngine<D: DatabaseRef> {
+pub struct SimulationEngine<D: DatabaseRef + std::clone::Clone>
+where
+    D: Clone,
+{
     pub state: D,
     pub trace: bool,
 }
 
-impl<D: DatabaseRef> SimulationEngine<D>
+impl<D: DatabaseRef + std::clone::Clone> SimulationEngine<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -351,9 +355,8 @@ impl SimulationParameters {
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::database;
+    use std::{error::Error, str::FromStr, sync::Arc, time::Instant};
 
-    use super::*;
     use ethers::{
         abi::parse_abi,
         prelude::BaseContract,
@@ -365,7 +368,10 @@ mod tests {
         EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, InvalidTransaction,
         OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
-    use std::{error::Error, str::FromStr, sync::Arc, time::Instant};
+
+    use crate::evm_simulation::database;
+
+    use super::*;
 
     #[test]
     fn test_converting_to_revm() {

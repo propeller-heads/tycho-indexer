@@ -1,6 +1,7 @@
-use std::cell::RefCell;
-
-use tycho_core::dto::ProtocolStateDelta;
+use std::{
+    any::Any,
+    sync::{Arc, RwLock},
+};
 
 use ethers::{
     prelude::BaseContract,
@@ -10,32 +11,53 @@ use revm::{
     db::DatabaseRef,
     primitives::{Address, U256 as rU256},
 };
+use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
     evm_simulation::simulation::{SimulationEngine, SimulationParameters},
-    protocol::{errors::TransitionError, models::GetAmountOutResult, state::ProtocolSim},
+    protocol::{
+        errors::TransitionError,
+        events::{EVMLogMeta, LogIndex},
+        models::GetAmountOutResult,
+        state::{ProtocolEvent, ProtocolSim},
+    },
     u256_num::u256_to_f64,
 };
 
 #[allow(dead_code)]
-pub struct DodoPoolState<D: DatabaseRef>
+#[derive(Debug)]
+pub struct DodoPoolState<D: DatabaseRef + std::clone::Clone>
 where
     D::Error: std::fmt::Debug,
 {
     pool_address: H160,
     pool_abi: BaseContract,
-    // TODO: Not sure how DODO handles these... so I am adding it here for no to not have to query
-    // every time
+    // TODO: Not sure how DODO handles these... so I am adding it here for no to not have to
+    // query every time
     base_token: H160,
     helper_address: H160,
     helper_abi: BaseContract,
-    // TODO: it would be nicer to move all the caching behind a RefCell instead of exposing it to
-    // the user
-    engine: RefCell<SimulationEngine<D>>,
-    spot_price_cache: RefCell<Option<(f64, f64)>>,
+    engine: SimulationEngine<D>,
+    spot_price_cache: Arc<RwLock<Option<(f64, f64)>>>,
+}
+impl<D: DatabaseRef + std::clone::Clone> Clone for DodoPoolState<D>
+where
+    D::Error: std::fmt::Debug,
+{
+    fn clone(&self) -> Self {
+        DodoPoolState {
+            pool_address: self.pool_address,
+            pool_abi: self.pool_abi.clone(),
+            base_token: self.base_token,
+            helper_address: self.helper_address,
+            helper_abi: self.helper_abi.clone(),
+            engine: self.engine.clone(),
+            spot_price_cache: Arc::clone(&self.spot_price_cache),
+        }
+    }
 }
 
-impl<D: DatabaseRef> DodoPoolState<D>
+impl<D: DatabaseRef + std::clone::Clone> DodoPoolState<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -59,8 +81,7 @@ where
             block_number: 0,
             timestamp: 0,
         };
-        let engine = self.engine.borrow();
-        let simulation_result = engine.simulate(&params).unwrap();
+        let simulation_result = self.engine.simulate(&params).unwrap();
         let spot_price_u256 = self
             .pool_abi
             .decode_output::<U256, _>("getMidPrice", simulation_result.result)
@@ -72,7 +93,8 @@ where
     }
 }
 
-impl<D: DatabaseRef> ProtocolSim for DodoPoolState<D>
+impl<D: DatabaseRef + Send + Sync + std::fmt::Debug + 'static + std::clone::Clone> ProtocolSim
+    for DodoPoolState<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -80,12 +102,13 @@ where
     ///
     ///  Fee rates are in slot 8 and 9 they are accessed directly.
     fn fee(&self) -> f64 {
-        let engine = self.engine.borrow();
-        let lp_fee = engine
+        let lp_fee = self
+            .engine
             .state
             .storage_ref(Address::from_slice(&self.pool_address.0), rU256::from(8))
             .unwrap_or_else(|_| panic!("Error while requesting data from node."));
-        let maintainer_fee = engine
+        let maintainer_fee = self
+            .engine
             .state
             .storage_ref(Address::from_slice(&self.pool_address.0), rU256::from(8))
             .unwrap_or_else(|_| panic!("Error while requesting data from node."));
@@ -98,7 +121,7 @@ where
         base: &crate::models::ERC20Token,
         quote: &crate::models::ERC20Token,
     ) -> f64 {
-        let mut cache = self.spot_price_cache.borrow_mut();
+        let mut cache = self.spot_price_cache.write().unwrap();
         if cache.is_none() {
             let prices = self.simulate_spot_prices(base, quote);
             *cache = Some(prices);
@@ -131,7 +154,10 @@ where
             self.helper_abi
                 .encode("querySellQuoteToken", (self.pool_address, amount_in))
         }
-        .expect("DODO: Error encoding calldata for get_amount_out!");
+        .expect(
+            "DODO: Error
+     encoding calldata for get_amount_out!",
+        );
         let params = SimulationParameters {
             caller: Address::ZERO,
             to: Address::from(self.helper_address.0),
@@ -142,8 +168,7 @@ where
             block_number: 0,
             timestamp: 0,
         };
-        let engine = self.engine.borrow();
-        let simulation_result = engine.simulate(&params).unwrap();
+        let simulation_result = self.engine.simulate(&params).unwrap();
         let amount_out = self
             .pool_abi
             .decode_output::<U256, _>("querySellBaseToken", simulation_result.result)
@@ -156,6 +181,28 @@ where
         &mut self,
         delta: ProtocolStateDelta,
     ) -> Result<(), TransitionError<String>> {
+        unimplemented!()
+    }
+
+    #[allow(unused_variables)]
+    fn event_transition(
+        &mut self,
+        protocol_event: Box<dyn ProtocolEvent>,
+        log: &EVMLogMeta,
+    ) -> Result<(), TransitionError<LogIndex>> {
+        unimplemented!()
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[allow(unused_variables)]
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
         unimplemented!()
     }
 }

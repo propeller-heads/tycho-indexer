@@ -39,6 +39,7 @@ pub enum TransitionError<T> {
     OutOfOrder { state: T, event: T },
     MissingAttribute(String),
     DecodeError(String),
+    InvalidEventType(),
 }
 
 #[derive(Debug, PartialEq, Error)]
