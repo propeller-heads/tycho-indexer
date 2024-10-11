@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
-use utoipa::ToSchema;
 
 /// Address hash literal type to uniquely identify contracts/accounts on a
 /// blockchain.
@@ -50,18 +49,7 @@ pub type AccountToContractStore = HashMap<Address, ContractStore>;
 pub type ComponentId = String;
 
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    EnumString,
-    Display,
-    Default,
-    ToSchema,
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -108,6 +96,7 @@ pub struct ExtractionState {
     pub chain: Chain,
     pub attributes: serde_json::Value,
     pub cursor: Vec<u8>,
+    pub block_hash: Bytes,
 }
 
 impl ExtractionState {
@@ -116,12 +105,14 @@ impl ExtractionState {
         chain: Chain,
         attributes: Option<serde_json::Value>,
         cursor: &[u8],
+        block_hash: Bytes,
     ) -> Self {
         ExtractionState {
             name,
             chain,
             attributes: attributes.unwrap_or_default(),
             cursor: cursor.to_vec(),
+            block_hash,
         }
     }
 }
@@ -181,9 +172,8 @@ pub enum ChangeType {
     Creation,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ContractId {
-    #[schema(value_type=String)]
     pub address: Address,
     pub chain: Chain,
 }
@@ -215,6 +205,10 @@ impl PaginationParams {
     pub fn new(page: i64, page_size: i64) -> Self {
         Self { page, page_size }
     }
+
+    pub fn offset(&self) -> i64 {
+        self.page * self.page_size
+    }
 }
 
 impl From<&dto::PaginationParams> for PaginationParams {
@@ -223,7 +217,7 @@ impl From<&dto::PaginationParams> for PaginationParams {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum DeltaError {
     #[error("Id mismatch: {0} vs {1}")]
     IdMismatch(String, String),

@@ -1,6 +1,6 @@
 [package]
 name = "tycho-storage"
-version = "0.5.0"
+version = "0.32.0"
 edition = "2021"
 
 [dependencies]
@@ -18,7 +18,6 @@ diesel_migrations = "2.1.0"
 lru = "0.12.1"
 itertools = "0.12.1"
 unicode-segmentation.workspace = true
-ethers.workspace = true
 lazy_static = "1.4.0"
 
 

@@ -1,0 +1,869 @@
+use chrono::NaiveDateTime;
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use tracing::{debug, instrument, trace, warn, Level};
+use tycho_core::{
+    models::{
+        blockchain::{Block, BlockScoped},
+        protocol::ComponentBalance,
+        AttrStoreKey, ComponentId, StoreVal,
+    },
+    storage::{BlockIdentifier, BlockOrTimestamp, StorageError},
+    Bytes,
+};
+
+#[derive(Clone, Debug, Copy)]
+pub enum BlockNumberOrTimestamp {
+    Number(u64),
+    Timestamp(NaiveDateTime),
+}
+
+impl BlockNumberOrTimestamp {
+    fn greater_than(&self, other: &Block) -> bool {
+        match self {
+            BlockNumberOrTimestamp::Number(n) => n > &other.number,
+            BlockNumberOrTimestamp::Timestamp(ts) => ts > &other.ts,
+        }
+    }
+}
+
+impl TryFrom<BlockOrTimestamp> for BlockNumberOrTimestamp {
+    type Error = StorageError;
+
+    fn try_from(value: BlockOrTimestamp) -> Result<Self, Self::Error> {
+        Ok(match value {
+            BlockOrTimestamp::Block(bid) => match bid {
+                BlockIdentifier::Number((_, no)) => BlockNumberOrTimestamp::Number(no as u64),
+                BlockIdentifier::Hash(_) => {
+                    return Err(StorageError::Unexpected("BlockHash unsupported!".to_string()))
+                }
+                BlockIdentifier::Latest(_) => {
+                    return Err(StorageError::Unexpected("Latest marker unsupported!".to_string()))
+                }
+            },
+            BlockOrTimestamp::Timestamp(ts) => BlockNumberOrTimestamp::Timestamp(ts),
+        })
+    }
+}
+
+/// This buffer temporarily stores blockchain blocks that are not yet finalized. It allows for
+/// efficient handling of chain reorganisations (reorg) without requiring database rollbacks.
+///
+/// Every time a new block is received by an extractor, it's pushed here. The extractor should then
+/// check if the reorg buffer contains newly finalized blocks, and send them to the db if there are
+/// some.
+///
+/// In case of a chain reorg, we can just purge this buffer.
+pub(crate) struct ReorgBuffer<B: BlockScoped> {
+    block_messages: VecDeque<B>,
+    strict: bool,
+}
+
+/// The finality status of a block or block-scoped data.
+#[derive(PartialEq, Clone, Debug, Copy)]
+pub enum FinalityStatus {
+    /// Versions at this status should have been committed to the db.
+    Finalized,
+    /// Versions with this status should be in the reorg buffer.
+    Unfinalized,
+    /// We have not seen this version yet.
+    Unseen,
+}
+
+impl<B> ReorgBuffer<B>
+where
+    B: BlockScoped + std::fmt::Debug,
+{
+    pub(crate) fn new() -> Self {
+        Self { block_messages: VecDeque::new(), strict: false }
+    }
+
+    /// Inserts a new block into the buffer. Ensures the new block is the expected next block,
+    /// otherwise panics.
+    pub fn insert_block(&mut self, new: B) -> Result<(), StorageError> {
+        // Make sure the new block matches the one we expect, panic if not.
+        if let Some(last_message) = self.block_messages.back() {
+            if last_message.block().hash != new.block().parent_hash {
+                return Err(StorageError::Unexpected(format!(
+                    "Unexpected block sequence. Expected parent hash {} received {}",
+                    last_message.block().hash,
+                    new.block().parent_hash
+                )));
+            };
+        }
+
+        self.block_messages.push_back(new);
+
+        Ok(())
+    }
+
+    /// Drains blocks up to the specified finalized block height. The last finalized block is kept
+    /// in the buffer. Returns the drained blocks ordered by ascending number or an error if the
+    /// specified block is not found.
+    pub fn drain_new_finalized_blocks(
+        &mut self,
+        final_block_height: u64,
+    ) -> Result<Vec<B>, StorageError> {
+        let target_index = self.find_index(|b| b.block().number == final_block_height);
+        let first = self
+            .get_block_range(None, None)?
+            .next()
+            .map(|e| e.block().number);
+
+        if let Some(idx) = target_index {
+            // Drain and return every block before the target index.
+            let mut temp = self.block_messages.split_off(idx);
+            std::mem::swap(&mut self.block_messages, &mut temp);
+            trace!(?temp, "ReorgBuffer drained blocks");
+            Ok(temp.into())
+        } else if !self.strict && first.unwrap_or(0) < final_block_height {
+            warn!(?first, ?final_block_height, "Finalized block not found in ReorgBuffer");
+            Ok(Vec::new())
+        } else {
+            Err(StorageError::NotFound("block".into(), final_block_height.to_string()))
+        }
+    }
+
+    fn find_index<F: Fn(&B) -> bool>(&self, predicate: F) -> Option<usize> {
+        for (index, block_message) in self.block_messages.iter().enumerate() {
+            if predicate(block_message) {
+                return Some(index);
+            }
+        }
+        None
+    }
+
+    /// Purges all blocks following the specified block hash from the buffer. Returns the purged
+    /// blocks ordered by ascending number or an error if the target hash is not found.
+    pub fn purge(&mut self, target_hash: Bytes) -> Result<Vec<B>, StorageError> {
+        debug!("Purging reorg buffer... Target hash {}", target_hash.to_string());
+        let mut target_index = None;
+
+        for (index, block_message) in self
+            .block_messages
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if block_message.block().hash == target_hash {
+                target_index = Some(self.block_messages.len() - index);
+            }
+        }
+
+        if let Some(idx) = target_index {
+            let purged = self
+                .block_messages
+                .split_off(idx)
+                .into();
+            trace!(?purged, "ReorgBuffer purged blocks");
+            Ok(purged)
+        } else {
+            Err(StorageError::NotFound("block".into(), target_hash.to_string()))
+        }
+    }
+
+    /// Returns an `Option` containing the most recent block in the buffer or `None` if the buffer
+    /// is empty
+    pub fn get_most_recent_block(&self) -> Option<tycho_core::models::blockchain::Block> {
+        if let Some(block_message) = self.block_messages.back() {
+            return Some(block_message.block());
+        }
+        None
+    }
+
+    /// Retrieves a range of blocks from the buffer.
+    ///
+    /// The retrieved iterator will include both the start and end block of specified range. In case
+    /// either start or end block are None, the iterator will start the range at the oldest / end
+    /// the range at the latest block.
+    #[instrument(skip(self), level = Level::DEBUG, fields(buffered_range))]
+    pub fn get_block_range(
+        &self,
+        start_version: Option<BlockNumberOrTimestamp>,
+        end_version: Option<BlockNumberOrTimestamp>,
+    ) -> Result<impl Iterator<Item = &B>, StorageError> {
+        let buffered_range = match (self.block_messages.front(), self.block_messages.back()) {
+            (Some(front), Some(back)) => {
+                format!("{}-{}", front.block().number, back.block().number)
+            }
+            _ => "None".to_string(),
+        };
+        tracing::Span::current().record("buffered_range", buffered_range.as_str());
+
+        let start_index = if let Some(version) = start_version {
+            self.find_index(|b| !version.greater_than(&b.block()))
+                .ok_or_else(|| {
+                    StorageError::NotFound("Block".to_string(), format!("{:?}", version))
+                })?
+        } else {
+            0
+        };
+
+        let end_index = if let Some(version) = end_version {
+            let end_idx = self
+                .find_index(|b| !version.greater_than(&b.block()))
+                .ok_or_else(|| {
+                    StorageError::NotFound("Block".to_string(), format!("{:?}", version))
+                })?;
+
+            if end_idx < start_index {
+                return Err(StorageError::Unexpected(
+                    "ReorgBuffer: Invalid block range".to_string(),
+                ));
+            }
+            end_idx + 1
+        } else {
+            self.block_messages.len()
+        };
+
+        Ok(self
+            .block_messages
+            .range(start_index..end_index))
+    }
+
+    // Retrieves FinalityStatus for a block, returns None if the buffer is empty.
+    pub fn get_finality_status(&self, version: BlockNumberOrTimestamp) -> Option<FinalityStatus> {
+        let first_block = self.block_messages.front();
+        let last_block = self.block_messages.back();
+        match (first_block, last_block) {
+            (Some(first), Some(last)) => {
+                let first_block = first.block();
+                let last_block = last.block();
+
+                if !version.greater_than(&first_block) {
+                    Some(FinalityStatus::Finalized)
+                } else if (version.greater_than(&first_block)) &
+                    (!version.greater_than(&last_block))
+                {
+                    Some(FinalityStatus::Unfinalized)
+                } else {
+                    Some(FinalityStatus::Unseen)
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+pub type ProtocolStateIdType = ComponentId;
+pub type ProtocolStateKeyType = AttrStoreKey;
+pub type ProtocolStateValueType = StoreVal;
+pub type AccountStateIdType = Bytes;
+pub type AccountStateKeyType = Bytes;
+pub type AccountStateValueType = Bytes;
+
+/// A ReorgBuffer entry containing state updates.
+///
+/// Enables additional state lookup methods within the buffer.
+pub(crate) trait StateUpdateBufferEntry: std::fmt::Debug {
+    fn get_filtered_protocol_state_update(
+        &self,
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType>;
+
+    #[allow(clippy::mutable_key_type)]
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType>;
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    fn get_filtered_balance_update(
+        &self,
+        keys: Vec<(&String, &Bytes)>,
+    ) -> HashMap<(String, Bytes), ComponentBalance>;
+}
+
+impl<B> ReorgBuffer<B>
+where
+    B: BlockScoped + StateUpdateBufferEntry,
+{
+    /// Looks up buffered protocol state updates for the provided keys. Returns a map of updates and
+    /// a list of keys for which updates were not found in the buffered blocks.
+    // Clippy thinks it is a complex type that is difficult to read
+    #[allow(clippy::type_complexity)]
+    pub fn lookup_protocol_state(
+        &self,
+        keys: &[(&ProtocolStateIdType, &ProtocolStateKeyType)],
+    ) -> (
+        HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType>,
+        Vec<(ProtocolStateIdType, ProtocolStateKeyType)>,
+    ) {
+        let mut res = HashMap::new();
+        let mut remaining_keys: HashSet<(ProtocolStateIdType, ProtocolStateKeyType)> =
+            HashSet::from_iter(
+                keys.iter()
+                    .map(|&(c_id, attr)| (c_id.clone(), attr.clone())),
+            );
+
+        for block_message in self.block_messages.iter().rev() {
+            if remaining_keys.is_empty() {
+                break;
+            }
+
+            for (key, val) in block_message.get_filtered_protocol_state_update(
+                remaining_keys
+                    .iter()
+                    .map(|k| (&k.0, &k.1))
+                    .collect(),
+            ) {
+                if remaining_keys.remove(&(key.0.clone(), key.1.clone())) {
+                    res.insert(key, val);
+                }
+            }
+        }
+
+        (res, remaining_keys.into_iter().collect())
+    }
+
+    /// Looks up buffered account state updates for the provided keys. Returns a map of updates and
+    /// a list of keys for which updates were not found in the buffered blocks.
+    ///
+    /// Clippy thinks it is a complex type that is difficult to read
+    #[allow(clippy::type_complexity)]
+    #[allow(clippy::mutable_key_type)]
+    pub fn lookup_account_state(
+        &self,
+        keys: &[(&AccountStateIdType, &AccountStateKeyType)],
+    ) -> (
+        HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType>,
+        Vec<(AccountStateIdType, AccountStateKeyType)>,
+    ) {
+        let mut res = HashMap::new();
+        let mut remaining_keys: HashSet<(AccountStateIdType, AccountStateKeyType)> =
+            HashSet::from_iter(
+                keys.iter()
+                    .map(|&(c_id, attr)| (c_id.clone(), attr.clone())),
+            );
+
+        for block_message in self.block_messages.iter().rev() {
+            if remaining_keys.is_empty() {
+                break;
+            }
+
+            for (key, val) in block_message.get_filtered_account_state_update(
+                remaining_keys
+                    .iter()
+                    .map(|k| (&k.0, &k.1))
+                    .collect(),
+            ) {
+                if remaining_keys.remove(&(key.0.clone(), key.1.clone())) {
+                    res.insert(key, val);
+                }
+            }
+        }
+
+        (res, remaining_keys.into_iter().collect())
+    }
+
+    /// Looks up buffered balance updates for the provided component and token keys. Returns a map
+    /// where each key is a component ID associated with its token balances, and a list of
+    /// component-token pairs for which no updates were found.
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    #[allow(clippy::type_complexity)]
+    pub fn lookup_balances(
+        &self,
+        keys: &[(&ComponentId, &Bytes)],
+    ) -> (HashMap<String, HashMap<Bytes, ComponentBalance>>, Vec<(ComponentId, Bytes)>) {
+        let mut res = HashMap::new();
+        let mut remaning_keys: HashSet<_> = keys
+            .iter()
+            .map(|(c_id, token)| (c_id.to_string(), token.to_owned().to_owned()))
+            .collect();
+
+        for block_message in self.block_messages.iter().rev() {
+            if remaning_keys.is_empty() {
+                break;
+            }
+            for (key, val) in block_message.get_filtered_balance_update(keys.to_vec().clone()) {
+                if remaning_keys.remove(&key) {
+                    res.entry(key).or_insert(val);
+                }
+            }
+        }
+
+        let mut results: HashMap<String, HashMap<Bytes, ComponentBalance>> = HashMap::new();
+        for ((component_id, address), val) in res {
+            results
+                .entry(component_id)
+                .or_default()
+                .insert(address, val);
+        }
+
+        (results, remaning_keys.into_iter().collect())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
+
+    use chrono::NaiveDateTime;
+    use rstest::rstest;
+    use tycho_core::{
+        models::{
+            blockchain::Transaction,
+            protocol::{ComponentBalance, ProtocolChangesWithTx, ProtocolComponentStateDelta},
+            Chain,
+        },
+        storage::StorageError,
+        Bytes,
+    };
+
+    use crate::{extractor::evm::BlockChanges, testing};
+
+    use super::{BlockNumberOrTimestamp, FinalityStatus, ReorgBuffer};
+
+    fn transaction() -> Transaction {
+        Transaction::new(
+            Bytes::zero(32),
+            Bytes::zero(32),
+            Bytes::zero(20),
+            Some(Bytes::zero(20)),
+            10,
+        )
+    }
+
+    fn get_block_changes(version: u8) -> BlockChanges {
+        match version {
+            1 => {
+                let tx = transaction();
+                let attr = HashMap::from([
+                    ("new".to_owned(), Bytes::from(1_u64.to_be_bytes().to_vec())),
+                    ("reserve".to_owned(), Bytes::from(10_u64.to_be_bytes().to_vec())),
+                ]);
+                let state_updates = HashMap::from([(
+                    "State1".to_owned(),
+                    ProtocolComponentStateDelta {
+                        component_id: "State1".to_owned(),
+                        updated_attributes: attr,
+                        deleted_attributes: HashSet::new(),
+                    },
+                )]);
+                let new_balances = HashMap::from([
+                    (
+                        "Balance1".to_string(),
+                        [(
+                            Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                            ComponentBalance {
+                                token: Bytes::from_str(
+                                    "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+                                )
+                                .unwrap(),
+                                balance: Bytes::from(1_i32.to_le_bytes()),
+                                modify_tx: tx.hash.clone(),
+                                component_id: "Balance1".to_string(),
+                                balance_float: 1.0,
+                            },
+                        )]
+                        .into_iter()
+                        .collect(),
+                    ),
+                    (
+                        "Balance2".to_string(),
+                        [(
+                            Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                            ComponentBalance {
+                                token: Bytes::from_str(
+                                    "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+                                )
+                                .unwrap(),
+                                balance: Bytes::from(30_i32.to_le_bytes()),
+                                modify_tx: tx.hash.clone(),
+                                component_id: "Balance2".to_string(),
+                                balance_float: 30.0,
+                            },
+                        )]
+                        .into_iter()
+                        .collect(),
+                    ),
+                ]);
+
+                BlockChanges::new(
+                    "test".to_string(),
+                    Chain::Ethereum,
+                    testing::block(1),
+                    0,
+                    false,
+                    vec![ProtocolChangesWithTx {
+                        protocol_states: state_updates,
+                        tx,
+                        balance_changes: new_balances,
+                        ..Default::default()
+                    }
+                    .into()],
+                )
+            }
+            2 => {
+                let tx = transaction();
+                let state_updates = HashMap::from([
+                    (
+                        "State1".to_owned(),
+                        ProtocolComponentStateDelta {
+                            component_id: "State1".to_owned(),
+                            updated_attributes: HashMap::from([(
+                                "new".to_owned(),
+                                Bytes::from(2_u64.to_be_bytes().to_vec()),
+                            )]),
+                            deleted_attributes: HashSet::new(),
+                        },
+                    ),
+                    (
+                        "State2".to_owned(),
+                        ProtocolComponentStateDelta {
+                            component_id: "State2".to_owned(),
+                            updated_attributes: HashMap::from([
+                                ("new".to_owned(), Bytes::from(3_u64.to_be_bytes().to_vec())),
+                                ("reserve".to_owned(), Bytes::from(30_u64.to_be_bytes().to_vec())),
+                            ]),
+                            deleted_attributes: HashSet::new(),
+                        },
+                    ),
+                ]);
+
+                BlockChanges::new(
+                    "test".to_string(),
+                    Chain::Ethereum,
+                    testing::block(2),
+                    0,
+                    false,
+                    vec![ProtocolChangesWithTx {
+                        protocol_states: state_updates,
+                        tx,
+                        ..Default::default()
+                    }
+                    .into()],
+                )
+            }
+            3 => {
+                let tx = transaction();
+
+                let balance_changes = HashMap::from([(
+                    "Balance1".to_string(),
+                    [(
+                        Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                        ComponentBalance {
+                            token: Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F")
+                                .unwrap(),
+                            balance: Bytes::from(3_i32.to_le_bytes()),
+                            modify_tx: tx.hash.clone(),
+                            component_id: "Balance1".to_string(),
+                            balance_float: 3.0,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                )]);
+
+                BlockChanges::new(
+                    "test".to_string(),
+                    Chain::Ethereum,
+                    testing::block(3),
+                    0,
+                    false,
+                    vec![ProtocolChangesWithTx { tx, balance_changes, ..Default::default() }.into()],
+                )
+            }
+            _ => panic!("block entity version not implemented"),
+        }
+    }
+    #[test]
+    fn test_reorg_buffer_state_lookup() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+
+        let c_ids = ["State1".to_string(), "State2".to_string()];
+        let new = "new".to_string();
+        let reserve = "reserve".to_string();
+        let missing = "missing".to_string();
+
+        let keys = vec![
+            (&c_ids[0], &new),
+            (&c_ids[0], &reserve),
+            (&c_ids[1], &reserve),
+            (&missing, &new),
+            (&c_ids[0], &missing),
+        ];
+
+        let (res, mut missing_keys) = reorg_buffer.lookup_protocol_state(&keys);
+
+        // Need to sort because collecting a HashSet is unstable.
+        missing_keys.sort();
+        assert_eq!(
+            missing_keys,
+            vec![(c_ids[0].clone(), missing.clone()), (missing.clone(), new.clone())]
+        );
+        assert_eq!(
+            res,
+            HashMap::from([
+                ((c_ids[0].clone(), new.clone()), Bytes::from(2_u64.to_be_bytes().to_vec())),
+                ((c_ids[0].clone(), reserve.clone()), Bytes::from(10_u64.to_be_bytes().to_vec())),
+                ((c_ids[1].clone(), reserve.clone()), Bytes::from(30_u64.to_be_bytes().to_vec()))
+            ])
+        );
+    }
+
+    #[test]
+    fn test_reorg_buffer_balance_lookup() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        let c_ids = ["Balance1".to_string(), "Balance2".to_string()];
+        let token_key = Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
+        let missing_token = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let missing_component = "missing".to_string();
+
+        let keys = vec![
+            (&c_ids[0], &token_key),
+            (&c_ids[1], &token_key),
+            (&c_ids[1], &missing_token),
+            (&missing_component, &token_key),
+        ];
+
+        let (res, mut missing_keys) = reorg_buffer.lookup_balances(&keys);
+
+        // Need to sort because collecting a HashSet is unstable.
+        missing_keys.sort();
+        assert_eq!(
+            missing_keys,
+            vec![
+                (c_ids[1].clone(), missing_token.clone()),
+                (missing_component.clone(), token_key.clone())
+            ]
+        );
+        assert_eq!(
+            res,
+            HashMap::from([
+                (
+                    c_ids[0].clone(),
+                    HashMap::from([(
+                        token_key.clone(),
+                        tycho_core::models::protocol::ComponentBalance {
+                            token: token_key.clone(),
+                            balance: Bytes::from(3_i32.to_le_bytes()),
+                            modify_tx: transaction().hash,
+                            component_id: c_ids[0].clone(),
+                            balance_float: 3.0,
+                        }
+                    )])
+                ),
+                (
+                    c_ids[1].clone(),
+                    HashMap::from([(
+                        token_key.clone(),
+                        tycho_core::models::protocol::ComponentBalance {
+                            token: token_key.clone(),
+                            balance: Bytes::from(30_i32.to_le_bytes()),
+                            modify_tx: transaction().hash,
+                            component_id: c_ids[1].clone(),
+                            balance_float: 30.0,
+                        }
+                    )])
+                )
+            ])
+        );
+    }
+
+    #[test]
+    fn test_drain_finalized_blocks() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer.strict = true;
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        let finalized = reorg_buffer
+            .drain_new_finalized_blocks(3)
+            .unwrap();
+
+        assert_eq!(reorg_buffer.block_messages.len(), 1);
+        assert_eq!(finalized, vec![get_block_changes(1), get_block_changes(2)]);
+
+        let unknown = reorg_buffer.drain_new_finalized_blocks(999);
+
+        assert!(unknown.is_err());
+    }
+
+    #[test]
+    fn test_purge() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        let purged = reorg_buffer
+            .purge(
+                Bytes::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000001",
+                )
+                .unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(reorg_buffer.block_messages.len(), 1);
+
+        assert_eq!(purged, vec![get_block_changes(2), get_block_changes(3)]);
+
+        let unknown = reorg_buffer.purge(
+            Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000999")
+                .unwrap(),
+        );
+
+        assert!(unknown.is_err());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_insert_wrong_block() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+    }
+
+    #[rstest]
+    #[case::complete_range(None, None, vec![1, 2, 3])]
+    #[case::range(Some("2020-01-01T00:00:12".parse::<NaiveDateTime>().unwrap()), Some("2020-01-01T00:00:24".parse::<NaiveDateTime>().unwrap()), vec![1, 2])]
+    #[case::from_start(None, Some("2020-01-01T00:00:24".parse::<NaiveDateTime>().unwrap()), vec![1, 2])]
+    #[case::until_end(Some("2020-01-01T00:00:24".parse::<NaiveDateTime>().unwrap()), None, vec![2, 3])]
+    fn test_get_block_range(
+        #[case] start: Option<NaiveDateTime>,
+        #[case] end: Option<NaiveDateTime>,
+        #[case] exp: Vec<u64>,
+    ) {
+        let start = start.map(BlockNumberOrTimestamp::Timestamp);
+        let end = end.map(BlockNumberOrTimestamp::Timestamp);
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        let blocks = reorg_buffer
+            .get_block_range(start, end)
+            .unwrap()
+            .map(|e| e.block.number)
+            .collect::<Vec<_>>();
+
+        assert_eq!(blocks, exp);
+    }
+
+    #[test]
+    fn test_get_block_range_empty() {
+        let reorg_buffer = ReorgBuffer::<BlockChanges>::new();
+
+        let res = reorg_buffer
+            .get_block_range(None, None)
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(res, Vec::<&BlockChanges>::new());
+    }
+
+    #[rstest]
+    #[case::not_found(Some("2020-01-01T00:00:12".parse::<NaiveDateTime>().unwrap()), Some("2020-01-01T00:00:36".parse::<NaiveDateTime>().unwrap()), StorageError::NotFound("Block".to_string(), "Timestamp(2020-01-01T00:00:36)".to_string()))]
+    #[case::invalid(Some("2020-01-01T00:00:24".parse::<NaiveDateTime>().unwrap()), Some("2020-01-01T00:00:12".parse::<NaiveDateTime>().unwrap()), StorageError::Unexpected("ReorgBuffer: Invalid block range".to_string()))]
+    fn test_get_block_range_invalid_range(
+        #[case] start: Option<NaiveDateTime>,
+        #[case] end: Option<NaiveDateTime>,
+        #[case] exp: StorageError,
+    ) {
+        let start = start.map(BlockNumberOrTimestamp::Timestamp);
+        let end = end.map(BlockNumberOrTimestamp::Timestamp);
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+
+        let res = reorg_buffer
+            .get_block_range(start, end)
+            .err()
+            .unwrap();
+
+        assert_eq!(res, exp);
+    }
+
+    #[rstest]
+    #[case::finalized_no(BlockNumberOrTimestamp::Number(0), FinalityStatus::Finalized)]
+    #[case::finalized_ts(
+        BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:00".parse().unwrap()),
+        FinalityStatus::Finalized
+    )]
+    #[case::unfinalized_no(BlockNumberOrTimestamp::Number(2), FinalityStatus::Unfinalized)]
+    #[case::unfinalized_ts(
+        BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:15".parse().unwrap()), 
+        FinalityStatus::Unfinalized
+    )]
+    #[case::unseen_no(BlockNumberOrTimestamp::Number(5), FinalityStatus::Unseen)]
+    #[case::unseen_ts(
+        BlockNumberOrTimestamp::Timestamp("2020-01-01T01:00:00".parse().unwrap()),
+        FinalityStatus::Unseen
+    )]
+    fn test_get_finality_status(
+        #[case] version: BlockNumberOrTimestamp,
+        #[case] exp: FinalityStatus,
+    ) {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        let res = reorg_buffer.get_finality_status(version);
+
+        assert_eq!(res, Some(exp));
+    }
+
+    #[test]
+    fn test_get_finality_status_empty() {
+        let reorg_buffer = ReorgBuffer::<BlockChanges>::new();
+
+        let res = reorg_buffer.get_finality_status(BlockNumberOrTimestamp::Number(2));
+
+        assert_eq!(res, None);
+    }
+}

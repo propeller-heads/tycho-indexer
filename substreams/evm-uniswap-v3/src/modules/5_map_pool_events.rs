@@ -7,9 +7,7 @@ use substreams_helper::hex::Hexable;
 use crate::{
     events::{get_log_changed_attributes, get_log_changed_balances},
     pb::{
-        tycho::evm::v1::{
-            BalanceChange, Block, BlockEntityChanges, EntityChanges, TransactionEntityChanges,
-        },
+        tycho::evm::v1::{BalanceChange, Block, BlockChanges, EntityChanges, TransactionChanges},
         uniswap::v3::Pool,
     },
 };
@@ -17,11 +15,11 @@ use crate::{
 #[substreams::handlers::map]
 pub fn map_pool_events(
     block: eth::Block,
-    created_pools: BlockEntityChanges,
+    created_pools: BlockChanges,
     pools_store: StoreGetProto<Pool>,
     balance_store: StoreGetBigInt,
-) -> Result<BlockEntityChanges, substreams::errors::Error> {
-    let mut tx_changes_map: HashMap<Vec<u8>, TransactionEntityChanges> = HashMap::new();
+) -> Result<BlockChanges, substreams::errors::Error> {
+    let mut tx_changes_map: HashMap<Vec<u8>, TransactionChanges> = HashMap::new();
 
     // Add created pools to the tx_changes_map
     for change in created_pools.changes.into_iter() {
@@ -110,12 +108,12 @@ pub fn map_pool_events(
     }
 
     // Make a list of all HashMap values:
-    let tx_entity_changes: Vec<TransactionEntityChanges> = tx_changes_map.into_values().collect();
+    let tx_entity_changes: Vec<TransactionChanges> = tx_changes_map.into_values().collect();
 
     let tycho_block: Block = block.into();
 
     let block_entity_changes =
-        BlockEntityChanges { block: Some(tycho_block), changes: tx_entity_changes };
+        BlockChanges { block: Some(tycho_block), changes: tx_entity_changes };
 
     Ok(block_entity_changes)
 }
@@ -123,7 +121,7 @@ pub fn map_pool_events(
 fn update_tx_changes_map(
     entity_changes: Vec<EntityChanges>,
     balance_changes: Vec<BalanceChange>,
-    tx_changes_map: &mut HashMap<Vec<u8>, TransactionEntityChanges>,
+    tx_changes_map: &mut HashMap<Vec<u8>, TransactionChanges>,
     tx_trace: &TransactionTrace,
 ) {
     // Get the tx hash
@@ -143,8 +141,9 @@ fn update_tx_changes_map(
             merge_balance_changes(&tx_changes.balance_changes, &balance_changes);
     } else {
         // If the tx is not in the map, add it
-        let tx_changes = TransactionEntityChanges {
+        let tx_changes = TransactionChanges {
             tx: Some(tx_trace.into()),
+            contract_changes: vec![],
             entity_changes,
             balance_changes,
             component_changes: vec![],

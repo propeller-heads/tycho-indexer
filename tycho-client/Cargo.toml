@@ -1,6 +1,6 @@
 [package]
 name = "tycho-client"
-version = "0.5.0"
+version = "0.32.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 tycho-core.workspace = true
+reqwest = { version = "0.12.7", features = ["json"] }
 futures03.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

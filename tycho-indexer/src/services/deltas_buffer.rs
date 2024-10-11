@@ -1,42 +1,46 @@
 use crate::extractor::{
-    evm::{BlockAccountChanges, BlockEntityChangesResult},
-    revert_buffer::{BlockNumberOrTimestamp, FinalityStatus, RevertBuffer},
+    reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus, ReorgBuffer},
     runner::MessageSender,
 };
-use ethers::prelude::StreamExt;
-use futures03::stream;
+use futures03::{stream, StreamExt};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::debug;
+use tracing::{debug, error, instrument, trace, Level};
 use tycho_core::{
     models::{
-        blockchain::{NativeBlockDeltas, VmBlockDeltas},
-        contract::Contract,
+        blockchain::BlockAggregatedChanges,
+        contract::Account,
         protocol::{ProtocolComponent, ProtocolComponentState},
         DeltaError, NormalisedMessage,
     },
     storage::StorageError,
+    Bytes,
 };
 
-type NativeRevertBuffer = Arc<Mutex<RevertBuffer<NativeBlockDeltas>>>;
-type VmRevertBuffer = Arc<Mutex<RevertBuffer<VmBlockDeltas>>>;
-
+/// The `PendingDeltas` struct manages access to the reorg buffers maintained by each extractor.
+///
+/// The main responsibilities of `PendingDeltas` include:
+/// - Inserting new blocks and deltas into the correct `ReorgBuffer`.
+/// - Managing and applying deltas to state data, which includes merging buffered changes with data
+///   fetched from the database.
+/// - Retrieving finality status for blocks, which is used to determine whether to fetch data from
+///   the database and/or from the buffer.
 #[derive(Default, Clone)]
 pub struct PendingDeltas {
-    native: HashMap<String, NativeRevertBuffer>,
-    vm: HashMap<String, VmRevertBuffer>,
+    // Map with the protocol system name as key and a `ReorgBuffer` as value.
+    buffers: HashMap<String, Arc<Mutex<ReorgBuffer<BlockAggregatedChanges>>>>,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum PendingDeltasError {
     #[error("Failed to acquire {0} lock: {1}")]
     LockError(String, String),
-    #[error("RevertBufferError: {0}")]
-    RevertBufferError(#[from] StorageError),
+    #[error("ReorgBufferError: {0}")]
+    ReorgBufferError(#[from] StorageError),
     #[error("Downcast failed: Unknown message type")]
     UnknownMessageType,
     #[error("Unknown extractor: {0}")]
@@ -47,83 +51,88 @@ pub enum PendingDeltasError {
 
 pub type Result<T> = std::result::Result<T, PendingDeltasError>;
 
+#[async_trait::async_trait]
+pub trait PendingDeltasBuffer {
+    fn merge_native_states(
+        &self,
+        protocol_ids: Option<&[&str]>,
+        db_states: &mut Vec<ProtocolComponentState>,
+        version: Option<BlockNumberOrTimestamp>,
+        protocol_system: &str,
+    ) -> Result<()>;
+
+    fn update_vm_states(
+        &self,
+        addresses: Option<&[Bytes]>,
+        db_states: &mut Vec<Account>,
+        version: Option<BlockNumberOrTimestamp>,
+        protocol_system: &str,
+    ) -> Result<()>;
+
+    fn get_new_components(
+        &self,
+        ids: Option<&[&str]>,
+        protocol_system: &str,
+    ) -> Result<Vec<ProtocolComponent>>;
+
+    fn get_block_finality(
+        &self,
+        version: BlockNumberOrTimestamp,
+        protocol_system: &str,
+    ) -> Result<Option<FinalityStatus>>;
+}
+
 impl PendingDeltas {
-    pub fn new<'a>(
-        vm_extractors: impl IntoIterator<Item = &'a str>,
-        native_extractors: impl IntoIterator<Item = &'a str>,
-    ) -> Self {
+    pub fn new<'a>(extractors: impl IntoIterator<Item = &'a str>) -> Self {
         Self {
-            native: native_extractors
+            buffers: extractors
                 .into_iter()
                 .map(|e| {
-                    debug!("Creating new NativeRevertBuffer for {}", e);
-                    (e.to_string(), Arc::new(Mutex::new(RevertBuffer::new())))
-                })
-                .collect(),
-            vm: vm_extractors
-                .into_iter()
-                .map(|e| {
-                    debug!("Creating new VmRevertBuffer for {}", e);
-                    (e.to_string(), Arc::new(Mutex::new(RevertBuffer::new())))
+                    debug!("Creating new ReorgBuffer for {}", e);
+                    (e.to_string(), Arc::new(Mutex::new(ReorgBuffer::new())))
                 })
                 .collect(),
         }
     }
 
     fn insert(&self, message: Arc<dyn NormalisedMessage>) -> Result<()> {
-        let maybe_native: Option<NativeBlockDeltas> = message
+        let maybe_convert: Option<BlockAggregatedChanges> = message
             .as_any()
-            .downcast_ref::<BlockEntityChangesResult>()
-            .map(|msg| msg.into());
-        let maybe_vm: Option<VmBlockDeltas> = message
-            .as_any()
-            .downcast_ref::<BlockAccountChanges>()
-            .map(|msg| msg.into());
-        match (maybe_native, maybe_vm) {
-            (Some(msg), None) => {
-                if let Some(buffer) = self.native.get(&msg.extractor) {
-                    let mut guard = buffer.lock().map_err(|e| {
-                        PendingDeltasError::LockError("Native".to_string(), e.to_string())
-                    })?;
-                    if msg.revert {
-                        guard.purge(msg.block.hash.clone())?;
-                    } else {
-                        guard.insert_block(msg.clone())?;
-                        guard.drain_new_finalized_blocks(msg.finalised_block_height)?;
+            .downcast_ref::<BlockAggregatedChanges>()
+            .cloned();
+        match maybe_convert {
+            Some(msg) => {
+                let maybe_buffer = self.buffers.get(&msg.extractor);
+
+                match maybe_buffer {
+                    Some(buffer) => {
+                        let mut guard = buffer.lock().map_err(|e| {
+                            PendingDeltasError::LockError(msg.extractor.to_string(), e.to_string())
+                        })?;
+                        if msg.revert {
+                            trace!(
+                                block_number = msg.block.number,
+                                extractor = msg.extractor,
+                                "DeltaBufferPurge"
+                            );
+                            guard.purge(msg.block.hash.clone())?;
+                        } else {
+                            trace!(
+                                block_number = msg.block.number,
+                                finality = msg.finalized_block_height,
+                                extractor = msg.extractor,
+                                "DeltaBufferInsertion"
+                            );
+                            guard.insert_block(msg.clone())?;
+                            guard.drain_new_finalized_blocks(msg.finalized_block_height)?;
+                        }
                     }
-                } else {
-                    return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone()));
+                    _ => return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone())),
                 }
             }
-            (None, Some(msg)) => {
-                if let Some(buffer) = self.vm.get(&msg.extractor) {
-                    let mut guard = buffer.lock().map_err(|e| {
-                        PendingDeltasError::LockError("VM".to_string(), e.to_string())
-                    })?;
-                    if msg.revert {
-                        guard.purge(msg.block.hash.clone())?;
-                    } else {
-                        guard.insert_block(msg.clone())?;
-                        guard.drain_new_finalized_blocks(msg.finalised_block_height)?;
-                    }
-                } else {
-                    return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone()));
-                }
-            }
-            _ => return Err(PendingDeltasError::UnknownMessageType),
+            None => return Err(PendingDeltasError::UnknownMessageType),
         }
 
-        Ok(())
-    }
-
-    pub fn update_native_states(
-        &self,
-        db_states: &mut [ProtocolComponentState],
-        version: Option<BlockNumberOrTimestamp>,
-    ) -> Result<()> {
-        for state in db_states {
-            self.update_native_state(state, version)?;
-        }
         Ok(())
     }
 
@@ -131,138 +140,109 @@ impl PendingDeltas {
         &self,
         db_state: &mut ProtocolComponentState,
         version: Option<BlockNumberOrTimestamp>,
+        protocol_system: &str,
     ) -> Result<bool> {
         let mut change_found = false;
-        for buffer in self.native.values() {
-            let guard = buffer
-                .lock()
-                .map_err(|e| PendingDeltasError::LockError("Native".to_string(), e.to_string()))?;
 
-            for entry in guard.get_block_range(None, version)? {
-                if let Some(delta) = entry.deltas.get(&db_state.component_id) {
-                    db_state.apply_state_delta(delta)?;
-                    change_found = true;
-                }
+        let buffer = self
+            .buffers
+            .get(protocol_system)
+            .ok_or_else(|| {
+                error!("Missing reorg buffer for {}", protocol_system);
+                PendingDeltasError::UnknownExtractor(protocol_system.to_string())
+            })?;
 
-                if let Some(delta) = entry
-                    .component_balances
-                    .get(&db_state.component_id)
-                {
-                    db_state.apply_balance_delta(delta)?;
-                    change_found = true
-                }
+        let guard = buffer.lock().map_err(|e| {
+            PendingDeltasError::LockError(protocol_system.to_string(), e.to_string())
+        })?;
+
+        for entry in guard.get_block_range(None, version)? {
+            // Apply state deltas if found
+            if let Some(delta) = entry
+                .state_deltas
+                .get(&db_state.component_id)
+            {
+                db_state.apply_state_delta(delta)?;
+                change_found = true;
             }
 
-            if change_found {
-                // if we found some changes no need to check other extractor's buffer
-                break;
+            // Apply balance deltas if found
+            if let Some(delta) = entry
+                .component_balances
+                .get(&db_state.component_id)
+            {
+                db_state.apply_balance_delta(delta)?;
+                change_found = true;
             }
         }
+
         Ok(change_found)
     }
 
-    pub fn update_vm_states(
-        &self,
-        db_states: &mut [Contract],
-        version: Option<BlockNumberOrTimestamp>,
-    ) -> Result<()> {
-        for state in db_states {
-            self.update_vm_state(state, version)?;
-        }
-        Ok(())
-    }
-
+    // Updates a given db account state with the buffered deltas.
     fn update_vm_state(
         &self,
-        db_state: &mut Contract,
+        db_state: &mut Account,
         version: Option<BlockNumberOrTimestamp>,
+        protocol_system: &str,
     ) -> Result<bool> {
         let mut change_found = false;
-        for buffer in self.vm.values() {
+
+        let buffer = self
+            .buffers
+            .get(protocol_system)
+            .ok_or_else(|| {
+                error!("Missing reorg buffer for {}", protocol_system);
+                PendingDeltasError::UnknownExtractor(protocol_system.to_string())
+            })?;
+
+        let guard = buffer.lock().map_err(|e| {
+            PendingDeltasError::LockError(protocol_system.to_string(), e.to_string())
+        })?;
+
+        for entry in guard.get_block_range(None, version)? {
+            if let Some(delta) = entry
+                .account_deltas
+                .get(&db_state.address)
+            {
+                db_state.apply_delta(delta)?;
+                change_found = true
+            }
+
+            // TODO: currently it is impossible to apply balance changes and state deltas since
+            //  we don't know the component_id of the contract.
+        }
+
+        Ok(change_found)
+    }
+
+    // Creates a new account state from the buffered deltas only.
+    fn get_account(
+        &self,
+        address: Bytes,
+        version: Option<BlockNumberOrTimestamp>,
+    ) -> Result<Account> {
+        let mut account: Option<Account> = None;
+        for buffer in self.buffers.values() {
             let guard = buffer
                 .lock()
                 .map_err(|e| PendingDeltasError::LockError("VM".to_string(), e.to_string()))?;
             for entry in guard.get_block_range(None, version)? {
-                if let Some(delta) = entry.deltas.get(&db_state.address) {
-                    db_state.apply_contract_delta(delta)?;
-                    change_found = true;
+                if let Some(delta) = entry.account_deltas.get(&address) {
+                    // Update account state or create a new one if not present
+                    let account_ref =
+                        account.get_or_insert_with(|| delta.clone().into_account_without_tx());
+                    account_ref.apply_delta(delta)?;
                 }
-
-                // TODO: currently it is impossible to apply balance changes since
-                //  we don't know the component_id of the contract.
-            }
-
-            if change_found {
-                // if we found some changes no need to check other extractor's buffer
-                break;
             }
         }
 
-        Ok(change_found)
+        account.ok_or(PendingDeltasError::ReorgBufferError(StorageError::NotFound(
+            "Contract".to_string(),
+            address.to_string(),
+        )))
     }
 
-    #[allow(dead_code)]
-    pub fn get_new_components(&self) -> Result<Vec<ProtocolComponent>> {
-        let mut new_components = Vec::new();
-        for buffer in self.native.values() {
-            let guard = buffer
-                .lock()
-                .map_err(|e| PendingDeltasError::LockError("Native".to_string(), e.to_string()))?;
-            for entry in guard.get_block_range(None, None)? {
-                new_components.extend(
-                    entry
-                        .new_components
-                        .clone()
-                        .into_values(),
-                );
-            }
-        }
-        for buffer in self.vm.values() {
-            let guard = buffer
-                .lock()
-                .map_err(|e| PendingDeltasError::LockError("Native".to_string(), e.to_string()))?;
-            for entry in guard.get_block_range(None, None)? {
-                new_components.extend(
-                    entry
-                        .new_components
-                        .clone()
-                        .into_values(),
-                );
-            }
-        }
-
-        Ok(new_components)
-    }
-
-    /// Returns finality for any extractor, can error if lock is poisened. Returns None if buffer is
-    /// empty.
-    pub fn get_block_finality(
-        &self,
-        version: BlockNumberOrTimestamp,
-    ) -> Result<Option<FinalityStatus>> {
-        // TODO: This is a temporary hack, since finality status may be different depending on each
-        //  individual extractor.
-        let vm_first = self.vm.values().next();
-        let native_first = self.native.values().next();
-
-        match (native_first, vm_first) {
-            (Some(first), _) => {
-                let guard = first.lock().map_err(|e| {
-                    PendingDeltasError::LockError("Native".to_string(), e.to_string())
-                })?;
-                Ok(guard.get_finality_status(version))
-            }
-            (_, Some(first)) => {
-                let guard = first
-                    .lock()
-                    .map_err(|e| PendingDeltasError::LockError("VM".to_string(), e.to_string()))?;
-                Ok(guard.get_finality_status(version))
-            }
-            _ => Ok(None),
-        }
-    }
-
-    #[allow(dead_code)]
     pub async fn run(
         self,
         extractors: impl IntoIterator<Item = Arc<dyn MessageSender + Send + Sync>>,
@@ -287,31 +267,192 @@ impl PendingDeltas {
     }
 }
 
+impl PendingDeltasBuffer for PendingDeltas {
+    /// Merges the buffered deltas with given db states. If a requested component is not in the
+    /// db yet, it creates a new state for it out of the buffered deltas.
+    ///
+    /// Arguments:
+    ///
+    /// * `protocol_ids`: A list of the requested protocol ids. Note: `None` is not supported yet.
+    /// * `db_states`: A mutable reference to the states fetched from the db.
+    /// * `version`: The version of the state to be fetched. If `None`, the latest state will be
+    ///   fetched.
+    #[instrument(level = Level::TRACE, skip_all)]
+    fn merge_native_states(
+        &self,
+        protocol_ids: Option<&[&str]>,
+        db_states: &mut Vec<ProtocolComponentState>,
+        version: Option<BlockNumberOrTimestamp>,
+        protocol_system: &str,
+    ) -> Result<()> {
+        // TODO: handle when no id is specified with filters
+
+        let mut missing_ids: HashSet<&str> = protocol_ids
+            .unwrap_or_default()
+            .iter()
+            .cloned()
+            .collect();
+
+        // update db states with buffered deltas
+        for state in db_states.iter_mut() {
+            self.update_native_state(state, version, protocol_system)?;
+            missing_ids.remove(state.component_id.as_str());
+        }
+
+        // for new components (not in the db yet), create an empty state and apply buffered deltas
+        // to it
+        for id in missing_ids {
+            let mut state = ProtocolComponentState::new(id, HashMap::new(), HashMap::new());
+            self.update_native_state(&mut state, version, protocol_system)?;
+            db_states.push(state);
+        }
+
+        Ok(())
+    }
+
+    /// Updates the given db states with the buffered deltas. If a requested account is not in the
+    /// db yet, it creates a new state for it out of the buffered deltas.
+    ///
+    /// Arguments:
+    ///
+    /// * `addresses`: A list of the requested account addresses.
+    /// * `db_states`: A mutable reference to the states fetched from the db.
+    /// * `version`: The version of the state to be fetched. If `None`, the latest state will be
+    ///   fetched.
+    #[instrument(level = Level::TRACE, skip_all)]
+    fn update_vm_states(
+        &self,
+        addresses: Option<&[Bytes]>,
+        db_states: &mut Vec<Account>,
+        version: Option<BlockNumberOrTimestamp>,
+        protocol_system: &str,
+    ) -> Result<()> {
+        let mut missing_addresses: HashSet<Bytes> = addresses
+            .unwrap_or_default()
+            .iter()
+            .cloned()
+            .collect();
+
+        // update db states with buffered deltas
+        for state in db_states.iter_mut() {
+            self.update_vm_state(state, version, protocol_system)?;
+            missing_addresses.remove(&state.address);
+        }
+
+        // for new accounts (not in the db yet), build a new state from the buffered deltas
+        // and add it to the db states
+        for address in missing_addresses {
+            let account = self.get_account(address, version)?;
+            db_states.push(account);
+        }
+
+        Ok(())
+    }
+
+    /// Retrieves a list of new protocol components that match all the provided criteria.
+    /// (The filters are combined using an AND logic.)
+    ///
+    /// # Parameters
+    /// - `ids`: `Option<&[&str]>`
+    ///     - A list of component IDs to filter the results. If `None`, all components will be
+    ///       considered.
+    /// - `protocol_system`: `Option<&str>`
+    ///     - The protocol system to filter the components by. If `None`, components from all
+    ///       protocol systems will be considered.
+    ///
+    /// # Returns
+    /// - `Result<Vec<ProtocolComponent>>`
+    ///     - A `Result` which is `Ok` containing a vector of `ProtocolComponent` objects if
+    ///       successful, or an error otherwise.
+    ///
+    /// # Example
+    /// ```
+    /// let components = get_new_components(Some(&["id1", "id2"]), Some("system1"))?;
+    /// ```
+    #[instrument(level = Level::TRACE, skip_all)]
+    fn get_new_components(
+        &self,
+        ids: Option<&[&str]>,
+        protocol_system: &str,
+    ) -> Result<Vec<ProtocolComponent>> {
+        let requested_ids: Option<HashSet<&str>> = ids.map(|ids| ids.iter().cloned().collect());
+        let mut new_components = Vec::new();
+
+        let buffer = self
+            .buffers
+            .get(protocol_system)
+            .ok_or_else(|| {
+                error!("Missing reorg buffer for {}", protocol_system);
+                PendingDeltasError::UnknownExtractor(protocol_system.to_string())
+            })?;
+
+        let guard = buffer.lock().map_err(|e| {
+            PendingDeltasError::LockError(protocol_system.to_string(), e.to_string())
+        })?;
+
+        for entry in guard.get_block_range(None, None)? {
+            new_components.extend(
+                entry
+                    .new_protocol_components
+                    .clone()
+                    .into_values()
+                    .filter(|comp| {
+                        requested_ids
+                            .as_ref()
+                            .map_or(true, |ids| ids.contains(comp.id.as_str()))
+                    }),
+            );
+        }
+
+        Ok(new_components)
+    }
+
+    /// Returns finality for any extractor, can error if lock is poisened. Returns None if buffer is
+    /// empty.
+    /// Returns an error if the provided protocol system isn't found in the buffer or the specified
+    /// block version is unseen. If a timestamp version is provided, the latest block before that
+    /// timestamp is used.
+    /// Note - if no protocol system is provided, we choose a random extractor to get the finality
+    /// status from. This is particularly risky when there is an extractor syncing.
+    #[instrument(level = Level::TRACE, skip_all)]
+    fn get_block_finality(
+        &self,
+        version: BlockNumberOrTimestamp,
+        protocol_system: &str,
+    ) -> Result<Option<FinalityStatus>> {
+        let buffer = self
+            .buffers
+            .get(protocol_system)
+            .ok_or_else(|| {
+                error!("Missing reorg buffer for {}", protocol_system);
+                PendingDeltasError::UnknownExtractor(protocol_system.to_string())
+            })?;
+        let guard = buffer.lock().map_err(|e| {
+            PendingDeltasError::LockError(protocol_system.to_string(), e.to_string())
+        })?;
+
+        Ok(guard.get_finality_status(version))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        extractor::{evm, evm::AccountUpdate},
-        testing::evm_block,
-    };
-    use ethers::types::{H160, H256, U256};
+    use crate::{extractor::evm, testing::block};
     use std::str::FromStr;
-    use tycho_core::{
-        models::{Chain, ChangeType},
-        Bytes,
+    use tycho_core::models::{
+        contract::AccountDelta,
+        protocol::{ComponentBalance, ProtocolComponentStateDelta},
+        Chain, ChangeType,
     };
 
-    fn vm_state() -> Contract {
-        Contract::new(
+    fn vm_state() -> Account {
+        Account::new(
             Chain::Ethereum,
             Bytes::from("0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05"),
             "Contract1".to_string(),
-            evm::fixtures::evm_slots([(2, 2)])
-                .into_iter()
-                .map(|(k, v)| (Bytes::from(k), Bytes::from(v)))
-                .collect::<HashMap<_, _>>(),
+            evm::fixtures::evm_slots([(2, 2)]),
             Bytes::from("0x1999"),
-            HashMap::new(),
             Bytes::from("0x0c0c0c"),
             Bytes::from("0xbabe"),
             Bytes::from("0x4200"),
@@ -320,45 +461,60 @@ mod test {
         )
     }
 
-    fn vm_block_deltas() -> BlockAccountChanges {
-        let address = H160::from_str("0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05").unwrap();
-        BlockAccountChanges::new(
+    fn vm_block_deltas() -> BlockAggregatedChanges {
+        let address = Bytes::from_str("0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05").unwrap();
+        BlockAggregatedChanges::new(
             "vm:extractor",
             Chain::Ethereum,
-            evm_block(1),
+            block(1),
             1,
             false,
-            [(
-                address,
-                AccountUpdate::new(
-                    address,
-                    Chain::Ethereum,
-                    evm::fixtures::evm_slots([(1, 1), (2, 1)]),
-                    Some(U256::from(1999)),
-                    None,
-                    ChangeType::Update,
+            HashMap::new(),
+            [
+                (
+                    address.clone(),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        address,
+                        evm::fixtures::slots([(1, 1), (2, 1)]),
+                        Some(Bytes::from(1999u32).lpad(32, 0)),
+                        None,
+                        ChangeType::Update,
+                    ),
                 ),
-            )]
+                (
+                    Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                        evm::fixtures::slots([(1, 1), (2, 1)]),
+                        Some(Bytes::from(200u32).lpad(32, 0)),
+                        Some(Bytes::from("0x0c0c0c")),
+                        ChangeType::Creation,
+                    ),
+                ),
+            ]
             .into_iter()
             .collect::<HashMap<_, _>>(),
             HashMap::new(),
             [(
                 "component2".to_string(),
-                evm::ProtocolComponent {
+                ProtocolComponent {
                     id: "component2".to_string(),
                     protocol_system: "vm_swap".to_string(),
                     protocol_type_name: "swap".to_string(),
                     chain: Chain::Ethereum,
                     tokens: Vec::new(),
-                    contract_ids: Vec::new(),
+                    contract_addresses: Vec::new(),
                     static_attributes: HashMap::new(),
                     change: ChangeType::Creation,
-                    creation_tx: H256::zero(),
+                    creation_tx: Bytes::new(),
                     created_at: "2020-01-01T00:00:00".parse().unwrap(),
                 },
             )]
             .into_iter()
             .collect::<HashMap<_, _>>(),
+            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
         )
@@ -377,58 +533,105 @@ mod test {
         )
     }
 
-    fn native_block_deltas() -> BlockEntityChangesResult {
-        BlockEntityChangesResult::new(
+    fn native_block_deltas() -> BlockAggregatedChanges {
+        BlockAggregatedChanges::new(
             "native:extractor",
             Chain::Ethereum,
-            evm_block(1),
+            block(1),
             1,
             false,
-            [evm::ProtocolStateDelta::new(
-                "component1".to_string(),
-                [("attr1", Bytes::from("0x01"))]
-                    .into_iter()
-                    .map(|(k, v)| (k.to_string(), v))
-                    .collect(),
-            )]
+            [
+                ProtocolComponentStateDelta::new(
+                    "component1",
+                    [("attr1", Bytes::from("0x01"))]
+                        .into_iter()
+                        .map(|(k, v)| (k.to_string(), v))
+                        .collect(),
+                    HashSet::new(),
+                ),
+                ProtocolComponentStateDelta::new(
+                    "component3",
+                    [("attr2", Bytes::from("0x05"))]
+                        .into_iter()
+                        .map(|(k, v)| (k.to_string(), v))
+                        .collect(),
+                    HashSet::new(),
+                ),
+            ]
             .into_iter()
             .map(|v| (v.component_id.clone(), v))
             .collect(),
             HashMap::new(),
-            [(
-                "component3".to_string(),
-                evm::ProtocolComponent {
-                    id: "component3".to_string(),
-                    protocol_system: "native_swap".to_string(),
-                    protocol_type_name: "swap".to_string(),
-                    chain: Chain::Ethereum,
-                    tokens: Vec::new(),
-                    contract_ids: Vec::new(),
-                    static_attributes: HashMap::new(),
-                    change: ChangeType::Creation,
-                    creation_tx: H256::zero(),
-                    created_at: "2020-01-01T00:00:00".parse().unwrap(),
-                },
-            )]
+            HashMap::new(),
+            [
+                (
+                    "component3".to_string(),
+                    ProtocolComponent {
+                        id: "component3".to_string(),
+                        protocol_system: "native_swap".to_string(),
+                        protocol_type_name: "swap".to_string(),
+                        chain: Chain::Ethereum,
+                        tokens: Vec::new(),
+                        contract_addresses: Vec::new(),
+                        static_attributes: HashMap::new(),
+                        change: ChangeType::Creation,
+                        creation_tx: Bytes::new(),
+                        created_at: "2020-01-01T00:00:00".parse().unwrap(),
+                    },
+                ),
+                (
+                    "component4".to_string(),
+                    ProtocolComponent {
+                        id: "component4".to_string(),
+                        protocol_system: "native_swap".to_string(),
+                        protocol_type_name: "swap".to_string(),
+                        chain: Chain::Ethereum,
+                        tokens: Vec::new(),
+                        contract_addresses: Vec::new(),
+                        static_attributes: HashMap::new(),
+                        change: ChangeType::Creation,
+                        creation_tx: Bytes::new(),
+                        created_at: "2020-01-01T00:00:00".parse().unwrap(),
+                    },
+                ),
+            ]
             .into_iter()
             .collect::<HashMap<_, _>>(),
             HashMap::new(),
-            [(
-                "component1".to_string(),
-                [(
-                    H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
-                    evm::ComponentBalance {
-                        token: H160::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
-                            .unwrap(),
-                        balance_float: 1.0,
-                        balance: Bytes::from("0x01"),
-                        modify_tx: H256::zero(),
-                        component_id: "component1".to_string(),
-                    },
-                )]
-                .into_iter()
-                .collect(),
-            )]
+            [
+                (
+                    "component1".to_string(),
+                    [(
+                        Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                        ComponentBalance {
+                            token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+                                .unwrap(),
+                            balance_float: 1.0,
+                            balance: Bytes::from("0x01"),
+                            modify_tx: Bytes::zero(32),
+                            component_id: "component1".to_string(),
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+                (
+                    "component3".to_string(),
+                    [(
+                        Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                        ComponentBalance {
+                            token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+                                .unwrap(),
+                            balance_float: 2.0,
+                            balance: Bytes::from("0x02"),
+                            modify_tx: Bytes::zero(32),
+                            component_id: "component3".to_string(),
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+            ]
             .into_iter()
             .collect(),
             HashMap::new(),
@@ -436,19 +639,19 @@ mod test {
     }
 
     #[test]
-    fn test_insert_vm() {
-        let buffer = PendingDeltas::new(["vm:extractor"], []);
-        let exp: VmBlockDeltas = (&vm_block_deltas()).into();
+    fn test_insert_extractor() {
+        let buffer = PendingDeltas::new(["vm:extractor"]);
+        let exp: BlockAggregatedChanges = vm_block_deltas();
 
         buffer
             .insert(Arc::new(vm_block_deltas()))
-            .expect("vm insert failed");
+            .expect("insert failed");
 
-        let vm_revert_buffer = buffer
-            .vm
+        let reorg_buffer = buffer
+            .buffers
             .get("vm:extractor")
-            .expect("vm:extractor buffer missing");
-        let binding = vm_revert_buffer.lock().unwrap();
+            .expect("extractor buffer missing");
+        let binding = reorg_buffer.lock().unwrap();
         let res = binding
             .get_block_range(None, None)
             .expect("Failed to get block range")
@@ -457,34 +660,14 @@ mod test {
     }
 
     #[test]
-    fn test_insert_native() {
-        let buffer = PendingDeltas::new([], ["native:extractor"]);
-        let exp: NativeBlockDeltas = (&native_block_deltas()).into();
-
-        buffer
-            .insert(Arc::new(native_block_deltas()))
-            .expect("native insert failed");
-
-        let native_revert_buffer = buffer
-            .native
-            .get("native:extractor")
-            .expect("native:extractor buffer missing");
-        let binding = native_revert_buffer.lock().unwrap();
-        let res = binding
-            .get_block_range(None, None)
-            .expect("Failed to get block range")
-            .collect::<Vec<_>>();
-        assert_eq!(res[0], &exp);
-    }
-
-    #[test]
-    fn test_update_native_states() {
-        let mut state = [native_state()];
-        let buffer = PendingDeltas::new([], ["native:extractor"]);
+    fn test_merge_native_states() {
+        let mut state = vec![native_state()]; // db state
+        let buffer = PendingDeltas::new(["native:extractor"]);
         buffer
             .insert(Arc::new(native_block_deltas()))
             .unwrap();
-        let exp = ProtocolComponentState::new(
+        // expected state after applying buffer deltas to the given db state
+        let exp1 = ProtocolComponentState::new(
             "component1",
             [("attr2", Bytes::from("0x02")), ("attr1", Bytes::from("0x01"))]
                 .into_iter()
@@ -494,49 +677,77 @@ mod test {
                 .into_iter()
                 .collect::<HashMap<_, _>>(),
         );
+        // expected state for a new component not yet in the db
+        let exp3 = ProtocolComponentState::new(
+            "component3",
+            [("attr2", Bytes::from("0x05"))]
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect::<HashMap<_, _>>(),
+            [(Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), Bytes::from("0x02"))]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+        );
 
         buffer
-            .update_native_states(
+            .merge_native_states(
+                Some(&["component1", "component3"]),
                 &mut state,
                 Some(BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:00".parse().unwrap())),
+                "native:extractor",
             )
             .unwrap();
 
-        assert_eq!(&state[0], &exp);
+        assert_eq!(state.len(), 2);
+        assert_eq!(&state[0], &exp1);
+        assert_eq!(&state[1], &exp3);
     }
 
     #[test]
     fn test_update_vm_states() {
-        let mut state = [vm_state()];
-        let buffer = PendingDeltas::new(["vm:extractor"], []);
+        let mut state = vec![vm_state()];
+        let buffer = PendingDeltas::new(["vm:extractor"]);
         buffer
             .insert(Arc::new(vm_block_deltas()))
             .unwrap();
-        let exp = Contract::new(
+        let address0 = Bytes::from("0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05");
+        let exp0 = Account::new(
             Chain::Ethereum,
-            Bytes::from("0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05"),
+            address0.clone(),
             "Contract1".to_string(),
-            evm::fixtures::evm_slots([(1, 1), (2, 1)])
-                .into_iter()
-                .map(|(k, v)| (Bytes::from(k), Bytes::from(v)))
-                .collect::<HashMap<_, _>>(),
+            evm::fixtures::evm_slots([(1, 1), (2, 1)]),
             Bytes::from("0x00000000000000000000000000000000000000000000000000000000000007cf"),
-            HashMap::new(),
             Bytes::from("0x0c0c0c"),
             Bytes::from("0xbabe"),
             Bytes::from("0x4200"),
             Bytes::from("0x4200"),
             None,
         );
+        let address1 = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+        let exp1 = Account::new(
+            Chain::Ethereum,
+            address1.clone(),
+            address1.clone().to_string(),
+            evm::fixtures::evm_slots([(1, 1), (2, 1)]),
+            Bytes::from("0x00000000000000000000000000000000000000000000000000000000000000c8"),
+            Bytes::from("0x0c0c0c"),
+            Bytes::from("0x58ca1e123f83094287ae82a842f4f49e064d6f2fa946a2130335ff131ebd010b"),
+            Bytes::from("0x00"),
+            Bytes::from("0x00"),
+            None,
+        );
 
         buffer
             .update_vm_states(
+                Some(&[address0, address1]),
                 &mut state,
                 Some(BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:00".parse().unwrap())),
+                "vm:extractor",
             )
             .unwrap();
 
-        assert_eq!(&state[0], &exp);
+        assert_eq!(&state[0], &exp0);
+        assert_eq!(&state[1], &exp1);
     }
 
     #[test]
@@ -551,7 +762,7 @@ mod test {
                 Vec::new(),
                 HashMap::new(),
                 ChangeType::Creation,
-                Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                Bytes::new(),
                 "2020-01-01T00:00:00".parse().unwrap(),
             ),
             ProtocolComponent::new(
@@ -563,11 +774,11 @@ mod test {
                 Vec::new(),
                 HashMap::new(),
                 ChangeType::Creation,
-                Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                Bytes::new(),
                 "2020-01-01T00:00:00".parse().unwrap(),
             ),
         ];
-        let buffer = PendingDeltas::new(["vm:extractor"], ["native:extractor"]);
+        let buffer = PendingDeltas::new(["vm:extractor", "native:extractor"]);
         buffer
             .insert(Arc::new(vm_block_deltas()))
             .unwrap();
@@ -575,8 +786,52 @@ mod test {
             .insert(Arc::new(native_block_deltas()))
             .unwrap();
 
-        let new_components = buffer.get_new_components().unwrap();
+        let new_components = buffer
+            .get_new_components(Some(&["component3"]), "native:extractor")
+            .unwrap();
 
-        assert_eq!(new_components, exp);
+        assert_eq!(new_components, vec![exp[0].clone()]);
+
+        let new_components = buffer
+            .get_new_components(None, "vm:extractor")
+            .unwrap();
+
+        assert_eq!(new_components, vec![exp[1].clone()]);
+    }
+
+    use rstest::rstest;
+
+    #[rstest]
+    // native extractor
+    #[case("native:extractor".to_string(), None)]
+    // vm extractor
+    #[case("vm:extractor".to_string(), None)]
+    // bad input
+    #[case("unknown_system".to_string(), Some(PendingDeltasError::UnknownExtractor("unknown_system".to_string())))]
+    fn test_get_block_finality(
+        #[case] protocol_system: String,
+        #[case] expected_error: Option<PendingDeltasError>,
+    ) {
+        let buffer = PendingDeltas::new(["vm:extractor", "native:extractor"]);
+        buffer
+            .insert(Arc::new(vm_block_deltas()))
+            .expect("vm insert failed");
+        buffer
+            .insert(Arc::new(native_block_deltas()))
+            .expect("native insert failed");
+
+        let version = BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:00".parse().unwrap());
+
+        let result = buffer.get_block_finality(version, &protocol_system);
+
+        match expected_error {
+            Some(expected_err) => {
+                assert!(matches!(result, Err(ref err) if err == &expected_err));
+            }
+            None => {
+                let finality_status = result.expect("Failed to get block finality");
+                assert!(finality_status.is_some());
+            }
+        }
     }
 }

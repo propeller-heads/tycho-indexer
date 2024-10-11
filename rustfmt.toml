@@ -1,4 +1,5 @@
 reorder_imports = true
+edition = "2021"
 imports_granularity = "Crate"
 use_small_heuristics = "Max"
 comment_width = 100

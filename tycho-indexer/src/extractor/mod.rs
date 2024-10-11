@@ -1,5 +1,8 @@
 use crate::{
-    extractor::revert_buffer::StateUpdateBufferEntry,
+    extractor::reorg_buffer::{
+        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
+        ProtocolStateKeyType, ProtocolStateValueType, StateUpdateBufferEntry,
+    },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 use async_trait::async_trait;
@@ -18,7 +21,7 @@ use tycho_core::{
 };
 
 pub mod evm;
-pub mod revert_buffer;
+pub mod reorg_buffer;
 pub mod runner;
 mod u256_num;
 
@@ -44,8 +47,16 @@ pub enum ExtractionError {
     ServiceError(String),
     #[error("Merge error: {0}")]
     MergeError(String),
-    #[error("Revert buffer error: {0}")]
-    RevertBufferError(String),
+    #[error("Reorg buffer error: {0}")]
+    ReorgBufferError(String),
+}
+
+#[derive(Error, Debug)]
+pub enum RPCError {
+    #[error("RPC setup error: {0}")]
+    SetupError(String),
+    #[error("RPC error: {0}")]
+    RequestError(String),
 }
 
 pub type ExtractorMsg = Arc<dyn NormalisedMessage>;
@@ -59,7 +70,7 @@ pub trait Extractor: Send + Sync {
 
     async fn get_cursor(&self) -> String;
 
-    async fn get_last_processed_block(&self) -> Option<evm::Block>;
+    async fn get_last_processed_block(&self) -> Option<Block>;
 
     async fn handle_tick_scoped_data(
         &self,
@@ -108,23 +119,27 @@ impl<B> StateUpdateBufferEntry for BlockUpdateWithCursor<B>
 where
     B: StateUpdateBufferEntry,
 {
-    type IdType = B::IdType;
-    type KeyType = B::KeyType;
-    type ValueType = B::ValueType;
-
-    fn get_filtered_state_update(
-        &self,
-        keys: Vec<(&Self::IdType, &Self::KeyType)>,
-    ) -> HashMap<(Self::IdType, Self::KeyType), Self::ValueType> {
-        self.block_update
-            .get_filtered_state_update(keys)
-    }
-
     fn get_filtered_balance_update(
         &self,
         keys: Vec<(&String, &Bytes)>,
     ) -> HashMap<(String, Bytes), ComponentBalance> {
         self.block_update
             .get_filtered_balance_update(keys)
+    }
+
+    fn get_filtered_protocol_state_update(
+        &self,
+        keys: Vec<(&ProtocolStateIdType, &ProtocolStateKeyType)>,
+    ) -> HashMap<(ProtocolStateIdType, ProtocolStateKeyType), ProtocolStateValueType> {
+        self.block_update
+            .get_filtered_protocol_state_update(keys)
+    }
+
+    fn get_filtered_account_state_update(
+        &self,
+        keys: Vec<(&AccountStateIdType, &AccountStateKeyType)>,
+    ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
+        self.block_update
+            .get_filtered_account_state_update(keys)
     }
 }

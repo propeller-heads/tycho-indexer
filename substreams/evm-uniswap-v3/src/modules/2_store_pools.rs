@@ -2,10 +2,10 @@ use std::str;
 
 use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 
-use crate::pb::{tycho::evm::v1::BlockEntityChanges, uniswap::v3::Pool};
+use crate::pb::{tycho::evm::v1::BlockChanges, uniswap::v3::Pool};
 
 #[substreams::handlers::store]
-pub fn store_pools(pools_created: BlockEntityChanges, store: StoreSetIfNotExistsProto<Pool>) {
+pub fn store_pools(pools_created: BlockChanges, store: StoreSetIfNotExistsProto<Pool>) {
     // Store pools. Required so the next maps can match any event to a known pool by their address
 
     for change in pools_created.changes {

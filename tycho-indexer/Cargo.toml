@@ -1,6 +1,6 @@
 [package]
 name = "tycho-indexer"
-version = "0.5.0"
+version = "0.32.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -21,14 +21,17 @@ tracing.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 console-subscriber.workspace = true
-ethers.workspace = true
 diesel-async.workspace = true
 tycho-core = { workspace = true }
 tycho-storage.workspace = true
-token-analyzer.workspace = true
+tycho-ethereum.workspace = true
 anyhow.workspace = true
 reqwest.workspace = true
 url.workspace = true
+tracing-opentelemetry = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 async-stream = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-retry = "0.3"
@@ -55,7 +58,10 @@ typetag = "0.2.16"
 utoipa = { version = "4.2.0", features = ["chrono"] }
 utoipa-swagger-ui = { version = "6.0.0", features = ["actix-web"] }
 ethrpc = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51" }
-web3 = { version = "0.19", default-features = false }
+mini-moka = "0.10.3"
+num-bigint = "0.4.4"
+num-traits = "0.2.19"
+num_cpus = "1.16.0"
 
 [dev-dependencies]
 actix-rt = "2.9.0"

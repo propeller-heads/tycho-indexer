@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tycho-indexer-client"
+# this is versioned in lockstep with all other tycho packages
+version = "0.32.0"
+description = "A package for interacting with the Tycho API."
+readme = "README.md"
+authors = [
+    { name = "Propeller Heads" }
+]
+requires-python = ">=3.9"
+license = { text = "MIT License" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "eth-abi==2.2.0",
+    "eth-typing==2.3.0",
+    "eth-utils==1.9.5",
+    "hexbytes==0.3.1",
+    "pydantic==1.8.*",
+    "requests==2.*",
+]
+
+[project.optional-dependencies]
+testing = [
+    "pytest",
+]
+
+[project.urls]
+homepage = "https://propellerswap.xyz"
+repository = "https://github.com/propeller-heads/tycho-indexer"
+
+[tool.setuptools.packages.find]
+where = ["."]

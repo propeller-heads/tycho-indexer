@@ -249,6 +249,13 @@ impl Version {
     }
 }
 
+// Helper type to retrieve entities with their total retrievable count.
+#[derive(Debug)]
+pub struct WithTotal<T> {
+    pub entity: T,
+    pub total: Option<i64>,
+}
+
 /// Store and retrieve protocol related structs.
 ///
 /// This trait defines how to retrieve protocol components, state as well as
@@ -270,7 +277,8 @@ pub trait ProtocolGateway {
         system: Option<String>,
         ids: Option<&[&str]>,
         min_tvl: Option<f64>,
-    ) -> Result<Vec<models::protocol::ProtocolComponent>, StorageError>;
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<Vec<models::protocol::ProtocolComponent>>, StorageError>;
 
     /// Retrieves owners of tokens
     ///
@@ -301,6 +309,7 @@ pub trait ProtocolGateway {
         to_delete: &[models::protocol::ProtocolComponent],
         block_ts: NaiveDateTime,
     ) -> Result<(), StorageError>;
+
     /// Stores new found ProtocolTypes.
     ///
     /// # Parameters
@@ -336,7 +345,8 @@ pub trait ProtocolGateway {
         system: Option<String>,
         id: Option<&[&str]>,
         retrieve_balances: bool,
-    ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError>;
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<Vec<models::protocol::ProtocolComponentState>>, StorageError>;
 
     async fn update_protocol_states(
         &self,
@@ -358,7 +368,7 @@ pub trait ProtocolGateway {
         min_quality: Option<i32>,
         traded_n_days_ago: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<Vec<models::token::CurrencyToken>, StorageError>;
+    ) -> Result<WithTotal<Vec<models::token::CurrencyToken>>, StorageError>;
 
     /// Saves multiple component balances to storage.
     ///
@@ -478,7 +488,7 @@ pub trait ContractStateGateway {
         id: &ContractId,
         version: Option<&Version>,
         include_slots: bool,
-    ) -> Result<models::contract::Contract, StorageError>;
+    ) -> Result<models::contract::Account, StorageError>;
 
     /// Get multiple contracts' states from storage.
     ///
@@ -505,8 +515,8 @@ pub trait ContractStateGateway {
         addresses: Option<&[Address]>,
         version: Option<&Version>,
         include_slots: bool,
-        retrieve_balances: bool,
-    ) -> Result<Vec<models::contract::Contract>, StorageError>;
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<Vec<models::contract::Account>>, StorageError>;
 
     /// Inserts a new contract into the database.
     ///
@@ -521,7 +531,7 @@ pub trait ContractStateGateway {
     /// - A Result with Ok if the operation was successful, and an Err containing `StorageError` if
     ///   there was an issue inserting the contract into the database. E.g. if the contract already
     ///   existed.
-    async fn upsert_contract(&self, new: &models::contract::Contract) -> Result<(), StorageError>;
+    async fn upsert_contract(&self, new: &models::contract::Account) -> Result<(), StorageError>;
 
     /// Update multiple contracts
     ///
@@ -547,7 +557,7 @@ pub trait ContractStateGateway {
     /// the one specified.
     async fn update_contracts(
         &self,
-        new: &[(TxHash, models::contract::ContractDelta)],
+        new: &[(TxHash, models::contract::AccountDelta)],
     ) -> Result<(), StorageError>;
 
     /// Mark a contract as deleted
@@ -610,7 +620,7 @@ pub trait ContractStateGateway {
         chain: &Chain,
         start_version: Option<&BlockOrTimestamp>,
         end_version: &BlockOrTimestamp,
-    ) -> Result<Vec<models::contract::ContractDelta>, StorageError>;
+    ) -> Result<Vec<models::contract::AccountDelta>, StorageError>;
 }
 
 pub trait Gateway:
@@ -619,5 +629,7 @@ pub trait Gateway:
     + ExtractionStateGateway
     + ProtocolGateway
     + ContractStateGateway
+    + Send
+    + Sync
 {
 }

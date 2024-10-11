@@ -71,13 +71,13 @@ impl PostgresGateway {
         }
         .map_err(|err| storage_error_from_diesel(err, "Block", &block_id.to_string(), None))?;
         let chain = self.get_chain(&orm_block.chain_id);
-        Ok(Block {
-            hash: std::mem::take(&mut orm_block.hash),
-            parent_hash: std::mem::take(&mut orm_block.parent_hash),
-            number: orm_block.number as u64,
+        Ok(Block::new(
+            orm_block.number as u64,
             chain,
-            ts: orm_block.ts,
-        })
+            std::mem::take(&mut orm_block.hash),
+            std::mem::take(&mut orm_block.parent_hash),
+            orm_block.ts,
+        ))
     }
 
     #[instrument(skip_all)]
@@ -239,15 +239,6 @@ impl PostgresGateway {
         .await
         .map_err(PostgresError::from)?;
 
-        diesel::update(
-            schema::protocol_calls_contract::table
-                .filter(schema::protocol_calls_contract::valid_to.gt(block.ts)),
-        )
-        .set(schema::protocol_calls_contract::valid_to.eq(MAX_TS))
-        .execute(conn)
-        .await
-        .map_err(PostgresError::from)?;
-
         // Any versioned table's rows, which have `deleted_at` set to "> block.ts"
         // need, to be updated to be valid again (thus, deleted_at = NULL).
         diesel::update(schema::account::table.filter(schema::account::deleted_at.gt(block.ts)))
@@ -276,7 +267,6 @@ mod test {
         db_fixtures::{yesterday_midnight, yesterday_one_am},
     };
     use diesel_async::AsyncConnection;
-    use ethers::types::{H256, U256};
     use std::{str::FromStr, time::Duration};
     use tycho_core::models::Chain;
 
@@ -310,15 +300,13 @@ mod test {
     }
 
     fn block(hash: &str) -> Block {
-        Block {
-            number: 2,
-            hash: Bytes::from(hash),
-            parent_hash: Bytes::from(
-                "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
-            ),
-            chain: Chain::Ethereum,
-            ts: yesterday_one_am(),
-        }
+        Block::new(
+            2,
+            Chain::Ethereum,
+            Bytes::from(hash),
+            Bytes::from("0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"),
+            yesterday_one_am(),
+        )
     }
 
     #[tokio::test]
@@ -376,15 +364,13 @@ mod test {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
-        let block = Block {
-            number: 1,
-            hash: Bytes::from("0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"),
-            parent_hash: Bytes::from(
-                "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
-            ),
-            chain: Chain::Ethereum,
-            ts: yesterday_midnight(),
-        };
+        let block = Block::new(
+            1,
+            Chain::Ethereum,
+            Bytes::from("0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"),
+            Bytes::from("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"),
+            yesterday_midnight(),
+        );
 
         gw.upsert_block(&[block.clone()], &mut conn)
             .await
@@ -582,16 +568,14 @@ mod test {
 
         // set up contracts data
         let block1_hash =
-            H256::from_str("0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
-                .unwrap()
-                .0
-                .into();
+            Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                .unwrap();
         let c0_address =
             Bytes::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").expect("c0 address valid");
-        let exp_slots: HashMap<U256, U256> = vec![
-            (U256::from(0), U256::from(1)),
-            (U256::from(1), U256::from(5)),
-            (U256::from(2), U256::from(1)),
+        let exp_slots: HashMap<Bytes, Bytes> = vec![
+            (Bytes::from(0_u8).lpad(32, 0), Bytes::from(1_u8).lpad(32, 0)),
+            (Bytes::from(1_u8).lpad(32, 0), Bytes::from(5_u8).lpad(32, 0)),
+            (Bytes::from(2_u8).lpad(32, 0), Bytes::from(1_u8).lpad(32, 0)),
         ]
         .into_iter()
         .collect();
@@ -602,7 +586,7 @@ mod test {
             .await
             .unwrap();
 
-        let slots: HashMap<U256, U256> = schema::contract_storage::table
+        let slots: HashMap<Bytes, Bytes> = schema::contract_storage::table
             .inner_join(schema::account::table)
             .filter(schema::account::address.eq(c0_address))
             .select((schema::contract_storage::slot, schema::contract_storage::value))
@@ -610,14 +594,7 @@ mod test {
             .await
             .unwrap()
             .iter()
-            .map(|(k, v)| {
-                (
-                    U256::from_big_endian(k),
-                    v.as_ref()
-                        .map(|rv| U256::from_big_endian(rv))
-                        .unwrap_or_else(U256::zero),
-                )
-            })
+            .map(|(k, v)| (k.clone(), v.clone().unwrap_or(Bytes::zero(32))))
             .collect();
         assert_eq!(slots, exp_slots);
 

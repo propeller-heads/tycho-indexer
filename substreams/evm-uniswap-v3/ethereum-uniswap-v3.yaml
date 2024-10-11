@@ -25,7 +25,7 @@ modules:
       - params: string
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:tycho.evm.v1.BlockEntityChanges
+      type: proto:tycho.evm.v1.BlockChanges
 
   - name: store_pools
     kind: store
@@ -61,7 +61,7 @@ modules:
       - store: store_pools
       - store: store_pools_balances
     output:
-      type: proto:tycho.evm.v1.BlockEntityChanges
+      type: proto:tycho.evm.v1.BlockChanges
 
 params:
   map_pools_created: "1F98431c8aD98523631AE4a59f267346ea31F984"

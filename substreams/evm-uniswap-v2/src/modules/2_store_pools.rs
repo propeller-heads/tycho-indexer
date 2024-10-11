@@ -1,13 +1,13 @@
 use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 
 use crate::{
-    pb::tycho::evm::v1::{BlockEntityChanges, ProtocolComponent},
+    pb::tycho::evm::v1::{BlockChanges, ProtocolComponent},
     store_key::StoreKey,
 };
 
 #[substreams::handlers::store]
 pub fn store_pools(
-    pools_created: BlockEntityChanges,
+    pools_created: BlockChanges,
     store: StoreSetIfNotExistsProto<ProtocolComponent>,
 ) {
     // Store pools. Required so the next steps can match any event to a known pool by their address

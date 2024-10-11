@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_block_number_identity ON block("number", "chain_id");

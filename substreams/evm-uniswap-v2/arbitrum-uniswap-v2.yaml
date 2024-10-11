@@ -1,6 +1,6 @@
 specVersion: v0.1.0
 package:
-  name: "substreams_arbitrum_uniswap_v2"
+  name: "arbitrum_uniswap_v2"
   version: v0.2.0
 
 protobuf:
@@ -15,7 +15,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../../target/wasm32-unknown-unknown/substreams/substreams_ethereum_uniswap_v2.wasm
+    file: ../../target/wasm32-unknown-unknown/substreams/ethereum_uniswap_v2.wasm
 
 modules:
   - name: map_pools_created
@@ -25,7 +25,7 @@ modules:
       - params: string
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:tycho.evm.v1.BlockEntityChanges
+      type: proto:tycho.evm.v1.BlockChanges
 
   - name: store_pools
     kind: store
@@ -43,7 +43,7 @@ modules:
       - map: map_pools_created
       - store: store_pools
     output:
-      type: proto:tycho.evm.v1.BlockEntityChanges
+      type: proto:tycho.evm.v1.BlockChanges
 
 params:
   map_pools_created: factory_address=f1D7CC64Fb4452F05c498126312eBE29f30Fbcf9&protocol_type_name=uniswap_v2_pool

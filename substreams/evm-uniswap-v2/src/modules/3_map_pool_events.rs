@@ -10,8 +10,8 @@ use crate::{
     pb::tycho::evm::{
         v1,
         v1::{
-            Attribute, BalanceChange, BlockEntityChanges, ChangeType, EntityChanges,
-            ProtocolComponent, TransactionEntityChanges,
+            Attribute, BalanceChange, BlockChanges, ChangeType, EntityChanges, ProtocolComponent,
+            TransactionChanges,
         },
     },
     store_key::StoreKey,
@@ -59,9 +59,9 @@ impl PartialChanges {
 #[substreams::handlers::map]
 pub fn map_pool_events(
     block: eth::Block,
-    block_entity_changes: BlockEntityChanges,
+    block_entity_changes: BlockChanges,
     pools_store: StoreGetProto<ProtocolComponent>,
-) -> Result<BlockEntityChanges, substreams::errors::Error> {
+) -> Result<BlockChanges, substreams::errors::Error> {
     // Sync event is sufficient for our use-case. Since it's emitted on every reserve-altering
     // function call, we can use it as the only event to update the reserves of a pool.
     let mut block_entity_changes = block_entity_changes;
@@ -149,8 +149,8 @@ fn handle_sync(
 /// Parameters:
 /// - tx_changes: HashMap with the changes for each transaction. This is the same HashMap used in
 ///   handle_sync
-/// - block_entity_changes: The BlockEntityChanges struct that will be updated with the changes from
-///   the sync events.
+/// - block_entity_changes: The BlockChanges struct that will be updated with the changes from the
+///   sync events.
 /// This HashMap comes pre-filled with the changes for the create_pool events, mapped in
 /// 1_map_pool_created.
 ///
@@ -158,7 +158,7 @@ fn handle_sync(
 /// block_entity_changes will be complete after this function ends.
 fn merge_block(
     tx_changes: &mut HashMap<Vec<u8>, PartialChanges>,
-    block_entity_changes: &mut BlockEntityChanges,
+    block_entity_changes: &mut BlockChanges,
 ) {
     let mut tx_entity_changes_map = HashMap::new();
 
@@ -171,7 +171,7 @@ fn merge_block(
         let transaction = change.tx.as_ref().unwrap();
         tx_entity_changes_map
             .entry(transaction.hash.clone())
-            .and_modify(|c: &mut TransactionEntityChanges| {
+            .and_modify(|c: &mut TransactionChanges| {
                 c.component_changes
                     .extend(change.component_changes.clone());
                 c.entity_changes
@@ -210,8 +210,9 @@ fn merge_block(
     for partial_changes in tx_changes.values() {
         tx_entity_changes_map.insert(
             partial_changes.transaction.hash.clone(),
-            TransactionEntityChanges {
+            TransactionChanges {
                 tx: Some(partial_changes.transaction.clone()),
+                contract_changes: vec![],
                 entity_changes: partial_changes
                     .clone()
                     .consolidate_entity_changes(),

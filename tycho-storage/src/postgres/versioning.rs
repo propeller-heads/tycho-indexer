@@ -333,7 +333,7 @@ pub async fn apply_partitioned_versioning<T: PartitionedVersionedRow>(
     let delete_versions = delete_versions.unwrap_or(&empty_delete_versions);
 
     if new_data.is_empty() && delete_versions.is_empty() {
-        return Ok((Vec::new(), Vec::new()))
+        return Ok((Vec::new(), Vec::new()));
     }
     let db_rows: Vec<T> = T::latest_versions_by_ids(
         new_data

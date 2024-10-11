@@ -143,7 +143,7 @@ impl WsActor {
                 let subscription_id = Uuid::new_v4();
 
                 // Add the subscription_id to the current tracing span recorded fields
-                tracing::Span::current().record("subscription_id", &subscription_id.to_string());
+                tracing::Span::current().record("subscription_id", subscription_id.to_string());
 
                 info!(extractor_id = %extractor_id, "Subscribing to extractor");
 
@@ -271,10 +271,10 @@ impl StreamHandler<Result<(Uuid, ExtractorMsg), ws::ProtocolError>> for WsActor 
         msg: Result<(Uuid, ExtractorMsg), ws::ProtocolError>,
         ctx: &mut Self::Context,
     ) {
-        debug!("Message received from extractor");
+        trace!("Message received from extractor");
         match msg {
             Ok((subscription_id, deltas)) => {
-                debug!("Forwarding message to client");
+                trace!("Forwarding message to client");
                 let msg = DeltasMessage { subscription_id, deltas };
                 ctx.text(serde_json::to_string(&msg).unwrap());
             }

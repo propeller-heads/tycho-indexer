@@ -84,3 +84,7 @@ Temporary Items
 *.log
 
 db/*.backup
+/tycho-client-py/build/*
+/tycho-client-py/*.egg-info
+/tycho-client-py/tycho_client.egg-info/
+/tycho-client-py/dist/

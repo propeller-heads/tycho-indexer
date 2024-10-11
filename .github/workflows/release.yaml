@@ -1,44 +1,33 @@
-# When a tag is created, this workflow will build and upload the tycho-client binary to the release.
 name: Release
 
 on:
-  push:
-    tags:
-      - '[0-9]+.*'
+  release:
+    types: [created, prereleased]
 
 permissions:
   id-token: write
   contents: write
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/create-gh-release-action@v1
-        with:
-          draft: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   upload-assets:
-    needs: create-release
     strategy:
       matrix:
         include:
-          - target: aarch64-apple-darwin
+          - package: tycho-client
+            target: aarch64-apple-darwin
             os: macos-latest
-          - target: x86_64-unknown-linux-gnu
+          - package: tycho-client
+            target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          - target: x86_64-apple-darwin
+          - package: tycho-client
+            target: x86_64-apple-darwin
             os: macos-latest
-          - target: universal-apple-darwin
-            os: macos-latest
+          - package: tycho-indexer
+            target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Determine Tag Name
-        id: get_tag
-        run: echo "TAG_NAME=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_ENV
       - name: Install PostgreSQL Client on macOS
         if: runner.os == 'macOS'
         run: |
@@ -46,10 +35,8 @@ jobs:
           brew link --force libpq
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
-          # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
-          # Note that glob pattern is not supported yet.
-          bin: tycho-client
-          archive: $bin-$target-${{ env.TAG_NAME }}
+          bin: ${{ matrix.package }}
+          archive: ${{ matrix.package }}-${{ matrix.target }}-${{ github.event.release.tag_name }}
           target: ${{ matrix.target }}
           tar: all
           zip: none
@@ -62,7 +49,6 @@ jobs:
           aws-region: eu-central-1
       - name: Upload binary to S3
         run: |
-          # Assuming the tar.gz file is named like 'tycho-client-<target>-<tag>.tar.gz'
-          FILE_NAME=tycho-client-${{ matrix.target }}-${{ env.TAG_NAME }}.tar.gz
+          FILE_NAME=${{ matrix.package }}-${{ matrix.target }}-${{ github.event.release.tag_name }}.tar.gz
           BUCKET_NAME=repo.propellerheads/tycho-client
           aws s3 cp $FILE_NAME s3://$BUCKET_NAME/$FILE_NAME

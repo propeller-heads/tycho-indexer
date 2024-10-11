@@ -15,7 +15,7 @@ use tycho_core::{
         self, Address, Balance, Chain, ChangeType, ComponentId, FinancialType, ImplementationType,
         PaginationParams, StoreVal, TxHash,
     },
-    storage::{BlockOrTimestamp, StorageError, Version},
+    storage::{BlockOrTimestamp, StorageError, Version, WithTotal},
     Bytes,
 };
 
@@ -72,7 +72,7 @@ impl PostgresGateway {
                 .remove(current_component_id)
                 .unwrap_or_default()
                 .into_iter()
-                .map(|(key, balance)| (key, balance.new_balance))
+                .map(|(key, balance)| (key, balance.balance))
                 .collect();
 
             let protocol_state = models::protocol::ProtocolComponentState::new(
@@ -94,7 +94,7 @@ impl PostgresGateway {
                 HashMap::new(),
                 balances
                     .into_iter()
-                    .map(|(key, balance)| (key, balance.new_balance))
+                    .map(|(key, balance)| (key, balance.balance))
                     .collect(),
             ))
         }
@@ -136,10 +136,15 @@ impl PostgresGateway {
         system: Option<String>,
         ids: Option<&[&str]>,
         min_tvl: Option<f64>,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<models::protocol::ProtocolComponent>, StorageError> {
+    ) -> Result<WithTotal<Vec<models::protocol::ProtocolComponent>>, StorageError> {
         use super::schema::{protocol_component::dsl::*, transaction::dsl::*};
         let chain_id_value = self.get_chain_id(chain);
+
+        let mut count_query = protocol_component
+            .left_join(schema::component_tvl::table)
+            .into_boxed();
 
         let mut query = protocol_component
             .inner_join(transaction.on(creation_tx.eq(schema::transaction::id)))
@@ -155,9 +160,19 @@ impl PostgresGateway {
                         .eq(chain_id_value)
                         .and(protocol_system_id.eq(protocol_system)),
                 );
+                count_query = count_query.filter(
+                    chain_id
+                        .eq(chain_id_value)
+                        .and(protocol_system_id.eq(protocol_system)),
+                );
             }
             (None, Some(external_ids)) => {
                 query = query.filter(
+                    chain_id
+                        .eq(chain_id_value)
+                        .and(external_id.eq_any(external_ids)),
+                );
+                count_query = count_query.filter(
                     chain_id
                         .eq(chain_id_value)
                         .and(external_id.eq_any(external_ids)),
@@ -172,14 +187,37 @@ impl PostgresGateway {
                             .and(protocol_system_id.eq(protocol_system)),
                     ),
                 );
+                count_query = count_query.filter(
+                    chain_id.eq(chain_id_value).and(
+                        external_id
+                            .eq_any(external_ids)
+                            .and(protocol_system_id.eq(protocol_system)),
+                    ),
+                );
             }
             (_, _) => {
                 query = query.filter(chain_id.eq(chain_id_value));
+                count_query = count_query.filter(chain_id.eq(chain_id_value));
             }
         }
 
         if let Some(thr) = min_tvl {
             query = query.filter(schema::component_tvl::tvl.gt(thr));
+            count_query = count_query.filter(schema::component_tvl::tvl.gt(thr));
+        }
+
+        let count = count_query
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        // Apply optional pagination when loading protocol components to ensure consistency
+        if let Some(pagination) = pagination_params {
+            query = query
+                .order_by(schema::protocol_component::id)
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
         }
 
         let orm_protocol_components = query
@@ -190,8 +228,11 @@ impl PostgresGateway {
             .map(|(pc, txh)| (pc, Some(txh)))
             .collect();
 
-        self.build_protocol_components(orm_protocol_components, chain, conn)
-            .await
+        let res = self
+            .build_protocol_components(orm_protocol_components, chain, conn)
+            .await?;
+
+        Ok(WithTotal { entity: res, total: Some(count) })
     }
 
     async fn build_protocol_components(
@@ -242,6 +283,14 @@ impl PostgresGateway {
                 .await
                 .map_err(PostgresError::from)?;
 
+        let protocol_type_names_by_id: HashMap<i64, String> = schema::protocol_type::table
+            .select((schema::protocol_type::id, schema::protocol_type::name))
+            .load::<(i64, String)>(conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .collect();
+
         fn map_addresses_to_protocol_component(
             protocol_component_to_address: Vec<(i64, Address)>,
         ) -> HashMap<i64, Vec<Address>> {
@@ -285,8 +334,12 @@ impl PostgresGateway {
                 Ok(models::protocol::ProtocolComponent::new(
                     &pc.external_id,
                     &ps,
-                    // TODO: this is obiviously wrong and needs fixing
-                    &pc.protocol_type_id.to_string(),
+                    protocol_type_names_by_id
+                        .get(&pc.protocol_type_id)
+                        .ok_or(PostgresError(StorageError::NotFound(
+                            "ProtocolType".into(),
+                            pc.protocol_type_id.to_string(),
+                        )))?,
                     *chain,
                     tokens_by_pc,
                     contracts_by_pc,
@@ -620,6 +673,7 @@ impl PostgresGateway {
     // The filters are applied in the following order: component ids, protocol system, chain. If
     // component ids are provided, the protocol system filter is ignored. The chain filter is
     // always applied.
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_protocol_states(
         &self,
         chain: &Chain,
@@ -628,8 +682,9 @@ impl PostgresGateway {
         system: Option<String>,
         ids: Option<&[&str]>,
         retrieve_balances: bool,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<models::protocol::ProtocolComponentState>, StorageError> {
+    ) -> Result<WithTotal<Vec<models::protocol::ProtocolComponentState>>, StorageError> {
         let chain_db_id = self.get_chain_id(chain);
         let version_ts = match &at {
             Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),
@@ -645,34 +700,64 @@ impl PostgresGateway {
 
         match (ids, system) {
             (Some(ids), Some(_)) => {
-                warn!("Both protocol IDs and system were provided. System will be ignored.");
-                self._decode_protocol_states(
-                    balances,
-                    orm::ProtocolState::by_id(ids, chain_db_id, version_ts, conn).await,
-                    ids.join(",").as_str(),
-                )
-            }
-            (Some(ids), _) => self._decode_protocol_states(
-                balances,
-                orm::ProtocolState::by_id(ids, chain_db_id, version_ts, conn).await,
-                ids.join(",").as_str(),
-            ),
-            (_, Some(system)) => self._decode_protocol_states(
-                balances,
-                orm::ProtocolState::by_protocol_system(
-                    system.clone(),
-                    chain_db_id,
+                let state_data = orm::ProtocolState::by_id(
+                    ids,
+                    &chain_db_id,
                     version_ts,
+                    pagination_params,
                     conn,
                 )
-                .await,
-                system.to_string().as_str(),
-            ),
-            _ => self._decode_protocol_states(
-                balances,
-                orm::ProtocolState::by_chain(chain_db_id, version_ts, conn).await,
-                chain.to_string().as_str(),
-            ),
+                .await;
+                let protocol_states = self._decode_protocol_states(
+                    balances,
+                    state_data.entity,
+                    ids.join(",").as_str(),
+                )?;
+                Ok(WithTotal { entity: protocol_states, total: state_data.total })
+            }
+            (Some(ids), _) => {
+                let state_data = orm::ProtocolState::by_id(
+                    ids,
+                    &chain_db_id,
+                    version_ts,
+                    pagination_params,
+                    conn,
+                )
+                .await;
+                let protocol_states = self._decode_protocol_states(
+                    balances,
+                    state_data.entity,
+                    ids.join(",").as_str(),
+                )?;
+                Ok(WithTotal { entity: protocol_states, total: state_data.total })
+            }
+            (_, Some(system)) => {
+                let state_data = orm::ProtocolState::by_protocol_system(
+                    &system.to_string(),
+                    &chain_db_id,
+                    version_ts,
+                    pagination_params,
+                    conn,
+                )
+                .await;
+                let protocol_states = self._decode_protocol_states(
+                    balances,
+                    state_data.entity,
+                    system.to_string().as_str(),
+                )?;
+                Ok(WithTotal { entity: protocol_states, total: state_data.total })
+            }
+            _ => {
+                let state_data =
+                    orm::ProtocolState::by_chain(&chain_db_id, version_ts, pagination_params, conn)
+                        .await;
+                let protocol_states = self._decode_protocol_states(
+                    balances,
+                    state_data.entity,
+                    chain.to_string().as_str(),
+                )?;
+                Ok(WithTotal { entity: protocol_states, total: state_data.total })
+            }
         }
     }
 
@@ -805,6 +890,22 @@ impl PostgresGateway {
                 .execute(conn)
                 .await
                 .map_err(PostgresError::from)?;
+            // remove deleted attributes from the default table
+            if !deleted_attributes.is_empty() {
+                let mut delete_query =
+                    diesel::delete(schema::protocol_state_default::table).into_boxed();
+                for ((component_id, attr_name), _) in deleted_attributes {
+                    delete_query = delete_query.or_filter(
+                        schema::protocol_state_default::protocol_component_id
+                            .eq(component_id)
+                            .and(schema::protocol_state_default::attribute_name.eq(attr_name)),
+                    );
+                }
+                delete_query
+                    .execute(conn)
+                    .await
+                    .map_err(PostgresError::from)?;
+            }
         }
         Ok(())
     }
@@ -817,9 +918,16 @@ impl PostgresGateway {
         last_traded_ts_threshold: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<models::token::CurrencyToken>, StorageError> {
+    ) -> Result<WithTotal<Vec<models::token::CurrencyToken>>, StorageError> {
         use super::schema::{account::dsl::*, token::dsl::*};
         let chain_db_id = self.get_chain_id(&chain);
+
+        let mut count_query = token
+            .inner_join(account)
+            .select(token::all_columns())
+            .filter(schema::account::chain_id.eq(chain_db_id))
+            .into_boxed();
+
         let mut query = token
             .inner_join(account)
             .select((token::all_columns(), schema::account::address))
@@ -828,25 +936,34 @@ impl PostgresGateway {
 
         if let Some(addrs) = addresses {
             query = query.filter(schema::account::address.eq_any(addrs));
+            count_query = count_query.filter(schema::account::address.eq_any(addrs));
         }
 
         if let Some(min_quality) = min_quality {
             query = query.filter(schema::token::quality.ge(min_quality));
+            count_query = count_query.filter(schema::token::quality.ge(min_quality));
         }
 
         if let Some(last_traded_ts_threshold) = last_traded_ts_threshold {
-            let active_tokens_subquery = schema::component_balance::table
-                .select(schema::component_balance::token_id)
-                .filter(schema::component_balance::valid_from.gt(last_traded_ts_threshold))
+            let active_tokens_subquery = schema::component_balance_default::table
+                .select(schema::component_balance_default::token_id)
+                .filter(schema::component_balance_default::valid_from.gt(last_traded_ts_threshold))
                 .distinct();
             query = query.filter(schema::token::id.eq_any(active_tokens_subquery));
+            count_query = count_query.filter(schema::token::id.eq_any(active_tokens_subquery));
         }
 
+        // TODO: Improve performance by running as subquery
+        let count = count_query
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
         if let Some(pagination) = pagination_params {
-            let offset = pagination.page * pagination.page_size;
             query = query
                 .limit(pagination.page_size)
-                .offset(offset);
+                .offset(pagination.offset());
         }
 
         let results = query
@@ -855,7 +972,7 @@ impl PostgresGateway {
             .await
             .map_err(|err| storage_error_from_diesel(err, "Token", &chain.to_string(), None))?;
 
-        let tokens: Result<Vec<models::token::CurrencyToken>, StorageError> = results
+        let tokens: Vec<models::token::CurrencyToken> = results
             .into_iter()
             .map(|(orm_token, address_)| {
                 let gas_usage: Vec<_> = orm_token
@@ -863,7 +980,7 @@ impl PostgresGateway {
                     .iter()
                     .map(|u| u.map(|g| g as u64))
                     .collect();
-                Ok(models::token::CurrencyToken::new(
+                models::token::CurrencyToken::new(
                     &address_,
                     orm_token.symbol.as_str(),
                     orm_token.decimals as u32,
@@ -871,10 +988,11 @@ impl PostgresGateway {
                     gas_usage.as_slice(),
                     chain,
                     orm_token.quality as u32,
-                ))
+                )
             })
             .collect();
-        tokens
+
+        Ok(WithTotal { entity: tokens, total: Some(count) })
     }
 
     pub async fn add_tokens(
@@ -1077,7 +1195,7 @@ impl PostgresGateway {
 
             let new_component_balance = orm::NewComponentBalance::new(
                 *token_id,
-                component_balance.new_balance.clone(),
+                component_balance.balance.clone(),
                 component_balance.balance_float,
                 None,
                 *transaction_id,
@@ -1616,7 +1734,6 @@ mod test {
     use std::str::FromStr;
 
     use diesel_async::AsyncConnection;
-    use ethers::prelude::{H256, U256};
     use rstest::rstest;
     use serde_json::json;
 
@@ -1767,8 +1884,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             conn,
-            Balance::from(U256::exp10(18)),
-            Balance::from(U256::zero()),
+            Balance::from(10u128.pow(18)).lpad(32, 0),
+            Bytes::zero(32),
             1e18,
             weth_id,
             txn[0],
@@ -1778,8 +1895,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             conn,
-            Balance::from(U256::from(2000) * U256::exp10(6)),
-            Balance::from(U256::zero()),
+            Balance::from(2000 * 10u128.pow(6)).lpad(32, 0),
+            Bytes::zero(32),
             2000.0 * 1e6,
             usdc_id,
             txn[0],
@@ -1801,8 +1918,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             conn,
-            Balance::from(U256::exp10(18)),
-            Balance::from(U256::zero()),
+            Balance::from(10u128.pow(18)).lpad(32, 0),
+            Bytes::zero(32),
             1e18,
             weth_id,
             txn[0],
@@ -1812,8 +1929,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             conn,
-            Balance::from(U256::from(2000) * U256::exp10(18)),
-            Balance::from(U256::zero()),
+            Balance::from(2000 * 10u128.pow(18)).lpad(32, 0),
+            Bytes::zero(32),
             2000.0 * 1e18,
             dai_id,
             txn[0],
@@ -1835,8 +1952,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             conn,
-            Balance::from(U256::from(2000) * U256::exp10(18)),
-            Balance::from(U256::zero()),
+            Balance::from(2000 * 10u128.pow(18)).lpad(32, 0),
+            Bytes::zero(32),
             1e18,
             lusd_id,
             txn[1],
@@ -1846,8 +1963,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             conn,
-            Balance::from(U256::from(2000) * U256::exp10(6)),
-            Balance::from(U256::zero()),
+            Balance::from(2000 * 10u128.pow(6)).lpad(32, 0),
+            Bytes::zero(32),
             2000.0 * 1e6,
             usdc_id,
             txn[1],
@@ -1874,7 +1991,7 @@ mod test {
             protocol_component_id,
             txn[0],
             "reserve1".to_owned(),
-            Bytes::from(U256::from(1100)),
+            Bytes::from(1100u128).lpad(32, 0),
             None,
             Some(txn[2]),
         )
@@ -1886,7 +2003,7 @@ mod test {
             protocol_component_id,
             txn[0],
             "reserve2".to_owned(),
-            Bytes::from(U256::from(500)),
+            Bytes::from(500u128).lpad(32, 0),
             None,
             None,
         )
@@ -1898,16 +2015,16 @@ mod test {
             protocol_component_id,
             txn[3],
             "reserve1".to_owned(),
-            Bytes::from(U256::from(1000)),
-            Some(Bytes::from(U256::from(1100))),
+            Bytes::from(1000u128).lpad(32, 0),
+            Some(Bytes::from(1100u128).lpad(32, 0)),
             None,
         )
         .await;
 
         db_fixtures::insert_component_balance(
             conn,
-            Balance::from(U256::from(2000) * U256::exp10(18)),
-            Balance::from(U256::zero()),
+            Balance::from(2000 * 10u128.pow(18)).lpad(32, 0),
+            Bytes::zero(32),
             2100.0 * 1e18,
             dai_id,
             txn[2],
@@ -1921,8 +2038,8 @@ mod test {
 
     fn protocol_state() -> models::protocol::ProtocolComponentState {
         let attributes: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(U256::from(1000))),
-            ("reserve2".to_owned(), Bytes::from(U256::from(500))),
+            ("reserve1".to_owned(), Bytes::from(1000u128).lpad(32, 0)),
+            ("reserve2".to_owned(), Bytes::from(500u128).lpad(32, 0)),
         ]
         .into_iter()
         .collect();
@@ -1931,13 +2048,13 @@ mod test {
                 "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
                     .parse()
                     .unwrap(),
-                Balance::from(U256::exp10(18)),
+                Balance::from(10u128.pow(18)).lpad(32, 0),
             ),
             (
                 "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
                     .parse()
                     .unwrap(),
-                Balance::from(U256::from(2000) * U256::exp10(6)),
+                Balance::from(2000 * 10u128.pow(6)).lpad(32, 0),
             ),
         ]
         .into_iter()
@@ -1964,11 +2081,48 @@ mod test {
         let gateway = EVMGateway::from_connection(&mut conn).await;
 
         let result = gateway
-            .get_protocol_states(&Chain::Ethereum, None, system, ids.as_deref(), false, &mut conn)
+            .get_protocol_states(
+                &Chain::Ethereum,
+                None,
+                system,
+                ids.as_deref(),
+                false,
+                None,
+                &mut conn,
+            )
+            .await
+            .unwrap()
+            .entity;
+
+        assert_eq!(result, expected)
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_states_with_pagination() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+
+        let mut protocol_state = protocol_state();
+        protocol_state.balances = HashMap::new();
+        let expected = vec![protocol_state];
+
+        let gateway = EVMGateway::from_connection(&mut conn).await;
+
+        let result = gateway
+            .get_protocol_states(
+                &Chain::Ethereum,
+                None,
+                None,
+                None,
+                false,
+                Some(&PaginationParams { page: 0, page_size: 1 }),
+                &mut conn,
+            )
             .await
             .unwrap();
 
-        assert_eq!(result, expected)
+        assert_eq!(result.entity, expected);
+        assert_eq!(result.total.unwrap(), 1);
     }
 
     #[tokio::test]
@@ -1980,8 +2134,8 @@ mod test {
 
         let mut protocol_state = protocol_state();
         let attributes: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(U256::from(1100))),
-            ("reserve2".to_owned(), Bytes::from(U256::from(500))),
+            ("reserve1".to_owned(), Bytes::from(1100u128).lpad(32, 0)),
+            ("reserve2".to_owned(), Bytes::from(500u128).lpad(32, 0)),
         ]
         .into_iter()
         .collect();
@@ -1997,13 +2151,13 @@ mod test {
                         "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
                             .parse()
                             .unwrap(),
-                        Balance::from(U256::exp10(18)),
+                        Balance::from(10u128.pow(18)).lpad(32, 0),
                     ),
                     (
                         "0x6b175474e89094c44da98b954eedeac495271d0f"
                             .parse()
                             .unwrap(),
-                        Balance::from(U256::from(2000) * U256::exp10(18)),
+                        Balance::from(2000 * 10u128.pow(18)).lpad(32, 0),
                     ),
                 ]),
             ),
@@ -2016,17 +2170,19 @@ mod test {
                 None,
                 None,
                 true,
+                None,
                 &mut conn,
             )
             .await
-            .unwrap();
+            .unwrap()
+            .entity;
 
         assert_eq!(result, expected)
     }
 
     fn protocol_state_delta() -> models::protocol::ProtocolComponentStateDelta {
         let attributes: HashMap<String, Bytes> =
-            vec![("reserve1".to_owned(), Bytes::from(U256::from(1000)))]
+            vec![("reserve1".to_owned(), Bytes::from(1000u128).lpad(32, 0))]
                 .into_iter()
                 .collect();
         models::protocol::ProtocolComponentStateDelta::new("state3", attributes, HashSet::new())
@@ -2042,19 +2198,18 @@ mod test {
 
         // set up deletable attribute state
         let protocol_component_id = schema::protocol_component::table
-            .filter(schema::protocol_component::external_id.eq("state2"))
+            .filter(schema::protocol_component::external_id.eq("state3"))
             .select(schema::protocol_component::id)
             .first::<i64>(&mut conn)
             .await
             .expect("Failed to fetch protocol component id");
         let txn_id = schema::transaction::table
             .filter(
-                schema::transaction::hash.eq(H256::from_str(
+                schema::transaction::hash.eq(Bytes::from_str(
                     "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945",
                 )
                 .expect("valid txhash")
-                .as_bytes()
-                .to_owned()),
+                .to_vec()),
             )
             .select(schema::transaction::id)
             .first::<i64>(&mut conn)
@@ -2065,7 +2220,7 @@ mod test {
             protocol_component_id,
             txn_id,
             "deletable".to_owned(),
-            Bytes::from(U256::from(1000)),
+            Bytes::from(1000u128).lpad(32, 0),
             None,
             None,
         )
@@ -2074,8 +2229,8 @@ mod test {
         // update
         let mut new_state1 = protocol_state_delta();
         let attributes1: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(U256::from(700))),
-            ("reserve2".to_owned(), Bytes::from(U256::from(700))),
+            ("reserve1".to_owned(), Bytes::from(700u128).lpad(32, 0)),
+            ("reserve2".to_owned(), Bytes::from(700u128).lpad(32, 0)),
         ]
         .into_iter()
         .collect();
@@ -2085,30 +2240,30 @@ mod test {
         new_state1.deleted_attributes = vec!["deletable".to_owned()]
             .into_iter()
             .collect();
-        let tx_1: H256 = "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-            .parse()
-            .unwrap();
+        let tx_1 =
+            Bytes::from_str("0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7")
+                .unwrap();
 
         // newer update
         let mut new_state2 = protocol_state_delta();
         let attributes2: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(U256::from(800))),
-            ("reserve2".to_owned(), Bytes::from(U256::from(800))),
+            ("reserve1".to_owned(), Bytes::from(800u128).lpad(32, 0)),
+            ("reserve2".to_owned(), Bytes::from(800u128).lpad(32, 0)),
         ]
         .into_iter()
         .collect();
         new_state2
             .updated_attributes
             .clone_from(&attributes2);
-        let tx_2: H256 = "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
-            .parse()
-            .unwrap();
+        let tx_2 =
+            Bytes::from_str("0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388")
+                .unwrap();
 
         // update the protocol state
         gateway
             .update_protocol_states(
                 &chain,
-                &[(tx_1.into(), &new_state1), (tx_2.into(), &new_state2)],
+                &[(tx_1.clone(), &new_state1), (tx_2.clone(), &new_state2)],
                 &mut conn,
             )
             .await
@@ -2122,10 +2277,12 @@ mod test {
                 None,
                 Some(&[new_state1.component_id.as_str()]),
                 true,
+                None,
                 &mut conn,
             )
             .await
-            .expect("Failed ");
+            .expect("Failed ")
+            .entity;
         let mut expected_state = protocol_state();
         expected_state.attributes = attributes2;
         expected_state
@@ -2136,13 +2293,13 @@ mod test {
                 "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
                     .parse()
                     .unwrap(),
-                Balance::from(U256::exp10(18)),
+                Balance::from(10u128.pow(18)).lpad(32, 0),
             ),
             (
                 "0x6b175474e89094c44da98b954eedeac495271d0f"
                     .parse()
                     .unwrap(),
-                Balance::from(U256::from(2000) * U256::exp10(18)),
+                Balance::from(2000 * 10u128.pow(18)).lpad(32, 0),
             ),
         ]
         .into_iter()
@@ -2150,29 +2307,38 @@ mod test {
         assert_eq!(db_states[0], expected_state);
 
         // fetch the older state from the db and check it's valid_to is set correctly
-        let tx_hash1: Bytes = tx_1.as_bytes().into();
         let older_state = schema::protocol_state::table
             .inner_join(schema::protocol_component::table)
             .inner_join(schema::transaction::table)
-            .filter(schema::transaction::hash.eq(tx_hash1))
+            .filter(schema::transaction::hash.eq(tx_1))
             .filter(schema::protocol_component::external_id.eq(new_state1.component_id.as_str()))
             .select(orm::ProtocolState::as_select())
             .first::<orm::ProtocolState>(&mut conn)
             .await
             .expect("Failed to fetch protocol state");
-        assert_eq!(older_state.attribute_value, Bytes::from(U256::from(700)));
+        assert_eq!(older_state.attribute_value, Bytes::from(700u128).lpad(32, 0));
         // fetch the newer state from the db to compare the valid_from
-        let tx_hash2: Bytes = tx_2.as_bytes().into();
         let newer_state = schema::protocol_state::table
             .inner_join(schema::protocol_component::table)
             .inner_join(schema::transaction::table)
-            .filter(schema::transaction::hash.eq(tx_hash2))
+            .filter(schema::transaction::hash.eq(tx_2))
             .filter(schema::protocol_component::external_id.eq(new_state1.component_id.as_str()))
             .select(orm::ProtocolState::as_select())
             .first::<orm::ProtocolState>(&mut conn)
             .await
             .expect("Failed to fetch protocol state");
         assert_eq!(older_state.valid_to, newer_state.valid_from);
+
+        // check the deleted attribute is deleted (valid_to has been set correctly)
+        let deleted_state = schema::protocol_state::table
+            .inner_join(schema::protocol_component::table)
+            .filter(schema::protocol_component::external_id.eq(new_state2.component_id.as_str()))
+            .filter(schema::protocol_state::attribute_name.eq("deletable"))
+            .select(orm::ProtocolState::as_select())
+            .first::<orm::ProtocolState>(&mut conn)
+            .await
+            .expect("Failed to fetch protocol state");
+        assert_eq!(deleted_state.valid_to, older_state.valid_to);
     }
 
     #[tokio::test]
@@ -2201,11 +2367,11 @@ mod test {
             .expect("Failed to fetch token address");
 
         let from_tx_hash =
-            H256::from_str("0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54")
+            Bytes::from_str("0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54")
                 .expect("valid txhash");
 
         let from_txn_id = schema::transaction::table
-            .filter(schema::transaction::hash.eq(from_tx_hash.clone().as_bytes()))
+            .filter(schema::transaction::hash.eq(from_tx_hash.to_vec()))
             .select(schema::transaction::id)
             .first::<i64>(&mut conn)
             .await
@@ -2234,8 +2400,8 @@ mod test {
 
         db_fixtures::insert_component_balance(
             &mut conn,
-            Balance::from(U256::from(1000)),
-            Balance::from(U256::from(0)),
+            Balance::from(1000u128).lpad(32, 0),
+            Balance::zero(32),
             1000.0,
             token_id,
             from_txn_id,
@@ -2245,8 +2411,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             &mut conn,
-            Balance::from(U256::from(2000)),
-            Balance::from(U256::from(1000)),
+            Balance::from(2000u128).lpad(32, 0),
+            Balance::from(1000u128).lpad(32, 0),
             2000.0,
             token_id,
             to_txn_id,
@@ -2261,7 +2427,7 @@ mod test {
             vec![models::protocol::ComponentBalance {
                 component_id: protocol_external_id.clone(),
                 token: token_address.clone(),
-                new_balance: Balance::from(U256::from(2000)),
+                balance: Balance::from(2000u128).lpad(32, 0),
                 balance_float: 2000.0,
                 modify_tx: to_tx_hash,
             }];
@@ -2283,7 +2449,7 @@ mod test {
         let expected_backward_deltas: Vec<models::protocol::ComponentBalance> = vec![
             models::protocol::ComponentBalance {
                 token: Bytes::from(DAI),
-                new_balance: Bytes::from(
+                balance: Bytes::from(
                     "0x0000000000000000000000000000000000000000000000000000000000000000",
                 ),
                 balance_float: 0.0,
@@ -2292,7 +2458,7 @@ mod test {
             },
             models::protocol::ComponentBalance {
                 token: Bytes::from(USDC),
-                new_balance: Bytes::from(
+                balance: Bytes::from(
                     "0x0000000000000000000000000000000000000000000000000000000000000000",
                 ),
                 balance_float: 0.0,
@@ -2301,7 +2467,7 @@ mod test {
             },
             models::protocol::ComponentBalance {
                 token: Bytes::from(WETH),
-                new_balance: Bytes::from(
+                balance: Bytes::from(
                     "0x0000000000000000000000000000000000000000000000000000000000000000",
                 ),
                 balance_float: 0.0,
@@ -2310,7 +2476,7 @@ mod test {
             },
             models::protocol::ComponentBalance {
                 token: Bytes::from(WETH),
-                new_balance: Bytes::from(
+                balance: Bytes::from(
                     "0x0000000000000000000000000000000000000000000000000000000000000000",
                 ),
                 balance_float: 0.0,
@@ -2352,12 +2518,11 @@ mod test {
             .expect("Failed to fetch protocol component id");
         let from_txn_id = schema::transaction::table
             .filter(
-                schema::transaction::hash.eq(H256::from_str(
+                schema::transaction::hash.eq(Bytes::from_str(
                     "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54",
                 )
                 .expect("valid txhash")
-                .as_bytes()
-                .to_owned()),
+                .to_vec()),
             )
             .select(schema::transaction::id)
             .first::<i64>(&mut conn)
@@ -2365,12 +2530,11 @@ mod test {
             .expect("Failed to fetch transaction id");
         let to_txn_id = schema::transaction::table
             .filter(
-                schema::transaction::hash.eq(H256::from_str(
+                schema::transaction::hash.eq(Bytes::from_str(
                     "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388",
                 )
                 .expect("valid txhash")
-                .as_bytes()
-                .to_owned()),
+                .to_vec()),
             )
             .select(schema::transaction::id)
             .first::<i64>(&mut conn)
@@ -2381,7 +2545,7 @@ mod test {
             protocol_component_id,
             from_txn_id,
             "deleted".to_owned(),
-            Bytes::from(U256::from(1000)),
+            Bytes::from(1000u128).lpad(32, 0),
             None,
             Some(to_txn_id),
         )
@@ -2399,7 +2563,7 @@ mod test {
             protocol_component_id2,
             from_txn_id,
             "deleted2".to_owned(),
-            Bytes::from(U256::from(100)),
+            Bytes::from(100u128).lpad(32, 0),
             None,
             Some(to_txn_id),
         )
@@ -2453,12 +2617,11 @@ mod test {
             .expect("Failed to fetch protocol component id");
         let txn_id = schema::transaction::table
             .filter(
-                schema::transaction::hash.eq(H256::from_str(
+                schema::transaction::hash.eq(Bytes::from_str(
                     "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7",
                 )
                 .expect("valid txhash")
-                .as_bytes()
-                .to_owned()),
+                .to_vec()),
             )
             .select(schema::transaction::id)
             .first::<i64>(&mut conn)
@@ -2469,7 +2632,7 @@ mod test {
             protocol_component_id,
             txn_id,
             "to_delete".to_owned(),
-            Bytes::from(U256::from(1000)),
+            Bytes::from(1000u128).lpad(32, 0),
             None,
             None,
         )
@@ -2478,12 +2641,11 @@ mod test {
         // set up deleted attribute state (to be created on revert)
         let from_txn_id = schema::transaction::table
             .filter(
-                schema::transaction::hash.eq(H256::from_str(
+                schema::transaction::hash.eq(Bytes::from_str(
                     "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54",
                 )
                 .expect("valid txhash")
-                .as_bytes()
-                .to_owned()),
+                .to_vec()),
             )
             .select(schema::transaction::id)
             .first::<i64>(&mut conn)
@@ -2491,12 +2653,11 @@ mod test {
             .expect("Failed to fetch transaction id");
         let to_txn_id = schema::transaction::table
             .filter(
-                schema::transaction::hash.eq(H256::from_str(
+                schema::transaction::hash.eq(Bytes::from_str(
                     "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388",
                 )
                 .expect("valid txhash")
-                .as_bytes()
-                .to_owned()),
+                .to_vec()),
             )
             .select(schema::transaction::id)
             .first::<i64>(&mut conn)
@@ -2507,7 +2668,7 @@ mod test {
             protocol_component_id,
             from_txn_id,
             "deleted".to_owned(),
-            Bytes::from(U256::from(1000)),
+            Bytes::from(1000u128).lpad(32, 0),
             None,
             Some(to_txn_id),
         )
@@ -2517,8 +2678,8 @@ mod test {
 
         // expected result
         let attributes: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(U256::from(1100))),
-            ("deleted".to_owned(), Bytes::from(U256::from(1000))),
+            ("reserve1".to_owned(), Bytes::from(1100u128).lpad(32, 0)),
+            ("deleted".to_owned(), Bytes::from(1000u128).lpad(32, 0)),
         ]
         .into_iter()
         .collect();
@@ -2603,7 +2764,8 @@ mod test {
         let tokens = gw
             .get_tokens(Chain::Ethereum, None, None, None, None, &mut conn)
             .await
-            .unwrap();
+            .unwrap()
+            .entity;
         assert_eq!(tokens.len(), 4);
 
         // get weth and usdc
@@ -2617,14 +2779,16 @@ mod test {
                 &mut conn,
             )
             .await
-            .unwrap();
+            .unwrap()
+            .entity;
         assert_eq!(tokens.len(), 2);
 
         // get weth
         let tokens = gw
             .get_tokens(Chain::Ethereum, Some(&[&WETH.into()]), None, None, None, &mut conn)
             .await
-            .unwrap();
+            .unwrap()
+            .entity;
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].symbol, "WETH".to_string());
         assert_eq!(tokens[0].decimals, 18);
@@ -2637,7 +2801,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         // get tokens with pagination
-        let tokens = gw
+        let result = gw
             .get_tokens(
                 Chain::Ethereum,
                 None,
@@ -2648,11 +2812,13 @@ mod test {
             )
             .await
             .unwrap();
-        assert_eq!(tokens.len(), 1);
-        let first_token_symbol = tokens[0].symbol.clone();
+        assert_eq!(result.entity.len(), 1);
+        assert_eq!(result.total, Some(4));
+
+        let first_token_symbol = result.entity[0].symbol.clone();
 
         // get tokens with 0 page_size
-        let tokens = gw
+        let result = gw
             .get_tokens(
                 Chain::Ethereum,
                 None,
@@ -2663,10 +2829,11 @@ mod test {
             )
             .await
             .unwrap();
-        assert_eq!(tokens.len(), 0);
+        assert_eq!(result.entity.len(), 0);
+        assert_eq!(result.total, Some(4));
 
         // get tokens skipping page
-        let tokens = gw
+        let result = gw
             .get_tokens(
                 Chain::Ethereum,
                 None,
@@ -2677,8 +2844,9 @@ mod test {
             )
             .await
             .unwrap();
-        assert_eq!(tokens.len(), 1);
-        assert_ne!(tokens[0].symbol, first_token_symbol);
+        assert_eq!(result.entity.len(), 1);
+        assert_eq!(result.total, Some(4));
+        assert_ne!(result.entity[0].symbol, first_token_symbol);
     }
 
     #[tokio::test]
@@ -2690,7 +2858,8 @@ mod test {
         let tokens = gw
             .get_tokens(Chain::ZkSync, None, None, None, None, &mut conn)
             .await
-            .unwrap();
+            .unwrap()
+            .entity;
 
         assert_eq!(tokens.len(), 1);
         let expected_token = models::token::CurrencyToken::new(
@@ -2715,7 +2884,8 @@ mod test {
         let tokens = gw
             .get_tokens(Chain::Ethereum, None, Some(80i32), None, None, &mut conn)
             .await
-            .unwrap();
+            .unwrap()
+            .entity;
 
         assert_eq!(tokens.len(), 1);
 
@@ -2743,7 +2913,8 @@ mod test {
         let tokens = gw
             .get_tokens(Chain::Ethereum, None, None, days_cutoff, None, &mut conn)
             .await
-            .unwrap();
+            .unwrap()
+            .entity;
 
         assert_eq!(tokens.len(), 1);
         let expected_token = models::token::CurrencyToken::new(
@@ -2836,6 +3007,7 @@ mod test {
             .get_tokens(Chain::Ethereum, Some(&[&dai_address]), None, None, None, &mut conn)
             .await
             .expect("failed to get old token")
+            .entity
             .remove(0);
         prev.gas = vec![Some(20000)];
 
@@ -2846,6 +3018,7 @@ mod test {
             .get_tokens(Chain::Ethereum, Some(&[&dai_address]), None, None, None, &mut conn)
             .await
             .expect("failed to get updated token")
+            .entity
             .remove(0);
 
         assert_eq!(updated, prev);
@@ -2863,7 +3036,7 @@ mod test {
         // Test the case where a previous balance doesn't exist
         let component_balance = models::protocol::ComponentBalance {
             token: base_token.clone(),
-            new_balance: Bytes::from(
+            balance: Bytes::from(
                 "0x000000000000000000000000000000000000000000000000000000000000000c",
             ),
             balance_float: 12.0,
@@ -2884,7 +3057,7 @@ mod test {
             .await
             .expect("retrieving inserted balance failed!");
 
-        assert_eq!(inserted_data.new_balance, Balance::from(U256::from(12)));
+        assert_eq!(inserted_data.new_balance, Balance::from(12u128).lpad(32, 0));
         assert_eq!(inserted_data.previous_value, Balance::from("0x00"),);
 
         let referenced_token = schema::token::table
@@ -2908,7 +3081,7 @@ mod test {
             Bytes::from("0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7");
         let updated_component_balance = models::protocol::ComponentBalance {
             token: base_token.clone(),
-            new_balance: Balance::from(U256::from(2000)),
+            balance: Balance::from(2000u128).lpad(32, 0),
             balance_float: 2000.0,
             modify_tx: new_tx_hash,
             component_id: component_external_id.clone(),
@@ -2935,8 +3108,8 @@ mod test {
             .await
             .expect("retrieving inserted balance failed!");
 
-        assert_eq!(new_inserted_data.new_balance, Balance::from(U256::from(2000)));
-        assert_eq!(new_inserted_data.previous_value, Balance::from(U256::from(12)));
+        assert_eq!(new_inserted_data.new_balance, Balance::from(2000u128).lpad(32, 0));
+        assert_eq!(new_inserted_data.previous_value, Balance::from(12u128).lpad(32, 0));
     }
 
     #[tokio::test]
@@ -3083,6 +3256,29 @@ mod test {
             .for_each(|ts| assert!(ts.is_some(), "Found None in updated_ts"));
     }
 
+    #[tokio::test]
+    async fn test_get_protocol_components_with_pagination() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let result = gw
+            .get_protocol_components(
+                &Chain::Ethereum,
+                None,
+                None,
+                None,
+                // Without pagination should return 3 components
+                Some(&PaginationParams { page: 0, page_size: 2 }),
+                &mut conn,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.entity.len(), 2);
+        assert_eq!(result.total, Some(3));
+    }
+
     #[rstest]
     #[case::get_one(Some("zigzag".to_string()))]
     #[case::get_none(Some("ambient".to_string()))]
@@ -3095,14 +3291,14 @@ mod test {
         let chain = Chain::Starknet;
 
         let result = gw
-            .get_protocol_components(&chain, system.clone(), None, None, &mut conn)
+            .get_protocol_components(&chain, system.clone(), None, None, None, &mut conn)
             .await;
 
         assert!(result.is_ok());
 
         match system.unwrap().as_str() {
             "zigzag" => {
-                let components = result.unwrap();
+                let components = result.unwrap().entity;
                 assert_eq!(components.len(), 1);
 
                 let pc = &components[0];
@@ -3112,7 +3308,7 @@ mod test {
                 assert_eq!(pc.creation_tx, Bytes::from(tx_hashes.get(1).unwrap().as_str()));
             }
             "ambient" => {
-                let components = result.unwrap();
+                let components = result.unwrap().entity;
                 assert_eq!(components.len(), 0)
             }
             _ => {}
@@ -3133,23 +3329,23 @@ mod test {
         let chain = Chain::Ethereum;
 
         let result = gw
-            .get_protocol_components(&chain, None, ids, None, &mut conn)
-            .await;
+            .get_protocol_components(&chain, None, ids, None, None, &mut conn)
+            .await
+            .unwrap()
+            .entity;
 
         match external_id.as_str() {
             "state1" => {
-                let components = result.unwrap();
-                assert_eq!(components.len(), 1);
+                assert_eq!(result.len(), 1);
 
-                let pc = &components[0];
+                let pc = &result[0];
                 assert_eq!(pc.id, external_id.to_string());
                 assert_eq!(pc.protocol_system, "ambient");
                 assert_eq!(pc.chain, Chain::Ethereum);
                 assert_eq!(pc.creation_tx, Bytes::from(tx_hashes[0].as_str()));
             }
             "state2" => {
-                let components = result.unwrap();
-                assert_eq!(components.len(), 0)
+                assert_eq!(result.len(), 0)
             }
             _ => {}
         }
@@ -3165,10 +3361,10 @@ mod test {
         let ids = Some(["state1", "state2"].as_slice());
         let chain = Chain::Ethereum;
         let result = gw
-            .get_protocol_components(&chain, Some(system), ids, None, &mut conn)
+            .get_protocol_components(&chain, Some(system), ids, None, None, &mut conn)
             .await;
 
-        let components = result.unwrap();
+        let components = result.unwrap().entity;
         assert_eq!(components.len(), 1);
 
         let pc = &components[0];
@@ -3195,9 +3391,10 @@ mod test {
             .collect::<HashSet<_>>();
 
         let components = gw
-            .get_protocol_components(&chain, None, None, None, &mut conn)
+            .get_protocol_components(&chain, None, None, None, None, &mut conn)
             .await
             .expect("failed retrieving components")
+            .entity
             .into_iter()
             .map(|c| c.id)
             .collect::<HashSet<_>>();
@@ -3224,9 +3421,10 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let res = gw
-            .get_protocol_components(&Chain::Ethereum, None, None, min_tvl, &mut conn)
+            .get_protocol_components(&Chain::Ethereum, None, None, min_tvl, None, &mut conn)
             .await
             .expect("failed retrieving components")
+            .entity
             .into_iter()
             .map(|comp| comp.id)
             .collect::<HashSet<_>>();
@@ -3294,9 +3492,9 @@ mod test {
                 Bytes::from(WETH),
                 models::protocol::ComponentBalance::new(
                     Bytes::from(WETH),
-                    Balance::from(U256::exp10(18)),
+                    Balance::from(10u128.pow(18)).lpad(32, 0),
                     1e18,
-                    Bytes::from(U256::zero()),
+                    Bytes::zero(32),
                     "state1",
                 ),
             ),
@@ -3305,9 +3503,9 @@ mod test {
                 Bytes::from(USDC),
                 models::protocol::ComponentBalance::new(
                     Bytes::from(USDC),
-                    Balance::from(U256::from(2000) * U256::exp10(6)),
+                    Balance::from(2000 * 10u128.pow(6)).lpad(32, 0),
                     2000000000.0,
-                    Bytes::from(U256::zero()),
+                    Bytes::zero(32),
                     "state1",
                 ),
             ),
@@ -3360,12 +3558,12 @@ mod test {
             .expect("Failed to fetch token id");
 
         let tx_hash =
-            H256::from_str("0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7")
+            Bytes::from_str("0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7")
                 .expect("valid txhash");
 
         let (txn_id, ts) = schema::transaction::table
             .inner_join(schema::block::table)
-            .filter(schema::transaction::hash.eq(tx_hash.clone().as_bytes()))
+            .filter(schema::transaction::hash.eq(tx_hash.to_vec()))
             .select((schema::transaction::id, schema::block::ts))
             .first::<(i64, NaiveDateTime)>(&mut conn)
             .await
@@ -3382,8 +3580,8 @@ mod test {
 
         db_fixtures::insert_component_balance(
             &mut conn,
-            Balance::from(U256::from(2) * U256::exp10(18)),
-            Balance::from(U256::exp10(18)),
+            Balance::from(2 * 10u128.pow(18)).lpad(32, 0),
+            Balance::from(10u128.pow(18)).lpad(32, 0),
             2e18,
             weth_id,
             txn_id,
@@ -3393,8 +3591,8 @@ mod test {
         .await;
         db_fixtures::insert_component_balance(
             &mut conn,
-            Balance::from(U256::from(3000) * U256::exp10(6)),
-            Balance::from(U256::from(2000) * U256::exp10(18)),
+            Balance::from(3000 * 10u128.pow(6)).lpad(32, 0),
+            Balance::from(2000 * 10u128.pow(18)).lpad(32, 0),
             3000.0 * 1e6,
             dai_id,
             txn_id,
@@ -3409,9 +3607,9 @@ mod test {
                 Bytes::from(WETH),
                 models::protocol::ComponentBalance::new(
                     Bytes::from(WETH),
-                    Balance::from(U256::exp10(18)),
+                    Balance::from(10u128.pow(18)).lpad(32, 0),
                     1e18,
-                    Bytes::from(U256::zero()),
+                    Bytes::zero(32),
                     "state3",
                 ),
             ),
@@ -3420,9 +3618,9 @@ mod test {
                 Bytes::from(DAI),
                 models::protocol::ComponentBalance::new(
                     Bytes::from(DAI),
-                    Balance::from(U256::from(2000) * U256::exp10(18)),
+                    Balance::from(2000 * 10u128.pow(18)).lpad(32, 0),
                     2000e18,
-                    Bytes::from(U256::zero()),
+                    Bytes::zero(32),
                     "state3",
                 ),
             ),

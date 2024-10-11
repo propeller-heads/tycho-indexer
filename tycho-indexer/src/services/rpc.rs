@@ -1,26 +1,26 @@
 //! This module contains Tycho RPC implementation
-use std::collections::HashSet;
+#![allow(deprecated)]
+use std::{collections::HashSet, sync::Arc};
 
 use actix_web::{web, HttpResponse};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
 use thiserror::Error;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
+use crate::{
+    extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
+    services::{
+        cache::RpcCache,
+        deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
+    },
+};
 use tycho_core::{
-    dto::{self, ProtocolComponentRequestParameters, ResponseToken, StateRequestParameters},
+    dto::{self, PaginationResponse},
     models::{Address, Chain, PaginationParams},
     storage::{BlockIdentifier, BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
     Bytes,
-};
-
-use crate::{
-    extractor::{
-        evm,
-        revert_buffer::{BlockNumberOrTimestamp, FinalityStatus},
-    },
-    services::deltas_buffer::{PendingDeltas, PendingDeltasError},
 };
 
 #[derive(Error, Debug)]
@@ -44,144 +44,143 @@ impl From<anyhow::Error> for RpcError {
     }
 }
 
-impl From<evm::ProtocolStateDelta> for dto::ProtocolStateDelta {
-    fn from(protocol_state: evm::ProtocolStateDelta) -> Self {
-        Self {
-            component_id: protocol_state.component_id,
-            updated_attributes: protocol_state.updated_attributes,
-            deleted_attributes: protocol_state.deleted_attributes,
-        }
-    }
-}
-
-impl From<evm::AccountUpdate> for dto::AccountUpdate {
-    fn from(account_update: evm::AccountUpdate) -> Self {
-        Self {
-            address: account_update.address.into(),
-            chain: account_update.chain.into(),
-            slots: account_update
-                .slots
-                .into_iter()
-                .map(|(k, v)| (Bytes::from(k), Bytes::from(v)))
-                .collect(),
-            balance: account_update.balance.map(Bytes::from),
-            code: account_update.code,
-            change: account_update.change.into(),
-        }
-    }
-}
-
-impl From<evm::ERC20Token> for ResponseToken {
-    fn from(token: evm::ERC20Token) -> Self {
-        Self {
-            address: token.address.into(),
-            symbol: token.symbol,
-            decimals: token.decimals,
-            tax: token.tax,
-            chain: token.chain.into(),
-            gas: token.gas,
-            quality: token.quality,
-        }
-    }
-}
-
-impl From<evm::ProtocolComponent> for dto::ProtocolComponent {
-    fn from(protocol_component: evm::ProtocolComponent) -> Self {
-        Self {
-            chain: protocol_component.chain.into(),
-            id: protocol_component.id,
-            protocol_system: protocol_component.protocol_system,
-            protocol_type_name: protocol_component.protocol_type_name,
-            tokens: protocol_component
-                .tokens
-                .into_iter()
-                .map(|token| {
-                    let bytes = token.as_bytes().to_vec();
-                    Bytes::from(bytes)
-                })
-                .collect(),
-            contract_ids: protocol_component
-                .contract_ids
-                .into_iter()
-                .map(|h| {
-                    let bytes = h.as_bytes().to_vec();
-                    Bytes::from(bytes)
-                })
-                .collect(),
-            static_attributes: protocol_component.static_attributes,
-            creation_tx: protocol_component.creation_tx.into(),
-            created_at: protocol_component.created_at,
-            change: protocol_component.change.into(),
-        }
-    }
-}
-
 pub struct RpcHandler<G> {
     db_gateway: G,
-    pending_deltas: PendingDeltas,
+    // TODO: remove use of Arc. It was introduced for ease of testing this deltas buffer, however
+    // it potentially could make this slow. We should consider refactoring this and maybe use
+    // generics
+    pending_deltas: Arc<dyn PendingDeltasBuffer + Send + Sync>,
+    token_cache: RpcCache<dto::TokensRequestBody, dto::TokensRequestResponse>,
+    contract_storage_cache: RpcCache<dto::StateRequestBody, dto::StateRequestResponse>,
+    protocol_state_cache:
+        RpcCache<dto::ProtocolStateRequestBody, dto::ProtocolStateRequestResponse>,
+    component_cache:
+        RpcCache<dto::ProtocolComponentsRequestBody, dto::ProtocolComponentRequestResponse>,
 }
 
 impl<G> RpcHandler<G>
 where
     G: Gateway,
 {
-    pub fn new(db_gateway: G, pending_deltas: PendingDeltas) -> Self {
-        Self { db_gateway, pending_deltas }
+    pub fn new(db_gateway: G, pending_deltas: Arc<dyn PendingDeltasBuffer + Send + Sync>) -> Self {
+        let token_cache = RpcCache::<dto::TokensRequestBody, dto::TokensRequestResponse>::new(
+            "token",
+            50,
+            7 * 60,
+        );
+
+        let contract_storage_cache =
+            RpcCache::<dto::StateRequestBody, dto::StateRequestResponse>::new(
+                "contract_storage",
+                50,
+                7 * 60,
+            );
+
+        let protocol_state_cache = RpcCache::<
+            dto::ProtocolStateRequestBody,
+            dto::ProtocolStateRequestResponse,
+        >::new("protocol_state", 50, 7 * 60);
+
+        let component_cache = RpcCache::<
+            dto::ProtocolComponentsRequestBody,
+            dto::ProtocolComponentRequestResponse,
+        >::new("protocol_components", 500, 7 * 60);
+
+        Self {
+            db_gateway,
+            pending_deltas,
+            token_cache,
+            contract_storage_cache,
+            protocol_state_cache,
+            component_cache,
+        }
     }
 
-    #[instrument(skip(self, chain, request, params))]
+    #[instrument(skip(self, request))]
     async fn get_contract_state(
         &self,
-        chain: &Chain,
         request: &dto::StateRequestBody,
-        params: &dto::StateRequestParameters,
     ) -> Result<dto::StateRequestResponse, RpcError> {
-        info!(?chain, ?request, ?params, "Getting contract state.");
-        self.get_contract_state_inner(chain, request, params)
+        info!(?request, "Getting contract state.");
+        self.contract_storage_cache
+            .get(request.clone(), |r| async {
+                self.get_contract_state_inner(r)
+                    .await
+                    .map(|res| (res, true))
+            })
             .await
     }
 
     async fn get_contract_state_inner(
         &self,
-        chain: &Chain,
-        request: &dto::StateRequestBody,
-        params: &dto::StateRequestParameters,
+        request: dto::StateRequestBody,
     ) -> Result<dto::StateRequestResponse, RpcError> {
-        //TODO: set version to latest if we are targeting a version within pending deltas
         let at = BlockOrTimestamp::try_from(&request.version)?;
+        let chain = request.chain.into();
         let (db_version, deltas_version) = self
-            .calculate_versions(&at, *chain)
+            .calculate_versions(&at, &request.protocol_system.clone(), chain)
             .await?;
 
+        let pagination_params: PaginationParams = (&request.pagination).into();
+
         // Get the contract IDs from the request
-        let contract_ids = request.contract_ids.clone();
-        let addresses: Option<Vec<Address>> = contract_ids.map(|ids| {
-            ids.into_iter()
-                .map(|id| Address::from(id.address))
-                .collect::<Vec<Address>>()
-        });
+        let addresses = request.contract_ids.clone();
         debug!(?addresses, "Getting contract states.");
         let addresses = addresses.as_deref();
 
+        // Apply pagination to the contract addresses. This is done so that we can determine which
+        // contracts were not returned from the db and get them from the buffer instead.
+        let mut paginated_addrs: Vec<Bytes> = Vec::new();
+        if let Some(adrs) = addresses {
+            paginated_addrs = adrs
+                .iter()
+                .skip(pagination_params.offset() as usize)
+                .take(pagination_params.page_size as usize)
+                .cloned()
+                .collect();
+        }
+
         // Get the contract states from the database
-        let mut accounts = self
+        let account_data = self
             .db_gateway
-            .get_contracts(chain, addresses, Some(&db_version), true, params.include_balances)
+            .get_contracts(
+                &chain,
+                Some(&paginated_addrs),
+                Some(&db_version),
+                true,
+                Some(&pagination_params),
+            )
             .await
             .map_err(|err| {
                 error!(error = %err, "Error while getting contract states.");
                 err
             })?;
+        let mut accounts = account_data.entity;
 
         if let Some(at) = deltas_version {
-            self.pending_deltas
-                .update_vm_states(&mut accounts, Some(at))?;
+            self.pending_deltas.update_vm_states(
+                Some(&paginated_addrs),
+                &mut accounts,
+                Some(at),
+                &request.protocol_system,
+            )?;
         }
+
+        let total = match addresses {
+            Some(adrs) => {
+                // If contract addresses are specified, the total count is the number of addresses
+                adrs.len() as i64
+            }
+            None => account_data.total.unwrap_or_default(), /* TODO: handle case where contract
+                                                             * addresses are not specified */
+        };
+
         Ok(dto::StateRequestResponse::new(
             accounts
                 .into_iter()
                 .map(dto::ResponseAccount::from)
                 .collect(),
+            PaginationResponse::new(pagination_params.page, pagination_params.page_size, total),
         ))
     }
 
@@ -200,6 +199,7 @@ where
     async fn calculate_versions(
         &self,
         request_version: &BlockOrTimestamp,
+        protocol_system: &str,
         chain: Chain,
     ) -> Result<(Version, Option<BlockNumberOrTimestamp>), RpcError> {
         let ordered_version = match request_version {
@@ -216,17 +216,20 @@ where
         };
         let request_version_finality = self
             .pending_deltas
-            .get_block_finality(ordered_version)?
+            .get_block_finality(ordered_version, protocol_system)
+            .unwrap_or(None)
             .unwrap_or_else(|| {
-                warn!(?ordered_version, "No finality found for version.");
+                warn!(?ordered_version, ?protocol_system, "No finality found for version.");
                 FinalityStatus::Finalized
             });
+
         debug!(
             ?request_version_finality,
             ?request_version,
             ?ordered_version,
             "Version finality calculated!"
         );
+
         match request_version_finality {
             FinalityStatus::Finalized => {
                 Ok((Version(request_version.clone(), VersionKind::Last), None))
@@ -235,96 +238,57 @@ where
                 Version(BlockOrTimestamp::Block(BlockIdentifier::Latest(chain)), VersionKind::Last),
                 Some(ordered_version),
             )),
-            FinalityStatus::Unseen => Err(RpcError::Storage(StorageError::NotFound(
-                "Version".to_string(),
-                format!("{:?}", request_version),
-            ))),
-        }
-    }
-
-    #[instrument(skip(self, chain, request, params))]
-    async fn get_contract_delta(
-        &self,
-        chain: &Chain,
-        request: &dto::ContractDeltaRequestBody,
-        params: &dto::StateRequestParameters,
-    ) -> Result<dto::ContractDeltaRequestResponse, RpcError> {
-        info!(?request, ?params, "Getting contract delta.");
-        self.get_contract_delta_inner(chain, request, params)
-            .await
-    }
-
-    async fn get_contract_delta_inner(
-        &self,
-        chain: &Chain,
-        request: &dto::ContractDeltaRequestBody,
-        params: &dto::StateRequestParameters,
-    ) -> Result<dto::ContractDeltaRequestResponse, RpcError> {
-        #![allow(unused_variables)]
-        //TODO: handle when no contract is specified with filters
-        let start = BlockOrTimestamp::try_from(&request.start)?;
-        let end = BlockOrTimestamp::try_from(&request.end)?;
-
-        // Get the contract IDs from the request
-        let contract_ids = request.contract_ids.clone();
-        let addresses: Option<HashSet<Address>> = contract_ids.map(|ids| {
-            ids.into_iter()
-                .map(|id| id.address)
-                .collect::<HashSet<Address>>()
-        });
-        debug!(?addresses, "Getting contract states.");
-        let addresses: Option<&HashSet<Address>> = addresses.as_ref();
-
-        // Get the contract deltas from the database
-        match self
-            .db_gateway
-            .get_accounts_delta(chain, Some(&start), &end)
-            .await
-        {
-            Ok(mut accounts) => {
-                // Filter by contract addresses if specified in the request
-                // PERF: This is not efficient, we should filter in the query
-                if let Some(contract_addrs) = addresses {
-                    accounts.retain(|acc| contract_addrs.contains(&acc.address));
+            FinalityStatus::Unseen => {
+                match request_version {
+                    BlockOrTimestamp::Timestamp(_) => {
+                        // If the request is based on a timestamp, return the latest valid version
+                        Ok((
+                            Version(
+                                BlockOrTimestamp::Block(BlockIdentifier::Latest(chain)),
+                                VersionKind::Last,
+                            ),
+                            Some(ordered_version),
+                        ))
+                    }
+                    BlockOrTimestamp::Block(_) => {
+                        // If the request is based on a block and it's unseen, return an error
+                        Err(RpcError::Storage(StorageError::NotFound(
+                            "Version".to_string(),
+                            format!("{:?}", request_version),
+                        )))
+                    }
                 }
-                Ok(dto::ContractDeltaRequestResponse::new(
-                    accounts
-                        .into_iter()
-                        .map(dto::AccountUpdate::from)
-                        .collect(),
-                ))
-            }
-            Err(err) => {
-                error!(error = %err, "Error while getting contract delta.");
-                Err(err.into())
             }
         }
     }
 
-    #[instrument(skip(self, request, params))]
+    #[instrument(skip(self, request))]
     async fn get_protocol_state(
         &self,
-        chain: &Chain,
         request: &dto::ProtocolStateRequestBody,
-        params: &dto::StateRequestParameters,
     ) -> Result<dto::ProtocolStateRequestResponse, RpcError> {
-        info!(?request, ?params, "Getting protocol state.");
-        self.get_protocol_state_inner(chain, request, params)
+        debug!(?request, "Getting protocol state.");
+        self.protocol_state_cache
+            .get(request.clone(), |r| async {
+                self.get_protocol_state_inner(r)
+                    .await
+                    .map(|res| (res, true))
+            })
             .await
     }
 
-    #[allow(unused_variables)]
     async fn get_protocol_state_inner(
         &self,
-        chain: &Chain,
-        request: &dto::ProtocolStateRequestBody,
-        params: &dto::StateRequestParameters,
+        request: dto::ProtocolStateRequestBody,
     ) -> Result<dto::ProtocolStateRequestResponse, RpcError> {
         //TODO: handle when no id is specified with filters
         let at = BlockOrTimestamp::try_from(&request.version)?;
+        let chain = request.chain.into();
         let (db_version, deltas_version) = self
-            .calculate_versions(&at, *chain)
+            .calculate_versions(&at, &request.protocol_system.clone(), chain)
             .await?;
+
+        let pagination_params: PaginationParams = (&request.pagination).into();
 
         // Get the protocol IDs from the request
         let protocol_ids: Option<Vec<dto::ProtocolId>> = request.protocol_ids.clone();
@@ -336,48 +300,91 @@ where
         debug!(?ids, "Getting protocol states.");
         let ids = ids.as_deref();
 
+        // Apply pagination to the protocol ids. This is done so that we can determine which ids
+        // were not returned from the db and get them from the buffer instead. For component ids
+        // that do not exist in either the db or the buffer, we will return an empty state.
+        let mut paginated_ids: Vec<&str> = Vec::new();
+        if let Some(ids) = ids {
+            paginated_ids = ids
+                .iter()
+                .skip(pagination_params.offset() as usize)
+                .take(pagination_params.page_size as usize)
+                .cloned()
+                .collect();
+        }
+
         // Get the protocol states from the database
-        let mut states = self
+        let state_data = self
             .db_gateway
             .get_protocol_states(
-                chain,
+                &chain,
                 Some(db_version),
-                request.protocol_system.clone(),
-                ids,
-                params.include_balances,
+                Some(request.protocol_system.clone()),
+                Some(&paginated_ids),
+                request.include_balances,
+                Some(&pagination_params),
             )
             .await
             .map_err(|err| {
                 error!(error = %err, "Error while getting protocol states.");
                 err
             })?;
+        let mut states = state_data.entity;
 
+        // merge db states with pending deltas
         if let Some(at) = deltas_version {
             self.pending_deltas
-                .update_native_states(&mut states, Some(at))?;
+                .merge_native_states(
+                    Some(&paginated_ids),
+                    &mut states,
+                    Some(at),
+                    &request.protocol_system,
+                )?;
         }
+
+        let total = match ids {
+            Some(ids) => {
+                // If protocol IDs are specified, the total count is the number of IDs
+                ids.len() as i64
+            }
+            None => state_data.total.unwrap_or_default(), /* TODO: handle case where protocol ids
+                                                           * are not specified */
+        };
+
         Ok(dto::ProtocolStateRequestResponse::new(
             states
                 .into_iter()
                 .map(dto::ResponseProtocolState::from)
                 .collect(),
+            PaginationResponse::new(pagination_params.page, pagination_params.page_size, total),
         ))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_tokens(
         &self,
-        chain: &Chain,
         request: &dto::TokensRequestBody,
     ) -> Result<dto::TokensRequestResponse, RpcError> {
-        info!(?chain, ?request, "Getting tokens.");
-        self.get_tokens_inner(chain, request)
-            .await
+        let response = self
+            .token_cache
+            .get(request.clone(), |r: dto::TokensRequestBody| async {
+                self.get_tokens_inner(r)
+                    .await
+                    .map(|res| {
+                        let last_page = res.pagination.total_pages() - 1;
+                        (res, request.pagination.page < last_page)
+                    })
+            })
+            .await?;
+
+        trace!(n_tokens_received=?response.tokens.len(), "Retrieved tokens from DB");
+
+        Ok(response)
     }
 
     async fn get_tokens_inner(
         &self,
-        chain: &Chain,
-        request: &dto::TokensRequestBody,
+        request: dto::TokensRequestBody,
     ) -> Result<dto::TokensRequestResponse, RpcError> {
         let address_refs: Option<Vec<&Address>> = request
             .token_addresses
@@ -401,15 +408,26 @@ where
 
         match self
             .db_gateway
-            .get_tokens(*chain, addresses_slice, min_quality, n_days_ago, Some(&converted_params))
+            .get_tokens(
+                request.chain.into(),
+                addresses_slice,
+                min_quality,
+                n_days_ago,
+                Some(&converted_params),
+            )
             .await
         {
-            Ok(tokens) => Ok(dto::TokensRequestResponse::new(
-                tokens
+            Ok(token_data) => Ok(dto::TokensRequestResponse::new(
+                token_data
+                    .entity
                     .into_iter()
                     .map(dto::ResponseToken::from)
                     .collect(),
-                &request.pagination,
+                &PaginationResponse::new(
+                    request.pagination.page,
+                    request.pagination.page_size,
+                    token_data.total.unwrap_or_default(),
+                ),
             )),
             Err(err) => {
                 error!(error = %err, "Error while getting tokens.");
@@ -418,192 +436,219 @@ where
         }
     }
 
+    #[instrument(skip(self, request))]
     async fn get_protocol_components(
         &self,
-        chain: &Chain,
         request: &dto::ProtocolComponentsRequestBody,
-        params: &dto::ProtocolComponentRequestParameters,
     ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
-        info!(?chain, ?request, "Getting protocol components.");
-        self.get_protocol_components_inner(chain, request, params)
+        info!(?request, "Getting protocol components.");
+        self.component_cache
+            .get(request.clone(), |r| async {
+                self.get_protocol_components_inner(r)
+                    .await
+                    .map(|res| {
+                        // If component ids were specified, check if we have all requested
+                        // components are in the response (should cache)
+                        if let Some(component_ids) = &request.component_ids {
+                            let all_found = component_ids.len() == res.pagination.total as usize;
+                            if all_found {
+                                return (res, true);
+                            } else {
+                                return (res, false);
+                            }
+                        }
+                        // Otherwise check if request is for the last page (shouldn't cache)
+                        let last_page = res.pagination.total_pages() - 1;
+                        (res, request.pagination.page < last_page)
+                    })
+            })
             .await
     }
 
     async fn get_protocol_components_inner(
         &self,
-        chain: &Chain,
-        request: &dto::ProtocolComponentsRequestBody,
-        params: &dto::ProtocolComponentRequestParameters,
+        request: dto::ProtocolComponentsRequestBody,
     ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
         let system = request.protocol_system.clone();
+        let pagination_params: PaginationParams = (&request.pagination).into();
+
         let ids_strs: Option<Vec<&str>> = request
             .component_ids
             .as_ref()
             .map(|vec| vec.iter().map(String::as_str).collect());
 
         let ids_slice = ids_strs.as_deref();
+
+        let buffered_components = self
+            .pending_deltas
+            .get_new_components(ids_slice, &system)?;
+        debug!(n_components = buffered_components.len(), "RetrievedBufferedComponents");
+
+        // Check if we have all requested components in the cache
+        if let Some(requested_ids) = ids_slice {
+            let fetched_ids: HashSet<_> = buffered_components
+                .iter()
+                .map(|comp| comp.id.as_str())
+                .collect();
+
+            let total = buffered_components.len() as i64;
+
+            if requested_ids.len() == fetched_ids.len() {
+                let response_components: Vec<dto::ProtocolComponent> = buffered_components
+                    .into_iter()
+                    .skip(
+                        ((pagination_params.page * pagination_params.page_size) as usize)
+                            .min(total as usize),
+                    )
+                    .take(pagination_params.page_size as usize)
+                    .map(dto::ProtocolComponent::from)
+                    .collect();
+
+                return Ok(dto::ProtocolComponentRequestResponse::new(
+                    response_components,
+                    PaginationResponse::new(
+                        pagination_params.page,
+                        pagination_params.page_size,
+                        total,
+                    ),
+                ));
+            }
+        }
+
         match self
             .db_gateway
-            .get_protocol_components(chain, system, ids_slice, params.tvl_gt)
+            .get_protocol_components(
+                &request.chain.into(),
+                Some(system),
+                ids_slice,
+                request.tvl_gt,
+                Some(&pagination_params),
+            )
             .await
         {
-            Ok(components) => Ok(dto::ProtocolComponentRequestResponse::new(
-                components
+            Ok(component_data) => {
+                let db_total = component_data.total.unwrap_or_default();
+                let total = db_total + buffered_components.len() as i64;
+                let mut components = component_data.entity;
+
+                // Handle adding buffered components to the response
+                let buffer_offset = pagination_params.offset() - db_total;
+                if buffer_offset > 0 {
+                    // Pagination page is greater than that provided by the db query - respond with
+                    // buffered data only
+                    components = buffered_components
+                        .into_iter()
+                        .skip(buffer_offset as usize)
+                        .take(pagination_params.page_size as usize)
+                        .collect();
+                } else {
+                    let remaining_capacity =
+                        pagination_params.page_size as usize - components.len();
+                    if remaining_capacity > 0 {
+                        // The db response does not fill a page - add buffered components to the
+                        // response
+                        let buf_comps = buffered_components
+                            .into_iter()
+                            .take(remaining_capacity);
+                        components.extend(buf_comps);
+                    }
+                }
+
+                let response_components = components
                     .into_iter()
                     .map(dto::ProtocolComponent::from)
-                    .collect(),
-            )),
+                    .collect::<Vec<dto::ProtocolComponent>>();
+                Ok(dto::ProtocolComponentRequestResponse::new(
+                    response_components,
+                    PaginationResponse::new(
+                        pagination_params.page,
+                        pagination_params.page_size,
+                        total,
+                    ),
+                ))
+            }
             Err(err) => {
                 error!(error = %err, "Error while getting protocol components.");
                 Err(err.into())
             }
         }
     }
-
-    #[instrument(skip(self, chain, request))]
-    async fn get_protocol_delta(
-        &self,
-        chain: &Chain,
-        request: &dto::ProtocolDeltaRequestBody,
-    ) -> Result<dto::ProtocolDeltaRequestResponse, RpcError> {
-        info!(?request, "Getting protocol delta.");
-        self.get_protocol_delta_inner(chain, request)
-            .await
-    }
-
-    async fn get_protocol_delta_inner(
-        &self,
-        chain: &Chain,
-        request: &dto::ProtocolDeltaRequestBody,
-    ) -> Result<dto::ProtocolDeltaRequestResponse, RpcError> {
-        let start = BlockOrTimestamp::try_from(&request.start)?;
-        let end = BlockOrTimestamp::try_from(&request.end)?;
-
-        // Get the components IDs from the request
-        let ids = request.component_ids.clone();
-        let component_ids: Option<HashSet<String>> = ids.map(|ids| {
-            ids.into_iter()
-                .collect::<HashSet<String>>()
-        });
-        debug!(?component_ids, "Getting protocol states delta.");
-        let component_ids: Option<&HashSet<String>> = component_ids.as_ref();
-
-        // Get the protocol state deltas from the database
-        match self
-            .db_gateway
-            .get_protocol_states_delta(chain, Some(&start), &end)
-            .await
-        {
-            Ok(mut components) => {
-                // Filter by component id if specified in the request
-                // PERF: This is not efficient, we should filter in the query
-                if let Some(component_ids) = component_ids {
-                    components.retain(|acc| {
-                        let id: String = acc.component_id.clone();
-                        component_ids.contains(&id)
-                    });
-                }
-                Ok(dto::ProtocolDeltaRequestResponse::new(
-                    components
-                        .into_iter()
-                        .map(dto::ProtocolStateDelta::from)
-                        .collect(),
-                ))
-            }
-            Err(err) => {
-                error!(error = %err, "Error while getting protocol state delta.");
-                Err(err.into())
-            }
-        }
-    }
 }
 
+/// Retrieve contract states
+///
+/// This endpoint retrieves the state of contracts within a specific execution environment. If no
+/// contract ids are given, all contracts are returned. Note that `protocol_system` is not a filter;
+/// it's a way to specify the protocol system associated with the contracts requested and is used to
+/// ensure that the correct extractor's block status is used when querying the database. If omitted,
+/// the block status will be determined by a random extractor, which could be risky if the extractor
+/// is out of sync. Filtering by protocol system is not currently supported on this endpoint and
+/// should be done client side.
 #[utoipa::path(
     post,
-    path = "/v1/{execution_env}/contract_state",
+    path = "/v1/contract_state",
     responses(
         (status = 200, description = "OK", body = StateRequestResponse),
     ),
     request_body = StateRequestBody,
-    params(
-        ("execution_env" = Chain, description = "Execution environment"),
-        StateRequestParameters
-    ),
 )]
 pub async fn contract_state<G: Gateway>(
-    execution_env: web::Path<Chain>,
-    query: web::Query<dto::StateRequestParameters>,
     body: web::Json<dto::StateRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    // Note - filtering by protocol system is not supported on this endpoint. This is due to the
+    // complexity of paginating this endpoint with the current design.
+
+    tracing::Span::current().record("page", body.pagination.page);
+    tracing::Span::current().record("page.size", body.pagination.page_size);
+    tracing::Span::current().record("protocol.system", &body.protocol_system);
+
+    if body.pagination.page_size > 100 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
+    }
+
     // Call the handler to get the state
     let response = handler
         .into_inner()
-        .get_contract_state(&execution_env, &body, &query)
+        .get_contract_state(&body)
         .await;
 
     match response {
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
-            error!(error = %err, ?body, ?query, "Error while getting contract state.");
+            error!(error = %err, ?body, "Error while getting contract state.");
             HttpResponse::InternalServerError().finish()
         }
     }
 }
 
+/// Retrieve tokens
+///
+/// This endpoint retrieves tokens for a specific execution environment, filtered by various
+/// criteria. The tokens are returned in a paginated format.
 #[utoipa::path(
     post,
-    path = "/v1/{execution_env}/contract_delta",
-    responses(
-        (status = 200, description = "OK", body = ContractDeltaRequestResponse),
-    ),
-    request_body = ContractDeltaRequestBody,
-    params(
-        ("execution_env" = Chain, description = "Execution environment"),
-        StateRequestParameters
-    ),
-)]
-pub async fn contract_delta<G: Gateway>(
-    execution_env: web::Path<Chain>,
-    params: web::Query<dto::StateRequestParameters>,
-    body: web::Json<dto::ContractDeltaRequestBody>,
-    handler: web::Data<RpcHandler<G>>,
-) -> HttpResponse {
-    // Call the handler to get the state delta
-    let response = handler
-        .into_inner()
-        .get_contract_delta(&execution_env, &body, &params)
-        .await;
-
-    match response {
-        Ok(state) => HttpResponse::Ok().json(state),
-        Err(err) => {
-            error!(error = %err, ?body, "Error while getting contract state delta.");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
-}
-
-#[utoipa::path(
-    post,
-    path = "/v1/{execution_env}/tokens",
+    path = "/v1/tokens",
     responses(
         (status = 200, description = "OK", body = TokensRequestResponse),
     ),
     request_body = TokensRequestBody,
-    params(
-        ("execution_env" = Chain, description = "Execution environment"),
-    ),
 )]
 pub async fn tokens<G: Gateway>(
-    execution_env: web::Path<Chain>,
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    tracing::Span::current().record("page", body.pagination.page);
+    tracing::Span::current().record("page.size", body.pagination.page_size);
+
+    if body.pagination.page_size > 3000 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 3000.");
+    }
+
     // Call the handler to get tokens
     let response = handler
         .into_inner()
-        .get_tokens(&execution_env, &body)
+        .get_tokens(&body)
         .await;
 
     match response {
@@ -615,28 +660,34 @@ pub async fn tokens<G: Gateway>(
     }
 }
 
+/// Retrieve protocol components
+///
+/// This endpoint retrieves components within a specific execution environment, filtered by various
+/// criteria.
 #[utoipa::path(
     post,
-    path = "/v1/{execution_env}/protocol_components",
+    path = "/v1/protocol_components",
     responses(
         (status = 200, description = "OK", body = ProtocolComponentRequestResponse),
     ),
     request_body = ProtocolComponentsRequestBody,
-    params(
-        ("execution_env" = Chain, description = "Execution environment"),
-        ProtocolComponentRequestParameters
-    ),
 )]
 pub async fn protocol_components<G: Gateway>(
-    execution_env: web::Path<Chain>,
     body: web::Json<dto::ProtocolComponentsRequestBody>,
-    params: web::Query<dto::ProtocolComponentRequestParameters>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    tracing::Span::current().record("page", body.pagination.page);
+    tracing::Span::current().record("page.size", body.pagination.page_size);
+    tracing::Span::current().record("protocol.system", &body.protocol_system);
+
+    if body.pagination.page_size > 500 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 500.");
+    }
+
     // Call the handler to get tokens
     let response = handler
         .into_inner()
-        .get_protocol_components(&execution_env, &body, &params)
+        .get_protocol_components(&body)
         .await;
 
     match response {
@@ -648,28 +699,40 @@ pub async fn protocol_components<G: Gateway>(
     }
 }
 
+/// Retrieve protocol states
+///
+/// This endpoint retrieves the state of protocols within a specific execution environment.
+/// Currently, the filters are not compounded, meaning that if multiple filters are provided, one
+/// will be prioritised. The priority from highest to lowest is as follows: 'protocol_ids',
+/// 'protocol_system', 'chain'. Note that 'protocol_system' serves as both a filter and as a way
+/// to specify the protocol system associated with the components requested. This is used to ensure
+/// that the correct extractor's block status is used when querying the database. If omitted, the
+/// block status will be determined by a random extractor, which could be risky if the extractor is
+/// out of sync.
 #[utoipa::path(
     post,
-    path = "/v1/{execution_env}/protocol_state",
+    path = "/v1/protocol_state",
     responses(
         (status = 200, description = "OK", body = ProtocolStateRequestResponse),
     ),
     request_body = ProtocolStateRequestBody,
-    params(
-        ("execution_env" = Chain, description = "Execution environment"),
-        StateRequestParameters
-    ),
 )]
 pub async fn protocol_state<G: Gateway>(
-    execution_env: web::Path<Chain>,
     body: web::Json<dto::ProtocolStateRequestBody>,
-    params: web::Query<dto::StateRequestParameters>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    tracing::Span::current().record("page", body.pagination.page);
+    tracing::Span::current().record("page.size", body.pagination.page_size);
+    tracing::Span::current().record("protocol.system", &body.protocol_system);
+
+    if body.pagination.page_size > 100 {
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
+    }
+
     // Call the handler to get protocol states
     let response = handler
         .into_inner()
-        .get_protocol_state(&execution_env, &body, &params)
+        .get_protocol_state(&body)
         .await;
 
     match response {
@@ -681,41 +744,12 @@ pub async fn protocol_state<G: Gateway>(
     }
 }
 
-#[utoipa::path(
-    post,
-    path = "/v1/{execution_env}/protocol_delta",
-    responses(
-        (status = 200, description = "OK", body = ProtocolDeltaRequestResponse),
-    ),
-    request_body = ProtocolDeltaRequestBody,
-    params(
-        ("execution_env" = Chain, description = "Execution environment"),
-        StateRequestParameters
-    ),
-)]
-pub async fn protocol_delta<G: Gateway>(
-    execution_env: web::Path<Chain>,
-    body: web::Json<dto::ProtocolDeltaRequestBody>,
-    handler: web::Data<RpcHandler<G>>,
-) -> HttpResponse {
-    // Call the handler to get protocol deltas
-    let response = handler
-        .into_inner()
-        .get_protocol_delta(&execution_env, &body)
-        .await;
-
-    match response {
-        Ok(state) => HttpResponse::Ok().json(state),
-        Err(err) => {
-            error!(error = %err, ?body, "Error while getting protocol deltas.");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
-}
-
+/// Health check endpoint
+///
+/// This endpoint is used to check the health of the service.
 #[utoipa::path(
     get,
-    path="/v1/health",
+    path = "/v1/health",
     responses(
         (status = 200, description = "OK", body=Health),
     ),
@@ -730,21 +764,62 @@ mod tests {
 
     use actix_web::test;
     use chrono::NaiveDateTime;
-    use ethers::types::U256;
 
-    use tycho_core::models::{
-        contract::{Contract, ContractDelta},
-        protocol::{ProtocolComponent, ProtocolComponentState, ProtocolComponentStateDelta},
-        token::CurrencyToken,
-        ChangeType,
+    use mockall::mock;
+    use tycho_core::{
+        models::{
+            contract::Account,
+            protocol::{ProtocolComponent, ProtocolComponentState},
+            token::CurrencyToken,
+            ChangeType,
+        },
+        storage::WithTotal,
+        Bytes,
     };
 
-    use crate::testing::{evm_contract_slots, MockGateway};
+    use crate::{
+        services::deltas_buffer::PendingDeltas,
+        testing::{evm_contract_slots, MockGateway},
+    };
 
     use super::*;
 
     const WETH: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const USDC: &str = "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+
+    mock! {
+        pub PendingDeltas {}
+
+        impl PendingDeltasBuffer for PendingDeltas {
+            fn merge_native_states<'a>(
+                &self,
+                protocol_ids: Option<&'a [&'a str]>,
+                db_states: &mut Vec<ProtocolComponentState>,
+                version: Option<BlockNumberOrTimestamp>,
+                protocol_system: &'a str,
+            ) -> Result<(), PendingDeltasError>;
+
+            fn update_vm_states<'a>(
+                &self,
+                addresses: Option<&'a [Bytes]>,
+                db_states: &mut Vec<Account>,
+                version: Option<BlockNumberOrTimestamp>,
+                protocol_system: &'a str,
+            ) -> Result<(), PendingDeltasError>;
+
+            fn get_new_components<'a>(
+                &self,
+                ids: Option<&'a [&'a str]>,
+                protocol_system: &'a str,
+            ) -> Result<Vec<ProtocolComponent>, PendingDeltasError>;
+
+            fn get_block_finality<'a>(
+                &self,
+                version: BlockNumberOrTimestamp,
+                protocol_system: &'a str,
+            ) -> Result<Option<FinalityStatus>, PendingDeltasError>;
+        }
+    }
 
     #[test]
     async fn test_validate_version_priority() {
@@ -754,7 +829,6 @@ mod tests {
             "timestamp": "2069-01-01T04:20:00",
             "block": {
                 "hash": "0x24101f9cb26cd09425b52da10e8c2f56ede94089a8bbe0f31f1cda5f4daa52c4",
-                "parentHash": "0x8d75152454e60413efe758cc424bfd339897062d7e658f302765eb7b50971815",
                 "number": 213,
                 "chain": "ethereum"
             }
@@ -801,11 +875,9 @@ mod tests {
     async fn test_parse_state_request_no_version_specified() {
         let json_str = r#"
     {
+        "protocol_system": "uniswap_v2",
         "contractIds": [
-            {
-                "address": "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092",
-                "chain": "ethereum"
-            }
+            "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092"
         ]
     }
     "#;
@@ -815,8 +887,11 @@ mod tests {
         let contract0 = "b4eccE46b8D4e4abFd03C9B806276A6735C9c092".into();
 
         let expected = dto::StateRequestBody {
-            contract_ids: Some(vec![dto::ContractId::new(dto::Chain::Ethereum, contract0)]),
+            contract_ids: Some(vec![contract0]),
+            protocol_system: "uniswap_v2".to_string(),
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::default(),
         };
 
         let time_difference = expected
@@ -837,16 +912,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_state() {
-        let expected = Contract::new(
+    async fn test_get_contract_state() {
+        let expected = Account::new(
             Chain::Ethereum,
             "0x6b175474e89094c44da98b954eedeac495271d0f"
                 .parse()
                 .unwrap(),
             "account0".to_owned(),
             evm_contract_slots([(6, 30), (5, 25), (1, 3), (2, 1), (0, 2)]),
-            Bytes::from(U256::from(101)),
-            HashMap::new(),
+            Bytes::from(101u8).lpad(32, 0),
             Bytes::from("C0C0C0"),
             "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                 .parse()
@@ -864,31 +938,69 @@ mod tests {
             ),
         );
         let mut gw = MockGateway::new();
-        let mock_response = Ok(vec![expected.clone()]);
+        let mock_response = Ok(WithTotal { entity: vec![expected.clone()], total: Some(10) });
         gw.expect_get_contracts()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([], []));
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected = Account::new(
+            Chain::Ethereum,
+            "0x388C818CA8B9251b393131C08a736A67ccB19297"
+                .parse()
+                .unwrap(),
+            "account1".to_owned(),
+            evm_contract_slots([(6, 30), (5, 25), (1, 3), (2, 1), (0, 2)]),
+            Bytes::from(101u8).lpad(32, 0),
+            Bytes::from("C0C0C0"),
+            "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
+                .parse()
+                .unwrap(),
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
+                .parse()
+                .unwrap(),
+            "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
+                .parse()
+                .unwrap(),
+            Some(
+                "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
+                    .parse()
+                    .unwrap(),
+            ),
+        );
+        mock_buffer
+            .expect_update_vm_states()
+            .return_once({
+                let buf_expected_clone = buf_expected.clone();
+                move |_, db_states: &mut Vec<Account>, _, _| {
+                    db_states.push(buf_expected_clone);
+                    Ok(())
+                }
+            });
+        mock_buffer
+            .expect_get_block_finality()
+            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
 
         let request = dto::StateRequestBody {
-            contract_ids: Some(vec![dto::ContractId::new(
-                dto::Chain::Ethereum,
-                "6B175474E89094C44Da98b954EedeAC495271d0F"
-                    .parse::<Bytes>()
-                    .unwrap(),
-            )]),
+            contract_ids: Some(vec![
+                Bytes::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                Bytes::from_str("388C818CA8B9251b393131C08a736A67ccB19297").unwrap(),
+            ]),
+            protocol_system: "uniswap_v2".to_string(),
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::default(),
         };
         let state = req_handler
-            .get_contract_state_inner(
-                &Chain::Ethereum,
-                &request,
-                &dto::StateRequestParameters::default(),
-            )
+            .get_contract_state_inner(request)
             .await
             .unwrap();
 
-        assert_eq!(state.accounts.len(), 1);
+        assert_eq!(state.accounts.len(), 2);
         assert_eq!(state.accounts[0], expected.into());
+        assert_eq!(state.accounts[1], buf_expected.into());
+        assert_eq!(state.pagination.total, 2);
     }
 
     #[test]
@@ -898,11 +1010,13 @@ mod tests {
 
         // Create the request body using the dto::StateRequestBody struct
         let request_body = dto::StateRequestBody {
-            contract_ids: Some(vec![dto::ContractId::new(
-                dto::Chain::Ethereum,
-                Bytes::from_str("b4eccE46b8D4e4abFd03C9B806276A6735C9c092").unwrap(),
-            )]),
+            contract_ids: Some(vec![
+                Bytes::from_str("b4eccE46b8D4e4abFd03C9B806276A6735C9c092").unwrap()
+            ]),
+            protocol_system: "uniswap_v2".to_string(),
             version: dto::VersionParam::default(),
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::default(),
         };
 
         // Serialize the request body to JSON
@@ -922,10 +1036,11 @@ mod tests {
             CurrencyToken::new(&(WETH.parse().unwrap()), "WETH", 18, 0, &[], Chain::Ethereum, 100),
         ];
         let mut gw = MockGateway::new();
-        let mock_response = Ok(expected.clone());
+        let mock_response = Ok(WithTotal { entity: expected.clone(), total: Some(3) });
+        // ensure the gateway is only accessed once - the second request should hit cache
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([], []));
+        let req_handler = RpcHandler::new(gw, Arc::new(PendingDeltas::new([])));
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -935,11 +1050,27 @@ mod tests {
             ]),
             min_quality: None,
             traded_n_days_ago: None,
-            pagination: dto::PaginationParams::default(),
+            pagination: dto::PaginationParams { page: 0, page_size: 2 },
+            chain: dto::Chain::Ethereum,
         };
 
+        // First request
+
         let tokens = req_handler
-            .get_tokens_inner(&Chain::Ethereum, &request)
+            .get_tokens(&request)
+            .await
+            .unwrap();
+
+        assert_eq!(tokens.tokens.len(), 2);
+        assert_eq!(tokens.tokens[0].symbol, "USDC");
+        assert_eq!(tokens.tokens[1].symbol, "WETH");
+        assert_eq!(tokens.pagination.total, 3);
+        assert_eq!(tokens.pagination.total_pages(), 2);
+
+        // Second request (should hit cache and not increase gateway access count)
+
+        let tokens = req_handler
+            .get_tokens(&request)
             .await
             .unwrap();
 
@@ -956,35 +1087,58 @@ mod tests {
             protocol_attributes([("reserve1", 1000), ("reserve2", 500)]),
             HashMap::new(),
         );
-        let mock_response = Ok(vec![expected.clone()]);
+        let mock_response = Ok(WithTotal { entity: vec![expected.clone()], total: Some(1) });
         gw.expect_get_protocol_states()
-            .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([], []));
+            .return_once(|_, _, _, _, _, _| Box::pin(async move { mock_response }));
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected = ProtocolComponentState::new(
+            "state_buff",
+            protocol_attributes([("reserve1", 100), ("reserve2", 200)]),
+            HashMap::new(),
+        );
+        mock_buffer
+            .expect_merge_native_states()
+            .return_once({
+                let buf_expected_clone = buf_expected.clone();
+                move |_, db_states: &mut Vec<ProtocolComponentState>, _, _| {
+                    db_states.push(buf_expected_clone);
+                    Ok(())
+                }
+            });
+        mock_buffer
+            .expect_get_block_finality()
+            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
 
         let request = dto::ProtocolStateRequestBody {
-            protocol_ids: Some(vec![dto::ProtocolId {
-                id: "state1".to_owned(),
-                chain: dto::Chain::Ethereum,
-            }]),
-            protocol_system: None,
+            protocol_ids: Some(vec![
+                dto::ProtocolId { id: "state1".to_owned(), chain: dto::Chain::Ethereum },
+                dto::ProtocolId { id: "state_buff".to_owned(), chain: dto::Chain::Ethereum },
+            ]),
+            protocol_system: "uniswap_v2".to_string(),
+            chain: dto::Chain::Ethereum,
+            include_balances: true,
             version: dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
+            pagination: dto::PaginationParams::default(),
         };
-        let params =
-            StateRequestParameters { tvl_gt: None, inertia_min_gt: None, include_balances: true };
         let res = req_handler
-            .get_protocol_state_inner(&Chain::Ethereum, &request, &params)
+            .get_protocol_state_inner(request)
             .await
             .unwrap();
 
-        assert_eq!(res.states.len(), 1);
+        assert_eq!(res.states.len(), 2);
         assert_eq!(res.states[0], expected.into());
+        assert_eq!(res.states[1], buf_expected.into());
+        assert_eq!(res.pagination.total, 2);
     }
 
     fn protocol_attributes<'a>(
         data: impl IntoIterator<Item = (&'a str, i32)>,
     ) -> HashMap<String, Bytes> {
         data.into_iter()
-            .map(|(s, v)| (s.to_owned(), Bytes::from(U256::from(v))))
+            .map(|(s, v)| (s.to_owned(), Bytes::from(u32::try_from(v).unwrap()).lpad(32, 0)))
             .collect()
     }
 
@@ -1005,136 +1159,160 @@ mod tests {
                 .unwrap(),
             NaiveDateTime::default(),
         );
-        let mock_response = Ok(vec![expected.clone()]);
+        let mock_response = Ok(WithTotal { entity: vec![expected.clone()], total: Some(1) });
         gw.expect_get_protocol_components()
-            .return_once(|_, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([], []));
+            .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected = ProtocolComponent::new(
+            "comp_buff",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
+        );
+        mock_buffer
+            .expect_get_new_components()
+            .return_once({
+                let buf_expected_clone = buf_expected.clone();
+                move |_, _| Ok(vec![buf_expected_clone])
+            });
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
 
         let request = dto::ProtocolComponentsRequestBody {
-            protocol_system: Option::from("ambient".to_string()),
+            protocol_system: "ambient".to_string(),
             component_ids: None,
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 2),
         };
-        let params = dto::ProtocolComponentRequestParameters::default();
 
         let components = req_handler
-            .get_protocol_components_inner(&Chain::Ethereum, &request, &params)
+            .get_protocol_components_inner(request)
             .await
             .unwrap();
 
+        assert_eq!(components.protocol_components.len(), 2);
         assert_eq!(components.protocol_components[0], expected.into());
+        assert_eq!(components.protocol_components[1], buf_expected.into());
+        assert_eq!(components.pagination.total, 2);
+        assert_eq!(components.pagination.page, 0);
+        assert_eq!(components.pagination.page_size, 2);
     }
 
     #[tokio::test]
-    async fn test_get_contract_delta() {
-        // Setup
+    async fn test_get_protocol_components_pagination() {
         let mut gw = MockGateway::new();
-        let expected = ContractDelta::new(
-            &Chain::Ethereum,
-            &("6B175474E89094C44Da98b954EedeAC495271d0F"
-                .parse()
-                .unwrap()),
-            Some(
-                evm_contract_slots([(6, 30), (5, 25), (1, 3), (0, 2)])
-                    .into_iter()
-                    .map(|(k, v)| (k, Some(v)))
-                    .collect(),
-            )
-            .as_ref(),
-            Some(&Bytes::from(U256::from(101))),
-            None,
-            ChangeType::Update,
-        );
-        let mock_response = Ok(vec![expected.clone()]);
-        gw.expect_get_accounts_delta()
-            .return_once(|_, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([], []));
-        let request = dto::ContractDeltaRequestBody {
-            contract_ids: Some(vec![dto::ContractId::new(
-                Chain::Ethereum.into(),
-                "6B175474E89094C44Da98b954EedeAC495271d0F"
-                    .parse()
-                    .unwrap(),
-            )]),
-            start: dto::VersionParam {
-                timestamp: None,
-                block: Some(dto::BlockParam {
-                    hash: Some(
-                        "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
-                            .parse()
-                            .unwrap(),
-                    ),
-                    chain: None,
-                    number: None,
-                }),
-            },
-            end: dto::VersionParam {
-                timestamp: None,
-                block: Some(dto::BlockParam {
-                    hash: Some(
-                        "0xb495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9"
-                            .parse()
-                            .unwrap(),
-                    ),
-                    chain: None,
-                    number: None,
-                }),
-            },
-        };
-
-        let delta = req_handler
-            .get_contract_delta_inner(
-                &Chain::Ethereum,
-                &request,
-                &StateRequestParameters::default(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(delta.accounts.len(), 1);
-        assert_eq!(delta.accounts[0], expected.into());
-    }
-
-    #[tokio::test]
-    async fn test_get_protocol_delta() {
-        // Setup
-        let mut gw = MockGateway::new();
-        let expected = ProtocolComponentStateDelta::new(
-            "state3",
+        let expected = ProtocolComponent::new(
+            "comp1",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
             HashMap::new(),
-            vec!["deleted2".to_owned()]
-                .into_iter()
-                .collect(),
+            ChangeType::Creation,
+            "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
         );
-        let mock_response = Ok(vec![expected.clone()]);
-        gw.expect_get_protocol_states_delta()
-            .return_once(|_, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, PendingDeltas::new([], []));
-        let request = dto::ProtocolDeltaRequestBody {
-            component_ids: Some(vec!["state3".to_owned()]), // Filter to only "state3"
-            start: dto::VersionParam {
-                timestamp: None,
-                block: Some(dto::BlockParam {
-                    hash: None,
-                    chain: Some(dto::Chain::Ethereum),
-                    number: Some(1),
-                }),
-            },
-            end: dto::VersionParam {
-                timestamp: None,
-                block: Some(dto::BlockParam {
-                    hash: None,
-                    chain: Some(dto::Chain::Ethereum),
-                    number: Some(2),
-                }),
-            },
+        gw.expect_get_protocol_components()
+            .returning({
+                let mock_response: Result<(i64, Vec<ProtocolComponent>), StorageError> =
+                    Ok((1, vec![expected.clone()]));
+                move |_, _, _, _, _| {
+                    let mock_response_clone = match &mock_response {
+                        Ok((num, components)) => {
+                            Ok(WithTotal { entity: components.clone(), total: Some(*num) })
+                        }
+                        Err(_) => Err(StorageError::Unexpected("Mock Error".to_string())),
+                    };
+                    Box::pin(async move { mock_response_clone })
+                }
+            });
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        let buf_expected1 = ProtocolComponent::new(
+            "comp_buff1",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            "0x2b493d2596845046d3769c6a9c763a6f983efdbd4209c62be1d024d564aa4df7"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
+        );
+        let buf_expected2 = ProtocolComponent::new(
+            "comp_buff2",
+            "ambient",
+            "pool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            "0x2b493d2596845046d3769c6a9c763a6f983efdbd4209c62be1d024d564aa4df7"
+                .parse()
+                .unwrap(),
+            NaiveDateTime::default(),
+        );
+
+        mock_buffer
+            .expect_get_new_components()
+            .returning({
+                let buf_expected1_clone = buf_expected1.clone();
+                let buf_expected2_clone = buf_expected2.clone();
+                move |_, _| Ok(vec![buf_expected1_clone.clone(), buf_expected2_clone.clone()])
+            });
+
+        let req_handler = RpcHandler::new(gw, Arc::new(mock_buffer));
+
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: "ambient".to_string(),
+            component_ids: None,
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 2),
         };
 
-        let delta = req_handler
-            .get_protocol_delta_inner(&Chain::Ethereum, &request)
+        let response1 = req_handler
+            .get_protocol_components_inner(request)
             .await
             .unwrap();
 
-        assert_eq!(delta.protocols.len(), 1);
-        assert_eq!(delta.protocols[0], expected.into());
+        assert_eq!(response1.protocol_components.len(), 2);
+        assert_eq!(response1.protocol_components[0], expected.into());
+        assert_eq!(response1.protocol_components[1], buf_expected1.into());
+        assert_eq!(response1.pagination.total, 3);
+
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: "ambient".to_string(),
+            component_ids: None,
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(1, 2),
+        };
+
+        let response2 = req_handler
+            .get_protocol_components_inner(request)
+            .await
+            .unwrap();
+
+        assert_eq!(response2.protocol_components.len(), 1);
+        assert_eq!(response2.protocol_components[0], buf_expected2.into());
+        assert_eq!(response2.pagination.total, 3);
     }
 }

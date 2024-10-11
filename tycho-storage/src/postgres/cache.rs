@@ -15,13 +15,13 @@ use tokio::{
     },
     task::JoinHandle,
 };
-use tracing::{debug, info, trace};
+use tracing::{debug, info, info_span, instrument, trace, Instrument};
 
 use tycho_core::{
     models::{
         self,
         blockchain::{Block, Transaction},
-        contract::{Contract, ContractDelta},
+        contract::{Account, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
@@ -32,7 +32,7 @@ use tycho_core::{
     },
     storage::{
         BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
-        ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version,
+        ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version, WithTotal,
     },
     Bytes,
 };
@@ -49,9 +49,9 @@ pub(crate) enum WriteOp {
     // Simply keep last
     SaveExtractionState(ExtractionState),
     // Support saving a batch
-    UpsertContract(Vec<models::contract::Contract>),
+    UpsertContract(Vec<models::contract::Account>),
     // Simply merge
-    UpdateContracts(Vec<(TxHash, models::contract::ContractDelta)>),
+    UpdateContracts(Vec<(TxHash, models::contract::AccountDelta)>),
     // Simply merge
     InsertProtocolComponents(Vec<models::protocol::ProtocolComponent>),
     // Simply merge
@@ -109,6 +109,16 @@ impl BlockRange {
     }
 }
 
+impl std::fmt::Display for BlockRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}, {}] - [{:#x}, {:#x}]",
+            self.start.number, self.end.number, self.start.hash, self.end.hash
+        )
+    }
+}
+
 /// Represents a transaction in the database, including the block information,
 /// a list of operations to be performed, and a channel to send the result.
 pub struct DBTransaction {
@@ -116,6 +126,8 @@ pub struct DBTransaction {
     size: usize,
     operations: Vec<WriteOp>,
     tx: oneshot::Sender<Result<(), StorageError>>,
+    /// Purely used to add an attribute to the span when the transaction is commited
+    owner: Option<String>,
 }
 
 impl DBTransaction {
@@ -264,14 +276,14 @@ impl DBCacheWriteExecutor {
             Err(_) => None,
         };
 
-        tracing::debug!("Persisted block: {:?}", persisted_block);
+        debug!("Persisted block: {:?}", persisted_block);
 
         Self { name, chain, pool, state_gateway, persisted_block, msg_receiver }
     }
 
     /// Spawns a task to process incoming database messages (write requests or flush commands).
     pub fn run(mut self) -> JoinHandle<()> {
-        tracing::info!("DBCacheWriteExecutor {} started!", self.name);
+        info!(name = self.name, "DBCacheWriteExecutor started!");
         tokio::spawn(async move {
             while let Some(message) = self.msg_receiver.recv().await {
                 match message {
@@ -284,8 +296,13 @@ impl DBCacheWriteExecutor {
         })
     }
 
+    #[instrument(name="db_write", skip_all, fields(block_range = %new_db_tx.block_range, extractor_id = tracing::field::Empty))]
     async fn write(&mut self, new_db_tx: DBTransaction) {
-        debug!(block_range=?&new_db_tx.block_range, "Received new transaction");
+        debug!("NewDBTransactionStart");
+        if let Some(extractor_id) = new_db_tx.owner.as_ref() {
+            tracing::Span::current().record("extractor_id", extractor_id);
+        }
+
         let mut conn = self
             .pool
             .get()
@@ -318,7 +335,7 @@ impl DBCacheWriteExecutor {
             .await;
 
         if res.is_ok() {
-            info!(block_range=?&new_db_tx.block_range, "Transaction successfully committed to DB!");
+            debug!("DBTransactionCommitted");
         }
 
         match self.persisted_block.as_ref() {
@@ -341,6 +358,7 @@ impl DBCacheWriteExecutor {
     ///
     /// This function handles different types of write operations such as
     /// upserts, updates, and reverts, ensuring data consistency in the database.
+    #[instrument(skip_all, fields(op=operation.variant_name()))]
     async fn execute_write_op(
         &mut self,
         operation: &WriteOp,
@@ -371,7 +389,7 @@ impl DBCacheWriteExecutor {
                 }
             }
             WriteOp::UpdateContracts(contracts) => {
-                let collected_changes: Vec<(TxHash, &models::contract::ContractDelta)> = contracts
+                let collected_changes: Vec<(TxHash, &models::contract::AccountDelta)> = contracts
                     .iter()
                     .map(|(tx, update)| (tx.clone(), update))
                     .collect();
@@ -427,7 +445,7 @@ struct RevertParameters {
 type DeltasCache = LruCache<
     RevertParameters,
     (
-        Vec<models::contract::ContractDelta>,
+        Vec<models::contract::AccountDelta>,
         Vec<models::protocol::ProtocolComponentStateDelta>,
         Vec<models::protocol::ComponentBalance>,
     ),
@@ -462,7 +480,7 @@ impl Clone for CachedGateway {
 
 impl CachedGateway {
     // Accumulating transactions does not drop previous data nor are transactions nested.
-    pub async fn start_transaction(&self, block: &models::blockchain::Block) {
+    pub async fn start_transaction(&self, block: &models::blockchain::Block, owner: Option<&str>) {
         let mut open_tx = self.open_tx.lock().await;
 
         if let Some(tx) = open_tx.as_mut() {
@@ -475,6 +493,7 @@ impl CachedGateway {
                     size: 0,
                     operations: vec![],
                     tx,
+                    owner: owner.map(String::from),
                 },
                 rx,
             ));
@@ -502,24 +521,31 @@ impl CachedGateway {
             }
             Some((mut db_txn, rx)) => {
                 if db_txn.size > min_ops_batch_size {
-                    db_txn
-                        .operations
-                        .sort_by_key(|e| e.order_key());
-                    debug!(
-                        size = db_txn.size,
-                        ops = ?db_txn
+                    let span = info_span!("DatabaseCommit", size = db_txn.size);
+                    async move {
+                        db_txn
                             .operations
-                            .iter()
-                            .map(WriteOp::variant_name)
-                            .collect::<Vec<_>>(),
-                        "Submitting db operation batch!"
-                    );
-                    self.tx
-                        .send(DBCacheMessage::Write(db_txn))
-                        .await
-                        .expect("Send message to receiver ok");
-                    rx.await
-                        .map_err(|_| StorageError::WriteCacheGoneAway())??;
+                            .sort_by_key(|e| e.order_key());
+                        debug!(
+                            size = db_txn.size,
+                            ops = ?db_txn
+                                .operations
+                                .iter()
+                                .map(WriteOp::variant_name)
+                                .collect::<Vec<_>>(),
+                            "Submitting db operation batch!"
+                        );
+                        self.tx
+                            .send(DBCacheMessage::Write(db_txn))
+                            .await
+                            .expect("Send message to receiver ok");
+                        rx.await
+                            .map_err(|_| StorageError::WriteCacheGoneAway())??;
+
+                        Ok::<(), StorageError>(())
+                    }
+                    .instrument(span)
+                    .await?;
                 } else {
                     // if we are not ready to commit, give the OpenTx struct back.
                     *open_tx = Some((db_txn, rx));
@@ -551,7 +577,7 @@ impl CachedGateway {
         end_version: &BlockOrTimestamp,
     ) -> Result<
         (
-            Vec<models::contract::ContractDelta>,
+            Vec<models::contract::AccountDelta>,
             Vec<models::protocol::ProtocolComponentStateDelta>,
             Vec<models::protocol::ComponentBalance>,
         ),
@@ -602,6 +628,7 @@ impl CachedGateway {
 
 #[async_trait]
 impl ExtractionStateGateway for CachedGateway {
+    #[instrument(skip_all)]
     async fn get_state(&self, name: &str, chain: &Chain) -> Result<ExtractionState, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
@@ -611,7 +638,7 @@ impl ExtractionStateGateway for CachedGateway {
             .get_state(name, chain, &mut conn)
             .await
     }
-
+    #[instrument(skip_all)]
     async fn save_state(&self, new: &ExtractionState) -> Result<(), StorageError> {
         self.add_op(WriteOp::SaveExtractionState(new.clone()))
             .await?;
@@ -621,12 +648,14 @@ impl ExtractionStateGateway for CachedGateway {
 
 #[async_trait]
 impl ChainGateway for CachedGateway {
+    #[instrument(skip_all)]
     async fn upsert_block(&self, new: &[Block]) -> Result<(), StorageError> {
         self.add_op(WriteOp::UpsertBlock(new.to_vec()))
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn get_block(&self, id: &BlockIdentifier) -> Result<Block, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
@@ -643,6 +672,7 @@ impl ChainGateway for CachedGateway {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn get_tx(&self, hash: &TxHash) -> Result<Transaction, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
@@ -653,6 +683,7 @@ impl ChainGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn revert_state(&self, to: &BlockIdentifier) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
@@ -666,12 +697,13 @@ impl ChainGateway for CachedGateway {
 
 #[async_trait]
 impl ContractStateGateway for CachedGateway {
+    #[instrument(skip_all)]
     async fn get_contract(
         &self,
         id: &ContractId,
         version: Option<&Version>,
         include_slots: bool,
-    ) -> Result<Contract, StorageError> {
+    ) -> Result<Account, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -681,35 +713,39 @@ impl ContractStateGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_contracts(
         &self,
         chain: &Chain,
         addresses: Option<&[Address]>,
         version: Option<&Version>,
         include_slots: bool,
-        retrieve_balances: bool,
-    ) -> Result<Vec<Contract>, StorageError> {
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<Vec<Account>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_contracts(chain, addresses, version, include_slots, retrieve_balances, &mut conn)
+            .get_contracts(chain, addresses, version, include_slots, pagination_params, &mut conn)
             .await
     }
 
-    async fn upsert_contract(&self, new: &Contract) -> Result<(), StorageError> {
+    #[instrument(skip_all)]
+    async fn upsert_contract(&self, new: &Account) -> Result<(), StorageError> {
         self.add_op(WriteOp::UpsertContract(vec![new.clone()]))
             .await?;
         Ok(())
     }
 
-    async fn update_contracts(&self, new: &[(TxHash, ContractDelta)]) -> Result<(), StorageError> {
+    #[instrument(skip_all)]
+    async fn update_contracts(&self, new: &[(TxHash, AccountDelta)]) -> Result<(), StorageError> {
         self.add_op(WriteOp::UpdateContracts(new.to_vec()))
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn delete_contract(&self, id: &ContractId, at_tx: &TxHash) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
@@ -720,12 +756,13 @@ impl ContractStateGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_accounts_delta(
         &self,
         chain: &Chain,
         start_version: Option<&BlockOrTimestamp>,
         end_version: &BlockOrTimestamp,
-    ) -> Result<Vec<ContractDelta>, StorageError> {
+    ) -> Result<Vec<AccountDelta>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -738,22 +775,25 @@ impl ContractStateGateway for CachedGateway {
 
 #[async_trait]
 impl ProtocolGateway for CachedGateway {
+    #[instrument(skip_all)]
     async fn get_protocol_components(
         &self,
         chain: &Chain,
         system: Option<String>,
         ids: Option<&[&str]>,
         min_tvl: Option<f64>,
-    ) -> Result<Vec<ProtocolComponent>, StorageError> {
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<Vec<ProtocolComponent>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_protocol_components(chain, system, ids, min_tvl, &mut conn)
+            .get_protocol_components(chain, system, ids, min_tvl, pagination_params, &mut conn)
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_token_owners(
         &self,
         chain: &Chain,
@@ -769,12 +809,14 @@ impl ProtocolGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn add_protocol_components(&self, new: &[ProtocolComponent]) -> Result<(), StorageError> {
         self.add_op(WriteOp::InsertProtocolComponents(new.to_vec()))
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn delete_protocol_components(
         &self,
         to_delete: &[ProtocolComponent],
@@ -789,6 +831,7 @@ impl ProtocolGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn add_protocol_types(
         &self,
         new_protocol_types: &[ProtocolType],
@@ -802,6 +845,7 @@ impl ProtocolGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_protocol_states(
         &self,
         chain: &Chain,
@@ -809,16 +853,26 @@ impl ProtocolGateway for CachedGateway {
         system: Option<String>,
         id: Option<&[&str]>,
         retrieve_balances: bool,
-    ) -> Result<Vec<ProtocolComponentState>, StorageError> {
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<Vec<ProtocolComponentState>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_protocol_states(chain, at, system, id, retrieve_balances, &mut conn)
+            .get_protocol_states(
+                chain,
+                at,
+                system,
+                id,
+                retrieve_balances,
+                pagination_params,
+                &mut conn,
+            )
             .await
     }
 
+    #[instrument(skip_all)]
     async fn update_protocol_states(
         &self,
         new: &[(TxHash, ProtocolComponentStateDelta)],
@@ -828,6 +882,7 @@ impl ProtocolGateway for CachedGateway {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn get_tokens(
         &self,
         chain: Chain,
@@ -835,7 +890,7 @@ impl ProtocolGateway for CachedGateway {
         min_quality: Option<i32>,
         traded_n_days_ago: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<Vec<CurrencyToken>, StorageError> {
+    ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -852,6 +907,7 @@ impl ProtocolGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn add_component_balances(
         &self,
         component_balances: &[ComponentBalance],
@@ -861,6 +917,7 @@ impl ProtocolGateway for CachedGateway {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn add_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError> {
         self.add_op(WriteOp::InsertTokens(tokens.to_vec()))
             .await?;
@@ -869,13 +926,14 @@ impl ProtocolGateway for CachedGateway {
 
     /// Updates tokens without using the write cache.
     ///
-    /// This method is currently only used by the token-analyzer job and therefore does
+    /// This method is currently only used by the tycho-ethereum job and therefore does
     /// not use the write cache. It creates a single transaction and executes all
     /// updates immediately.
     ///
     /// ## Note
     /// This is a short term solution. Ideally we should have a simple gateway version
     /// for these use cases that creates a single transactions and emits them immediately.
+    #[instrument(skip_all)]
     async fn update_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
@@ -895,6 +953,7 @@ impl ProtocolGateway for CachedGateway {
         .map_err(|e| StorageError::Unexpected(format!("Failed to update tokens: {}", e.0)))
     }
 
+    #[instrument(skip_all)]
     async fn get_protocol_states_delta(
         &self,
         chain: &Chain,
@@ -910,6 +969,7 @@ impl ProtocolGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_balance_deltas(
         &self,
         chain: &Chain,
@@ -925,6 +985,7 @@ impl ProtocolGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_balances(
         &self,
         chain: &Chain,
@@ -940,6 +1001,7 @@ impl ProtocolGateway for CachedGateway {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_token_prices(&self, chain: &Chain) -> Result<HashMap<Bytes, f64>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
@@ -951,6 +1013,7 @@ impl ProtocolGateway for CachedGateway {
     }
 
     /// TODO: add to transaction instead
+    #[instrument(skip_all)]
     async fn upsert_component_tvl(
         &self,
         chain: &Chain,
@@ -971,8 +1034,6 @@ impl Gateway for CachedGateway {}
 #[cfg(test)]
 mod test_serial_db {
     use std::{collections::HashSet, str::FromStr, time::Duration};
-
-    use ethers::types::U256;
 
     use tycho_core::models::ChangeType;
 
@@ -1082,7 +1143,7 @@ mod test_serial_db {
             let component_balance = models::protocol::ComponentBalance {
                 token: usdc_address.clone(),
                 balance_float: 0.0,
-                new_balance: Bytes::from(&[0u8]),
+                balance: Bytes::from(&[0u8]),
                 modify_tx: tx_1.hash.clone(),
                 component_id: protocol_component_id.clone(),
             };
@@ -1107,7 +1168,7 @@ mod test_serial_db {
             // Send second block messages
             let block_2 = get_sample_block(2);
             let attributes: HashMap<String, Bytes> =
-                vec![("reserve1".to_owned(), Bytes::from(U256::from(1000)))]
+                vec![("reserve1".to_owned(), Bytes::from(1000u64).lpad(32, 0))]
                     .into_iter()
                     .collect();
             let protocol_state_delta = models::protocol::ProtocolComponentStateDelta::new(
@@ -1211,7 +1272,7 @@ mod test_serial_db {
             let block_1 = get_sample_block(1);
             let tx_1 = get_sample_transaction(1);
             cached_gw
-                .start_transaction(&block_1)
+                .start_transaction(&block_1, None)
                 .await;
             cached_gw
                 .upsert_block(&[block_1.clone()])
@@ -1229,7 +1290,7 @@ mod test_serial_db {
             // Send second block messages
             let block_2 = get_sample_block(2);
             cached_gw
-                .start_transaction(&block_2)
+                .start_transaction(&block_2, None)
                 .await;
             cached_gw
                 .upsert_block(&[block_2.clone()])
@@ -1243,7 +1304,7 @@ mod test_serial_db {
             // Send third block messages
             let block_3 = get_sample_block(3);
             cached_gw
-                .start_transaction(&block_3)
+                .start_transaction(&block_3, None)
                 .await;
             cached_gw
                 .upsert_block(&[block_3.clone()])
@@ -1296,37 +1357,37 @@ mod test_serial_db {
         let ts2 = ts1 + Duration::from_secs(3600);
         let ts3 = ts2 + Duration::from_secs(3600);
         match version {
-            1 => models::blockchain::Block {
-                number: 1,
-                chain: Chain::Ethereum,
-                hash: "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
+            1 => models::blockchain::Block::new(
+                1,
+                Chain::Ethereum,
+                "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
                     .parse()
                     .expect("Invalid hash"),
-                parent_hash: Bytes::default(),
-                ts: ts1,
-            },
-            2 => models::blockchain::Block {
-                number: 2,
-                chain: Chain::Ethereum,
-                hash: "0xb495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9"
+                Bytes::default(),
+                ts1,
+            ),
+            2 => models::blockchain::Block::new(
+                2,
+                Chain::Ethereum,
+                "0xb495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9"
                     .parse()
                     .expect("Invalid hash"),
-                parent_hash: "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
+                "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
                     .parse()
                     .expect("Invalid hash"),
-                ts: ts2,
-            },
-            3 => models::blockchain::Block {
-                number: 3,
-                chain: Chain::Ethereum,
-                hash: "0x3d6122660cc824376f11ee842f83addc3525e2dd6756b9bcf0affa6aa88cf741"
+                ts2,
+            ),
+            3 => models::blockchain::Block::new(
+                3,
+                Chain::Ethereum,
+                "0x3d6122660cc824376f11ee842f83addc3525e2dd6756b9bcf0affa6aa88cf741"
                     .parse()
                     .expect("Invalid hash"),
-                parent_hash: "0xb495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9"
+                "0xb495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9"
                     .parse()
                     .expect("Invalid hash"),
-                ts: ts3,
-            },
+                ts3,
+            ),
             _ => panic!("Block version not found"),
         }
     }
@@ -1355,6 +1416,8 @@ mod test_serial_db {
                 Chain::Ethereum,
                 None,
                 "cursor@420".as_bytes(),
+                Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                    .unwrap(),
             ),
             _ => panic!("Block version not found"),
         }
@@ -1371,6 +1434,7 @@ mod test_serial_db {
             size: operations.len(),
             operations,
             tx: os_tx,
+            owner: None,
         };
 
         tx.send(DBCacheMessage::Write(db_transaction))
@@ -1518,7 +1582,7 @@ mod test_serial_db {
             protocol_component_id,
             txn[0],
             "reserve1".to_owned(),
-            Bytes::from(U256::from(1100)),
+            Bytes::from(1100u64).lpad(32, 0),
             None,
             Some(txn[2]),
         )

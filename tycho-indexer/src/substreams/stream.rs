@@ -168,7 +168,7 @@ async fn process_substreams_response(
 
     match response.message {
         Some(Message::Session(session)) => {
-            tracing::Span::current().record("trace_id", &session.trace_id);
+            tracing::Span::current().record("sf_trace_id", &session.trace_id);
             info!(
                 ?session.resolved_start_block,
                 ?session.linear_handoff_block,

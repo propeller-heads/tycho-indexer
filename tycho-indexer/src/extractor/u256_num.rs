@@ -5,7 +5,8 @@
 
 use std::{cmp::max, panic};
 
-use ethers::types::U256;
+use num_bigint::BigInt;
+use num_traits::{One, ToPrimitive, Zero};
 use tracing::warn;
 
 /// Converts a U256 integer into it's closest floating point representation
@@ -36,9 +37,9 @@ pub fn bytes_to_f64(data: &[u8]) -> Option<f64> {
         warn!(?data, "Received invalid balance bytes!");
         return None;
     }
-    let x = U256::from(data);
+    let x = BigInt::from_bytes_be(num_bigint::Sign::Plus, data);
     let res = panic::catch_unwind(|| {
-        if x == U256::zero() {
+        if x == BigInt::zero() {
             return Some(0.0);
         }
 
@@ -48,7 +49,9 @@ pub fn bytes_to_f64(data: &[u8]) -> Option<f64> {
 
         let mut significant = if n_shifts >= 0 {
             // shift left if pos, no rounding needed
-            (x << n_shifts).as_u64()
+            (x << n_shifts)
+                .to_u64()
+                .expect("unable to convert to u64")
         } else {
             /*
             shift right if neg, dropping LSBs, round to nearest even
@@ -62,17 +65,21 @@ pub fn bytes_to_f64(data: &[u8]) -> Option<f64> {
             round to the number that has 0 at the n-th place.
             */
             // least significant bit is be used as tiebreaker
-            let lsb = (x >> n_shifts.abs()) & U256::one();
-            let round_bit = (x >> (n_shifts.abs() - 1)) & U256::one();
+            let lsb = (x.clone() >> n_shifts.abs()) & BigInt::one();
+            let round_bit = (x.clone() >> (n_shifts.abs() - 1)) & BigInt::one();
 
             // build mask for sticky bit, handle case when no data for sticky bit is available
-            let sticky_bit = x & ((U256::one() << max(n_shifts.abs() - 2, 0)) - U256::one());
+            let sticky_bit =
+                x.clone() & ((BigInt::one() << max(n_shifts.abs() - 2, 0)) - BigInt::one());
 
-            let rounded_torwards_zero = (x >> n_shifts.abs()).as_u64();
-            if round_bit == U256::one() {
-                if sticky_bit == U256::zero() {
+            let rounded_torwards_zero = (x.clone() >> n_shifts.abs())
+                .to_u64()
+                .expect("unable to convert to u64");
+
+            if round_bit == BigInt::one() {
+                if sticky_bit == BigInt::zero() {
                     // tiebreaker: round up if lsb is 1 and down if lsb is 0
-                    if lsb == U256::zero() {
+                    if lsb == BigInt::zero() {
                         rounded_torwards_zero
                     } else {
                         rounded_torwards_zero + 1
@@ -102,24 +109,23 @@ pub fn bytes_to_f64(data: &[u8]) -> Option<f64> {
 mod test {
 
     use super::*;
+    use num_bigint::BigUint;
     use rstest::rstest;
-    use tycho_core::Bytes;
 
     #[rstest]
-    #[case::one(U256::one(), 1.0f64)]
-    #[case::two(U256::from(2), 2.0f64)]
-    #[case::zero(U256::zero(), 0.0f64)]
-    #[case::two_pow1024(U256::from(2).pow(U256::from(190)), 2.0f64.powi(190))]
-    #[case::max32(U256([u32::MAX as u64, 0, 0, 0]), u32::MAX as f64)]
-    #[case::max64(U256([u64::MAX, 0, 0, 0]), u64::MAX as f64)]
-    #[case::edge_54bits_trailing_zeros(U256::from(2u64.pow(53)), 2u64.pow(53) as f64)]
-    #[case::edge_54bits_trailing_ones(U256::from(2u64.pow(54) - 1), (2u64.pow(54) - 1) as f64)]
-    #[case::edge_53bits_trailing_zeros(U256::from(2u64.pow(52)), 2u64.pow(52) as f64)]
-    #[case::edge_53bits_trailing_ones(U256::from(2u64.pow(53) - 1), (2u64.pow(53) - 1) as f64)]
-    fn test_convert(#[case] inp: U256, #[case] out: f64) {
-        let data = Bytes::from(inp).to_vec();
-        let res = bytes_to_f64(&data).unwrap();
-
+    #[case::one(BigUint::one(), 1.0f64)]
+    #[case::two(BigUint::from(2u64), 2.0f64)]
+    #[case::zero(BigUint::from(0u64), 0.0f64)]
+    #[case::two_pow1024(BigUint::from(2u64).pow(190), 2.0f64.powi(190))]
+    #[case::max32(BigUint::from(u32::MAX as u64), u32::MAX as f64)]
+    #[case::max64(BigUint::from(u64::MAX), u64::MAX as f64)]
+    #[case::edge_54bits_trailing_zeros(BigUint::from(2u64.pow(53)), 2u64.pow(53) as f64)]
+    #[case::edge_54bits_trailing_ones(BigUint::from(2u64.pow(54) - 1), (2u64.pow(54) - 1) as f64)]
+    #[case::edge_53bits_trailing_zeros(BigUint::from(2u64.pow(52)), 2u64.pow(52) as f64)]
+    #[case::edge_53bits_trailing_ones(BigUint::from(2u64.pow(53) - 1), (2u64.pow(53) - 1) as f64)]
+    fn test_convert(#[case] inp: BigUint, #[case] out: f64) {
+        let bytes = inp.to_bytes_be();
+        let res = bytes_to_f64(&bytes).unwrap();
         assert_eq!(res, out);
     }
 }

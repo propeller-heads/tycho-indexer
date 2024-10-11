@@ -9,8 +9,8 @@ use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 use crate::{
     abi::factory::events::PoolCreated,
     pb::tycho::evm::v1::{
-        Attribute, BlockEntityChanges, ChangeType, EntityChanges, FinancialType,
-        ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges,
+        Attribute, BlockChanges, ChangeType, EntityChanges, FinancialType, ImplementationType,
+        ProtocolComponent, ProtocolType, Transaction, TransactionChanges,
     },
 };
 
@@ -18,27 +18,28 @@ use crate::{
 pub fn map_pools_created(
     params: String,
     block: eth::Block,
-) -> Result<BlockEntityChanges, substreams::errors::Error> {
-    let mut new_pools: Vec<TransactionEntityChanges> = vec![];
+) -> Result<BlockChanges, substreams::errors::Error> {
+    let mut new_pools: Vec<TransactionChanges> = vec![];
     let factory_address = params.as_str();
 
     get_new_pools(&block, &mut new_pools, factory_address);
 
-    Ok(BlockEntityChanges { block: Some(block.into()), changes: new_pools })
+    Ok(BlockChanges { block: Some(block.into()), changes: new_pools })
 }
 
 // Extract new pools from PoolCreated events
 fn get_new_pools(
     block: &eth::Block,
-    new_pools: &mut Vec<TransactionEntityChanges>,
+    new_pools: &mut Vec<TransactionChanges>,
     factory_address: &str,
 ) {
     // Extract new pools from PoolCreated events
     let mut on_pool_created = |event: PoolCreated, _tx: &eth::TransactionTrace, _log: &eth::Log| {
         let tycho_tx: Transaction = _tx.into();
 
-        new_pools.push(TransactionEntityChanges {
-            tx: Option::from(tycho_tx),
+        new_pools.push(TransactionChanges {
+            tx: Some(tycho_tx.clone()),
+            contract_changes: vec![],
             entity_changes: vec![EntityChanges {
                 component_id: event.pool.to_hex(),
                 attributes: vec![
@@ -87,6 +88,7 @@ fn get_new_pools(
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Custom.into(),
                 }),
+                tx: Some(tycho_tx),
             }],
             balance_changes: vec![],
         })

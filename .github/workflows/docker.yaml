@@ -1,13 +1,7 @@
-name: Build Docker Image
+name: Build Docker Image Manual
 
 on:
-  push:
-    branches:
-      - main
-      - patch/*
-      - ah/fix-token-owner-detection
-  workflow_dispatch: { }
-
+  workflow_dispatch: {}
 
 permissions:
   id-token: write

@@ -1,17 +1,21 @@
 use crate::cli::AnalyzeTokenArgs;
-use ethers::prelude::{H160, U256};
 use futures03::{future::try_join_all, FutureExt};
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Instant};
-use token_analyzer::{trace_call::TraceCallDetector, BadTokenDetecting, TokenFinder, TokenQuality};
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
 use tycho_core::{
-    models::{token::CurrencyToken, Chain, PaginationParams},
+    models::{
+        blockchain::BlockTag,
+        token::{CurrencyToken, TokenOwnerStore, TokenQuality},
+        Chain, PaginationParams,
+    },
     storage::ProtocolGateway,
+    traits::TokenAnalyzer,
+    Bytes,
 };
-use web3::types::BlockNumber;
-
-use super::token_pre_processor::map_vault;
+use tycho_ethereum::{
+    token_analyzer::trace_call::TraceCallDetector, token_pre_processor::map_vault,
+};
 
 pub async fn analyze_tokens(
     analyze_args: AnalyzeTokenArgs,
@@ -25,7 +29,8 @@ pub async fn analyze_tokens(
         let pagination_params = PaginationParams::new(page, page_size);
         tokens.clone_from(
             &(gw.get_tokens(analyze_args.chain, None, None, None, Some(&pagination_params))
-                .await?),
+                .await?
+                .entity),
         );
         let sem = Arc::new(Semaphore::new(analyze_args.concurrency));
         let tasks = tokens
@@ -75,8 +80,9 @@ async fn analyze_batch(
         .map(|(cid, _)| cid.as_str())
         .collect::<Vec<_>>();
     let components = gw
-        .get_protocol_components(&chain, None, Some(&component_ids), None)
+        .get_protocol_components(&chain, None, Some(&component_ids), None, None)
         .await?
+        .entity
         .into_iter()
         .map(|pc| (pc.id.clone(), pc))
         .collect::<HashMap<_, _>>();
@@ -91,31 +97,30 @@ async fn analyze_batch(
                         // contract in the protocol component. This approach is a temporary
                         // workaround and needs to be revisited for a more robust solution.
                         .first()
-                        .map(|addr| H160::from_slice(addr))
-                        .or_else(|| H160::from_str(&pc.id).ok())
+                        .cloned()
+                        .or_else(|| Bytes::from_str(&pc.id).ok())
                 });
 
-                liq_owner.map(|liq_owner| {
-                    (H160::from_slice(&address), (liq_owner, U256::from_big_endian(&balance)))
-                })
+                liq_owner.map(|liq_owner| (address, (liq_owner, balance)))
             } else {
                 warn!(component_id=?cid, "Failed to find component for id!");
                 None
             }
         })
         .collect::<HashMap<_, _>>();
-    let tf = Arc::new(TokenFinder::new(liquidity_token_owners));
-    let analyzer = TraceCallDetector::new(eth_rpc_url.as_str(), tf);
+    let analyzer = TraceCallDetector::new(
+        eth_rpc_url.as_str(),
+        Arc::new(TokenOwnerStore::new(liquidity_token_owners)),
+    );
     for t in tokens.iter_mut() {
         // Skip tokens that failed previously and ones we already analyzed successfully.
         if t.quality <= 5 || !t.gas.is_empty() {
             continue;
         }
 
-        let address = H160::from_slice(&t.address);
-        debug!(?address, "Analyzing token");
+        debug!(?t.address, "Analyzing token");
         let (token_quality, gas, tax) = match analyzer
-            .detect(address, BlockNumber::Latest)
+            .analyze(t.address.clone(), BlockTag::Latest)
             .await
         {
             Ok(t) => t,
@@ -126,21 +131,20 @@ async fn analyze_batch(
         };
 
         if let TokenQuality::Bad { reason } = token_quality {
-            debug!(?address, ?reason, "Token quality detected as bad!");
-            // Don't try to analyze again.
-            t.quality = 5;
+            debug!(?t.address, ?reason, "Token quality detected as bad!");
+            // Remove 1 to the quality for each attempt. If it fails 5 times we won't try again.
+            t.quality -= 1;
         };
 
         // If it's a fee token, set quality to 50
-        if tax.map_or(false, |tax_value| tax_value > U256::zero()) {
+        if tax.map_or(false, |tax_value| tax_value > 0) {
             t.quality = 50;
         }
 
-        t.tax = tax
-            .unwrap_or(U256::zero())
-            .try_into()
-            .unwrap_or(10_000);
-        t.gas = gas.map_or_else(Vec::new, |g| vec![Some(g.try_into().unwrap_or(8_000_000))]);
+        t.tax = tax.unwrap_or(0);
+        t.gas = gas
+            .map(|g| vec![Some(g)])
+            .unwrap_or_else(Vec::new);
     }
 
     if !tokens.is_empty() {
@@ -159,6 +163,7 @@ mod test {
     use std::{collections::HashMap, sync::Arc};
     use tycho_core::{
         models::{protocol::ProtocolComponent, token::CurrencyToken, Chain, ChangeType},
+        storage::WithTotal,
         Bytes,
     };
 
@@ -166,28 +171,30 @@ mod test {
     #[ignore]
     #[test_log::test(tokio::test)]
     async fn test_analyze_tokens() {
+        let rpc = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
         let args = AnalyzeTokenArgs {
             chain: Chain::Ethereum,
             concurrency: 10,
             update_batch_size: 100,
             fetch_batch_size: 100,
-            rpc_url:
-                "https://ethereum-mainnet.core.chainstack.com/71bdd37d35f18d55fed5cc5d138a8fac"
-                    .to_string(),
+            rpc_url: rpc,
         };
         let mut gw = testing::MockGateway::new();
         gw.expect_get_tokens()
             .returning(|_, _, _, _, _| {
                 Box::pin(async {
-                    Ok(vec![CurrencyToken::new(
-                        &Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78"),
-                        "PAXG",
-                        18,
-                        0,
-                        &[],
-                        Chain::Ethereum,
-                        10,
-                    )])
+                    Ok(WithTotal {
+                        entity: vec![CurrencyToken::new(
+                            &Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78"),
+                            "PAXG",
+                            18,
+                            0,
+                            &[],
+                            Chain::Ethereum,
+                            10,
+                        )],
+                        total: Some(1),
+                    })
                 })
             });
         let exp = vec![CurrencyToken::new(
@@ -212,20 +219,23 @@ mod test {
                 })
             });
         gw.expect_get_protocol_components()
-            .returning(|_, _, _, _| {
+            .returning(|_, _, _, _, _| {
                 Box::pin(async move {
-                    Ok(vec![ProtocolComponent::new(
-                        "0xe25a329d385f77df5d4ed56265babe2b99a5436e",
-                        "uniswap_v2",
-                        "pool",
-                        Chain::Ethereum,
-                        vec![Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78")],
-                        vec![],
-                        HashMap::new(),
-                        ChangeType::Creation,
-                        Bytes::from("0x00"),
-                        NaiveDateTime::default(),
-                    )])
+                    Ok(WithTotal {
+                        entity: vec![ProtocolComponent::new(
+                            "0xe25a329d385f77df5d4ed56265babe2b99a5436e",
+                            "uniswap_v2",
+                            "pool",
+                            Chain::Ethereum,
+                            vec![Bytes::from("0x45804880de22913dafe09f4980848ece6ecbaf78")],
+                            vec![],
+                            HashMap::new(),
+                            ChangeType::Creation,
+                            Bytes::from("0x00"),
+                            NaiveDateTime::default(),
+                        )],
+                        total: Some(1),
+                    })
                 })
             });
         gw.expect_update_tokens()

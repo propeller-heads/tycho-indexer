@@ -1,5 +1,5 @@
 use clap::{Args, Parser, Subcommand};
-use tycho_core::models::Chain;
+use tycho_core::{models::Chain, Bytes};
 
 /// Tycho Indexer using Substreams
 ///
@@ -128,6 +128,14 @@ pub struct RunSpkgArgs {
     /// Defaults to STOP_BLOCK env var or None.
     #[clap(long)]
     stop_block: Option<String>,
+
+    /// Account addresses to be initialized before indexing
+    #[clap(long, value_delimiter = ',')]
+    pub initialized_accounts: Vec<Bytes>,
+
+    /// Block number to initialize the accounts at
+    #[clap(long, default_value = "0")]
+    pub initialization_block: i64,
 }
 
 impl RunSpkgArgs {
@@ -216,6 +224,8 @@ mod cli_tests {
                     rpc_url: "http://example.com".to_string(),
                     substreams_api_token: "your_api_token".to_string(),
                 },
+                initialized_accounts: vec![],
+                initialization_block: 0,
             }),
         };
 

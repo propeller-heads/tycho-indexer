@@ -13,18 +13,17 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::services::deltas_buffer::PendingDeltas;
 use tycho_core::{
     dto::{
-        AccountUpdate, BlockParam, ChangeType, ContractDeltaRequestBody,
-        ContractDeltaRequestResponse, Health, PaginationParams, ProtocolComponent,
-        ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolDeltaRequestBody,
-        ProtocolDeltaRequestResponse, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
+        AccountUpdate, BlockParam, Chain, ChangeType, ContractId, Health, PaginationParams,
+        PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
+        ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
         ProtocolStateRequestResponse, ResponseAccount, ResponseProtocolState, ResponseToken,
         StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
         VersionParam,
     },
-    models::{Chain, ContractId, ImplementationType},
     storage::Gateway,
 };
 
+mod cache;
 mod deltas_buffer;
 mod rpc;
 mod ws;
@@ -34,8 +33,7 @@ pub struct ServicesBuilder<G> {
     port: u16,
     bind: String,
     extractor_handles: ws::MessageSenderMap,
-    native_extractors: Vec<String>,
-    vm_extractors: Vec<String>,
+    extractors: Vec<String>,
     db_gateway: G,
 }
 
@@ -49,24 +47,15 @@ where
             port: 4242,
             bind: "0.0.0.0".to_owned(),
             extractor_handles: HashMap::new(),
-            native_extractors: Vec::new(),
-            vm_extractors: Vec::new(),
+            extractors: Vec::new(),
             db_gateway,
         }
     }
 
-    pub fn register_extractors(
-        mut self,
-        handle: Vec<(ExtractorHandle, ImplementationType)>,
-    ) -> Self {
-        for (e, impl_type) in handle {
+    pub fn register_extractors(mut self, handle: Vec<ExtractorHandle>) -> Self {
+        for e in handle {
             let id = e.get_id();
-            match impl_type {
-                ImplementationType::Vm => self.vm_extractors.push(id.name.clone()),
-                ImplementationType::Custom => self
-                    .native_extractors
-                    .push(id.name.clone()),
-            }
+            self.extractors.push(id.name.clone());
             self.extractor_handles
                 .insert(id, Arc::new(e));
         }
@@ -97,9 +86,7 @@ where
                 rpc::contract_state,
                 rpc::tokens,
                 rpc::protocol_components,
-                rpc::contract_delta,
                 rpc::protocol_state,
-                rpc::protocol_delta,
                 rpc::health,
             ),
             components(
@@ -113,20 +100,17 @@ where
                 schemas(TokensRequestBody),
                 schemas(TokensRequestResponse),
                 schemas(PaginationParams),
+                schemas(PaginationResponse),
                 schemas(ResponseToken),
                 schemas(ProtocolComponentsRequestBody),
                 schemas(ProtocolComponentRequestResponse),
                 schemas(ProtocolComponent),
-                schemas(ContractDeltaRequestBody),
-                schemas(ContractDeltaRequestResponse),
                 schemas(ProtocolStateRequestBody),
                 schemas(ProtocolStateRequestResponse),
                 schemas(AccountUpdate),
                 schemas(ProtocolId),
                 schemas(ResponseProtocolState),
                 schemas(ChangeType),
-                schemas(ProtocolDeltaRequestBody),
-                schemas(ProtocolDeltaRequestResponse),
                 schemas(ProtocolStateDelta),
                 schemas(Health),
             )
@@ -135,10 +119,7 @@ where
 
         let openapi = ApiDoc::openapi();
         let pending_deltas = PendingDeltas::new(
-            self.vm_extractors
-                .iter()
-                .map(String::as_str),
-            self.native_extractors
+            self.extractors
                 .iter()
                 .map(String::as_str),
         );
@@ -153,36 +134,26 @@ where
             }
         });
         let ws_data = web::Data::new(ws::WsData::new(self.extractor_handles));
-        let rpc_data = web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas));
+        let rpc_data =
+            web::Data::new(rpc::RpcHandler::new(self.db_gateway, Arc::new(pending_deltas)));
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(rpc_data.clone())
                 .service(
-                    web::resource(format!("/{}/{{execution_env}}/contract_state", self.prefix))
+                    web::resource(format!("/{}/contract_state", self.prefix))
                         .route(web::post().to(rpc::contract_state::<G>)),
                 )
                 .service(
-                    web::resource(format!("/{}/{{execution_env}}/contract_delta", self.prefix))
-                        .route(web::post().to(rpc::contract_delta::<G>)),
-                )
-                .service(
-                    web::resource(format!("/{}/{{execution_env}}/protocol_state", self.prefix))
+                    web::resource(format!("/{}/protocol_state", self.prefix))
                         .route(web::post().to(rpc::protocol_state::<G>)),
                 )
                 .service(
-                    web::resource(format!("/{}/{{execution_env}}/protocol_delta", self.prefix))
-                        .route(web::post().to(rpc::protocol_delta::<G>)),
-                )
-                .service(
-                    web::resource(format!("/{}/{{execution_env}}/tokens", self.prefix))
+                    web::resource(format!("/{}/tokens", self.prefix))
                         .route(web::post().to(rpc::tokens::<G>)),
                 )
                 .service(
-                    web::resource(format!(
-                        "/{}/{{execution_env}}/protocol_components",
-                        self.prefix
-                    ))
-                    .route(web::post().to(rpc::protocol_components::<G>)),
+                    web::resource(format!("/{}/protocol_components", self.prefix))
+                        .route(web::post().to(rpc::protocol_components::<G>)),
                 )
                 .service(
                     web::resource(format!("/{}/health", self.prefix))

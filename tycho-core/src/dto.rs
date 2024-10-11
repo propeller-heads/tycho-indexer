@@ -4,32 +4,41 @@
 //! be very simple and ideally not contain any business logic.
 //!
 //! Structs in here implement utoipa traits so they can be used to derive an OpenAPI schema.
+#![allow(deprecated)]
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt,
+    hash::{Hash, Hasher},
 };
 
 use chrono::{NaiveDateTime, Utc};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
     models,
-    models::{
-        contract::{Contract, ContractDelta},
-        token::CurrencyToken,
-    },
+    models::{contract::Account, token::CurrencyToken},
     serde_primitives::{
-        hex_bytes, hex_bytes_option, hex_bytes_vec, hex_hashmap_key, hex_hashmap_key_value,
-        hex_hashmap_value,
+        hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
     Bytes,
 };
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
+    Default,
+    ToSchema,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -41,15 +50,14 @@ pub enum Chain {
     Arbitrum,
 }
 
-impl From<models::contract::Contract> for ResponseAccount {
-    fn from(value: Contract) -> Self {
+impl From<models::contract::Account> for ResponseAccount {
+    fn from(value: Account) -> Self {
         ResponseAccount::new(
             value.chain.into(),
             value.address,
             value.title,
             value.slots,
             value.native_balance,
-            value.balances,
             value.code,
             value.code_hash,
             value.balance_modify_tx,
@@ -111,8 +119,8 @@ impl ExtractorIdentity {
     }
 }
 
-impl std::fmt::Display for ExtractorIdentity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ExtractorIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.chain, self.name)
     }
 }
@@ -133,106 +141,11 @@ pub enum Response {
     SubscriptionEnded { subscription_id: Uuid },
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
-#[serde(untagged)]
-pub enum Deltas {
-    VM(BlockAccountChanges),
-    Native(BlockEntityChangesResult),
-}
-
-impl Deltas {
-    pub fn get_block(&self) -> &Block {
-        match self {
-            Deltas::VM(data) => &data.block,
-            Deltas::Native(data) => &data.block,
-        }
-    }
-
-    pub fn is_revert(&self) -> bool {
-        match self {
-            Deltas::VM(data) => data.revert,
-            Deltas::Native(data) => data.revert,
-        }
-    }
-
-    pub fn component_tvl(&self) -> &HashMap<String, f64> {
-        match self {
-            Deltas::VM(data) => &data.component_tvl,
-            Deltas::Native(data) => &data.component_tvl,
-        }
-    }
-
-    pub fn filter_by_component<F: Fn(&str) -> bool>(&mut self, keep: F) {
-        match self {
-            Deltas::Native(data) => {
-                data.state_updates
-                    .retain(|k, _| keep(k));
-                data.component_balances
-                    .retain(|k, _| keep(k));
-                data.component_tvl
-                    .retain(|k, _| keep(k));
-            }
-            Deltas::VM(data) => {
-                data.component_balances
-                    .retain(|k, _| keep(k));
-                data.component_tvl
-                    .retain(|k, _| keep(k));
-            }
-        }
-    }
-
-    pub fn filter_by_contract<F: Fn(&Bytes) -> bool>(&mut self, keep: F) {
-        match self {
-            Deltas::VM(data) => {
-                data.account_updates
-                    .retain(|k, _| keep(k));
-            }
-            Deltas::Native(_) => panic!("Can't filter native deltas by contract!"),
-        }
-    }
-
-    pub fn merge(self, other: Self) -> Self {
-        match (self, other) {
-            (Deltas::VM(left), Deltas::VM(right)) => Deltas::VM(left.merge(right)),
-            (Deltas::Native(left), Deltas::Native(right)) => Deltas::Native(left.merge(right)),
-            _ => panic!("Not allowed to merge deltas of different types"),
-        }
-    }
-
-    pub fn n_changes(&self) -> usize {
-        match self {
-            Deltas::VM(deltas) => deltas.account_updates.len(),
-            Deltas::Native(deltas) => deltas.state_updates.len(),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for Deltas {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let json: serde_json::Value = serde_json::Value::deserialize(deserializer)?;
-        if json.get("account_updates").is_some() {
-            return BlockAccountChanges::deserialize(json)
-                .map(Deltas::VM)
-                .map_err(serde::de::Error::custom);
-        }
-        if json.get("state_updates").is_some() {
-            return BlockEntityChangesResult::deserialize(json)
-                .map(Deltas::Native)
-                .map_err(serde::de::Error::custom);
-        }
-
-        Err(serde::de::Error::custom("data did not match any variant of untagged enum Deltas"))
-    }
-}
-
 /// A message sent from the server to the client
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum WebSocketMessage {
-    BlockChanges { subscription_id: Uuid, deltas: Deltas },
+    BlockChanges { subscription_id: Uuid, deltas: BlockChanges },
     Response(Response),
 }
 
@@ -247,7 +160,8 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct BlockParam {
     #[schema(value_type=Option<String>)]
     #[serde(with = "hex_bytes_option", default)]
@@ -262,6 +176,15 @@ impl From<&Block> for BlockParam {
     fn from(value: &Block) -> Self {
         // The hash should uniquely identify a block across chains
         BlockParam { hash: Some(value.hash.clone()), chain: None, number: None }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct TokenBalances(#[serde(with = "hex_hashmap_key")] pub HashMap<Bytes, ComponentBalance>);
+
+impl From<HashMap<Bytes, ComponentBalance>> for TokenBalances {
+    fn from(value: HashMap<Bytes, ComponentBalance>) -> Self {
+        TokenBalances(value)
     }
 }
 
@@ -285,56 +208,49 @@ impl Transaction {
     }
 }
 
-/// A container for account updates grouped by account.
-///
-/// Hold a single update per account. This is a condensed form of
-/// [BlockStateChanges].
-///
-/// TODO - update once new structure is merged
+/// A container for updates grouped by account/component.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct BlockAccountChanges {
-    extractor: String,
-    chain: Chain,
+pub struct BlockChanges {
+    pub extractor: String,
+    pub chain: Chain,
     pub block: Block,
+    pub finalized_block_height: u64,
     pub revert: bool,
     #[serde(with = "hex_hashmap_key", default)]
     pub new_tokens: HashMap<Bytes, ResponseToken>,
-    #[serde(with = "hex_hashmap_key")]
+    #[serde(alias = "account_deltas", with = "hex_hashmap_key")]
     pub account_updates: HashMap<Bytes, AccountUpdate>,
+    #[serde(alias = "state_deltas")]
+    pub state_updates: HashMap<String, ProtocolStateDelta>,
     pub new_protocol_components: HashMap<String, ProtocolComponent>,
     pub deleted_protocol_components: HashMap<String, ProtocolComponent>,
     pub component_balances: HashMap<String, TokenBalances>,
     pub component_tvl: HashMap<String, f64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct TokenBalances(#[serde(with = "hex_hashmap_key")] pub HashMap<Bytes, ComponentBalance>);
-
-impl From<HashMap<Bytes, ComponentBalance>> for TokenBalances {
-    fn from(value: HashMap<Bytes, ComponentBalance>) -> Self {
-        TokenBalances(value)
-    }
-}
-
-impl BlockAccountChanges {
+impl BlockChanges {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor: &str,
         chain: Chain,
         block: Block,
+        finalized_block_height: u64,
         revert: bool,
         account_updates: HashMap<Bytes, AccountUpdate>,
+        state_updates: HashMap<String, ProtocolStateDelta>,
         new_protocol_components: HashMap<String, ProtocolComponent>,
         deleted_protocol_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>>,
     ) -> Self {
-        BlockAccountChanges {
+        BlockChanges {
             extractor: extractor.to_owned(),
             chain,
             block,
+            finalized_block_height,
             revert,
             new_tokens: HashMap::new(),
             account_updates,
+            state_updates,
             new_protocol_components,
             deleted_protocol_components,
             component_balances: component_balances
@@ -359,6 +275,18 @@ impl BlockAccountChanges {
             });
 
         other
+            .state_updates
+            .into_iter()
+            .for_each(|(k, v)| {
+                self.state_updates
+                    .entry(k)
+                    .and_modify(|e| {
+                        e.merge(&v);
+                    })
+                    .or_insert(v);
+            });
+
+        other
             .component_balances
             .into_iter()
             .for_each(|(k, v)| {
@@ -368,6 +296,8 @@ impl BlockAccountChanges {
                     .or_insert_with(|| v);
             });
 
+        self.component_tvl
+            .extend(other.component_tvl);
         self.new_protocol_components
             .extend(other.new_protocol_components);
         self.deleted_protocol_components
@@ -376,6 +306,32 @@ impl BlockAccountChanges {
         self.block = other.block;
 
         self
+    }
+
+    pub fn get_block(&self) -> &Block {
+        &self.block
+    }
+
+    pub fn is_revert(&self) -> bool {
+        self.revert
+    }
+
+    pub fn filter_by_component<F: Fn(&str) -> bool>(&mut self, keep: F) {
+        self.state_updates
+            .retain(|k, _| keep(k));
+        self.component_balances
+            .retain(|k, _| keep(k));
+        self.component_tvl
+            .retain(|k, _| keep(k));
+    }
+
+    pub fn filter_by_contract<F: Fn(&Bytes) -> bool>(&mut self, keep: F) {
+        self.account_updates
+            .retain(|k, _| keep(k));
+    }
+
+    pub fn n_changes(&self) -> usize {
+        self.account_updates.len() + self.state_updates.len()
     }
 }
 
@@ -423,8 +379,8 @@ impl AccountUpdate {
     }
 }
 
-impl From<models::contract::ContractDelta> for AccountUpdate {
-    fn from(value: ContractDelta) -> Self {
+impl From<models::contract::AccountDelta> for AccountUpdate {
+    fn from(value: models::contract::AccountDelta) -> Self {
         AccountUpdate::new(
             value.address,
             value.chain.into(),
@@ -447,10 +403,9 @@ pub struct ProtocolComponent {
     pub protocol_system: String,
     pub protocol_type_name: String,
     pub chain: Chain,
-    #[serde(with = "hex_bytes_vec")]
     #[schema(value_type=Vec<String>)]
     pub tokens: Vec<Bytes>,
-    #[serde(with = "hex_bytes_vec")]
+    #[serde(alias = "contract_addresses")]
     #[schema(value_type=Vec<String>)]
     pub contract_ids: Vec<Bytes>,
     #[serde(with = "hex_hashmap_value")]
@@ -489,64 +444,6 @@ pub struct ComponentBalance {
     #[serde(with = "hex_bytes")]
     pub modify_tx: Bytes,
     pub component_id: String,
-}
-
-/// A container for state updates grouped by protocol component.
-///
-/// Hold a single update per component. This is a condensed form of
-/// [BlockEntityChanges].
-///
-/// TODO - update once new structure is merged
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct BlockEntityChangesResult {
-    pub extractor: String,
-    pub chain: Chain,
-    pub block: Block,
-    pub revert: bool,
-    #[serde(with = "hex_hashmap_key", default)]
-    pub new_tokens: HashMap<Bytes, ResponseToken>,
-    pub state_updates: HashMap<String, ProtocolStateDelta>,
-    pub new_protocol_components: HashMap<String, ProtocolComponent>,
-    pub deleted_protocol_components: HashMap<String, ProtocolComponent>,
-    pub component_balances: HashMap<String, TokenBalances>,
-    pub component_tvl: HashMap<String, f64>,
-}
-
-impl BlockEntityChangesResult {
-    pub fn merge(mut self, other: Self) -> Self {
-        other
-            .state_updates
-            .into_iter()
-            .for_each(|(k, v)| {
-                self.state_updates
-                    .entry(k)
-                    .and_modify(|e| {
-                        e.merge(&v);
-                    })
-                    .or_insert(v);
-            });
-
-        other
-            .component_balances
-            .into_iter()
-            .for_each(|(k, v)| {
-                self.component_balances
-                    .entry(k)
-                    .and_modify(|e| e.0.extend(v.0.clone()))
-                    .or_insert_with(|| v);
-            });
-
-        self.component_tvl
-            .extend(other.component_tvl);
-        self.new_protocol_components
-            .extend(other.new_protocol_components);
-        self.deleted_protocol_components
-            .extend(other.deleted_protocol_components);
-        self.revert = other.revert;
-        self.block = other.block;
-
-        self
-    }
 }
 
 #[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize, ToSchema)]
@@ -613,34 +510,50 @@ impl ProtocolStateDelta {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema)]
+#[derive(Clone, Serialize, Debug, Default, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct StateRequestBody {
-    #[serde(rename = "contractIds")]
-    pub contract_ids: Option<Vec<ContractId>>,
+    #[serde(alias = "contractIds")]
+    #[schema(value_type=Option<Vec<String>>)]
+    pub contract_ids: Option<Vec<Bytes>>,
+    #[serde(alias = "protocolSystem", default)]
+    pub protocol_system: String,
     #[serde(default = "VersionParam::default")]
     pub version: VersionParam,
+    #[serde(default)]
+    pub chain: Chain,
+    #[serde(default)]
+    pub pagination: PaginationParams,
 }
 
 impl StateRequestBody {
-    pub fn new(contract_ids: Option<Vec<Bytes>>, version: VersionParam) -> Self {
+    pub fn new(
+        contract_ids: Option<Vec<Bytes>>,
+        protocol_system: String,
+        version: VersionParam,
+        chain: Chain,
+        pagination: PaginationParams,
+    ) -> Self {
+        Self { contract_ids, protocol_system, version, chain, pagination }
+    }
+
+    pub fn from_block(protocol_system: &str, block: BlockParam) -> Self {
         Self {
-            contract_ids: contract_ids.map(|ids| {
-                ids.into_iter()
-                    .map(|id| ContractId::new(Chain::Ethereum, id)) //TODO: remove chain assumption
-                    .collect()
-            }),
-            version,
+            contract_ids: None,
+            protocol_system: protocol_system.to_string(),
+            version: VersionParam { timestamp: None, block: Some(block.clone()) },
+            chain: block.chain.unwrap_or_default(),
+            pagination: PaginationParams::default(),
         }
     }
 
-    pub fn from_block(block: BlockParam) -> Self {
-        Self { contract_ids: None, version: VersionParam { timestamp: None, block: Some(block) } }
-    }
-
-    pub fn from_timestamp(timestamp: NaiveDateTime) -> Self {
+    pub fn from_timestamp(protocol_system: &str, timestamp: NaiveDateTime, chain: Chain) -> Self {
         Self {
             contract_ids: None,
+            protocol_system: protocol_system.to_string(),
             version: VersionParam { timestamp: Some(timestamp), block: None },
+            chain,
+            pagination: PaginationParams::default(),
         }
     }
 }
@@ -649,11 +562,12 @@ impl StateRequestBody {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct StateRequestResponse {
     pub accounts: Vec<ResponseAccount>,
+    pub pagination: PaginationResponse,
 }
 
 impl StateRequestResponse {
-    pub fn new(accounts: Vec<ResponseAccount>) -> Self {
-        Self { accounts }
+    pub fn new(accounts: Vec<ResponseAccount>, pagination: PaginationResponse) -> Self {
+        Self { accounts, pagination }
     }
 }
 
@@ -675,9 +589,6 @@ pub struct ResponseAccount {
     #[schema(value_type=HashMap<String, String>, example="0x00")]
     #[serde(with = "hex_bytes")]
     pub native_balance: Bytes,
-    #[schema(value_type=HashMap<String, String>)]
-    #[serde(with = "hex_hashmap_key_value")]
-    pub balances: HashMap<Bytes, Bytes>,
     #[schema(value_type=HashMap<String, String>, example="0xBADBABE")]
     #[serde(with = "hex_bytes")]
     pub code: Bytes,
@@ -703,7 +614,6 @@ impl ResponseAccount {
         title: String,
         slots: HashMap<Bytes, Bytes>,
         native_balance: Bytes,
-        balances: HashMap<Bytes, Bytes>,
         code: Bytes,
         code_hash: Bytes,
         balance_modify_tx: Bytes,
@@ -716,7 +626,6 @@ impl ResponseAccount {
             title,
             slots,
             native_balance,
-            balances,
             code,
             code_hash,
             balance_modify_tx,
@@ -727,15 +636,14 @@ impl ResponseAccount {
 }
 
 /// Implement Debug for ResponseAccount manually to avoid printing the code field.
-impl std::fmt::Debug for ResponseAccount {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for ResponseAccount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ResponseAccount")
             .field("chain", &self.chain)
             .field("address", &self.address)
             .field("title", &self.title)
             .field("slots", &self.slots)
             .field("native_balance", &self.native_balance)
-            .field("balances", &self.balances)
             .field("code", &format!("[{} bytes]", self.code.len()))
             .field("code_hash", &self.code_hash)
             .field("balance_modify_tx", &self.balance_modify_tx)
@@ -745,9 +653,11 @@ impl std::fmt::Debug for ResponseAccount {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ContractId {
     #[serde(with = "hex_bytes")]
+    #[schema(value_type=String)]
     pub address: Bytes,
     pub chain: Chain,
 }
@@ -763,13 +673,20 @@ impl ContractId {
     }
 }
 
-impl Display for ContractId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ContractId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}: 0x{}", self.chain, hex::encode(&self.address))
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema)]
+/// The version of the requested state, given as either a timestamp or a block.
+///
+/// If block is provided, the state at that exact block is returned. Will error if the block
+/// has not been processed yet. If timestamp is provided, the state at the latest block before
+/// that timestamp is returned.
+/// Defaults to the current time.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct VersionParam {
     pub timestamp: Option<NaiveDateTime>,
     pub block: Option<BlockParam>,
@@ -787,23 +704,30 @@ impl Default for VersionParam {
     }
 }
 
-fn default_include_balances_flag() -> bool {
-    true
-}
-
+#[deprecated(note = "Use StateRequestBody instead")]
 #[derive(Serialize, Deserialize, Default, Debug, IntoParams)]
 pub struct StateRequestParameters {
+    /// The minimum TVL of the protocol components to return, denoted in the chain's native token.
     #[param(default = 0)]
     pub tvl_gt: Option<u64>,
+    /// The minimum inertia of the protocol components to return.
     #[param(default = 0)]
     pub inertia_min_gt: Option<u64>,
+    /// Whether to include ERC20 balances in the response.
     #[serde(default = "default_include_balances_flag")]
     pub include_balances: bool,
+    #[serde(default)]
+    pub pagination: PaginationParams,
 }
 
 impl StateRequestParameters {
     pub fn new(include_balances: bool) -> Self {
-        Self { tvl_gt: None, inertia_min_gt: None, include_balances }
+        Self {
+            tvl_gt: None,
+            inertia_min_gt: None,
+            include_balances,
+            pagination: PaginationParams::default(),
+        }
     }
 
     pub fn to_query_string(&self) -> String {
@@ -825,33 +749,44 @@ impl StateRequestParameters {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct TokensRequestBody {
-    #[serde(rename = "tokenAddresses")]
+    #[serde(alias = "tokenAddresses")]
     #[schema(value_type=Option<Vec<String>>)]
     pub token_addresses: Option<Vec<Bytes>>,
+    /// Quality is between 0-100, where:
+    ///  - 100: Normal token
+    ///  - 75: Rebase token
+    ///  - 50: Fee token
+    ///  - 10: Token analysis failed at creation
+    ///  - 5: Token analysis failed on cronjob (after creation).
+    ///  - 0: Failed to extract decimals onchain
     #[serde(default)]
     pub min_quality: Option<i32>,
     #[serde(default)]
     pub traded_n_days_ago: Option<u64>,
     #[serde(default)]
     pub pagination: PaginationParams,
+    #[serde(default)]
+    pub chain: Chain,
 }
 
 /// Response from Tycho server for a tokens request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 pub struct TokensRequestResponse {
     pub tokens: Vec<ResponseToken>,
-    pub pagination: PaginationParams,
+    pub pagination: PaginationResponse,
 }
 
 impl TokensRequestResponse {
-    pub fn new(tokens: Vec<ResponseToken>, pagination_request: &PaginationParams) -> Self {
+    pub fn new(tokens: Vec<ResponseToken>, pagination_request: &PaginationResponse) -> Self {
         Self { tokens, pagination: pagination_request.clone() }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct PaginationParams {
     #[serde(default)]
     pub page: i64,
@@ -867,14 +802,31 @@ impl PaginationParams {
 
 impl Default for PaginationParams {
     fn default() -> Self {
-        PaginationParams {
-            page: 0,       // Default page number
-            page_size: 20, // Default page size
-        }
+        PaginationParams { page: 0, page_size: 20 }
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Default, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[serde(deny_unknown_fields)]
+pub struct PaginationResponse {
+    pub page: i64,
+    pub page_size: i64,
+    /// The total number of items available across all pages of results
+    pub total: i64,
+}
+
+impl PaginationResponse {
+    pub fn new(page: i64, page_size: i64, total: i64) -> Self {
+        Self { page, page_size, total }
+    }
+
+    pub fn total_pages(&self) -> i64 {
+        // ceil(total / page_size)
+        (self.total + self.page_size - 1) / self.page_size
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Default, ToSchema, Eq, Hash)]
 #[serde(rename = "Token")]
 /// Token struct for the response from Tycho server for a tokens request.
 pub struct ResponseToken {
@@ -904,31 +856,98 @@ impl From<models::token::CurrencyToken> for ResponseToken {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Default, ToSchema, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ProtocolComponentsRequestBody {
-    pub protocol_system: Option<String>,
-    #[serde(rename = "componentAddresses")]
+    pub protocol_system: String,
+    #[serde(alias = "componentAddresses")]
     pub component_ids: Option<Vec<String>>,
+    /// The minimum TVL of the protocol components to return, denoted in the chain's native token.
+    #[serde(default)]
+    pub tvl_gt: Option<f64>,
+    #[serde(default)]
+    pub chain: Chain,
+    #[serde(default)]
+    pub pagination: PaginationParams,
+}
+
+// Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
+impl PartialEq for ProtocolComponentsRequestBody {
+    fn eq(&self, other: &Self) -> bool {
+        let tvl_close_enough = match (self.tvl_gt, other.tvl_gt) {
+            (Some(a), Some(b)) => (a - b).abs() < 1e-6,
+            (None, None) => true,
+            _ => false,
+        };
+
+        self.protocol_system == other.protocol_system &&
+            self.component_ids == other.component_ids &&
+            tvl_close_enough &&
+            self.chain == other.chain &&
+            self.pagination == other.pagination
+    }
+}
+
+// Implement Eq without any new logic
+impl Eq for ProtocolComponentsRequestBody {}
+
+impl Hash for ProtocolComponentsRequestBody {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.protocol_system.hash(state);
+        self.component_ids.hash(state);
+
+        // Handle the f64 `tvl_gt` field by converting it into a hashable integer
+        if let Some(tvl) = self.tvl_gt {
+            // Convert f64 to bits and hash those bits
+            tvl.to_bits().hash(state);
+        } else {
+            // Use a constant value to represent None
+            state.write_u8(0);
+        }
+
+        self.chain.hash(state);
+        self.pagination.hash(state);
+    }
 }
 
 impl ProtocolComponentsRequestBody {
-    pub fn system_filtered(system: &str) -> Self {
-        Self { protocol_system: Some(system.to_string()), component_ids: None }
+    pub fn system_filtered(system: &str, tvl_gt: Option<f64>, chain: Chain) -> Self {
+        Self {
+            protocol_system: system.to_string(),
+            component_ids: None,
+            tvl_gt,
+            chain,
+            pagination: Default::default(),
+        }
     }
 
-    pub fn id_filtered(ids: Vec<String>) -> Self {
-        Self { protocol_system: None, component_ids: Some(ids) }
+    pub fn id_filtered(system: &str, ids: Vec<String>, chain: Chain) -> Self {
+        Self {
+            protocol_system: system.to_string(),
+            component_ids: Some(ids),
+            tvl_gt: None,
+            chain,
+            pagination: Default::default(),
+        }
     }
 }
 
 impl ProtocolComponentsRequestBody {
-    pub fn new(protocol_system: Option<String>, component_ids: Option<Vec<String>>) -> Self {
-        Self { protocol_system, component_ids }
+    pub fn new(
+        protocol_system: String,
+        component_ids: Option<Vec<String>>,
+        tvl_gt: Option<f64>,
+        chain: Chain,
+        pagination: PaginationParams,
+    ) -> Self {
+        Self { protocol_system, component_ids, tvl_gt, chain, pagination }
     }
 }
 
+#[deprecated(note = "Use ProtocolComponentsRequestBody instead")]
 #[derive(Serialize, Deserialize, Default, Debug, IntoParams)]
 pub struct ProtocolComponentRequestParameters {
+    /// The minimum TVL of the protocol components to return, denoted in the chain's native token.
     #[param(default = 0)]
     pub tvl_gt: Option<f64>,
 }
@@ -952,36 +971,20 @@ impl ProtocolComponentRequestParameters {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ProtocolComponentRequestResponse {
     pub protocol_components: Vec<ProtocolComponent>,
+    pub pagination: PaginationResponse,
 }
 
 impl ProtocolComponentRequestResponse {
-    pub fn new(protocol_components: Vec<ProtocolComponent>) -> Self {
-        Self { protocol_components }
+    pub fn new(
+        protocol_components: Vec<ProtocolComponent>,
+        pagination: PaginationResponse,
+    ) -> Self {
+        Self { protocol_components, pagination }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-pub struct ContractDeltaRequestBody {
-    #[serde(rename = "contractIds")]
-    pub contract_ids: Option<Vec<ContractId>>,
-    #[serde(default = "VersionParam::default")]
-    pub start: VersionParam,
-    #[serde(default = "VersionParam::default")]
-    pub end: VersionParam,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-pub struct ContractDeltaRequestResponse {
-    pub accounts: Vec<AccountUpdate>,
-}
-
-impl ContractDeltaRequestResponse {
-    pub fn new(accounts: Vec<AccountUpdate>) -> Self {
-        Self { accounts }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct ProtocolId {
     pub id: String,
     pub chain: Chain,
@@ -1010,14 +1013,26 @@ impl From<models::protocol::ProtocolComponentState> for ResponseProtocolState {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema, Default)]
+fn default_include_balances_flag() -> bool {
+    true
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Default, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct ProtocolStateRequestBody {
-    #[serde(rename = "protocolIds")]
+    #[serde(alias = "protocolIds")]
     pub protocol_ids: Option<Vec<ProtocolId>>,
-    #[serde(rename = "protocolSystem")]
-    pub protocol_system: Option<String>,
+    #[serde(alias = "protocolSystem")]
+    pub protocol_system: String,
+    #[serde(default)]
+    pub chain: Chain,
+    /// Whether to include account balances in the response. Defaults to true.
+    #[serde(default = "default_include_balances_flag")]
+    pub include_balances: bool,
     #[serde(default = "VersionParam::default")]
     pub version: VersionParam,
+    #[serde(default)]
+    pub pagination: PaginationParams,
 }
 
 impl ProtocolStateRequestBody {
@@ -1026,35 +1041,15 @@ impl ProtocolStateRequestBody {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ProtocolStateRequestResponse {
     pub states: Vec<ResponseProtocolState>,
+    pub pagination: PaginationResponse,
 }
 
 impl ProtocolStateRequestResponse {
-    pub fn new(states: Vec<ResponseProtocolState>) -> Self {
-        Self { states }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-pub struct ProtocolDeltaRequestBody {
-    #[serde(rename = "contractIds")]
-    pub component_ids: Option<Vec<String>>,
-    #[serde(default = "VersionParam::default")]
-    pub start: VersionParam,
-    #[serde(default = "VersionParam::default")]
-    pub end: VersionParam,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-pub struct ProtocolDeltaRequestResponse {
-    pub protocols: Vec<ProtocolStateDelta>,
-}
-
-impl ProtocolDeltaRequestResponse {
-    pub fn new(protocols: Vec<ProtocolStateDelta>) -> Self {
-        Self { protocols }
+    pub fn new(states: Vec<ResponseProtocolState>, pagination: PaginationResponse) -> Self {
+        Self { states, pagination }
     }
 }
 
@@ -1067,7 +1062,7 @@ pub struct ProtocolComponentId {
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(tag = "status", content = "message")]
-#[schema(example=json!({"status": "NotReady", "message": "No db connection"}))]
+#[schema(example = json!({"status": "NotReady", "message": "No db connection"}))]
 pub enum Health {
     Ready,
     Starting(String),
@@ -1076,31 +1071,74 @@ pub enum Health {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use maplit::hashmap;
 
     use super::*;
 
     #[test]
+    fn test_protocol_components_equality() {
+        let body1 = ProtocolComponentsRequestBody {
+            protocol_system: "protocol1".to_string(),
+            component_ids: Some(vec!["component1".to_string(), "component2".to_string()]),
+            tvl_gt: Some(1000.0),
+            chain: Chain::Ethereum,
+            pagination: PaginationParams::default(),
+        };
+
+        let body2 = ProtocolComponentsRequestBody {
+            protocol_system: "protocol1".to_string(),
+            component_ids: Some(vec!["component1".to_string(), "component2".to_string()]),
+            tvl_gt: Some(1000.0 + 1e-7), // Within the tolerance ±1e-6
+            chain: Chain::Ethereum,
+            pagination: PaginationParams::default(),
+        };
+
+        // These should be considered equal due to the tolerance in tvl_gt
+        assert_eq!(body1, body2);
+    }
+
+    #[test]
+    fn test_protocol_components_inequality() {
+        let body1 = ProtocolComponentsRequestBody {
+            protocol_system: "protocol1".to_string(),
+            component_ids: Some(vec!["component1".to_string(), "component2".to_string()]),
+            tvl_gt: Some(1000.0),
+            chain: Chain::Ethereum,
+            pagination: PaginationParams::default(),
+        };
+
+        let body2 = ProtocolComponentsRequestBody {
+            protocol_system: "protocol1".to_string(),
+            component_ids: Some(vec!["component1".to_string(), "component2".to_string()]),
+            tvl_gt: Some(1000.0 + 1e-5), // Outside the tolerance ±1e-6
+            chain: Chain::Ethereum,
+            pagination: PaginationParams::default(),
+        };
+
+        // These should not be equal due to the difference in tvl_gt
+        assert_ne!(body1, body2);
+    }
+
+    #[test]
     fn test_parse_state_request() {
         let json_str = r#"
-        {
-            "contractIds": [
-                {
-                    "address": "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092",
-                    "chain": "ethereum"
-                }
-            ],
-            "version": {
-                "timestamp": "2069-01-01T04:20:00",
-                "block": {
-                    "hash": "0x24101f9cb26cd09425b52da10e8c2f56ede94089a8bbe0f31f1cda5f4daa52c4",
-                    "parentHash": "0x8d75152454e60413efe758cc424bfd339897062d7e658f302765eb7b50971815",
-                    "number": 213,
-                    "chain": "ethereum"
-                }
+    {
+        "contractIds": [
+            "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092"
+        ],
+        "protocol_system": "uniswap_v2",
+        "version": {
+            "timestamp": "2069-01-01T04:20:00",
+            "block": {
+                "hash": "0x24101f9cb26cd09425b52da10e8c2f56ede94089a8bbe0f31f1cda5f4daa52c4",
+                "number": 213,
+                "chain": "ethereum"
             }
         }
-        "#;
+    }
+    "#;
 
         let result: StateRequestBody = serde_json::from_str(json_str).unwrap();
 
@@ -1116,7 +1154,8 @@ mod test {
             NaiveDateTime::parse_from_str("2069-01-01T04:20:00", "%Y-%m-%dT%H:%M:%S").unwrap();
 
         let expected = StateRequestBody {
-            contract_ids: Some(vec![ContractId::new(Chain::Ethereum, contract0)]),
+            contract_ids: Some(vec![contract0]),
+            protocol_system: "uniswap_v2".to_string(),
             version: VersionParam {
                 timestamp: Some(expected_timestamp),
                 block: Some(BlockParam {
@@ -1125,20 +1164,84 @@ mod test {
                     number: Some(block_number),
                 }),
             },
+            chain: Chain::Ethereum,
+            pagination: PaginationParams::default(),
         };
 
         assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_parse_state_request_no_contract_specified() {
-        let json_str = r#"
+    fn test_parse_state_request_dual_interface() {
+        let json_common = r#"
     {
+        "__CONTRACT_IDS__": [
+            "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092"
+        ],
+        "version": {
+            "timestamp": "2069-01-01T04:20:00",
+            "block": {
+                "hash": "0x24101f9cb26cd09425b52da10e8c2f56ede94089a8bbe0f31f1cda5f4daa52c4",
+                "number": 213,
+                "chain": "ethereum"
+            }
+        }
+    }
+    "#;
+
+        let json_str_snake = json_common.replace("\"__CONTRACT_IDS__\"", "\"contract_ids\"");
+        let json_str_camel = json_common.replace("\"__CONTRACT_IDS__\"", "\"contractIds\"");
+
+        let snake: StateRequestBody = serde_json::from_str(&json_str_snake).unwrap();
+        let camel: StateRequestBody = serde_json::from_str(&json_str_camel).unwrap();
+
+        assert_eq!(snake, camel);
+    }
+
+    #[test]
+    fn test_parse_state_request_unknown_field() {
+        let body = r#"
+    {
+        "contract_ids_with_typo_error": [
+            {
+                "address": "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092",
+                "chain": "ethereum"
+            }
+        ],
         "version": {
             "timestamp": "2069-01-01T04:20:00",
             "block": {
                 "hash": "0x24101f9cb26cd09425b52da10e8c2f56ede94089a8bbe0f31f1cda5f4daa52c4",
                 "parentHash": "0x8d75152454e60413efe758cc424bfd339897062d7e658f302765eb7b50971815",
+                "number": 213,
+                "chain": "ethereum"
+            }
+        }
+    }
+    "#;
+
+        let decoded = serde_json::from_str::<StateRequestBody>(body);
+
+        assert!(decoded.is_err(), "Expected an error due to unknown field");
+
+        if let Err(e) = decoded {
+            assert!(
+                e.to_string()
+                    .contains("unknown field `contract_ids_with_typo_error`"),
+                "Error message does not contain expected unknown field information"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_state_request_no_contract_specified() {
+        let json_str = r#"
+    {
+        "protocol_system": "uniswap_v2",
+        "version": {
+            "timestamp": "2069-01-01T04:20:00",
+            "block": {
+                "hash": "0x24101f9cb26cd09425b52da10e8c2f56ede94089a8bbe0f31f1cda5f4daa52c4",
                 "number": 213,
                 "chain": "ethereum"
             }
@@ -1155,6 +1258,7 @@ mod test {
 
         let expected = StateRequestBody {
             contract_ids: None,
+            protocol_system: "uniswap_v2".to_string(),
             version: VersionParam {
                 timestamp: Some(expected_timestamp),
                 block: Some(BlockParam {
@@ -1163,13 +1267,113 @@ mod test {
                     number: Some(block_number),
                 }),
             },
+            chain: Chain::Ethereum,
+            pagination: PaginationParams { page: 0, page_size: 20 },
         };
 
         assert_eq!(result, expected);
     }
 
+    fn create_models_block_entity_changes() -> crate::models::blockchain::BlockAggregatedChanges {
+        let base_ts = 1694534400; // Example base timestamp for 2023-09-14T00:00:00
+
+        crate::models::blockchain::BlockAggregatedChanges {
+            extractor: "native_name".to_string(),
+            chain: models::Chain::Ethereum,
+            block: models::blockchain::Block::new(
+                3,
+                models::Chain::Ethereum,
+                Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
+                NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+            ),
+            finalized_block_height: 1,
+            revert: true,
+            state_deltas: HashMap::from([
+                ("pc_1".to_string(), models::protocol::ProtocolComponentStateDelta {
+                    component_id: "pc_1".to_string(),
+                    updated_attributes: HashMap::from([
+                        ("attr_2".to_string(), Bytes::from("0x0000000000000002")),
+                        ("attr_1".to_string(), Bytes::from("0x00000000000003e8")),
+                    ]),
+                    deleted_attributes: HashSet::new(),
+                }),
+            ]),
+            new_tokens: HashMap::new(),
+            new_protocol_components: HashMap::from([
+                ("pc_2".to_string(), crate::models::protocol::ProtocolComponent {
+                    id: "pc_2".to_string(),
+                    protocol_system: "native_protocol_system".to_string(),
+                    protocol_type_name: "pt_1".to_string(),
+                    chain: models::Chain::Ethereum,
+                    tokens: vec![
+                        Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+                        Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                    ],
+                    contract_addresses: vec![],
+                    static_attributes: HashMap::new(),
+                    change: models::ChangeType::Creation,
+                    creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
+                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                }),
+            ]),
+            deleted_protocol_components: HashMap::from([
+                ("pc_3".to_string(), crate::models::protocol::ProtocolComponent {
+                    id: "pc_3".to_string(),
+                    protocol_system: "native_protocol_system".to_string(),
+                    protocol_type_name: "pt_2".to_string(),
+                    chain: models::Chain::Ethereum,
+                    tokens: vec![
+                        Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+                        Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                    ],
+                    contract_addresses: vec![],
+                    static_attributes: HashMap::new(),
+                    change: models::ChangeType::Deletion,
+                    creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
+                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                }),
+            ]),
+            component_balances: HashMap::from([
+                ("pc_1".to_string(), HashMap::from([
+                    (Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), models::protocol::ComponentBalance {
+                        token: Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                        balance: Bytes::from("0x00000001"),
+                        balance_float: 1.0,
+                        modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+                        component_id: "pc_1".to_string(),
+                    }),
+                    (Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), models::protocol::ComponentBalance {
+                        token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                        balance: Bytes::from("0x000003e8"),
+                        balance_float: 1000.0,
+                        modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000007531").unwrap(),
+                        component_id: "pc_1".to_string(),
+                    }),
+                ])),
+            ]),
+            component_tvl: HashMap::new(),
+            account_deltas: Default::default(),
+        }
+    }
+
     #[test]
-    fn test_parse_block_account_changes() {
+    fn test_serialize_deserialize_block_changes() {
+        // Test that models::BlockAggregatedChanges serialized as json can be deserialized as
+        // dto::BlockChanges.
+
+        // Create a models::BlockAggregatedChanges instance
+        let block_entity_changes = create_models_block_entity_changes();
+
+        // Serialize the struct into JSON
+        let json_data = serde_json::to_string(&block_entity_changes).expect("Failed to serialize");
+
+        // Deserialize the JSON back into a dto::BlockChanges struct
+        serde_json::from_str::<BlockChanges>(&json_data).expect("parsing failed");
+    }
+
+    #[test]
+    fn test_parse_block_changes() {
         let json_data = r#"
         {
             "extractor": "vm:ambient",
@@ -1181,6 +1385,7 @@ mod test {
                 "chain": "ethereum",
                 "ts": "2023-09-14T00:00:00"
             },
+            "finalized_block_height": 0,
             "revert": false,
             "new_tokens": {},
             "account_updates": {
@@ -1191,6 +1396,13 @@ mod test {
                     "balance": "0x01f4",
                     "code": "",
                     "change": "Update"
+                }
+            },
+            "state_updates": {
+                "component_1": {
+                    "component_id": "component_1",
+                    "updated_attributes": {"attr1": "0x01"},
+                    "deleted_attributes": ["attr2"]
                 }
             },
             "new_protocol_components":
@@ -1226,73 +1438,16 @@ mod test {
         }
         "#;
 
-        serde_json::from_str::<BlockAccountChanges>(json_data).expect("parsing failed");
+        serde_json::from_str::<BlockChanges>(json_data).expect("parsing failed");
     }
 
     #[test]
-    fn test_parse_block_entity_changes() {
-        let json_data = r#"
-        {
-            "extractor": "vm:ambient",
-            "chain": "ethereum",
-            "block": {
-                "number": 123,
-                "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "chain": "ethereum",
-                "ts": "2023-09-14T00:00:00"
-            },
-            "revert": false,
-            "new_tokens": {},
-            "state_updates": {
-                "component_1": {
-                    "component_id": "component_1",
-                    "updated_attributes": {"attr1": "0x01"},
-                    "deleted_attributes": ["attr2"]
-                }
-            },
-            "new_protocol_components": {
-                "protocol_1": {
-                    "id": "protocol_1",
-                    "protocol_system": "system_1",
-                    "protocol_type_name": "type_1",
-                    "chain": "ethereum",
-                    "tokens": ["0x01", "0x02"],
-                    "contract_ids": ["0x01", "0x02"],
-                    "static_attributes": {"attr1": "0x01f4"},
-                    "change": "Update",
-                    "creation_tx": "0x01",
-                    "created_at": "2023-09-14T00:00:00"
-                }
-            },
-            "deleted_protocol_components": {},
-            "component_balances": {
-                "protocol_1": {
-                    "0x01": {
-                        "token": "0x01",
-                        "balance": "0x01f4",
-                        "balance_float": 0.0,
-                        "modify_tx": "0x01",
-                        "component_id": "protocol_1"
-                    }
-                }
-            },
-            "component_tvl": {
-                "protocol_1": 1000.0
-            }
-        }
-        "#;
-
-        serde_json::from_str::<BlockEntityChangesResult>(json_data).expect("parsing failed");
-    }
-
-    #[test]
-    fn test_parse_native_websocket_message() {
+    fn test_parse_websocket_message() {
         let json_data = r#"
         {
             "subscription_id": "5d23bfbe-89ad-4ea3-8672-dc9e973ac9dc",
             "deltas": {
-                "type": "BlockEntityChangesResult",
+                "type": "BlockChanges",
                 "extractor": "uniswap_v2",
                 "chain": "ethereum",
                 "block": {
@@ -1302,8 +1457,19 @@ mod test {
                 "chain": "ethereum",
                 "ts": "2024-02-23T16:35:35"
                 },
+                "finalized_block_height": 0,
                 "revert": false,
                 "new_tokens": {},
+                "account_updates": {
+                            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                                "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                                "chain": "ethereum",
+                                "slots": {},
+                                "balance": "0x01f4",
+                                "code": "",
+                                "change": "Update"
+                            }
+                        },
                 "state_updates": {
                     "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28": {
                         "component_id": "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28",
@@ -1505,29 +1671,33 @@ mod test {
         .into_iter()
         .collect();
         // Create initial and new BlockAccountChanges instances
-        let block_account_changes_initial = BlockAccountChanges::new(
+        let block_account_changes_initial = BlockChanges::new(
             "extractor1",
             Chain::Ethereum,
             Block::default(),
+            0,
             false,
             old_account_updates,
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
         );
 
-        let block_account_changes_new = BlockAccountChanges::new(
+        let block_account_changes_new = BlockChanges::new(
             "extractor2",
             Chain::Ethereum,
             Block::default(),
+            0,
             true,
             new_account_updates,
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
         );
 
-        // Merge the new BlockAccountChanges into the initial one
+        // Merge the new BlockChanges into the initial one
         let res = block_account_changes_initial.merge(block_account_changes_new);
 
         // Create the expected result of the merge operation
@@ -1549,12 +1719,14 @@ mod test {
         )]
         .into_iter()
         .collect();
-        let block_account_changes_expected = BlockAccountChanges::new(
+        let block_account_changes_expected = BlockChanges::new(
             "extractor1",
             Chain::Ethereum,
             Block::default(),
+            0,
             true,
             expected_account_updates,
+            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
@@ -1564,8 +1736,8 @@ mod test {
 
     #[test]
     fn test_block_entity_changes_merge() {
-        // Initialize two BlockEntityChangesResult instances with different details
-        let block_entity_changes_result1 = BlockEntityChangesResult {
+        // Initialize two BlockChanges instances with different details
+        let block_entity_changes_result1 = BlockChanges {
             extractor: String::from("extractor1"),
             chain: Chain::Ethereum,
             block: Block::default(),
@@ -1594,8 +1766,9 @@ mod test {
 
             },
             component_tvl: hashmap! { "tvl1".to_string() => 1000.0 },
+            ..Default::default()
         };
-        let block_entity_changes_result2 = BlockEntityChangesResult {
+        let block_entity_changes_result2 = BlockChanges {
             extractor: String::from("extractor2"),
             chain: Chain::Ethereum,
             block: Block::default(),
@@ -1609,11 +1782,12 @@ mod test {
                 "component2".to_string() => TokenBalances::default()
             },
             component_tvl: hashmap! { "tvl2".to_string() => 2000.0 },
+            ..Default::default()
         };
 
         let res = block_entity_changes_result1.merge(block_entity_changes_result2);
 
-        let expected_block_entity_changes_result = BlockEntityChangesResult {
+        let expected_block_entity_changes_result = BlockChanges {
             extractor: String::from("extractor1"),
             chain: Chain::Ethereum,
             block: Block::default(),
@@ -1653,6 +1827,7 @@ mod test {
                 "tvl1".to_string() => 1000.0,
                 "tvl2".to_string() => 2000.0
             },
+            ..Default::default()
         };
 
         assert_eq!(res, expected_block_entity_changes_result);

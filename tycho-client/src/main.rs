@@ -1,7 +1,7 @@
 use std::{str::FromStr, time::Duration};
 
 use clap::Parser;
-use tracing::debug;
+use tracing::{debug, info};
 use tracing_appender::rolling::{self};
 
 use tycho_client::{
@@ -14,12 +14,21 @@ use tycho_client::{
 };
 use tycho_core::dto::{Chain, ExtractorIdentity};
 
-#[derive(Parser, Debug, Clone, PartialEq, Eq)]
-#[clap(version = "0.1.0")]
+#[derive(Parser, Debug, Clone, PartialEq)]
+#[clap(version = env!("CARGO_PKG_VERSION"))]
 struct CliArgs {
-    /// Tycho server URL, without protocol. Example: localhost:8888
-    #[clap(long, default_value = "localhost:8888")]
+    /// Tycho server URL, without protocol. Example: localhost:4242
+    #[clap(long, default_value = "localhost:4242")]
     tycho_url: String,
+
+    /// Tycho gateway API key, used as authentication for both websocket and http connections.
+    /// Can be set with TYCHO_AUTH_TOKEN env variable.
+    #[clap(short = 'k', long, env = "TYCHO_AUTH_TOKEN")]
+    auth_key: Option<String>,
+
+    /// If set, use unsecured transports: http and ws instead of https and wss.
+    #[clap(long)]
+    no_tls: bool,
 
     /// The blockchain to index on
     #[clap(long, default_value = "ethereum")]
@@ -32,6 +41,16 @@ struct CliArgs {
     /// Specifies the minimum TVL to filter the components. Ignored if addresses are provided.
     #[clap(long, default_value = "10")]
     min_tvl: u32,
+
+    /// Specifies the lower bound of the TVL threshold range. Components below this TVL will be
+    /// removed from tracking.
+    #[clap(long)]
+    remove_tvl_threshold: Option<u32>,
+
+    /// Specifies the upper bound of the TVL threshold range. Components above this TVL will be
+    /// added to tracking.
+    #[clap(long)]
+    add_tvl_threshold: Option<u32>,
 
     /// Specifies the client's block time
     #[clap(long, default_value = "600")]
@@ -61,17 +80,33 @@ struct CliArgs {
     max_messages: Option<usize>,
 }
 
+impl CliArgs {
+    fn validate(&self) -> Result<(), String> {
+        if self.remove_tvl_threshold.is_some() && self.add_tvl_threshold.is_none() {
+            return Err("Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string());
+        }
+        if self.remove_tvl_threshold.is_none() && self.add_tvl_threshold.is_some() {
+            return Err("Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string());
+        }
+        Ok(())
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Parse CLI Args
     let args: CliArgs = CliArgs::parse();
+    if let Err(e) = args.validate() {
+        panic!("{}", e);
+    }
 
     // Setup Logging
     let (non_blocking, _guard) =
         tracing_appender::non_blocking(rolling::never(&args.log_folder, "dev_logs.log"));
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().expect("Bad env filter"),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .with_writer(non_blocking)
         .finish();
@@ -126,10 +161,22 @@ async fn main() {
     run(exchanges, args).await;
 }
 
+#[allow(deprecated)]
 async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
-    let tycho_ws_url = format!("ws://{}", &args.tycho_url);
-    let tycho_rpc_url = format!("http://{}", &args.tycho_url);
-    let ws_client = WsDeltasClient::new(&tycho_ws_url).unwrap();
+    //TODO: remove "or args.auth_key.is_none()" when our internal client use the no_tls flag
+    let (tycho_ws_url, tycho_rpc_url) = if args.no_tls || args.auth_key.is_none() {
+        info!("Using non-secure connection: ws:// and http://");
+        let tycho_ws_url = format!("ws://{}", &args.tycho_url);
+        let tycho_rpc_url = format!("http://{}", &args.tycho_url);
+        (tycho_ws_url, tycho_rpc_url)
+    } else {
+        info!("Using secure connection: wss:// and https://");
+        let tycho_ws_url = format!("wss://{}", &args.tycho_url);
+        let tycho_rpc_url = format!("https://{}", &args.tycho_url);
+        (tycho_ws_url, tycho_rpc_url)
+    };
+
+    let ws_client = WsDeltasClient::new(&tycho_ws_url, args.auth_key.as_deref()).unwrap();
     let ws_jh = ws_client
         .connect()
         .await
@@ -153,18 +200,20 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
         };
         let filter = if address.is_some() {
             ComponentFilter::Ids(vec![address.unwrap()])
+        } else if let (Some(remove_tvl), Some(add_tvl)) =
+            (args.remove_tvl_threshold, args.add_tvl_threshold)
+        {
+            ComponentFilter::with_tvl_range(remove_tvl as f64, add_tvl as f64)
         } else {
-            ComponentFilter::MinimumTVL(args.min_tvl as f64)
+            ComponentFilter::with_tvl_range(args.min_tvl as f64, args.min_tvl as f64)
         };
-        let is_native: bool = !name.starts_with("vm:");
         let sync = ProtocolStateSynchronizer::new(
             id.clone(),
-            is_native,
             true,
             filter,
             3,
             !args.no_state,
-            HttpRPCClient::new(&tycho_rpc_url).unwrap(),
+            HttpRPCClient::new(&tycho_rpc_url, args.auth_key.as_deref()).unwrap(),
             ws_client.clone(),
         );
         block_sync = block_sync.register_synchronizer(id, sync);

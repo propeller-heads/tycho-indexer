@@ -10,8 +10,8 @@ use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 use crate::{
     abi::factory::events::PairCreated,
     pb::tycho::evm::v1::{
-        Attribute, Block, BlockEntityChanges, ChangeType, EntityChanges, FinancialType,
-        ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionEntityChanges,
+        Attribute, Block, BlockChanges, ChangeType, EntityChanges, FinancialType,
+        ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionChanges,
     },
 };
 
@@ -25,8 +25,8 @@ struct Params {
 pub fn map_pools_created(
     params: String,
     block: eth::Block,
-) -> Result<BlockEntityChanges, substreams::errors::Error> {
-    let mut new_pools: Vec<TransactionEntityChanges> = vec![];
+) -> Result<BlockChanges, substreams::errors::Error> {
+    let mut new_pools: Vec<TransactionChanges> = vec![];
 
     let params: Params = serde_qs::from_str(params.as_str()).expect("Unable to deserialize params");
 
@@ -34,16 +34,17 @@ pub fn map_pools_created(
 
     let tycho_block: Block = block.into();
 
-    Ok(BlockEntityChanges { block: Some(tycho_block), changes: new_pools })
+    Ok(BlockChanges { block: Some(tycho_block), changes: new_pools })
 }
 
-fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionEntityChanges>, params: &Params) {
+fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params: &Params) {
     // Extract new pools from PairCreated events
     let mut on_pair_created = |event: PairCreated, _tx: &eth::TransactionTrace, _log: &eth::Log| {
         let tycho_tx: Transaction = _tx.into();
 
-        new_pools.push(TransactionEntityChanges {
+        new_pools.push(TransactionChanges {
             tx: Some(tycho_tx.clone()),
+            contract_changes: vec![],
             entity_changes: vec![EntityChanges {
                 component_id: event.pair.to_hex(),
                 attributes: vec![

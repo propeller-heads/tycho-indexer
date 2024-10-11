@@ -1,0 +1,40 @@
+{
+  "protocol_components": [
+    {
+      "id": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+      "protocol_system": "uniswap_v2",
+      "protocol_type_name": "uniswap_v2_pool",
+      "chain": "ethereum",
+      "tokens": [
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      ],
+      "contract_ids": [],
+      "static_attributes": {
+        "pool_address": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+        "fee": "0x1e"
+      },
+      "change": "Creation",
+      "creation_tx": "0xd07cbde817318492092cc7a27b3064a69bd893c01cb593d6029683ffd290ab3a",
+      "created_at": "2020-05-05T20:22:25"
+    },
+    {
+      "id": "0xd8c0045cb78ab9cbee0dca156bef0486bc5fc800",
+      "protocol_system": "uniswap_v2",
+      "protocol_type_name": "uniswap_v2_pool",
+      "chain": "ethereum",
+      "tokens": [
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "0x6ed5276fc084c54a3af373e3c1a068dc61eeb6d2"
+      ],
+      "contract_ids": [],
+      "static_attributes": {
+        "fee": "0x1e",
+        "pool_address": "0xd8c0045cb78ab9cbee0dca156bef0486bc5fc800"
+      },
+      "change": "Creation",
+      "creation_tx": "0x9d5fedf3dd9e1784f8e3a1b5c0fcbfb45d420efa2f8166227f0141120e60a246",
+      "created_at": "2020-05-26T18:54:56"
+    }
+  ]
+}

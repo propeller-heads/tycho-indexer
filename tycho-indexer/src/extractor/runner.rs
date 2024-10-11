@@ -1,32 +1,13 @@
-use super::{
-    compat::{
-        add_default_attributes_uniswapv2, add_default_attributes_uniswapv3, ignore_self_balances,
-        transcode_ambient_balances, transcode_usv2_balances,
-    },
-    evm::{
-        chain_state::ChainState,
-        native::{NativeContractExtractor, NativePgGateway},
-        token_pre_processor::TokenPreProcessor,
-        vm::{VmContractExtractor, VmPgGateway},
-    },
-    Extractor, ExtractorMsg,
-};
-use crate::{
-    extractor::{evm::protocol_cache::ProtocolMemoryCache, ExtractionError},
-    pb::sf::substreams::v1::Package,
-    substreams::{
-        stream::{BlockResponse, SubstreamsStream},
-        SubstreamsEndpoint,
-    },
-};
+use std::{collections::HashMap, env, path::Path, sync::Arc};
+
 use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::Client;
 use prost::Message;
 use serde::Deserialize;
-use std::{collections::HashMap, env, path::Path, sync::Arc};
 use tokio::{
+    runtime::Handle,
     sync::{
         mpsc::{self, error::SendError, Receiver, Sender},
         Mutex,
@@ -35,10 +16,37 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info, instrument, trace, warn, Instrument};
-use tycho_core::models::{
-    Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType,
+use tycho_ethereum::token_pre_processor::EthereumTokenPreProcessor;
+
+use tycho_core::{
+    models::{Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
+    Bytes,
 };
 use tycho_storage::postgres::cache::CachedGateway;
+
+use crate::{
+    extractor::{
+        evm::{
+            hybrid::{HybridContractExtractor, HybridPgGateway},
+            protocol_cache::ProtocolMemoryCache,
+        },
+        ExtractionError,
+    },
+    pb::sf::substreams::v1::Package,
+    substreams::{
+        stream::{BlockResponse, SubstreamsStream},
+        SubstreamsEndpoint,
+    },
+};
+
+use super::{
+    compat::{
+        add_default_attributes_uniswapv2, add_default_attributes_uniswapv3, ignore_self_balances,
+        transcode_ambient_balances, transcode_usv2_balances, trim_curve_component_token,
+    },
+    evm::chain_state::ChainState,
+    Extractor, ExtractorMsg,
+};
 
 pub enum ControlMessage {
     Stop,
@@ -112,6 +120,9 @@ pub struct ExtractorRunner {
     subscriptions: Arc<Mutex<SubscriptionsMap>>,
     next_subscriber_id: u64,
     control_rx: Receiver<ControlMessage>,
+    /// Handle of the tokio runtime on which the extraction tasks will be run.
+    /// If 'None' the default runtime will be used.
+    runtime_handle: Option<Handle>,
 }
 
 impl ExtractorRunner {
@@ -120,14 +131,37 @@ impl ExtractorRunner {
         substreams: SubstreamsStream,
         subscriptions: Arc<Mutex<SubscriptionsMap>>,
         control_rx: Receiver<ControlMessage>,
+        runtime_handle: Option<Handle>,
     ) -> Self {
-        ExtractorRunner { extractor, substreams, subscriptions, next_subscriber_id: 0, control_rx }
+        ExtractorRunner {
+            extractor,
+            substreams,
+            subscriptions,
+            next_subscriber_id: 0,
+            control_rx,
+            runtime_handle,
+        }
     }
     pub fn run(mut self) -> JoinHandle<Result<(), ExtractionError>> {
-        tokio::spawn(async move {
+        let runtime = self
+            .runtime_handle
+            .clone()
+            .unwrap_or_else(|| tokio::runtime::Handle::current());
+
+        runtime.spawn(async move {
             let id = self.extractor.get_id();
             loop {
-                tokio::select! {
+                // this is the main info span of an extractor
+                let loop_span = tracing::info_span!(
+                    parent: None,  // don't attach this to the parent (builder) span to keep spans short
+                    "extractor",
+                    extractor_id = %id,
+                    sf_trace_id = tracing::field::Empty,
+                    block_number = tracing::field::Empty,
+                    otel.status_code = tracing::field::Empty,
+                );
+                async {
+                    tokio::select! {
                     Some(ctrl) = self.control_rx.recv() =>  {
                         match ctrl {
                             ControlMessage::Stop => {
@@ -142,6 +176,8 @@ impl ExtractorRunner {
                     val = self.substreams.next() => {
                         match val {
                             None => {
+                                error!("stream ended");
+                                tracing::Span::current().record("otel.status_code", "error");
                                 return Err(ExtractionError::SubstreamsError(format!("{}: stream ended", id)));
                             }
                             Some(Ok(BlockResponse::New(data))) => {
@@ -157,7 +193,8 @@ impl ExtractorRunner {
                                         trace!("No message to propagate.");
                                     }
                                     Err(err) => {
-                                        error!(error = %err, msg = ?data, "Error while processing tick!");
+                                        error!(error = %err, "Error while processing tick!");
+                                        tracing::Span::current().record("otel.status_code", "error");
                                         return Err(err);
                                     }
                                 }
@@ -166,30 +203,32 @@ impl ExtractorRunner {
                                 info!(block=?&undo_signal.last_valid_block,  "Revert requested!");
                                 match self.extractor.handle_revert(undo_signal.clone()).await {
                                     Ok(Some(msg)) => {
-                                        trace!(msg = %msg, "Propagating block undo message.");
+                                        trace!("Propagating block undo message.");
                                         Self::propagate_msg(&self.subscriptions, msg).await
                                     }
                                     Ok(None) => {
                                         trace!("No message to propagate.");
                                     }
                                     Err(err) => {
-                                        error!(error = %err, ?undo_signal, "Error while processing revert!");
+                                        error!(error = %err, "Error while processing revert!");
+                                        tracing::Span::current().record("otel.status_code", "error");
                                         return Err(err);
                                     }
                                 }
                             }
                             Some(Err(err)) => {
                                 error!(error = %err, "Stream terminated with error.");
+                                tracing::Span::current().record("otel.status_code", "error");
                                 return Err(ExtractionError::SubstreamsError(err.to_string()));
                             }
                         };
                     }
-                }
+                };
+                    tracing::Span::current().record("otel.status_code", "ok");
+                    Ok(())
+                }.instrument(loop_span).await?
             }
-        }
-            // Additional inner info span with substreams information
-            // trace_id is set later on in process_substreams_response
-        .instrument(tracing::info_span!("loop", trace_id = tracing::field::Empty)))
+        })
     }
 
     #[instrument(skip_all)]
@@ -197,7 +236,7 @@ impl ExtractorRunner {
         let subscriber_id = self.next_subscriber_id;
         self.next_subscriber_id += 1;
         tracing::Span::current().record("subscriber_id", subscriber_id);
-        info!("New subscription with id {}", subscriber_id);
+        info!(?subscriber_id, "New subscription");
         self.subscriptions
             .lock()
             .await
@@ -225,7 +264,7 @@ impl ExtractorRunner {
                 Err(err) => {
                     // Receiver has been dropped, mark for removal
                     to_remove.push(*counter);
-                    error!(error = %err, "Error while sending message to subscriber {}", counter);
+                    error!(error = %err, counter, "Error while sending message to subscriber");
                 }
             }
         }
@@ -261,6 +300,10 @@ pub struct ExtractorConfig {
     protocol_types: Vec<ProtocolTypeConfig>,
     spkg: String,
     module_name: String,
+    #[serde(default)]
+    pub initialized_accounts: Vec<Bytes>,
+    #[serde(default)]
+    pub initialized_accounts_block: i64,
 }
 
 impl ExtractorConfig {
@@ -275,6 +318,8 @@ impl ExtractorConfig {
         protocol_types: Vec<ProtocolTypeConfig>,
         spkg: String,
         module_name: String,
+        initialized_accounts: Vec<Bytes>,
+        initialized_accounts_block: i64,
     ) -> Self {
         Self {
             name,
@@ -286,6 +331,8 @@ impl ExtractorConfig {
             protocol_types,
             spkg,
             module_name,
+            initialized_accounts,
+            initialized_accounts_block,
         }
     }
 }
@@ -296,10 +343,12 @@ pub struct ExtractorBuilder {
     token: String,
     extractor: Option<Arc<dyn Extractor>>,
     final_block_only: bool,
+    /// Handle of the tokio runtime on which the extraction tasks will be run.
+    /// If 'None' the default runtime will be used.
+    runtime_handle: Option<Handle>,
 }
 
-pub type HandleResult =
-    (JoinHandle<Result<(), ExtractionError>>, (ExtractorHandle, ImplementationType));
+pub type HandleResult = (JoinHandle<Result<(), ExtractionError>>, ExtractorHandle);
 
 impl ExtractorBuilder {
     pub fn new(config: &ExtractorConfig, endpoint_url: &str) -> Self {
@@ -309,6 +358,7 @@ impl ExtractorBuilder {
             token: env::var("SUBSTREAMS_API_TOKEN").unwrap_or("".to_string()),
             extractor: None,
             final_block_only: false,
+            runtime_handle: None,
         }
     }
 
@@ -336,6 +386,11 @@ impl ExtractorBuilder {
 
     pub fn only_final_blocks(mut self) -> Self {
         self.final_block_only = true;
+        self
+    }
+
+    pub fn set_runtime(mut self, runtime: Handle) -> Self {
+        self.runtime_handle = Some(runtime);
         self
     }
 
@@ -368,7 +423,7 @@ impl ExtractorBuilder {
         mut self,
         chain_state: ChainState,
         cached_gw: &CachedGateway,
-        token_pre_processor: &TokenPreProcessor,
+        token_pre_processor: &EthereumTokenPreProcessor,
         protocol_cache: &ProtocolMemoryCache,
     ) -> Result<Self, ExtractionError> {
         let protocol_types = self
@@ -388,72 +443,45 @@ impl ExtractorBuilder {
             })
             .collect();
 
-        match self.config.implementation_type {
-            ImplementationType::Vm => {
-                let gw = VmPgGateway::new(
-                    &self.config.name,
-                    self.config.chain,
-                    self.config.sync_batch_size,
-                    cached_gw.clone(),
-                );
+        let gw = HybridPgGateway::new(
+            &self.config.name,
+            self.config.chain,
+            self.config.sync_batch_size,
+            cached_gw.clone(),
+        );
 
-                self.extractor = Some(Arc::new(
-                    VmContractExtractor::new(
-                        &self.config.name,
-                        self.config.chain,
-                        chain_state,
-                        gw,
-                        protocol_types,
-                        self.config.name.clone(),
-                        protocol_cache.clone(),
-                        token_pre_processor.clone(),
-                        if self.config.name == "vm:ambient" {
-                            Some(transcode_ambient_balances)
-                        } else if self.config.name == "vm:balancer" {
-                            Some(ignore_self_balances)
-                        } else {
-                            None
-                        },
-                        128,
-                    )
-                    .await?,
-                ));
-            }
-            ImplementationType::Custom => {
-                let gw = NativePgGateway::new(
-                    &self.config.name,
-                    self.config.chain,
-                    self.config.sync_batch_size,
-                    cached_gw.clone(),
-                );
-
-                self.extractor = Some(Arc::new(
-                    NativeContractExtractor::new(
-                        &self.config.name,
-                        self.config.chain,
-                        chain_state,
-                        gw,
-                        protocol_types,
-                        self.config.name.clone(),
-                        protocol_cache.clone(),
-                        token_pre_processor.clone(),
-                        if self.config.name == "uniswap_v2" {
+        self.extractor = Some(Arc::new(
+            HybridContractExtractor::new(
+                gw,
+                &self.config.name,
+                self.config.chain,
+                chain_state,
+                self.config.name.clone(),
+                protocol_cache.clone(),
+                protocol_types,
+                token_pre_processor.clone(),
+                match self.config.name.as_str() {
+                    "uniswap_v2" => {
+                        if self.config.chain == Chain::Ethereum {
                             Some(|b| transcode_usv2_balances(add_default_attributes_uniswapv2(b)))
-                        } else if self.config.name == "uniswap_v3" {
-                            Some(add_default_attributes_uniswapv3)
                         } else {
                             None
-                        },
-                        128,
-                    )
-                    .await?,
-                ));
-            }
-        }
+                        }
+                    }
+                    "uniswap_v3" => Some(add_default_attributes_uniswapv3),
+                    "vm:ambient" => Some(transcode_ambient_balances),
+                    "vm:balancer" => Some(ignore_self_balances),
+                    "vm:curve" => Some(trim_curve_component_token),
+                    _ => None,
+                },
+            )
+            .await?,
+        ));
+
         Ok(self)
     }
 
-    #[instrument(name = "extractor", skip(self), fields(id))] // this is the main info lvl span of the extractor
+    #[instrument(name = "extractor_start", skip(self), fields(id))]
     pub async fn run(self) -> Result<HandleResult, ExtractionError> {
         let extractor = self
             .extractor
@@ -489,11 +517,16 @@ impl ExtractorBuilder {
 
         let id = extractor.get_id();
         let (ctrl_tx, ctrl_rx) = mpsc::channel(128);
-        let runner =
-            ExtractorRunner::new(extractor, stream, Arc::new(Mutex::new(HashMap::new())), ctrl_rx);
+        let runner = ExtractorRunner::new(
+            extractor,
+            stream,
+            Arc::new(Mutex::new(HashMap::new())),
+            ctrl_rx,
+            self.runtime_handle,
+        );
 
         let handle = runner.run();
-        Ok((handle, (ExtractorHandle::new(id, ctrl_tx), self.config.implementation_type)))
+        Ok((handle, ExtractorHandle::new(id, ctrl_tx)))
     }
 }
 
@@ -535,11 +568,14 @@ async fn download_file_from_s3(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::extractor::MockExtractor;
     use serde::{Deserialize, Serialize};
     use tracing::info_span;
+
     use tycho_core::models::NormalisedMessage;
+
+    use crate::extractor::MockExtractor;
+
+    use super::*;
 
     #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
     struct DummyMessage {
@@ -639,6 +675,8 @@ mod test {
                 }],
                 spkg: "./test/spkg/substreams-ethereum-quickstart-v1.0.0.spkg".to_owned(),
                 module_name: "test_module".to_owned(),
+                initialized_accounts: vec![],
+                initialized_accounts_block: 0,
             },
             "https://mainnet.eth.streamingfast.io",
         )

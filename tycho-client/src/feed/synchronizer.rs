@@ -6,6 +6,12 @@ use std::{
     time::Duration,
 };
 
+use super::Header;
+use crate::{
+    deltas::{DeltasClient, SubscriptionOptions},
+    feed::component_tracker::{ComponentFilter, ComponentTracker},
+    rpc::RPCClient,
+};
 use tokio::{
     select,
     sync::{
@@ -18,18 +24,10 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_core::{
     dto::{
-        BlockParam, Chain, Deltas, ExtractorIdentity, ProtocolComponent, ProtocolId,
-        ResponseAccount, ResponseProtocolState, StateRequestBody, StateRequestParameters,
-        VersionParam,
+        BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent, ProtocolId,
+        ResponseAccount, ResponseProtocolState, VersionParam,
     },
     Bytes,
-};
-
-use super::Header;
-use crate::{
-    deltas::{DeltasClient, SubscriptionOptions},
-    feed::component_tracker::{ComponentFilter, ComponentTracker},
-    rpc::RPCClient,
 };
 
 pub type SyncResult<T> = anyhow::Result<T>;
@@ -37,14 +35,13 @@ pub type SyncResult<T> = anyhow::Result<T>;
 #[derive(Clone)]
 pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     extractor_id: ExtractorIdentity,
-    is_native: bool,
     #[allow(dead_code)]
     retrieve_balances: bool,
     rpc_client: R,
     deltas_client: D,
     max_retries: u64,
     include_snapshots: bool,
-    component_filter: ComponentFilter,
+    component_tracker: Arc<Mutex<ComponentTracker<R>>>,
     shared: Arc<Mutex<SharedState>>,
     end_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
@@ -75,18 +72,22 @@ impl Snapshot {
     pub fn get_states(&self) -> &HashMap<String, ComponentWithState> {
         &self.states
     }
+
+    pub fn get_vm_storage(&self) -> &HashMap<Bytes, ResponseAccount> {
+        &self.vm_storage
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Default, Serialize)]
 pub struct StateSyncMessage {
-    /// The block number for this update.
+    /// The block information for this update.
     pub header: Header,
     /// Snapshot for new components.
     pub snapshots: Snapshot,
     /// A single delta contains state updates for all tracked components, as well as additional
     /// information about the system components e.g. newly added components (even below tvl), tvl
     /// updates, balance updates.
-    pub deltas: Option<Deltas>,
+    pub deltas: Option<BlockChanges>,
     /// Components that stopped being tracked.
     pub removed_components: HashMap<String, ProtocolComponent>,
 }
@@ -128,6 +129,7 @@ impl StateSyncMessage {
 /// delivering delta messages for the components that have changed.
 #[async_trait]
 pub trait StateSynchronizer: Send + Sync + 'static {
+    async fn initialize(&self) -> SyncResult<()>;
     /// Starts the state synchronization.
     async fn start(&self) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage>)>;
     /// Ends the sychronization loop.
@@ -145,7 +147,6 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor_id: ExtractorIdentity,
-        is_native: bool,
         retrieve_balances: bool,
         component_filter: ComponentFilter,
         max_retries: u64,
@@ -154,13 +155,17 @@ where
         deltas_client: D,
     ) -> Self {
         Self {
-            extractor_id,
-            is_native,
+            extractor_id: extractor_id.clone(),
             retrieve_balances,
-            rpc_client,
+            rpc_client: rpc_client.clone(),
             include_snapshots,
             deltas_client,
-            component_filter,
+            component_tracker: Arc::new(Mutex::new(ComponentTracker::new(
+                extractor_id.chain,
+                extractor_id.name.as_str(),
+                component_filter,
+                rpc_client,
+            ))),
             max_retries,
             shared: Arc::new(Mutex::new(SharedState::default())),
             end_tx: Arc::new(Mutex::new(None)),
@@ -168,6 +173,12 @@ where
     }
 
     /// Retrieves state snapshots of the requested components
+    ///
+    /// TODO:
+    /// Future considerations:
+    /// The current design separates the concepts of snapshots and deltas, therefore requiring us to
+    /// fetch data for snapshots that might already exist in the deltas messages. This is
+    /// unnecessary and could be optimized by removing snapshots entirely and only using deltas.
     async fn get_snapshots<'a, I: IntoIterator<Item = &'a String>>(
         &self,
         header: Header,
@@ -190,7 +201,7 @@ where
         let request_ids = ids
             .map(|it| {
                 it.into_iter()
-                    .map(|id| ProtocolId { id: id.clone(), chain: Chain::Ethereum }) //TODO: remove chain assumption
+                    .map(|id| ProtocolId { id: id.clone(), chain: self.extractor_id.chain })
                     .collect::<Vec<_>>()
             })
             .unwrap_or_else(|| tracked_components.get_tracked_component_ids());
@@ -206,7 +217,15 @@ where
 
         let mut protocol_states = self
             .rpc_client
-            .get_protocol_states_paginated(self.extractor_id.chain, &request_ids, &version, 50, 4)
+            .get_protocol_states_paginated(
+                self.extractor_id.chain,
+                &request_ids,
+                &self.extractor_id.name,
+                self.retrieve_balances,
+                &version,
+                50,
+                4,
+            )
             .await?
             .states
             .into_iter()
@@ -236,20 +255,19 @@ where
 
         let contract_ids = tracked_components.get_contracts_by_component(component_ids.clone());
         let vm_storage = if !contract_ids.is_empty() {
+            let ids: Vec<Bytes> = contract_ids
+                .clone()
+                .into_iter()
+                .collect();
             let contract_states = self
                 .rpc_client
-                .get_contract_state(
+                .get_contract_state_paginated(
                     self.extractor_id.chain,
-                    &StateRequestParameters::new(false),
-                    &StateRequestBody::new(
-                        Some(
-                            contract_ids
-                                .clone()
-                                .into_iter()
-                                .collect(),
-                        ),
-                        version,
-                    ),
+                    ids.as_slice(),
+                    &self.extractor_id.name,
+                    &version,
+                    50,
+                    4,
                 )
                 .await?
                 .accounts
@@ -310,23 +328,11 @@ where
     }
 
     /// Main method that does all the work.
-    #[instrument(skip(self, block_tx),fields(extractor_id = %self.extractor_id))]
+    #[instrument(skip(self, block_tx), fields(extractor_id = %self.extractor_id))]
     async fn state_sync(self, block_tx: &mut Sender<StateSyncMessage>) -> SyncResult<()> {
         // initialisation
-        let mut tracker = ComponentTracker::new(
-            self.extractor_id.chain,
-            self.extractor_id.name.as_str(),
-            self.component_filter.clone(),
-            self.rpc_client.clone(),
-        );
-        info!("Retrieving relevant protocol components");
-        tracker.initialise_components().await?;
+        let mut tracker = self.component_tracker.lock().await;
 
-        info!(
-            n_components = tracker.components.len(),
-            n_contracts = tracker.contracts.len(),
-            "Finished retrieving components",
-        );
         let subscription_options = SubscriptionOptions::new().with_state(self.include_snapshots);
         let (_, mut msg_rx) = self
             .deltas_client
@@ -374,44 +380,34 @@ where
                 let header = Header::from_block(deltas.get_block(), deltas.is_revert());
                 debug!(block_number=?header.number, "Received delta message");
                 let (snapshots, removed_components) = {
-                    match &self.component_filter {
-                        ComponentFilter::Ids(_) => (Default::default(), Default::default()),
-                        ComponentFilter::MinimumTVL(min_tvl) => {
-                            // 1. Remove components based on tvl changes
-                            // 2. Add components based on tvl changes, query those for snapshots
-                            let (to_add, to_remove): (Vec<_>, Vec<_>) = deltas
-                                .component_tvl()
-                                .iter()
-                                .partition(|(_, &tvl)| tvl > *min_tvl);
+                    // 1. Remove components based on latest changes
+                    // 2. Add components based on latest changes, query those for snapshots
+                    let (to_add, to_remove) = tracker.filter_updated_components(&deltas);
 
-                            // Only components we don't track yet need a snapshot,
-                            let requiring_snapshot = to_add
-                                .iter()
-                                .filter_map(|(k, _)| {
-                                    if tracker.components.contains_key(*k) {
-                                        None
-                                    } else {
-                                        Some(*k)
-                                    }
-                                })
-                                .collect::<Vec<_>>();
-                            debug!(components=?requiring_snapshot, "SnapshotRequest");
-                            tracker
-                                .start_tracking(&requiring_snapshot)
-                                .await?;
-                            let snapshots = self
-                                .get_snapshots(header.clone(), &tracker, Some(requiring_snapshot))
-                                .await?
-                                .snapshots;
+                    // Only components we don't track yet need a snapshot,
+                    let requiring_snapshot: Vec<_> = to_add
+                        .iter()
+                        .filter(|id| {
+                            !tracker
+                                .components
+                                .contains_key(id.as_str())
+                        })
+                        .collect();
+                    debug!(components=?requiring_snapshot, "SnapshotRequest");
+                    tracker
+                        .start_tracking(requiring_snapshot.as_slice())
+                        .await?;
+                    let snapshots = self
+                        .get_snapshots(header.clone(), &tracker, Some(requiring_snapshot))
+                        .await?
+                        .snapshots;
 
-                            let removed_components = if !to_remove.is_empty() {
-                                tracker.stop_tracking(to_remove.iter().map(|(id, _)| *id))
-                            } else {
-                                Default::default()
-                            };
-                            (snapshots, removed_components)
-                        }
-                    }
+                    let removed_components = if !to_remove.is_empty() {
+                        tracker.stop_tracking(&to_remove)
+                    } else {
+                        Default::default()
+                    };
+                    (snapshots, removed_components)
                 };
 
                 // 3. Filter deltas by currently tracked components / contracts
@@ -441,13 +437,9 @@ where
         }
     }
 
-    fn filter_deltas(&self, second_msg: &mut Deltas, tracker: &ComponentTracker<R>) {
-        if self.is_native {
-            second_msg.filter_by_component(|id| tracker.components.contains_key(id));
-        } else {
-            second_msg.filter_by_component(|id| tracker.components.contains_key(id));
-            second_msg.filter_by_contract(|id| tracker.contracts.contains(id));
-        }
+    fn filter_deltas(&self, second_msg: &mut BlockChanges, tracker: &ComponentTracker<R>) {
+        second_msg.filter_by_component(|id| tracker.components.contains_key(id));
+        second_msg.filter_by_contract(|id| tracker.contracts.contains(id));
     }
 }
 
@@ -457,6 +449,18 @@ where
     R: RPCClient + Clone + Send + Sync + 'static,
     D: DeltasClient + Clone + Send + Sync + 'static,
 {
+    async fn initialize(&self) -> SyncResult<()> {
+        let mut tracker = self.component_tracker.lock().await;
+        info!("Retrieving relevant protocol components");
+        tracker.initialise_components().await?;
+        info!(
+            n_components = tracker.components.len(),
+            n_contracts = tracker.contracts.len(),
+            "Finished retrieving components",
+        );
+
+        Ok(())
+    }
     async fn start(&self) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage>)> {
         let (mut tx, rx) = channel(15);
 
@@ -536,7 +540,6 @@ mod test {
         DeltasError, RPCError,
     };
     use async_trait::async_trait;
-    use mockall::predicate::always;
     use std::{collections::HashMap, sync::Arc, time::Duration};
     use test_log::test;
     use tokio::{
@@ -546,11 +549,11 @@ mod test {
     };
     use tycho_core::{
         dto::{
-            Block, BlockEntityChangesResult, Chain, Deltas, ExtractorIdentity, ProtocolComponent,
-            ProtocolComponentRequestParameters, ProtocolComponentRequestResponse,
-            ProtocolComponentsRequestBody, ProtocolId, ProtocolStateRequestBody,
-            ProtocolStateRequestResponse, ResponseAccount, ResponseProtocolState, StateRequestBody,
-            StateRequestParameters, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+            Block, BlockChanges, Chain, ExtractorIdentity, PaginationResponse, ProtocolComponent,
+            ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolId,
+            ProtocolStateRequestBody, ProtocolStateRequestResponse, ResponseAccount,
+            ResponseProtocolState, StateRequestBody, StateRequestResponse, TokensRequestBody,
+            TokensRequestResponse,
         },
         Bytes,
     };
@@ -573,42 +576,33 @@ mod test {
     {
         async fn get_tokens(
             &self,
-            chain: &Chain,
             request: &TokensRequestBody,
         ) -> Result<TokensRequestResponse, RPCError> {
-            self.0.get_tokens(chain, request).await
+            self.0.get_tokens(request).await
         }
 
         async fn get_contract_state(
             &self,
-            chain: Chain,
-            filters: &StateRequestParameters,
             request: &StateRequestBody,
         ) -> Result<StateRequestResponse, RPCError> {
-            self.0
-                .get_contract_state(chain, filters, request)
-                .await
+            self.0.get_contract_state(request).await
         }
 
         async fn get_protocol_components(
             &self,
-            chain: Chain,
-            filters: &ProtocolComponentRequestParameters,
             request: &ProtocolComponentsRequestBody,
         ) -> Result<ProtocolComponentRequestResponse, RPCError> {
             self.0
-                .get_protocol_components(chain, filters, request)
+                .get_protocol_components(request)
                 .await
         }
 
         async fn get_protocol_states(
             &self,
-            chain: Chain,
-            filters: &StateRequestParameters,
             request: &ProtocolStateRequestBody,
         ) -> Result<ProtocolStateRequestResponse, RPCError> {
             self.0
-                .get_protocol_states(chain, filters, request)
+                .get_protocol_states(request)
                 .await
         }
     }
@@ -632,7 +626,7 @@ mod test {
             &self,
             extractor_id: ExtractorIdentity,
             options: SubscriptionOptions,
-        ) -> Result<(Uuid, Receiver<Deltas>), DeltasError> {
+        ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError> {
             self.0
                 .subscribe(extractor_id, options)
                 .await
@@ -665,8 +659,7 @@ mod test {
         ProtocolStateSynchronizer::new(
             ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
             native,
-            false,
-            ComponentFilter::MinimumTVL(50.0),
+            ComponentFilter::with_tvl_range(50.0, 50.0),
             1,
             true,
             rpc_client,
@@ -680,6 +673,7 @@ mod test {
                 component_id: "Component1".to_string(),
                 ..Default::default()
             }],
+            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
         }
     }
 
@@ -688,12 +682,12 @@ mod test {
         let header = Header::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
-            .returning(|_, _, _| Ok(state_snapshot_native()));
+            .returning(|_| Ok(state_snapshot_native()));
         let state_sync = with_mocked_clients(true, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,
             "uniswap-v2",
-            ComponentFilter::MinimumTVL(0.0),
+            ComponentFilter::with_tvl_range(0.0, 0.0),
             state_sync.rpc_client.clone(),
         );
         let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
@@ -734,6 +728,7 @@ mod test {
                 ResponseAccount { address: Bytes::from("0x0badc0ffee"), ..Default::default() },
                 ResponseAccount { address: Bytes::from("0xbabe42"), ..Default::default() },
             ],
+            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
         }
     }
 
@@ -742,14 +737,14 @@ mod test {
         let header = Header::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
-            .returning(|_, _, _| Ok(state_snapshot_native()));
+            .returning(|_| Ok(state_snapshot_native()));
         rpc.expect_get_contract_state()
-            .returning(|_, _, _| Ok(state_snapshot_vm()));
+            .returning(|_| Ok(state_snapshot_vm()));
         let state_sync = with_mocked_clients(false, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,
             "uniswap-v2",
-            ComponentFilter::MinimumTVL(0.0),
+            ComponentFilter::with_tvl_range(0.0, 0.0),
             state_sync.rpc_client.clone(),
         );
         let component = ProtocolComponent {
@@ -794,63 +789,57 @@ mod test {
         assert_eq!(snap, exp);
     }
 
-    fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<Deltas>) {
+    fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<BlockChanges>) {
         let mut rpc_client = MockRPCClient::new();
         // Mocks for the start_tracking call, these need to come first because they are more
         // specific, see: https://docs.rs/mockall/latest/mockall/#matching-multiple-calls
         rpc_client
             .expect_get_protocol_components()
-            .with(
-                always(),
-                always(),
-                mockall::predicate::function(
-                    move |request_params: &ProtocolComponentsRequestBody| {
-                        if let Some(ids) = request_params.component_ids.as_ref() {
-                            ids.contains(&"Component3".to_string())
-                        } else {
-                            false
-                        }
-                    },
-                ),
-            )
-            .returning(|_, _, _| {
+            .with(mockall::predicate::function(
+                move |request_params: &ProtocolComponentsRequestBody| {
+                    if let Some(ids) = request_params.component_ids.as_ref() {
+                        ids.contains(&"Component3".to_string())
+                    } else {
+                        false
+                    }
+                },
+            ))
+            .returning(|_| {
                 // return Component3
                 Ok(ProtocolComponentRequestResponse {
                     protocol_components: vec![
                         // this component shall have a tvl update above threshold
                         ProtocolComponent { id: "Component3".to_string(), ..Default::default() },
                     ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
         rpc_client
             .expect_get_protocol_states()
-            .with(
-                always(),
-                always(),
-                mockall::predicate::function(move |request_params: &ProtocolStateRequestBody| {
-                    let expected_id =
-                        ProtocolId { chain: Chain::Ethereum, id: "Component3".to_string() };
-                    if let Some(ids) = request_params.protocol_ids.as_ref() {
-                        ids.contains(&expected_id)
-                    } else {
-                        false
-                    }
-                }),
-            )
-            .returning(|_, _, _| {
+            .with(mockall::predicate::function(move |request_params: &ProtocolStateRequestBody| {
+                let expected_id =
+                    ProtocolId { chain: Chain::Ethereum, id: "Component3".to_string() };
+                if let Some(ids) = request_params.protocol_ids.as_ref() {
+                    ids.contains(&expected_id)
+                } else {
+                    false
+                }
+            }))
+            .returning(|_| {
                 // return Component3 state
                 Ok(ProtocolStateRequestResponse {
                     states: vec![ResponseProtocolState {
                         component_id: "Component3".to_string(),
                         ..Default::default()
                     }],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
 
         // mock calls for the initial state snapshots
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_, _, _| {
+            .returning(|_| {
                 // Initial sync of components
                 Ok(ProtocolComponentRequestResponse {
                     protocol_components: vec![
@@ -860,11 +849,12 @@ mod test {
                         ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
                         // a third component will have a tvl update above threshold
                     ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
         rpc_client
             .expect_get_protocol_states()
-            .returning(|_, _, _| {
+            .returning(|_| {
                 // Initial state snapshot
                 Ok(ProtocolStateRequestResponse {
                     states: vec![
@@ -877,6 +867,7 @@ mod test {
                             ..Default::default()
                         },
                     ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
         // Mock deltas client and messages
@@ -901,7 +892,7 @@ mod test {
     async fn test_state_sync() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let deltas = [
-            Deltas::Native(BlockEntityChangesResult {
+            BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -913,8 +904,8 @@ mod test {
                 },
                 revert: false,
                 ..Default::default()
-            }),
-            Deltas::Native(BlockEntityChangesResult {
+            },
+            BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -926,8 +917,8 @@ mod test {
                 },
                 revert: false,
                 ..Default::default()
-            }),
-            Deltas::Native(BlockEntityChangesResult {
+            },
+            BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -946,9 +937,13 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            }),
+            },
         ];
         let mut state_sync = with_mocked_clients(true, Some(rpc_client), Some(deltas_client));
+        state_sync
+            .initialize()
+            .await
+            .expect("Init failed");
 
         // Test starts here
         let (jh, mut rx) = state_sync
@@ -1052,7 +1047,7 @@ mod test {
             },
             // Our deltas are empty and since merge methods are
             // tested in tycho-core we don't have much to do here.
-            deltas: Some(Deltas::Native(BlockEntityChangesResult {
+            deltas: Some(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1071,7 +1066,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            })),
+            }),
             // "Component2" was removed, because it's tvl changed to 0.
             removed_components: [(
                 "Component2".to_string(),
@@ -1082,6 +1077,246 @@ mod test {
         };
         assert_eq!(first_msg, exp);
         assert_eq!(second_msg, exp2);
+        assert!(exit.is_ok());
+    }
+
+    #[test(tokio::test)]
+    async fn test_state_sync_with_tvl_range() {
+        // Define the range for testing
+        let remove_tvl_threshold = 5.0;
+        let add_tvl_threshold = 7.0;
+
+        let mut rpc_client = MockRPCClient::new();
+        let mut deltas_client = MockDeltasClient::new();
+
+        rpc_client
+            .expect_get_protocol_components()
+            .with(mockall::predicate::function(
+                move |request_params: &ProtocolComponentsRequestBody| {
+                    if let Some(ids) = request_params.component_ids.as_ref() {
+                        ids.contains(&"Component3".to_string())
+                    } else {
+                        false
+                    }
+                },
+            ))
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![ProtocolComponent {
+                        id: "Component3".to_string(),
+                        ..Default::default()
+                    }],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        rpc_client
+            .expect_get_protocol_states()
+            .with(mockall::predicate::function(move |request_params: &ProtocolStateRequestBody| {
+                let expected_id =
+                    ProtocolId { chain: Chain::Ethereum, id: "Component3".to_string() };
+                if let Some(ids) = request_params.protocol_ids.as_ref() {
+                    ids.contains(&expected_id)
+                } else {
+                    false
+                }
+            }))
+            .returning(|_| {
+                Ok(ProtocolStateRequestResponse {
+                    states: vec![ResponseProtocolState {
+                        component_id: "Component3".to_string(),
+                        ..Default::default()
+                    }],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        // Mock for the initial snapshot retrieval
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![
+                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                    ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        rpc_client
+            .expect_get_protocol_states()
+            .returning(|_| {
+                Ok(ProtocolStateRequestResponse {
+                    states: vec![
+                        ResponseProtocolState {
+                            component_id: "Component1".to_string(),
+                            ..Default::default()
+                        },
+                        ResponseProtocolState {
+                            component_id: "Component2".to_string(),
+                            ..Default::default()
+                        },
+                    ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        let (tx, rx) = channel(1);
+        deltas_client
+            .expect_subscribe()
+            .return_once(move |_, _| Ok((Uuid::default(), rx)));
+
+        let mut state_sync = ProtocolStateSynchronizer::new(
+            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
+            true,
+            ComponentFilter::with_tvl_range(remove_tvl_threshold, add_tvl_threshold),
+            1,
+            true,
+            ArcRPCClient(Arc::new(rpc_client)),
+            ArcDeltasClient(Arc::new(deltas_client)),
+        );
+        state_sync
+            .initialize()
+            .await
+            .expect("Init failed");
+
+        // Simulate the incoming BlockChanges
+        let deltas = [
+            BlockChanges {
+                extractor: "uniswap-v2".to_string(),
+                chain: Chain::Ethereum,
+                block: Block {
+                    number: 1,
+                    hash: Bytes::from("0x01"),
+                    parent_hash: Bytes::from("0x00"),
+                    chain: Chain::Ethereum,
+                    ts: Default::default(),
+                },
+                revert: false,
+                ..Default::default()
+            },
+            BlockChanges {
+                extractor: "uniswap-v2".to_string(),
+                chain: Chain::Ethereum,
+                block: Block {
+                    number: 2,
+                    hash: Bytes::from("0x02"),
+                    parent_hash: Bytes::from("0x01"),
+                    chain: Chain::Ethereum,
+                    ts: Default::default(),
+                },
+                revert: false,
+                ..Default::default()
+            },
+            BlockChanges {
+                extractor: "uniswap-v2".to_string(),
+                chain: Chain::Ethereum,
+                block: Block {
+                    number: 3,
+                    hash: Bytes::from("0x03"),
+                    parent_hash: Bytes::from("0x02"),
+                    chain: Chain::Ethereum,
+                    ts: Default::default(),
+                },
+                revert: false,
+                component_tvl: [
+                    ("Component1".to_string(), 6.0), // Within range, should not trigger changes
+                    ("Component2".to_string(), 2.0), // Below lower threshold, should be removed
+                    ("Component3".to_string(), 10.0), // Above upper threshold, should be added
+                ]
+                .into_iter()
+                .collect(),
+                ..Default::default()
+            },
+        ];
+
+        let (jh, mut rx) = state_sync
+            .start()
+            .await
+            .expect("Failed to start state synchronizer");
+
+        // Simulate sending delta messages
+        tx.send(deltas[0].clone())
+            .await
+            .expect("deltas channel msg 0 closed!");
+        tx.send(deltas[1].clone())
+            .await
+            .expect("deltas channel msg 1 closed!");
+
+        // Expecting to receive the initial state message
+        let _ = timeout(Duration::from_millis(100), rx.recv())
+            .await
+            .expect("waiting for first state msg timed out!")
+            .expect("state sync block sender closed!");
+
+        // Send the third message, which should trigger TVL-based changes
+        tx.send(deltas[2].clone())
+            .await
+            .expect("deltas channel msg 2 closed!");
+        let second_msg = timeout(Duration::from_millis(100), rx.recv())
+            .await
+            .expect("waiting for second state msg timed out!")
+            .expect("state sync block sender closed!");
+
+        let _ = state_sync.close().await;
+        let exit = jh
+            .await
+            .expect("state sync task panicked!");
+
+        let expected_second_msg = StateSyncMessage {
+            header: Header {
+                number: 3,
+                hash: Bytes::from("0x03"),
+                parent_hash: Bytes::from("0x02"),
+                revert: false,
+            },
+            snapshots: Snapshot {
+                states: [(
+                    "Component3".to_string(),
+                    ComponentWithState {
+                        state: ResponseProtocolState {
+                            component_id: "Component3".to_string(),
+                            ..Default::default()
+                        },
+                        component: ProtocolComponent {
+                            id: "Component3".to_string(),
+                            ..Default::default()
+                        },
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                vm_storage: HashMap::new(),
+            },
+            deltas: Some(BlockChanges {
+                extractor: "uniswap-v2".to_string(),
+                chain: Chain::Ethereum,
+                block: Block {
+                    number: 3,
+                    hash: Bytes::from("0x03"),
+                    parent_hash: Bytes::from("0x02"),
+                    chain: Chain::Ethereum,
+                    ts: Default::default(),
+                },
+                revert: false,
+                component_tvl: [
+                    ("Component1".to_string(), 6.0), // Within range, should not trigger changes
+                    ("Component3".to_string(), 10.0), // Above upper threshold, should be added
+                ]
+                .into_iter()
+                .collect(),
+                ..Default::default()
+            }),
+            removed_components: [(
+                "Component2".to_string(),
+                ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(second_msg, expected_second_msg);
         assert!(exit.is_ok());
     }
 }
