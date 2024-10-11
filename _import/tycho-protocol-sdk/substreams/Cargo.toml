@@ -1,5 +1,13 @@
 [workspace]
-members = ["ethereum-balancer", "ethereum-curve", "crates/tycho-substreams"]
+members = [
+    "ethereum-balancer",
+    "ethereum-curve",
+    "crates/tycho-substreams",
+    "crates/substreams-helper",
+    "ethereum-ambient",
+    "ethereum-uniswap-v2",
+    "ethereum-uniswap-v3",
+]
 resolver = "2"
 
 
@@ -9,9 +17,11 @@ substreams = "0.5"
 prost = "0.11"
 prost-types = "0.12.3"
 hex-literal = "0.4.1"
+anyhow = "1.0.75"
 hex = "0.4.3"
 ethabi = "18.0.0"
 tycho-substreams = { path = "crates/tycho-substreams" }
+substreams-helper = { path = "crates/substreams-helper" }
 serde = "1.0.204"
 serde_json = "1.0.120"
 

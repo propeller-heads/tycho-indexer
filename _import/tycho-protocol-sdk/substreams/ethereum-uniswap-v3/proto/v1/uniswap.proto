@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package uniswap.v3;
+
+message Pool {
+  bytes address = 1;
+  bytes token0 = 2;
+  bytes token1 = 3;
+  bytes created_tx_hash = 4;
+}
+
+// A change to a pool's balance.
+message BalanceDelta {
+  // The address of the ERC20 token.
+  bytes token_address = 1;
+  // The delta of the token.
+  bytes amount = 2;
+  // The sign of the delta, true for positive, false for negative.
+  bool sign = 3;
+  // The address of the pool whose balance changed.
+  bytes pool_address = 4;
+  // Used to determine the order of the balance changes. Necessary for the balance store.
+  uint64 ordinal = 5;
+}
+
+// A group of BalanceDelta
+message BalanceDeltas {
+    repeated BalanceDelta deltas = 1;
+}

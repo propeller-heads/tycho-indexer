@@ -30,6 +30,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "base64"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
+
+[[package]]
 name = "bigdecimal"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -125,6 +131,12 @@ dependencies = [
  "block-buffer",
  "crypto-common",
 ]
+
+[[package]]
+name = "downcast-rs"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
 name = "either"
@@ -935,6 +947,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "substreams-entity-change"
+version = "1.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2c7fca123abff659d15ed30da5b605fa954a29e912c94260c488d0d18f9107d"
+dependencies = [
+ "base64",
+ "prost 0.11.9",
+ "prost-types 0.11.9",
+ "substreams",
+]
+
+[[package]]
 name = "substreams-ethereum"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -963,6 +987,20 @@ dependencies = [
  "quote",
  "substreams-ethereum-core",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "substreams-ethereum-ambient"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "ethabi 18.0.0",
+ "hex",
+ "hex-literal 0.4.1",
+ "prost 0.11.9",
+ "substreams",
+ "substreams-ethereum",
 ]
 
 [[package]]
@@ -995,6 +1033,64 @@ dependencies = [
  "quote",
  "substreams-ethereum-abigen",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "substreams-ethereum-uniswap-v2"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "ethabi 18.0.0",
+ "getrandom",
+ "hex-literal 0.4.1",
+ "itertools 0.12.1",
+ "num-bigint",
+ "prost 0.11.9",
+ "serde",
+ "serde_qs",
+ "substreams",
+ "substreams-ethereum",
+ "substreams-helper",
+]
+
+[[package]]
+name = "substreams-ethereum-uniswap-v3"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "ethabi 18.0.0",
+ "getrandom",
+ "hex",
+ "hex-literal 0.4.1",
+ "num-bigint",
+ "prost 0.11.9",
+ "substreams",
+ "substreams-entity-change",
+ "substreams-ethereum",
+ "substreams-helper",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "substreams-helper"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bigdecimal",
+ "downcast-rs",
+ "ethabi 18.0.0",
+ "hex",
+ "hex-literal 0.4.1",
+ "num-bigint",
+ "pad",
+ "prost 0.11.9",
+ "prost-types 0.12.3",
+ "substreams",
+ "substreams-entity-change",
+ "substreams-ethereum",
+ "thiserror",
+ "tiny-keccak",
 ]
 
 [[package]]
