@@ -1,7 +1,5 @@
-use crate::{
-    pb::tycho::evm::v1::{Attribute, ChangeType},
-    storage::utils,
-};
+use crate::storage::utils;
+use tycho_substreams::prelude::{Attribute, ChangeType};
 
 use substreams::scalar::BigInt;
 use substreams_ethereum::pb::eth::v2::StorageChange;

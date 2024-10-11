@@ -8,4 +8,3 @@ mod storage;
 pub use modules::*;
 
 mod events;
-mod traits;

@@ -15,6 +15,7 @@ ethabi.workspace = true
 anyhow = { workspace = true, features = [] }
 hex-literal.workspace = true
 substreams-helper.workspace = true
+tycho-substreams.workspace = true
 num-bigint = "0.4.4"
 hex.workspace = true
 tiny-keccak = "2.0"

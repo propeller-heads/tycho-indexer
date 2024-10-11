@@ -3,11 +3,12 @@ use substreams_helper::storage_change::StorageChangesFilter;
 
 use crate::{
     abi::pool::events::Burn,
-    pb::{tycho::evm::v1::Attribute, uniswap::v3::Pool},
+    pb::uniswap::v3::Pool,
     storage::{constants::TRACKED_SLOTS, pool_storage::UniswapPoolStorage},
 };
 
 use super::{BalanceDelta, EventTrait};
+use tycho_substreams::prelude::Attribute;
 
 impl EventTrait for Burn {
     fn get_changed_attributes(

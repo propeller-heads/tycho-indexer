@@ -1070,6 +1070,7 @@ dependencies = [
  "substreams-ethereum",
  "substreams-helper",
  "tiny-keccak",
+ "tycho-substreams",
 ]
 
 [[package]]

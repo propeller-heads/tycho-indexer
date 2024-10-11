@@ -2,10 +2,11 @@ use substreams_ethereum::pb::eth::v2::StorageChange;
 
 use crate::{
     abi::pool::events::SetFeeProtocol,
-    pb::{tycho::evm::v1::Attribute, uniswap::v3::Pool},
+    pb::uniswap::v3::Pool,
     storage::{constants::TRACKED_SLOTS, pool_storage::UniswapPoolStorage},
 };
 use substreams_helper::storage_change::StorageChangesFilter;
+use tycho_substreams::prelude::Attribute;
 
 use super::{BalanceDelta, EventTrait};
 

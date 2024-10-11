@@ -5,12 +5,9 @@ package:
 
 protobuf:
   files:
-    - tycho/evm/v1/common.proto
-    - tycho/evm/v1/entity.proto
     - uniswap.proto
   importPaths:
     - ./proto/v1
-    - ../../proto/
 
 binaries:
   default:

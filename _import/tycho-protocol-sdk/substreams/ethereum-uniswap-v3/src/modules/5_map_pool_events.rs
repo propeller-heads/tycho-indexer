@@ -6,11 +6,10 @@ use substreams_helper::hex::Hexable;
 
 use crate::{
     events::{get_log_changed_attributes, get_log_changed_balances},
-    pb::{
-        tycho::evm::v1::{BalanceChange, Block, BlockChanges, EntityChanges, TransactionChanges},
-        uniswap::v3::Pool,
-    },
+    pb::uniswap::v3::Pool,
 };
+
+use tycho_substreams::prelude::*;
 
 #[substreams::handlers::map]
 pub fn map_pool_events(
@@ -110,7 +109,7 @@ pub fn map_pool_events(
     // Make a list of all HashMap values:
     let tx_entity_changes: Vec<TransactionChanges> = tx_changes_map.into_values().collect();
 
-    let tycho_block: Block = block.into();
+    let tycho_block: Block = (&block).into();
 
     let block_entity_changes =
         BlockChanges { block: Some(tycho_block), changes: tx_entity_changes };

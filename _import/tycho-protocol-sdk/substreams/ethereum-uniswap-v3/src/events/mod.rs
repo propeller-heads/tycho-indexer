@@ -7,11 +7,9 @@ use crate::{
     abi::pool::events::{
         Burn, Collect, CollectProtocol, Flash, Initialize, Mint, SetFeeProtocol, Swap,
     },
-    pb::{
-        tycho::evm::v1::Attribute,
-        uniswap::v3::{BalanceDelta, Pool},
-    },
+    pb::uniswap::v3::{BalanceDelta, Pool},
 };
+use tycho_substreams::prelude::Attribute;
 
 pub mod burn;
 pub mod collect;

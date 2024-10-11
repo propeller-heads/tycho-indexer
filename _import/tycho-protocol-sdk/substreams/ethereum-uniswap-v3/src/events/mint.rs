@@ -1,13 +1,13 @@
 use substreams_ethereum::pb::eth::v2::StorageChange;
 
+use super::{BalanceDelta, EventTrait};
 use crate::{
     abi::pool::events::Mint,
-    pb::{tycho::evm::v1::Attribute, uniswap::v3::Pool},
+    pb::uniswap::v3::Pool,
     storage::{constants::TRACKED_SLOTS, pool_storage::UniswapPoolStorage},
 };
 use substreams_helper::storage_change::StorageChangesFilter;
-
-use super::{BalanceDelta, EventTrait};
+use tycho_substreams::prelude::Attribute;
 
 impl EventTrait for Mint {
     fn get_changed_attributes(

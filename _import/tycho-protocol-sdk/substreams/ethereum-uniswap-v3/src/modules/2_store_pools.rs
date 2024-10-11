@@ -2,7 +2,9 @@ use std::str;
 
 use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 
-use crate::pb::{tycho::evm::v1::BlockChanges, uniswap::v3::Pool};
+use crate::pb::uniswap::v3::Pool;
+
+use tycho_substreams::prelude::BlockChanges;
 
 #[substreams::handlers::store]
 pub fn store_pools(pools_created: BlockChanges, store: StoreSetIfNotExistsProto<Pool>) {

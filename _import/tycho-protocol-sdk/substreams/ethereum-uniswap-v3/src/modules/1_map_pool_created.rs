@@ -6,13 +6,8 @@ use substreams_ethereum::pb::eth::v2::{self as eth};
 
 use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 
-use crate::{
-    abi::factory::events::PoolCreated,
-    pb::tycho::evm::v1::{
-        Attribute, BlockChanges, ChangeType, EntityChanges, FinancialType, ImplementationType,
-        ProtocolComponent, ProtocolType, Transaction, TransactionChanges,
-    },
-};
+use crate::abi::factory::events::PoolCreated;
+use tycho_substreams::prelude::*;
 
 #[substreams::handlers::map]
 pub fn map_pools_created(
@@ -24,7 +19,7 @@ pub fn map_pools_created(
 
     get_new_pools(&block, &mut new_pools, factory_address);
 
-    Ok(BlockChanges { block: Some(block.into()), changes: new_pools })
+    Ok(BlockChanges { block: Some((&block).into()), changes: new_pools })
 }
 
 // Extract new pools from PoolCreated events
