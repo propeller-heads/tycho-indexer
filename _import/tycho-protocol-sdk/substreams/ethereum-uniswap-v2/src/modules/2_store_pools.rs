@@ -1,9 +1,7 @@
 use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 
-use crate::{
-    pb::tycho::evm::v1::{BlockChanges, ProtocolComponent},
-    store_key::StoreKey,
-};
+use crate::store_key::StoreKey;
+use tycho_substreams::prelude::*;
 
 #[substreams::handlers::store]
 pub fn store_pools(

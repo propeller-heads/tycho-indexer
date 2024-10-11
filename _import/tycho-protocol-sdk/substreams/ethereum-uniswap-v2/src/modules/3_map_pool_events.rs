@@ -5,18 +5,8 @@ use substreams_ethereum::pb::eth::v2::{self as eth};
 
 use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 
-use crate::{
-    abi::pool::events::Sync,
-    pb::tycho::evm::{
-        v1,
-        v1::{
-            Attribute, BalanceChange, BlockChanges, ChangeType, EntityChanges, ProtocolComponent,
-            TransactionChanges,
-        },
-    },
-    store_key::StoreKey,
-    traits::PoolAddresser,
-};
+use crate::{abi::pool::events::Sync, store_key::StoreKey, traits::PoolAddresser};
+use tycho_substreams::prelude::*;
 
 // Auxiliary struct to serve as a key for the HashMaps.
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -33,7 +23,7 @@ impl<T> ComponentKey<T> {
 
 #[derive(Clone)]
 struct PartialChanges {
-    transaction: v1::Transaction,
+    transaction: Transaction,
     entity_changes: HashMap<ComponentKey<String>, Attribute>,
     balance_changes: HashMap<ComponentKey<Vec<u8>>, BalanceChange>,
 }

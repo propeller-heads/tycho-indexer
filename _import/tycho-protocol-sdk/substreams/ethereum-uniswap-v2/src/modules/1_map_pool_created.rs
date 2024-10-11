@@ -7,14 +7,9 @@ use substreams_ethereum::pb::eth::v2::{self as eth};
 
 use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 
-use crate::{
-    abi::factory::events::PairCreated,
-    pb::tycho::evm::v1::{
-        Attribute, Block, BlockChanges, ChangeType, EntityChanges, FinancialType,
-        ImplementationType, ProtocolComponent, ProtocolType, Transaction, TransactionChanges,
-    },
-};
+use crate::abi::factory::events::PairCreated;
 
+use tycho_substreams::prelude::*;
 #[derive(Debug, Deserialize)]
 struct Params {
     factory_address: String,
@@ -32,7 +27,7 @@ pub fn map_pools_created(
 
     get_pools(&block, &mut new_pools, &params);
 
-    let tycho_block: Block = block.into();
+    let tycho_block: Block = (&block).into();
 
     Ok(BlockChanges { block: Some(tycho_block), changes: new_pools })
 }
