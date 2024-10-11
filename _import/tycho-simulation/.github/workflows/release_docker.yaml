@@ -14,8 +14,8 @@ jobs:
   tests-and-lints:
     uses: ./.github/workflows/tests-and-lints-template.yaml
     secrets:
-      gh_token: ${{ secrets.GH_TOKEN }}
-      infura_api_key: ${{ secrets.INFURA_API_KEY }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
   docker_release:
     name: Docker Image Build
@@ -23,6 +23,16 @@ jobs:
     needs:
       - tests-and-lints
     steps:
+      - name: Generate a token
+        id: generate-token
+        uses: getsentry/action-github-app-token@v2
+        with:
+          app_id: ${{ secrets.app_id }}
+          private_key: ${{ secrets.app_private_key }}
+
+      - name: Install git
+        run: sudo apt update && sudo apt install -y git
+
       - name: Check out Repo
         uses: actions/checkout@v3
         with:
@@ -31,8 +41,8 @@ jobs:
       - name: Setup git to use https
         run: |
           git config --global credential.helper store
-          echo "https://${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
-          git config --global url."https://${{ secrets.GH_TOKEN }}@github.com".insteadOf ssh://github.com
+          echo "https://${{ steps.generate-token.outputs.token }}@github.com" > ~/.git-credentials
+          git config --global url."https://x-access-token:${{ steps.generate-token.outputs.token }}@github.com".insteadOf ssh://github.com
 
       - name: Set build variables
         run: |

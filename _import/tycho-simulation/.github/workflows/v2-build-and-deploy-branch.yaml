@@ -25,7 +25,8 @@ jobs:
       image_tag: ${{ github.sha }}
       image_name: propeller-searcher
     secrets:
-      gh_token: ${{ secrets.GH_TOKEN }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
   deploy-dev:
     needs:

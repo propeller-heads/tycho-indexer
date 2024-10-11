@@ -18,8 +18,8 @@ jobs:
   tests-and-lints:
     uses: ./.github/workflows/tests-and-lints-template.yaml
     secrets:
-      gh_token: ${{ secrets.GH_TOKEN }}
-      infura_api_key: ${{ secrets.INFURA_API_KEY }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
   build_python_wheel_linux:
     uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
@@ -29,7 +29,8 @@ jobs:
       id-token: write
       contents: read
     secrets:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
     with:
       runs_on: 'ubuntu-latest'
       yum_packages: "pkgconfig openssl-devel"
@@ -43,7 +44,8 @@ jobs:
       id-token: write
       contents: read
     secrets:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
     with:
       runs_on: 'macos-latest'
       package_root: "protosim_py"
