@@ -52,13 +52,15 @@ impl From<InterimContractChange> for tycho::ContractChange {
 
 /// Extracts all contract changes relevant to vm simulations
 ///
-/// This is the main logic of the substreams integration. It takes a raw ethereum block on input and extracts the BlockContractChanges stream. It includes tracking:
+/// This is the main logic of the substreams integration. It takes a raw ethereum block on input and
+/// extracts the BlockContractChanges stream. It includes tracking:
 /// - new pool initializations
 /// - all storage slot changes for the Ambient contract
 /// - all ERC20 balance changes for the Ambient pools
 /// - all code changes and balance updates of the Ambient contract
-/// 
-/// Generally we detect all changes in transactions sequentially and detect if it is a CREATE or UPDATE change based on already present data.
+///
+/// Generally we detect all changes in transactions sequentially and detect if it is a CREATE or
+/// UPDATE change based on already present data.
 #[substreams::handlers::map]
 fn map_changes(
     block: eth::v2::Block,
@@ -83,7 +85,8 @@ fn map_changes(
 
     for block_tx in block.transactions() {
         // Extract storage changes for all contracts relevant to this protocol system.
-        // Ambient is a protocol system consisting of many ProtocolComponents (one for each pool), but they all share the same AMBIENT_CONTRACT contract.
+        // Ambient is a protocol system consisting of many ProtocolComponents (one for each pool),
+        // but they all share the same AMBIENT_CONTRACT contract.
         let mut storage_changes = block_tx
             .calls
             .iter()
@@ -105,7 +108,7 @@ fn map_changes(
             .collect::<Vec<_>>();
 
         // Detect all pool initializations
-        // Official documentation: https://docs.ambient.finance/developers/dex-contract-interface/pool-initialization 
+        // Official documentation: https://docs.ambient.finance/developers/dex-contract-interface/pool-initialization
         for call in ambient_calls {
             if call.input.len() < 4 {
                 continue;

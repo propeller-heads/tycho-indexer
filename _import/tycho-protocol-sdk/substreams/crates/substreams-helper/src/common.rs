@@ -8,6 +8,7 @@ use substreams::store::{
 use crate::hex::Hexable;
 
 /// HasAddresser is a trait that a few functionalities in this crate depend on.
+///
 /// Every time we need to filter something by address (events emmited by a set of addresses,
 /// storage changes occurring on certain contracts, etc) you'll likely need
 /// to provide a HasAddresser.

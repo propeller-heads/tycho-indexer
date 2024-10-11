@@ -51,13 +51,13 @@ pub mod event {
 #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Type {
         #[prost(message, tag="10")]
-        DepositType(super::DepositEvent),
+        Deposit(super::DepositEvent),
         #[prost(message, tag="20")]
-        WithdrawType(super::WithdrawEvent),
+        Withdraw(super::WithdrawEvent),
         #[prost(message, tag="30")]
-        SyncType(super::SyncEvent),
+        Sync(super::SyncEvent),
         #[prost(message, tag="40")]
-        SwapType(super::SwapEvent),
+        Swap(super::SwapEvent),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

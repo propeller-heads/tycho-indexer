@@ -21,10 +21,10 @@ message Events {
 
 message Event {
   oneof type {
-    DepositEvent deposit_type = 10;
-    WithdrawEvent withdraw_type = 20;
-    SyncEvent sync_type = 30;
-    SwapEvent swap_type = 40;
+    DepositEvent deposit = 10;
+    WithdrawEvent withdraw = 20;
+    SyncEvent sync = 30;
+    SwapEvent swap = 40;
   }
 
   string hash = 100;

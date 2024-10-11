@@ -1,4 +1,4 @@
-use std::{collections::HashMap, usize, vec};
+use std::{collections::HashMap, vec};
 use substreams::store::{StoreGet, StoreGetBigInt, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::{self as eth, TransactionTrace};
 

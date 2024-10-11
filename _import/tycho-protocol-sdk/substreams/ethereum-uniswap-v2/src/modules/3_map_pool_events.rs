@@ -141,8 +141,9 @@ fn handle_sync(
 ///   handle_sync
 /// - block_entity_changes: The BlockChanges struct that will be updated with the changes from the
 ///   sync events.
+///
 /// This HashMap comes pre-filled with the changes for the create_pool events, mapped in
-/// 1_map_pool_created.
+///   1_map_pool_created.
 ///
 /// This function is called after the handle_sync function, and it is expected that
 /// block_entity_changes will be complete after this function ends.
