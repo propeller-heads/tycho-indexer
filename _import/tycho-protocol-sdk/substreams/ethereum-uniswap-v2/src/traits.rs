@@ -11,7 +11,7 @@ pub struct PoolAddresser<'a> {
     pub store: &'a StoreGetProto<ProtocolComponent>,
 }
 
-impl<'a> HasAddresser for PoolAddresser<'a> {
+impl HasAddresser for PoolAddresser<'_> {
     fn has_address(&self, key: Address) -> bool {
         let pool = self
             .store

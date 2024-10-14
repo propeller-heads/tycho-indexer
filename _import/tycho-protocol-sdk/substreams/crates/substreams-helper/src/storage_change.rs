@@ -6,9 +6,8 @@ pub trait StorageChangesFilter {
 
 impl StorageChangesFilter for Vec<StorageChange> {
     fn filter_by_address(&self, contract_addr: &[u8; 20]) -> Vec<&StorageChange> {
-        return self
-            .iter()
+        self.iter()
             .filter(|change| change.address == contract_addr)
-            .collect();
+            .collect()
     }
 }
