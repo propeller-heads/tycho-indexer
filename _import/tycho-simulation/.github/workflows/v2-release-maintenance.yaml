@@ -9,8 +9,9 @@ jobs:
   tests-and-lints:
     uses: ./.github/workflows/tests-and-lints-template.yaml
     secrets:
-      gh_token: ${{ secrets.GH_TOKEN }}
       infura_api_key: ${{ secrets.INFURA_API_KEY }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
   check-release:
     uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
@@ -52,4 +53,5 @@ jobs:
       image_tag: ${{ needs.release.outputs.next_release_version }}
       image_name: propeller-searcher
     secrets:
-      gh_token: ${{ secrets.GH_TOKEN }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}

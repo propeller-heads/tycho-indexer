@@ -12,6 +12,8 @@ on:
         type: number
         default: 15
     secrets:
+      infura_api_key:
+        required: true
       app_id:
         required: true
       app_private_key:
@@ -23,7 +25,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-    #INFURA_API_KEY: ${{ secrets.infura_api_key }}
+  INFURA_API_KEY: ${{ secrets.infura_api_key }}
 
 jobs:
   compile_and_test:
