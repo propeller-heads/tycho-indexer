@@ -469,15 +469,12 @@ mod tests {
     }
 
     fn get_client() -> Arc<Provider<Http>> {
-        let infura_api_key = env::var("INFURA_API_KEY").unwrap_or_else(|_| {
+        let eth_rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
-            env::var("INFURA_API_KEY").expect("Missing INFURA_API_KEY in .env file")
+            env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
         });
 
-        let client = Provider::<Http>::try_from(
-            format!("https://mainnet.infura.io/v3/{}", infura_api_key).as_str(),
-        )
-        .unwrap();
+        let client = Provider::<Http>::try_from(eth_rpc_url).unwrap();
         Arc::new(client)
     }
     // endregion helpers

@@ -26,13 +26,12 @@ U256MAX = 1157920892373161954235709850086879078532699846656405640394575840079131
 def test_simulation_db():
     print("Run test function")
 
-    infura_api_key = os.getenv("INFURA_API_KEY")
-
-    if infura_api_key is None:
-        raise Exception("INFURA_API_KEY environment variable not set")
+    eth_rpc_url = os.getenv("ETH_RPC_URL")
+    if eth_rpc_url is None:
+        raise Exception("ETH_RPC_URL environment variable not set")
 
     db = SimulationDB(
-        rpc_url=f"https://mainnet.infura.io/v3/{infura_api_key}", block=None
+        rpc_url=eth_rpc_url, block=None
     )
     engine = SimulationEngine.new_with_simulation_db(db=db, trace=False)
 

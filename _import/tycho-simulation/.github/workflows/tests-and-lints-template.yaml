@@ -12,7 +12,7 @@ on:
         type: number
         default: 15
     secrets:
-      infura_api_key:
+      eth_rpc_url:
         required: true
       app_id:
         required: true
@@ -25,7 +25,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  INFURA_API_KEY: ${{ secrets.infura_api_key }}
+  ETH_RPC_URL: ${{ secrets.eth_rpc_url }}
 
 jobs:
   compile_and_test:
