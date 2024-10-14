@@ -1,13 +1,16 @@
 specVersion: v0.1.0
 package:
   name: "ethereum_uniswap_v2"
-  version: v0.2.0
+  version: v0.2.1
 
 protobuf:
   files:
+    - tycho/evm/v1/common.proto
+    - tycho/evm/v1/entity.proto
     - uniswap.proto
   importPaths:
     - ./proto/v1
+    - ../../proto/
 
 binaries:
   default:
