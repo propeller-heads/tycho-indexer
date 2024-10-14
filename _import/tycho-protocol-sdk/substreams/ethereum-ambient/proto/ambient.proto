@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package tycho.ambient.v1;
+
+import "tycho/evm/v1/common.proto";
+
+// A change to a pool's balance. Ambient specific.
+message AmbientBalanceDelta {
+  // The address of the ERC20 token whose balance changed.
+  bytes pool_hash = 1;
+  // The token type: it can be base or quote.
+  string token_type = 2;
+  // The delta of the token.
+  bytes token_delta = 3;
+  // Used to determine the order of the balance changes. Necessary for the balance store.
+  uint64 ordinal = 4;
+  // Transaction where the balance changed.
+  tycho.evm.v1.Transaction tx = 5;
+}
+
+// Ambient pool changes within a single block
+message BlockPoolChanges {
+  // New protocol components added in this block
+  repeated tycho.evm.v1.ProtocolComponent protocol_components = 1;
+  // Balance changes to pools in this block
+  repeated AmbientBalanceDelta balance_deltas = 2;
+}

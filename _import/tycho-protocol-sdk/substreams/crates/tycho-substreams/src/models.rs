@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use substreams_ethereum::pb::eth::v2::{self as sf, StorageChange};
 
 // re-export the protobuf types here.
-pub use crate::pb::tycho::evm::v1::*;
+pub use crate::pb::tycho::{ambient::v1::*, evm::v1::*};
 
 impl TransactionContractChanges {
     /// Creates a new empty `TransactionContractChanges` instance.

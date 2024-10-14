@@ -84,7 +84,8 @@ pub struct ProtocolComponent {
     /// Usually it is a single contract, but some protocols use multiple contracts.
     #[prost(bytes="vec", repeated, tag="3")]
     pub contracts: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    /// Attributes of the component. Used mainly be the native integration.
+    /// Static attributes of the component.
+    /// These attributes MUST be immutable. If it can ever change, it should be given as an EntityChanges for this component id.
     /// The inner ChangeType of the attribute has to match the ChangeType of the ProtocolComponent.
     #[prost(message, repeated, tag="4")]
     pub static_att: ::prost::alloc::vec::Vec<Attribute>,
@@ -186,6 +187,7 @@ pub struct TransactionChanges {
     pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
 }
 /// A set of transaction changes within a single block.
+/// This message must be the output of your substreams module.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockChanges {

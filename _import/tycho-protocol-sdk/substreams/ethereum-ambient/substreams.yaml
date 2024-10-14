@@ -1,14 +1,13 @@
 specVersion: v0.1.0
 package:
   name: "substreams_ethereum_ambient"
-  version: v0.3.0
+  version: v0.5.0
 
 protobuf:
   files:
-    - vm.proto
-    - common.proto
+    - ambient.proto
   importPaths:
-    - ../../proto/tycho/evm/v1/
+    - ./proto
 
 binaries:
   default:
@@ -16,9 +15,35 @@ binaries:
     file: ../../target/wasm32-unknown-unknown/substreams/substreams_ethereum_ambient.wasm
 
 modules:
-  - name: map_changes
+  - name: map_pool_changes
     kind: map
+    initialBlock: 17361664
     inputs:
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:tycho.evm.state.v1.BlockContractChanges
+      type: proto:tycho.evm.v1.BlockPoolChanges
+  - name: store_pools
+    kind: store
+    initialBlock: 17361664
+    updatePolicy: set
+    valueType: proto:tycho.evm.v1.ProtocolComponent
+    inputs:
+      - map: map_pool_changes
+  - name: store_pool_balances
+    kind: store
+    initialBlock: 17361664
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_pool_changes
+  - name: map_changes
+    kind: map
+    initialBlock: 17361664
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: map_pool_changes
+      - store: store_pool_balances
+        mode: deltas
+      - store: store_pools
+    output:
+      type: proto:tycho.evm.v1.BlockContractChanges
