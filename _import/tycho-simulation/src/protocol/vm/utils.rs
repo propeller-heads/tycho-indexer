@@ -2,12 +2,108 @@
 #![allow(dead_code)]
 
 use mini_moka::sync::Cache;
+use reqwest::{blocking::Client, StatusCode};
+use serde_json::json;
 use std::{
+    env,
     fs::File,
     io::Read,
     path::Path,
     sync::{Arc, LazyLock},
+    time::Duration,
 };
+
+#[derive(Debug)]
+pub enum RpcError {
+    Http(reqwest::Error),
+    Rpc(String, StatusCode),
+    InvalidResponse(String),
+}
+
+fn exec_rpc_method(
+    url: &str,
+    method: &str,
+    params: Vec<serde_json::Value>,
+    timeout: u64,
+) -> Result<serde_json::Value, RpcError> {
+    let client = Client::new();
+    let payload = json!({
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+        "id": 1,
+    });
+
+    let response = client
+        .post(url)
+        .json(&payload)
+        .timeout(Duration::from_secs(timeout))
+        .send()
+        .map_err(RpcError::Http)?;
+
+    if response.status().is_client_error() || response.status().is_server_error() {
+        let status = response.status();
+        let body = response
+            .text()
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(RpcError::Rpc(body, status));
+    }
+
+    let data: serde_json::Value = response
+        .json()
+        .map_err(RpcError::Http)?;
+
+    if let Some(result) = data.get("result") {
+        Ok(result.clone())
+    } else if let Some(error) = data.get("error") {
+        Err(RpcError::InvalidResponse(format!(
+            "RPC failed to call {} with Error: {}",
+            method, error
+        )))
+    } else {
+        Ok(serde_json::Value::Null)
+    }
+}
+
+pub fn get_code_for_address(
+    address: &str,
+    connection_string: Option<String>,
+) -> Result<Option<Vec<u8>>, RpcError> {
+    // Get the connection string, defaulting to the RPC_URL environment variable
+    let connection_string = connection_string.or_else(|| env::var("RPC_URL").ok());
+
+    let connection_string = match connection_string {
+        Some(url) => url,
+        None => {
+            return Err(RpcError::InvalidResponse(
+                "RPC_URL environment variable is not set".to_string(),
+            ))
+        }
+    };
+
+    let method = "eth_getCode";
+    let params = vec![json!(address), json!("latest")];
+
+    match exec_rpc_method(&connection_string, method, params, 240) {
+        Ok(code) => {
+            if let Some(code_str) = code.as_str() {
+                let code_bytes = hex::decode(&code_str[2..]).map_err(|_| {
+                    RpcError::InvalidResponse(format!(
+                        "Failed to decode hex string for address {}",
+                        address
+                    ))
+                })?;
+                Ok(Some(code_bytes))
+            } else {
+                Ok(None)
+            }
+        }
+        Err(e) => {
+            println!("Error fetching code for address {}: {:?}", address, e);
+            Err(e)
+        }
+    }
+}
 
 static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Vec<u8>>> = LazyLock::new(|| Cache::new(1_000));
 
@@ -27,9 +123,35 @@ pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use dotenv::dotenv;
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
+
+    use super::*;
+
+    #[test]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_get_code_for_address() {
+        let rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
+            dotenv().expect("Missing .env file");
+            env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
+        });
+
+        let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
+        let result = get_code_for_address(address, Some(rpc_url));
+
+        assert!(result.is_ok(), "Network call should not fail");
+
+        let code_bytes = result.unwrap();
+        match code_bytes {
+            Some(bytes) => {
+                assert!(!bytes.is_empty(), "Code should not be empty");
+            }
+            None => {
+                panic!("There should be some code for the address");
+            }
+        }
+    }
 
     #[test]
     fn test_get_contract_bytecode() {
