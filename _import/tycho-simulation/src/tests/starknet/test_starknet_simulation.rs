@@ -35,11 +35,11 @@ mod tests {
     /// Does not accept block number as input since it is overwritten by the simulation engine,
     /// taking it as a parameter might make the user think that it is permanent
     fn setup_reader() -> RpcStateReader {
-        let infura_api_key = env::var("INFURA_API_KEY").unwrap_or_else(|_| {
+        let eth_rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
-            env::var("INFURA_API_KEY").expect("Missing INFURA_API_KEY in .env file")
+            env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
         });
-        let rpc_endpoint = format!("https://{}.infura.io/v3/{}", RpcChain::MainNet, infura_api_key);
+        let rpc_endpoint = format!("https://{}.infura.io/v3/{}", RpcChain::MainNet, eth_rpc_url);
         let feeder_url = format!("https://{}.starknet.io/feeder_gateway", RpcChain::MainNet);
         RpcStateReader::new(RpcState::new(
             RpcChain::MainNet,

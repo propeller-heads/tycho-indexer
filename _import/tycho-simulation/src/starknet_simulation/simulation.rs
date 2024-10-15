@@ -585,10 +585,9 @@ pub mod tests {
 
     fn setup_engine(
         block_number: u64,
-        rpc_chain: RpcChain,
         contract_overrides: Option<Vec<ContractOverride>>,
     ) -> SimulationEngine<RpcStateReader> {
-        let rpc_state_reader = Arc::new(setup_reader(block_number, rpc_chain));
+        let rpc_state_reader = Arc::new(setup_reader(block_number));
 
         // Initialize the engine
         SimulationEngine::new(rpc_state_reader, contract_overrides)
@@ -667,7 +666,7 @@ pub mod tests {
         let input_contract = ContractOverride::new(address, class_hash, None);
 
         // Create engine
-        let rpc_state_reader = setup_reader(333333, RpcChain::MainNet);
+        let rpc_state_reader = setup_reader(333333);
         let engine_result =
             SimulationEngine::new(Arc::new(rpc_state_reader), vec![input_contract].into());
         if let Err(err) = engine_result {
@@ -862,7 +861,7 @@ pub mod tests {
 
         // Set up the engine
         let block_number = 366118; // actual block is 366119
-        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+        let mut engine = setup_engine(block_number, None);
 
         // Prepare the simulation parameters
         let params = SimulationParameters::new(
@@ -922,7 +921,7 @@ pub mod tests {
 
         // Set up the engine
         let block_number = 368719; // actual tx block is 368720
-        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+        let mut engine = setup_engine(block_numbe, None);
 
         // Prepare the simulation parameters
         let params = SimulationParameters::new(
@@ -966,7 +965,7 @@ pub mod tests {
 
         // Set up the engine
         let block_number = 366118; // actual block is 366119
-        let mut engine = setup_engine(block_number, RpcChain::MainNet, None);
+        let mut engine = setup_engine(block_number, None);
 
         // Prepare the simulation parameters
         let params = SimulationParameters::new(
@@ -1029,7 +1028,7 @@ pub mod tests {
             ),
             None,
         )];
-        let mut engine = setup_engine(block_number, RpcChain::MainNet, contract_overrides.into());
+        let mut engine = setup_engine(block_number, contract_overrides.into());
 
         // Set state storage inital value
         engine

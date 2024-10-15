@@ -659,7 +659,7 @@ mod tests {
     /// 
     /// Then run the test with:
     /// ```bash
-    /// cargo test --package protosim --lib -- --ignored --exact --nocapture
+    /// cargo test --package src --lib -- --ignored --exact --nocapture
     /// evm_simulation::tycho_db::tests::test_tycho_db_connection
     /// ```
     #[ignore]

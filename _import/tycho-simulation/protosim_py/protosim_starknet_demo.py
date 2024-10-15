@@ -33,13 +33,13 @@ DAI_ADDRESS = "0xda114221cb83fa859dbdb4c44beeaa0bb37c7537ad5ae66fe5e0efd20e6eb3"
 
 def setup_engine(contract_overrides: list = None) -> StarknetSimulationEngine:
     load_dotenv()
-    infura_api_key = os.getenv("INFURA_API_KEY")
-    if infura_api_key is None:
-        raise Exception("INFURA_API_KEY env variable is not set")
+    rpc_url = os.getenv("STARKNET_RPC_URL")
+    if rpc_url is None:
+        raise Exception("STARKNET_RPC_URL env variable is not set")
 
     contract_overrides = contract_overrides if contract_overrides is not None else []
     engine = StarknetSimulationEngine(
-        rpc_endpoint=f"https://starknet-mainnet.infura.io/v3/{infura_api_key}",
+        rpc_endpoint=rpc_url,
         feeder_url="https://alpha-mainnet.starknet.io/feeder_gateway",
         contract_overrides=contract_overrides,
     )

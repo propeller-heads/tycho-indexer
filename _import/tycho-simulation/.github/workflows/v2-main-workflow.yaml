@@ -9,7 +9,7 @@ jobs:
   tests-and-lints:
     uses: ./.github/workflows/tests-and-lints-template.yaml
     secrets:
-      infura_api_key: ${{ secrets.INFURA_API_KEY }}
+      eth_rpc_url: ${{ secrets.ETH_RPC_URL }}
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
@@ -37,35 +37,6 @@ jobs:
       issues: write # to be able to comment on released issues
       pull-requests: write # to be able to comment on released pull requests
       id-token: write # to enable use of OIDC for npm provenance
-    secrets:
-      app_id: ${{ secrets.APP_ID }}
-      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
-  build-and-push:
-    needs:
-      - release
-    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
-    permissions:
-      id-token: write
-      contents: read
-    with:
-      image_tag: ${{ needs.release.outputs.next_release_version }}
-      image_name: propeller-searcher
-    secrets:
-      app_id: ${{ secrets.APP_ID }}
-      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
-  promote-to-dev:
-    needs:
-      - release
-      - build-and-push
-    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-dev.yaml@main
-    with:
-      image_tag: ${{ needs.release.outputs.next_release_version }}
-      image_name: propeller-searcher
-    permissions:
-      id-token: write
-      contents: read
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
