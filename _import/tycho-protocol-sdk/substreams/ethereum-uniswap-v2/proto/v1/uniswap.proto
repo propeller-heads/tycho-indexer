@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package tycho.evm.uniswap.v2;
+
+message Pools {
+  repeated Pool pools = 1;
+}
+
+message Pool {
+  bytes address = 1;
+
+  bytes token0 = 2;
+  bytes token1 = 3;
+
+  bytes created_tx_hash = 4;
+}
+
+message Events {
+  repeated Event events = 1;
+}
+
+message Event {
+  oneof type {
+    DepositEvent deposit = 10;
+    WithdrawEvent withdraw = 20;
+    SyncEvent sync = 30;
+    SwapEvent swap = 40;
+  }
+
+  string hash = 100;
+  uint32 log_index = 101;
+  uint64 log_ordinal = 102;
+  string to = 103;
+  string from = 104;
+  uint64 block_number = 105;
+  uint64 timestamp = 106;
+  string pool = 107;
+}
+
+message DepositEvent {
+  repeated string input_token_amounts = 1;
+  optional string output_token_amount = 2;
+}
+
+message WithdrawEvent {
+  repeated string input_token_amounts = 1;
+  optional string output_token_amount = 2;
+}
+
+message SyncEvent {
+  string reserve0 = 1;
+  string reserve1 = 2;
+}
+
+message SwapEvent {
+  string token_in = 1;
+  string amount_in = 2;
+
+  string token_out = 3;
+  string amount_out = 4;
+}
