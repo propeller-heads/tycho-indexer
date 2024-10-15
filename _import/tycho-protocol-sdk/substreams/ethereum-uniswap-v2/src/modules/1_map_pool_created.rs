@@ -10,6 +10,7 @@ use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 use crate::abi::factory::events::PairCreated;
 
 use tycho_substreams::prelude::*;
+
 #[derive(Debug, Deserialize)]
 struct Params {
     factory_address: String,
