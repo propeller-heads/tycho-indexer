@@ -5,15 +5,19 @@ use hex::FromHex;
 use mini_moka::sync::Cache;
 use reqwest::{blocking::Client, StatusCode};
 use serde_json::json;
+
+use serde_json::Value;
 use std::{
     collections::HashMap,
     env,
     fs::File,
     io::Read,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock},
     time::Duration,
 };
+use walkdir::WalkDir;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -93,7 +97,7 @@ fn parse_solidity_error_message(data: &str) -> String {
             }
         }
 
-    // Solidity Panic(uint256) signature: 0x4e487b71
+        // Solidity Panic(uint256) signature: 0x4e487b71
     } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
         if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
             if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
@@ -240,8 +244,72 @@ pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
     Ok(code)
 }
 
+fn assets_folder() -> PathBuf {
+    // Get the directory of the current file (similar to Python's __file__)
+    let current_file = Path::new(file!());
+
+    // Go one level up (parent directory) and then add the "assets" folder
+    let assets_folder = current_file
+        .parent()
+        .unwrap()
+        .join("assets");
+
+    assets_folder
+}
+
+pub fn load_abi(name_or_path: &str) -> Result<Value, std::io::Error> {
+    let assets_folder = assets_folder();
+
+    let path = if Path::new(name_or_path).exists() {
+        PathBuf::from(name_or_path)
+    } else {
+        PathBuf::from(assets_folder.clone()).join(format!("{}.abi", name_or_path))
+    };
+
+    match File::open(&path) {
+        Ok(mut file) => {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            Ok(serde_json::from_str(&contents)?)
+        }
+        Err(_) => {
+            let available_files: Vec<String> = WalkDir::new(&assets_folder)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .map_or(false, |ext| ext == "abi")
+                })
+                .filter_map(|e| {
+                    e.path()
+                        .strip_prefix(&assets_folder)
+                        .ok()
+                        .map(|p| p.to_owned())
+                })
+                .filter_map(|p| {
+                    p.to_str()
+                        .map(|s| s.replace(".abi", ""))
+                })
+                .collect();
+
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!(
+                    "File {} not found. Did you mean one of these? {}",
+                    name_or_path,
+                    available_files.join(", ")
+                ),
+            ))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+
     use dotenv::dotenv;
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
@@ -387,5 +455,46 @@ mod tests {
     fn test_get_contract_bytecode_error() {
         let result = get_contract_bytecode("non_existent_file.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_existing_abi() {
+        let assets_folder = assets_folder();
+
+        // Create a temporary file in the assets folder
+        let temp_file = NamedTempFile::new_in(&assets_folder).unwrap();
+        let test_file_path = temp_file.path().to_path_buf();
+
+        // Create a test ABI file
+        let test_abi = r#"{"test": "abi"}"#;
+        std::fs::write(&test_file_path, test_abi).unwrap();
+
+        // Test loading an existing file
+        let result = load_abi(test_file_path.to_str().unwrap());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), serde_json::json!({"test": "abi"}));
+    }
+
+    #[test]
+    fn test_load_non_existent_abi() {
+        // Write two abi files, neither of which is the one we will try to load
+        let assets_folder = assets_folder();
+        let test_a_file_path = assets_folder.clone().join("test_a.abi");
+        let test_abi = r#"{"test": "abi"}"#;
+        std::fs::write(&test_a_file_path, test_abi).unwrap();
+
+        let test_b_file_path = assets_folder.join("test_b.abi");
+        std::fs::write(&test_b_file_path, test_abi).unwrap();
+
+        // Test loading a non-existent file
+        let result = load_abi("non_existent");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains(&format!("Did you mean one of these? test_a, test_b")));
+
+        std::fs::remove_file(&test_a_file_path).unwrap();
+        std::fs::remove_file(&test_b_file_path).unwrap();
     }
 }

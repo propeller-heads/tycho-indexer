@@ -44,6 +44,8 @@ cairo-vm = { version = "0.8.5", features = ["cairo-1-hints"], optional = true }
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
 foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
 revm-inspectors = { version = "0.5", features = ["serde"] }
+walkdir = "2.5.0"
+tempfile = "3.13.0"
 
 mini-moka = "0.10"
 tempfile = "3.13.0"
