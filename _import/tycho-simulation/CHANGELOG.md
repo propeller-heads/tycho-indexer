@@ -1,3 +1,11 @@
+## [0.21.0](https://github.com/propeller-heads/protosim/compare/0.20.0...0.21.0) (2024-10-17)
+
+
+### Features
+
+* Add ERC20 abi. ([232b966](https://github.com/propeller-heads/protosim/commit/232b9668ce22a06588199d157f1866f56cc3a483))
+* Dynamically detect token storage slots when necessary ([d2dbc26](https://github.com/propeller-heads/protosim/commit/d2dbc269d37642f2a1676cb01ed1ce5dcc58d331))
+
 ## [0.20.0](https://github.com/propeller-heads/protosim/compare/0.19.0...0.20.0) (2024-10-10)
 
 
