@@ -1,3 +1,15 @@
+## [1.1.0](https://github.com/propeller-heads/protosim/compare/1.0.0...1.1.0) (2024-10-17)
+
+
+### Features
+
+* implement get_contract_bytecode util function ([a4bce5d](https://github.com/propeller-heads/protosim/commit/a4bce5d8100c5ecbfcdfc39a2af47284c8412edf))
+
+
+### Bug Fixes
+
+* make get_contract_bytecote pub ([50fd8e7](https://github.com/propeller-heads/protosim/commit/50fd8e7413863a1208fc7bf9d38e3bfb99163c29))
+
 ## 1.0.0 (2024-10-17)
 
 
