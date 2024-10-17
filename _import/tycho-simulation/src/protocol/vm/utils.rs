@@ -11,7 +11,7 @@ use std::{
 
 static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Vec<u8>>> = LazyLock::new(|| Cache::new(1_000));
 
-fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
+pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
     if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string())) {
         return Ok(bytecode.clone());
     }
