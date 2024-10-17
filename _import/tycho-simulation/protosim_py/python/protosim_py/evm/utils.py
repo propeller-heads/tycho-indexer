@@ -63,7 +63,7 @@ def create_engine(
 
 
 class ERC20OverwriteFactory:
-    def __init__(self, token: EthereumToken):
+    def __init__(self, token: EthereumToken, token_slots = (0, 1)):
         """
         Initialize the ERC20OverwriteFactory.
 
@@ -72,8 +72,8 @@ class ERC20OverwriteFactory:
         """
         self._token = token
         self._overwrites = dict()
-        self._balance_slot: Final[int] = 0
-        self._allowance_slot: Final[int] = 1
+        self._balance_slot: int = token_slots[0]
+        self._allowance_slot: int = token_slots[1]
         self._total_supply_slot: Final[int] = 2
 
     def set_balance(self, balance: int, owner: Address):
