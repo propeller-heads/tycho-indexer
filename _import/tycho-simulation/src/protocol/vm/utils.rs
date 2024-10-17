@@ -4,19 +4,16 @@ use ethabi::{self, decode, ParamType};
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use reqwest::{blocking::Client, StatusCode};
-use serde_json::json;
-
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     env,
     fs::File,
     io::Read,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, LazyLock},
     time::Duration,
 };
-use walkdir::WalkDir;
 
 use thiserror::Error;
 
@@ -244,77 +241,40 @@ pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
     Ok(code)
 }
 
-fn assets_folder() -> PathBuf {
-    // Get the directory of the current file (similar to Python's __file__)
-    let current_file = Path::new(file!());
-
-    // Go one level up (parent directory) and then add the "assets" folder
-    let assets_folder = current_file
+pub fn load_swap_abi() -> Result<Value, std::io::Error> {
+    let swap_abi_path = Path::new(file!())
         .parent()
         .unwrap()
-        .join("assets");
+        .join("assets")
+        .join("ISwapAdapter.abi");
 
-    assets_folder
+    let mut file = File::open(&swap_abi_path).expect("Failed to open the swap ABI file");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Failed to read the swap ABI file");
+    Ok(serde_json::from_str(&contents).expect("Swap ABI is malformed."))
 }
 
-pub fn load_abi(name_or_path: &str) -> Result<Value, std::io::Error> {
-    let assets_folder = assets_folder();
+pub fn load_erc20_abi() -> Result<Value, std::io::Error> {
+    let erc20_abi_path = Path::new(file!())
+        .parent()
+        .unwrap()
+        .join("assets")
+        .join("ERC20.abi");
 
-    let path = if Path::new(name_or_path).exists() {
-        PathBuf::from(name_or_path)
-    } else {
-        PathBuf::from(assets_folder.clone()).join(format!("{}.abi", name_or_path))
-    };
-
-    match File::open(&path) {
-        Ok(mut file) => {
-            let mut contents = String::new();
-            file.read_to_string(&mut contents)?;
-            Ok(serde_json::from_str(&contents)?)
-        }
-        Err(_) => {
-            let available_files: Vec<String> = WalkDir::new(&assets_folder)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.path()
-                        .extension()
-                        .map_or(false, |ext| ext == "abi")
-                })
-                .filter_map(|e| {
-                    e.path()
-                        .strip_prefix(&assets_folder)
-                        .ok()
-                        .map(|p| p.to_owned())
-                })
-                .filter_map(|p| {
-                    p.to_str()
-                        .map(|s| s.replace(".abi", ""))
-                })
-                .collect();
-
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!(
-                    "File {} not found. Did you mean one of these? {}",
-                    name_or_path,
-                    available_files.join(", ")
-                ),
-            ))
-        }
-    }
+    let mut file = File::open(&erc20_abi_path).expect("Failed to open the ERC20 ABI file");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Failed to read the ERC20 ABI file");
+    Ok(serde_json::from_str(&contents).expect("ERC20 ABI is malformed."))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
-
     use dotenv::dotenv;
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
-
-    use super::*;
 
     #[test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
@@ -458,43 +418,33 @@ mod tests {
     }
 
     #[test]
-    fn test_load_existing_abi() {
-        let assets_folder = assets_folder();
-
-        // Create a temporary file in the assets folder
-        let temp_file = NamedTempFile::new_in(&assets_folder).unwrap();
-        let test_file_path = temp_file.path().to_path_buf();
-
-        // Create a test ABI file
-        let test_abi = r#"{"test": "abi"}"#;
-        std::fs::write(&test_file_path, test_abi).unwrap();
-
+    fn test_load_swap_abi() {
         // Test loading an existing file
-        let result = load_abi(test_file_path.to_str().unwrap());
+        let result = load_swap_abi();
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), serde_json::json!({"test": "abi"}));
+        assert!(
+            result
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len() >
+                0,
+            "The swap ABI should not be empty."
+        );
     }
-
     #[test]
-    fn test_load_non_existent_abi() {
-        // Write two abi files, neither of which is the one we will try to load
-        let assets_folder = assets_folder();
-        let test_a_file_path = assets_folder.clone().join("test_a.abi");
-        let test_abi = r#"{"test": "abi"}"#;
-        std::fs::write(&test_a_file_path, test_abi).unwrap();
-
-        let test_b_file_path = assets_folder.join("test_b.abi");
-        std::fs::write(&test_b_file_path, test_abi).unwrap();
-
-        // Test loading a non-existent file
-        let result = load_abi("non_existent");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains(&format!("Did you mean one of these? test_a, test_b")));
-
-        std::fs::remove_file(&test_a_file_path).unwrap();
-        std::fs::remove_file(&test_b_file_path).unwrap();
+    fn test_load_erc20_abi() {
+        // Test loading an existing file
+        let result = load_erc20_abi();
+        assert!(result.is_ok());
+        assert!(
+            result
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len() >
+                0,
+            "The erc20 ABI should not be empty."
+        );
     }
 }
