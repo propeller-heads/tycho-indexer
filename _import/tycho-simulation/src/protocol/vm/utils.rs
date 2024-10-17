@@ -423,12 +423,11 @@ mod tests {
         let result = load_swap_abi();
         assert!(result.is_ok());
         assert!(
-            result
+            !result
                 .unwrap()
                 .as_array()
                 .unwrap()
-                .len() >
-                0,
+                .is_empty(),
             "The swap ABI should not be empty."
         );
     }
@@ -438,12 +437,11 @@ mod tests {
         let result = load_erc20_abi();
         assert!(result.is_ok());
         assert!(
-            result
+            !result
                 .unwrap()
                 .as_array()
                 .unwrap()
-                .len() >
-                0,
+                .is_empty(),
             "The erc20 ABI should not be empty."
         );
     }
