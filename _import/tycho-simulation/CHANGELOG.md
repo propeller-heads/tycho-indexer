@@ -1,3 +1,11 @@
+## [0.22.0](https://github.com/propeller-heads/protosim/compare/0.21.0...0.22.0) (2024-10-17)
+
+
+### Features
+
+* implement get_code_for_address util function ([9b5e64a](https://github.com/propeller-heads/protosim/commit/9b5e64a28701195a3f1f04810033e98166cbbf7d))
+* implement maybe_coerce_error utils function ([6c75b26](https://github.com/propeller-heads/protosim/commit/6c75b264b35f3b3c017af5fb3ac107534c64ee59))
+
 ## [0.21.0](https://github.com/propeller-heads/protosim/compare/0.20.0...0.21.0) (2024-10-17)
 
 
