@@ -16,7 +16,7 @@ if [ -n "$current_tag" ]; then
         # Semantic version
         version="${BASH_REMATCH[2]}"
 
-        cargo_version=$(cargo pkgid -p ethereum-balancer | cut -d# -f2 | cut -d: -f2)
+        cargo_version=$(cargo pkgid -p "$package" | cut -d# -f2 | cut -d: -f2)
         if [[ "$cargo_version" != "$version" ]]; then
           echo "Error: Cargo version: ${cargo_version} does not match tag version: ${version}!"
           exit 1
@@ -52,9 +52,18 @@ fi
 REPOSITORY=${REPOSITORY:-"s3://repo.propellerheads/substreams"}
 repository_path="$REPOSITORY/$package/$package-$version.spkg"
 
+# Optional input for yaml file; defaults to substreams.yaml if not provided
+yaml_file=${2:-"substreams.yaml"}
+
+if [[ ! -f "$package/$yaml_file" ]]; then
+    echo "Error: manifest reader: unable to stat input file $yaml_file: file does not exist."
+    exit 1
+fi
+
+set -e  # Exit the script if any command fails
 cargo build --target wasm32-unknown-unknown --release -p "$package"
 mkdir -p ./target/spkg/
-substreams pack $package/substreams.yaml -o ./target/spkg/$package-$version.spkg
+substreams pack "$package/$yaml_file" -o ./target/spkg/$package-$version.spkg
 aws s3 cp ./target/spkg/$package-$version.spkg $repository_path
 
 echo "Released substreams package: '$repository_path'"
