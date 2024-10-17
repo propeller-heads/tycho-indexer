@@ -165,6 +165,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             adapter_contract_path=self.adapter_contract,
             trace=self.trace,
             manual_updates=manual_updates,
+            involved_contracts=set(component.contract_ids),
             **optional_attributes,
         )
 

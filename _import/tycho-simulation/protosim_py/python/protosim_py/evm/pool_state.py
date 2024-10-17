@@ -12,6 +12,7 @@ import eth_abi
 from eth_utils import keccak
 from eth_typing import HexStr
 
+from . import token
 from . import SimulationEngine, AccountInfo, SimulationParameters
 from .adapter_contract import AdapterContract
 from .constants import MAX_BALANCE, EXTERNAL_ACCOUNT
@@ -46,6 +47,8 @@ class ThirdPartyPool:
         block_lasting_overwrites: defaultdict[Address, dict[int, int]] = None,
         manual_updates: bool = False,
         trace: bool = False,
+        involved_contracts=None,
+        token_storage_slots=None,
     ):
         self.id_ = id_
         """The pools identifier."""
@@ -91,10 +94,22 @@ class ThirdPartyPool:
         self.trace: bool = trace
         """If set, vm will emit detailed traces about the execution."""
 
+        self.involved_contracts: set[Address] = involved_contracts or set()
+        """A set of all contract addresses involved in the simulation of this pool."""
+
+        self.token_storage_slots: dict[Address, tuple[int, int]] = (
+            token_storage_slots or {}
+        )
+        """Allows the specification of custom storage slots for token allowances and
+        balances. This is particularly useful for token contracts involved in protocol
+        logic that extends beyond simple transfer functionality.
+        """
+
         self._engine: Optional[SimulationEngine] = None
         self._set_engine()
         self._adapter_contract = AdapterContract(ADAPTER_ADDRESS, self._engine)
         self._set_capabilities()
+        self._init_token_storage_slots()
         if len(self.marginal_prices) == 0:
             self._set_marginal_prices()
 
@@ -105,11 +120,6 @@ class ThirdPartyPool:
 
         The engine will have the specified adapter contract mocked, as well as the
         tokens used by the pool.
-
-        Parameters
-        ----------
-        engine
-            Optional simulation engine instance.
         """
         if self._engine is not None:
             return
@@ -193,6 +203,16 @@ class ThirdPartyPool:
             log.warning(
                 f"Pool {self.id_} hash different capabilities depending on the token pair!"
             )
+
+    def _init_token_storage_slots(self):
+        for t in self.tokens:
+            if (
+                t.address in self.involved_contracts
+                and t.address not in self.token_storage_slots
+            ):
+                self.token_storage_slots[t.address] = token.brute_force_slots(
+                    t, self.block, self._engine
+                )
 
     def get_amount_out(
         self: TPoolState,
@@ -291,8 +311,11 @@ class ThirdPartyPool:
     def _get_balance_overwrites(self) -> dict[Address, dict[int, int]]:
         balance_overwrites = {}
         address = self.balance_owner or self.id_
+        slots = (0, 1)
         for t in self.tokens:
-            overwrites = ERC20OverwriteFactory(t)
+            if t.address in self.involved_contracts:
+                slots = self.token_storage_slots.get(t.address)
+            overwrites = ERC20OverwriteFactory(t, token_slots=slots)
             overwrites.set_balance(
                 t.to_onchain_amount(self.balances[t.address]), address
             )
