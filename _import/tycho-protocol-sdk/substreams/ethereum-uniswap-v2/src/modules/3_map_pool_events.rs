@@ -104,7 +104,7 @@ fn handle_sync(
                     name: attribute_name,
                     value: reserve_bytes
                         .clone()
-                        .to_signed_bytes_le(), //TODO: Unify bytes encoding (either be or le)
+                        .to_signed_bytes_be(),
                     change: ChangeType::Update.into(),
                 },
             );

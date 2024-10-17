@@ -46,12 +46,12 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                 attributes: vec![
                     Attribute {
                         name: "reserve0".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_le(),
+                        value: BigInt::from(0).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
                         name: "reserve1".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_le(),
+                        value: BigInt::from(0).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                 ],
@@ -64,7 +64,7 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                     // Trading Fee is hardcoded to 0.3%, saved as int in bps (basis points)
                     Attribute {
                         name: "fee".to_string(),
-                        value: BigInt::from(30).to_signed_bytes_le(),
+                        value: BigInt::from(30).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
