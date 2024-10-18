@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 use ethabi::{self, decode, ParamType};
 use ethers::{
-    providers::{Http, Middleware, Provider},
+    providers::{Http, Middleware, Provider, ProviderError},
     types::H160,
 };
 use hex::FromHex;
@@ -20,10 +20,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RpcError {
-    #[error("Invalid Response: {0}")]
-    InvalidResponse(String),
     #[error("Invalid Request: {0}")]
     InvalidRequest(String),
+    #[error("Invalid Response: {0}")]
+    InvalidResponse(ProviderError),
+    #[error("Solidity Error: {0}")]
+    SolidityError(String),
     #[error("Out of Gas: {0}. Pool state: {1}")]
     OutOfGas(String, String),
 }
@@ -36,9 +38,9 @@ pub fn maybe_coerce_error(
 ) -> Result<(), RpcError> {
     match err {
         // Check for revert situation (if error message starts with "0x")
-        RpcError::InvalidResponse(ref details) if details.starts_with("0x") => {
+        RpcError::SolidityError(ref details) if details.starts_with("0x") => {
             let reason = parse_solidity_error_message(details);
-            let err = RpcError::InvalidResponse(format!("Revert! Reason: {}", reason));
+            let err = RpcError::SolidityError(format!("Revert! Reason: {}", reason));
 
             // Check if we are running out of gas
             if let (Some(gas_limit), Some(gas_used)) = (gas_limit, gas_used) {
@@ -59,7 +61,7 @@ pub fn maybe_coerce_error(
         }
 
         // Check if "OutOfGas" is part of the error message
-        RpcError::InvalidResponse(ref details) if details.contains("OutOfGas") => {
+        RpcError::SolidityError(ref details) if details.contains("OutOfGas") => {
             let usage_msg = if let (Some(gas_limit), Some(gas_used)) = (gas_limit, gas_used) {
                 let usage = gas_used as f64 / gas_limit as f64;
                 format!("Used: {:.2}% of gas limit. ", usage * 100.0)
@@ -170,7 +172,7 @@ pub async fn get_code_for_address(
         Ok(code) => Ok(Some(code.to_vec())),
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
-            Err(RpcError::InvalidResponse(format!("RPC failed to call get_code with Error: {}", e)))
+            Err(RpcError::InvalidResponse(e))
         }
     }
 }
@@ -225,22 +227,22 @@ mod tests {
 
     #[test]
     fn test_maybe_coerce_error_revert_no_gas_info() {
-        let err = RpcError::InvalidResponse("0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string());
+        let err = RpcError::SolidityError("0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string());
 
         let result = maybe_coerce_error(err, "test_pool", None, None);
 
         assert!(result.is_err());
-        if let Err(RpcError::InvalidResponse(message)) = result {
+        if let Err(RpcError::SolidityError(message)) = result {
             assert!(message.contains("Revert! Reason: Invalid operation"));
         } else {
-            panic!("Expected InvalidResponse error");
+            panic!("Expected SolidityError error");
         }
     }
 
     #[test]
     fn test_maybe_coerce_error_out_of_gas() {
         // Test out-of-gas situation with gas limit and gas used provided
-        let err = RpcError::InvalidResponse("OutOfGas".to_string());
+        let err = RpcError::SolidityError("OutOfGas".to_string());
 
         let result = maybe_coerce_error(err, "test_pool", Some(1000), Some(980));
 
@@ -256,7 +258,7 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_no_gas_limit_info() {
         // Test out-of-gas situation without gas limit info
-        let err = RpcError::InvalidResponse("OutOfGas".to_string());
+        let err = RpcError::SolidityError("OutOfGas".to_string());
 
         let result = maybe_coerce_error(err, "test_pool", None, None);
 
