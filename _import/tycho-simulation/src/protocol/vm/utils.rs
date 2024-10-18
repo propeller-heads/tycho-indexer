@@ -7,7 +7,6 @@ use ethers::{
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
-use reqwest::StatusCode;
 
 use std::{
     collections::HashMap,
@@ -21,12 +20,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RpcError {
-    #[error("HTTP Error: {0}")]
-    Http(reqwest::Error),
-    #[error("RPC Error: {0}. Status code: {1}")]
-    Rpc(String, StatusCode),
     #[error("Invalid Response: {0}")]
     InvalidResponse(String),
+    #[error("Invalid Request: {0}")]
+    InvalidRequest(String),
     #[error("Out of Gas: {0}. Pool state: {1}")]
     OutOfGas(String, String),
 }
@@ -152,7 +149,7 @@ pub async fn get_code_for_address(
     let connection_string = match connection_string {
         Some(url) => url,
         None => {
-            return Err(RpcError::InvalidResponse(
+            return Err(RpcError::InvalidRequest(
                 "RPC_URL environment variable is not set".to_string(),
             ))
         }
@@ -165,17 +162,12 @@ pub async fn get_code_for_address(
     // Parse the address
     let addr: H160 = address
         .parse()
-        .map_err(|_| RpcError::InvalidResponse(format!("Failed to parse address: {}", address)))?;
+        .map_err(|_| RpcError::InvalidRequest(format!("Failed to parse address: {}", address)))?;
 
     // Call eth_getCode to get the bytecode of the contract
     match provider.get_code(addr, None).await {
-        Ok(code) => {
-            if code.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(code.to_vec()))
-            }
-        }
+        Ok(code) if code.is_empty() => Ok(None),
+        Ok(code) => Ok(Some(code.to_vec())),
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
             Err(RpcError::InvalidResponse(format!("RPC failed to call get_code with Error: {}", e)))
@@ -208,7 +200,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    // #[cfg_attr(not(feature = "network_tests"), ignore)]
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
     async fn test_get_code_for_address() {
         let rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
@@ -274,22 +266,6 @@ mod tests {
             assert_eq!(pool_state, "test_pool");
         } else {
             panic!("Expected OutOfGas error");
-        }
-    }
-
-    #[test]
-    fn test_maybe_coerce_error_no_match() {
-        // Test for non-revert, non-out-of-gas errors
-        let err = RpcError::Rpc("Some other error".to_string(), StatusCode::BAD_REQUEST);
-
-        let result = maybe_coerce_error(err, "test_pool", None, None);
-
-        assert!(result.is_err());
-        if let Err(RpcError::Rpc(message, status)) = result {
-            assert_eq!(message, "Some other error");
-            assert_eq!(status, StatusCode::BAD_REQUEST);
-        } else {
-            panic!("Expected Rpc error");
         }
     }
 
