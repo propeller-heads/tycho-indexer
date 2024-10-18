@@ -1,6 +1,7 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 use ethabi::{self, decode, ParamType};
+use ethers::abi::Abi;
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use reqwest::{blocking::Client, StatusCode};
@@ -14,6 +15,7 @@ use std::{
     sync::{Arc, LazyLock},
     time::Duration,
 };
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -93,7 +95,7 @@ fn parse_solidity_error_message(data: &str) -> String {
             }
         }
 
-    // Solidity Panic(uint256) signature: 0x4e487b71
+        // Solidity Panic(uint256) signature: 0x4e487b71
     } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
         if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
             if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
@@ -238,6 +240,37 @@ pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
     BYTECODE_CACHE.insert(Arc::new(path.to_string()), code.clone());
 
     Ok(code)
+}
+
+pub fn load_swap_abi() -> Result<Abi, std::io::Error> {
+    let swap_abi_path = Path::new(file!())
+        .parent()
+        .unwrap()
+        .join("assets")
+        .join("ISwapAdapter.abi");
+
+    let mut file = File::open(&swap_abi_path).expect("Failed to open the swap ABI file");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Failed to read the swap ABI file");
+    let abi: Abi = serde_json::from_str(&contents).expect("Swap ABI is malformed.");
+    Ok(abi)
+}
+
+pub fn load_erc20_abi() -> Result<Abi, std::io::Error> {
+    let erc20_abi_path = Path::new(file!())
+        .parent()
+        .unwrap()
+        .join("assets")
+        .join("ERC20.abi");
+
+    let mut file = File::open(&erc20_abi_path).expect("Failed to open the ERC20 ABI file");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Failed to read the ERC20 ABI file");
+
+    let abi: Abi = serde_json::from_str(&contents).expect("ERC20 ABI is malformed.");
+    Ok(abi)
 }
 
 #[cfg(test)]
@@ -387,5 +420,22 @@ mod tests {
     fn test_get_contract_bytecode_error() {
         let result = get_contract_bytecode("non_existent_file.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_swap_abi() {
+        let result = load_swap_abi();
+        assert!(result.is_ok());
+
+        let abi: Abi = result.expect("Failed to retrieve swap ABI result");
+        assert!(!abi.functions.is_empty(), "The swap ABI should contain functions.");
+    }
+
+    #[test]
+    fn test_load_erc20_abi() {
+        let result = load_erc20_abi();
+        assert!(result.is_ok());
+        let abi: Abi = result.expect("Failed to retrieve ERC20 ABI result");
+        assert!(!abi.functions.is_empty(), "The ERC20 ABI should contain functions.");
     }
 }
