@@ -1,10 +1,11 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 use ethabi::{self, decode, ParamType};
+use ethers::abi::Abi;
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use reqwest::{blocking::Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::{
     collections::HashMap,
     env,
@@ -241,7 +242,7 @@ pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
     Ok(code)
 }
 
-pub fn load_swap_abi() -> Result<Value, std::io::Error> {
+pub fn load_swap_abi() -> Result<Abi, std::io::Error> {
     let swap_abi_path = Path::new(file!())
         .parent()
         .unwrap()
@@ -252,10 +253,11 @@ pub fn load_swap_abi() -> Result<Value, std::io::Error> {
     let mut contents = String::new();
     file.read_to_string(&mut contents)
         .expect("Failed to read the swap ABI file");
-    Ok(serde_json::from_str(&contents).expect("Swap ABI is malformed."))
+    let abi: Abi = serde_json::from_str(&contents).expect("Swap ABI is malformed.");
+    Ok(abi)
 }
 
-pub fn load_erc20_abi() -> Result<Value, std::io::Error> {
+pub fn load_erc20_abi() -> Result<Abi, std::io::Error> {
     let erc20_abi_path = Path::new(file!())
         .parent()
         .unwrap()
@@ -266,15 +268,18 @@ pub fn load_erc20_abi() -> Result<Value, std::io::Error> {
     let mut contents = String::new();
     file.read_to_string(&mut contents)
         .expect("Failed to read the ERC20 ABI file");
-    Ok(serde_json::from_str(&contents).expect("ERC20 ABI is malformed."))
+
+    let abi: Abi = serde_json::from_str(&contents).expect("ERC20 ABI is malformed.");
+    Ok(abi)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use dotenv::dotenv;
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
+
+    use super::*;
 
     #[test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
@@ -419,30 +424,18 @@ mod tests {
 
     #[test]
     fn test_load_swap_abi() {
-        // Test loading an existing file
         let result = load_swap_abi();
         assert!(result.is_ok());
-        assert!(
-            !result
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .is_empty(),
-            "The swap ABI should not be empty."
-        );
+
+        let abi: Abi = result.expect("Failed to retrieve swap ABI result");
+        assert!(!abi.functions.is_empty(), "The swap ABI should contain functions.");
     }
+
     #[test]
     fn test_load_erc20_abi() {
-        // Test loading an existing file
         let result = load_erc20_abi();
         assert!(result.is_ok());
-        assert!(
-            !result
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .is_empty(),
-            "The erc20 ABI should not be empty."
-        );
+        let abi: Abi = result.expect("Failed to retrieve ERC20 ABI result");
+        assert!(!abi.functions.is_empty(), "The ERC20 ABI should contain functions.");
     }
 }
