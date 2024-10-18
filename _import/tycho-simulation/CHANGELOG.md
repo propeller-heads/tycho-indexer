@@ -1,3 +1,16 @@
+## [0.23.0](https://github.com/propeller-heads/protosim/compare/0.22.0...0.23.0) (2024-10-18)
+
+
+### Features
+
+* implement load_abi util function ([ee81b3c](https://github.com/propeller-heads/protosim/commit/ee81b3c0b5a357eee1129a8093056e342a100fc2))
+
+
+### Bug Fixes
+
+* return ethers::ebi::Abi from load_swap_abi ([2c18f68](https://github.com/propeller-heads/protosim/commit/2c18f6870a0d1c1232328e83a4c19d67e81be056))
+* split into load_erc20_abi and load_swap_abi ([57d3415](https://github.com/propeller-heads/protosim/commit/57d3415d662afab902969544b2059963bb5b7d00))
+
 ## [0.22.0](https://github.com/propeller-heads/protosim/compare/0.21.0...0.22.0) (2024-10-17)
 
 
