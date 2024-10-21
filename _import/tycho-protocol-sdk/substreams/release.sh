@@ -10,7 +10,7 @@ current_tag=$(git describe --tags --exact-match HEAD 2>/dev/null)
 
 if [ -n "$current_tag" ]; then
     # If the HEAD is at a tag, extract the prefix and version
-    if [[ $current_tag =~ ^([a-zA-Z-]*-)?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    if [[ $current_tag =~ ^([a-zA-Z0-9-]*-)?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
         # Prefix without the trailing hyphen (if any)
         package="${BASH_REMATCH[1]%?}"
         # Semantic version
