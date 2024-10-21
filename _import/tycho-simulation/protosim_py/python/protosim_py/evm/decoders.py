@@ -165,7 +165,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             adapter_contract_path=self.adapter_contract,
             trace=self.trace,
             manual_updates=manual_updates,
-            involved_contracts=set(component.contract_ids),
+            involved_contracts=set(to_checksum_address(b.hex()) for b in component.contract_ids),
             **optional_attributes,
         )
 
