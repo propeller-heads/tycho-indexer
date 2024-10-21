@@ -34,6 +34,8 @@ pub enum RpcError {
     OutOfGas(String, String),
 }
 
+pub type SlotHash = H256;
+
 pub fn maybe_coerce_error(
     err: RpcError,
     pool_state: &str,
@@ -130,53 +132,54 @@ fn parse_solidity_error_message(data: &str) -> String {
     format!("Failed to decode: {}", data)
 }
 
-pub fn get_storage_slot_at_key(key: Address, mapping_slot: H256) -> H256 {
-    // Convert key to bytes
+pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
     let mut key_bytes = key.as_bytes().to_vec();
     key_bytes.resize(32, 0); // Right pad with zeros
 
-    // Convert mapping slot to bytes
     let mut mapping_slot_bytes = [0u8; 32];
     mapping_slot_bytes.copy_from_slice(mapping_slot.as_bytes());
 
-    // Concatenate key and mapping slot bytes, then hash
     let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
-    ethers::types::TxHash(slot_bytes)
+    SlotHash::from_slice(&slot_bytes)
 }
 
 pub struct GethOverwrite {
-    pub state_diff: HashMap<String, String>, // The formatted overwrites
-    pub code: String,                        // The bytecode as a string
+    /// the formatted overwrites
+    pub state_diff: HashMap<String, String>,
+    /// the bytecode as a string
+    pub code: String,
 }
+
+pub type Overwrites = HashMap<SlotHash, U256>;
 
 pub struct ERC20OverwriteFactory {
     token_address: Address,
-    overwrites: HashMap<H256, U256>,
-    balance_slot: H256,
-    allowance_slot: H256,
-    total_supply_slot: H256,
+    overwrites: Overwrites,
+    balance_slot: SlotHash,
+    allowance_slot: SlotHash,
+    total_supply_slot: SlotHash,
 }
 
 impl ERC20OverwriteFactory {
-    pub fn new(token_address: Address, token_slots: (H256, H256)) -> Self {
+    pub fn new(token_address: Address, token_slots: (SlotHash, SlotHash)) -> Self {
         ERC20OverwriteFactory {
             token_address,
             overwrites: HashMap::new(),
             balance_slot: token_slots.0,
             allowance_slot: token_slots.1,
-            total_supply_slot: H256::from_low_u64_be(2),
+            total_supply_slot: SlotHash::from_low_u64_be(2),
         }
     }
 
     pub fn set_balance(&mut self, balance: U256, owner: Address) {
-        let storage_index = get_storage_slot_at_key(owner, self.balance_slot);
+        let storage_index = get_storage_slot_index_at_key(owner, self.balance_slot);
         self.overwrites
             .insert(storage_index, balance);
     }
 
     pub fn set_allowance(&mut self, allowance: U256, spender: Address, owner: Address) {
-        let owner_slot = get_storage_slot_at_key(owner, self.allowance_slot);
-        let storage_index = get_storage_slot_at_key(spender, owner_slot);
+        let owner_slot = get_storage_slot_index_at_key(owner, self.allowance_slot);
+        let storage_index = get_storage_slot_index_at_key(spender, owner_slot);
         self.overwrites
             .insert(storage_index, allowance);
     }
@@ -186,7 +189,7 @@ impl ERC20OverwriteFactory {
             .insert(self.total_supply_slot, supply);
     }
 
-    pub fn get_protosim_overwrites(&self) -> HashMap<Address, HashMap<H256, U256>> {
+    pub fn get_protosim_overwrites(&self) -> HashMap<Address, Overwrites> {
         let mut result = HashMap::new();
         result.insert(self.token_address, self.overwrites.clone());
         result
@@ -207,13 +210,20 @@ impl ERC20OverwriteFactory {
 
         let erc20_abi_path = Path::new(file!())
             .parent()
-            .unwrap()
+            .expect("Failed to obtain parent directory of current file.")
             .join("assets")
             .join("ERC20.abi");
 
         let code = format!(
             "0x{}",
-            hex::encode(get_contract_bytecode(erc20_abi_path.to_str().unwrap()).unwrap())
+            hex::encode(
+                get_contract_bytecode(
+                    erc20_abi_path
+                        .to_str()
+                        .expect("Failed to convert file path to string.")
+                )
+                .expect("Failed to read contract bytecode.")
+            )
         );
 
         let mut result = HashMap::new();
@@ -538,8 +548,8 @@ mod tests {
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address = Address::random();
-        let balance_slot = H256::random();
-        let allowance_slot = H256::random();
+        let balance_slot = SlotHash::random();
+        let allowance_slot = SlotHash::random();
         ERC20OverwriteFactory::new(token_address, (balance_slot, allowance_slot))
     }
 
@@ -603,7 +613,7 @@ mod tests {
     fn test_get_geth_overwrites() {
         let mut factory = setup_factory();
 
-        let storage_slot = H256::from_low_u64_be(1);
+        let storage_slot = SlotHash::from_low_u64_be(1);
         let val = U256::from(123456);
         factory
             .overwrites
