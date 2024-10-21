@@ -9,6 +9,10 @@ on:
       package:
         required: true
         description: "Package to build"
+      config_file:
+        required: false
+        description: "Path to the substreams configuration file"
+        default: "substreams.yaml"
 
 jobs:
   Release:
@@ -42,4 +46,4 @@ jobs:
       - name: Run checks
         run: |
           cd substreams
-          ./release.sh ${{ inputs.package }}
+          ./release.sh ${{ inputs.package }} ${{ inputs.config_file }}
