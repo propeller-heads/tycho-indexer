@@ -29,8 +29,7 @@ use crate::{
         chain_state::ChainState,
         post_processors::{
             add_default_attributes_uniswapv2, add_default_attributes_uniswapv3,
-            ignore_self_balances, transcode_ambient_balances, transcode_usv2_balances,
-            trim_curve_component_token,
+            ignore_self_balances, transcode_ambient_balances, trim_curve_component_token,
         },
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
@@ -457,7 +456,7 @@ impl ExtractorBuilder {
                 match self.config.name.as_str() {
                     "uniswap_v2" => {
                         if self.config.chain == Chain::Ethereum {
-                            Some(|b| transcode_usv2_balances(add_default_attributes_uniswapv2(b)))
+                            Some(add_default_attributes_uniswapv2)
                         } else {
                             None
                         }
