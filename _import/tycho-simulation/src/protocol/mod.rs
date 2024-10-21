@@ -10,7 +10,7 @@ pub mod state;
 pub mod tycho;
 pub mod uniswap_v2;
 pub mod uniswap_v3;
-mod vm;
+pub mod vm;
 
 /// A trait for converting types to and from `Bytes`.
 ///

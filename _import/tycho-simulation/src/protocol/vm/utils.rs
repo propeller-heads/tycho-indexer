@@ -132,6 +132,50 @@ fn parse_solidity_error_message(data: &str) -> String {
     format!("Failed to decode: {}", data)
 }
 
+/// Get storage slot index of a value stored at a certain key in a mapping
+///
+/// # Arguments
+///
+/// * `key`: Key in a mapping. This function is meant to work with ethereum addresses and accepts
+///   only strings.
+/// * `mapping_slot`: Storage slot at which the mapping itself is stored. See the examples for more
+///   explanation.
+///
+/// # Returns
+///
+/// A `SlotHash` representing the  index of a storage slot where the value at the given
+/// key is stored.
+///
+/// # Examples
+///
+/// If a mapping is declared as a first variable in Solidity code, its storage slot
+/// is 0 (e.g. `balances` in our mocked ERC20 contract). Here's how to compute
+/// a storage slot where balance of a given account is stored:
+///
+/// ```
+/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, SlotHash};
+/// use ethers::types::Address;
+/// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
+/// get_storage_slot_index_at_key(address, SlotHash::from_low_u64_be(0));
+/// ```
+///
+/// For nested mappings, we need to apply the function twice. An example of this is
+/// `allowances` in ERC20. It is a mapping of form:
+/// `HashMap<Owner, HashMap<Spender, U256>>`. In our mocked ERC20 contract, `allowances`
+/// is a second variable, so it is stored at slot 1. Here's how to get a storage slot
+/// where an allowance of `address_spender` to spend `address_owner`'s money is stored:
+///
+/// ```
+/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, SlotHash};
+/// use ethers::types::Address;
+/// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
+/// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
+/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, SlotHash::from_low_u64_be(1)));
+/// ```
+///
+/// # See Also
+///
+/// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
 pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
     let mut key_bytes = key.as_bytes().to_vec();
     key_bytes.resize(32, 0); // Right pad with zeros
