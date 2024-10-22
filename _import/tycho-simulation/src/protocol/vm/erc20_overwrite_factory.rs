@@ -1,10 +1,7 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
-use crate::protocol::vm::utils::{get_contract_bytecode, get_storage_slot_index_at_key};
-use ethers::{
-    addressbook::Address,
-    prelude::{H256, U256},
-};
+use crate::protocol::vm::utils::{get_contract_bytecode, get_storage_slot_index_at_key, SlotHash};
+use ethers::{addressbook::Address, prelude::U256};
 use std::{collections::HashMap, path::Path};
 use thiserror::Error;
 
@@ -28,24 +25,24 @@ pub struct GethOverwrite {
     pub code: String,
 }
 
-pub type Overwrites = HashMap<H256, U256>;
+pub type Overwrites = HashMap<SlotHash, U256>;
 
 pub struct ERC20OverwriteFactory {
     token_address: Address,
     overwrites: Overwrites,
-    balance_slot: H256,
-    allowance_slot: H256,
-    total_supply_slot: H256,
+    balance_slot: SlotHash,
+    allowance_slot: SlotHash,
+    total_supply_slot: SlotHash,
 }
 
 impl ERC20OverwriteFactory {
-    pub fn new(token_address: Address, token_slots: (H256, H256)) -> Self {
+    pub fn new(token_address: Address, token_slots: (SlotHash, SlotHash)) -> Self {
         ERC20OverwriteFactory {
             token_address,
             overwrites: HashMap::new(),
             balance_slot: token_slots.0,
             allowance_slot: token_slots.1,
-            total_supply_slot: H256::from_low_u64_be(2),
+            total_supply_slot: SlotHash::from_low_u64_be(2),
         }
     }
 
@@ -118,11 +115,12 @@ impl ERC20OverwriteFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::vm::utils::SlotHash;
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address = Address::random();
-        let balance_slot = H256::random();
-        let allowance_slot = H256::random();
+        let balance_slot = SlotHash::random();
+        let allowance_slot = SlotHash::random();
         ERC20OverwriteFactory::new(token_address, (balance_slot, allowance_slot))
     }
 
@@ -186,7 +184,7 @@ mod tests {
     fn test_get_geth_overwrites() {
         let mut factory = setup_factory();
 
-        let storage_slot = H256::from_low_u64_be(1);
+        let storage_slot = SlotHash::from_low_u64_be(1);
         let val = U256::from(123456);
         factory
             .overwrites

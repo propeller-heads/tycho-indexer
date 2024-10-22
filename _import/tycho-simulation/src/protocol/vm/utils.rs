@@ -5,7 +5,7 @@ use ethabi::{self, decode, ParamType};
 use ethers::{
     abi::Abi,
     core::utils::keccak256,
-    types::{H160, H256},
+    types::{Address, H256},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
@@ -130,13 +130,15 @@ fn parse_solidity_error_message(data: &str) -> String {
     format!("Failed to decode: {}", data)
 }
 
+pub type SlotHash = H256;
+
 /// Get storage slot index of a value stored at a certain key in a mapping
 ///
 /// # Arguments
 ///
 /// * `key`: Key in a mapping. Can be any H160 value (such as an address).
-/// * `mapping_slot`: Storage slot at which the mapping itself is stored. See the examples for more
-///   explanation.
+/// * `mapping_slot`: An `H256` representing the storage slot at which the mapping itself is stored.
+///   See the examples for more explanation.
 ///
 /// # Returns
 ///
@@ -173,7 +175,7 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(key: H160, mapping_slot: H256) -> H256 {
+pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
     let mut key_bytes = key.as_bytes().to_vec();
     key_bytes.resize(32, 0); // Right pad with zeros
 
@@ -181,7 +183,7 @@ pub fn get_storage_slot_index_at_key(key: H160, mapping_slot: H256) -> H256 {
     mapping_slot_bytes.copy_from_slice(mapping_slot.as_bytes());
 
     let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
-    H256::from_slice(&slot_bytes)
+    SlotHash::from_slice(&slot_bytes)
 }
 
 fn get_solidity_panic_codes() -> HashMap<u64, String> {
