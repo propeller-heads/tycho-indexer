@@ -18,7 +18,7 @@ use strum_macros::Display;
 use tokio::runtime::Runtime;
 use tracing::debug;
 
-use crate::evm_simulation::database::OverriddenSimulationDB;
+use crate::evm::database::OverriddenSimulationDB;
 
 use super::{
     account_storage::StateUpdate,
@@ -374,7 +374,7 @@ mod tests {
         OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
 
-    use crate::evm_simulation::database;
+    use crate::evm::database;
 
     use super::*;
 

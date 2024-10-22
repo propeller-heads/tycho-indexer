@@ -9,7 +9,7 @@ use ethers::{
 use hex::FromHex;
 use mini_moka::sync::Cache;
 
-use crate::evm_simulation::simulation::SimulationError;
+use crate::evm::simulation::SimulationError;
 use std::{
     collections::HashMap,
     env,

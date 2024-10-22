@@ -118,7 +118,6 @@ impl BlockAccountChanges {
 pub enum Chain {
     #[default]
     Ethereum,
-    Starknet,
     ZkSync,
 }
 

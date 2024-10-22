@@ -232,7 +232,7 @@ impl AccountStorage {
 #[cfg(test)]
 mod tests {
     use super::StateUpdate;
-    use crate::evm_simulation::account_storage::{Account, AccountStorage};
+    use crate::evm::account_storage::{Account, AccountStorage};
     use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY, U256 as rU256};
     use std::{collections::HashMap, error::Error, str::FromStr};
 
