@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "ethers",
  "hex",
@@ -3035,18 +3035,6 @@ dependencies = [
  "serde",
  "sha3 0.10.8",
  "zeroize",
-]
-
-[[package]]
-name = "enum_dispatch"
-version = "0.3.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11f36e95862220b211a6e2aa5eca09b4fa391b13cd52ceb8035a24bf65a79de2"
-dependencies = [
- "once_cell",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -6245,21 +6233,18 @@ dependencies = [
 
 [[package]]
 name = "protosim"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "approx",
- "async-trait",
- "cairo-vm",
  "chrono",
  "dotenv",
- "enum_dispatch",
  "ethabi 13.0.0",
  "ethers",
  "foundry-config",
  "foundry-evm",
  "futures 0.3.28",
  "hex",
- "hyper 0.14.27",
+ "lazy_static",
  "mini-moka",
  "mockito",
  "num-traits 0.2.17",
@@ -6270,18 +6255,13 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
- "starknet",
- "starknet_api",
- "starknet_in_rust",
  "strum 0.25.0",
  "strum_macros 0.25.2",
  "tempfile",
  "thiserror",
  "tokio",
- "tokio-tungstenite 0.20.1",
  "tracing",
  "tracing-subscriber",
- "tungstenite 0.20.1",
  "tycho-client",
  "tycho-core",
  "uuid 1.4.1",

@@ -1,6 +1,6 @@
 [package]
 name = "protosim"
-version = "0.23.0"
+version = "0.23.1"
 edition = "2021"
 
 [workspace]
@@ -9,13 +9,9 @@ members = ["protosim_py"]
 [dependencies]
 ethabi = "13.0" 
 ethers = "2.0.13"
-enum_dispatch = "0.3.8"
 serde_json = "1.0.105"
 serde = { version = "1.0", features = ["rc"] }
 tokio = { version = "1.38.0", features = ["full"] }
-tokio-tungstenite = "0.20.1"
-async-trait = "0.1.73"
-hyper = "0.14.27"
 futures = "0.3.28"
 revm = { version = "12.1.0", features = ["ethersdb", "serde"] }
 hex = "0.4.3"
@@ -36,15 +32,11 @@ reqwest = { version = "0.12.7", features = ["blocking"] }
 tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.31.3" }
 tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.31.3" }
 rpc_state_reader = { git = "https://github.com/propeller-heads/starknet_in_rust.git", package = "rpc_state_reader", branch = "feature/bump-cairo-lang-version", optional = true }
-starknet_in_rust = { git = "https://github.com/propeller-heads/starknet_in_rust.git", package = "starknet_in_rust", branch = "feature/bump-cairo-lang-version", optional = true }
-starknet_api = { version = "0.4.1", optional = true }
-starknet = { version = "0.5.0", optional = true }
-cairo-vm = { version = "0.8.5", features = ["cairo-1-hints"], optional = true }
-
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
 foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
 revm-inspectors = { version = "0.5", features = ["serde"] }
 mini-moka = "0.10"
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 mockito = "1.1.1"
@@ -55,19 +47,11 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "env-filter",
     "fmt",
 ] }
-tungstenite = "0.20.1"
 tempfile = "3.13.0"
 
 [features]
 default = []
 network_tests = []
-starknet = [
-    "dep:starknet_in_rust",
-    "dep:starknet_api",
-    "dep:starknet",
-    "dep:cairo-vm",
-    "dep:rpc_state_reader",
-]
 
 [profile.bench]
 debug = true

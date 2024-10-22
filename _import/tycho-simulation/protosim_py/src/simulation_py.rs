@@ -9,7 +9,7 @@ use crate::structs_py::{
 use pyo3::{prelude::*, types::PyType};
 use std::{collections::HashMap, str::FromStr};
 
-use protosim::evm_simulation::{account_storage, database, simulation, tycho_db};
+use protosim::evm::{account_storage, database, simulation, tycho_db};
 
 #[derive(Clone, Copy)]
 enum DatabaseType {
@@ -201,7 +201,7 @@ impl SimulationEngine {
         updates: HashMap<String, StateUpdate>,
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
-        let block = protosim::evm_simulation::database::BlockHeader::from(block);
+        let block = protosim::evm::database::BlockHeader::from(block);
         let mut rust_updates: HashMap<Address, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(

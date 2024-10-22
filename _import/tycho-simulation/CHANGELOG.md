@@ -1,3 +1,10 @@
+## [0.23.1](https://github.com/propeller-heads/protosim/compare/0.23.0...0.23.1) (2024-10-21)
+
+
+### Bug Fixes
+
+* misc bugfixes in balance handling. ([bfadcc7](https://github.com/propeller-heads/protosim/commit/bfadcc735458540b5e314cc35742c177666610d2))
+
 ## [0.23.0](https://github.com/propeller-heads/protosim/compare/0.22.0...0.23.0) (2024-10-18)
 
 

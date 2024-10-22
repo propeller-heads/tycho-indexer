@@ -2,18 +2,20 @@ import json
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch, call
+from venv import create
 
 import pytest
 from hexbytes import HexBytes
-from protosim_py._protosim_py import AccountInfo
 
-from protosim_py.evm import BlockHeader
+from tycho_indexer_client.dto import ChangeType
+
+from protosim_py.evm import AccountInfo, AccountUpdate, BlockHeader
 from protosim_py.evm.adapter_contract import AdapterContract
 from protosim_py.evm.pool_state import ThirdPartyPool
 from protosim_py.evm.storage import TychoDBSingleton
 from protosim_py.evm.utils import parse_account_info, create_engine
 from protosim_py.exceptions import RecoverableSimulationException
-from protosim_py.models import EVMBlock, Capability, EthereumToken
+from protosim_py.models import EVMBlock, Capability, EthereumToken, Blockchain
 
 ADDRESS_ZERO = "0x0000000000000000000000000000000000000000"
 
@@ -29,6 +31,11 @@ def Token(name: str) -> EthereumToken:
         "BAL": EthereumToken(
             symbol="BAL",
             address="0xba100000625a3754423978a60c9317c58a424e3D",
+            decimals=18,
+        ),
+        "sfrxETH": EthereumToken(
+            symbol="sfrxETH",
+            address="0xac3e018457b222d93114458476f3e3416abbe38f",
             decimals=18,
         ),
     }[name]
@@ -222,3 +229,86 @@ def test_stateless_contract_pool(asset_dir):
         )
 
         assert mock_get_code.call_count == 2
+
+
+def test_overwrites_mock_erc20(pool_state):
+    overwrites = pool_state._get_overwrites(pool_state.tokens[0], pool_state.tokens[1])
+
+    assert overwrites == {
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+            # pool balance, caller balance & allowance
+            24060209162895628919861412957428278191632570471602070876674374646072182449944: 178754012737301800000,
+            58546993237423525698686728856645416951692145960565761888391937184176623942864: 578960446186580977117854925043439539266349923328202820197287920039565648199,
+            110136159478993350616340414857413728709904511599989695046923576775517543504731: 578960446186580977117854925043439539266349923328202820197287920039565648199,
+        },
+        "0xba100000625a3754423978a60c9317c58a424e3d": {
+            # pool balance
+            24060209162895628919861412957428278191632570471602070876674374646072182449944: 91082987763369890000
+        },
+    }
+
+
+def test_overwrites_custom_erc20(asset_dir):
+    dai, sfrxEth = Token("DAI"), Token("sfrxETH")
+    with open(asset_dir / "sfrxEthToken.evm.runtime", "rb") as fp:
+        code = fp.read()
+    block = EVMBlock(
+        id=18485417,
+        hash_="0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
+    )
+    engine = create_engine([])
+    engine.init_account(
+        address=sfrxEth.address,
+        account=AccountInfo(
+            nonce=0,
+            balance=0,
+            code=bytearray(code),
+        ),
+        mocked=True,
+        permanent_storage=None,
+    )
+
+    pool = ThirdPartyPool(
+        block=block,
+        id_="0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011",
+        tokens=(dai, sfrxEth),
+        marginal_prices={
+            (sfrxEth, dai): Decimal("7.071503245428245871486924221"),
+            (dai, sfrxEth): Decimal("0.1377789143190479049114331557"),
+        },
+        balances={
+            dai.address: "178.7540127373018",
+            sfrxEth.address: "91.08298776336989",
+        },
+        adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
+        balance_owner="0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+        involved_contracts={sfrxEth.address},
+    )
+    overwrites_zero2one = dict(pool._get_overwrites(pool.tokens[0], pool.tokens[1]))
+    overwrites_one2zero = dict(pool._get_overwrites(pool.tokens[1], pool.tokens[0]))
+
+    assert pool.token_storage_slots == {
+        "0xac3e018457b222d93114458476f3e3416abbe38f": (3, 4)
+    }
+    assert overwrites_zero2one == {
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+            # same as test above
+            24060209162895628919861412957428278191632570471602070876674374646072182449944: 178754012737301800000,
+            58546993237423525698686728856645416951692145960565761888391937184176623942864: 100279494253364362835,
+            110136159478993350616340414857413728709904511599989695046923576775517543504731: 100279494253364362835,
+        },
+        "0xac3e018457b222d93114458476f3e3416abbe38f": {
+            # different key compared to our mocked contract in previous test!
+            26260780229836133480733911416306220824002130525338603371401637394485347754320: 91082987763369890000
+        },
+    }
+    assert overwrites_one2zero == {
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+            24060209162895628919861412957428278191632570471602070876674374646072182449944: 178754012737301800000,
+        },
+        "0xac3e018457b222d93114458476f3e3416abbe38f": {
+            26260780229836133480733911416306220824002130525338603371401637394485347754320: 91082987763369890000,
+            39404303412979837706729056057326168057508607640016353144739821671269873586962: 0,
+            55680195869663131363475621218576616366970057593641329011542336081174417563938: 0,
+        },
+    }
