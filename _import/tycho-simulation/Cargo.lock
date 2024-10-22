@@ -6260,6 +6260,7 @@ dependencies = [
  "futures 0.3.28",
  "hex",
  "hyper 0.14.27",
+ "lazy_static",
  "mini-moka",
  "mockito",
  "num-traits 0.2.17",
