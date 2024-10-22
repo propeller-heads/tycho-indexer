@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::TraceKind;
+use strum_macros::Display;
 use revm::{
     db::DatabaseRef,
     inspector_handle_register,
@@ -25,7 +26,7 @@ use super::{
 };
 
 /// An error representing any transaction simulation result other than successful execution
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum SimulationError {
     /// Something went wrong while getting storage; might be caused by network issues
     StorageError(String),

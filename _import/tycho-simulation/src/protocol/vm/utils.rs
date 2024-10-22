@@ -8,6 +8,7 @@ use ethers::{
 use hex::FromHex;
 use mini_moka::sync::Cache;
 
+use crate::evm_simulation::simulation::SimulationError;
 use std::{
     collections::HashMap,
     env,
@@ -24,32 +25,38 @@ pub enum RpcError {
     InvalidRequest(String),
     #[error("Invalid Response: {0}")]
     InvalidResponse(ProviderError),
+}
+
+#[derive(Debug, Error)]
+pub enum RecoverableError {
     #[error("Solidity Error: {0}")]
     SolidityError(String),
     #[error("Out of Gas: {0}. Pool state: {1}")]
     OutOfGas(String, String),
+    /// Something went wrong while getting storage; might be caused by network issues
+    #[error("Storage Error: {0}")]
+    StorageError(String),
 }
 
 pub fn maybe_coerce_error(
-    err: RpcError,
+    err: SimulationError,
     pool_state: &str,
     gas_limit: Option<u64>,
-    gas_used: Option<u64>,
-) -> Result<(), RpcError> {
+) -> Result<(), RecoverableError> {
     match err {
         // Check for revert situation (if error message starts with "0x")
-        RpcError::SolidityError(ref details) if details.starts_with("0x") => {
-            let reason = parse_solidity_error_message(details);
-            let err = RpcError::SolidityError(format!("Revert! Reason: {}", reason));
+        SimulationError::TransactionError { ref data, ref gas_used } if data.starts_with("0x") => {
+            let reason = parse_solidity_error_message(data);
+            let err = RecoverableError::SolidityError(format!("Revert! Reason: {}", reason));
 
             // Check if we are running out of gas
             if let (Some(gas_limit), Some(gas_used)) = (gas_limit, gas_used) {
                 // if we used up 97% or more issue a OutOfGas error.
-                let usage = gas_used as f64 / gas_limit as f64;
+                let usage = *gas_used as f64 / gas_limit as f64;
                 if usage >= 0.97 {
-                    return Err(RpcError::OutOfGas(
+                    return Err(RecoverableError::OutOfGas(
                         format!(
-                            "SimulationError: Likely out-of-gas. Used {:.2}% of gas limit. Original error: {}",
+                            "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. Original error: {}",
                             usage * 100.0,
                             err
                         ),
@@ -61,22 +68,26 @@ pub fn maybe_coerce_error(
         }
 
         // Check if "OutOfGas" is part of the error message
-        RpcError::SolidityError(ref details) if details.contains("OutOfGas") => {
+        SimulationError::TransactionError { ref data, ref gas_used }
+            if data.contains("OutOfGas") =>
+        {
             let usage_msg = if let (Some(gas_limit), Some(gas_used)) = (gas_limit, gas_used) {
-                let usage = gas_used as f64 / gas_limit as f64;
+                let usage = *gas_used as f64 / gas_limit as f64;
                 format!("Used: {:.2}% of gas limit. ", usage * 100.0)
             } else {
                 String::new()
             };
 
-            Err(RpcError::OutOfGas(
-                format!("SimulationError: out-of-gas. {}Original error: {}", usage_msg, details),
+            Err(RecoverableError::OutOfGas(
+                format!("SimulationError: out-of-gas. {} Original error: {}", usage_msg, data),
                 pool_state.to_string(),
             ))
         }
+        SimulationError::StorageError(msg) => Err(RecoverableError::StorageError(msg)),
 
-        // Otherwise return the original error
-        _ => Err(err),
+        // Transaction error that doesn't start with 0x or contain "OutOfGas" - re-raise the
+        // original error.
+        _ => Err(RecoverableError::SolidityError(err.to_string())),
     }
 }
 
@@ -227,12 +238,15 @@ mod tests {
 
     #[test]
     fn test_maybe_coerce_error_revert_no_gas_info() {
-        let err = RpcError::SolidityError("0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string());
+        let err = SimulationError::TransactionError{
+            data: "0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string(),
+            gas_used: None
+        };
 
-        let result = maybe_coerce_error(err, "test_pool", None, None);
+        let result = maybe_coerce_error(err, "test_pool", None);
 
         assert!(result.is_err());
-        if let Err(RpcError::SolidityError(message)) = result {
+        if let Err(RecoverableError::SolidityError(message)) = result {
             assert!(message.contains("Revert! Reason: Invalid operation"));
         } else {
             panic!("Expected SolidityError error");
@@ -242,12 +256,15 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_out_of_gas() {
         // Test out-of-gas situation with gas limit and gas used provided
-        let err = RpcError::SolidityError("OutOfGas".to_string());
+        let err = SimulationError::TransactionError{
+            data: "0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string(),
+            gas_used: Some(980)
+        };
 
-        let result = maybe_coerce_error(err, "test_pool", Some(1000), Some(980));
+        let result = maybe_coerce_error(err, "test_pool", Some(1000));
 
         assert!(result.is_err());
-        if let Err(RpcError::OutOfGas(message, pool_state)) = result {
+        if let Err(RecoverableError::OutOfGas(message, pool_state)) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
             assert_eq!(pool_state, "test_pool");
         } else {
@@ -258,12 +275,13 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_no_gas_limit_info() {
         // Test out-of-gas situation without gas limit info
-        let err = RpcError::SolidityError("OutOfGas".to_string());
+        let err =
+            SimulationError::TransactionError { data: "OutOfGas".to_string(), gas_used: None };
 
-        let result = maybe_coerce_error(err, "test_pool", None, None);
+        let result = maybe_coerce_error(err, "test_pool", None);
 
         assert!(result.is_err());
-        if let Err(RpcError::OutOfGas(message, pool_state)) = result {
+        if let Err(RecoverableError::OutOfGas(message, pool_state)) = result {
             assert!(message.contains("Original error: OutOfGas"));
             assert_eq!(pool_state, "test_pool");
         } else {
