@@ -5,7 +5,6 @@ use tycho_core::{models::protocol::ProtocolComponentStateDelta, Bytes};
 use crate::extractor::models::BlockChanges;
 
 const USV3_MANDATORY_ATTRIBUTES: [&str; 3] = ["liquidity", "tick", "sqrt_price_x96"];
-const USV2_MANDATORY_ATTRIBUTES: [&str; 2] = ["reserve0", "reserve1"];
 static STABLE_SWAP_FACTORY: &[u8] = b"stable_swap_factory";
 static PLAIN_POOL: &[u8] = b"plain_pool";
 
@@ -74,12 +73,6 @@ pub fn trim_curve_component_token(mut changes: BlockChanges) -> BlockChanges {
 pub fn add_default_attributes_uniswapv3(changes: BlockChanges) -> BlockChanges {
     // TODO: Remove it while this is handled directly in the substreams modules.
     add_default_attributes(changes, &USV3_MANDATORY_ATTRIBUTES)
-}
-
-/// Post processor function that adds missing attributes to all new created uniswapV2 pools.
-pub fn add_default_attributes_uniswapv2(changes: BlockChanges) -> BlockChanges {
-    // TODO: Remove it while this is handled directly in the substreams modules.
-    add_default_attributes(changes, &USV2_MANDATORY_ATTRIBUTES)
 }
 
 #[cfg(test)]
