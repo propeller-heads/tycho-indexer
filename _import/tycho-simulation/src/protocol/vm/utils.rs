@@ -339,7 +339,10 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_no_match() {
         // Test for non-revert, non-out-of-gas, non-storage errors
-        let err = SimulationError::TransactionError{data: "Some other error".to_string(), gas_used: None};
+        let err = SimulationError::TransactionError {
+            data: "Some other error".to_string(),
+            gas_used: None,
+        };
 
         let result = maybe_coerce_error(err, "test_pool", None);
 

@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::TraceKind;
-use std::fmt;
 use revm::{
     db::DatabaseRef,
     inspector_handle_register,
@@ -15,6 +14,7 @@ use revm::{
     Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
+use std::fmt;
 use tokio::runtime::Runtime;
 use tracing::debug;
 
@@ -38,12 +38,10 @@ impl fmt::Display for SimulationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SimulationError::StorageError(msg) => write!(f, "StorageError: {}", msg),
-            SimulationError::TransactionError { data, gas_used } => {
-                match gas_used {
-                    Some(gas) => write!(f, "TransactionError: {} (gas used: {})", data, gas),
-                    None => write!(f, "TransactionError: {}", data),
-                }
-            }
+            SimulationError::TransactionError { data, gas_used } => match gas_used {
+                Some(gas) => write!(f, "TransactionError: {} (gas used: {})", data, gas),
+                None => write!(f, "TransactionError: {}", data),
+            },
         }
     }
 }
