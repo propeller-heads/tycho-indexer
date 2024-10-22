@@ -210,9 +210,10 @@ class ThirdPartyPool:
                 t.address in self.involved_contracts
                 and t.address not in self.token_storage_slots
             ):
-                self.token_storage_slots[t.address] = token.brute_force_slots(
+                self.token_storage_slots[t.address] = slots = token.brute_force_slots(
                     t, self.block, self._engine
                 )
+                log.debug(f"Using custom storage slots for {t.address}: {slots}")
 
     def get_amount_out(
         self: TPoolState,
@@ -240,6 +241,7 @@ class ThirdPartyPool:
         sell_amount: Decimal,
         buy_token: EthereumToken,
     ) -> tuple[Decimal, int, TPoolState]:
+        overwrites = self._get_overwrites(sell_token, buy_token)
         trade, state_changes = self._adapter_contract.swap(
             cast(HexStr, self.id_),
             sell_token,
@@ -247,7 +249,7 @@ class ThirdPartyPool:
             False,
             sell_token.to_onchain_amount(sell_amount),
             block=self.block,
-            overwrites=self._get_overwrites(sell_token, buy_token),
+            overwrites=overwrites,
         )
         new_state = self._duplicate()
         for address, state_update in state_changes.items():
@@ -274,7 +276,7 @@ class ThirdPartyPool:
         level, and token-specific overwrites that depend on passed tokens.
         """
         token_overwrites = self._get_token_overwrites(sell_token, buy_token, **kwargs)
-        return _merge(self.block_lasting_overwrites, token_overwrites)
+        return _merge(self.block_lasting_overwrites.copy(), token_overwrites)
 
     def _get_token_overwrites(
         self, sell_token: EthereumToken, buy_token: EthereumToken, max_amount=None
@@ -296,7 +298,10 @@ class ThirdPartyPool:
             max_amount = sell_token.to_onchain_amount(
                 self.get_sell_amount_limit(sell_token, buy_token)
             )
-        overwrites = ERC20OverwriteFactory(sell_token)
+        overwrites = ERC20OverwriteFactory(
+            sell_token,
+            token_slots=self.token_storage_slots.get(sell_token.address, (0,1))
+        )
         overwrites.set_balance(max_amount, EXTERNAL_ACCOUNT)
         overwrites.set_allowance(
             allowance=max_amount, owner=EXTERNAL_ACCOUNT, spender=ADAPTER_ADDRESS
@@ -311,8 +316,8 @@ class ThirdPartyPool:
     def _get_balance_overwrites(self) -> dict[Address, dict[int, int]]:
         balance_overwrites = {}
         address = self.balance_owner or self.id_
-        slots = (0, 1)
         for t in self.tokens:
+            slots = (0, 1)
             if t.address in self.involved_contracts:
                 slots = self.token_storage_slots.get(t.address)
             overwrites = ERC20OverwriteFactory(t, token_slots=slots)

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::TraceKind;
-use strum_macros::Display;
+use std::fmt;
 use revm::{
     db::DatabaseRef,
     inspector_handle_register,
@@ -26,12 +26,26 @@ use super::{
 };
 
 /// An error representing any transaction simulation result other than successful execution
-#[derive(Debug, Display)]
+#[derive(Debug)]
 pub enum SimulationError {
     /// Something went wrong while getting storage; might be caused by network issues
     StorageError(String),
     /// Simulation didn't succeed; likely not related to network, so retrying won't help
     TransactionError { data: String, gas_used: Option<u64> },
+}
+
+impl fmt::Display for SimulationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SimulationError::StorageError(msg) => write!(f, "StorageError: {}", msg),
+            SimulationError::TransactionError { data, gas_used } => {
+                match gas_used {
+                    Some(gas) => write!(f, "TransactionError: {} (gas used: {})", data, gas),
+                    None => write!(f, "TransactionError: {}", data),
+                }
+            }
+        }
+    }
 }
 
 /// A result of a successful transaction simulation

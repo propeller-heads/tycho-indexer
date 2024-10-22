@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 use ethabi::{self, decode, ParamType};
 use ethers::{
+    abi::Abi,
     providers::{Http, Middleware, Provider, ProviderError},
     types::H160,
 };
@@ -17,6 +18,7 @@ use std::{
     path::Path,
     sync::{Arc, LazyLock},
 };
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -106,7 +108,7 @@ fn parse_solidity_error_message(data: &str) -> String {
             }
         }
 
-    // Solidity Panic(uint256) signature: 0x4e487b71
+        // Solidity Panic(uint256) signature: 0x4e487b71
     } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
         if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
             if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
@@ -204,6 +206,37 @@ pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
     Ok(code)
 }
 
+pub fn load_swap_abi() -> Result<Abi, std::io::Error> {
+    let swap_abi_path = Path::new(file!())
+        .parent()
+        .unwrap()
+        .join("assets")
+        .join("ISwapAdapter.abi");
+
+    let mut file = File::open(&swap_abi_path).expect("Failed to open the swap ABI file");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Failed to read the swap ABI file");
+    let abi: Abi = serde_json::from_str(&contents).expect("Swap ABI is malformed.");
+    Ok(abi)
+}
+
+pub fn load_erc20_abi() -> Result<Abi, std::io::Error> {
+    let erc20_abi_path = Path::new(file!())
+        .parent()
+        .unwrap()
+        .join("assets")
+        .join("ERC20.abi");
+
+    let mut file = File::open(&erc20_abi_path).expect("Failed to open the ERC20 ABI file");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Failed to read the ERC20 ABI file");
+
+    let abi: Abi = serde_json::from_str(&contents).expect("ERC20 ABI is malformed.");
+    Ok(abi)
+}
+
 #[cfg(test)]
 mod tests {
     use dotenv::dotenv;
@@ -290,6 +323,35 @@ mod tests {
     }
 
     #[test]
+    fn test_maybe_coerce_error_storage_error() {
+        let err = SimulationError::StorageError("Storage error:".to_string());
+
+        let result = maybe_coerce_error(err, "test_pool", None);
+
+        assert!(result.is_err());
+        if let Err(RecoverableError::StorageError(message)) = result {
+            assert_eq!(message, "Storage error:");
+        } else {
+            panic!("Expected storage error");
+        }
+    }
+
+    #[test]
+    fn test_maybe_coerce_error_no_match() {
+        // Test for non-revert, non-out-of-gas, non-storage errors
+        let err = SimulationError::TransactionError{data: "Some other error".to_string(), gas_used: None};
+
+        let result = maybe_coerce_error(err, "test_pool", None);
+
+        assert!(result.is_err());
+        if let Err(RecoverableError::SolidityError(message)) = result {
+            assert_eq!(message, "TransactionError: Some other error");
+        } else {
+            panic!("Expected solidity error");
+        }
+    }
+
+    #[test]
     fn test_parse_solidity_error_message_error_string() {
         // Test parsing Solidity Error(string) message
         let data = "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000e416d6f756e7420746f6f206c6f77000000000000000000000000000000000000";
@@ -342,5 +404,22 @@ mod tests {
     fn test_get_contract_bytecode_error() {
         let result = get_contract_bytecode("non_existent_file.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_swap_abi() {
+        let result = load_swap_abi();
+        assert!(result.is_ok());
+
+        let abi: Abi = result.expect("Failed to retrieve swap ABI result");
+        assert!(!abi.functions.is_empty(), "The swap ABI should contain functions.");
+    }
+
+    #[test]
+    fn test_load_erc20_abi() {
+        let result = load_erc20_abi();
+        assert!(result.is_ok());
+        let abi: Abi = result.expect("Failed to retrieve ERC20 ABI result");
+        assert!(!abi.functions.is_empty(), "The ERC20 ABI should contain functions.");
     }
 }
