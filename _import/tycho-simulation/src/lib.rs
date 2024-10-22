@@ -18,9 +18,8 @@
 // Reexports
 pub use num_traits;
 
-pub mod evm_simulation;
+pub mod evm;
 pub mod models;
-pub mod optimize;
 pub mod protocol;
 pub mod safe_math;
 pub mod serde_helpers;

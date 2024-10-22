@@ -8,7 +8,7 @@ use revm::{
     primitives::{AccountInfo, Address, Bytecode, Bytes, B256, U256 as rU256},
 };
 
-use crate::evm_simulation::{
+use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
     tycho_client::{TychoClientError, TychoHttpClient, AMBIENT_ACCOUNT_ADDRESS},
@@ -380,7 +380,7 @@ mod tests {
     use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr};
 
-    use crate::evm_simulation::{
+    use crate::evm::{
         tycho_client::TychoClientError,
         tycho_models::{
             AccountUpdate, Block, Chain, ChangeType, ResponseAccount, StateRequestParameters,
@@ -660,7 +660,7 @@ mod tests {
     /// Then run the test with:
     /// ```bash
     /// cargo test --package src --lib -- --ignored --exact --nocapture
-    /// evm_simulation::tycho_db::tests::test_tycho_db_connection
+    /// evm::tycho_db::tests::test_tycho_db_connection
     /// ```
     #[ignore]
     #[rstest]

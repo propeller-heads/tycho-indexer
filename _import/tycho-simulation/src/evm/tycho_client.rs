@@ -8,9 +8,7 @@ use uuid::Uuid;
 use super::tycho_models::{
     BlockAccountChanges, Chain, Command, ExtractorIdentity, Response, WebSocketMessage,
 };
-use crate::evm_simulation::tycho_models::{
-    StateRequestBody, StateRequestParameters, StateRequestResponse,
-};
+use crate::evm::tycho_models::{StateRequestBody, StateRequestParameters, StateRequestResponse};
 use async_trait::async_trait;
 use futures::SinkExt;
 use tokio::sync::mpsc::{self, Receiver};
@@ -258,7 +256,7 @@ impl TychoWsClient for TychoWsClientImpl {
 
 #[cfg(test)]
 mod tests {
-    use crate::evm_simulation::tycho_models::{AccountUpdate, Block, ChangeType};
+    use crate::evm::tycho_models::{AccountUpdate, Block, ChangeType};
     use chrono::NaiveDateTime;
 
     use super::*;
