@@ -43,6 +43,9 @@ jobs:
     with:
       image_tag: ${{ needs.release.outputs.next_release_version }}
       image_name: tycho-indexer
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
   promote-to-dev:
     needs:
