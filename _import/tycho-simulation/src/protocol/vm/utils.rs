@@ -5,7 +5,7 @@ use ethabi::{self, decode, ParamType};
 use ethers::{
     abi::Abi,
     core::utils::keccak256,
-    types::{Address, H256, U256},
+    types::{Address, H160, H256, U256},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
@@ -34,7 +34,18 @@ pub enum RpcError {
     OutOfGas(String, String),
 }
 
-pub type SlotHash = H256;
+#[derive(Debug, Error)]
+pub enum FileError {
+    /// Occurs when the ABI file cannot be read
+    #[error("Malformed ABI error: {0}")]
+    MalformedABIError(String),
+    /// Occurs when the parent directory of the current file cannot be retrieved
+    #[error("Structure error {0}")]
+    StructureError(String),
+    /// Occurs when a bad file path was given, which cannot be converted to string.
+    #[error("File path conversion error {0}")]
+    FilePathError(String),
+}
 
 pub fn maybe_coerce_error(
     err: RpcError,
@@ -136,14 +147,13 @@ fn parse_solidity_error_message(data: &str) -> String {
 ///
 /// # Arguments
 ///
-/// * `key`: Key in a mapping. This function is meant to work with ethereum addresses and accepts
-///   only strings.
+/// * `key`: Key in a mapping. Can be any H160 value (such as an address).
 /// * `mapping_slot`: Storage slot at which the mapping itself is stored. See the examples for more
 ///   explanation.
 ///
 /// # Returns
 ///
-/// A `SlotHash` representing the  index of a storage slot where the value at the given
+/// An `H256` representing the  index of a storage slot where the value at the given
 /// key is stored.
 ///
 /// # Examples
@@ -153,10 +163,10 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// a storage slot where balance of a given account is stored:
 ///
 /// ```
-/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, SlotHash};
+/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, H256};
 /// use ethers::types::Address;
 /// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address, SlotHash::from_low_u64_be(0));
+/// get_storage_slot_index_at_key(address, H256::from_low_u64_be(0));
 /// ```
 ///
 /// For nested mappings, we need to apply the function twice. An example of this is
@@ -166,17 +176,17 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// where an allowance of `address_spender` to spend `address_owner`'s money is stored:
 ///
 /// ```
-/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, SlotHash};
+/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, H256};
 /// use ethers::types::Address;
 /// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, SlotHash::from_low_u64_be(1)));
+/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, H256::from_low_u64_be(1)));
 /// ```
 ///
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
+pub fn get_storage_slot_index_at_key(key: H160, mapping_slot: H256) -> H256 {
     let mut key_bytes = key.as_bytes().to_vec();
     key_bytes.resize(32, 0); // Right pad with zeros
 
@@ -184,7 +194,7 @@ pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> Sl
     mapping_slot_bytes.copy_from_slice(mapping_slot.as_bytes());
 
     let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
-    SlotHash::from_slice(&slot_bytes)
+    H256::from_slice(&slot_bytes)
 }
 
 pub struct GethOverwrite {
@@ -194,24 +204,24 @@ pub struct GethOverwrite {
     pub code: String,
 }
 
-pub type Overwrites = HashMap<SlotHash, U256>;
+pub type Overwrites = HashMap<H256, U256>;
 
 pub struct ERC20OverwriteFactory {
     token_address: Address,
     overwrites: Overwrites,
-    balance_slot: SlotHash,
-    allowance_slot: SlotHash,
-    total_supply_slot: SlotHash,
+    balance_slot: H256,
+    allowance_slot: H256,
+    total_supply_slot: H256,
 }
 
 impl ERC20OverwriteFactory {
-    pub fn new(token_address: Address, token_slots: (SlotHash, SlotHash)) -> Self {
+    pub fn new(token_address: Address, token_slots: (H256, H256)) -> Self {
         ERC20OverwriteFactory {
             token_address,
             overwrites: HashMap::new(),
             balance_slot: token_slots.0,
             allowance_slot: token_slots.1,
-            total_supply_slot: SlotHash::from_low_u64_be(2),
+            total_supply_slot: H256::from_low_u64_be(2),
         }
     }
 
@@ -239,7 +249,7 @@ impl ERC20OverwriteFactory {
         result
     }
 
-    pub fn get_geth_overwrites(&self) -> HashMap<Address, GethOverwrite> {
+    pub fn get_geth_overwrites(&self) -> Result<HashMap<Address, GethOverwrite>, FileError> {
         let mut formatted_overwrites = HashMap::new();
 
         for (key, val) in &self.overwrites {
@@ -254,26 +264,30 @@ impl ERC20OverwriteFactory {
 
         let erc20_abi_path = Path::new(file!())
             .parent()
-            .expect("Failed to obtain parent directory of current file.")
+            .ok_or_else(|| {
+                FileError::StructureError(
+                    "Failed to obtain parent directory of current file.".to_string(),
+                )
+            })?
             .join("assets")
             .join("ERC20.abi");
 
         let code = format!(
             "0x{}",
             hex::encode(
-                get_contract_bytecode(
-                    erc20_abi_path
-                        .to_str()
-                        .expect("Failed to convert file path to string.")
-                )
-                .expect("Failed to read contract bytecode.")
+                get_contract_bytecode(erc20_abi_path.to_str().ok_or_else(|| {
+                    FileError::FilePathError("Failed to convert file path to string.".to_string())
+                })?)
+                .map_err(|_err| FileError::MalformedABIError(
+                    "Failed to read contract bytecode.".to_string()
+                ))?
             )
         );
 
         let mut result = HashMap::new();
         result.insert(self.token_address, GethOverwrite { state_diff: formatted_overwrites, code });
 
-        result
+        Ok(result)
     }
 }
 
@@ -592,8 +606,8 @@ mod tests {
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address = Address::random();
-        let balance_slot = SlotHash::random();
-        let allowance_slot = SlotHash::random();
+        let balance_slot = H256::random();
+        let allowance_slot = H256::random();
         ERC20OverwriteFactory::new(token_address, (balance_slot, allowance_slot))
     }
 
@@ -657,13 +671,15 @@ mod tests {
     fn test_get_geth_overwrites() {
         let mut factory = setup_factory();
 
-        let storage_slot = SlotHash::from_low_u64_be(1);
+        let storage_slot = H256::from_low_u64_be(1);
         let val = U256::from(123456);
         factory
             .overwrites
             .insert(storage_slot, val);
 
-        let result = factory.get_geth_overwrites();
+        let result = factory
+            .get_geth_overwrites()
+            .expect("Failed to get geth overwrites");
 
         assert_eq!(result.len(), 1);
 
