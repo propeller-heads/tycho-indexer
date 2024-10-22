@@ -14,7 +14,7 @@ use revm::{
 use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
-    evm_simulation::simulation::{SimulationEngine, SimulationParameters},
+    evm::simulation::{SimulationEngine, SimulationParameters},
     protocol::{
         errors::TransitionError,
         events::{EVMLogMeta, LogIndex},

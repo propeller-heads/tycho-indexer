@@ -10,7 +10,7 @@ use tracing::info;
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use protosim::evm_simulation::{account_storage, database, simulation, tycho_db, tycho_models};
+use protosim::evm::{account_storage, database, simulation, tycho_db, tycho_models};
 use std::fmt::Debug;
 
 /// Data needed to invoke a transaction simulation
@@ -402,9 +402,9 @@ impl BlockHeader {
     }
 }
 
-impl From<BlockHeader> for protosim::evm_simulation::database::BlockHeader {
+impl From<BlockHeader> for protosim::evm::database::BlockHeader {
     fn from(py_header: BlockHeader) -> Self {
-        protosim::evm_simulation::database::BlockHeader {
+        protosim::evm::database::BlockHeader {
             number: py_header.number,
             hash: H256::from_str(&py_header.hash).unwrap(),
             timestamp: py_header.timestamp,
@@ -530,7 +530,7 @@ impl TychoDB {
             .map(Into::into)
             .collect();
 
-        let block = block.map(protosim::evm_simulation::database::BlockHeader::from);
+        let block = block.map(protosim::evm::database::BlockHeader::from);
 
         let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
         runtime.block_on(async {

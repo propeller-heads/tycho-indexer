@@ -8,11 +8,10 @@ use revm::{
     primitives::{AccountInfo, Address, Bytecode, Bytes, B256, U256 as rU256},
 };
 
-use crate::evm_simulation::{
+use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
     database::BlockHeader,
-    tycho_client::{TychoClientError, TychoHttpClient, AMBIENT_ACCOUNT_ADDRESS},
-    tycho_models::{AccountUpdate, ChangeType, StateRequestBody, StateRequestParameters, Version},
+    tycho_models::{AccountUpdate, ChangeType},
 };
 
 /// Perform bytecode analysis on the code of an account.
@@ -23,6 +22,18 @@ pub fn to_analysed(account_info: AccountInfo) -> AccountInfo {
             .map(revm::interpreter::analysis::to_analysed),
         ..account_info
     }
+}
+
+#[derive(Error, Debug)]
+pub enum TychoClientError {
+    #[error("Failed to parse URI: {0}. Error: {1}")]
+    UriParsing(String, String),
+    #[error("Failed to format request: {0}")]
+    FormatRequest(String),
+    #[error("Unexpected HTTP client error: {0}")]
+    HttpClient(String),
+    #[error("Failed to parse response: {0}")]
+    ParseResponse(String),
 }
 
 #[derive(Error, Debug)]
@@ -62,40 +73,6 @@ impl PreCachedDB {
                 block: None,
             })),
         })
-    }
-
-    /// Initialize the state of the database.
-    #[instrument(skip_all)]
-    async fn initialize_state(
-        &self,
-        client: &impl TychoHttpClient,
-    ) -> Result<(), PreCachedDBError> {
-        info!("Getting current state");
-        let state = client
-            .get_state(
-                &StateRequestParameters::default(),
-                &StateRequestBody::new(
-                    Some(vec![Address::from(AMBIENT_ACCOUNT_ADDRESS)]),
-                    Version::default(),
-                ),
-            )
-            .await
-            .map_err(PreCachedDBError::TychoClientError)?;
-
-        for account in state.accounts.into_iter() {
-            info!(%account.address, "Initializing account");
-            self.init_account(
-                account.address,
-                AccountInfo::new(
-                    account.balance,
-                    0,
-                    account.code_hash,
-                    Bytecode::new_raw(Bytes::from(account.code)),
-                ),
-                Some(account.slots),
-            );
-        }
-        Ok(())
     }
 
     #[instrument(skip_all)]
@@ -373,20 +350,13 @@ impl DatabaseRef for PreCachedDB {
 
 #[cfg(test)]
 mod tests {
-    use async_trait::async_trait;
     use chrono::DateTime;
 
     use revm::primitives::U256 as rU256;
     use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr};
 
-    use crate::evm_simulation::{
-        tycho_client::TychoClientError,
-        tycho_models::{
-            AccountUpdate, Block, Chain, ChangeType, ResponseAccount, StateRequestParameters,
-            StateRequestResponse,
-        },
-    };
+    use crate::evm::tycho_models::{AccountUpdate, Block, Chain, ChangeType};
 
     use super::*;
 
@@ -537,56 +507,6 @@ mod tests {
         Ok(())
     }
 
-    pub struct MockTychoClient {
-        mock_state: StateRequestResponse,
-    }
-
-    impl MockTychoClient {
-        pub fn new(mock_state: StateRequestResponse) -> Self {
-            MockTychoClient { mock_state }
-        }
-    }
-
-    #[fixture]
-    pub fn mock_client() -> MockTychoClient {
-        let mut contract_slots = HashMap::<rU256, rU256>::new();
-        contract_slots.insert(rU256::from(1), rU256::from(987));
-
-        let creation_tx =
-            B256::from_str("0x1234000000000000000000000000000000000000000000000000000000000000")
-                .unwrap();
-
-        let account: ResponseAccount = ResponseAccount {
-            chain: Chain::Ethereum,
-            address: Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap(),
-            title: "mock".to_owned(),
-            slots: contract_slots,
-            balance: rU256::from(123),
-            code: Vec::<u8>::new(),
-            code_hash: B256::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000000",
-            )
-            .unwrap(),
-            balance_modify_tx: creation_tx,
-            code_modify_tx: creation_tx,
-            creation_tx: Some(creation_tx),
-        };
-
-        let mock_state = StateRequestResponse::new(vec![account]);
-        MockTychoClient::new(mock_state)
-    }
-
-    #[async_trait]
-    impl TychoHttpClient for MockTychoClient {
-        async fn get_state(
-            &self,
-            _filters: &StateRequestParameters,
-            _request: &StateRequestBody,
-        ) -> Result<StateRequestResponse, TychoClientError> {
-            Ok(self.mock_state.clone())
-        }
-    }
-
     #[rstest]
     #[tokio::test]
     async fn test_update() {
@@ -660,7 +580,7 @@ mod tests {
     /// Then run the test with:
     /// ```bash
     /// cargo test --package src --lib -- --ignored --exact --nocapture
-    /// evm_simulation::tycho_db::tests::test_tycho_db_connection
+    /// evm::tycho_db::tests::test_tycho_db_connection
     /// ```
     #[ignore]
     #[rstest]
