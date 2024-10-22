@@ -48,7 +48,7 @@ pub fn maybe_coerce_error(
                 // if we used up 97% or more issue a OutOfGas error.
                 let usage = *gas_used as f64 / gas_limit as f64;
                 if usage >= 0.97 {
-                    return Err(SimulationError::OutOfGasError(
+                    return Err(SimulationError::OutOfGas(
                         format!(
                             "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. Original error: {}",
                             usage * 100.0,
@@ -72,7 +72,7 @@ pub fn maybe_coerce_error(
                 String::new()
             };
 
-            Err(SimulationError::OutOfGasError(
+            Err(SimulationError::OutOfGas(
                 format!("SimulationError: out-of-gas. {} Original error: {}", usage_msg, data),
                 pool_state.to_string(),
             ))
@@ -286,7 +286,7 @@ mod tests {
         let result = maybe_coerce_error(err, "test_pool", Some(1000));
 
         assert!(result.is_err());
-        if let Err(SimulationError::OutOfGasError(message, pool_state)) = result {
+        if let Err(SimulationError::OutOfGas(message, pool_state)) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
             assert_eq!(pool_state, "test_pool");
         } else {
@@ -303,7 +303,7 @@ mod tests {
         let result = maybe_coerce_error(err, "test_pool", None);
 
         assert!(result.is_err());
-        if let Err(SimulationError::OutOfGasError(message, pool_state)) = result {
+        if let Err(SimulationError::OutOfGas(message, pool_state)) = result {
             assert!(message.contains("Original error: OutOfGas"));
             assert_eq!(pool_state, "test_pool");
         } else {

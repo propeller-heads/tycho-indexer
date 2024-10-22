@@ -33,7 +33,7 @@ pub enum SimulationError {
     StorageError(String),
     /// Gas limit has been reached. Retrying while increasing gas limit or waiting for a gas price
     /// reduction may help.
-    OutOfGasError(String, String),
+    OutOfGas(String, String),
     /// Simulation didn't succeed; likely not related to network or gas, so retrying won't help
     TransactionError { data: String, gas_used: Option<u64> },
 }
