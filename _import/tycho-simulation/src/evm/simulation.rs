@@ -14,6 +14,7 @@ use revm::{
     Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
+use strum_macros::Display;
 use tokio::runtime::Runtime;
 use tracing::debug;
 
@@ -25,11 +26,15 @@ use super::{
 };
 
 /// An error representing any transaction simulation result other than successful execution
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum SimulationError {
-    /// Something went wrong while getting storage; might be caused by network issues
+    /// Something went wrong while getting storage; might be caused by network issues.
+    /// Retrying may help.
     StorageError(String),
-    /// Simulation didn't succeed; likely not related to network, so retrying won't help
+    /// Gas limit has been reached. Retrying while increasing gas limit or waiting for a gas price
+    /// reduction may help.
+    OutOfGas(String, String),
+    /// Simulation didn't succeed; likely not related to network or gas, so retrying won't help
     TransactionError { data: String, gas_used: Option<u64> },
 }
 

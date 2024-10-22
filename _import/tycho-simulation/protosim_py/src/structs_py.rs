@@ -450,6 +450,9 @@ impl From<simulation::SimulationError> for SimulationErrorDetails {
             simulation::SimulationError::TransactionError { data, gas_used } => {
                 SimulationErrorDetails { data, gas_used }
             }
+            simulation::SimulationError::OutOfGas(reason, _) => {
+                SimulationErrorDetails { data: reason, gas_used: None }
+            }
         }
     }
 }

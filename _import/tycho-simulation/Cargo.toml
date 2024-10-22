@@ -36,6 +36,7 @@ foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "2544793
 foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
 revm-inspectors = { version = "0.5", features = ["serde"] }
 mini-moka = "0.10"
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 mockito = "1.1.1"

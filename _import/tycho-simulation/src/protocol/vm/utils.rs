@@ -1,11 +1,15 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 use ethabi::{self, decode, ParamType};
-use ethers::abi::Abi;
+use ethers::{
+    abi::Abi,
+    providers::{Http, Middleware, Provider, ProviderError},
+    types::H160,
+};
 use hex::FromHex;
 use mini_moka::sync::Cache;
-use reqwest::{blocking::Client, StatusCode};
-use serde_json::json;
+
+use crate::evm::simulation::SimulationError;
 use std::{
     collections::HashMap,
     env,
@@ -13,43 +17,40 @@ use std::{
     io::Read,
     path::Path,
     sync::{Arc, LazyLock},
-    time::Duration,
 };
 
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RpcError {
-    #[error("HTTP Error: {0}")]
-    Http(reqwest::Error),
-    #[error("RPC Error: {0}. Status code: {1}")]
-    Rpc(String, StatusCode),
+    #[error("Invalid Request: {0}")]
+    InvalidRequest(String),
     #[error("Invalid Response: {0}")]
-    InvalidResponse(String),
-    #[error("Out of Gas: {0}. Pool state: {1}")]
-    OutOfGas(String, String),
+    InvalidResponse(ProviderError),
 }
 
 pub fn maybe_coerce_error(
-    err: RpcError,
+    err: SimulationError,
     pool_state: &str,
     gas_limit: Option<u64>,
-    gas_used: Option<u64>,
-) -> Result<(), RpcError> {
+) -> Result<(), SimulationError> {
     match err {
         // Check for revert situation (if error message starts with "0x")
-        RpcError::InvalidResponse(ref details) if details.starts_with("0x") => {
-            let reason = parse_solidity_error_message(details);
-            let err = RpcError::InvalidResponse(format!("Revert! Reason: {}", reason));
+        SimulationError::TransactionError { ref data, ref gas_used } if data.starts_with("0x") => {
+            let reason = parse_solidity_error_message(data);
+            let err = SimulationError::TransactionError {
+                data: format!("Revert! Reason: {}", reason),
+                gas_used: *gas_used,
+            };
 
             // Check if we are running out of gas
             if let (Some(gas_limit), Some(gas_used)) = (gas_limit, gas_used) {
                 // if we used up 97% or more issue a OutOfGas error.
-                let usage = gas_used as f64 / gas_limit as f64;
+                let usage = *gas_used as f64 / gas_limit as f64;
                 if usage >= 0.97 {
-                    return Err(RpcError::OutOfGas(
+                    return Err(SimulationError::OutOfGas(
                         format!(
-                            "SimulationError: Likely out-of-gas. Used {:.2}% of gas limit. Original error: {}",
+                            "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. Original error: {}",
                             usage * 100.0,
                             err
                         ),
@@ -61,20 +62,21 @@ pub fn maybe_coerce_error(
         }
 
         // Check if "OutOfGas" is part of the error message
-        RpcError::InvalidResponse(ref details) if details.contains("OutOfGas") => {
+        SimulationError::TransactionError { ref data, ref gas_used }
+            if data.contains("OutOfGas") =>
+        {
             let usage_msg = if let (Some(gas_limit), Some(gas_used)) = (gas_limit, gas_used) {
-                let usage = gas_used as f64 / gas_limit as f64;
+                let usage = *gas_used as f64 / gas_limit as f64;
                 format!("Used: {:.2}% of gas limit. ", usage * 100.0)
             } else {
                 String::new()
             };
 
-            Err(RpcError::OutOfGas(
-                format!("SimulationError: out-of-gas. {}Original error: {}", usage_msg, details),
+            Err(SimulationError::OutOfGas(
+                format!("SimulationError: out-of-gas. {} Original error: {}", usage_msg, data),
                 pool_state.to_string(),
             ))
         }
-
         // Otherwise return the original error
         _ => Err(err),
     }
@@ -141,52 +143,7 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
     panic_codes
 }
 
-fn exec_rpc_method(
-    url: &str,
-    method: &str,
-    params: Vec<serde_json::Value>,
-    timeout: u64,
-) -> Result<serde_json::Value, RpcError> {
-    let client = Client::new();
-    let payload = json!({
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params,
-        "id": 1,
-    });
-
-    let response = client
-        .post(url)
-        .json(&payload)
-        .timeout(Duration::from_secs(timeout))
-        .send()
-        .map_err(RpcError::Http)?;
-
-    if response.status().is_client_error() || response.status().is_server_error() {
-        let status = response.status();
-        let body = response
-            .text()
-            .unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(RpcError::Rpc(body, status));
-    }
-
-    let data: serde_json::Value = response
-        .json()
-        .map_err(RpcError::Http)?;
-
-    if let Some(result) = data.get("result") {
-        Ok(result.clone())
-    } else if let Some(error) = data.get("error") {
-        Err(RpcError::InvalidResponse(format!(
-            "RPC failed to call {} with Error: {}",
-            method, error
-        )))
-    } else {
-        Ok(serde_json::Value::Null)
-    }
-}
-
-pub fn get_code_for_address(
+pub async fn get_code_for_address(
     address: &str,
     connection_string: Option<String>,
 ) -> Result<Option<Vec<u8>>, RpcError> {
@@ -196,32 +153,28 @@ pub fn get_code_for_address(
     let connection_string = match connection_string {
         Some(url) => url,
         None => {
-            return Err(RpcError::InvalidResponse(
+            return Err(RpcError::InvalidRequest(
                 "RPC_URL environment variable is not set".to_string(),
             ))
         }
     };
 
-    let method = "eth_getCode";
-    let params = vec![json!(address), json!("latest")];
+    // Create a provider with the URL
+    let provider =
+        Provider::<Http>::try_from(connection_string).expect("could not instantiate HTTP Provider");
 
-    match exec_rpc_method(&connection_string, method, params, 240) {
-        Ok(code) => {
-            if let Some(code_str) = code.as_str() {
-                let code_bytes = hex::decode(&code_str[2..]).map_err(|_| {
-                    RpcError::InvalidResponse(format!(
-                        "Failed to decode hex string for address {}",
-                        address
-                    ))
-                })?;
-                Ok(Some(code_bytes))
-            } else {
-                Ok(None)
-            }
-        }
+    // Parse the address
+    let addr: H160 = address
+        .parse()
+        .map_err(|_| RpcError::InvalidRequest(format!("Failed to parse address: {}", address)))?;
+
+    // Call eth_getCode to get the bytecode of the contract
+    match provider.get_code(addr, None).await {
+        Ok(code) if code.is_empty() => Ok(None),
+        Ok(code) => Ok(Some(code.to_vec())),
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
-            Err(e)
+            Err(RpcError::InvalidResponse(e))
         }
     }
 }
@@ -281,16 +234,16 @@ mod tests {
 
     use super::*;
 
-    #[test]
+    #[tokio::test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
-    fn test_get_code_for_address() {
+    async fn test_get_code_for_address() {
         let rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
             env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
         });
 
         let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
-        let result = get_code_for_address(address, Some(rpc_url));
+        let result = get_code_for_address(address, Some(rpc_url)).await;
 
         assert!(result.is_ok(), "Network call should not fail");
 
@@ -307,27 +260,33 @@ mod tests {
 
     #[test]
     fn test_maybe_coerce_error_revert_no_gas_info() {
-        let err = RpcError::InvalidResponse("0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string());
+        let err = SimulationError::TransactionError{
+            data: "0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string(),
+            gas_used: None
+        };
 
-        let result = maybe_coerce_error(err, "test_pool", None, None);
+        let result = maybe_coerce_error(err, "test_pool", None);
 
         assert!(result.is_err());
-        if let Err(RpcError::InvalidResponse(message)) = result {
-            assert!(message.contains("Revert! Reason: Invalid operation"));
+        if let Err(SimulationError::TransactionError { ref data, gas_used: _ }) = result {
+            assert!(data.contains("Revert! Reason: Invalid operation"));
         } else {
-            panic!("Expected InvalidResponse error");
+            panic!("Expected SolidityError error");
         }
     }
 
     #[test]
     fn test_maybe_coerce_error_out_of_gas() {
         // Test out-of-gas situation with gas limit and gas used provided
-        let err = RpcError::InvalidResponse("OutOfGas".to_string());
+        let err = SimulationError::TransactionError{
+            data: "0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string(),
+            gas_used: Some(980)
+        };
 
-        let result = maybe_coerce_error(err, "test_pool", Some(1000), Some(980));
+        let result = maybe_coerce_error(err, "test_pool", Some(1000));
 
         assert!(result.is_err());
-        if let Err(RpcError::OutOfGas(message, pool_state)) = result {
+        if let Err(SimulationError::OutOfGas(message, pool_state)) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
             assert_eq!(pool_state, "test_pool");
         } else {
@@ -338,12 +297,13 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_no_gas_limit_info() {
         // Test out-of-gas situation without gas limit info
-        let err = RpcError::InvalidResponse("OutOfGas".to_string());
+        let err =
+            SimulationError::TransactionError { data: "OutOfGas".to_string(), gas_used: None };
 
-        let result = maybe_coerce_error(err, "test_pool", None, None);
+        let result = maybe_coerce_error(err, "test_pool", None);
 
         assert!(result.is_err());
-        if let Err(RpcError::OutOfGas(message, pool_state)) = result {
+        if let Err(SimulationError::OutOfGas(message, pool_state)) = result {
             assert!(message.contains("Original error: OutOfGas"));
             assert_eq!(pool_state, "test_pool");
         } else {
@@ -352,18 +312,34 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_coerce_error_no_match() {
-        // Test for non-revert, non-out-of-gas errors
-        let err = RpcError::Rpc("Some other error".to_string(), StatusCode::BAD_REQUEST);
+    fn test_maybe_coerce_error_storage_error() {
+        let err = SimulationError::StorageError("Storage error:".to_string());
 
-        let result = maybe_coerce_error(err, "test_pool", None, None);
+        let result = maybe_coerce_error(err, "test_pool", None);
 
         assert!(result.is_err());
-        if let Err(RpcError::Rpc(message, status)) = result {
-            assert_eq!(message, "Some other error");
-            assert_eq!(status, StatusCode::BAD_REQUEST);
+        if let Err(SimulationError::StorageError(message)) = result {
+            assert_eq!(message, "Storage error:");
         } else {
-            panic!("Expected Rpc error");
+            panic!("Expected storage error");
+        }
+    }
+
+    #[test]
+    fn test_maybe_coerce_error_no_match() {
+        // Test for non-revert, non-out-of-gas, non-storage errors
+        let err = SimulationError::TransactionError {
+            data: "Some other error".to_string(),
+            gas_used: None,
+        };
+
+        let result = maybe_coerce_error(err, "test_pool", None);
+
+        assert!(result.is_err());
+        if let Err(SimulationError::TransactionError { ref data, gas_used: _ }) = result {
+            assert_eq!(data, "Some other error");
+        } else {
+            panic!("Expected solidity error");
         }
     }
 
