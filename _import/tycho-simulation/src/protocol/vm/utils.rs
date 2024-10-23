@@ -3,8 +3,9 @@
 use ethabi::{self, decode, ParamType};
 use ethers::{
     abi::Abi,
+    core::utils::keccak256,
     providers::{Http, Middleware, Provider, ProviderError},
-    types::H160,
+    types::{Address, H160, H256},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
@@ -18,7 +19,6 @@ use std::{
     path::Path,
     sync::{Arc, LazyLock},
 };
-
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -126,6 +126,62 @@ fn parse_solidity_error_message(data: &str) -> String {
 
     // Fallback if no decoding succeeded
     format!("Failed to decode: {}", data)
+}
+
+pub type SlotHash = H256;
+
+/// Get storage slot index of a value stored at a certain key in a mapping
+///
+/// # Arguments
+///
+/// * `key`: Key in a mapping. Can be any H160 value (such as an address).
+/// * `mapping_slot`: An `H256` representing the storage slot at which the mapping itself is stored.
+///   See the examples for more explanation.
+///
+/// # Returns
+///
+/// An `H256` representing the  index of a storage slot where the value at the given
+/// key is stored.
+///
+/// # Examples
+///
+/// If a mapping is declared as a first variable in Solidity code, its storage slot
+/// is 0 (e.g. `balances` in our mocked ERC20 contract). Here's how to compute
+/// a storage slot where balance of a given account is stored:
+///
+/// ```
+/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, H256};
+/// use ethers::types::Address;
+/// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
+/// get_storage_slot_index_at_key(address, H256::from_low_u64_be(0));
+/// ```
+///
+/// For nested mappings, we need to apply the function twice. An example of this is
+/// `allowances` in ERC20. It is a mapping of form:
+/// `HashMap<Owner, HashMap<Spender, U256>>`. In our mocked ERC20 contract, `allowances`
+/// is a second variable, so it is stored at slot 1. Here's how to get a storage slot
+/// where an allowance of `address_spender` to spend `address_owner`'s money is stored:
+///
+/// ```
+/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, H256};
+/// use ethers::types::Address;
+/// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
+/// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
+/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, H256::from_low_u64_be(1)));
+/// ```
+///
+/// # See Also
+///
+/// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
+pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
+    let mut key_bytes = key.as_bytes().to_vec();
+    key_bytes.resize(32, 0); // Right pad with zeros
+
+    let mut mapping_slot_bytes = [0u8; 32];
+    mapping_slot_bytes.copy_from_slice(mapping_slot.as_bytes());
+
+    let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
+    SlotHash::from_slice(&slot_bytes)
 }
 
 fn get_solidity_panic_codes() -> HashMap<u64, String> {
