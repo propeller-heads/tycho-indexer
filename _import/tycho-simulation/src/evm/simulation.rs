@@ -1,5 +1,8 @@
+// Necessary for the init_account method to be in scope
+#![allow(unused_imports)]
 use std::collections::HashMap;
 
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::TraceKind;

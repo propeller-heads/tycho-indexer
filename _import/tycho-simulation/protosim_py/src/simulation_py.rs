@@ -6,10 +6,11 @@ use crate::structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
     SimulationResult, StateUpdate, TychoDB,
 };
+use protosim::evm::{
+    account_storage, database, engine_db_interface::EngineDatabaseInterface, simulation, tycho_db,
+};
 use pyo3::{prelude::*, types::PyType};
 use std::{collections::HashMap, str::FromStr};
-
-use protosim::evm::{account_storage, database, simulation, tycho_db};
 
 #[derive(Clone, Copy)]
 enum DatabaseType {
@@ -52,7 +53,7 @@ impl SimulationEngineInner {
             SimulationEngineInner::TychoDB(engine) => {
                 engine
                     .state
-                    .init_account(address, account, permanent_storage)
+                    .init_account(address, account, permanent_storage, false)
             }
         }
     }
