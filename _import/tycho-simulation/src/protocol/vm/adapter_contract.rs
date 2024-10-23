@@ -1,17 +1,13 @@
 use ethers::{
-    abi::{encode, Abi, ParamType, Token},
-    core::types::{U256},
+    abi::{decode, encode, Abi, ParamType, Token},
+    core::types::U256,
     prelude::*,
 };
 use revm::{
     db::DatabaseRef,
     primitives::{alloy_primitives::Keccak256, Address},
 };
-use std::{
-    collections::{HashMap},
-    str::FromStr,
-};
-use ethers::abi::decode;
+use std::{collections::HashMap, str::FromStr};
 use thiserror::Error;
 
 use crate::{
@@ -190,8 +186,34 @@ impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D> {
         }
     }
 
-    pub fn decode_output(&self, fname: &str, encoded: Vec<u8>) -> Result<Vec<Token>, SimulationError> {
-        todo!()
+    pub fn decode_output(
+        &self,
+        fname: &str,
+        encoded: Vec<u8>,
+    ) -> Result<Vec<Token>, SimulationError> {
+        let function = self
+            .abi
+            .functions
+            .get(fname)
+            .and_then(|funcs| funcs.first())
+            .ok_or_else(|| {
+                SimulationError::DecodingError(format!(
+                    "Function name {} not found in the ABI",
+                    fname.to_string()
+                ))
+            })?;
+
+        let output_types: Vec<ParamType> = function
+            .outputs
+            .iter()
+            .map(|output| output.kind.clone())
+            .collect();
+        println!("output_types: {:?}", output_types);
+        let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
+            SimulationError::DecodingError(format!("Failed to decode output: {:?}", e))
+        })?;
+
+        Ok(decoded_tokens)
     }
 
     pub async fn call(
@@ -347,5 +369,28 @@ mod tests {
         assert_eq!(&encoded_result[4..36], &expected_pool_id); // 32 bytes for poolId
         assert_eq!(&encoded_result[36..68], &expected_sell_token); // 32 bytes for address (padded)
         assert_eq!(&encoded_result[68..100], &expected_buy_token); // 32 bytes for address (padded)
+    }
+
+    #[test]
+    fn test_decode_output_get_tokens() {
+        let contract = create_contract();
+
+        let token_1 = H160::from_str("0000000000000000000000000000000000000002").unwrap();
+        let token_2 = H160::from_str("0000000000000000000000000000000000000003").unwrap();
+
+        let encoded_output = hex!("
+        0000000000000000000000000000000000000000000000000000000000000020" // Offset to the start of the array
+        "0000000000000000000000000000000000000000000000000000000000000002" // Array length: 2
+        "0000000000000000000000000000000000000000000000000000000000000002" // Token 1
+        "0000000000000000000000000000000000000000000000000000000000000003" // Token 2
+        );
+
+        let decoded = contract
+            .decode_output("getTokens", encoded_output.to_vec())
+            .unwrap();
+
+        let expected_tokens =
+            vec![Token::Array(vec![Token::Address(token_1), Token::Address(token_2)])];
+        assert_eq!(decoded, expected_tokens);
     }
 }
