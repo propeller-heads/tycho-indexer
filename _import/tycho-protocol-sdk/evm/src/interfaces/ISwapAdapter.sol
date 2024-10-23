@@ -74,7 +74,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @param poolId The ID of the trading pool.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
-    /// @return limits an array of size two indicating the limit amount for the sell
+    /// @return limits An array of size two indicating the limit amount for the sell
     ///     token (maximum the pool is willing to buy in sell token) as well as the limit
     ///     amount of the buy token (maximum the pool is willing to sell in buy token).
     function getLimits(bytes32 poolId, address sellToken, address buyToken)
