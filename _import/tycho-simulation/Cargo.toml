@@ -80,7 +80,7 @@ unicode-width = "0.1.13"
 default = ["evm"]
 network_tests = []
 evm = [
-    "dep:ethabi", "foundry-config", "foundry-evm", "alloy-primitives", "revm", "revm-inspectors"
+    "dep:ethabi", "dep:foundry-config", "dep:foundry-evm", "dep:alloy-primitives", "dep:revm", "dep:revm-inspectors"
 ]
 
 [profile.bench]
