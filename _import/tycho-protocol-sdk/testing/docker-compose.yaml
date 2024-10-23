@@ -1,4 +1,4 @@
-version: '3.1'
+version: "3.1"
 services:
   db:
     build:
@@ -12,7 +12,7 @@ services:
       POSTGRESQL_SHARED_PRELOAD_LIBRARIES: pg_cron
     ports:
       - "5431:5432"
-    shm_size: '1gb'
+    shm_size: "1gb"
   app:
     build:
       context: .
