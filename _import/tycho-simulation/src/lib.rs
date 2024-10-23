@@ -17,10 +17,11 @@
 
 // Reexports
 pub use num_traits;
-
+#[cfg(feature = "evm")]
 pub mod evm;
 pub mod models;
 pub mod protocol;
 pub mod safe_math;
 pub mod serde_helpers;
+#[cfg(feature = "evm")]
 pub mod u256_num;
