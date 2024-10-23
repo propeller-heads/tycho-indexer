@@ -1,3 +1,4 @@
+use chrono::Utc;
 use ethers::{
     abi::{decode, encode, Abi, ParamType, Token},
     core::types::U256,
@@ -9,10 +10,11 @@ use revm::{
 };
 use std::{collections::HashMap, str::FromStr};
 use thiserror::Error;
+use tracing::warn;
 
 use crate::{
-    evm_simulation::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
-    protocol::vm::utils::load_swap_abi,
+    evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
+    protocol::vm::utils::{load_swap_abi, maybe_coerce_error},
 };
 
 #[derive(Error, Debug)]
@@ -31,6 +33,9 @@ pub enum SimulationError {
 
     #[error("Encoding error: {0}")]
     EncodingError(String),
+
+    #[error("Simulation failure error: {0}")]
+    SimulationFailure(String),
 }
 
 impl From<std::io::Error> for SimulationError {
@@ -39,8 +44,6 @@ impl From<std::io::Error> for SimulationError {
     }
 }
 
-type TStateOverwrites = HashMap<Address, HashMap<u64, U256>>;
-
 #[derive(Debug)]
 struct Trade {
     received_amount: f64,
@@ -48,8 +51,9 @@ struct Trade {
     price: f64,
 }
 
+#[derive(Debug)]
 struct ProtoSimResponse {
-    return_value: Vec<H160>,
+    return_value: Vec<Token>,
     simulation_result: SimulationResult,
 }
 
@@ -59,7 +63,10 @@ struct ProtoSimContract<D: DatabaseRef + std::clone::Clone> {
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D> {
+impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D>
+where
+    D::Error: std::fmt::Debug,
+{
     pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
@@ -208,7 +215,6 @@ impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D> {
             .iter()
             .map(|output| output.kind.clone())
             .collect();
-        println!("output_types: {:?}", output_types);
         let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
             SimulationError::DecodingError(format!("Failed to decode output: {:?}", e))
         })?;
@@ -219,29 +225,59 @@ impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D> {
     pub async fn call(
         &self,
         fname: &str,
-        args: Vec<H160>,
-        block_number: U256,
+        args: Vec<String>,
+        block_number: u64,
         timestamp: Option<u64>,
-        overrides: Option<TStateOverwrites>,
+        overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
         caller: Option<Address>,
         value: U256,
     ) -> Result<ProtoSimResponse, SimulationError> {
-        todo!()
+        let call_data = self.encode_input(fname, args)?;
+        let params = SimulationParameters {
+            data: Bytes::from(call_data),
+            to: self.address,
+            block_number,
+            timestamp: timestamp.unwrap_or_else(|| {
+                Utc::now()
+                    .naive_utc()
+                    .and_utc()
+                    .timestamp() as u64
+            }),
+            overrides,
+            caller: caller.unwrap_or_else(|| Address::ZERO),
+            value,
+            gas_limit: None,
+        };
+
+        let sim_result = self.simulate(params)?;
+
+        let output = self
+            .decode_output(fname, sim_result.result.to_vec())
+            .unwrap_or_else(|err| {
+                warn!("Failed to decode output: {:?}", err);
+                Vec::new() // Set to empty if decoding fails
+            });
+
+        Ok(ProtoSimResponse { return_value: output, simulation_result: sim_result })
     }
 
-    pub fn simulate(
-        &self,
-        params: SimulationParameters,
-    ) -> Result<SimulationResult, SimulationError> {
-        todo!()
-        // use self.engine.simulate(&params)
+    fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
+        self.engine
+            .simulate(&params)
+            .map_err(|e| {
+                if let Err(coerced_err) = maybe_coerce_error(e, "pool_state", params.gas_limit) {
+                    SimulationError::SimulationFailure(coerced_err.to_string())
+                } else {
+                    SimulationError::SimulationFailure("Unknown simulation error".to_string())
+                }
+            })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
+    use revm::primitives::{bytes, hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
     use rstest::rstest;
     use std::str::FromStr;
 
@@ -255,11 +291,11 @@ mod tests {
             &self,
             address: revm::precompile::Address,
         ) -> Result<Option<AccountInfo>, Self::Error> {
-            todo!()
+            Ok(Some(AccountInfo::default()))
         }
 
         fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-            todo!()
+            Ok(Bytecode::new())
         }
 
         fn storage_ref(
@@ -267,16 +303,21 @@ mod tests {
             address: revm::precompile::Address,
             index: rU256,
         ) -> Result<rU256, Self::Error> {
-            todo!()
+            Ok(rU256::from(0))
         }
 
         fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
-            todo!()
+            Ok(B256::default())
         }
     }
+
+    fn create_mock_engine() -> SimulationEngine<MockDatabase> {
+        SimulationEngine::new(MockDatabase, false)
+    }
+
     fn create_contract() -> ProtoSimContract<MockDatabase> {
         let address = Address::ZERO;
-        let engine = SimulationEngine::new(MockDatabase, false);
+        let engine = create_mock_engine();
         ProtoSimContract::new(address, engine).unwrap()
     }
 
@@ -393,4 +434,46 @@ mod tests {
             vec![Token::Array(vec![Token::Address(token_1), Token::Address(token_2)])];
         assert_eq!(decoded, expected_tokens);
     }
+
+    // #[tokio::test]
+    // async fn test_call_get_capabilities() {
+    //     let contract = create_contract();
+    //
+    //     // Set up the arguments for the function
+    //     let pool_id =
+    //         "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string();
+    //     let sell_token = "0000000000000000000000000000000000000002".to_string();
+    //     let buy_token = "0000000000000000000000000000000000000003".to_string();
+    //     let args = vec![pool_id, sell_token, buy_token];
+    //
+    //     // Mock the block number, timestamp, and other parameters
+    //     let block_number = 123456;
+    //     let timestamp = Some(1620000000);
+    //     let overrides: Option<HashMap<Address, HashMap<U256, U256>>> = None;
+    //     let caller = Some(Address::ZERO);
+    //     let value = U256::zero();
+    //
+    //     // Mock the expected simulation result (e.g., empty result)
+    //     let sim_result = SimulationResult {
+    //         result: bytes::Bytes::from(vec![0; 32]), // Mock result
+    //         ..Default::default()
+    //     };
+    //     let mock_engine = create_mock_engine();
+    //     // Simulate the call by overriding the `simulate` method (mocking behavior)
+    //     let simulate_fn = |params: &SimulationParameters| -> Result<SimulationResult,
+    // SimulationError> {         // Simulate the expected behavior here (e.g., returning the
+    // mock result)         Ok(sim_result.clone())
+    //     };
+    //
+    //     // Inject the mocked engine into the contract and call the method
+    //     let result = contract
+    //         .call("getCapabilities", args, block_number, timestamp, overrides, caller, value)
+    //         .await;
+    //     println!("{:?}", result);
+    //     // Validate the result
+    //     assert!(result.is_ok());
+    //
+    //     let response = result.unwrap();
+    //     assert_eq!(response.simulation_result.result, sim_result.result);
+    // }
 }

@@ -39,6 +39,7 @@ pub enum SimulationError {
 }
 
 /// A result of a successful transaction simulation
+#[derive(Debug, Clone, Default)]
 pub struct SimulationResult {
     /// Output of transaction execution as bytes
     pub result: bytes::Bytes,
