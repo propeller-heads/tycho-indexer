@@ -18,6 +18,7 @@ use crate::{
 };
 
 #[derive(Error, Debug)]
+#[allow(unused)]
 pub enum SimulationError {
     #[error("Runtime Error: {0}")]
     RuntimeError(String),
@@ -45,13 +46,7 @@ impl From<std::io::Error> for SimulationError {
 }
 
 #[derive(Debug)]
-struct Trade {
-    received_amount: f64,
-    gas_used: f64,
-    price: f64,
-}
-
-#[derive(Debug)]
+#[allow(unused)]
 struct ProtoSimResponse {
     return_value: Vec<Token>,
     simulation_result: SimulationResult,
@@ -67,6 +62,7 @@ impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D>
 where
     D::Error: std::fmt::Debug,
 {
+    #[allow(unused)]
     pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
@@ -80,7 +76,7 @@ where
             .ok_or_else(|| {
                 SimulationError::EncodingError(format!(
                     "Function name {} not found in the ABI",
-                    fname.to_string()
+                    fname
                 ))
             })?;
 
@@ -125,6 +121,7 @@ where
     /// This function takes an argument in string format and a `ParamType` that describes the
     /// expected type of the argument according to the Ethereum ABI. It parses the string and
     /// converts it into the corresponding `Token`.
+    #[allow(clippy::only_used_in_recursion)]
     fn convert_to_token(
         &self,
         param_type: &ParamType,
@@ -206,7 +203,7 @@ where
             .ok_or_else(|| {
                 SimulationError::DecodingError(format!(
                     "Function name {} not found in the ABI",
-                    fname.to_string()
+                    fname
                 ))
             })?;
 
@@ -222,6 +219,8 @@ where
         Ok(decoded_tokens)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[allow(unused)]
     pub async fn call(
         &self,
         fname: &str,
@@ -244,7 +243,7 @@ where
                     .timestamp() as u64
             }),
             overrides,
-            caller: caller.unwrap_or_else(|| Address::ZERO),
+            caller: caller.unwrap_or(Address::ZERO),
             value,
             gas_limit: None,
         };
@@ -261,6 +260,7 @@ where
         Ok(ProtoSimResponse { return_value: output, simulation_result: sim_result })
     }
 
+    #[allow(unused)]
     fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
         self.engine
             .simulate(&params)
@@ -277,7 +277,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use revm::primitives::{bytes, hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
+    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
     use rstest::rstest;
     use std::str::FromStr;
 
@@ -287,6 +287,7 @@ mod tests {
     impl DatabaseRef for MockDatabase {
         type Error = String;
 
+        #[allow(unused_variables)]
         fn basic_ref(
             &self,
             address: revm::precompile::Address,
@@ -294,10 +295,12 @@ mod tests {
             Ok(Some(AccountInfo::default()))
         }
 
+        #[allow(unused_variables)]
         fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
             Ok(Bytecode::new())
         }
 
+        #[allow(unused_variables)]
         fn storage_ref(
             &self,
             address: revm::precompile::Address,
@@ -306,6 +309,7 @@ mod tests {
             Ok(rU256::from(0))
         }
 
+        #[allow(unused_variables)]
         fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
             Ok(B256::default())
         }
@@ -434,46 +438,4 @@ mod tests {
             vec![Token::Array(vec![Token::Address(token_1), Token::Address(token_2)])];
         assert_eq!(decoded, expected_tokens);
     }
-
-    // #[tokio::test]
-    // async fn test_call_get_capabilities() {
-    //     let contract = create_contract();
-    //
-    //     // Set up the arguments for the function
-    //     let pool_id =
-    //         "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string();
-    //     let sell_token = "0000000000000000000000000000000000000002".to_string();
-    //     let buy_token = "0000000000000000000000000000000000000003".to_string();
-    //     let args = vec![pool_id, sell_token, buy_token];
-    //
-    //     // Mock the block number, timestamp, and other parameters
-    //     let block_number = 123456;
-    //     let timestamp = Some(1620000000);
-    //     let overrides: Option<HashMap<Address, HashMap<U256, U256>>> = None;
-    //     let caller = Some(Address::ZERO);
-    //     let value = U256::zero();
-    //
-    //     // Mock the expected simulation result (e.g., empty result)
-    //     let sim_result = SimulationResult {
-    //         result: bytes::Bytes::from(vec![0; 32]), // Mock result
-    //         ..Default::default()
-    //     };
-    //     let mock_engine = create_mock_engine();
-    //     // Simulate the call by overriding the `simulate` method (mocking behavior)
-    //     let simulate_fn = |params: &SimulationParameters| -> Result<SimulationResult,
-    // SimulationError> {         // Simulate the expected behavior here (e.g., returning the
-    // mock result)         Ok(sim_result.clone())
-    //     };
-    //
-    //     // Inject the mocked engine into the contract and call the method
-    //     let result = contract
-    //         .call("getCapabilities", args, block_number, timestamp, overrides, caller, value)
-    //         .await;
-    //     println!("{:?}", result);
-    //     // Validate the result
-    //     assert!(result.is_ok());
-    //
-    //     let response = result.unwrap();
-    //     assert_eq!(response.simulation_result.result, sim_result.result);
-    // }
 }
