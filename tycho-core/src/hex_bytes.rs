@@ -344,51 +344,55 @@ macro_rules! impl_from_uint_for_bytes {
 
 impl_from_uint_for_bytes!(u8, u16, u32, u64, u128);
 
-impl From<Bytes> for u128 {
-    fn from(src: Bytes) -> Self {
-        let bytes_slice = src.as_ref();
+macro_rules! impl_from_bytes_for_uint {
+    ($($t:ty),*) => {
+        $(
+            impl From<Bytes> for $t {
+                fn from(src: Bytes) -> Self {
+                    let bytes_slice = src.as_ref();
 
-        // Create an array with zeros.
-        let mut u128_bytes: [u8; 16] = [0; 16];
+                    // Create an array with zeros.
+                    let mut buf = [0u8; std::mem::size_of::<$t>()];
 
-        // Copy bytes from bytes_slice to u128_bytes.
-        u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
+                    // Copy bytes from `bytes_slice` to the end of `buf` to maintain big-endian order.
+                    buf[std::mem::size_of::<$t>() - bytes_slice.len()..].copy_from_slice(bytes_slice);
 
-        // Convert to u128 using little-endian
-        u128::from_le_bytes(u128_bytes)
-    }
+                    // Convert to the integer type using big-endian.
+                    <$t>::from_be_bytes(buf)
+                }
+            }
+        )*
+    };
 }
 
-impl From<Bytes> for i128 {
-    fn from(src: Bytes) -> Self {
-        let bytes_slice = src.as_ref();
+impl_from_bytes_for_uint!(u8, u16, u32, u64, u128);
 
-        // Create an array with zeros.
-        let mut u128_bytes: [u8; 16] = [0; 16];
+macro_rules! impl_from_bytes_for_signed_int {
+    ($($t:ty),*) => {
+        $(
+            impl From<Bytes> for $t {
+                fn from(src: Bytes) -> Self {
+                    let bytes_slice = src.as_ref();
 
-        // Copy bytes from bytes_slice to u128_bytes.
-        u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
+                    // Create an array with zeros or ones for negative numbers.
+                    let mut buf = if bytes_slice.get(0).map_or(false, |&b| b & 0x80 != 0) {
+                        [0xFFu8; std::mem::size_of::<$t>()] // Sign-extend with 0xFF for negative numbers.
+                    } else {
+                        [0x00u8; std::mem::size_of::<$t>()] // Fill with 0x00 for positive numbers.
+                    };
 
-        // Convert to i128 using little-endian
-        i128::from_le_bytes(u128_bytes)
-    }
+                    // Copy bytes from `bytes_slice` to the end of `buf` to maintain big-endian order.
+                    buf[std::mem::size_of::<$t>() - bytes_slice.len()..].copy_from_slice(bytes_slice);
+
+                    // Convert to the signed integer type using big-endian.
+                    <$t>::from_be_bytes(buf)
+                }
+            }
+        )*
+    };
 }
 
-impl From<Bytes> for i32 {
-    fn from(src: Bytes) -> Self {
-        let bytes_slice = src.as_ref();
-
-        // Create an array with zeros.
-        let mut i32_bytes: [u8; 4] = [0; 4];
-
-        // Copy bytes from bytes_slice to i32_bytes.
-        let len = 4.min(bytes_slice.len());
-        i32_bytes[..len].copy_from_slice(&bytes_slice[..len]);
-
-        // Convert to i32 using little-endian
-        i32::from_le_bytes(i32_bytes)
-    }
-}
+impl_from_bytes_for_signed_int!(i8, i16, i32, i64, i128);
 
 #[cfg(test)]
 mod tests {
@@ -471,21 +475,21 @@ mod tests {
 
     #[test]
     fn test_u128_from_bytes() {
-        let data = Bytes::from(vec![1, 2, 3, 4]);
+        let data = Bytes::from(vec![4, 3, 2, 1]);
         let result: u128 = u128::from(data.clone());
         assert_eq!(result, u128::from_str("67305985").unwrap());
     }
 
     #[test]
     fn test_i128_from_bytes() {
-        let data = Bytes::from(vec![1, 2, 3, 4]);
+        let data = Bytes::from(vec![4, 3, 2, 1]);
         let result: i128 = i128::from(data.clone());
         assert_eq!(result, i128::from_str("67305985").unwrap());
     }
 
     #[test]
     fn test_i32_from_bytes() {
-        let data = Bytes::from(vec![1, 2, 3, 4]);
+        let data = Bytes::from(vec![4, 3, 2, 1]);
         let result: i32 = i32::from(data);
         assert_eq!(result, i32::from_str("67305985").unwrap());
     }
