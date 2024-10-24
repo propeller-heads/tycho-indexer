@@ -1,3 +1,20 @@
+## [0.24.0](https://github.com/propeller-heads/protosim/compare/0.23.1...0.24.0) (2024-10-24)
+
+
+### Features
+
+* create ERC20OverwriteFactory utils ([86457cf](https://github.com/propeller-heads/protosim/commit/86457cff9364b8a47cf8871d27d72997ef183be3))
+* Update tycho version ([39fb025](https://github.com/propeller-heads/protosim/commit/39fb025285ff1e45efdea257c82788ce5030b4ea))
+
+
+### Bug Fixes
+
+* differentiate between SolidityError and InvalidResponse ([184ff45](https://github.com/propeller-heads/protosim/commit/184ff459a4f052b85e255f97e9e77f3504070b1e))
+* maybe_coerce_error - change expected input and outputs ([43e0165](https://github.com/propeller-heads/protosim/commit/43e01651bfcdb41bba9a46722b716fda230da405))
+* Propagate error upwards in get_geth_overwrites ([5af81da](https://github.com/propeller-heads/protosim/commit/5af81da2cb5b2a3334d09f3903a350ea463d6b80))
+* Return SimulationError from maybe_coerce_error ([1354220](https://github.com/propeller-heads/protosim/commit/1354220ce244ae79272889d5d5222365eb6cfef3))
+* use expect instead of unwrap (and readability fixes) ([b033fae](https://github.com/propeller-heads/protosim/commit/b033faea4f8c7b44fb656c0f23c6880344abac44))
+
 ## [0.23.1](https://github.com/propeller-heads/protosim/compare/0.23.0...0.23.1) (2024-10-21)
 
 
