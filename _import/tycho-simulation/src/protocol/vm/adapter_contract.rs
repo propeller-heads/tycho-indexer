@@ -4,7 +4,7 @@
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::vm::{
-        errors::ProtosimError, models::Capability, protosim_contract::ProtoSimContract,
+        errors::ProtosimError, models::Capability, protosim_contract::ProtosimContract,
     },
 };
 use ethers::{
@@ -21,7 +21,7 @@ pub struct Trade {
     price: f64,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D>
+impl<D: DatabaseRef + std::clone::Clone> ProtosimContract<D>
 where
     D::Error: std::fmt::Debug,
 {

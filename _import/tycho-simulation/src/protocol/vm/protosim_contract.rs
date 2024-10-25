@@ -28,13 +28,13 @@ pub struct ProtoSimResponse {
     pub simulation_result: SimulationResult,
 }
 
-pub struct ProtoSimContract<D: DatabaseRef + std::clone::Clone> {
+pub struct ProtosimContract<D: DatabaseRef + std::clone::Clone> {
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D>
+impl<D: DatabaseRef + std::clone::Clone> ProtosimContract<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -154,11 +154,11 @@ where
         self.engine
             .simulate(&params)
             .map_err(|e| {
-                if let Err(coerced_err) = maybe_coerce_error(e, "pool_state", params.gas_limit) {
-                    ProtosimError::SimulationFailure(coerced_err.to_string())
-                } else {
-                    ProtosimError::SimulationFailure("Unknown simulation error".to_string())
-                }
+                ProtosimError::SimulationFailure(maybe_coerce_error(
+                    &e,
+                    "pool_state",
+                    params.gas_limit,
+                ))
             })
     }
 }
@@ -203,10 +203,10 @@ mod tests {
         SimulationEngine::new(MockDatabase, false)
     }
 
-    fn create_contract() -> ProtoSimContract<MockDatabase> {
+    fn create_contract() -> ProtosimContract<MockDatabase> {
         let address = Address::ZERO;
         let engine = create_mock_engine();
-        ProtoSimContract::new(address, engine).unwrap()
+        ProtosimContract::new(address, engine).unwrap()
     }
 
     #[test]
