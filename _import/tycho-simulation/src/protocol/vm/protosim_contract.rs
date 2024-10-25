@@ -28,7 +28,7 @@ struct ProtoSimResponse {
     simulation_result: SimulationResult,
 }
 
-struct ProtoSimContract<D: DatabaseRef + std::clone::Clone> {
+pub struct ProtoSimContract<D: DatabaseRef + std::clone::Clone> {
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
