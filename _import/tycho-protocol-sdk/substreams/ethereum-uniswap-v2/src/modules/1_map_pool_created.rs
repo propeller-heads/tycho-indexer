@@ -4,7 +4,6 @@ use ethabi::ethereum_types::Address;
 use serde::Deserialize;
 use substreams::prelude::BigInt;
 use substreams_ethereum::pb::eth::v2::{self as eth};
-
 use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 
 use crate::abi::factory::events::PairCreated;
@@ -86,12 +85,12 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                 BalanceChange {
                     token: event.token0,
                     balance: BigInt::from(0).to_signed_bytes_be(),
-                    component_id: event.pair.clone(),
+                    component_id: event.pair.to_hex().as_bytes().to_vec(),
                 },
                 BalanceChange {
                     token: event.token1,
                     balance: BigInt::from(0).to_signed_bytes_be(),
-                    component_id: event.pair,
+                    component_id: event.pair.to_hex().as_bytes().to_vec(),
                 },
             ],
         })
