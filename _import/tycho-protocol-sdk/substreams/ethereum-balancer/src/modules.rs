@@ -208,7 +208,11 @@ pub fn map_protocol_changes(
                 .or_insert_with(|| TransactionChangesBuilder::new(&tx));
             balances
                 .values()
-                .for_each(|bc| builder.add_balance_change(bc));
+                .for_each(|token_bc_map| {
+                    token_bc_map
+                        .values()
+                        .for_each(|bc| builder.add_balance_change(bc))
+                });
         });
 
     // Extract and insert any storage changes that happened for any of the components.
