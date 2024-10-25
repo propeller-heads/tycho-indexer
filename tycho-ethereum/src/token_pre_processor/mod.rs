@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use ethers::{abi::Abi, contract::Contract, prelude::Provider, providers::Http, types::H160};
+use ethrpc::{http::HttpTransport, Web3, Web3Transport};
 use reqwest::Client;
 use serde_json::from_str;
 use std::{str::FromStr, sync::Arc};
 use tracing::{instrument, warn};
 use url::Url;
 
-use ethrpc::{http::HttpTransport, Web3, Web3Transport};
 use tycho_core::{
     models::{
         blockchain::BlockTag,
@@ -17,7 +17,7 @@ use tycho_core::{
     Bytes,
 };
 
-use crate::{token_analyzer::trace_call::TraceCallDetector, BytesConvertible};
+use crate::{token_analyzer::trace_call::TraceCallDetector, BytesCodec};
 
 #[derive(Debug, Clone)]
 pub struct EthereumTokenPreProcessor {
