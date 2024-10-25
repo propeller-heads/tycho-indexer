@@ -6,6 +6,7 @@ use tracing::{debug, info};
 
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use revm::{
     db::DatabaseRef,
     interpreter::analysis::to_analysed,
@@ -111,35 +112,6 @@ impl<M: Middleware> SimulationDB<M> {
     /// Set the block that will be used when querying a node
     pub fn set_block(&mut self, block: Option<BlockHeader>) {
         self.block = block;
-    }
-
-    /// Sets up a single account
-    ///
-    /// Full control over setting up an accounts. Allows to set up EOAs as
-    /// well as smart contracts.
-    ///
-    /// # Arguments
-    ///
-    /// * `address` - Address of the account
-    /// * `account` - The account information
-    /// * `permanent_storage` - Storage to init the account with this storage can only be updated
-    ///   manually.
-    /// * `mocked` - Whether this account should be considered mocked. For mocked accounts, nothing
-    ///   is downloaded from a node; all data must be inserted manually.
-    pub fn init_account(
-        &self,
-        address: Address,
-        mut account: AccountInfo,
-        permanent_storage: Option<HashMap<rU256, rU256>>,
-        mocked: bool,
-    ) {
-        if account.code.is_some() {
-            account.code = Some(to_analysed(account.code.unwrap()));
-        }
-
-        self.account_storage
-            .borrow_mut()
-            .init_account(address, account, permanent_storage, mocked);
     }
 
     /// Update the simulation state.
@@ -294,6 +266,39 @@ impl<M: Middleware> SimulationDB<M> {
             Some(runtime) => runtime.block_on(f),
             None => futures::executor::block_on(f),
         }
+    }
+}
+
+impl<M: Middleware> EngineDatabaseInterface for SimulationDB<M> {
+    type Error = String;
+
+    /// Sets up a single account
+    ///
+    /// Full control over setting up an accounts. Allows to set up EOAs as
+    /// well as smart contracts.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Address of the account
+    /// * `account` - The account information
+    /// * `permanent_storage` - Storage to init the account with this storage can only be updated
+    ///   manually.
+    /// * `mocked` - Whether this account should be considered mocked. For mocked accounts, nothing
+    ///   is downloaded from a node; all data must be inserted manually.
+    fn init_account(
+        &self,
+        address: Address,
+        mut account: AccountInfo,
+        permanent_storage: Option<HashMap<rU256, rU256>>,
+        mocked: bool,
+    ) {
+        if account.code.is_some() {
+            account.code = Some(to_analysed(account.code.unwrap()));
+        }
+
+        self.account_storage
+            .borrow_mut()
+            .init_account(address, account, permanent_storage, mocked);
     }
 }
 

@@ -10,7 +10,8 @@ use revm::{
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
-    database::BlockHeader,
+    engine_db_interface::EngineDatabaseInterface,
+    simulation_db::BlockHeader,
     tycho_models::{AccountUpdate, ChangeType},
 };
 
@@ -163,31 +164,6 @@ impl PreCachedDB {
             .get_storage(address, index)
     }
 
-    /// Sets up a single account
-    ///
-    /// Full control over setting up an accounts. Allows to set up EOAs as well as smart contracts.
-    ///
-    /// # Arguments
-    ///
-    /// * `address` - Address of the account
-    /// * `account` - The account information
-    /// * `permanent_storage` - Storage to init the account with, this storage can only be updated
-    ///   manually
-    pub fn init_account(
-        &self,
-        address: Address,
-        account: AccountInfo,
-        permanent_storage: Option<HashMap<rU256, rU256>>,
-    ) {
-        self.block_on(async {
-            self.inner
-                .write()
-                .await
-                .accounts
-                .init_account(address, to_analysed(account), permanent_storage, true)
-        });
-    }
-
     /// Blocking version of [get_storage_async]
     pub fn get_storage(&self, address: &Address, index: &rU256) -> Option<rU256> {
         self.block_on(self.get_storage_async(address, index))
@@ -263,6 +239,36 @@ impl PreCachedDB {
         self.block_on(async { self.inner.read().await.block })
             .as_ref()
             .map(|header| header.number)
+    }
+}
+
+impl EngineDatabaseInterface for PreCachedDB {
+    type Error = String;
+
+    /// Sets up a single account
+    ///
+    /// Full control over setting up an accounts. Allows to set up EOAs as well as smart contracts.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Address of the account
+    /// * `account` - The account information
+    /// * `permanent_storage` - Storage to init the account with, this storage can only be updated
+    ///   manually
+    fn init_account(
+        &self,
+        address: Address,
+        account: AccountInfo,
+        permanent_storage: Option<HashMap<rU256, rU256>>,
+        _mocked: bool,
+    ) {
+        self.block_on(async {
+            self.inner
+                .write()
+                .await
+                .accounts
+                .init_account(address, to_analysed(account), permanent_storage, true)
+        });
     }
 }
 
@@ -376,7 +382,7 @@ mod tests {
         // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
+        mock_db.init_account(mock_acc_address, AccountInfo::default(), None, false);
 
         let acc_info = mock_db
             .basic_ref(mock_acc_address)
@@ -399,7 +405,12 @@ mod tests {
         let storage_address = rU256::from(1);
         let mut permanent_storage: HashMap<rU256, rU256> = HashMap::new();
         permanent_storage.insert(storage_address, rU256::from(10));
-        mock_db.init_account(mock_acc_address, AccountInfo::default(), Some(permanent_storage));
+        mock_db.init_account(
+            mock_acc_address,
+            AccountInfo::default(),
+            Some(permanent_storage),
+            false,
+        );
 
         let storage = mock_db
             .storage_ref(mock_acc_address, storage_address)
@@ -413,7 +424,7 @@ mod tests {
     fn test_account_storage_zero(mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = rU256::from(1);
-        mock_db.init_account(mock_acc_address, AccountInfo::default(), None);
+        mock_db.init_account(mock_acc_address, AccountInfo::default(), None, false);
 
         let storage = mock_db
             .storage_ref(mock_acc_address, storage_address)
@@ -442,7 +453,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_state(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(address, AccountInfo::default(), None);
+        mock_db.init_account(address, AccountInfo::default(), None, false);
 
         let mut new_storage = HashMap::default();
         let new_storage_value_index = rU256::from_limbs_slice(&[123]);
@@ -486,7 +497,7 @@ mod tests {
     #[tokio::test]
     async fn test_block_number_getter(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(address, AccountInfo::default(), None);
+        mock_db.init_account(address, AccountInfo::default(), None, false);
 
         let new_block = Block {
             number: 1,
