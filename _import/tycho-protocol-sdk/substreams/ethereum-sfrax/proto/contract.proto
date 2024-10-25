@@ -1,0 +1,276 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package contract.v1;
+
+message Events {
+    repeated stakedfrax_Approval stakedfrax_approvals = 1;
+    repeated stakedfrax_Deposit stakedfrax_deposits = 2;
+    repeated stakedfrax_DistributeRewards stakedfrax_distribute_rewards = 3;
+    repeated stakedfrax_SetMaxDistributionPerSecondPerAsset stakedfrax_set_max_distribution_per_second_per_assets = 4;
+    repeated stakedfrax_SyncRewards stakedfrax_sync_rewards = 5;
+    repeated stakedfrax_TimelockTransferStarted stakedfrax_timelock_transfer_starteds = 6;
+    repeated stakedfrax_TimelockTransferred stakedfrax_timelock_transferreds = 7;
+    repeated stakedfrax_Transfer stakedfrax_transfers = 8;
+    repeated stakedfrax_Withdraw stakedfrax_withdraws = 9;
+}
+
+message Calls {
+    repeated stakedfrax_AcceptTransferTimelockCall stakedfrax_call_accept_transfer_timelocks = 1;
+    repeated stakedfrax_ApproveCall stakedfrax_call_approves = 2;
+    repeated stakedfrax_DepositCall stakedfrax_call_deposits = 3;
+    repeated stakedfrax_DepositWithSignatureCall stakedfrax_call_deposit_with_signatures = 4;
+    repeated stakedfrax_MintCall stakedfrax_call_mints = 5;
+    repeated stakedfrax_PermitCall stakedfrax_call_permits = 6;
+    repeated stakedfrax_RedeemCall stakedfrax_call_redeems = 7;
+    repeated stakedfrax_RenounceTimelockCall stakedfrax_call_renounce_timelocks = 8;
+    repeated stakedfrax_SetMaxDistributionPerSecondPerAssetCall stakedfrax_call_set_max_distribution_per_second_per_assets = 9;
+    repeated stakedfrax_SyncRewardsAndDistributionCall stakedfrax_call_sync_rewards_and_distributions = 10;
+    repeated stakedfrax_TransferCall stakedfrax_call_transfers = 11;
+    repeated stakedfrax_TransferFromCall stakedfrax_call_transfer_froms = 12;
+    repeated stakedfrax_TransferTimelockCall stakedfrax_call_transfer_timelocks = 13;
+    repeated stakedfrax_WithdrawCall stakedfrax_call_withdraws = 14;
+}
+
+
+message stakedfrax_Approval {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    bytes owner = 5;
+    bytes spender = 6;
+    string amount = 7;
+}
+
+message stakedfrax_Deposit {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    bytes caller = 5;
+    bytes owner = 6;
+    string assets = 7;
+    string shares = 8;
+}
+
+message stakedfrax_DistributeRewards {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    string rewards_to_distribute = 5;
+}
+
+message stakedfrax_SetMaxDistributionPerSecondPerAsset {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    string old_max = 5;
+    string new_max = 6;
+}
+
+message stakedfrax_SyncRewards {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    uint64 cycle_end = 5;
+    uint64 last_sync = 6;
+    string reward_cycle_amount = 7;
+}
+
+message stakedfrax_TimelockTransferStarted {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    bytes previous_timelock = 5;
+    bytes new_timelock = 6;
+}
+
+message stakedfrax_TimelockTransferred {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    bytes previous_timelock = 5;
+    bytes new_timelock = 6;
+}
+
+message stakedfrax_Transfer {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    bytes from = 5;
+    bytes to = 6;
+    string amount = 7;
+}
+
+message stakedfrax_Withdraw {
+    string evt_tx_hash = 1;
+    uint32 evt_index = 2;
+    google.protobuf.Timestamp evt_block_time = 3;
+    uint64 evt_block_number = 4;
+    bytes caller = 5;
+    bytes receiver = 6;
+    bytes owner = 7;
+    string assets = 8;
+    string shares = 9;
+}
+
+message stakedfrax_AcceptTransferTimelockCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+}
+
+message stakedfrax_ApproveCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    bytes spender = 6;
+    string amount = 7;
+    bool output_param0 = 8;
+}
+
+message stakedfrax_DepositCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    string u_assets = 6;
+    bytes u_receiver = 7;
+    string output__shares = 8;
+}
+
+message stakedfrax_DepositWithSignatureCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    string u_assets = 6;
+    bytes u_receiver = 7;
+    string u_deadline = 8;
+    bool u_approve_max = 9;
+    uint64 u_v = 10;
+    bytes u_r = 11;
+    bytes u_s = 12;
+    string output__shares = 13;
+}
+
+message stakedfrax_MintCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    string u_shares = 6;
+    bytes u_receiver = 7;
+    string output__assets = 8;
+}
+
+message stakedfrax_PermitCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    bytes owner = 6;
+    bytes spender = 7;
+    string value = 8;
+    string deadline = 9;
+    uint64 v = 10;
+    bytes r = 11;
+    bytes s = 12;
+}
+
+message stakedfrax_RedeemCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    string u_shares = 6;
+    bytes u_receiver = 7;
+    bytes u_owner = 8;
+    string output__assets = 9;
+}
+
+message stakedfrax_RenounceTimelockCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+}
+
+message stakedfrax_SetMaxDistributionPerSecondPerAssetCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    string u_max_distribution_per_second_per_asset = 6;
+}
+
+message stakedfrax_SyncRewardsAndDistributionCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+}
+
+message stakedfrax_TransferCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    bytes to = 6;
+    string amount = 7;
+    bool output_param0 = 8;
+}
+
+message stakedfrax_TransferFromCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    bytes from = 6;
+    bytes to = 7;
+    string amount = 8;
+    bool output_param0 = 9;
+}
+
+message stakedfrax_TransferTimelockCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    bytes u_new_timelock = 6;
+}
+
+message stakedfrax_WithdrawCall {
+    string call_tx_hash = 1;
+    google.protobuf.Timestamp call_block_time = 2;
+    uint64 call_block_number = 3;
+    uint64 call_ordinal = 4;
+    bool call_success = 5;
+    string u_assets = 6;
+    bytes u_receiver = 7;
+    bytes u_owner = 8;
+    string output__shares = 9;
+}
