@@ -6746,7 +6746,6 @@ dependencies = [
  "ethers",
  "ethrpc",
  "humantime",
- "mockall",
  "primitive-types",
  "reqwest 0.11.24",
  "serde",

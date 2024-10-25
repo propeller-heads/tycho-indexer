@@ -1,5 +1,8 @@
+#[cfg(feature = "contracts")]
 pub mod account_extractor;
+#[cfg(feature = "contracts")]
 pub mod token_analyzer;
+#[cfg(feature = "contracts")]
 pub mod token_pre_processor;
 
 use ethers::{
