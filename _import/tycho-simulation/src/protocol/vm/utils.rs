@@ -150,8 +150,8 @@ pub type SlotHash = H256;
 /// a storage slot where balance of a given account is stored:
 ///
 /// ```
-/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, H256};
-/// use ethers::types::Address;
+/// use protosim::protocol::vm::utils::get_storage_slot_index_at_key;
+/// use ethers::types::{Address, H256};
 /// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// get_storage_slot_index_at_key(address, H256::from_low_u64_be(0));
 /// ```
@@ -163,8 +163,8 @@ pub type SlotHash = H256;
 /// where an allowance of `address_spender` to spend `address_owner`'s money is stored:
 ///
 /// ```
-/// use protosim::protocol::vm::utils::{get_storage_slot_index_at_key, H256};
-/// use ethers::types::Address;
+/// use protosim::protocol::vm::utils::get_storage_slot_index_at_key;
+/// use ethers::types::{Address, H256};
 /// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
 /// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, H256::from_low_u64_be(1)));

@@ -1,3 +1,5 @@
+// TODO: remove skips for clippy
+
 use chrono::Utc;
 use ethers::{
     abi::{decode, encode, Abi, ParamType, Token},
@@ -9,41 +11,15 @@ use revm::{
     primitives::{alloy_primitives::Keccak256, Address},
 };
 use std::{collections::HashMap, str::FromStr};
-use thiserror::Error;
 use tracing::warn;
 
 use crate::{
     evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
-    protocol::vm::utils::{load_swap_abi, maybe_coerce_error},
+    protocol::vm::{
+        errors::ProtosimError,
+        utils::{load_swap_abi, maybe_coerce_error},
+    },
 };
-
-#[derive(Error, Debug)]
-#[allow(unused)]
-pub enum SimulationError {
-    #[error("Runtime Error: {0}")]
-    RuntimeError(String),
-
-    #[error("Revert Error: {0}")]
-    RevertError(String),
-
-    #[error("Decoding error: {0}")]
-    DecodingError(String),
-
-    #[error("ABI loading error: {0}")]
-    AbiError(String),
-
-    #[error("Encoding error: {0}")]
-    EncodingError(String),
-
-    #[error("Simulation failure error: {0}")]
-    SimulationFailure(String),
-}
-
-impl From<std::io::Error> for SimulationError {
-    fn from(err: std::io::Error) -> SimulationError {
-        SimulationError::AbiError(err.to_string())
-    }
-}
 
 #[derive(Debug)]
 #[allow(unused)]
@@ -63,25 +39,25 @@ where
     D::Error: std::fmt::Debug,
 {
     #[allow(unused)]
-    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
+    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, ProtosimError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
     }
-    fn encode_input(&self, fname: &str, args: Vec<String>) -> Result<Vec<u8>, SimulationError> {
+    fn encode_input(&self, fname: &str, args: Vec<String>) -> Result<Vec<u8>, ProtosimError> {
         let function = self
             .abi
             .functions
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::EncodingError(format!(
+                ProtosimError::EncodingError(format!(
                     "Function name {} not found in the ABI",
                     fname
                 ))
             })?;
 
         if function.inputs.len() != args.len() {
-            return Err(SimulationError::EncodingError("Invalid argument count".to_string()));
+            return Err(ProtosimError::EncodingError("Invalid argument count".to_string()));
         }
 
         // ethers::abi::encode only takes &[Token] as input,
@@ -90,7 +66,7 @@ where
             .inputs
             .iter()
             .zip(args.into_iter())
-            .map(|(param, arg_value)| self.convert_to_token(&param.kind, arg_value))
+            .map(|(param, arg_value)| convert_to_token(&param.kind, arg_value))
             .collect::<Result<Vec<_>, _>>()?;
 
         let input_types: String = function
@@ -115,93 +91,18 @@ where
         Ok(result)
     }
 
-    /// Converts a string argument to an `ethers::abi::Token` based on its corresponding
-    /// `ParamType`.
-    ///
-    /// This function takes an argument in string format and a `ParamType` that describes the
-    /// expected type of the argument according to the Ethereum ABI. It parses the string and
-    /// converts it into the corresponding `Token`.
-    #[allow(clippy::only_used_in_recursion)]
-    fn convert_to_token(
-        &self,
-        param_type: &ParamType,
-        arg_value: String,
-    ) -> Result<Token, SimulationError> {
-        match param_type {
-            ParamType::Address => {
-                let addr = H160::from_str(&arg_value).map_err(|_| {
-                    SimulationError::EncodingError(format!("Invalid address: {}", arg_value))
-                })?;
-                Ok(Token::Address(addr))
-            }
-            ParamType::Uint(_) => {
-                let value = U256::from_dec_str(&arg_value).map_err(|_| {
-                    SimulationError::EncodingError(format!("Invalid uint: {}", arg_value))
-                })?;
-                Ok(Token::Uint(value))
-            }
-            ParamType::FixedBytes(size) => {
-                let bytes = hex::decode(arg_value.clone()).map_err(|_| {
-                    SimulationError::EncodingError(format!("Invalid bytes: {}", arg_value))
-                })?;
-                if bytes.len() == *size {
-                    Ok(Token::FixedBytes(bytes))
-                } else {
-                    Err(SimulationError::EncodingError("Invalid bytes length".to_string()))
-                }
-            }
-            ParamType::Bytes => {
-                let bytes = hex::decode(arg_value.clone()).map_err(|_| {
-                    SimulationError::EncodingError(format!("Invalid bytes: {}", arg_value))
-                })?;
-                Ok(Token::Bytes(bytes))
-            }
-            ParamType::Array(inner) => {
-                let elements: Vec<String> = arg_value
-                    .split(',')
-                    .map(String::from)
-                    .collect();
-                let tokens = elements
-                    .into_iter()
-                    .map(|elem| self.convert_to_token(inner, elem))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(Token::Array(tokens))
-            }
-            ParamType::Tuple(types) => {
-                let elements: Vec<String> = arg_value
-                    .split(',')
-                    .map(String::from)
-                    .collect();
-                if elements.len() != types.len() {
-                    return Err(SimulationError::EncodingError(format!(
-                        "Invalid tuple length. Expected {}, got {}",
-                        types.len(),
-                        elements.len()
-                    )));
-                }
-                let tokens = elements
-                    .into_iter()
-                    .zip(types.iter())
-                    .map(|(elem, typ)| self.convert_to_token(typ, elem))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(Token::Tuple(tokens))
-            }
-            _ => Err(SimulationError::EncodingError("Unsupported type".to_string())),
-        }
-    }
-
     pub fn decode_output(
         &self,
         fname: &str,
         encoded: Vec<u8>,
-    ) -> Result<Vec<Token>, SimulationError> {
+    ) -> Result<Vec<Token>, ProtosimError> {
         let function = self
             .abi
             .functions
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::DecodingError(format!(
+                ProtosimError::DecodingError(format!(
                     "Function name {} not found in the ABI",
                     fname
                 ))
@@ -213,7 +114,7 @@ where
             .map(|output| output.kind.clone())
             .collect();
         let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
-            SimulationError::DecodingError(format!("Failed to decode output: {:?}", e))
+            ProtosimError::DecodingError(format!("Failed to decode output: {:?}", e))
         })?;
 
         Ok(decoded_tokens)
@@ -230,7 +131,7 @@ where
         overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
         caller: Option<Address>,
         value: U256,
-    ) -> Result<ProtoSimResponse, SimulationError> {
+    ) -> Result<ProtoSimResponse, ProtosimError> {
         let call_data = self.encode_input(fname, args)?;
         let params = SimulationParameters {
             data: Bytes::from(call_data),
@@ -261,16 +162,86 @@ where
     }
 
     #[allow(unused)]
-    fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
+    fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, ProtosimError> {
         self.engine
             .simulate(&params)
             .map_err(|e| {
                 if let Err(coerced_err) = maybe_coerce_error(e, "pool_state", params.gas_limit) {
-                    SimulationError::SimulationFailure(coerced_err.to_string())
+                    ProtosimError::SimulationFailure(coerced_err.to_string())
                 } else {
-                    SimulationError::SimulationFailure("Unknown simulation error".to_string())
+                    ProtosimError::SimulationFailure("Unknown simulation error".to_string())
                 }
             })
+    }
+}
+
+/// Converts a string argument to an `ethers::abi::Token` based on its corresponding
+/// `ParamType`.
+///
+/// This function takes an argument in string format and a `ParamType` that describes the
+/// expected type of the argument according to the Ethereum ABI. It parses the string and
+/// converts it into the corresponding `Token`.
+fn convert_to_token(param_type: &ParamType, arg_value: String) -> Result<Token, ProtosimError> {
+    match param_type {
+        ParamType::Address => {
+            let addr = H160::from_str(&arg_value).map_err(|_| {
+                ProtosimError::EncodingError(format!("Invalid address: {}", arg_value))
+            })?;
+            Ok(Token::Address(addr))
+        }
+        ParamType::Uint(_) => {
+            let value = U256::from_dec_str(&arg_value).map_err(|_| {
+                ProtosimError::EncodingError(format!("Invalid uint: {}", arg_value))
+            })?;
+            Ok(Token::Uint(value))
+        }
+        ParamType::FixedBytes(size) => {
+            let bytes = hex::decode(arg_value.clone()).map_err(|_| {
+                ProtosimError::EncodingError(format!("Invalid bytes: {}", arg_value))
+            })?;
+            if bytes.len() == *size {
+                Ok(Token::FixedBytes(bytes))
+            } else {
+                Err(ProtosimError::EncodingError("Invalid bytes length".to_string()))
+            }
+        }
+        ParamType::Bytes => {
+            let bytes = hex::decode(arg_value.clone()).map_err(|_| {
+                ProtosimError::EncodingError(format!("Invalid bytes: {}", arg_value))
+            })?;
+            Ok(Token::Bytes(bytes))
+        }
+        ParamType::Array(inner) => {
+            let elements: Vec<String> = arg_value
+                .split(',')
+                .map(String::from)
+                .collect();
+            let tokens = elements
+                .into_iter()
+                .map(|elem| convert_to_token(inner, elem))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Token::Array(tokens))
+        }
+        ParamType::Tuple(types) => {
+            let elements: Vec<String> = arg_value
+                .split(',')
+                .map(String::from)
+                .collect();
+            if elements.len() != types.len() {
+                return Err(ProtosimError::EncodingError(format!(
+                    "Invalid tuple length. Expected {}, got {}",
+                    types.len(),
+                    elements.len()
+                )));
+            }
+            let tokens = elements
+                .into_iter()
+                .zip(types.iter())
+                .map(|(elem, typ)| convert_to_token(typ, elem))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Token::Tuple(tokens))
+        }
+        _ => Err(ProtosimError::EncodingError("Unsupported type".to_string())),
     }
 }
 
@@ -287,29 +258,25 @@ mod tests {
     impl DatabaseRef for MockDatabase {
         type Error = String;
 
-        #[allow(unused_variables)]
         fn basic_ref(
             &self,
-            address: revm::precompile::Address,
+            _address: revm::precompile::Address,
         ) -> Result<Option<AccountInfo>, Self::Error> {
             Ok(Some(AccountInfo::default()))
         }
 
-        #[allow(unused_variables)]
         fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
             Ok(Bytecode::new())
         }
 
-        #[allow(unused_variables)]
         fn storage_ref(
             &self,
-            address: revm::precompile::Address,
-            index: rU256,
+            _address: revm::precompile::Address,
+            _index: rU256,
         ) -> Result<rU256, Self::Error> {
             Ok(rU256::from(0))
         }
 
-        #[allow(unused_variables)]
         fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
             Ok(B256::default())
         }
@@ -367,19 +334,15 @@ mod tests {
         #[case] arg_value: &str,
         #[case] expected_token: Token,
     ) {
-        let contract = create_contract();
-        let token = contract
-            .convert_to_token(&param_type, arg_value.to_string())
-            .unwrap();
+        let token = convert_to_token(&param_type, arg_value.to_string()).unwrap();
         assert_eq!(token, expected_token);
     }
 
     #[test]
     fn test_convert_to_token_invalid_address() {
-        let contract = create_contract();
         let param_type = ParamType::Address;
         let arg_value = "invalid_address".to_string();
-        let result = contract.convert_to_token(&param_type, arg_value);
+        let result = convert_to_token(&param_type, arg_value);
 
         assert!(result.is_err());
     }
