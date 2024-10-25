@@ -1,4 +1,5 @@
-// TODO: remove skips for clippy
+// TODO: remove skip for clippy dead_code check
+#![allow(dead_code)]
 
 use chrono::Utc;
 use ethers::{
@@ -10,7 +11,7 @@ use revm::{
     db::DatabaseRef,
     primitives::{alloy_primitives::Keccak256, Address},
 };
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 use tracing::warn;
 
 use crate::{
@@ -22,10 +23,9 @@ use crate::{
 };
 
 #[derive(Debug)]
-#[allow(unused)]
-struct ProtoSimResponse {
-    return_value: Vec<Token>,
-    simulation_result: SimulationResult,
+pub struct ProtoSimResponse {
+    pub return_value: Vec<Token>,
+    pub simulation_result: SimulationResult,
 }
 
 pub struct ProtoSimContract<D: DatabaseRef + std::clone::Clone> {
@@ -38,12 +38,11 @@ impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D>
 where
     D::Error: std::fmt::Debug,
 {
-    #[allow(unused)]
     pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, ProtosimError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
     }
-    fn encode_input(&self, fname: &str, args: Vec<String>) -> Result<Vec<u8>, ProtosimError> {
+    fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, ProtosimError> {
         let function = self
             .abi
             .functions
@@ -60,15 +59,6 @@ where
             return Err(ProtosimError::EncodingError("Invalid argument count".to_string()));
         }
 
-        // ethers::abi::encode only takes &[Token] as input,
-        // so we need to convert arguments to tokens based on the ABI types
-        let tokens: Vec<Token> = function
-            .inputs
-            .iter()
-            .zip(args.into_iter())
-            .map(|(param, arg_value)| convert_to_token(&param.kind, arg_value))
-            .collect::<Result<Vec<_>, _>>()?;
-
         let input_types: String = function
             .inputs
             .iter()
@@ -83,7 +73,7 @@ where
             result[..4].to_vec()
         };
 
-        let encoded = encode(&tokens);
+        let encoded = encode(&args);
         let mut result = Vec::with_capacity(4 + encoded.len());
         result.extend_from_slice(&selector);
         result.extend(encoded);
@@ -121,11 +111,10 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[allow(unused)]
     pub async fn call(
         &self,
         fname: &str,
-        args: Vec<String>,
+        args: Vec<Token>,
         block_number: u64,
         timestamp: Option<u64>,
         overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
@@ -161,7 +150,6 @@ where
         Ok(ProtoSimResponse { return_value: output, simulation_result: sim_result })
     }
 
-    #[allow(unused)]
     fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, ProtosimError> {
         self.engine
             .simulate(&params)
@@ -175,81 +163,10 @@ where
     }
 }
 
-/// Converts a string argument to an `ethers::abi::Token` based on its corresponding
-/// `ParamType`.
-///
-/// This function takes an argument in string format and a `ParamType` that describes the
-/// expected type of the argument according to the Ethereum ABI. It parses the string and
-/// converts it into the corresponding `Token`.
-fn convert_to_token(param_type: &ParamType, arg_value: String) -> Result<Token, ProtosimError> {
-    match param_type {
-        ParamType::Address => {
-            let addr = H160::from_str(&arg_value).map_err(|_| {
-                ProtosimError::EncodingError(format!("Invalid address: {}", arg_value))
-            })?;
-            Ok(Token::Address(addr))
-        }
-        ParamType::Uint(_) => {
-            let value = U256::from_dec_str(&arg_value).map_err(|_| {
-                ProtosimError::EncodingError(format!("Invalid uint: {}", arg_value))
-            })?;
-            Ok(Token::Uint(value))
-        }
-        ParamType::FixedBytes(size) => {
-            let bytes = hex::decode(arg_value.clone()).map_err(|_| {
-                ProtosimError::EncodingError(format!("Invalid bytes: {}", arg_value))
-            })?;
-            if bytes.len() == *size {
-                Ok(Token::FixedBytes(bytes))
-            } else {
-                Err(ProtosimError::EncodingError("Invalid bytes length".to_string()))
-            }
-        }
-        ParamType::Bytes => {
-            let bytes = hex::decode(arg_value.clone()).map_err(|_| {
-                ProtosimError::EncodingError(format!("Invalid bytes: {}", arg_value))
-            })?;
-            Ok(Token::Bytes(bytes))
-        }
-        ParamType::Array(inner) => {
-            let elements: Vec<String> = arg_value
-                .split(',')
-                .map(String::from)
-                .collect();
-            let tokens = elements
-                .into_iter()
-                .map(|elem| convert_to_token(inner, elem))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Token::Array(tokens))
-        }
-        ParamType::Tuple(types) => {
-            let elements: Vec<String> = arg_value
-                .split(',')
-                .map(String::from)
-                .collect();
-            if elements.len() != types.len() {
-                return Err(ProtosimError::EncodingError(format!(
-                    "Invalid tuple length. Expected {}, got {}",
-                    types.len(),
-                    elements.len()
-                )));
-            }
-            let tokens = elements
-                .into_iter()
-                .zip(types.iter())
-                .map(|(elem, typ)| convert_to_token(typ, elem))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Token::Tuple(tokens))
-        }
-        _ => Err(ProtosimError::EncodingError("Unsupported type".to_string())),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
-    use rstest::rstest;
     use std::str::FromStr;
 
     #[derive(Debug, Clone)]
@@ -292,61 +209,6 @@ mod tests {
         ProtoSimContract::new(address, engine).unwrap()
     }
 
-    #[rstest]
-    #[case::address(
-        ParamType::Address,
-    "0x0000000000000000000000000000000000000001",
-        Token::Address(H160::from_str("0x0000000000000000000000000000000000000001").unwrap())
-    )]
-    #[case::uint(ParamType::Uint(256), "1000", Token::Uint(U256::from(1000u64)))]
-    #[case::fixed_bytes(
-        ParamType::FixedBytes(4),
-    "12345678",
-        Token::FixedBytes(vec![0x12, 0x34, 0x56, 0x78])
-    )]
-    #[case::bytes(
-        ParamType::Bytes,
-    "12345678",
-        Token::Bytes(vec![0x12, 0x34, 0x56, 0x78])
-    )]
-    #[case::array(
-        ParamType::Array(Box::new(ParamType::Uint(256))),
-    "100,200,300",
-        Token::Array(vec![
-        Token::Uint(U256::from(100u64)),
-        Token::Uint(U256::from(200u64)),
-        Token::Uint(U256::from(300u64)),
-        ])
-    )]
-    #[case::tuple(
-        ParamType::Tuple(vec![
-        ParamType::Uint(256),
-        ParamType::Address,
-        ]),
-    "1000,0x0000000000000000000000000000000000000001",
-        Token::Tuple(vec![
-        Token::Uint(U256::from(1000u64)),
-        Token::Address(H160::from_str("0x0000000000000000000000000000000000000001").unwrap()),
-        ])
-    )]
-    fn test_convert_to_token_parameterized(
-        #[case] param_type: ParamType,
-        #[case] arg_value: &str,
-        #[case] expected_token: Token,
-    ) {
-        let token = convert_to_token(&param_type, arg_value.to_string()).unwrap();
-        assert_eq!(token, expected_token);
-    }
-
-    #[test]
-    fn test_convert_to_token_invalid_address() {
-        let param_type = ParamType::Address;
-        let arg_value = "invalid_address".to_string();
-        let result = convert_to_token(&param_type, arg_value);
-
-        assert!(result.is_err());
-    }
-
     #[test]
     fn test_encode_input_get_capabilities() {
         let contract = create_contract();
@@ -357,8 +219,14 @@ mod tests {
         let sell_token = "0000000000000000000000000000000000000002".to_string();
         let buy_token = "0000000000000000000000000000000000000003".to_string();
 
-        let encoded_input =
-            contract.encode_input("getCapabilities", vec![pool_id, sell_token, buy_token]);
+        let encoded_input = contract.encode_input(
+            "getCapabilities",
+            vec![
+                Token::FixedBytes(hex::decode(pool_id.clone()).unwrap()),
+                Token::Address(H160::from_str(&sell_token).unwrap()),
+                Token::Address(H160::from_str(&buy_token).unwrap()),
+            ],
+        );
 
         assert!(encoded_input.is_ok());
         let encoded_result = encoded_input.unwrap();
