@@ -5257,6 +5257,7 @@ dependencies = [
  "foundry-evm",
  "futures 0.3.28",
  "hex",
+ "lazy_static",
  "mini-moka",
  "mockito",
  "num-traits",

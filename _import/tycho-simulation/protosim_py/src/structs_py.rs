@@ -10,7 +10,7 @@ use tracing::info;
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use protosim::evm::{account_storage, database, simulation, tycho_db, tycho_models};
+use protosim::evm::{account_storage, simulation, simulation_db, tycho_db, tycho_models};
 use std::fmt::Debug;
 
 /// Data needed to invoke a transaction simulation
@@ -402,9 +402,9 @@ impl BlockHeader {
     }
 }
 
-impl From<BlockHeader> for protosim::evm::database::BlockHeader {
+impl From<BlockHeader> for protosim::evm::simulation_db::BlockHeader {
     fn from(py_header: BlockHeader) -> Self {
-        protosim::evm::database::BlockHeader {
+        protosim::evm::simulation_db::BlockHeader {
             number: py_header.number,
             hash: H256::from_str(&py_header.hash).unwrap(),
             timestamp: py_header.timestamp,
@@ -477,7 +477,7 @@ fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct SimulationDB {
-    pub inner: database::SimulationDB<Provider<Http>>,
+    pub inner: simulation_db::SimulationDB<Provider<Http>>,
 }
 
 #[pymethods]
@@ -486,8 +486,11 @@ impl SimulationDB {
     #[pyo3(signature = (rpc_url, block))]
     pub fn new(rpc_url: String, block: Option<BlockHeader>) -> Self {
         info!(?rpc_url, ?block, "Creating python SimulationDB wrapper instance");
-        let db =
-            database::SimulationDB::new(get_client(&rpc_url), get_runtime(), block.map(Into::into));
+        let db = simulation_db::SimulationDB::new(
+            get_client(&rpc_url),
+            get_runtime(),
+            block.map(Into::into),
+        );
         Self { inner: db }
     }
 }
@@ -533,7 +536,7 @@ impl TychoDB {
             .map(Into::into)
             .collect();
 
-        let block = block.map(protosim::evm::database::BlockHeader::from);
+        let block = block.map(protosim::evm::simulation_db::BlockHeader::from);
 
         let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
         runtime.block_on(async {
