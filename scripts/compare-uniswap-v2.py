@@ -61,7 +61,7 @@ erc20_abi = [
 def decode_big_endian(hex_str, signed=False):
     if hex_str.startswith("0x"):
         hex_str = hex_str[2:]
-    # Convert hex string to bytes in little endian
+    # Convert hex string to bytes in big endian
     value_bytes = bytes.fromhex(hex_str)
     return int.from_bytes(value_bytes, byteorder="big", signed=signed)
 
