@@ -8,7 +8,7 @@ use std::fmt::Display;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-use super::database::BlockHeader;
+use super::simulation_db::BlockHeader;
 
 use crate::serde_helpers::{hex_bytes, hex_bytes_option};
 

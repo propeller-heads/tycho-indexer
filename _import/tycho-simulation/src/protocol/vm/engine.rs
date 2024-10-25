@@ -59,8 +59,7 @@ where
     }
 
     engine.state.init_account(
-        Address::parse_checksummed(EXTERNAL_ACCOUNT.clone(), None)
-            .expect("Invalid checksum for external account address"),
+        *EXTERNAL_ACCOUNT,
         AccountInfo { balance: *MAX_BALANCE, nonce: 0, code_hash: Default::default(), code: None },
         None,
         false,
@@ -159,8 +158,7 @@ mod tests {
         }
 
         // Verify external account initialization
-        let external_account_address =
-            Address::parse_checksummed(EXTERNAL_ACCOUNT.clone(), None).expect("valid checksum");
+        let external_account_address = *EXTERNAL_ACCOUNT;
         let external_account = engine
             .state
             .data

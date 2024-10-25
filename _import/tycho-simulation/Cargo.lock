@@ -5249,7 +5249,6 @@ name = "protosim"
 version = "0.24.0"
 dependencies = [
  "approx",
- "auto_impl",
  "chrono",
  "dotenv",
  "ethabi 13.0.0",

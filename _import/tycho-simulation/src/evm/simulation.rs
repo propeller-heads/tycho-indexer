@@ -21,7 +21,7 @@ use strum_macros::Display;
 use tokio::runtime::Runtime;
 use tracing::debug;
 
-use crate::evm::database::OverriddenSimulationDB;
+use crate::evm::simulation_db::OverriddenSimulationDB;
 
 use super::{
     account_storage::StateUpdate,
@@ -377,7 +377,7 @@ mod tests {
         OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
 
-    use crate::evm::database;
+    use crate::evm::simulation_db;
 
     use super::*;
 
@@ -620,7 +620,7 @@ mod tests {
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = database::SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = simulation_db::SimulationDB::new(client, Some(Arc::new(runtime)), None);
 
         // any random address will work
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
@@ -689,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_contract_deployment() -> Result<(), Box<dyn Error>> {
-        fn new_state() -> database::SimulationDB<Provider<Http>> {
+        fn new_state() -> simulation_db::SimulationDB<Provider<Http>> {
             let client = Provider::<Http>::try_from(
                 "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
             )
@@ -699,7 +699,7 @@ mod tests {
                 .is_err()
                 .then(|| tokio::runtime::Runtime::new().unwrap())
                 .unwrap();
-            database::SimulationDB::new(client, Some(Arc::new(runtime)), None)
+            simulation_db::SimulationDB::new(client, Some(Arc::new(runtime)), None)
         }
 
         let readonly_state = new_state();

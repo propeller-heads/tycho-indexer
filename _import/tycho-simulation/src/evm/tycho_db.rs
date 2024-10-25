@@ -10,8 +10,8 @@ use revm::{
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
-    database::BlockHeader,
     engine_db_interface::EngineDatabaseInterface,
+    simulation_db::BlockHeader,
     tycho_models::{AccountUpdate, ChangeType},
 };
 

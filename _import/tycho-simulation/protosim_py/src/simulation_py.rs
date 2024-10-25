@@ -7,7 +7,8 @@ use crate::structs_py::{
     SimulationResult, StateUpdate, TychoDB,
 };
 use protosim::evm::{
-    account_storage, database, engine_db_interface::EngineDatabaseInterface, simulation, tycho_db,
+    account_storage, engine_db_interface::EngineDatabaseInterface, simulation, simulation_db,
+    tycho_db,
 };
 use pyo3::{prelude::*, types::PyType};
 use std::{collections::HashMap, str::FromStr};
@@ -22,7 +23,7 @@ enum DatabaseType {
 /// Instead we use an enum to store the all possible simulation engines.
 /// and we keep them invisible to the Python user.
 enum SimulationEngineInner {
-    SimulationDB(simulation::SimulationEngine<database::SimulationDB<Provider<Http>>>),
+    SimulationDB(simulation::SimulationEngine<simulation_db::SimulationDB<Provider<Http>>>),
     TychoDB(simulation::SimulationEngine<tycho_db::PreCachedDB>),
 }
 
@@ -61,7 +62,7 @@ impl SimulationEngineInner {
     fn update_state(
         &mut self,
         updates: &HashMap<Address, account_storage::StateUpdate>,
-        block: database::BlockHeader,
+        block: simulation_db::BlockHeader,
     ) -> HashMap<Address, account_storage::StateUpdate> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine
@@ -202,7 +203,7 @@ impl SimulationEngine {
         updates: HashMap<String, StateUpdate>,
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
-        let block = protosim::evm::database::BlockHeader::from(block);
+        let block = protosim::evm::simulation_db::BlockHeader::from(block);
         let mut rust_updates: HashMap<Address, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(
