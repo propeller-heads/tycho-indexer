@@ -1,22 +1,11 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
-use crate::protocol::vm::utils::{get_contract_bytecode, get_storage_slot_index_at_key, SlotHash};
+use crate::protocol::vm::{
+    errors::FileError,
+    utils::{get_contract_bytecode, get_storage_slot_index_at_key, SlotHash},
+};
 use ethers::{addressbook::Address, prelude::U256};
 use std::{collections::HashMap, path::Path};
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum FileError {
-    /// Occurs when the ABI file cannot be read
-    #[error("Malformed ABI error: {0}")]
-    MalformedABI(String),
-    /// Occurs when the parent directory of the current file cannot be retrieved
-    #[error("Structure error {0}")]
-    Structure(String),
-    /// Occurs when a bad file path was given, which cannot be converted to string.
-    #[error("File path conversion error {0}")]
-    FilePath(String),
-}
 
 pub struct GethOverwrite {
     /// the formatted overwrites

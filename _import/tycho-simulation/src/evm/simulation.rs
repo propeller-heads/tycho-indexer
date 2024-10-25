@@ -26,7 +26,7 @@ use super::{
 };
 
 /// An error representing any transaction simulation result other than successful execution
-#[derive(Debug, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum SimulationError {
     /// Something went wrong while getting storage; might be caused by network issues.
     /// Retrying may help.

@@ -28,13 +28,36 @@ pub struct ProtoSimResponse {
     pub simulation_result: SimulationResult,
 }
 
-pub struct ProtoSimContract<D: DatabaseRef + std::clone::Clone> {
+/// Represents a contract interface that interacts with the Protosim environment to perform
+/// simulations on Ethereum smart contracts.
+///
+/// `ProtosimContract` is a wrapper around the low-level details of encoding and decoding inputs
+/// and outputs, simulating transactions, and handling ABI interactions specific to the Protosim
+/// environment. It is designed to be used by applications requiring smart contract simulations
+/// and includes methods for encoding function calls, decoding transaction results, and interacting
+/// with the `SimulationEngine`.
+///
+/// # Type Parameters
+/// - `D`: A database reference that implements `DatabaseRef` and `Clone`, which the simulation
+///   engine uses to access blockchain state.
+///
+/// # Fields
+/// - `abi`: The Application Binary Interface of the contract, which defines its functions and event
+///   signatures.
+/// - `address`: The address of the contract being simulated.
+/// - `engine`: The `SimulationEngine` instance responsible for simulating transactions and managing
+///   the contract's state.
+///
+/// # Errors
+/// Returns errors of type `ProtosimError` when encoding, decoding, or simulation operations fail.
+/// These errors provide detailed feedback on potential issues.
+pub struct ProtosimContract<D: DatabaseRef + std::clone::Clone> {
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D>
+impl<D: DatabaseRef + std::clone::Clone> ProtosimContract<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -154,11 +177,11 @@ where
         self.engine
             .simulate(&params)
             .map_err(|e| {
-                if let Err(coerced_err) = maybe_coerce_error(e, "pool_state", params.gas_limit) {
-                    ProtosimError::SimulationFailure(coerced_err.to_string())
-                } else {
-                    ProtosimError::SimulationFailure("Unknown simulation error".to_string())
-                }
+                ProtosimError::SimulationFailure(maybe_coerce_error(
+                    &e,
+                    "pool_state",
+                    params.gas_limit,
+                ))
             })
     }
 }
@@ -203,10 +226,10 @@ mod tests {
         SimulationEngine::new(MockDatabase, false)
     }
 
-    fn create_contract() -> ProtoSimContract<MockDatabase> {
+    fn create_contract() -> ProtosimContract<MockDatabase> {
         let address = Address::ZERO;
         let engine = create_mock_engine();
-        ProtoSimContract::new(address, engine).unwrap()
+        ProtosimContract::new(address, engine).unwrap()
     }
 
     #[test]

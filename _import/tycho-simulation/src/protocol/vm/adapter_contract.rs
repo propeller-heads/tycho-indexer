@@ -4,7 +4,7 @@
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::vm::{
-        errors::ProtosimError, models::Capability, protosim_contract::ProtoSimContract,
+        errors::ProtosimError, models::Capability, protosim_contract::ProtosimContract,
     },
 };
 use ethers::{
@@ -21,7 +21,20 @@ pub struct Trade {
     price: f64,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> ProtoSimContract<D>
+/// An implementation of `ProtosimContract` specific to the `AdapterContract` ABI interface,
+/// providing methods for price calculations, token swaps, capability checks, and more.
+///
+/// This struct facilitates interaction with the `AdapterContract` by encoding and decoding data
+/// according to its ABI specification. Each method corresponds to a function in the adapter
+/// contract's interface, enabling seamless integration with Protosim’s simulation environment.
+///
+/// # Methods
+/// - `price`: Calculates price information for a token pair within the adapter.
+/// - `swap`: Simulates a token swap operation, returning details about the trade and state updates.
+/// - `get_limits`: Retrieves the trade limits for a given token pair.
+/// - `get_capabilities`: Checks the capabilities of the adapter for a specific token pair.
+/// - `min_gas_usage`: Queries the minimum gas usage required for operations within the adapter.
+impl<D: DatabaseRef + std::clone::Clone> ProtosimContract<D>
 where
     D::Error: std::fmt::Debug,
 {
