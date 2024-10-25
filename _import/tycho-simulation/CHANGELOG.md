@@ -1,3 +1,10 @@
+## [0.25.0](https://github.com/propeller-heads/protosim/compare/0.24.0...0.25.0) (2024-10-25)
+
+
+### Features
+
+* implement create_engine ([4c3cd0c](https://github.com/propeller-heads/protosim/commit/4c3cd0cbb10dd81498862987a62e9cf06cd03e67))
+
 ## [0.24.0](https://github.com/propeller-heads/protosim/compare/0.23.1...0.24.0) (2024-10-24)
 
 
