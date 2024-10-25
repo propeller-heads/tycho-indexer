@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "ethereum_pancakeswap"
-  version: v0.2.1
+  version: v0.3.1
 
 protobuf:
   files:
@@ -15,7 +15,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../../target/wasm32-unknown-unknown/substreams/ethereum_uniswap_v2.wasm
+    file: ../target/wasm32-unknown-unknown/target/ethereum_uniswap_v2.wasm
 
 modules:
   - name: map_pools_created
@@ -31,7 +31,7 @@ modules:
     kind: store
     initialBlock: 15614590
     updatePolicy: set_if_not_exists
-    valueType: proto:tycho.evm.v1.ProtocolComponent
+    valueType: proto:tycho.evm.uniswap.v2.Pool
     inputs:
       - map: map_pools_created
 
