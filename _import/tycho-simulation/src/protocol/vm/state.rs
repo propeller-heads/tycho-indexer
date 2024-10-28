@@ -5,19 +5,24 @@
 
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface, simulation::SimulationEngine,
+        engine_db_interface::EngineDatabaseInterface,
+        simulation::{SimulationEngine, SimulationParameters},
+        simulation_db::BlockHeader,
         tycho_db::PreCachedDB,
     },
     models::ERC20Token,
     protocol::vm::{
-        constants::{ADAPTER_ADDRESS, MAX_BALANCE},
+        constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
         engine::{create_engine, SHARED_TYCHO_DB},
+        errors::ProtosimError,
         utils::get_code_for_address,
     },
 };
+use chrono::Utc;
+use ethers::abi::{decode, ParamType};
 use revm::{
     precompile::{Address, Bytes},
-    primitives::{AccountInfo, Bytecode},
+    primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode},
     DatabaseRef,
 };
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
@@ -28,6 +33,8 @@ pub struct EVMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub id: String,
     /// The pools tokens
     pub tokens: Vec<ERC20Token>,
+    /// The current block, will be used to set vm context
+    pub block: BlockHeader,
     /// The address to bytecode map of all stateless contracts used by the protocol
     /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
@@ -40,10 +47,12 @@ impl EVMPoolState<PreCachedDB> {
     pub async fn new(
         id: String,
         tokens: Vec<ERC20Token>,
+        block: BlockHeader,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
     ) -> Self {
-        let mut state = EVMPoolState { id, tokens, stateless_contracts, trace, engine: None };
+        let mut state =
+            EVMPoolState { id, tokens, block, stateless_contracts, trace, engine: None };
         state
             .set_engine()
             .await
@@ -87,7 +96,7 @@ impl EVMPoolState<PreCachedDB> {
                 false,
             );
             engine.state.init_account(
-                Address::parse_checksummed(ADAPTER_ADDRESS.clone(), None)
+                Address::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
                     .expect("Invalid checksum for external account address"),
                 AccountInfo {
                     balance: *MAX_BALANCE,
@@ -105,7 +114,7 @@ impl EVMPoolState<PreCachedDB> {
                     let addr_str = format!("{:?}", address);
                     if addr_str.starts_with("call") {
                         let addr = self.get_address_from_call(&engine, &addr_str);
-                        &get_code_for_address(&addr, None).await?
+                        &get_code_for_address(&addr?.to_string(), None).await?
                     } else {
                         bytecode
                     }
@@ -135,9 +144,61 @@ impl EVMPoolState<PreCachedDB> {
 
     fn get_address_from_call(
         &self,
-        _engine: &SimulationEngine<PreCachedDB>,
-        _decoded: &str,
-    ) -> String {
-        todo!()
+        engine: &SimulationEngine<PreCachedDB>,
+        decoded: &str,
+    ) -> Result<Address, ProtosimError> {
+        let method_name = decoded
+            .split(':')
+            .last()
+            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string format".into()))?;
+
+        let selector = {
+            let mut hasher = Keccak256::new();
+            hasher.update(method_name.as_bytes());
+            let result = hasher.finalize();
+            result[..4].to_vec()
+        };
+
+        let to_address = decoded
+            .split(':')
+            .nth(1)
+            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string format".into()))?;
+
+        let timestamp = Utc::now()
+            .naive_utc()
+            .and_utc()
+            .timestamp() as u64;
+
+        let parsed_address: Address = to_address
+            .parse()
+            .map_err(|_| ProtosimError::DecodingError("Invalid address format".into()))?;
+
+        let sim_params = SimulationParameters {
+            data: selector.to_vec().into(),
+            to: parsed_address,
+            block_number: self.block.number,
+            timestamp,
+            overrides: Some(HashMap::new()),
+            caller: *EXTERNAL_ACCOUNT,
+            value: 0.into(),
+            gas_limit: None,
+        };
+
+        let sim_result = engine
+            .simulate(&sim_params)
+            .map_err(ProtosimError::SimulationFailure)?;
+
+        let address = decode(&[ParamType::Address], &sim_result.result)
+            .expect("Decoding failed")
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                ProtosimError::DecodingError("Expected an address in the result".into())
+            })?;
+
+        address
+            .to_string()
+            .parse()
+            .map_err(|_| ProtosimError::DecodingError("Expected an Address".into()))
     }
 }
