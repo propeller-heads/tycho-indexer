@@ -19,7 +19,10 @@ use crate::{
     },
 };
 use chrono::Utc;
-use ethers::abi::{decode, ParamType};
+use ethers::{
+    abi::{decode, Address as EthAddress, ParamType},
+    utils::to_checksum,
+};
 use revm::{
     precompile::{Address, Bytes},
     primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode},
@@ -65,9 +68,8 @@ impl EVMPoolState<PreCachedDB> {
             let token_addresses = self
                 .tokens
                 .iter()
-                .map(|token| token.address.to_string())
+                .map(|token| to_checksum(&token.address, None))
                 .collect();
-
             let engine: SimulationEngine<_> =
                 create_engine(SHARED_TYCHO_DB.clone(), token_addresses, self.trace).await;
             engine.state.init_account(
@@ -200,5 +202,48 @@ impl EVMPoolState<PreCachedDB> {
             .to_string()
             .parse()
             .map_err(|_| ProtosimError::DecodingError("Expected an Address".into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{evm::simulation_db::BlockHeader, models::ERC20Token};
+    use ethers::{prelude::U256, types::Address as EthAddress};
+    use std::collections::HashMap;
+    use tokio::runtime::Runtime;
+
+    #[tokio::test]
+    async fn test_set_engine_initialization() {
+        let id = "test_pool".to_string();
+        let tokens = vec![
+            ERC20Token::new(
+                "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                6,
+                "USDC",
+                U256::from(10_000),
+            ),
+            ERC20Token::new(
+                "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+                18,
+                "WETH",
+                U256::from(10_000),
+            ),
+        ];
+
+        let block = BlockHeader { number: 12345, ..Default::default() };
+        let mut stateless_contracts: HashMap<String, Option<Vec<u8>>> = HashMap::new();
+        stateless_contracts.insert("0x0000000000000000000000000000000000000004".to_string(), None);
+
+        let pool_state = EVMPoolState::<PreCachedDB>::new(
+            id.clone(),
+            tokens,
+            block,
+            stateless_contracts.clone(),
+            true,
+        )
+        .await;
+
+        assert!(pool_state.engine.is_some(), "Engine should be initialized");
     }
 }
