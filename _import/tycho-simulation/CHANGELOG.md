@@ -1,3 +1,11 @@
+## [0.27.0](https://github.com/propeller-heads/protosim/compare/0.26.0...0.27.0) (2024-10-28)
+
+
+### Features
+
+* (WIP) Implement set_engine ([47a500b](https://github.com/propeller-heads/protosim/commit/47a500b3b571aa7f98baeff6e42375fdb3ff83ec))
+* Implement get_address_from_call ([c488e86](https://github.com/propeller-heads/protosim/commit/c488e862aea5b327645ba2ac22264d8b8b608b68))
+
 ## [0.26.0](https://github.com/propeller-heads/protosim/compare/0.25.0...0.26.0) (2024-10-28)
 
 
