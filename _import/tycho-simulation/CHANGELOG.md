@@ -1,3 +1,18 @@
+## [0.26.0](https://github.com/propeller-heads/protosim/compare/0.25.0...0.26.0) (2024-10-28)
+
+
+### Features
+
+* AdapterContract new and encode method ([8e1cbde](https://github.com/propeller-heads/protosim/commit/8e1cbded5d77b1183b03427ebebc7d384588823b))
+* Add call and simulate ([d0fa2b8](https://github.com/propeller-heads/protosim/commit/d0fa2b8022ec514302395715a916558300bc7f57))
+* Add decode_output method ([39e6832](https://github.com/propeller-heads/protosim/commit/39e68327a4d466af997af758e4bd24aa5665b5b9))
+* Implement ProtosimContract for adapter contract ([be59fa0](https://github.com/propeller-heads/protosim/commit/be59fa0f2da45bd64e81e2e26f19cf4ee9c6ba1c))
+
+
+### Bug Fixes
+
+* Add adapter_contract to mod ([c8f0646](https://github.com/propeller-heads/protosim/commit/c8f0646673ebf50bab7fafecd104e097a0c448a6))
+
 ## [0.25.0](https://github.com/propeller-heads/protosim/compare/0.24.0...0.25.0) (2024-10-25)
 
 
