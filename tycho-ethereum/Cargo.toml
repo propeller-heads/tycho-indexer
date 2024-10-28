@@ -33,4 +33,4 @@ humantime = { version = "2.1.0", optional = true }
 
 [features]
 default = []
-contracts = ["ethrpc", "ethcontract", "dep:contracts", "humantime", "clap"]
+onchain_data = ["ethrpc", "ethcontract", "dep:contracts", "humantime", "clap"]

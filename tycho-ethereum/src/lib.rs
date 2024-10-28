@@ -1,8 +1,8 @@
-#[cfg(feature = "contracts")]
+#[cfg(feature = "onchain_data")]
 pub mod account_extractor;
-#[cfg(feature = "contracts")]
+#[cfg(feature = "onchain_data")]
 pub mod token_analyzer;
-#[cfg(feature = "contracts")]
+#[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
 
 use ethers::{
@@ -107,7 +107,7 @@ impl BytesCodec for U256 {
         Bytes::from(buf.to_vec())
     }
 
-    /// Converts `Bytes` to `U256`.
+    /// Converts `Bytes` to `U256` using big-endian.
     ///
     /// # Panics
     ///
