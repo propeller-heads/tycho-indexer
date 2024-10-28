@@ -68,6 +68,21 @@ where
     engine
 }
 
+pub fn update_engine<D: DatabaseRef + Clone>(
+    db: Arc<RwLock<D>>,
+    block: BlockHeader,
+    vm_storage: Option<HashMap<Bytes, ResponseAccount>>,
+    account_updates: HashMap<Bytes, AccountUpdate>,
+) -> Vec<AccountUpdate> {
+    // from protosim_py.python.protosim_py.evm.decoders.handle_vm_updates
+    // Acquire a read lock for the database instance
+    // let db_write = db.write().unwrap();
+    //
+    // process messages and call db_write.update
+
+    todo!()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
