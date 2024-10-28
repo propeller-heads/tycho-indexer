@@ -4,7 +4,6 @@ use ethabi::ethereum_types::Address;
 use serde::Deserialize;
 use substreams::prelude::BigInt;
 use substreams_ethereum::pb::eth::v2::{self as eth};
-
 use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 
 use crate::abi::factory::events::PairCreated;
@@ -58,7 +57,7 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
             }],
             component_changes: vec![ProtocolComponent {
                 id: event.pair.to_hex(),
-                tokens: vec![event.token0, event.token1],
+                tokens: vec![event.token0.clone(), event.token1.clone()],
                 contracts: vec![],
                 static_att: vec![
                     // Trading Fee is hardcoded to 0.3%, saved as int in bps (basis points)
@@ -69,7 +68,7 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                     },
                     Attribute {
                         name: "pool_address".to_string(),
-                        value: event.pair,
+                        value: event.pair.clone(),
                         change: ChangeType::Creation.into(),
                     },
                 ],
@@ -82,7 +81,18 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                 }),
                 tx: Some(tycho_tx),
             }],
-            balance_changes: vec![],
+            balance_changes: vec![
+                BalanceChange {
+                    token: event.token0,
+                    balance: BigInt::from(0).to_signed_bytes_be(),
+                    component_id: event.pair.to_hex().as_bytes().to_vec(),
+                },
+                BalanceChange {
+                    token: event.token1,
+                    balance: BigInt::from(0).to_signed_bytes_be(),
+                    component_id: event.pair.to_hex().as_bytes().to_vec(),
+                },
+            ],
         })
     };
 
