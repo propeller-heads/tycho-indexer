@@ -17,12 +17,13 @@ use tracing::warn;
 use crate::{
     evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     protocol::vm::{
+        constants::EXTERNAL_ACCOUNT,
         errors::ProtosimError,
         utils::{load_swap_abi, maybe_coerce_error},
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProtoSimResponse {
     pub return_value: Vec<Token>,
     pub simulation_result: SimulationResult,
@@ -51,6 +52,7 @@ pub struct ProtoSimResponse {
 /// # Errors
 /// Returns errors of type `ProtosimError` when encoding, decoding, or simulation operations fail.
 /// These errors provide detailed feedback on potential issues.
+#[derive(Clone)]
 pub struct ProtosimContract<D: DatabaseRef + std::clone::Clone> {
     abi: Abi,
     address: Address,
@@ -156,7 +158,7 @@ where
                     .timestamp() as u64
             }),
             overrides,
-            caller: caller.unwrap_or(Address::ZERO),
+            caller: caller.unwrap_or(*EXTERNAL_ACCOUNT),
             value,
             gas_limit: None,
         };

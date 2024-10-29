@@ -1,6 +1,7 @@
 // TODO: remove skips for clippy
 
 use crate::evm::simulation::SimulationError;
+use ethers::prelude::ProviderError;
 use serde_json::Error as SerdeError;
 use std::io;
 use thiserror::Error;
@@ -26,6 +27,8 @@ pub enum ProtosimError {
     SimulationFailure(SimulationError),
     #[error("Decoding error: {0}")]
     DecodingError(String),
+    #[error("RPC related error {0}")]
+    RpcError(RpcError),
 }
 
 #[derive(Debug, Error)]
@@ -65,5 +68,19 @@ impl From<FileError> for ProtosimError {
 impl From<SimulationError> for ProtosimError {
     fn from(err: SimulationError) -> Self {
         ProtosimError::SimulationFailure(err)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum RpcError {
+    #[error("Invalid Request: {0}")]
+    InvalidRequest(String),
+    #[error("Invalid Response: {0}")]
+    InvalidResponse(ProviderError),
+}
+
+impl From<RpcError> for ProtosimError {
+    fn from(err: RpcError) -> Self {
+        ProtosimError::RpcError(err)
     }
 }

@@ -153,16 +153,16 @@ where
             .call("getCapabilities", args, 1, None, None, None, U256::zero())
             .await?
             .return_value;
-        let capabilities: HashSet<Capability> = res
-            .into_iter()
-            .filter_map(|token| {
-                if let Token::Uint(value) = token {
-                    Capability::from_uint(value).ok()
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let capabilities: HashSet<Capability> = match res.first() {
+            Some(Token::Array(inner_tokens)) => inner_tokens
+                .iter()
+                .filter_map(|token| match token {
+                    Token::Uint(value) => Capability::from_uint(*value).ok(),
+                    _ => None,
+                })
+                .collect(),
+            _ => HashSet::new(),
+        };
 
         Ok(capabilities)
     }
