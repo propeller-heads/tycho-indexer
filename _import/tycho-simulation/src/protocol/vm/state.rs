@@ -32,6 +32,7 @@ use revm::{
     DatabaseRef,
 };
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use revm::primitives::KECCAK_EMPTY;
 use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct EVMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
@@ -94,7 +95,7 @@ impl EVMPoolState<PreCachedDB> {
         Ok(state)
     }
 
-    async fn set_engine(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn set_engine(&mut self) -> Result<(), ProtosimError> {
         if self.engine.is_none() {
             let token_addresses = self
                 .tokens
@@ -110,7 +111,7 @@ impl EVMPoolState<PreCachedDB> {
                 AccountInfo {
                     balance: Default::default(),
                     nonce: 0,
-                    code_hash: Default::default(),
+                    code_hash: KECCAK_EMPTY,
                     code: None,
                 },
                 None,
@@ -122,7 +123,7 @@ impl EVMPoolState<PreCachedDB> {
                 AccountInfo {
                     balance: Default::default(),
                     nonce: 0,
-                    code_hash: Default::default(),
+                    code_hash: KECCAK_EMPTY,
                     code: None,
                 },
                 None,
@@ -296,16 +297,13 @@ mod tests {
         ];
 
         let block = BlockHeader { number: 12345, ..Default::default() };
-        let mut stateless_contracts: HashMap<String, Option<Vec<u8>>> = HashMap::new();
-        stateless_contracts.insert("0x0000000000000000000000000000000000000004".to_string(), None);
-
         let pool_state = EVMPoolState::<PreCachedDB>::new(
             id.clone(),
             tokens,
             block,
             HashMap::new(),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
-            stateless_contracts.clone(),
+            HashMap::new(),
             true,
         )
         .await;
@@ -337,7 +335,7 @@ mod tests {
                 AccountInfo {
                     balance: account.balance.unwrap_or_default(),
                     nonce: 0u64,
-                    code_hash: Default::default(),
+                    code_hash: KECCAK_EMPTY,
                     code: account
                         .code
                         .clone()
@@ -408,19 +406,17 @@ mod tests {
             .get_capabilities(pool_id[2..].to_string(), dai.address, bal.address)
             .await
             .unwrap();
-        println!("{:?}", capabilities);
 
-        // assert_eq!(
-        //     pool_state.capabilities,
-        //     vec![R
-        //         Capability::SellSide,
-        //         Capability::BuySide,
-        //         Capability::PriceFunction,
-        //         Capability::HardLimits,
-        //     ].into_iter().collect::<HashSet<_>>()
-        // );
-        //
-        // // Assert spot prices
+        assert_eq!(
+            capabilities,
+            vec![
+                Capability::SellSide,
+                Capability::BuySide,
+                Capability::PriceFunction,
+                Capability::HardLimits,
+            ].into_iter().collect::<HashSet<_>>()
+        );
+        // // Assert spot prices TODO: in 3757
         // assert_eq!(
         //     pool.spot_prices,
         //     HashMap::from([

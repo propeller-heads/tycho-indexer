@@ -10,6 +10,7 @@ use revm::{
     DatabaseRef,
 };
 use std::{fmt::Debug, sync::Arc};
+use revm::primitives::KECCAK_EMPTY;
 use tokio::sync::RwLock;
 
 use crate::evm::{simulation::SimulationEngine, tycho_db::PreCachedDB};
@@ -47,7 +48,7 @@ where
         let info = AccountInfo {
             balance: Default::default(),
             nonce: 0,
-            code_hash: Default::default(),
+            code_hash: KECCAK_EMPTY,
             code: None,
         };
         engine.state.init_account(
@@ -60,7 +61,7 @@ where
 
     engine.state.init_account(
         *EXTERNAL_ACCOUNT,
-        AccountInfo { balance: *MAX_BALANCE, nonce: 0, code_hash: Default::default(), code: None },
+        AccountInfo { balance: *MAX_BALANCE, nonce: 0, code_hash: KECCAK_EMPTY, code: None },
         None,
         false,
     );
