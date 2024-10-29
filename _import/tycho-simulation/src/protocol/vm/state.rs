@@ -310,6 +310,124 @@ mod tests {
         )
         .await;
 
-        assert!(pool_state.engine.is_some(), "Engine should be initialized");
+        assert!(pool_state.unwrap().engine.is_some(), "Engine should be initialized");
+    }
+
+    async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        let file = File::open(asset_path)?;
+        let data: Value = serde_json::from_reader(file)?;
+
+        let accounts: Vec<AccountUpdate> = serde_json::from_value(data["accounts"].clone())
+            .expect("Expected accounts to match AccountUpdate structure");
+
+        let db = SHARED_TYCHO_DB.clone();
+        let engine: SimulationEngine<_> = create_engine(db.clone(), vec![], false).await;
+
+        let block = BlockHeader {
+            number: 20463609,
+            hash: H256::from_str(
+                "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
+            )?,
+            timestamp: 1722875891,
+        };
+
+        for account in accounts.clone() {
+            engine.state.init_account(
+                account.address,
+                AccountInfo {
+                    balance: account.balance.unwrap_or_default(),
+                    nonce: 0u64,
+                    code_hash: Default::default(),
+                    code: account
+                        .code
+                        .clone()
+                        .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
+                },
+                None,
+                false,
+            );
+        }
+        let db_write = db.write();
+        db_write
+            .await
+            .update(accounts, Some(block))
+            .await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init() {
+        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
+            .await
+            .unwrap();
+        let dai = ERC20Token::new(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            18,
+            "DAI",
+            U256::from(10_000),
+        );
+        let bal = ERC20Token::new(
+            "0xba100000625a3754423978a60c9317c58a424e3d",
+            18,
+            "BAL",
+            U256::from(10_000),
+        );
+
+        let tokens = vec![dai.clone(), bal.clone()];
+        let block = BlockHeader {
+            number: 18485417,
+            hash: H256::from_str(
+                "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
+            )
+            .expect("Invalid block hash"),
+            timestamp: 0,
+        };
+
+        let pool_id: String =
+            "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
+        let pool_state = EVMPoolState::<PreCachedDB>::new(
+            pool_id.clone(),
+            tokens,
+            block,
+            HashMap::from([
+                (dai.address, U256::from("178754012737301807104")),
+                (bal.address, U256::from("91082987763369885696")),
+            ]),
+            "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
+            HashMap::new(),
+            false,
+        )
+        .await;
+
+        let capabilities = pool_state
+            .unwrap()
+            .clone()
+            .adapter_contract
+            .unwrap()
+            .get_capabilities(pool_id[2..].to_string(), dai.address, bal.address)
+            .await
+            .unwrap();
+        println!("{:?}", capabilities);
+
+        // assert_eq!(
+        //     pool_state.capabilities,
+        //     vec![R
+        //         Capability::SellSide,
+        //         Capability::BuySide,
+        //         Capability::PriceFunction,
+        //         Capability::HardLimits,
+        //     ].into_iter().collect::<HashSet<_>>()
+        // );
+        //
+        // // Assert spot prices
+        // assert_eq!(
+        //     pool.spot_prices,
+        //     HashMap::from([
+        //         ((bal.clone(), dai.clone()),
+        // Decimal::from_str("7.071503245428245871486924221").unwrap()),         ((dai.
+        // clone(), bal.clone()), Decimal::from_str("0.1377789143190479049114331557").unwrap())
+        //     ])
+        // );
     }
 }
