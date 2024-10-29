@@ -19,6 +19,7 @@ use crate::{
         utils::{get_code_for_address, get_contract_bytecode},
     },
 };
+
 use chrono::Utc;
 use ethers::{
     abi::{decode, Address as EthAddress, ParamType},
@@ -49,6 +50,8 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// If given, balances will be overwritten here instead of on the pool contract during
     /// simulations
     pub balance_owner: Option<H160>, // TODO: implement this in ENG-3758
+    /// Marginal prices of the pool by token pair
+    pub marginal_prices: HashMap<H160, f64>,
     /// The address to bytecode map of all stateless contracts used by the protocol
     /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
@@ -66,6 +69,7 @@ impl VMPoolState<PreCachedDB> {
         tokens: Vec<ERC20Token>,
         block: BlockHeader,
         balances: HashMap<H160, U256>,
+        marginal_prices: HashMap<H160, f64>,
         adapter_contract_path: String,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
@@ -77,6 +81,7 @@ impl VMPoolState<PreCachedDB> {
             adapter_contract_path,
             balances,
             balance_owner: None,
+            marginal_prices,
             stateless_contracts,
             trace,
             engine: None,
@@ -259,6 +264,17 @@ impl VMPoolState<PreCachedDB> {
             .parse()
             .map_err(|_| ProtosimError::DecodingError("Expected an Address".into()))
     }
+
+    async fn get_sell_amount_limit(&self, sell_token: EthAddress, buy_token: EthAddress) -> U256{
+        let binding = self
+            .adapter_contract.clone()
+            .unwrap();
+        let limits = binding
+            .get_limits(self.id.clone()[2..].to_string(), sell_token, buy_token, self.block.number, None  // TODO: in 3758 add overwrites here
+            ).await;
+        let sell_amount_limit = limits.expect("Expected a (u64, u64)").0;
+        sell_amount_limit
+    }
 }
 
 #[cfg(test)]
@@ -312,6 +328,7 @@ mod tests {
             tokens,
             block,
             HashMap::new(),
+            HashMap::new(),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             HashMap::new(),
             true,
@@ -364,11 +381,11 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_init() {
+    async fn setup_pool_state() -> VMPoolState<PreCachedDB> {
         setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
             .await
-            .unwrap();
+            .expect("Failed to set up database");
+
         let dai = ERC20Token::new(
             "0x6b175474e89094c44da98b954eedeac495271d0f",
             18,
@@ -388,32 +405,43 @@ mod tests {
             hash: H256::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
-            .expect("Invalid block hash"),
+                .expect("Invalid block hash"),
             timestamp: 0,
         };
 
         let pool_id: String =
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
-        let pool_state = VMPoolState::<PreCachedDB>::new(
-            pool_id.clone(),
+
+        VMPoolState::<PreCachedDB>::new(
+            pool_id,
             tokens,
             block,
             HashMap::from([
                 (dai.address, U256::from("178754012737301807104")),
                 (bal.address, U256::from("91082987763369885696")),
             ]),
+            HashMap::new(),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             HashMap::new(),
             false,
         )
-        .await;
+            .await
+            .expect("Failed to initialize pool state")
+    }
+
+    #[tokio::test]
+    async fn test_init() {
+        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
+            .await
+            .unwrap();
+
+        let pool_state = setup_pool_state().await;
 
         let capabilities = pool_state
-            .unwrap()
             .clone()
             .adapter_contract
             .unwrap()
-            .get_capabilities(pool_id[2..].to_string(), dai.address, bal.address)
+            .get_capabilities(pool_state.id[2..].to_string(), pool_state.tokens[0].address, pool_state.tokens[1].address)
             .await
             .unwrap();
 
@@ -438,4 +466,21 @@ mod tests {
         //     ])
         // );
     }
+
+    #[tokio::test]
+    async fn test_get_sell_amount_limit() {
+        let pool_state = setup_pool_state().await;
+        let dai_limit = pool_state.get_sell_amount_limit(
+            pool_state.tokens[0].address,
+            pool_state.tokens[1].address
+        ).await;
+        assert_eq!(dai_limit, U256::from_dec_str("100279494253364362835").unwrap());
+
+        let bal_limit = pool_state.get_sell_amount_limit(
+            pool_state.tokens[1].address,
+            pool_state.tokens[0].address
+        ).await;
+        assert_eq!(bal_limit, U256::from_dec_str("13997408640689987484").unwrap());
+    }
+
 }

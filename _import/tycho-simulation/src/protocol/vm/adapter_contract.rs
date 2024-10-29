@@ -112,7 +112,7 @@ where
         buy_token: Address,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
-    ) -> Result<(u64, u64), ProtosimError> {
+    ) -> Result<(U256, U256), ProtosimError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -123,18 +123,14 @@ where
             .call("getLimits", args, block, None, overwrites, None, U256::zero())
             .await?
             .return_value;
-        Ok((
-            res[0]
-                .clone()
-                .into_uint()
-                .unwrap()
-                .as_u64(),
-            res[1]
-                .clone()
-                .into_uint()
-                .unwrap()
-                .as_u64(),
-        ))
+
+        if let Some(Token::Array(inner)) = res.first() {
+            if let (Some(Token::Uint(value1)), Some(Token::Uint(value2))) = (inner.get(0), inner.get(1)) {
+                return Ok((value1.clone(), value2.clone()));
+            }
+        }
+
+        Err(ProtosimError::EncodingError("Unexpected response format".into()))
     }
 
     pub async fn get_capabilities(
