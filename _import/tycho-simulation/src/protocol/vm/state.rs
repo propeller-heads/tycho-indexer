@@ -191,6 +191,15 @@ impl VMPoolState<PreCachedDB> {
         }
     }
 
+    /// Gets the address of the code - mostly used for dynamic proxy implementations. For example,
+    /// some protocols have some dynamic math implementation that is given by the factory. When
+    /// we swap on the pools for such protocols, it will call the factory to get the implementation
+    /// and use it for the swap.
+    /// This method simulates the call to the pool, which gives us the address of the
+    /// implementation.
+    ///
+    /// # See Also
+    /// [Dynamic Address Resolution Example](https://github.com/propeller-heads/propeller-protocol-lib/blob/main/docs/indexing/reserved-attributes.md#description-2)
     fn get_address_from_call(
         &self,
         engine: &SimulationEngine<PreCachedDB>,
