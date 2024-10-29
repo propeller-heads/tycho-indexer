@@ -4,13 +4,16 @@ use ethabi::{self, decode, ParamType};
 use ethers::{
     abi::Abi,
     core::utils::keccak256,
-    providers::{Http, Middleware, Provider, ProviderError},
+    providers::{Http, Middleware, Provider},
     types::{Address, H160, H256},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
 
-use crate::{evm::simulation::SimulationError, protocol::vm::errors::FileError};
+use crate::{
+    evm::simulation::SimulationError,
+    protocol::vm::errors::{FileError, RpcError},
+};
 use std::{
     collections::HashMap,
     env,
@@ -19,15 +22,6 @@ use std::{
     path::Path,
     sync::{Arc, LazyLock},
 };
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum RpcError {
-    #[error("Invalid Request: {0}")]
-    InvalidRequest(String),
-    #[error("Invalid Response: {0}")]
-    InvalidResponse(ProviderError),
-}
 
 pub fn maybe_coerce_error(
     err: &SimulationError,

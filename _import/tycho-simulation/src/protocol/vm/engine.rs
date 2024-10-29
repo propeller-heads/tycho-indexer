@@ -6,11 +6,10 @@ use crate::{
 };
 use lazy_static::lazy_static;
 use revm::{
-    primitives::{AccountInfo, Address},
+    primitives::{AccountInfo, Address, KECCAK_EMPTY},
     DatabaseRef,
 };
 use std::{fmt::Debug, sync::Arc};
-use revm::primitives::KECCAK_EMPTY;
 use tokio::sync::RwLock;
 
 use crate::evm::{simulation::SimulationEngine, tycho_db::PreCachedDB};
@@ -154,7 +153,7 @@ mod tests {
                 .clone();
             assert_eq!(account.balance, U256::default());
             assert_eq!(account.nonce, 0);
-            assert_eq!(account.code_hash, B256::default());
+            assert_eq!(account.code_hash, KECCAK_EMPTY);
             assert!(account.code.is_none());
         }
 
@@ -169,7 +168,7 @@ mod tests {
             .clone();
         assert_eq!(external_account.balance, *MAX_BALANCE);
         assert_eq!(external_account.nonce, 0);
-        assert_eq!(external_account.code_hash, B256::default());
+        assert_eq!(external_account.code_hash, KECCAK_EMPTY);
         assert!(external_account.code.is_none());
     }
 

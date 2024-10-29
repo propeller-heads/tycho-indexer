@@ -28,14 +28,15 @@ use ethers::{
 };
 use revm::{
     precompile::{Address, Bytes},
-    primitives::{alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256},
+    primitives::{
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
+    },
     DatabaseRef,
 };
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
-use revm::primitives::KECCAK_EMPTY;
 use tokio::sync::RwLock;
 #[derive(Clone)]
-pub struct EVMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
+pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The pool's identifier
     pub id: String,
     /// The pools tokens
@@ -59,17 +60,17 @@ pub struct EVMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     adapter_contract_path: String,
 }
 
-impl EVMPoolState<PreCachedDB> {
+impl VMPoolState<PreCachedDB> {
     pub async fn new(
         id: String,
         tokens: Vec<ERC20Token>,
         block: BlockHeader,
         balances: HashMap<H160, U256>,
-        adapter_contract_path: String, // TODO: include this in the adpater contrcat thinsg
+        adapter_contract_path: String,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
     ) -> Result<Self, ProtosimError> {
-        let mut state = EVMPoolState {
+        let mut state = VMPoolState {
             id,
             tokens,
             block,
@@ -144,7 +145,7 @@ impl EVMPoolState<PreCachedDB> {
                     balance: *MAX_BALANCE,
                     nonce: 0,
                     code_hash: B256::from(keccak256(
-                        &adapter_contract_code
+                        adapter_contract_code
                             .clone()
                             .ok_or(ProtosimError::EncodingError("Can't encode code hash".into()))?
                             .bytes(),
@@ -297,7 +298,7 @@ mod tests {
         ];
 
         let block = BlockHeader { number: 12345, ..Default::default() };
-        let pool_state = EVMPoolState::<PreCachedDB>::new(
+        let pool_state = VMPoolState::<PreCachedDB>::new(
             id.clone(),
             tokens,
             block,
@@ -384,7 +385,7 @@ mod tests {
 
         let pool_id: String =
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
-        let pool_state = EVMPoolState::<PreCachedDB>::new(
+        let pool_state = VMPoolState::<PreCachedDB>::new(
             pool_id.clone(),
             tokens,
             block,
@@ -414,7 +415,9 @@ mod tests {
                 Capability::BuySide,
                 Capability::PriceFunction,
                 Capability::HardLimits,
-            ].into_iter().collect::<HashSet<_>>()
+            ]
+            .into_iter()
+            .collect::<HashSet<_>>()
         );
         // // Assert spot prices TODO: in 3757
         // assert_eq!(
