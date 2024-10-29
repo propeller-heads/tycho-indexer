@@ -3,7 +3,7 @@ use crate::protocol::vm::errors::ProtosimError;
 use ethers::abi::Uint;
 
 #[allow(dead_code)]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Capability {
     SellSide = 0,
     BuySide = 1,

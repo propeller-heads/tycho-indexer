@@ -15,22 +15,25 @@ use crate::{
         constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
         engine::{create_engine, SHARED_TYCHO_DB},
         errors::ProtosimError,
-        utils::get_code_for_address,
+        protosim_contract::ProtosimContract,
+        utils::{get_code_for_address, get_contract_bytecode},
     },
 };
 use chrono::Utc;
 use ethers::{
     abi::{decode, Address as EthAddress, ParamType},
+    prelude::U256,
+    types::{Res, H160},
     utils::to_checksum,
 };
 use revm::{
     precompile::{Address, Bytes},
-    primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode},
+    primitives::{alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256},
     DatabaseRef,
 };
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::RwLock;
-
+#[derive(Clone)]
 pub struct EVMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The pool's identifier
     pub id: String,
@@ -38,12 +41,21 @@ pub struct EVMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub tokens: Vec<ERC20Token>,
     /// The current block, will be used to set vm context
     pub block: BlockHeader,
+    /// The pools token balances
+    pub balances: HashMap<H160, U256>,
+    /// The contract address for where protocol balances are stored (i.e. a vault contract).
+    /// If given, balances will be overwritten here instead of on the pool contract during
+    /// simulations
+    pub balance_owner: Option<H160>, // TODO: implement this in ENG-3758
     /// The address to bytecode map of all stateless contracts used by the protocol
     /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
     /// If set, vm will emit detailed traces about the execution
     pub trace: bool,
     engine: Option<SimulationEngine<D>>,
+    /// The adapter contract. This is used to run simulations
+    adapter_contract: Option<ProtosimContract<D>>,
+    adapter_contract_path: String,
 }
 
 impl EVMPoolState<PreCachedDB> {
@@ -51,16 +63,35 @@ impl EVMPoolState<PreCachedDB> {
         id: String,
         tokens: Vec<ERC20Token>,
         block: BlockHeader,
+        balances: HashMap<H160, U256>,
+        adapter_contract_path: String, // TODO: include this in the adpater contrcat thinsg
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
-    ) -> Self {
-        let mut state =
-            EVMPoolState { id, tokens, block, stateless_contracts, trace, engine: None };
+    ) -> Result<Self, ProtosimError> {
+        let mut state = EVMPoolState {
+            id,
+            tokens,
+            block,
+            adapter_contract_path,
+            balances,
+            balance_owner: None,
+            stateless_contracts,
+            trace,
+            engine: None,
+            adapter_contract: None,
+        };
         state
             .set_engine()
             .await
             .expect("Unable to set engine");
-        state
+        state.adapter_contract = Some(ProtosimContract::new(
+            *ADAPTER_ADDRESS,
+            state
+                .engine
+                .clone()
+                .expect("Engine not set"),
+        )?);
+        Ok(state)
     }
 
     async fn set_engine(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -97,15 +128,27 @@ impl EVMPoolState<PreCachedDB> {
                 None,
                 false,
             );
+            let adapter_contract_code = get_contract_bytecode(&self.adapter_contract_path)
+                .map(|bytecode_vec| Some(Bytecode::new_raw(bytecode_vec.into())))
+                .map_err(|_| {
+                    ProtosimError::DecodingError(
+                        "Error in converting adapter contract bytecode".into(),
+                    )
+                })?;
+
             engine.state.init_account(
                 Address::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
                     .expect("Invalid checksum for external account address"),
                 AccountInfo {
                     balance: *MAX_BALANCE,
                     nonce: 0,
-                    code_hash: Default::default(),
-                    code: None,
-                    // get_contract_bytecode(self.adapter_contract_path)
+                    code_hash: B256::from(keccak256(
+                        &adapter_contract_code
+                            .clone()
+                            .ok_or(ProtosimError::EncodingError("Can't encode code hash".into()))?
+                            .bytes(),
+                    )),
+                    code: adapter_contract_code,
                 },
                 None,
                 false,
@@ -128,7 +171,9 @@ impl EVMPoolState<PreCachedDB> {
                     AccountInfo {
                         balance: Default::default(),
                         nonce: 0,
-                        code_hash: Default::default(),
+                        code_hash: B256::from(keccak256(&code.clone().ok_or(
+                            ProtosimError::EncodingError("Can't encode code hash".into()),
+                        )?)),
                         code: code
                             .clone()
                             .map(|vec| Bytecode::new_raw(Bytes::from(vec))),
@@ -208,10 +253,29 @@ impl EVMPoolState<PreCachedDB> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{evm::simulation_db::BlockHeader, models::ERC20Token};
-    use ethers::{prelude::U256, types::Address as EthAddress};
-    use std::collections::HashMap;
+    use crate::{
+        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
+        models::ERC20Token,
+        protocol::{
+            vm::{models::Capability, utils::maybe_coerce_error},
+            BytesConvertible,
+        },
+    };
+    use ethers::{
+        prelude::{H256, U256},
+        types::Address as EthAddress,
+        utils::hex::traits::FromHex,
+    };
+    use serde_json::Value;
+    use std::{
+        collections::{HashMap, HashSet},
+        fs::File,
+        io::Read,
+        path::Path,
+        str::FromStr,
+    };
     use tokio::runtime::Runtime;
+    use tycho_core::{dto::ChangeType, Bytes};
 
     #[tokio::test]
     async fn test_set_engine_initialization() {
@@ -239,6 +303,8 @@ mod tests {
             id.clone(),
             tokens,
             block,
+            HashMap::new(),
+            "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             stateless_contracts.clone(),
             true,
         )
