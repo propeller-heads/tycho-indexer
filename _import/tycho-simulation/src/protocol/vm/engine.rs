@@ -224,40 +224,4 @@ mod tests {
         // Verify trace flag is set
         assert!(engine.trace);
     }
-
-    #[tokio::test]
-    async fn test_update_engine() {
-        // TODO Does not accept a MockDatabase - only PreCachedDB
-        // It's not possible to factor out the `update` method into a Trait since this is an async
-        // fn and clippy disapproves with `auto trait bounds cannot be specified`.
-        // Any workaround I tried results in lifetime errors, or requiring me to change the
-        // PreCachedDB to include mock attributes. It's bad.
-        // So, unfortunately this can't be tested, but maybe we can take what I wrote in this
-        // test and use it as a reference for some integration test if we need?
-
-        // let db = create_shared_db_ref(PreCachedDB::new().expect("Failed to create PreCachedDB"));
-        // let address_a = Address::parse_checksummed(
-        //     String::from("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270"),
-        //     None,
-        // )
-        // .expect("Invalid checksum");
-        // let mut address_a_slots: HashMap<U256, U256> = HashMap::new();
-        // let mut account_updates: HashMap<Address, AccountUpdate> = HashMap::new();
-        // let mut vm_storage: HashMap<Address, ResponseAccount> = HashMap::new();
-        //
-        // address_a_slots.insert(U256::from(0), U256::from(1));
-        // account_updates.insert(
-        //     address_a,
-        //     AccountUpdate {
-        //         address: address_a,
-        //         chain: Chain::Ethereum,
-        //         slots: address_a_slots.clone(),
-        //         balance: Some(U256::ZERO),
-        //         code: None,
-        //         change: ChangeType::Update,
-        //     },
-        // );
-        // update_engine(db, BlockHeader::default(), Some(vm_storage), account_updates).await;
-        todo!()
-    }
 }
