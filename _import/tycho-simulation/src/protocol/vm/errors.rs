@@ -17,6 +17,9 @@ use thiserror::Error;
 /// - `SimulationFailure`: Wraps errors that occur during simulation, containing a
 ///   `SimulationError`.
 /// - `DecodingError`: Indicates an error in decoding data.
+/// - `RPCError`: Indicates an error related to RPC interaction.
+/// - `UnsupportedCapability`: Denotes an error when a pool state does not support a necessary
+///   capability.
 #[derive(Error, Debug)]
 pub enum ProtosimError {
     #[error("ABI loading error: {0}")]
@@ -29,6 +32,8 @@ pub enum ProtosimError {
     DecodingError(String),
     #[error("RPC related error {0}")]
     RpcError(RpcError),
+    #[error("Unsupported Capability: {0}")]
+    UnsupportedCapability(String),
 }
 
 #[derive(Debug, Error)]
