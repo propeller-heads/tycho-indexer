@@ -4,7 +4,8 @@ use crate::protocol::vm::{
     errors::FileError,
     utils::{get_contract_bytecode, get_storage_slot_index_at_key, SlotHash},
 };
-use ethers::{addressbook::Address, prelude::U256};
+use ethers::{abi::Address, types::U256};
+use revm::primitives::Address as rAddress;
 use std::{collections::HashMap, path::Path};
 
 pub struct GethOverwrite {
@@ -17,7 +18,7 @@ pub struct GethOverwrite {
 pub type Overwrites = HashMap<SlotHash, U256>;
 
 pub struct ERC20OverwriteFactory {
-    token_address: Address,
+    token_address: rAddress,
     overwrites: Overwrites,
     balance_slot: SlotHash,
     allowance_slot: SlotHash,
@@ -25,13 +26,13 @@ pub struct ERC20OverwriteFactory {
 }
 
 impl ERC20OverwriteFactory {
-    pub fn new(token_address: Address, token_slots: (SlotHash, SlotHash)) -> Self {
+    pub fn new(token_address: rAddress, token_slots: (SlotHash, SlotHash)) -> Self {
         ERC20OverwriteFactory {
             token_address,
             overwrites: HashMap::new(),
             balance_slot: token_slots.0,
             allowance_slot: token_slots.1,
-            total_supply_slot: SlotHash::from_low_u64_be(2),
+            total_supply_slot: SlotHash::from(2),
         }
     }
 
@@ -53,21 +54,23 @@ impl ERC20OverwriteFactory {
             .insert(self.total_supply_slot, supply);
     }
 
-    pub fn get_protosim_overwrites(&self) -> HashMap<Address, Overwrites> {
+    pub fn get_protosim_overwrites(&self) -> HashMap<rAddress, Overwrites> {
         let mut result = HashMap::new();
         result.insert(self.token_address, self.overwrites.clone());
         result
     }
 
-    pub fn get_geth_overwrites(&self) -> Result<HashMap<Address, GethOverwrite>, FileError> {
+    pub fn get_geth_overwrites(&self) -> Result<HashMap<rAddress, GethOverwrite>, FileError> {
         let mut formatted_overwrites = HashMap::new();
 
         for (key, val) in &self.overwrites {
-            let hex_key = hex::encode(key.as_bytes());
+            let mut key_bytes = [0u8; 32];
+            key.to_big_endian(&mut key_bytes);
+            let hex_key = hex::encode(key_bytes);
 
-            let mut bytes = [0u8; 32];
-            val.to_big_endian(&mut bytes);
-            let hex_val = format!("0x{:0>64}", hex::encode(bytes));
+            let mut value_bytes = [0u8; 32];
+            val.to_big_endian(&mut value_bytes);
+            let hex_val = format!("0x{:0>64}", hex::encode(value_bytes));
 
             formatted_overwrites.insert(hex_key, hex_val);
         }
@@ -107,9 +110,13 @@ mod tests {
     use crate::protocol::vm::utils::SlotHash;
 
     fn setup_factory() -> ERC20OverwriteFactory {
-        let token_address = Address::random();
-        let balance_slot = SlotHash::random();
-        let allowance_slot = SlotHash::random();
+        let token_address = rAddress::parse_checksummed(
+            String::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+            None,
+        )
+        .expect("Failed to parse address");
+        let balance_slot = SlotHash::from(5);
+        let allowance_slot = SlotHash::from(6);
         ERC20OverwriteFactory::new(token_address, (balance_slot, allowance_slot))
     }
 
@@ -173,7 +180,7 @@ mod tests {
     fn test_get_geth_overwrites() {
         let mut factory = setup_factory();
 
-        let storage_slot = SlotHash::from_low_u64_be(1);
+        let storage_slot = SlotHash::from(1);
         let val = U256::from(123456);
         factory
             .overwrites

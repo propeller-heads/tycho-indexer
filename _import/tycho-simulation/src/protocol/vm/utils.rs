@@ -5,7 +5,7 @@ use ethers::{
     abi::Abi,
     core::utils::keccak256,
     providers::{Http, Middleware, Provider},
-    types::{Address, H160, H256},
+    types::{Address, H160},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
@@ -14,6 +14,7 @@ use crate::{
     evm::simulation::SimulationError,
     protocol::vm::errors::{FileError, RpcError},
 };
+use ethers::types::U256;
 use std::{
     collections::HashMap,
     env,
@@ -120,19 +121,19 @@ fn parse_solidity_error_message(data: &str) -> String {
     format!("Failed to decode: {}", data)
 }
 
-pub type SlotHash = H256;
+pub type SlotHash = U256;
 
 /// Get storage slot index of a value stored at a certain key in a mapping
 ///
 /// # Arguments
 ///
 /// * `key`: Key in a mapping. Can be any H160 value (such as an address).
-/// * `mapping_slot`: An `H256` representing the storage slot at which the mapping itself is stored.
+/// * `mapping_slot`: An `U256` representing the storage slot at which the mapping itself is stored.
 ///   See the examples for more explanation.
 ///
 /// # Returns
 ///
-/// An `H256` representing the  index of a storage slot where the value at the given
+/// An `U256` representing the  index of a storage slot where the value at the given
 /// key is stored.
 ///
 /// # Examples
@@ -143,9 +144,9 @@ pub type SlotHash = H256;
 ///
 /// ```
 /// use protosim::protocol::vm::utils::get_storage_slot_index_at_key;
-/// use ethers::types::{Address, H256};
+/// use ethers::types::{Address, U256};
 /// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address, H256::from_low_u64_be(0));
+/// get_storage_slot_index_at_key(address, U256::from(0));
 /// ```
 ///
 /// For nested mappings, we need to apply the function twice. An example of this is
@@ -156,10 +157,10 @@ pub type SlotHash = H256;
 ///
 /// ```
 /// use protosim::protocol::vm::utils::get_storage_slot_index_at_key;
-/// use ethers::types::{Address, H256};
+/// use ethers::types::{Address, U256};
 /// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, H256::from_low_u64_be(1)));
+/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, U256::from(1)));
 /// ```
 ///
 /// # See Also
@@ -170,10 +171,10 @@ pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> Sl
     key_bytes.resize(32, 0); // Right pad with zeros
 
     let mut mapping_slot_bytes = [0u8; 32];
-    mapping_slot_bytes.copy_from_slice(mapping_slot.as_bytes());
+    mapping_slot.to_big_endian(&mut mapping_slot_bytes);
 
     let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
-    SlotHash::from_slice(&slot_bytes)
+    SlotHash::from_big_endian(&slot_bytes)
 }
 
 fn get_solidity_panic_codes() -> HashMap<u64, String> {

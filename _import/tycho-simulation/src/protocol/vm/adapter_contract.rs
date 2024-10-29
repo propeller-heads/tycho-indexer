@@ -4,7 +4,8 @@
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::vm::{
-        errors::ProtosimError, models::Capability, protosim_contract::ProtosimContract,
+        erc20_overwrite_factory::Overwrites, errors::ProtosimError, models::Capability,
+        protosim_contract::ProtosimContract,
     },
 };
 use ethers::{
@@ -45,7 +46,7 @@ where
         buy_token: Address,
         amounts: Vec<U256>,
         block: u64,
-        overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
+        overwrites: Option<HashMap<rAddress, Overwrites>>,
     ) -> Result<Vec<f64>, ProtosimError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
@@ -54,7 +55,7 @@ where
             Token::Array(
                 amounts
                     .into_iter()
-                    .map(|a| Token::Uint(U256::from(a)))
+                    .map(Token::Uint)
                     .collect(),
             ),
         ];
@@ -128,9 +129,9 @@ where
 
         if let Some(Token::Array(inner)) = res.first() {
             if let (Some(Token::Uint(value1)), Some(Token::Uint(value2))) =
-                (inner.get(0), inner.get(1))
+                (inner.first(), inner.get(1))
             {
-                return Ok((value1.clone(), value2.clone()));
+                return Ok((*value1, *value2));
             }
         }
 

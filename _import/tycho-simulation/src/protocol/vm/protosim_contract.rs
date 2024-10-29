@@ -18,6 +18,7 @@ use crate::{
     evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     protocol::vm::{
         constants::EXTERNAL_ACCOUNT,
+        erc20_overwrite_factory::Overwrites,
         errors::ProtosimError,
         utils::{load_swap_abi, maybe_coerce_error},
     },
@@ -142,7 +143,7 @@ where
         args: Vec<Token>,
         block_number: u64,
         timestamp: Option<u64>,
-        overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
+        overrides: Option<HashMap<Address, Overwrites>>,
         caller: Option<Address>,
         value: U256,
     ) -> Result<ProtoSimResponse, ProtosimError> {
