@@ -1,3 +1,10 @@
+## [0.28.0](https://github.com/propeller-heads/protosim/compare/0.27.0...0.28.0) (2024-10-29)
+
+
+### Features
+
+* (WIP) Implement update_engine ([4c18c89](https://github.com/propeller-heads/protosim/commit/4c18c89fb6de66e4b6c8579d7b97e93c9f90ec74))
+
 ## [0.27.0](https://github.com/propeller-heads/protosim/compare/0.26.0...0.27.0) (2024-10-28)
 
 
