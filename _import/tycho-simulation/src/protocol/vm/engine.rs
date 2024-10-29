@@ -9,10 +9,15 @@ use revm::{
     primitives::{AccountInfo, Address},
     DatabaseRef,
 };
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::RwLock;
 
-use crate::evm::{simulation::SimulationEngine, tycho_db::PreCachedDB};
+use crate::evm::{
+    simulation::SimulationEngine,
+    simulation_db::BlockHeader,
+    tycho_db::PreCachedDB,
+    tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
+};
 
 lazy_static! {
     pub static ref SHARED_TYCHO_DB: Arc<RwLock<PreCachedDB>> =
@@ -66,6 +71,43 @@ where
     );
 
     engine
+}
+
+pub async fn update_engine(
+    db: Arc<RwLock<PreCachedDB>>,
+    block: BlockHeader,
+    vm_storage: Option<HashMap<Address, ResponseAccount>>,
+    account_updates: HashMap<Address, AccountUpdate>,
+) -> Vec<AccountUpdate> {
+    let db_write = db.write().await;
+
+    let mut vm_updates: Vec<AccountUpdate> = Vec::new();
+
+    for (_address, account_update) in account_updates.iter() {
+        vm_updates.push(account_update.clone());
+    }
+
+    if let Some(vm_storage_values) = vm_storage {
+        for (_address, vm_storage_values) in vm_storage_values.iter() {
+            // ResponseAccount objects to AccountUpdate objects as required by the update method
+            vm_updates.push(AccountUpdate {
+                address: vm_storage_values.address,
+                chain: vm_storage_values.chain,
+                slots: vm_storage_values.slots.clone(),
+                balance: Some(vm_storage_values.balance),
+                code: Some(vm_storage_values.code.clone()),
+                change: ChangeType::Creation,
+            });
+        }
+    }
+
+    if !vm_updates.is_empty() {
+        db_write
+            .update(vm_updates.clone(), Some(block))
+            .await;
+    }
+
+    vm_updates
 }
 
 #[cfg(test)]
