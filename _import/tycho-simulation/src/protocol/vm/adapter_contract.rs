@@ -43,7 +43,7 @@ where
         pair_id: String,
         sell_token: Address,
         buy_token: Address,
-        amounts: Vec<u64>,
+        amounts: Vec<U256>,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
     ) -> Result<Vec<f64>, ProtosimError> {
@@ -63,7 +63,9 @@ where
             .call("price", args, block, None, overwrites, None, U256::zero())
             .await?
             .return_value;
-        // returning just floats - the python version returns Fractions (not sure why)
+        println!("complete res: {:?}", res);
+        // returning just floats - the python version returns Fractions (not sure why) // TODO:
+        // figure out why.. can we just divide two U256 and it's fine? what about decimals?
         let price = self.calculate_price(res[0].clone())?;
         Ok(price)
     }
@@ -125,7 +127,9 @@ where
             .return_value;
 
         if let Some(Token::Array(inner)) = res.first() {
-            if let (Some(Token::Uint(value1)), Some(Token::Uint(value2))) = (inner.get(0), inner.get(1)) {
+            if let (Some(Token::Uint(value1)), Some(Token::Uint(value2))) =
+                (inner.get(0), inner.get(1))
+            {
                 return Ok((value1.clone(), value2.clone()));
             }
         }

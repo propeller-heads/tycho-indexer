@@ -14,7 +14,7 @@ use tycho_core::dto::ResponseToken;
 
 use crate::protocol::BytesConvertible;
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, Hash)]
 pub struct ERC20Token {
     /// The address of the token on the blockchain network
     pub address: H160,

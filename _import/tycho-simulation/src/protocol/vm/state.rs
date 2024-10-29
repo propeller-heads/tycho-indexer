@@ -27,6 +27,7 @@ use ethers::{
     types::{Res, H160},
     utils::to_checksum,
 };
+use itertools::Itertools;
 use revm::{
     precompile::{Address, Bytes},
     primitives::{
@@ -36,6 +37,7 @@ use revm::{
 };
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::RwLock;
+
 #[derive(Clone)]
 pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The pool's identifier
@@ -50,8 +52,8 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// If given, balances will be overwritten here instead of on the pool contract during
     /// simulations
     pub balance_owner: Option<H160>, // TODO: implement this in ENG-3758
-    /// Marginal prices of the pool by token pair
-    pub marginal_prices: HashMap<H160, f64>,
+    /// Spot prices of the pool by token pair
+    pub spot_prices: HashMap<(ERC20Token, ERC20Token), f64>,
     /// The address to bytecode map of all stateless contracts used by the protocol
     /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
@@ -69,7 +71,7 @@ impl VMPoolState<PreCachedDB> {
         tokens: Vec<ERC20Token>,
         block: BlockHeader,
         balances: HashMap<H160, U256>,
-        marginal_prices: HashMap<H160, f64>,
+        spot_prices: HashMap<(ERC20Token, ERC20Token), f64>,
         adapter_contract_path: String,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
@@ -81,7 +83,7 @@ impl VMPoolState<PreCachedDB> {
             adapter_contract_path,
             balances,
             balance_owner: None,
-            marginal_prices,
+            spot_prices,
             stateless_contracts,
             trace,
             engine: None,
@@ -98,6 +100,8 @@ impl VMPoolState<PreCachedDB> {
                 .clone()
                 .expect("Engine not set"),
         )?);
+        state.set_spot_prices().await?;
+
         Ok(state)
     }
 
@@ -265,13 +269,57 @@ impl VMPoolState<PreCachedDB> {
             .map_err(|_| ProtosimError::DecodingError("Expected an Address".into()))
     }
 
-    async fn get_sell_amount_limit(&self, sell_token: EthAddress, buy_token: EthAddress) -> U256{
+    async fn set_spot_prices(&mut self) -> Result<(), ProtosimError> {
+        // TODO: ensure capabilities
+
+        for tokens_pair in self.tokens.iter().permutations(2) {
+            // Manually unpack the inner vector
+            if let [t0, t1] = &tokens_pair[..] {
+                let sell_amount_limit = self
+                    .get_sell_amount_limit(t0.address, t1.address)
+                    .await;
+                println!("Sell amount limit: {}", sell_amount_limit);
+                let price_result = self
+                    .adapter_contract
+                    .clone()
+                    .expect("Adapter contract not set")
+                    .price(
+                        self.id.clone()[2..].to_string(),
+                        t0.address,
+                        t1.address,
+                        vec![sell_amount_limit],
+                        self.block.number,
+                        None, // TODO: in 3758 add overwrites here
+                    )
+                    .await?;
+                println!("Price result: {:?}", price_result);
+                // TODO: handle scaled price here
+                self.spot_prices.insert(
+                    ((*t0).clone(), (*t1).clone()),
+                    price_result
+                        .first()
+                        .expect("Expected a u64")
+                        .clone(),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_sell_amount_limit(&self, sell_token: EthAddress, buy_token: EthAddress) -> U256 {
         let binding = self
-            .adapter_contract.clone()
-            .unwrap();
+            .adapter_contract
+            .clone()
+            .expect("Adapter contract not set");
         let limits = binding
-            .get_limits(self.id.clone()[2..].to_string(), sell_token, buy_token, self.block.number, None  // TODO: in 3758 add overwrites here
-            ).await;
+            .get_limits(
+                self.id.clone()[2..].to_string(),
+                sell_token,
+                buy_token,
+                self.block.number,
+                None, // TODO: in 3758 add overwrites here
+            )
+            .await;
         let sell_amount_limit = limits.expect("Expected a (u64, u64)").0;
         sell_amount_limit
     }
@@ -289,6 +337,7 @@ mod tests {
         },
     };
     use ethers::{
+        core::k256::elliptic_curve::consts::U25,
         prelude::{H256, U256},
         types::Address as EthAddress,
         utils::hex::traits::FromHex,
@@ -405,7 +454,7 @@ mod tests {
             hash: H256::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
-                .expect("Invalid block hash"),
+            .expect("Invalid block hash"),
             timestamp: 0,
         };
 
@@ -425,8 +474,8 @@ mod tests {
             HashMap::new(),
             false,
         )
-            .await
-            .expect("Failed to initialize pool state")
+        .await
+        .expect("Failed to initialize pool state")
     }
 
     #[tokio::test]
@@ -441,7 +490,11 @@ mod tests {
             .clone()
             .adapter_contract
             .unwrap()
-            .get_capabilities(pool_state.id[2..].to_string(), pool_state.tokens[0].address, pool_state.tokens[1].address)
+            .get_capabilities(
+                pool_state.id[2..].to_string(),
+                pool_state.tokens[0].address,
+                pool_state.tokens[1].address,
+            )
             .await
             .unwrap();
 
@@ -456,31 +509,24 @@ mod tests {
             .into_iter()
             .collect::<HashSet<_>>()
         );
-        // // Assert spot prices TODO: in 3757
-        // assert_eq!(
-        //     pool.spot_prices,
-        //     HashMap::from([
-        //         ((bal.clone(), dai.clone()),
-        // Decimal::from_str("7.071503245428245871486924221").unwrap()),         ((dai.
-        // clone(), bal.clone()), Decimal::from_str("0.1377789143190479049114331557").unwrap())
-        //     ])
-        // );
+
+        let dai_bal_spot_price = pool_state.spot_prices.get(&(pool_state.tokens[0].clone(), pool_state.tokens[1].clone())).unwrap();
+        let bal_dai_spot_price = pool_state.spot_prices.get(&(pool_state.tokens[1].clone(), pool_state.tokens[0].clone())).unwrap();
+        assert_eq!(*dai_bal_spot_price, 0.1377789143190479049114331557);
+        assert_eq!(*bal_dai_spot_price, 7.071503245428245871486924221);
     }
 
     #[tokio::test]
     async fn test_get_sell_amount_limit() {
         let pool_state = setup_pool_state().await;
-        let dai_limit = pool_state.get_sell_amount_limit(
-            pool_state.tokens[0].address,
-            pool_state.tokens[1].address
-        ).await;
+        let dai_limit = pool_state
+            .get_sell_amount_limit(pool_state.tokens[0].address, pool_state.tokens[1].address)
+            .await;
         assert_eq!(dai_limit, U256::from_dec_str("100279494253364362835").unwrap());
 
-        let bal_limit = pool_state.get_sell_amount_limit(
-            pool_state.tokens[1].address,
-            pool_state.tokens[0].address
-        ).await;
+        let bal_limit = pool_state
+            .get_sell_amount_limit(pool_state.tokens[1].address, pool_state.tokens[0].address)
+            .await;
         assert_eq!(bal_limit, U256::from_dec_str("13997408640689987484").unwrap());
     }
-
 }
