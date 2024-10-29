@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "ethers",
  "num-bigint",
@@ -5246,7 +5246,7 @@ dependencies = [
 
 [[package]]
 name = "protosim"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "approx",
  "chrono",

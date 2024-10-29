@@ -1,3 +1,16 @@
+## [0.29.0](https://github.com/propeller-heads/protosim/compare/0.28.0...0.29.0) (2024-10-29)
+
+
+### Features
+
+* Add adapter_contract to EVMPoolState ([345ad1b](https://github.com/propeller-heads/protosim/commit/345ad1bc038acce1886c94997df2bdb15f9f7de9))
+
+
+### Bug Fixes
+
+* Convert to capabilities correctly ([71a1e22](https://github.com/propeller-heads/protosim/commit/71a1e22304185b58133b8f83944d4b5bc6c1ac77))
+* Use KECCAK_EMPTY instead of code_hash: Default::default() ([629bd76](https://github.com/propeller-heads/protosim/commit/629bd76259345cdd4392a319341c4f3a81fd9edf))
+
 ## [0.28.0](https://github.com/propeller-heads/protosim/compare/0.27.0...0.28.0) (2024-10-29)
 
 
