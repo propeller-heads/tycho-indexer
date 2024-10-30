@@ -1,3 +1,10 @@
+## [0.30.0](https://github.com/propeller-heads/protosim/compare/0.29.0...0.30.0) (2024-10-30)
+
+
+### Features
+
+* (VMPoolState) set and ensure capabilities ([c4d4bd2](https://github.com/propeller-heads/protosim/commit/c4d4bd23a443ecf209c3a3d0b8c3c1389c80a80f))
+
 ## [0.29.0](https://github.com/propeller-heads/protosim/compare/0.28.0...0.29.0) (2024-10-29)
 
 

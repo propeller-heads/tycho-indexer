@@ -1,11 +1,28 @@
-// Necessary for the init_account method to be in scope
-#![allow(unused_imports)]
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
+use std::collections::{HashMap, HashSet};
+
+use chrono::Utc;
+use ethers::{
+    abi::{decode, ParamType},
+    prelude::U256,
+    types::H160,
+    utils::to_checksum,
+};
+use revm::{
+    precompile::{Address, Bytes},
+    primitives::{
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
+    },
+    DatabaseRef,
+};
+use tracing::warn;
+
+use itertools::Itertools;
+
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters},
         simulation_db::BlockHeader,
         tycho_db::PreCachedDB,
@@ -15,6 +32,7 @@ use crate::{
         constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
         engine::{create_engine, SHARED_TYCHO_DB},
         errors::ProtosimError,
+        models::Capability,
         protosim_contract::ProtosimContract,
         utils::{get_code_for_address, get_contract_bytecode},
     },
@@ -49,6 +67,10 @@ use std::{
 };
 use tokio::sync::RwLock;
 
+// Necessary for the init_account method to be in scope
+#[allow(unused_imports)]
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
+
 #[derive(Clone)]
 pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The pool's identifier
@@ -81,6 +103,8 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
     /// If set, vm will emit detailed traces about the execution
     pub trace: bool,
+    /// The supported capabilities of this pool
+    pub capabilities: HashSet<Capability>,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<ProtosimContract<D>>,
@@ -118,6 +142,7 @@ impl VMPoolState<PreCachedDB> {
             trace,
             engine: None,
             adapter_contract: None,
+            capabilities: HashSet::new(),
         };
         state
             .set_engine(adapter_contract_path)
@@ -130,6 +155,7 @@ impl VMPoolState<PreCachedDB> {
                 .clone()
                 .expect("Engine not set"),
         )?);
+        state.set_capabilities().await?;
         state.set_spot_prices().await?;
         // TODO: add init_token_storage_slots() in 3796
         Ok(state)
@@ -297,6 +323,60 @@ format"
             .to_string()
             .parse()
             .map_err(|_| ProtosimError::DecodingError("Expected an Address".into()))
+    }
+
+    /// Ensures the pool supports the given capability
+    fn ensure_capability(&self, capability: Capability) -> Result<(), ProtosimError> {
+        if !self.capabilities.contains(&capability) {
+            return Err(ProtosimError::UnsupportedCapability(capability.to_string()));
+        }
+        Ok(())
+    }
+
+    async fn set_capabilities(&mut self) -> Result<(), ProtosimError> {
+        let mut capabilities = Vec::new();
+
+        // Generate all permutations of tokens and retrieve capabilities
+        for tokens_pair in self.tokens.iter().permutations(2) {
+            // Manually unpack the inner vector
+            if let [t0, t1] = &tokens_pair[..] {
+                let caps = self
+                    .adapter_contract
+                    .clone()
+                    .ok_or_else(|| {
+                        ProtosimError::UninitializedAdapter(
+                            "Adapter contract must be initialized before setting capabilities"
+                                .to_string(),
+                        )
+                    })?
+                    .get_capabilities(self.id.clone()[2..].to_string(), t0.address, t1.address)
+                    .await?;
+                capabilities.push(caps);
+            }
+        }
+
+        // Find the maximum capabilities length
+        let max_capabilities = capabilities
+            .iter()
+            .map(|c| c.len())
+            .max()
+            .unwrap_or(0);
+
+        // Intersect all capability sets
+        let common_capabilities: HashSet<_> = capabilities
+            .iter()
+            .fold(capabilities[0].clone(), |acc, cap| acc.intersection(cap).cloned().collect());
+
+        self.capabilities = common_capabilities;
+
+        // Check for mismatches in capabilities
+        if self.capabilities.len() < max_capabilities {
+            warn!(
+                "Warning: Pool {} has different capabilities depending on the token pair!",
+                self.id
+            );
+        }
+        Ok(())
     }
 
     async fn set_spot_prices(&mut self) -> Result<(), ProtosimError> {
@@ -488,12 +568,20 @@ mod tests {
     use std::{
         collections::{HashMap, HashSet},
         fs::File,
-        io::Read,
         path::Path,
         str::FromStr,
     };
-    use tokio::runtime::Runtime;
-    use tycho_core::{dto::ChangeType, Bytes};
+
+    use ethers::prelude::{H256, U256};
+    use serde_json::Value;
+
+    use crate::{
+        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
+        models::ERC20Token,
+        protocol::vm::models::Capability,
+    };
+
+    use super::*;
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(asset_path)?;
@@ -605,7 +693,18 @@ mod tests {
 
         let pool_state = setup_pool_state().await;
 
-        let capabilities = pool_state
+        let pool_state_initialized = pool_state.unwrap();
+
+        let expected_capabilities = vec![
+            Capability::SellSide,
+            Capability::BuySide,
+            Capability::PriceFunction,
+            Capability::HardLimits,
+        ]
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+        let capabilities_adapter_contract = pool_state_initialized
             .clone()
             .adapter_contract
             .unwrap()
@@ -617,17 +716,26 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            capabilities,
-            vec![
-                Capability::SellSide,
-                Capability::BuySide,
-                Capability::PriceFunction,
-                Capability::HardLimits,
-            ]
-            .into_iter()
-            .collect::<HashSet<_>>()
-        );
+        assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());
+
+        let capabilities_state = pool_state_initialized
+            .clone()
+            .capabilities;
+
+        assert_eq!(capabilities_state, expected_capabilities.clone());
+
+        for capability in expected_capabilities.clone() {
+            assert!(pool_state_initialized
+                .clone()
+                .ensure_capability(capability)
+                .is_ok());
+        }
+
+        assert!(pool_state_initialized
+            .clone()
+            .ensure_capability(Capability::MarginalPrice)
+            .is_err());
+
 
         let dai_bal_spot_price = pool_state
             .spot_prices
