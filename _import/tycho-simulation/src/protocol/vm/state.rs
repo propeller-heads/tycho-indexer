@@ -11,11 +11,11 @@ use ethers::{
     utils::to_checksum,
 };
 use revm::{
-    DatabaseRef,
     precompile::{Address, Bytes},
     primitives::{
-        AccountInfo, alloy_primitives::Keccak256, B256, Bytecode, keccak256, KECCAK_EMPTY,
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
     },
+    DatabaseRef,
 };
 use tracing::warn;
 

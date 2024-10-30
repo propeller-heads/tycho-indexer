@@ -5,13 +5,13 @@ use foundry_config::{Chain, Config};
 use foundry_evm::traces::TraceKind;
 use revm::{
     db::DatabaseRef,
-    Evm,
     inspector_handle_register,
-    interpreter::{InstructionResult, return_ok},
+    interpreter::{return_ok, InstructionResult},
     primitives::{
-        Address, BlockEnv, bytes, EVMError, EVMResult, EvmState, ExecutionResult, Output,
+        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output,
         ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
     },
+    Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
@@ -373,9 +373,9 @@ mod tests {
         types::U256,
     };
     use revm::primitives::{
-        Account, AccountInfo, AccountStatus, Address, B256, Bytecode, bytes, Bytes,
-        EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, hex,
-        InvalidTransaction, OutOfGasError, Output, ResultAndState, SuccessReason,
+        bytes, hex, Account, AccountInfo, AccountStatus, Address, Bytecode, Bytes,
+        EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, InvalidTransaction,
+        OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
 
     use crate::evm::simulation_db;
