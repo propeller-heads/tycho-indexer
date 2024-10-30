@@ -1,6 +1,23 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
+use std::collections::{HashMap, HashSet};
+
+use chrono::Utc;
+use ethers::{
+    abi::{decode, Address, ParamType},
+    prelude::U256,
+    types::H160,
+    utils::to_checksum,
+};
+use itertools::Itertools;
+use revm::{
+    primitives::{
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
+        B256, KECCAK_EMPTY, U256 as rU256,
+    },
+    DatabaseRef,
+};
 use tracing::warn;
 
 use crate::{
@@ -18,32 +35,14 @@ use crate::{
         utils::{get_code_for_contract, get_contract_bytecode},
     },
 };
-
+// Necessary for the init_account method to be in scope
+#[allow(unused_imports)]
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use crate::protocol::vm::{
     erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
     models::Capability,
     utils::SlotId,
 };
-use chrono::Utc;
-use ethers::{
-    abi::{decode, ParamType},
-    prelude::U256,
-    types::H160,
-    utils::to_checksum,
-};
-use itertools::Itertools;
-use revm::{
-    primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
-        B256, KECCAK_EMPTY, U256 as rU256,
-    },
-    DatabaseRef,
-};
-use std::collections::{HashMap, HashSet};
-
-// Necessary for the init_account method to be in scope
-#[allow(unused_imports)]
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
 
 #[derive(Clone)]
 pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
@@ -62,7 +61,7 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The supported capabilities of this pool
     pub capabilities: HashSet<Capability>,
     /// Storage overwrites that will be applied to all simulations. They will be cleared
-    //  when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
+    /// when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
     pub block_lasting_overwrites: HashMap<rAddress, Overwrites>,
     /// A set of all contract addresses involved in the simulation of this pool."""
     pub involved_contracts: HashSet<H160>,
@@ -75,6 +74,8 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
     /// If set, vm will emit detailed traces about the execution
     pub trace: bool,
+    /// Marginal prices of the pool by token pair
+    pub marginal_prices: HashMap<(Address, Address), f64>,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<ProtosimContract<D>>,
@@ -94,6 +95,7 @@ impl VMPoolState<PreCachedDB> {
         involved_contracts: HashSet<H160>,
         token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
+        marginal_prices: HashMap<(Address, Address), f64>,
         trace: bool,
     ) -> Result<Self, ProtosimError> {
         let mut state = VMPoolState {
@@ -110,6 +112,7 @@ impl VMPoolState<PreCachedDB> {
             trace,
             engine: None,
             adapter_contract: None,
+            marginal_prices,
         };
         state
             .set_engine(adapter_contract_path)
@@ -533,27 +536,114 @@ impl VMPoolState<PreCachedDB> {
 
         merged
     }
+
+    async fn get_amount_out(
+        &self,
+        sell_token: ERC20Token,
+        sell_amount: U256,
+        buy_token: ERC20Token,
+    ) -> Result<(U256, U256, VMPoolState<PreCachedDB>), ProtosimError> {
+        let sell_amount_limit = self
+            .clone()
+            .get_sell_amount_limit(vec![sell_token.clone(), buy_token.clone()])
+            .await?;
+
+        let overwrites = self
+            .clone()
+            .get_overwrites(vec![sell_token.clone(), buy_token.clone()], sell_amount_limit)
+            .await?;
+
+        let pool_id = self.clone().id;
+
+        let (trade, state_changes) = self
+            .adapter_contract
+            .clone()
+            .ok_or_else(|| {
+                ProtosimError::UninitializedAdapter(
+                    "Adapter contract must be initialized before setting capabilities".to_string(),
+                )
+            })?
+            .swap(
+                pool_id[2..].to_string(),
+                sell_token.clone().address,
+                buy_token.clone().address,
+                false,
+                sell_amount,
+                self.block.number,
+                Some(overwrites),
+            )
+            .await?;
+
+        let mut new_state = self.clone();
+
+        // Apply state changes to the new state
+        for (address, state_update) in state_changes {
+            if let Some(storage) = state_update.storage {
+                for (slot, value) in storage {
+                    let slot_str = slot.to_string();
+                    let value_str = value.to_string();
+
+                    new_state
+                        .block_lasting_overwrites
+                        .entry(address)
+                        .or_default()
+                        .insert(
+                            U256::from_dec_str(&slot_str).map_err(|_| {
+                                ProtosimError::DecodingError(
+                                    "Failed to decode slot index".to_string(),
+                                )
+                            })?,
+                            U256::from_dec_str(&value_str).map_err(|_| {
+                                ProtosimError::DecodingError(
+                                    "Failed to decode slot overwrite".to_string(),
+                                )
+                            })?,
+                        );
+                }
+            }
+        }
+
+        // Calculate the new price and update marginal prices
+        let new_price = trade.price;
+        if new_price != 0.0f64 {
+            new_state
+                .marginal_prices
+                .insert((sell_token.address, buy_token.address), new_price);
+            new_state
+                .marginal_prices
+                .insert((buy_token.address, sell_token.address), 1.0f64 / new_price);
+        }
+
+        // Convert the received amount to buy token units
+        let buy_amount = trade.received_amount;
+
+        // Return the buy amount, gas used, and the new state
+        Ok((buy_amount, trade.gas_used, new_state))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{
-        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
-        models::ERC20Token,
-        protocol::vm::models::Capability,
-    };
-    use ethers::{
-        prelude::{H256, U256},
-        types::Address as EthAddress,
-    };
-    use serde_json::Value;
     use std::{
         collections::{HashMap, HashSet},
         fs::File,
         path::Path,
         str::FromStr,
     };
+
+    use ethers::{
+        prelude::{H256, U256},
+        types::Address as EthAddress,
+    };
+    use serde_json::Value;
+
+    use crate::{
+        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
+        models::ERC20Token,
+        protocol::vm::models::Capability,
+    };
+
+    use super::*;
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(asset_path)?;
@@ -589,12 +679,45 @@ mod tests {
                 false,
             );
         }
-        let db_write = db.write();
+        let db_write = db.write().await;
         db_write
-            .await
             .update(accounts, Some(block))
             .await;
 
+        let onchain_bytecode = revm::precompile::Bytes::from(ethers::utils::hex::decode("608060405234801561000f575f80fd5b50600436106100a6575f3560e01c8063395093511161006e578063395093511461011f57806370a082311461013257806395d89b411461015a578063a457c2d714610162578063a9059cbb14610175578063dd62ed3e14610188575f80fd5b806306fdde03146100aa578063095ea7b3146100c857806318160ddd146100eb57806323b872dd146100fd578063313ce56714610110575b5f80fd5b6100b261019b565b6040516100bf91906105b9565b60405180910390f35b6100db6100d636600461061f565b61022b565b60405190151581526020016100bf565b6002545b6040519081526020016100bf565b6100db61010b366004610647565b610244565b604051601281526020016100bf565b6100db61012d36600461061f565b610267565b6100ef610140366004610680565b6001600160a01b03165f9081526020819052604090205490565b6100b2610288565b6100db61017036600461061f565b610297565b6100db61018336600461061f565b6102f2565b6100ef6101963660046106a0565b6102ff565b6060600380546101aa906106d1565b80601f01602080910402602001604051908101604052809291908181526020018280546101d6906106d1565b80156102215780601f106101f857610100808354040283529160200191610221565b820191905f5260205f20905b81548152906001019060200180831161020457829003601f168201915b5050505050905090565b5f33610238818585610329565b60019150505b92915050565b5f336102518582856103dc565b61025c85858561043e565b506001949350505050565b5f3361023881858561027983836102ff565b6102839190610709565b610329565b6060600480546101aa906106d1565b5f33816102a482866102ff565b9050838110156102e557604051632983c0c360e21b81526001600160a01b038616600482015260248101829052604481018590526064015b60405180910390fd5b61025c8286868403610329565b5f3361023881858561043e565b6001600160a01b039182165f90815260016020908152604080832093909416825291909152205490565b6001600160a01b0383166103525760405163e602df0560e01b81525f60048201526024016102dc565b6001600160a01b03821661037b57604051634a1406b160e11b81525f60048201526024016102dc565b6001600160a01b038381165f8181526001602090815260408083209487168084529482529182902085905590518481527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a3505050565b5f6103e784846102ff565b90505f198114610438578181101561042b57604051637dc7a0d960e11b81526001600160a01b038416600482015260248101829052604481018390526064016102dc565b6104388484848403610329565b50505050565b6001600160a01b03831661046757604051634b637e8f60e11b81525f60048201526024016102dc565b6001600160a01b0382166104905760405163ec442f0560e01b81525f60048201526024016102dc565b61049b8383836104a0565b505050565b6001600160a01b0383166104ca578060025f8282546104bf9190610709565b9091555061053a9050565b6001600160a01b0383165f908152602081905260409020548181101561051c5760405163391434e360e21b81526001600160a01b038516600482015260248101829052604481018390526064016102dc565b6001600160a01b0384165f9081526020819052604090209082900390555b6001600160a01b03821661055657600280548290039055610574565b6001600160a01b0382165f9081526020819052604090208054820190555b816001600160a01b0316836001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516103cf91815260200190565b5f6020808352835180828501525f5b818110156105e4578581018301518582016040015282016105c8565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b038116811461061a575f80fd5b919050565b5f8060408385031215610630575f80fd5b61063983610604565b946020939093013593505050565b5f805f60608486031215610659575f80fd5b61066284610604565b925061067060208501610604565b9150604084013590509250925092565b5f60208284031215610690575f80fd5b61069982610604565b9392505050565b5f80604083850312156106b1575f80fd5b6106ba83610604565b91506106c860208401610604565b90509250929050565b600181811c908216806106e557607f821691505b60208210810361070357634e487b7160e01b5f52602260045260245ffd5b50919050565b8082018082111561023e57634e487b7160e01b5f52601160045260245ffdfea2646970667358221220dfc123d5852c9246ea16b645b377b4436e2f778438195cc6d6c435e8c73a20e764736f6c63430008140033000000000000000000000000000000000000000000000000000000000000000000")?);
+        let code = Bytecode::new_raw(onchain_bytecode);
+        let contract_acc_info = AccountInfo::new(rU256::from(0), 0, code.hash_slow(), code);
+
+        // Adding permanent storage for balance and approval - necessary for amount out calculation
+        let mut storage = HashMap::default();
+        // balance of EOA
+        storage.insert(
+            rU256::from_str(
+                "110136159478993350616340414857413728709904511599989695046923576775517543504731",
+            )
+            .unwrap(),
+            rU256::from_str("2500000000000000000000000000000000000").unwrap(),
+        );
+        // allowance for Adapter contract to spend EOA's DAI
+        storage.insert(
+            rU256::from_str(
+                "58546993237423525698686728856645416951692145960565761888391937184176623942864",
+            )
+            .unwrap(),
+            rU256::from_str("2500000000000000000000000000000000000").unwrap(),
+        );
+        let dai = ERC20Token::new(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            18,
+            "DAI",
+            U256::from(10_000),
+        );
+        db_write.init_account(
+            rAddress::from_slice(dai.address.as_bytes()),
+            contract_acc_info,
+            Some(storage),
+            true,
+        );
         Ok(())
     }
 
@@ -650,6 +773,7 @@ mod tests {
             HashSet::new(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
             false,
         )
         .await
@@ -702,6 +826,31 @@ mod tests {
             .clone()
             .ensure_capability(Capability::MarginalPrice)
             .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_amount_out() {
+        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
+            .await
+            .unwrap();
+
+        let pool_state = setup_pool_state().await;
+
+        let (amount_out, gas_used, new_state) = pool_state
+            .get_amount_out(
+                pool_state.tokens[0].clone(),
+                U256::from_dec_str("1000000000000000000").unwrap(),
+                pool_state.tokens[1].clone(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(amount_out, U256::from_dec_str("137780051463393923").unwrap());
+        assert_eq!(gas_used, U256::from_dec_str("89623").unwrap());
+        assert_ne!(new_state.marginal_prices, pool_state.marginal_prices);
+        // Assert 3 block lasting overwrites: one for the in token, one for the out token, and one
+        // for the balancer vault.
+        assert_eq!(new_state.block_lasting_overwrites.len(), 3);
     }
 
     #[tokio::test]

@@ -1,6 +1,14 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
+use std::collections::{HashMap, HashSet};
+
+use ethers::{
+    abi::{Address, Token},
+    types::U256,
+};
+use revm::{primitives::Address as rAddress, DatabaseRef};
+
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::vm::{
@@ -8,18 +16,12 @@ use crate::{
         protosim_contract::ProtosimContract,
     },
 };
-use ethers::{
-    abi::{Address, Token},
-    types::U256,
-};
-use revm::{primitives::Address as rAddress, DatabaseRef};
-use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct Trade {
-    received_amount: U256,
-    gas_used: U256,
-    price: f64,
+    pub received_amount: U256,
+    pub gas_used: U256,
+    pub price: f64,
 }
 
 /// An implementation of `ProtosimContract` specific to the `AdapterContract` ABI interface,
@@ -90,17 +92,46 @@ where
         let res = self
             .call("swap", args, block, None, overwrites, None, U256::zero())
             .await?;
-        let received_amount = res.return_value[0]
-            .clone()
-            .into_uint()
-            .unwrap();
-        let gas_used = res.return_value[1]
-            .clone()
-            .into_uint()
-            .unwrap();
-        let price = self
-            .calculate_price(res.return_value[2].clone())
-            .unwrap()[0];
+
+        let (received_amount, gas_used, price) = if let Token::Tuple(return_value) =
+            res.return_value[0].clone()
+        {
+            let received_amount = match &return_value[0] {
+                Token::Uint(amount) => *amount,
+                _ => {
+                    return Err(ProtosimError::DecodingError(
+                        "Expected a uint for received_amount".into(),
+                    ));
+                }
+            };
+
+            let gas_used = match &return_value[1] {
+                Token::Uint(gas) => *gas,
+                _ => {
+                    return Err(ProtosimError::DecodingError("Expected a uint for gas_used".into()));
+                }
+            };
+
+            let price_token = match &return_value[2] {
+                Token::Tuple(elements) => Token::Array(vec![Token::Tuple(elements.clone())]),
+                _ => {
+                    return Err(ProtosimError::DecodingError(
+                        "Expected a tuple for price_token".into(),
+                    ));
+                }
+            };
+            let price = self
+                .calculate_price(price_token)?
+                .first()
+                .cloned()
+                .ok_or(ProtosimError::DecodingError(
+                    "Expected at least one element in the calculated price".into(),
+                ))?;
+
+            Ok((received_amount, gas_used, price))
+        } else {
+            Err(ProtosimError::DecodingError("Expected return_value to be a Token::Tuple".into()))
+        }?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
     }
