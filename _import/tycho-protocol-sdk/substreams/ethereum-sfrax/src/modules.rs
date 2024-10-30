@@ -214,11 +214,17 @@ pub fn map_protocol_changes(
     aggregate_balances_changes(balance_store, deltas)
         .into_iter()
         .for_each(|(_, (tx, balances))| {
-            transaction_contract
+            let tx_change = transaction_contract
                 .entry(tx.index)
-                .or_insert_with(|| TransactionChanges::new(&tx))
-                .balance_changes
-                .extend(balances.into_values());
+                .or_insert_with(|| TransactionChanges::new(&tx));
+
+            balances
+                .into_values()
+                .for_each(|token_bc_map| {
+                    tx_change
+                        .balance_changes
+                        .extend(token_bc_map.into_values());
+                });
         });
 
     extract_contract_changes(
