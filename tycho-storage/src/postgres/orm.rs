@@ -454,7 +454,7 @@ impl PartitionedVersionedRow for NewComponentBalance {
                 component_balance::protocol_component_id
                     .eq_any(&component_ids)
                     .and(component_balance::token_id.eq_any(&token_ids))
-                    .and(component_balance::valid_to.eq(MAX_TS)),
+                    .and(component_balance::valid_to.gt(*MAX_VERSION_TS)),
             )
             .get_results(conn)
             .await
@@ -1076,7 +1076,7 @@ impl PartitionedVersionedRow for NewProtocolState {
                 protocol_state::protocol_component_id
                     .eq_any(&pc_id)
                     .and(protocol_state::attribute_name.eq_any(&attr_name))
-                    .and(protocol_state::valid_to.eq(MAX_TS)),
+                    .and(protocol_state::valid_to.gt(*MAX_VERSION_TS)),
             )
             .get_results(conn)
             .await
@@ -1585,7 +1585,7 @@ impl PartitionedVersionedRow for NewSlot {
                 contract_storage::account_id
                     .eq_any(&accounts)
                     .and(contract_storage::slot.eq_any(&slots))
-                    .and(contract_storage::valid_to.eq(MAX_TS)),
+                    .and(contract_storage::valid_to.gt(*MAX_VERSION_TS)),
             )
             .get_results(conn)
             .await
