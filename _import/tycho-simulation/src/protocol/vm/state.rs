@@ -177,8 +177,12 @@ impl VMPoolState<PreCachedDB> {
                     code_hash: B256::from(keccak256(
                         adapter_contract_code
                             .clone()
-                            .ok_or(ProtosimError::EncodingError("Can't encode code
-hash".into()))?                             .bytes(),
+                            .ok_or(ProtosimError::EncodingError(
+                                "Can't encode code
+hash"
+                                    .into(),
+                            ))?
+                            .bytes(),
                     )),
                     code: adapter_contract_code,
                 },
@@ -238,8 +242,13 @@ hash".into()))?                             .bytes(),
         let method_name = decoded
             .split(':')
             .last()
-            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string
-format".into()))?;
+            .ok_or_else(|| {
+                ProtosimError::DecodingError(
+                    "Invalid decoded string
+format"
+                        .into(),
+                )
+            })?;
 
         let selector = {
             let mut hasher = Keccak256::new();
@@ -251,8 +260,13 @@ format".into()))?;
         let to_address = decoded
             .split(':')
             .nth(1)
-            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string
-format".into()))?;
+            .ok_or_else(|| {
+                ProtosimError::DecodingError(
+                    "Invalid decoded string
+format"
+                        .into(),
+                )
+            })?;
 
         let timestamp = Utc::now()
             .naive_utc()
@@ -308,8 +322,8 @@ format".into()))?;
                     .expect("Adapter contract not set")
                     .price(
                         self.id.clone()[2..].to_string(),
-                        ethers::types::Address::from_slice(&t0.address.0),
-                        ethers::types::Address::from_slice(&t1.address.0),
+                        t0.address,
+                        t1.address,
                         vec![sell_amount_limit],
                         self.block.number,
                         Some(self.block_lasting_overwrites.clone()),
@@ -329,8 +343,8 @@ format".into()))?;
         Ok(())
     }
 
-    async fn get_sell_amount_limit(&self, sell_token: ERC20Token, buy_token: ERC20Token) -> U256
-{         let binding = self
+    async fn get_sell_amount_limit(&self, sell_token: ERC20Token, buy_token: ERC20Token) -> U256 {
+        let binding = self
             .adapter_contract
             .clone()
             .expect("Adapter contract not set");
@@ -340,16 +354,17 @@ format".into()))?;
                 sell_token.address,
                 buy_token.address,
                 self.block.number,
-                Some(
-                    self.get_overwrites(
-                        &sell_token,
-                        &buy_token,
-                        Some(U256::from_big_endian(
-                            &(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>(),
-                        )),
-                    )
-                    .await,
-                ),
+                // Some(
+                //     self.get_overwrites(
+                //         &sell_token,
+                //         &buy_token,
+                //         Some(U256::from_big_endian(
+                //             &(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>(),
+                //         )),
+                //     )
+                //     .await,
+                // ),
+                None,
             )
             .await;
 
@@ -368,8 +383,9 @@ format".into()))?;
             .await;
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
-            let mut overwrites =self.block_lasting_overwrites.clone();
-        // TODO: is this merge enough?? See here for python version protosim_py.python.protosim_py.evm.pool_state._merge
+        let mut overwrites = self.block_lasting_overwrites.clone();
+        // TODO: is this merge enough?? See here for python version
+        // protosim_py.python.protosim_py.evm.pool_state._merge
         for (address, inner_map) in token_overwrites {
             overwrites
                 .entry(address)
@@ -439,13 +455,10 @@ format".into()))?;
 
         for token in &self.tokens {
             let mut overwrites = ERC20OverwriteFactory::new(
-                rAddress::parse_checksummed(String::from(token.address.clone()), None)
-                    .expect("Failed to parse token address"),
-                (SlotHash::from_low_u64_be(0), SlotHash::from_low_u64_be(1)),
+                rAddress::from(token.address.0),
+                (SlotHash::from(0), SlotHash::from(1)),
             );
-            let token_address =
-                rAddress::parse_checksummed(String::from(token.address.clone()), None)
-                    .expect("Failed to parse token address");
+            let token_address = rAddress::from(token.address.0);
             overwrites.set_balance(
                 self.balances
                     .get(&token_address)
@@ -603,16 +616,8 @@ mod tests {
             tokens,
             block,
             HashMap::from([
-                (
-                    rAddress::parse_checksummed(String::from(dai.address.clone()), None)
-                        .expect("Failed to parse sell token address"),
-                    U256::from("178754012737301807104"),
-                ),
-                (
-                    rAddress::parse_checksummed(String::from(bal.address.clone()), None)
-                        .expect("Failed to parse sell token address"),
-                    U256::from("91082987763369885696"),
-                ),
+                (rAddress::from(dai.address.0), U256::from("178754012737301807104")),
+                (rAddress::from(bal.address.0), U256::from("91082987763369885696")),
             ]),
             HashMap::new(),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
