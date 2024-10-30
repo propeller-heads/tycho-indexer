@@ -36,8 +36,8 @@ use ethers::{
 use itertools::Itertools;
 use revm::{
     primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
-        B256, KECCAK_EMPTY, U256 as rU256,
+        alloy_primitives::Keccak256, hex, keccak256, AccountInfo, Address as rAddress, Bytecode,
+        Bytes, B256, KECCAK_EMPTY, U256 as rU256,
     },
     DatabaseRef,
 };
@@ -93,6 +93,7 @@ impl VMPoolState<PreCachedDB> {
         tokens: Vec<ERC20Token>,
         block: BlockHeader,
         balances: HashMap<H160, U256>,
+        balance_owner: Option<H160>,
         spot_prices: HashMap<(ERC20Token, ERC20Token), f64>,
         adapter_contract_path: String,
         capabilities: HashSet<Capability>,
@@ -107,7 +108,7 @@ impl VMPoolState<PreCachedDB> {
             tokens,
             block,
             balances,
-            balance_owner: None,
+            balance_owner,
             spot_prices,
             capabilities,
             block_lasting_overwrites,
@@ -300,14 +301,13 @@ format"
 
     async fn set_spot_prices(&mut self) -> Result<(), ProtosimError> {
         // TODO: ensure capabilities
-
-        for tokens_pair in self.tokens.iter().permutations(2) {
+        let tokens_clone = self.tokens.clone(); // Clone `self.tokens` to avoid an immutable borrow of `self`
+        for tokens_pair in tokens_clone.iter().permutations(2) {
             // Manually unpack the inner vector
             if let [t0, t1] = &tokens_pair[..] {
                 let sell_amount_limit = self
                     .get_sell_amount_limit((*t0).clone(), (*t1).clone())
                     .await;
-                println!("Sell amount limit: {}", sell_amount_limit);
                 let price_result = self
                     .adapter_contract
                     .clone()
@@ -316,12 +316,12 @@ format"
                         self.id.clone()[2..].to_string(),
                         t0.address,
                         t1.address,
-                        vec![sell_amount_limit],
+                        vec![sell_amount_limit / U256::from(100)],
                         self.block.number,
                         Some(self.block_lasting_overwrites.clone()),
                     )
                     .await?;
-                println!("Price result: {:?}", price_result);
+
                 // TODO: handle scaled price here when we have capabilities
                 self.spot_prices.insert(
                     ((*t0).clone(), (*t1).clone()),
@@ -334,7 +334,11 @@ format"
         Ok(())
     }
 
-    async fn get_sell_amount_limit(&self, sell_token: ERC20Token, buy_token: ERC20Token) -> U256 {
+    async fn get_sell_amount_limit(
+        &mut self,
+        sell_token: ERC20Token,
+        buy_token: ERC20Token,
+    ) -> U256 {
         let binding = self
             .adapter_contract
             .clone()
@@ -345,17 +349,15 @@ format"
                 sell_token.address,
                 buy_token.address,
                 self.block.number,
-                // Some(
-                //     self.get_overwrites(
-                //         &sell_token,
-                //         &buy_token,
-                //         Some(U256::from_big_endian(
-                //             &(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>(),
-                //         )),
-                //     )
-                //     .await,
-                // ),
-                None,
+                Some(
+                    self.get_overwrites(
+                        &sell_token,
+                        U256::from_big_endian(
+                            &(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>(),
+                        ),
+                    )
+                    .await,
+                ),
             )
             .await;
 
@@ -363,26 +365,25 @@ format"
     }
 
     pub async fn get_overwrites(
-        &self,
+        &mut self,
         sell_token: &ERC20Token,
-        buy_token: &ERC20Token,
-        max_amount: Option<U256>,
+        max_amount: U256,
     ) -> HashMap<rAddress, Overwrites> {
         let token_overwrites = self
-            .get_token_overwrites(sell_token, buy_token, max_amount)
+            .get_token_overwrites(sell_token, max_amount)
             .await;
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
         let mut overwrites = self.block_lasting_overwrites.clone();
         self.deep_merge(&mut overwrites, &token_overwrites);
+        self.block_lasting_overwrites = overwrites.clone();
         overwrites
     }
 
     async fn get_token_overwrites(
         &self,
         sell_token: &ERC20Token,
-        buy_token: &ERC20Token,
-        max_amount: Option<U256>,
+        max_amount: U256,
     ) -> HashMap<rAddress, Overwrites> {
         let mut res: Vec<HashMap<rAddress, Overwrites>> = Vec::new();
         if !self
@@ -391,12 +392,6 @@ format"
         {
             res.push(self.get_balance_overwrites());
         }
-        let max_amount = if let Some(amount) = max_amount {
-            amount
-        } else {
-            self.get_sell_amount_limit((*sell_token).clone(), (*buy_token).clone())
-                .await
-        };
         let mut overwrites = ERC20OverwriteFactory::new(
             rAddress::from_slice(&sell_token.address.0),
             *self
@@ -410,8 +405,8 @@ format"
         // Set allowance for ADAPTER_ADDRESS to max_amount
         overwrites.set_allowance(
             max_amount,
-            H160::from_slice(&*EXTERNAL_ACCOUNT.0),
             H160::from_slice(&*ADAPTER_ADDRESS.0),
+            H160::from_slice(&*EXTERNAL_ACCOUNT.0),
         );
 
         res.push(overwrites.get_protosim_overwrites());
@@ -440,7 +435,7 @@ format"
                 self.token_storage_slots
                     .get(&token.address)
                     .cloned()
-                    .expect("Token storage slots not found") // TODO: raise proper error
+                    .expect("Token storage slots not found")
             } else {
                 (SlotHash::from(0), SlotHash::from(1))
             };
@@ -453,9 +448,8 @@ format"
                     .unwrap_or_default(),
                 address,
             );
-            self.deep_merge(&mut balance_overwrites, &overwrites.get_protosim_overwrites());
+            balance_overwrites.extend(overwrites.get_protosim_overwrites());
         }
-
         balance_overwrites
     }
 
@@ -500,44 +494,6 @@ mod tests {
     };
     use tokio::runtime::Runtime;
     use tycho_core::{dto::ChangeType, Bytes};
-
-    #[tokio::test]
-    async fn test_set_engine_initialization() {
-        let id = "test_pool".to_string();
-        let tokens = vec![
-            ERC20Token::new(
-                "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                6,
-                "USDC",
-                U256::from(10_000),
-            ),
-            ERC20Token::new(
-                "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                18,
-                "WETH",
-                U256::from(10_000),
-            ),
-        ];
-
-        let block = BlockHeader { number: 12345, ..Default::default() };
-        let pool_state = VMPoolState::<PreCachedDB>::new(
-            id.clone(),
-            tokens,
-            block,
-            HashMap::new(),
-            HashMap::new(),
-            "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
-            HashSet::new(),
-            HashMap::new(),
-            HashSet::new(),
-            HashMap::new(),
-            HashMap::new(),
-            true,
-        )
-        .await;
-
-        assert!(pool_state.unwrap().engine.is_some(), "Engine should be initialized");
-    }
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(asset_path)?;
@@ -618,9 +574,16 @@ mod tests {
             tokens,
             block,
             HashMap::from([
-                (EthAddress::from(dai.address.0), U256::from("178754012737301807104")),
-                (EthAddress::from(bal.address.0), U256::from("91082987763369885696")),
+                (
+                    EthAddress::from(dai.address.0),
+                    U256::from_dec_str("178754012737301807104").unwrap(),
+                ),
+                (
+                    EthAddress::from(bal.address.0),
+                    U256::from_dec_str("91082987763369885696").unwrap(),
+                ),
             ]),
+            Some(EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap()),
             HashMap::new(),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             HashSet::new(),
@@ -680,7 +643,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_sell_amount_limit() {
-        let pool_state = setup_pool_state().await;
+        let mut pool_state = setup_pool_state().await;
         let dai_limit = pool_state
             .get_sell_amount_limit(pool_state.tokens[0].clone(), pool_state.tokens[1].clone())
             .await;

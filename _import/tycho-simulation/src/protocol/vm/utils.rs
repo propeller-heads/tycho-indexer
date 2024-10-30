@@ -169,8 +169,10 @@ pub type SlotHash = U256;
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
 pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
     let mut key_bytes = key.as_bytes().to_vec();
-    key_bytes.resize(32, 0); // Right pad with zeros
-
+    if key_bytes.len() < 32 {
+        let padding = vec![0u8; 32 - key_bytes.len()];
+        key_bytes.splice(0..0, padding); // Prepend zeros to the start
+    }
     let mut mapping_slot_bytes = [0u8; 32];
     mapping_slot.to_big_endian(&mut mapping_slot_bytes);
 

@@ -64,9 +64,6 @@ where
             .call("price", args, block, None, overwrites, None, U256::zero())
             .await?
             .return_value;
-        println!("complete res: {:?}", res);
-        // returning just floats - the python version returns Fractions (not sure why) // TODO:
-        // figure out why.. can we just divide two U256 and it's fine? what about decimals?
         let price = self.calculate_price(res[0].clone())?;
         Ok(price)
     }
