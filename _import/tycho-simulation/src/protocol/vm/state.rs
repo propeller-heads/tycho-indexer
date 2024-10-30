@@ -84,7 +84,6 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<ProtosimContract<D>>,
-    adapter_contract_path: String,
 }
 
 impl VMPoolState<PreCachedDB> {
@@ -107,7 +106,6 @@ impl VMPoolState<PreCachedDB> {
             id,
             tokens,
             block,
-            adapter_contract_path,
             balances,
             balance_owner: None,
             spot_prices,
@@ -121,7 +119,7 @@ impl VMPoolState<PreCachedDB> {
             adapter_contract: None,
         };
         state
-            .set_engine()
+            .set_engine(adapter_contract_path)
             .await
             .expect("Unable to set engine");
         state.adapter_contract = Some(ProtosimContract::new(
@@ -136,7 +134,7 @@ impl VMPoolState<PreCachedDB> {
         Ok(state)
     }
 
-    async fn set_engine(&mut self) -> Result<(), ProtosimError> {
+    async fn set_engine(&mut self, adapter_contract_path: String) -> Result<(), ProtosimError> {
         if self.engine.is_none() {
             let token_addresses = self
                 .tokens
@@ -170,13 +168,7 @@ impl VMPoolState<PreCachedDB> {
                 None,
                 false,
             );
-            let adapter_contract_code = get_contract_bytecode(&self.adapter_contract_path)
-                .map(|bytecode_vec| Some(Bytecode::new_raw(bytecode_vec.into())))
-                .map_err(|_| {
-                    ProtosimError::DecodingError(
-                        "Error in converting adapter contract bytecode".into(),
-                    )
-                })?;
+            let adapter_contract_code = get_contract_bytecode(&adapter_contract_path)?;
 
             engine.state.init_account(
                 rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
@@ -184,46 +176,36 @@ impl VMPoolState<PreCachedDB> {
                 AccountInfo {
                     balance: *MAX_BALANCE,
                     nonce: 0,
-                    code_hash: B256::from(keccak256(
-                        adapter_contract_code
-                            .clone()
-                            .ok_or(ProtosimError::EncodingError(
-                                "Can't encode code
-hash"
-                                    .into(),
-                            ))?
-                            .bytes(),
-                    )),
-                    code: adapter_contract_code,
+                    code_hash: B256::from(keccak256(adapter_contract_code.clone().bytes())),
+                    code: Some(adapter_contract_code),
                 },
                 None,
                 false,
             );
 
             for (address, bytecode) in self.stateless_contracts.iter() {
-                let code: &Option<Vec<u8>> = if bytecode.is_none() {
+                let (code, code_hash) = if bytecode.is_none() {
                     let addr_str = format!("{:?}", address);
                     if addr_str.starts_with("call") {
-                        let addr = self.get_address_from_call(&engine, &addr_str);
-                        &get_code_for_address(&addr?.to_string(), None).await?
+                        let addr = self.get_address_from_call(&engine, &addr_str)?;
+                        let code = get_code_for_address(&addr.to_string(), None).await?;
+                        let code_hash = B256::from(keccak256(code.clone().bytes()));
+                        (Some(code), code_hash)
                     } else {
-                        bytecode
+                        (None, KECCAK_EMPTY)
                     }
                 } else {
-                    bytecode
+                    let code = Bytecode::new_raw(Bytes::from(
+                        bytecode
+                            .clone()
+                            .expect("Expected bytecode"),
+                    ));
+                    let code_hash = B256::from(keccak256(code.clone().bytes()));
+                    (Some(code), code_hash)
                 };
                 engine.state.init_account(
                     address.parse().unwrap(),
-                    AccountInfo {
-                        balance: Default::default(),
-                        nonce: 0,
-                        code_hash: B256::from(keccak256(&code.clone().ok_or(
-                            ProtosimError::EncodingError("Can't encode code hash".into()),
-                        )?)),
-                        code: code
-                            .clone()
-                            .map(|vec| Bytecode::new_raw(Bytes::from(vec))),
-                    },
+                    AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
                 );

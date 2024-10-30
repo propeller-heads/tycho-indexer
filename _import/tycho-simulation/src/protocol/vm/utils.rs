@@ -15,6 +15,7 @@ use crate::{
     protocol::vm::errors::{FileError, RpcError},
 };
 use ethers::types::U256;
+use revm::primitives::{Bytecode, Bytes};
 use std::{
     collections::HashMap,
     env,
@@ -195,7 +196,7 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
 pub async fn get_code_for_address(
     address: &str,
     connection_string: Option<String>,
-) -> Result<Option<Vec<u8>>, RpcError> {
+) -> Result<Bytecode, RpcError> {
     // Get the connection string, defaulting to the RPC_URL environment variable
     let connection_string = connection_string.or_else(|| env::var("RPC_URL").ok());
 
@@ -219,8 +220,11 @@ pub async fn get_code_for_address(
 
     // Call eth_getCode to get the bytecode of the contract
     match provider.get_code(addr, None).await {
-        Ok(code) if code.is_empty() => Ok(None),
-        Ok(code) => Ok(Some(code.to_vec())),
+        Ok(code) if code.is_empty() => Err(RpcError::EmptyResponse()),
+        Ok(code) => {
+            let bytecode = Bytecode::new_raw(Bytes::from(code.to_vec()));
+            Ok(bytecode)
+        }
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
             Err(RpcError::InvalidResponse(e))
@@ -228,22 +232,23 @@ pub async fn get_code_for_address(
     }
 }
 
-static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Vec<u8>>> = LazyLock::new(|| Cache::new(1_000));
+static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Bytecode>> = LazyLock::new(|| Cache::new(1_000));
 
-pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
+pub fn get_contract_bytecode(path: &str) -> Result<Bytecode, FileError> {
     if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string())) {
-        return Ok(bytecode.clone());
+        return Ok(bytecode);
     }
 
-    let mut file = File::open(Path::new(path))?;
+    let mut file = File::open(Path::new(path)).map_err(FileError::Io)?;
     let mut code = Vec::new();
+    file.read_to_end(&mut code)
+        .map_err(FileError::Io)?;
 
-    file.read_to_end(&mut code)?;
-    BYTECODE_CACHE.insert(Arc::new(path.to_string()), code.clone());
+    let bytecode = Bytecode::new_raw(code.into()); // Construct `Bytecode` from `Vec<u8>`
+    BYTECODE_CACHE.insert(Arc::new(path.to_string()), bytecode.clone());
 
-    Ok(code)
+    Ok(bytecode)
 }
-
 pub fn load_swap_abi() -> Result<Abi, FileError> {
     let swap_abi_path = Path::new(file!())
         .parent()
@@ -296,15 +301,8 @@ mod tests {
 
         assert!(result.is_ok(), "Network call should not fail");
 
-        let code_bytes = result.unwrap();
-        match code_bytes {
-            Some(bytes) => {
-                assert!(!bytes.is_empty(), "Code should not be empty");
-            }
-            None => {
-                panic!("There should be some code for the address");
-            }
-        }
+        let code = result.unwrap();
+        assert!(!code.bytes().is_empty(), "Code should not be empty");
     }
 
     #[test]
@@ -427,13 +425,13 @@ mod tests {
 
         // First call to get_contract_bytecode
         let result1 = get_contract_bytecode(temp_path).unwrap();
-        assert_eq!(result1, test_data);
+        assert_eq!(result1, Bytecode::new_raw(test_data.into()));
 
         // Second call to get_contract_bytecode (should use cached data)
         // Verify that the cache was used (file is not read twice)
         remove_file(&temp_file).unwrap(); // This removes the temporary file
         let result2 = get_contract_bytecode(temp_path).unwrap();
-        assert_eq!(result2, test_data);
+        assert_eq!(result2, Bytecode::new_raw(test_data.into()));
     }
 
     #[test]

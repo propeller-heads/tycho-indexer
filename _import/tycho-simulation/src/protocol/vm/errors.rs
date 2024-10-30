@@ -77,6 +77,8 @@ pub enum RpcError {
     InvalidRequest(String),
     #[error("Invalid Response: {0}")]
     InvalidResponse(ProviderError),
+    #[error("Empty Response")]
+    EmptyResponse(),
 }
 
 impl From<RpcError> for ProtosimError {

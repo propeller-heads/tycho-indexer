@@ -85,17 +85,12 @@ impl ERC20OverwriteFactory {
             .join("assets")
             .join("ERC20.abi");
 
-        let code = format!(
-            "0x{}",
-            hex::encode(
-                get_contract_bytecode(erc20_abi_path.to_str().ok_or_else(|| {
-                    FileError::FilePath("Failed to convert file path to string.".to_string())
-                })?)
-                .map_err(|_err| FileError::MalformedABI(
-                    "Failed to read contract bytecode.".to_string()
-                ))?
-            )
-        );
+        let contract_bytecode =
+            get_contract_bytecode(erc20_abi_path.to_str().ok_or_else(|| {
+                FileError::FilePath("Failed to convert file path to string.".to_string())
+            })?)?;
+
+        let code = format!("0x{}", hex::encode(contract_bytecode.bytes()));
 
         let mut result = HashMap::new();
         result.insert(self.token_address, GethOverwrite { state_diff: formatted_overwrites, code });
