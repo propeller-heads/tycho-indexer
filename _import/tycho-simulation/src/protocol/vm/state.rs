@@ -1,25 +1,7 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
-use std::collections::{HashMap, HashSet};
-
-use chrono::Utc;
-use ethers::{
-    abi::{decode, ParamType},
-    prelude::U256,
-    types::H160,
-    utils::to_checksum,
-};
-use revm::{
-    precompile::{Address, Bytes},
-    primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
-    },
-    DatabaseRef,
-};
 use tracing::warn;
-
-use itertools::Itertools;
 
 use crate::{
     evm::{
@@ -32,7 +14,6 @@ use crate::{
         constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
         engine::{create_engine, SHARED_TYCHO_DB},
         errors::ProtosimError,
-        models::Capability,
         protosim_contract::ProtosimContract,
         utils::{get_code_for_address, get_contract_bytecode},
     },
@@ -44,28 +25,21 @@ use crate::protocol::vm::{
     utils::SlotHash,
 };
 use chrono::Utc;
-use ethabi::Hash;
 use ethers::{
-    abi::{decode, Address as EthAddress, ParamType},
+    abi::{decode, ParamType},
     prelude::U256,
-    types::{Res, H160},
+    types::H160,
     utils::to_checksum,
 };
 use itertools::Itertools;
 use revm::{
     primitives::{
-        alloy_primitives::Keccak256, hex, keccak256, AccountInfo, Address as rAddress, Bytecode,
-        Bytes, B256, KECCAK_EMPTY, U256 as rU256,
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
+        B256, KECCAK_EMPTY, U256 as rU256,
     },
     DatabaseRef,
 };
-use std::{
-    cmp::max,
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    sync::Arc,
-};
-use tokio::sync::RwLock;
+use std::collections::{HashMap, HashSet};
 
 // Necessary for the init_account method to be in scope
 #[allow(unused_imports)]
@@ -103,8 +77,6 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
     /// If set, vm will emit detailed traces about the execution
     pub trace: bool,
-    /// The supported capabilities of this pool
-    pub capabilities: HashSet<Capability>,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<ProtosimContract<D>>,
@@ -142,7 +114,6 @@ impl VMPoolState<PreCachedDB> {
             trace,
             engine: None,
             adapter_contract: None,
-            capabilities: HashSet::new(),
         };
         state
             .set_engine(adapter_contract_path)
@@ -380,7 +351,7 @@ format"
     }
 
     async fn set_spot_prices(&mut self) -> Result<(), ProtosimError> {
-        // TODO: ensure capabilities
+        self.ensure_capability(Capability::PriceFunction)?;
         let tokens_clone = self.tokens.clone(); // Clone `self.tokens` to avoid an immutable borrow of `self`
         for tokens_pair in tokens_clone.iter().permutations(2) {
             // Manually unpack the inner vector
@@ -553,16 +524,11 @@ mod tests {
     use crate::{
         evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
         models::ERC20Token,
-        protocol::{
-            vm::{models::Capability, utils::maybe_coerce_error},
-            BytesConvertible,
-        },
+        protocol::vm::models::Capability,
     };
     use ethers::{
-        core::k256::elliptic_curve::consts::U25,
         prelude::{H256, U256},
         types::Address as EthAddress,
-        utils::hex::traits::FromHex,
     };
     use serde_json::Value;
     use std::{
@@ -571,17 +537,6 @@ mod tests {
         path::Path,
         str::FromStr,
     };
-
-    use ethers::prelude::{H256, U256};
-    use serde_json::Value;
-
-    use crate::{
-        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
-        models::ERC20Token,
-        protocol::vm::models::Capability,
-    };
-
-    use super::*;
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(asset_path)?;
@@ -693,8 +648,6 @@ mod tests {
 
         let pool_state = setup_pool_state().await;
 
-        let pool_state_initialized = pool_state.unwrap();
-
         let expected_capabilities = vec![
             Capability::SellSide,
             Capability::BuySide,
@@ -704,7 +657,7 @@ mod tests {
         .into_iter()
         .collect::<HashSet<_>>();
 
-        let capabilities_adapter_contract = pool_state_initialized
+        let capabilities_adapter_contract = pool_state
             .clone()
             .adapter_contract
             .unwrap()
@@ -718,24 +671,21 @@ mod tests {
 
         assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());
 
-        let capabilities_state = pool_state_initialized
-            .clone()
-            .capabilities;
+        let capabilities_state = pool_state.clone().capabilities;
 
         assert_eq!(capabilities_state, expected_capabilities.clone());
 
         for capability in expected_capabilities.clone() {
-            assert!(pool_state_initialized
+            assert!(pool_state
                 .clone()
                 .ensure_capability(capability)
                 .is_ok());
         }
 
-        assert!(pool_state_initialized
+        assert!(pool_state
             .clone()
             .ensure_capability(Capability::MarginalPrice)
             .is_err());
-
 
         let dai_bal_spot_price = pool_state
             .spot_prices
