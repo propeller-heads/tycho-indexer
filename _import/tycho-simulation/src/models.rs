@@ -6,7 +6,11 @@
 //! ERC20Tokens provide instructions on how to handle prices and amounts,
 //! while Swap and SwapSequence are usually used as results types.
 
-use std::{convert::TryFrom, str::FromStr};
+use std::{
+    convert::TryFrom,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
 
 use ethers::types::{H160, U256};
 use serde::{Deserialize, Serialize};
@@ -14,7 +18,7 @@ use tycho_core::dto::ResponseToken;
 
 use crate::protocol::BytesConvertible;
 
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
     /// The address of the token on the blockchain network
     pub address: H160,
@@ -67,6 +71,12 @@ impl PartialOrd for ERC20Token {
 impl PartialEq for ERC20Token {
     fn eq(&self, other: &Self) -> bool {
         self.address == other.address
+    }
+}
+
+impl Hash for ERC20Token {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.address.hash(state);
     }
 }
 

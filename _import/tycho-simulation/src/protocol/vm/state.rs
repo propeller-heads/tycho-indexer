@@ -35,10 +35,9 @@ use ethers::{
 };
 use itertools::Itertools;
 use revm::{
-    precompile::{Address, Bytes},
     primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, B256,
-        KECCAK_EMPTY, U256 as rU256,
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
+        B256, KECCAK_EMPTY, U256 as rU256,
     },
     DatabaseRef,
 };
@@ -59,7 +58,7 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The current block, will be used to set vm context
     pub block: BlockHeader,
     /// The pools token balances
-    pub balances: HashMap<rAddress, U256>,
+    pub balances: HashMap<H160, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
     /// If given, balances will be overwritten here instead of on the pool contract during
     /// simulations
@@ -71,6 +70,12 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// Storage overwrites that will be applied to all simulations. They will be cleared
     //  when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
     pub block_lasting_overwrites: HashMap<rAddress, Overwrites>,
+    /// A set of all contract addresses involved in the simulation of this pool."""
+    pub involved_contracts: HashSet<H160>,
+    /// Allows the specification of custom storage slots for token allowances and
+    /// balances. This is particularly useful for token contracts involved in protocol
+    /// logic that extends beyond simple transfer functionality.
+    pub token_storage_slots: HashMap<H160, (SlotHash, SlotHash)>,
     /// The address to bytecode map of all stateless contracts used by the protocol
     /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
@@ -83,15 +88,18 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
 }
 
 impl VMPoolState<PreCachedDB> {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         id: String,
         tokens: Vec<ERC20Token>,
         block: BlockHeader,
-        balances: HashMap<rAddress, U256>,
+        balances: HashMap<H160, U256>,
         spot_prices: HashMap<(ERC20Token, ERC20Token), f64>,
         adapter_contract_path: String,
         capabilities: HashSet<Capability>,
         block_lasting_overwrites: HashMap<rAddress, Overwrites>,
+        involved_contracts: HashSet<H160>,
+        token_storage_slots: HashMap<H160, (SlotHash, SlotHash)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
     ) -> Result<Self, ProtosimError> {
@@ -105,6 +113,8 @@ impl VMPoolState<PreCachedDB> {
             spot_prices,
             capabilities,
             block_lasting_overwrites,
+            involved_contracts,
+            token_storage_slots,
             stateless_contracts,
             trace,
             engine: None,
@@ -122,7 +132,7 @@ impl VMPoolState<PreCachedDB> {
                 .expect("Engine not set"),
         )?);
         state.set_spot_prices().await?;
-
+        // TODO: add init_token_storage_slots() in 3796
         Ok(state)
     }
 
@@ -149,7 +159,7 @@ impl VMPoolState<PreCachedDB> {
                 false,
             );
             engine.state.init_account(
-                Address::parse_checksummed("0x0000000000000000000000000000000000000004", None)
+                rAddress::parse_checksummed("0x0000000000000000000000000000000000000004", None)
                     .expect("Invalid checksum for external account address"),
                 AccountInfo {
                     balance: Default::default(),
@@ -169,7 +179,7 @@ impl VMPoolState<PreCachedDB> {
                 })?;
 
             engine.state.init_account(
-                Address::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
+                rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
                     .expect("Invalid checksum for external account address"),
                 AccountInfo {
                     balance: *MAX_BALANCE,
@@ -238,7 +248,7 @@ hash"
         &self,
         engine: &SimulationEngine<PreCachedDB>,
         decoded: &str,
-    ) -> Result<Address, ProtosimError> {
+    ) -> Result<rAddress, ProtosimError> {
         let method_name = decoded
             .split(':')
             .last()
@@ -273,7 +283,7 @@ format"
             .and_utc()
             .timestamp() as u64;
 
-        let parsed_address: Address = to_address
+        let parsed_address: rAddress = to_address
             .parse()
             .map_err(|_| ProtosimError::DecodingError("Invalid address format".into()))?;
 
@@ -333,10 +343,9 @@ format"
                 // TODO: handle scaled price here when we have capabilities
                 self.spot_prices.insert(
                     ((*t0).clone(), (*t1).clone()),
-                    price_result
+                    *price_result
                         .first()
-                        .expect("Expected a u64")
-                        .clone(),
+                        .expect("Expected a u64"),
                 );
             }
         }
@@ -368,8 +377,7 @@ format"
             )
             .await;
 
-        let sell_amount_limit = limits.expect("Expected a (u64, u64)").0;
-        sell_amount_limit
+        limits.expect("Expected a (u64, u64)").0
     }
 
     pub async fn get_overwrites(
@@ -384,14 +392,7 @@ format"
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
         let mut overwrites = self.block_lasting_overwrites.clone();
-        // TODO: is this merge enough?? See here for python version
-        // protosim_py.python.protosim_py.evm.pool_state._merge
-        for (address, inner_map) in token_overwrites {
-            overwrites
-                .entry(address)
-                .or_insert_with(HashMap::new)
-                .extend(inner_map)
-        }
+        self.deep_merge(&mut overwrites, &token_overwrites);
         overwrites
     }
 
@@ -408,16 +409,18 @@ format"
         {
             res.push(self.get_balance_overwrites());
         }
-        let max_amount = if max_amount.is_none() {
+        let max_amount = if let Some(amount) = max_amount {
+            amount
+        } else {
             self.get_sell_amount_limit((*sell_token).clone(), (*buy_token).clone())
                 .await
-        } else {
-            max_amount.expect("Failed to get max amount")
         };
-
         let mut overwrites = ERC20OverwriteFactory::new(
             rAddress::from_slice(&sell_token.address.0),
-            (SlotHash::from(0), SlotHash::from(1)),
+            *self
+                .token_storage_slots
+                .get(&sell_token.address)
+                .unwrap_or(&(SlotHash::from(0), SlotHash::from(1))),
         );
 
         overwrites.set_balance(max_amount, H160::from_slice(&*EXTERNAL_ACCOUNT.0));
@@ -432,44 +435,59 @@ format"
         res.push(overwrites.get_protosim_overwrites());
 
         // Merge all overwrites into a single HashMap
-        // TODO: is this merge enough?? See here for python version
-        // protosim_py.python.protosim_py.evm.pool_state._merge
         res.into_iter()
             .fold(HashMap::new(), |mut acc, overwrite| {
-                for (address, inner_map) in overwrite {
-                    acc.entry(address)
-                        .or_insert_with(HashMap::new)
-                        .extend(inner_map);
-                }
+                self.deep_merge(&mut acc, &overwrite);
                 acc
             })
     }
 
     fn get_balance_overwrites(&self) -> HashMap<rAddress, Overwrites> {
         let mut balance_overwrites: HashMap<rAddress, Overwrites> = HashMap::new();
-        let address = self.balance_owner.unwrap_or(
+        let address = self.balance_owner.unwrap_or_else(|| {
             self.id
                 .parse()
-                .expect("Pool ID is not an address"),
-        );
+                .expect("Pool ID is not an address")
+        });
 
         for token in &self.tokens {
-            let mut overwrites = ERC20OverwriteFactory::new(
-                rAddress::from(token.address.0),
-                (SlotHash::from(0), SlotHash::from(1)),
-            );
-            let token_address = rAddress::from(token.address.0);
+            let slots = if self
+                .involved_contracts
+                .contains(&token.address)
+            {
+                self.token_storage_slots
+                    .get(&token.address)
+                    .cloned()
+                    .expect("Token storage slots not found") // TODO: raise proper error
+            } else {
+                (SlotHash::from(0), SlotHash::from(1))
+            };
+
+            let mut overwrites = ERC20OverwriteFactory::new(rAddress::from(token.address.0), slots);
             overwrites.set_balance(
                 self.balances
-                    .get(&token_address)
+                    .get(&token.address)
                     .cloned()
                     .unwrap_or_default(),
                 address,
             );
-            balance_overwrites.extend(overwrites.get_protosim_overwrites());
+            self.deep_merge(&mut balance_overwrites, &overwrites.get_protosim_overwrites());
         }
 
         balance_overwrites
+    }
+
+    fn deep_merge(
+        &self,
+        target: &mut HashMap<rAddress, Overwrites>,
+        source: &HashMap<rAddress, Overwrites>,
+    ) {
+        for (key, source_inner) in source {
+            target
+                .entry(*key)
+                .or_default()
+                .extend(source_inner.clone());
+        }
     }
 }
 
@@ -527,6 +545,8 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
+            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
             HashMap::new(),
             HashMap::new(),
@@ -616,11 +636,13 @@ mod tests {
             tokens,
             block,
             HashMap::from([
-                (rAddress::from(dai.address.0), U256::from("178754012737301807104")),
-                (rAddress::from(bal.address.0), U256::from("91082987763369885696")),
+                (EthAddress::from(dai.address.0), U256::from("178754012737301807104")),
+                (EthAddress::from(bal.address.0), U256::from("91082987763369885696")),
             ]),
             HashMap::new(),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
+            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
             HashMap::new(),
             HashMap::new(),
@@ -670,8 +692,8 @@ mod tests {
             .spot_prices
             .get(&(pool_state.tokens[1].clone(), pool_state.tokens[0].clone()))
             .unwrap();
-        assert_eq!(*dai_bal_spot_price, 0.1377789143190479049114331557);
-        assert_eq!(*bal_dai_spot_price, 7.071503245428245871486924221);
+        assert_eq!(*dai_bal_spot_price, 0.137_778_914_319_047_9);
+        assert_eq!(*bal_dai_spot_price, 7.071_503_245_428_246);
     }
 
     #[tokio::test]
