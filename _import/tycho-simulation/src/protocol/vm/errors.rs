@@ -1,10 +1,12 @@
 // TODO: remove skips for clippy
 
-use crate::evm::simulation::SimulationError;
+use std::io;
+
 use ethers::prelude::ProviderError;
 use serde_json::Error as SerdeError;
-use std::io;
 use thiserror::Error;
+
+use crate::evm::simulation::SimulationError;
 
 /// Represents the outer-level, user-facing errors of the Protosim package.
 ///
@@ -20,6 +22,9 @@ use thiserror::Error;
 /// - `RPCError`: Indicates an error related to RPC interaction.
 /// - `UnsupportedCapability`: Denotes an error when a pool state does not support a necessary
 ///   capability.
+/// - `UninitializedAdapter`: Indicates an error when trying to set capabilities before initializing
+///   the adapter.
+/// - `CapabilityRetrievalFailure`: Indicates an error when trying to retrieve capabilities.
 #[derive(Error, Debug)]
 pub enum ProtosimError {
     #[error("ABI loading error: {0}")]
@@ -34,6 +39,8 @@ pub enum ProtosimError {
     RpcError(RpcError),
     #[error("Unsupported Capability: {0}")]
     UnsupportedCapability(String),
+    #[error("Adapter not initialized: {0}")]
+    UninitializedAdapter(String),
 }
 
 #[derive(Debug, Error)]

@@ -1,10 +1,28 @@
-// Necessary for the init_account method to be in scope
-#![allow(unused_imports)]
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
+
+use std::collections::{HashMap, HashSet};
+
+use chrono::Utc;
+use ethers::{
+    abi::{decode, ParamType},
+    prelude::U256,
+    types::H160,
+    utils::to_checksum,
+};
+use revm::{
+    DatabaseRef,
+    precompile::{Address, Bytes},
+    primitives::{
+        AccountInfo, alloy_primitives::Keccak256, B256, Bytecode, keccak256, KECCAK_EMPTY,
+    },
+};
+use tracing::warn;
+
+use itertools::Itertools;
+
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters},
         simulation_db::BlockHeader,
         tycho_db::PreCachedDB,
@@ -19,27 +37,10 @@ use crate::{
         utils::{get_code_for_address, get_contract_bytecode},
     },
 };
-use chrono::Utc;
-use ethers::{
-    abi::{decode, Address as EthAddress, ParamType},
-    prelude::U256,
-    types::{Res, H160},
-    utils::to_checksum,
-};
-use itertools::Itertools;
-use revm::{
-    precompile::{Address, Bytes},
-    primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
-    },
-    DatabaseRef,
-};
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    sync::Arc,
-};
-use tokio::sync::RwLock;
+// Necessary for the init_account method to be in scope
+#[allow(unused_imports)]
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
+
 #[derive(Clone)]
 pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The pool's identifier
@@ -101,7 +102,7 @@ impl VMPoolState<PreCachedDB> {
                 .clone()
                 .expect("Engine not set"),
         )?);
-        state.set_capabilities().await;
+        state.set_capabilities().await?;
         Ok(state)
     }
 
@@ -276,7 +277,8 @@ impl VMPoolState<PreCachedDB> {
         }
         Ok(())
     }
-    async fn set_capabilities(&mut self) {
+
+    async fn set_capabilities(&mut self) -> Result<(), ProtosimError> {
         let mut capabilities = Vec::new();
 
         // Generate all permutations of tokens and retrieve capabilities
@@ -286,10 +288,14 @@ impl VMPoolState<PreCachedDB> {
                 let caps = self
                     .adapter_contract
                     .clone()
-                    .expect("Adapter contract not initialized")
+                    .ok_or_else(|| {
+                        ProtosimError::UninitializedAdapter(
+                            "Adapter contract must be initialized before setting capabilities"
+                                .to_string(),
+                        )
+                    })?
                     .get_capabilities(self.id.clone()[2..].to_string(), t0.address, t1.address)
-                    .await
-                    .expect("Failed to get capabilities");
+                    .await?;
                 capabilities.push(caps);
             }
         }
@@ -310,40 +316,34 @@ impl VMPoolState<PreCachedDB> {
 
         // Check for mismatches in capabilities
         if self.capabilities.len() < max_capabilities {
-            println!(
+            warn!(
                 "Warning: Pool {} has different capabilities depending on the token pair!",
                 self.id
             );
         }
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{
-        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
-        models::ERC20Token,
-        protocol::{
-            vm::{models::Capability, utils::maybe_coerce_error},
-            BytesConvertible,
-        },
-    };
-    use ethers::{
-        prelude::{H256, U256},
-        types::Address as EthAddress,
-        utils::hex::traits::FromHex,
-    };
-    use serde_json::Value;
     use std::{
         collections::{HashMap, HashSet},
         fs::File,
-        io::Read,
         path::Path,
         str::FromStr,
     };
-    use tokio::runtime::Runtime;
-    use tycho_core::{dto::ChangeType, Bytes};
+
+    use ethers::prelude::{H256, U256};
+    use serde_json::Value;
+
+    use crate::{
+        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
+        models::ERC20Token,
+        protocol::vm::models::Capability,
+    };
+
+    use super::*;
 
     #[tokio::test]
     async fn test_set_engine_initialization() {

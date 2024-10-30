@@ -1,26 +1,26 @@
-// Necessary for the init_account method to be in scope
-#![allow(unused_imports)]
 use std::collections::HashMap;
 
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::TraceKind;
 use revm::{
     db::DatabaseRef,
+    Evm,
     inspector_handle_register,
-    interpreter::{return_ok, InstructionResult},
+    interpreter::{InstructionResult, return_ok},
     primitives::{
-        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output,
+        Address, BlockEnv, bytes, EVMError, EVMResult, EvmState, ExecutionResult, Output,
         ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
     },
-    Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
 use tokio::runtime::Runtime;
 use tracing::debug;
 
+// Necessary for the init_account method to be in scope
+#[allow(unused_imports)]
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use crate::evm::simulation_db::OverriddenSimulationDB;
 
 use super::{
@@ -373,9 +373,9 @@ mod tests {
         types::U256,
     };
     use revm::primitives::{
-        bytes, hex, Account, AccountInfo, AccountStatus, Address, Bytecode, Bytes,
-        EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, InvalidTransaction,
-        OutOfGasError, Output, ResultAndState, SuccessReason, B256,
+        Account, AccountInfo, AccountStatus, Address, B256, Bytecode, bytes, Bytes,
+        EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, hex,
+        InvalidTransaction, OutOfGasError, Output, ResultAndState, SuccessReason,
     };
 
     use crate::evm::simulation_db;
