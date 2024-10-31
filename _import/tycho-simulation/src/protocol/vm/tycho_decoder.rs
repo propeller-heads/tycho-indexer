@@ -60,7 +60,10 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             .get("balance_owner")
             .map(H160::from_bytes);
 
-        // TODO: look into missing attributes: manual_updates
+        let manual_updates = snapshot
+            .state
+            .attributes
+            .contains_key("manual_updates");
 
         let pool_state = VMPoolState::new(
             id,
@@ -70,6 +73,7 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             balance_owner,
             "todo".to_string(), // TODO: map for adapter paths needed
             HashMap::new(),     // TODO: implement decoding stateless contracts
+            manual_updates,
             false,
         )
         .await

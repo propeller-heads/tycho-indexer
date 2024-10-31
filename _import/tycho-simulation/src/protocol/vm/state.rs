@@ -89,6 +89,10 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
     /// If set, vm will emit detailed traces about the execution
     pub trace: bool,
+    /// Indicates if the protocol uses custom update rules and requires update
+    /// triggers to recalculate spot prices ect. Default is to update on all changes on
+    /// the pool.
+    manual_updates: bool,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<TychoSimulationContract<D>>,
@@ -108,6 +112,7 @@ impl VMPoolState<PreCachedDB> {
         involved_contracts: HashSet<H160>,
         token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
+        manual_updates: bool,
         trace: bool,
     ) -> Result<Self, TychoSimulationError> {
         let mut state = VMPoolState {
@@ -125,6 +130,7 @@ impl VMPoolState<PreCachedDB> {
             trace,
             engine: None,
             adapter_contract: None,
+            manual_updates,
         };
         state
             .set_engine(adapter_contract_path)
@@ -710,6 +716,7 @@ mod tests {
             HashSet::new(),
             HashMap::new(),
             HashMap::new(),
+            false,
             false,
         )
         .await
