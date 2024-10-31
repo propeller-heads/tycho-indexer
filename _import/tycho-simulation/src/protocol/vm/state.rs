@@ -117,14 +117,13 @@ impl VMPoolState<PreCachedDB> {
         };
         state
             .set_engine(adapter_contract_path)
-            .await
-            .expect("Unable to set engine");
+            .await?;
         state.adapter_contract = Some(ProtosimContract::new(
             *ADAPTER_ADDRESS,
             state
                 .engine
                 .clone()
-                .expect("Engine not set"),
+                .ok_or_else(ProtosimError::EngineNotSet)?,
         )?);
         state.set_capabilities().await?;
         state.set_spot_prices().await?;
@@ -183,21 +182,20 @@ impl VMPoolState<PreCachedDB> {
 
             for (address, bytecode) in self.stateless_contracts.iter() {
                 let (code, code_hash) = if bytecode.is_none() {
-                    let addr_str = format!("{:?}", address);
+                    let mut addr_str = format!("{:?}", address);
                     if addr_str.starts_with("call") {
-                        let addr = self.get_address_from_call(&engine, &addr_str)?;
-                        let code = get_code_for_address(&addr.to_string(), None).await?;
-                        let code_hash = B256::from(keccak256(code.clone().bytes()));
-                        (Some(code), code_hash)
-                    } else {
-                        (None, KECCAK_EMPTY)
+                        addr_str = self
+                            .get_address_from_call(&engine, &addr_str)?
+                            .to_string();
                     }
+                    let code = get_code_for_address(&addr_str, None).await?;
+                    let code_hash = B256::from(keccak256(code.clone().bytes()));
+                    (Some(code), code_hash)
                 } else {
-                    let code = Bytecode::new_raw(Bytes::from(
-                        bytecode
-                            .clone()
-                            .expect("Expected bytecode"),
-                    ));
+                    let code =
+                        Bytecode::new_raw(Bytes::from(bytecode.clone().ok_or_else(|| {
+                            ProtosimError::DecodingError("Expected bytecode".into())
+                        })?));
                     let code_hash = B256::from(keccak256(code.clone().bytes()));
                     (Some(code), code_hash)
                 };
@@ -232,13 +230,7 @@ impl VMPoolState<PreCachedDB> {
         let method_name = decoded
             .split(':')
             .last()
-            .ok_or_else(|| {
-                ProtosimError::DecodingError(
-                    "Invalid decoded string
-format"
-                        .into(),
-                )
-            })?;
+            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string format".into()))?;
 
         let selector = {
             let mut hasher = Keccak256::new();
@@ -250,13 +242,7 @@ format"
         let to_address = decoded
             .split(':')
             .nth(1)
-            .ok_or_else(|| {
-                ProtosimError::DecodingError(
-                    "Invalid decoded string
-format"
-                        .into(),
-                )
-            })?;
+            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string format".into()))?;
 
         let timestamp = Utc::now()
             .naive_utc()
@@ -282,8 +268,7 @@ format"
             .simulate(&sim_params)
             .map_err(ProtosimError::SimulationFailure)?;
 
-        let address = decode(&[ParamType::Address], &sim_result.result)
-            .expect("Decoding failed")
+        let address = decode(&[ParamType::Address], &sim_result.result)?
             .into_iter()
             .next()
             .ok_or_else(|| {
@@ -358,11 +343,16 @@ format"
             if let [t0, t1] = &tokens_pair[..] {
                 let sell_amount_limit = self
                     .get_sell_amount_limit((*t0).clone(), (*t1).clone())
-                    .await;
+                    .await?;
                 let price_result = self
                     .adapter_contract
                     .clone()
-                    .expect("Adapter contract not set")
+                    .ok_or_else(|| {
+                        ProtosimError::UninitializedAdapter(
+                            "Adapter contract must be initialized before setting capabilities"
+                                .to_string(),
+                        )
+                    })?
                     .price(
                         self.id.clone()[2..].to_string(),
                         t0.address,
@@ -376,9 +366,9 @@ format"
                 // TODO: handle scaled price here when we have capabilities
                 self.spot_prices.insert(
                     ((*t0).clone(), (*t1).clone()),
-                    *price_result
-                        .first()
-                        .expect("Expected a u64"),
+                    *price_result.first().ok_or_else(|| {
+                        ProtosimError::DecodingError("Expected a u64".to_string())
+                    })?,
                 );
             }
         }
@@ -389,11 +379,15 @@ format"
         &mut self,
         sell_token: ERC20Token,
         buy_token: ERC20Token,
-    ) -> U256 {
+    ) -> Result<U256, ProtosimError> {
         let binding = self
             .adapter_contract
             .clone()
-            .expect("Adapter contract not set");
+            .ok_or_else(|| {
+                ProtosimError::UninitializedAdapter(
+                    "Adapter contract must be initialized before setting capabilities".to_string(),
+                )
+            })?;
         let limits = binding
             .get_limits(
                 self.id.clone()[2..].to_string(),
@@ -407,41 +401,41 @@ format"
                             &(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>(),
                         ),
                     )
-                    .await,
+                    .await?,
                 ),
             )
             .await;
 
-        limits.expect("Expected a (u64, u64)").0
+        Ok(limits?.0)
     }
 
     pub async fn get_overwrites(
         &mut self,
         sell_token: &ERC20Token,
         max_amount: U256,
-    ) -> HashMap<rAddress, Overwrites> {
+    ) -> Result<HashMap<rAddress, Overwrites>, ProtosimError> {
         let token_overwrites = self
             .get_token_overwrites(sell_token, max_amount)
-            .await;
+            .await?;
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
-        let mut overwrites = self.block_lasting_overwrites.clone();
-        self.deep_merge(&mut overwrites, &token_overwrites);
-        self.block_lasting_overwrites = overwrites.clone();
-        overwrites
+        let merged_overwrites =
+            self.merge(&self.block_lasting_overwrites.clone(), &token_overwrites);
+        self.block_lasting_overwrites = merged_overwrites.clone();
+        Ok(merged_overwrites)
     }
 
     async fn get_token_overwrites(
         &self,
         sell_token: &ERC20Token,
         max_amount: U256,
-    ) -> HashMap<rAddress, Overwrites> {
+    ) -> Result<HashMap<rAddress, Overwrites>, ProtosimError> {
         let mut res: Vec<HashMap<rAddress, Overwrites>> = Vec::new();
         if !self
             .capabilities
             .contains(&Capability::TokenBalanceIndependent)
         {
-            res.push(self.get_balance_overwrites());
+            res.push(self.get_balance_overwrites()?);
         }
         let mut overwrites = ERC20OverwriteFactory::new(
             rAddress::from_slice(&sell_token.address.0),
@@ -463,20 +457,23 @@ format"
         res.push(overwrites.get_protosim_overwrites());
 
         // Merge all overwrites into a single HashMap
-        res.into_iter()
-            .fold(HashMap::new(), |mut acc, overwrite| {
-                self.deep_merge(&mut acc, &overwrite);
+        Ok(res
+            .into_iter()
+            .fold(HashMap::new(), |acc, overwrite| {
+                self.merge(&acc, &overwrite);
                 acc
-            })
+            }))
     }
 
-    fn get_balance_overwrites(&self) -> HashMap<rAddress, Overwrites> {
+    fn get_balance_overwrites(&self) -> Result<HashMap<rAddress, Overwrites>, ProtosimError> {
         let mut balance_overwrites: HashMap<rAddress, Overwrites> = HashMap::new();
-        let address = self.balance_owner.unwrap_or_else(|| {
-            self.id
+        let address = match self.balance_owner {
+            Some(address) => Ok(address),
+            None => self
+                .id
                 .parse()
-                .expect("Pool ID is not an address")
-        });
+                .map_err(|_| ProtosimError::EncodingError("Pool ID is not an address".into())),
+        }?;
 
         for token in &self.tokens {
             let slots = if self
@@ -486,7 +483,9 @@ format"
                 self.token_storage_slots
                     .get(&token.address)
                     .cloned()
-                    .expect("Token storage slots not found")
+                    .ok_or_else(|| {
+                        ProtosimError::EncodingError("Token storage slots not found".into())
+                    })?
             } else {
                 (SlotHash::from(0), SlotHash::from(1))
             };
@@ -501,20 +500,24 @@ format"
             );
             balance_overwrites.extend(overwrites.get_protosim_overwrites());
         }
-        balance_overwrites
+        Ok(balance_overwrites)
     }
 
-    fn deep_merge(
+    fn merge(
         &self,
-        target: &mut HashMap<rAddress, Overwrites>,
+        target: &HashMap<rAddress, Overwrites>,
         source: &HashMap<rAddress, Overwrites>,
-    ) {
+    ) -> HashMap<rAddress, Overwrites> {
+        let mut merged = target.clone();
+
         for (key, source_inner) in source {
-            target
+            merged
                 .entry(*key)
                 .or_default()
                 .extend(source_inner.clone());
         }
+
+        merged
     }
 }
 
@@ -704,12 +707,14 @@ mod tests {
         let mut pool_state = setup_pool_state().await;
         let dai_limit = pool_state
             .get_sell_amount_limit(pool_state.tokens[0].clone(), pool_state.tokens[1].clone())
-            .await;
+            .await
+            .unwrap();
         assert_eq!(dai_limit, U256::from_dec_str("100279494253364362835").unwrap());
 
         let bal_limit = pool_state
             .get_sell_amount_limit(pool_state.tokens[1].clone(), pool_state.tokens[0].clone())
-            .await;
+            .await
+            .unwrap();
         assert_eq!(bal_limit, U256::from_dec_str("13997408640689987484").unwrap());
     }
 }

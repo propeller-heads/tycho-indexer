@@ -195,6 +195,27 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
     panic_codes
 }
 
+/// Fetches the bytecode for a specified contract address, returning an error if the address is
+/// an Externally Owned Account (EOA) or if no code is associated with it.
+///
+/// This function checks the specified address on the blockchain, attempting to retrieve any
+/// contract bytecode deployed at that address. If the address corresponds to an EOA or any
+/// other address without associated bytecode, an `RpcError::EmptyResponse` error is returned.
+///
+/// # Parameters
+/// - `address`: The address of the account or contract to query, as a string.
+/// - `connection_string`: An optional RPC connection string. If not provided, the function will
+///   default to the `RPC_URL` environment variable.
+///
+/// # Returns
+/// - `Ok(Bytecode)`: The bytecode of the contract at the specified address, if present.
+/// - `Err(RpcError)`: An error if the address does not have associated bytecode, if there is an
+///   issue with the RPC connection, or if the address is invalid.
+///
+/// # Errors
+/// - Returns `RpcError::InvalidRequest` if `address` is not parsable or if no RPC URL is set.
+/// - Returns `RpcError::EmptyResponse` if the address has no associated bytecode (e.g., EOA).
+/// - Returns `RpcError::InvalidResponse` for issues with the RPC provider response.
 pub async fn get_code_for_address(
     address: &str,
     connection_string: Option<String>,

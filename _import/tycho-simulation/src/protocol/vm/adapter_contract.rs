@@ -132,7 +132,7 @@ where
             }
         }
 
-        Err(ProtosimError::EncodingError("Unexpected response format".into()))
+        Err(ProtosimError::DecodingError("Unexpected response format".into()))
     }
 
     pub async fn get_capabilities(
