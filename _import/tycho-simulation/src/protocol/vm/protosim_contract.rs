@@ -53,7 +53,7 @@ pub struct ProtoSimResponse {
 /// # Errors
 /// Returns errors of type `ProtosimError` when encoding, decoding, or simulation operations fail.
 /// These errors provide detailed feedback on potential issues.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ProtosimContract<D: DatabaseRef + std::clone::Clone> {
     abi: Abi,
     address: Address,
