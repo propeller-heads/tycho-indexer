@@ -24,8 +24,8 @@ initialized_accounts:
 #  - "0x1d8f8f00cfa6758d7be78336684788fb0ee0fa46"
 #  - "0xae78736cd615f374d3085123a210448e74fc6393"
 tests:
-  # WeightedPoolFactory - 0x897888115Ada5773E02aA29F775430BFB5F34c51
-  - name: test_weighted_pool_creation
+  # WeightedPoolFactoryV4 - 0x897888115Ada5773E02aA29F775430BFB5F34c51
+  - name: test_weighted_pool_v4
     start_block: 20128706
     stop_block: 20128806
     expected_components:
@@ -38,7 +38,7 @@ tests:
           normalized_weights: "0x5b22307830623161326263326563353030303030222c22307830326336386166306262313430303030225d"
           fee: "0x11c37937e08000"
           manual_updates: "0x01"
-          pool_type: "0x5765696768746564506f6f6c466163746f7279"
+          pool_type: "0x5765696768746564506f6f6c466163746f72795634"
         creation_tx: "0xa63c671046ad2075ec8ea83ac21199cf3e3a5f433e72ec4c117cbabfb9b18de2"
 
   # WeightedPool2TokensFactory - 0xA5bf2ddF098bb0Ef6d120C98217dD6B141c74EE0
@@ -160,3 +160,57 @@ tests:
           main_token: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
         skip_simulation: true
         creation_tx: "0x497aa03ce84d236c183204ddfc6762c8e4158da1ebc5e7e18e7f6cceaa497a2a"
+
+  # WeigthedPoolFactoryV1 - 0x8E9aa87E45e92bad84D5F8DD1bff34Fb92637dE9
+  - name: test_weighted_pool_v1
+    start_block: 13899835
+    stop_block: 13901090
+    expected_components:
+      - id: "0xcb0e14e96f2cefa8550ad8e4aea344f211e5061d00020000000000000000011a"
+        tokens:
+          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          - "0xcAfE001067cDEF266AfB7Eb5A286dCFD277f3dE5"
+        static_attributes:
+          manual_updates: "0x01"
+          fee: "0x038d7ea4c68000"
+          normalized_weights: "0x5b22307830326336386166306262313430303030222c22307830623161326263326563353030303030225d"
+          pool_type: "0x5765696768746564506f6f6c466163746f72795631"
+        skip_simulation: false
+        creation_tx: "0xc5c3b384644363aa15cf9a0c33dfebd22df351446bce92ee49ead7d5d896b4e9"
+
+  # WeigthedPoolFactoryV2 - 0xcC508a455F5b0073973107Db6a878DdBDab957bC
+  - name: test_weighted_pool_v2
+    start_block: 15732922
+    stop_block: 15742922
+    initialized_accounts:
+    expected_components:
+      - id: "0xe340ebfcaa544da8bb1ee9005f1a346d50ec422e000200000000000000000396"
+        tokens:
+          - "0x3472A5A71965499acd81997a54BBA8D852C6E53d"
+          - "0xae78736Cd615f374D3085123A210448E74Fc6393"
+        static_attributes:
+          manual_updates: "0x01"
+          fee: "0x08e1bc9bf04000"
+          normalized_weights: "0x5b22307830366630356235396433623230303030222c22307830366630356235396433623230303030225d"
+          rate_providers: "0x5b22307830303030303030303030303030303030303030303030303030303030303030303030303030303030222c22307831613866383163323536616565396336343065313462623034353363653234376561306466653666225d"
+          pool_type: "0x5765696768746564506f6f6c466163746f72795632"
+        skip_simulation: true # can't simulate because it has rate provider
+        creation_tx: "0x9a949a52e4179d0c57dcffd6884d5787febfb92f8f4b7e114ef8cfbda0292a79"
+
+  # WeigthedPoolFactoryV3 - 0x5Dd94Da3644DDD055fcf6B3E1aa310Bb7801EB8b
+  - name: test_weighted_pool_v3
+    start_block: 16975289
+    stop_block: 16975290
+    expected_components:
+      - id: "0xd278166dabaf26707362f7cfdd204b277fd2a4600002000000000000000004f6"
+        tokens:
+          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          - "0xE60779CC1b2c1d0580611c526a8DF0E3f870EC48"
+        static_attributes:
+          manual_updates: "0x01"
+          fee: "0x11c37937e08000"
+          normalized_weights: "0x5b22307830366630356235396433623230303030222c22307830366630356235396433623230303030225d"
+          rate_providers: "0x5b22307830303030303030303030303030303030303030303030303030303030303030303030303030303030222c22307830303030303030303030303030303030303030303030303030303030303030303030303030303030225d"
+          pool_type: "0x5765696768746564506f6f6c466163746f72795633"
+        skip_simulation: true # not enough liquidity added within more than 100k blocks
+        creation_tx: "0x3dda8ac9423f0018dffdda343c376cc1781ad12cb49827770351411d84036bf8"

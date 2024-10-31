@@ -3,6 +3,7 @@ src = "src"
 out = "out"
 libs = ["lib"]
 via_ir = true
+solc_version = "0.8.27" # 0.8.25 and 0.8.26 are broken with via-ir (see https://github.com/ethereum/solidity/issues/15004)
 
 [rpc_endpoints]
 mainnet = "${ETH_RPC_URL}"
