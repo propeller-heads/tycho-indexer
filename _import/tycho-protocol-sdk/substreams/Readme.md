@@ -19,8 +19,10 @@ since this will error.
 
 To create a pre release for testing in dev you can start CD pipeline manually supplying 
 the package you'd like to pre release. This will create a 
-`[package]-[semver].pre-[commit-sha]` release in our spkg repository which you can use 
+`[package].pre-[commit-sha]` release in our spkg repository which you can use 
 to run the substream´.
+
+For forked protocols you'll need to also supply the config file name, e.g. `ethereum-pancakeswap`.
 
 ## Test your implementation
 

@@ -11,8 +11,8 @@ on:
         description: "Package to build"
       config_file:
         required: false
-        description: "Path to the substreams configuration file"
-        default: "substreams.yaml"
+        description: "Name of the substreams configuration file"
+        default: "substreams"
 
 jobs:
   Release:
