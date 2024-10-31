@@ -1,3 +1,5 @@
+## [0.30.1](https://github.com/propeller-heads/protosim/compare/0.30.0...0.30.1) (2024-10-31)
+
 ## [0.30.0](https://github.com/propeller-heads/protosim/compare/0.29.0...0.30.0) (2024-10-30)
 
 
