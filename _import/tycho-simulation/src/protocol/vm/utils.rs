@@ -122,7 +122,7 @@ fn parse_solidity_error_message(data: &str) -> String {
     format!("Failed to decode: {}", data)
 }
 
-pub type SlotHash = U256;
+pub type SlotId = U256;
 
 /// Get storage slot index of a value stored at a certain key in a mapping
 ///
@@ -167,7 +167,7 @@ pub type SlotHash = U256;
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
+pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotId) -> SlotId {
     let mut key_bytes = key.as_bytes().to_vec();
     if key_bytes.len() < 32 {
         let padding = vec![0u8; 32 - key_bytes.len()];
@@ -177,7 +177,7 @@ pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> Sl
     mapping_slot.to_big_endian(&mut mapping_slot_bytes);
 
     let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
-    SlotHash::from_big_endian(&slot_bytes)
+    SlotId::from_big_endian(&slot_bytes)
 }
 
 fn get_solidity_panic_codes() -> HashMap<u64, String> {
@@ -216,7 +216,7 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
 /// - Returns `RpcError::InvalidRequest` if `address` is not parsable or if no RPC URL is set.
 /// - Returns `RpcError::EmptyResponse` if the address has no associated bytecode (e.g., EOA).
 /// - Returns `RpcError::InvalidResponse` for issues with the RPC provider response.
-pub async fn get_code_for_address(
+pub async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
 ) -> Result<Bytecode, RpcError> {
@@ -320,7 +320,7 @@ mod tests {
         });
 
         let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
-        let result = get_code_for_address(address, Some(rpc_url)).await;
+        let result = get_code_for_contract(address, Some(rpc_url)).await;
 
         assert!(result.is_ok(), "Network call should not fail");
 

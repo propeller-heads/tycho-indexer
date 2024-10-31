@@ -15,14 +15,14 @@ use crate::{
         engine::{create_engine, SHARED_TYCHO_DB},
         errors::ProtosimError,
         protosim_contract::ProtosimContract,
-        utils::{get_code_for_address, get_contract_bytecode},
+        utils::{get_code_for_contract, get_contract_bytecode},
     },
 };
 
 use crate::protocol::vm::{
     erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
     models::Capability,
-    utils::SlotHash,
+    utils::SlotId,
 };
 use chrono::Utc;
 use ethers::{
@@ -69,7 +69,7 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// Allows the specification of custom storage slots for token allowances and
     /// balances. This is particularly useful for token contracts involved in protocol
     /// logic that extends beyond simple transfer functionality.
-    pub token_storage_slots: HashMap<H160, (SlotHash, SlotHash)>,
+    pub token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
     /// The address to bytecode map of all stateless contracts used by the protocol
     /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
@@ -92,7 +92,7 @@ impl VMPoolState<PreCachedDB> {
         capabilities: HashSet<Capability>,
         block_lasting_overwrites: HashMap<rAddress, Overwrites>,
         involved_contracts: HashSet<H160>,
-        token_storage_slots: HashMap<H160, (SlotHash, SlotHash)>,
+        token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
     ) -> Result<Self, ProtosimError> {
@@ -183,7 +183,7 @@ impl VMPoolState<PreCachedDB> {
                             .get_address_from_call(&engine, &addr_str)?
                             .to_string();
                     }
-                    let code = get_code_for_address(&addr_str, None).await?;
+                    let code = get_code_for_contract(&addr_str, None).await?;
                     let code_hash = B256::from(keccak256(code.clone().bytes()));
                     (Some(code), code_hash)
                 } else {
@@ -336,13 +336,13 @@ impl VMPoolState<PreCachedDB> {
     ) -> Result<HashMap<(ERC20Token, ERC20Token), f64>, ProtosimError> {
         self.ensure_capability(Capability::PriceFunction)?;
         let mut spot_prices: HashMap<(ERC20Token, ERC20Token), f64> = HashMap::new();
-        for [t0, t1] in tokens
+        for [sell_token, buy_token] in tokens
             .iter()
             .permutations(2)
             .map(|p| [p[0], p[1]])
         {
             let sell_amount_limit = self
-                .get_sell_amount_limit(vec![(*t0).clone(), (*t1).clone()])
+                .get_sell_amount_limit(vec![(*sell_token).clone(), (*buy_token).clone()])
                 .await?;
             let price_result = self
                 .adapter_contract
@@ -355,8 +355,8 @@ impl VMPoolState<PreCachedDB> {
                 })?
                 .price(
                     self.id.clone()[2..].to_string(),
-                    t0.address,
-                    t1.address,
+                    sell_token.address,
+                    buy_token.address,
                     vec![sell_amount_limit / U256::from(100)],
                     self.block.number,
                     Some(self.block_lasting_overwrites.clone()),
@@ -374,10 +374,11 @@ impl VMPoolState<PreCachedDB> {
                 let unscaled_price = price_result
                     .first()
                     .ok_or_else(|| ProtosimError::DecodingError("Expected a u64".to_string()))?;
-                *unscaled_price * 10f64.powi(t0.decimals as i32) / 10f64.powi(t1.decimals as i32)
+                *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
+                    10f64.powi(buy_token.decimals as i32)
             };
 
-            spot_prices.insert(((*t0).clone(), (*t1).clone()), price);
+            spot_prices.insert(((*sell_token).clone(), (*buy_token).clone()), price);
         }
         Ok(spot_prices)
     }
@@ -452,7 +453,7 @@ impl VMPoolState<PreCachedDB> {
             *self
                 .token_storage_slots
                 .get(&sell_token.address)
-                .unwrap_or(&(SlotHash::from(0), SlotHash::from(1))),
+                .unwrap_or(&(SlotId::from(0), SlotId::from(1))),
         );
 
         overwrites.set_balance(max_amount, H160::from_slice(&*EXTERNAL_ACCOUNT.0));
@@ -500,7 +501,7 @@ impl VMPoolState<PreCachedDB> {
                         ProtosimError::EncodingError("Token storage slots not found".into())
                     })?
             } else {
-                (SlotHash::from(0), SlotHash::from(1))
+                (SlotId::from(0), SlotId::from(1))
             };
 
             let mut overwrites = ERC20OverwriteFactory::new(rAddress::from(token.address.0), slots);

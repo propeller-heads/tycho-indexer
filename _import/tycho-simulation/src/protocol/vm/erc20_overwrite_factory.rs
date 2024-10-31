@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 use crate::protocol::vm::{
     errors::FileError,
-    utils::{get_contract_bytecode, get_storage_slot_index_at_key, SlotHash},
+    utils::{get_contract_bytecode, get_storage_slot_index_at_key, SlotId},
 };
 use ethers::{abi::Address, types::U256};
 use revm::primitives::Address as rAddress;
@@ -15,24 +15,24 @@ pub struct GethOverwrite {
     pub code: String,
 }
 
-pub type Overwrites = HashMap<SlotHash, U256>;
+pub type Overwrites = HashMap<SlotId, U256>;
 
 pub struct ERC20OverwriteFactory {
     token_address: rAddress,
     overwrites: Overwrites,
-    balance_slot: SlotHash,
-    allowance_slot: SlotHash,
-    total_supply_slot: SlotHash,
+    balance_slot: SlotId,
+    allowance_slot: SlotId,
+    total_supply_slot: SlotId,
 }
 
 impl ERC20OverwriteFactory {
-    pub fn new(token_address: rAddress, token_slots: (SlotHash, SlotHash)) -> Self {
+    pub fn new(token_address: rAddress, token_slots: (SlotId, SlotId)) -> Self {
         ERC20OverwriteFactory {
             token_address,
             overwrites: HashMap::new(),
             balance_slot: token_slots.0,
             allowance_slot: token_slots.1,
-            total_supply_slot: SlotHash::from(2),
+            total_supply_slot: SlotId::from(2),
         }
     }
 
@@ -102,7 +102,7 @@ impl ERC20OverwriteFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::vm::utils::SlotHash;
+    use crate::protocol::vm::utils::SlotId;
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address = rAddress::parse_checksummed(
@@ -110,8 +110,8 @@ mod tests {
             None,
         )
         .expect("Failed to parse address");
-        let balance_slot = SlotHash::from(5);
-        let allowance_slot = SlotHash::from(6);
+        let balance_slot = SlotId::from(5);
+        let allowance_slot = SlotId::from(6);
         ERC20OverwriteFactory::new(token_address, (balance_slot, allowance_slot))
     }
 
@@ -175,7 +175,7 @@ mod tests {
     fn test_get_geth_overwrites() {
         let mut factory = setup_factory();
 
-        let storage_slot = SlotHash::from(1);
+        let storage_slot = SlotId::from(1);
         let val = U256::from(123456);
         factory
             .overwrites
