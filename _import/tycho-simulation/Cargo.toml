@@ -7,7 +7,7 @@ edition = "2021"
 members = ["protosim_py"]
 
 [dependencies]
-ethabi = "13.0" 
+ethabi = "13.0"
 ethers = "2.0.13"
 serde_json = "1.0.105"
 serde = { version = "1.0", features = ["rc"] }
@@ -35,17 +35,26 @@ foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
 revm-inspectors = { version = "0.5", features = ["serde"] }
 mini-moka = "0.10"
 lazy_static = "1.4.0"
+clap = { version = "4.5.3", features = ["derive"] }
+anyhow = "1.0.79"
+tracing-subscriber = { version = "0.3.17", default-features = false, features = [
+    "env-filter",
+    "fmt",
+] }
+petgraph = "0.6.5"
+indicatif = "0.17.8"
 
 [dev-dependencies]
 mockito = "1.1.1"
 warp = "0.3.5"
 approx = "0.5.1"
 rstest = "0.18.2"
-tracing-subscriber = { version = "0.3.17", default-features = false, features = [
-    "env-filter",
-    "fmt",
-] }
+
 tempfile = "3.13.0"
+
+[[bin]]
+name = "simple_searcher"
+path = "src/simple_solver.rs"
 
 [features]
 default = []
