@@ -11,7 +11,6 @@ use crate::{
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
-        tycho::i24_le_bytes_to_i32,
         BytesConvertible,
     },
     safe_math::{safe_add_u256, safe_sub_u256},
@@ -25,6 +24,7 @@ use super::{
     swap_math,
     tick_list::{TickInfo, TickList},
     tick_math,
+    tycho_decoder::i24_le_bytes_to_i32,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
