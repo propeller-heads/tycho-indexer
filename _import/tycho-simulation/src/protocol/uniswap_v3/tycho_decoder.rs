@@ -111,7 +111,9 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
                 .into_iter()
                 .filter(|t| t.net_liquidity != 0)
                 .collect::<Vec<_>>(),
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            _ => {
+                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);
@@ -269,10 +271,10 @@ mod tests {
         let result = UniswapV3State::try_from(snapshot);
 
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.err().unwrap(),
-            InvalidSnapshotError::MissingAttribute(missing_attribute)
-        );
+            InvalidSnapshotError::MissingAttribute(attr) if attr == missing_attribute
+        ));
     }
 
     #[test]
@@ -295,10 +297,10 @@ mod tests {
         let result = UniswapV3State::try_from(snapshot);
 
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.err().unwrap(),
-            InvalidSnapshotError::ValueError("Unsupported fee amount".to_string())
-        );
+            InvalidSnapshotError::ValueError(err) if err == *"Unsupported fee amount"
+        ));
     }
 
     #[test]

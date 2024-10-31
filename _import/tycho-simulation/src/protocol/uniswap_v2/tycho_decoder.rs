@@ -110,9 +110,10 @@ mod tests {
         let result = UniswapV2State::try_from(snapshot);
 
         assert!(result.is_err());
-        assert_eq!(
+
+        assert!(matches!(
             result.err().unwrap(),
-            InvalidSnapshotError::MissingAttribute("reserve1".to_string())
-        );
+            InvalidSnapshotError::MissingAttribute(attr) if attr == *"reserve1"
+        ));
     }
 }
