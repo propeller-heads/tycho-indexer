@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -72,6 +72,7 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             balances,
             balance_owner,
             "todo".to_string(), // TODO: map for adapter paths needed
+            HashSet::new(),     // TODO: implement decoding involved contracts
             HashMap::new(),     // TODO: implement decoding stateless contracts
             manual_updates,
             false,

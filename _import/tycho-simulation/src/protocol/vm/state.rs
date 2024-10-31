@@ -107,10 +107,7 @@ impl VMPoolState<PreCachedDB> {
         balances: HashMap<H160, U256>,
         balance_owner: Option<H160>,
         adapter_contract_path: String,
-        capabilities: HashSet<Capability>,
-        block_lasting_overwrites: HashMap<rAddress, Overwrites>,
         involved_contracts: HashSet<H160>,
-        token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         manual_updates: bool,
         trace: bool,
@@ -122,10 +119,10 @@ impl VMPoolState<PreCachedDB> {
             balances,
             balance_owner,
             spot_prices: HashMap::new(),
-            capabilities,
-            block_lasting_overwrites,
+            capabilities: HashSet::new(),
+            block_lasting_overwrites: HashMap::new(),
             involved_contracts,
-            token_storage_slots,
+            token_storage_slots: HashMap::new(),
             stateless_contracts,
             trace,
             engine: None,
@@ -618,10 +615,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
-        protocol::vm::models::Capability,
-    };
+
     use ethers::{
         prelude::{H256, U256},
         types::Address as EthAddress,
@@ -632,6 +626,11 @@ mod tests {
         fs::File,
         path::Path,
         str::FromStr,
+    };
+
+    use crate::{
+        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
+        protocol::vm::models::Capability,
     };
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -713,9 +712,6 @@ mod tests {
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             HashSet::new(),
             HashMap::new(),
-            HashSet::new(),
-            HashMap::new(),
-            HashMap::new(),
             false,
             false,
         )
@@ -771,11 +767,19 @@ mod tests {
             .is_err());
     }
 
+    fn dai() -> ERC20Token {
+        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
+    }
+
+    fn bal() -> ERC20Token {
+        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
+    }
+
     #[tokio::test]
     async fn test_get_sell_amount_limit() {
         let mut pool_state = setup_pool_state().await;
         let dai_limit = pool_state
-            .get_sell_amount_limit(vec![pool_state.tokens[0], pool_state.tokens[1]])
+            .get_sell_amount_limit(vec![dai().address, bal().address])
             .await
             .unwrap();
         assert_eq!(dai_limit, U256::from_dec_str("100279494253364362835").unwrap());
@@ -787,20 +791,12 @@ mod tests {
         assert_eq!(bal_limit, U256::from_dec_str("13997408640689987484").unwrap());
     }
 
-    fn dai() -> ERC20Token {
-        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
-    }
-
-    fn bal() -> ERC20Token {
-        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
-    }
-
     #[tokio::test]
     async fn test_set_spot_prices() {
         let mut pool_state = setup_pool_state().await;
 
         pool_state
-            .set_spot_prices(vec![dai(), bal()])
+            .set_spot_prices(vec![bal(), dai()])
             .await
             .unwrap();
 
