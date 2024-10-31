@@ -79,7 +79,12 @@ pub fn map_relative_balances(
                     .get_last(format!("pool:{}", &component_id[..42]))
                     .is_some()
                 {
-                    for (token, delta) in ev.tokens.iter().zip(ev.deltas.iter()) {
+                    for (token, delta) in ev
+                        .tokens
+                        .iter()
+                        .zip(ev.deltas.iter())
+                        .filter(|(token, _)| **token != hex::decode(&component_id[2..42]).unwrap())
+                    {
                         deltas.push(BalanceDelta {
                             ord: vault_log.ordinal(),
                             tx: Some(vault_log.receipt.transaction.into()),

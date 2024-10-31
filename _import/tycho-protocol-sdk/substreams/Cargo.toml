@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "ethereum-balancer",
+    "ethereum-balancer-v2",
     "ethereum-curve",
     "crates/tycho-substreams",
     "crates/substreams-helper",
@@ -8,7 +8,7 @@ members = [
     "ethereum-uniswap-v2",
     "ethereum-uniswap-v3",
     "ethereum-sfrax",
-    "ethereum-sfraxeth"
+    "ethereum-sfraxeth",
 ]
 resolver = "2"
 

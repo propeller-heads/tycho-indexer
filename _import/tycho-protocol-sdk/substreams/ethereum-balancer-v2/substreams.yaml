@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
-  name: "ethereum_balancer"
-  version: v0.2.2
+  name: "ethereum_balancer_v2"
+  version: v0.2.3
 
 protobuf:
   files:
@@ -14,7 +14,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../target/wasm32-unknown-unknown/release/ethereum_balancer.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_balancer_v2.wasm
 
 modules:
   - name: map_components

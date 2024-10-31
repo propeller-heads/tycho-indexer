@@ -305,7 +305,7 @@ class TestRunner:
             data = yaml.safe_load(file)
 
         modify_func(data)
-        spkg_name = f"{yaml_file_path.rsplit('/', 1)[0]}/{data['package']['name'].replace('_', '-', 1)}-{data['package']['version']}.spkg"
+        spkg_name = f"{yaml_file_path.rsplit('/', 1)[0]}/{data['package']['name'].replace('_', '-')}-{data['package']['version']}.spkg"
 
         with open(yaml_file_path, "w") as file:
             yaml.dump(data, file, default_flow_style=False)

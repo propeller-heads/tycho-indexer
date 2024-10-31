@@ -97,14 +97,14 @@ python ./testing/src/runner/cli.py --package "your-package-name"
 
 #### Example
 
-If you want to run tests for `ethereum-balancer`, use:
+If you want to run tests for `ethereum-balancer-v2`, use:
 
 ```bash
 conda activate propeller-protocol-lib-testing
 export RPC_URL="https://ethereum-mainnet.core.chainstack.com/123123123123"
 export SUBSTREAMS_API_TOKEN=eyJhbGci...
 docker compose up -d db
-python ./testing/src/runner/cli.py --package "ethereum-balancer"
+python ./testing/src/runner/cli.py --package "ethereum-balancer-v2"
 ```
 
 #### Testing CLI args
