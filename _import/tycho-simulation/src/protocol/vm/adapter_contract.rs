@@ -4,7 +4,8 @@
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::vm::{
-        errors::ProtosimError, models::Capability, protosim_contract::ProtosimContract,
+        erc20_overwrite_factory::Overwrites, errors::ProtosimError, models::Capability,
+        protosim_contract::ProtosimContract,
     },
 };
 use ethers::{
@@ -43,9 +44,9 @@ where
         pair_id: String,
         sell_token: Address,
         buy_token: Address,
-        amounts: Vec<u64>,
+        amounts: Vec<U256>,
         block: u64,
-        overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
+        overwrites: Option<HashMap<rAddress, Overwrites>>,
     ) -> Result<Vec<f64>, ProtosimError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
@@ -54,7 +55,7 @@ where
             Token::Array(
                 amounts
                     .into_iter()
-                    .map(|a| Token::Uint(U256::from(a)))
+                    .map(Token::Uint)
                     .collect(),
             ),
         ];
@@ -63,7 +64,6 @@ where
             .call("price", args, block, None, overwrites, None, U256::zero())
             .await?
             .return_value;
-        // returning just floats - the python version returns Fractions (not sure why)
         let price = self.calculate_price(res[0].clone())?;
         Ok(price)
     }
@@ -112,7 +112,7 @@ where
         buy_token: Address,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
-    ) -> Result<(u64, u64), ProtosimError> {
+    ) -> Result<(U256, U256), ProtosimError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -123,18 +123,16 @@ where
             .call("getLimits", args, block, None, overwrites, None, U256::zero())
             .await?
             .return_value;
-        Ok((
-            res[0]
-                .clone()
-                .into_uint()
-                .unwrap()
-                .as_u64(),
-            res[1]
-                .clone()
-                .into_uint()
-                .unwrap()
-                .as_u64(),
-        ))
+
+        if let Some(Token::Array(inner)) = res.first() {
+            if let (Some(Token::Uint(value1)), Some(Token::Uint(value2))) =
+                (inner.first(), inner.get(1))
+            {
+                return Ok((*value1, *value2));
+            }
+        }
+
+        Err(ProtosimError::DecodingError("Unexpected response format".into()))
     }
 
     pub async fn get_capabilities(

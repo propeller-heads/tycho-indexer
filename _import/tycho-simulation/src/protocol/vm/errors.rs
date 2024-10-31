@@ -22,9 +22,11 @@ use crate::evm::simulation::SimulationError;
 /// - `RPCError`: Indicates an error related to RPC interaction.
 /// - `UnsupportedCapability`: Denotes an error when a pool state does not support a necessary
 ///   capability.
-/// - `UninitializedAdapter`: Indicates an error when trying to set capabilities before initializing
-///   the adapter.
+/// - `UninitializedAdapter`: Indicates an error when trying to use the Adapter before initializing
+///   it.
 /// - `CapabilityRetrievalFailure`: Indicates an error when trying to retrieve capabilities.
+/// - `EngineNotSet`: Indicates an error when trying to use the engine before setting it.
+//   the adapter.
 #[derive(Error, Debug)]
 pub enum ProtosimError {
     #[error("ABI loading error: {0}")]
@@ -41,6 +43,8 @@ pub enum ProtosimError {
     UnsupportedCapability(String),
     #[error("Adapter not initialized: {0}")]
     UninitializedAdapter(String),
+    #[error("Engine not set")]
+    EngineNotSet(),
 }
 
 #[derive(Debug, Error)]
@@ -89,10 +93,18 @@ pub enum RpcError {
     InvalidRequest(String),
     #[error("Invalid Response: {0}")]
     InvalidResponse(ProviderError),
+    #[error("Empty Response")]
+    EmptyResponse(),
 }
 
 impl From<RpcError> for ProtosimError {
     fn from(err: RpcError) -> Self {
         ProtosimError::RpcError(err)
+    }
+}
+
+impl From<ethers::abi::Error> for ProtosimError {
+    fn from(err: ethers::abi::Error) -> Self {
+        ProtosimError::DecodingError(err.to_string())
     }
 }

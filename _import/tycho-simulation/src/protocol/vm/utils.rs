@@ -5,7 +5,7 @@ use ethers::{
     abi::Abi,
     core::utils::keccak256,
     providers::{Http, Middleware, Provider},
-    types::{Address, H160, H256},
+    types::{Address, H160},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
@@ -14,6 +14,8 @@ use crate::{
     evm::simulation::SimulationError,
     protocol::vm::errors::{FileError, RpcError},
 };
+use ethers::types::U256;
+use revm::primitives::{Bytecode, Bytes};
 use std::{
     collections::HashMap,
     env,
@@ -120,19 +122,19 @@ fn parse_solidity_error_message(data: &str) -> String {
     format!("Failed to decode: {}", data)
 }
 
-pub type SlotHash = H256;
+pub type SlotId = U256;
 
 /// Get storage slot index of a value stored at a certain key in a mapping
 ///
 /// # Arguments
 ///
 /// * `key`: Key in a mapping. Can be any H160 value (such as an address).
-/// * `mapping_slot`: An `H256` representing the storage slot at which the mapping itself is stored.
+/// * `mapping_slot`: An `U256` representing the storage slot at which the mapping itself is stored.
 ///   See the examples for more explanation.
 ///
 /// # Returns
 ///
-/// An `H256` representing the  index of a storage slot where the value at the given
+/// An `U256` representing the  index of a storage slot where the value at the given
 /// key is stored.
 ///
 /// # Examples
@@ -143,9 +145,9 @@ pub type SlotHash = H256;
 ///
 /// ```
 /// use protosim::protocol::vm::utils::get_storage_slot_index_at_key;
-/// use ethers::types::{Address, H256};
+/// use ethers::types::{Address, U256};
 /// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address, H256::from_low_u64_be(0));
+/// get_storage_slot_index_at_key(address, U256::from(0));
 /// ```
 ///
 /// For nested mappings, we need to apply the function twice. An example of this is
@@ -156,24 +158,26 @@ pub type SlotHash = H256;
 ///
 /// ```
 /// use protosim::protocol::vm::utils::get_storage_slot_index_at_key;
-/// use ethers::types::{Address, H256};
+/// use ethers::types::{Address, U256};
 /// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, H256::from_low_u64_be(1)));
+/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, U256::from(1)));
 /// ```
 ///
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotHash) -> SlotHash {
+pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotId) -> SlotId {
     let mut key_bytes = key.as_bytes().to_vec();
-    key_bytes.resize(32, 0); // Right pad with zeros
-
+    if key_bytes.len() < 32 {
+        let padding = vec![0u8; 32 - key_bytes.len()];
+        key_bytes.splice(0..0, padding); // Prepend zeros to the start
+    }
     let mut mapping_slot_bytes = [0u8; 32];
-    mapping_slot_bytes.copy_from_slice(mapping_slot.as_bytes());
+    mapping_slot.to_big_endian(&mut mapping_slot_bytes);
 
     let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
-    SlotHash::from_slice(&slot_bytes)
+    SlotId::from_big_endian(&slot_bytes)
 }
 
 fn get_solidity_panic_codes() -> HashMap<u64, String> {
@@ -191,10 +195,31 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
     panic_codes
 }
 
-pub async fn get_code_for_address(
+/// Fetches the bytecode for a specified contract address, returning an error if the address is
+/// an Externally Owned Account (EOA) or if no code is associated with it.
+///
+/// This function checks the specified address on the blockchain, attempting to retrieve any
+/// contract bytecode deployed at that address. If the address corresponds to an EOA or any
+/// other address without associated bytecode, an `RpcError::EmptyResponse` error is returned.
+///
+/// # Parameters
+/// - `address`: The address of the account or contract to query, as a string.
+/// - `connection_string`: An optional RPC connection string. If not provided, the function will
+///   default to the `RPC_URL` environment variable.
+///
+/// # Returns
+/// - `Ok(Bytecode)`: The bytecode of the contract at the specified address, if present.
+/// - `Err(RpcError)`: An error if the address does not have associated bytecode, if there is an
+///   issue with the RPC connection, or if the address is invalid.
+///
+/// # Errors
+/// - Returns `RpcError::InvalidRequest` if `address` is not parsable or if no RPC URL is set.
+/// - Returns `RpcError::EmptyResponse` if the address has no associated bytecode (e.g., EOA).
+/// - Returns `RpcError::InvalidResponse` for issues with the RPC provider response.
+pub async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
-) -> Result<Option<Vec<u8>>, RpcError> {
+) -> Result<Bytecode, RpcError> {
     // Get the connection string, defaulting to the RPC_URL environment variable
     let connection_string = connection_string.or_else(|| env::var("RPC_URL").ok());
 
@@ -218,8 +243,11 @@ pub async fn get_code_for_address(
 
     // Call eth_getCode to get the bytecode of the contract
     match provider.get_code(addr, None).await {
-        Ok(code) if code.is_empty() => Ok(None),
-        Ok(code) => Ok(Some(code.to_vec())),
+        Ok(code) if code.is_empty() => Err(RpcError::EmptyResponse()),
+        Ok(code) => {
+            let bytecode = Bytecode::new_raw(Bytes::from(code.to_vec()));
+            Ok(bytecode)
+        }
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
             Err(RpcError::InvalidResponse(e))
@@ -227,22 +255,23 @@ pub async fn get_code_for_address(
     }
 }
 
-static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Vec<u8>>> = LazyLock::new(|| Cache::new(1_000));
+static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Bytecode>> = LazyLock::new(|| Cache::new(1_000));
 
-pub fn get_contract_bytecode(path: &str) -> std::io::Result<Vec<u8>> {
+pub fn get_contract_bytecode(path: &str) -> Result<Bytecode, FileError> {
     if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string())) {
-        return Ok(bytecode.clone());
+        return Ok(bytecode);
     }
 
-    let mut file = File::open(Path::new(path))?;
+    let mut file = File::open(Path::new(path)).map_err(FileError::Io)?;
     let mut code = Vec::new();
+    file.read_to_end(&mut code)
+        .map_err(FileError::Io)?;
 
-    file.read_to_end(&mut code)?;
-    BYTECODE_CACHE.insert(Arc::new(path.to_string()), code.clone());
+    let bytecode = Bytecode::new_raw(code.into()); // Construct `Bytecode` from `Vec<u8>`
+    BYTECODE_CACHE.insert(Arc::new(path.to_string()), bytecode.clone());
 
-    Ok(code)
+    Ok(bytecode)
 }
-
 pub fn load_swap_abi() -> Result<Abi, FileError> {
     let swap_abi_path = Path::new(file!())
         .parent()
@@ -291,19 +320,12 @@ mod tests {
         });
 
         let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
-        let result = get_code_for_address(address, Some(rpc_url)).await;
+        let result = get_code_for_contract(address, Some(rpc_url)).await;
 
         assert!(result.is_ok(), "Network call should not fail");
 
-        let code_bytes = result.unwrap();
-        match code_bytes {
-            Some(bytes) => {
-                assert!(!bytes.is_empty(), "Code should not be empty");
-            }
-            None => {
-                panic!("There should be some code for the address");
-            }
-        }
+        let code = result.unwrap();
+        assert!(!code.bytes().is_empty(), "Code should not be empty");
     }
 
     #[test]
@@ -426,13 +448,13 @@ mod tests {
 
         // First call to get_contract_bytecode
         let result1 = get_contract_bytecode(temp_path).unwrap();
-        assert_eq!(result1, test_data);
+        assert_eq!(result1, Bytecode::new_raw(test_data.into()));
 
         // Second call to get_contract_bytecode (should use cached data)
         // Verify that the cache was used (file is not read twice)
         remove_file(&temp_file).unwrap(); // This removes the temporary file
         let result2 = get_contract_bytecode(temp_path).unwrap();
-        assert_eq!(result2, test_data);
+        assert_eq!(result2, Bytecode::new_raw(test_data.into()));
     }
 
     #[test]

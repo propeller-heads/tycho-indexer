@@ -6,7 +6,11 @@
 //! ERC20Tokens provide instructions on how to handle prices and amounts,
 //! while Swap and SwapSequence are usually used as results types.
 
-use std::{convert::TryFrom, str::FromStr};
+use std::{
+    convert::TryFrom,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
 
 use ethers::types::{H160, U256};
 use serde::{Deserialize, Serialize};
@@ -67,6 +71,12 @@ impl PartialOrd for ERC20Token {
 impl PartialEq for ERC20Token {
     fn eq(&self, other: &Self) -> bool {
         self.address == other.address
+    }
+}
+
+impl Hash for ERC20Token {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.address.hash(state);
     }
 }
 
