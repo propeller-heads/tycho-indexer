@@ -122,13 +122,18 @@ pub fn map_relative_balances(
                 abi::vault::events::PoolBalanceManaged::match_and_decode(vault_log.log)
             {
                 let component_id = format!("0x{}", hex::encode(ev.pool_id));
-                deltas.extend_from_slice(&[BalanceDelta {
-                    ord: vault_log.ordinal(),
-                    tx: Some(vault_log.receipt.transaction.into()),
-                    token: ev.token.to_vec(),
-                    delta: ev.cash_delta.to_signed_bytes_be(),
-                    component_id: component_id.as_bytes().to_vec(),
-                }]);
+                if store
+                    .get_last(format!("pool:{}", &component_id[..42]))
+                    .is_some()
+                {
+                    deltas.extend_from_slice(&[BalanceDelta {
+                        ord: vault_log.ordinal(),
+                        tx: Some(vault_log.receipt.transaction.into()),
+                        token: ev.token.to_vec(),
+                        delta: ev.cash_delta.to_signed_bytes_be(),
+                        component_id: component_id.as_bytes().to_vec(),
+                    }]);
+                }
             }
 
             deltas
