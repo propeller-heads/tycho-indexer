@@ -24,37 +24,31 @@ use revm::{
 };
 use tracing::warn;
 
+use tycho_core::dto::ProtocolStateDelta;
+
 use crate::{
     evm::{
+        engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters},
         simulation_db::BlockHeader,
         tycho_db::PreCachedDB,
     },
     models::ERC20Token,
-    protocol::vm::{
-        constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-        engine::{create_engine, SHARED_TYCHO_DB},
-        errors::TychoSimulationError,
-        tycho_simulation_contract::TychoSimulationContract,
-        utils::{get_code_for_contract, get_contract_bytecode},
+    protocol::{
+        errors::{TradeSimulationError, TransitionError},
+        events::{EVMLogMeta, LogIndex},
+        models::GetAmountOutResult,
+        state::{ProtocolEvent, ProtocolSim},
+        vm::{
+            constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+            engine::{create_engine, SHARED_TYCHO_DB},
+            erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
+            errors::TychoSimulationError,
+            models::Capability,
+            tycho_simulation_contract::TychoSimulationContract,
+            utils::{get_code_for_contract, get_contract_bytecode, SlotId},
+        },
     },
-};
-
-use crate::protocol::vm::{
-    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
-    models::Capability,
-    utils::SlotId,
-};
-use tycho_core::dto::ProtocolStateDelta;
-
-// Necessary for the init_account method to be in scope
-#[allow(unused_imports)]
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
-use crate::protocol::{
-    errors::{TradeSimulationError, TransitionError},
-    events::{EVMLogMeta, LogIndex},
-    models::GetAmountOutResult,
-    state::{ProtocolEvent, ProtocolSim},
 };
 
 #[derive(Clone, Debug)]
