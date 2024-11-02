@@ -20,7 +20,6 @@ pub use num_traits;
 
 pub mod data_feed;
 pub mod evm;
-pub mod examples;
 pub mod models;
 pub mod protocol;
 pub mod safe_math;

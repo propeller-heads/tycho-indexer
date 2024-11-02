@@ -5248,10 +5248,8 @@ dependencies = [
 name = "protosim"
 version = "0.27.0"
 dependencies = [
- "anyhow",
  "approx",
  "chrono",
- "clap",
  "dotenv",
  "ethabi 13.0.0",
  "ethers",
@@ -5259,12 +5257,10 @@ dependencies = [
  "foundry-evm",
  "futures 0.3.28",
  "hex",
- "indicatif",
  "lazy_static",
  "mini-moka",
  "mockito",
  "num-traits",
- "petgraph",
  "revm",
  "revm-inspectors",
  "rstest",
@@ -5276,7 +5272,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "tycho-client",
  "tycho-core",
  "uuid 1.4.1",
@@ -7310,6 +7305,21 @@ dependencies = [
  "sha1",
  "thiserror",
  "utf-8",
+]
+
+[[package]]
+name = "tutorial"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ethers",
+ "indicatif",
+ "petgraph",
+ "protosim",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
