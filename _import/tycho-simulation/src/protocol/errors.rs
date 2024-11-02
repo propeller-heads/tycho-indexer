@@ -51,3 +51,9 @@ pub enum InvalidSnapshotError {
     #[error("Unable to set up vm state on the engine: {0}")]
     VMError(ProtosimError),
 }
+
+impl From<ProtosimError> for InvalidSnapshotError {
+    fn from(error: ProtosimError) -> Self {
+        InvalidSnapshotError::VMError(error)
+    }
+}

@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use ethers::types::{H160, H256, U256};
 
@@ -62,8 +65,6 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             .attributes
             .contains_key("manual_updates");
 
-        use std::collections::HashMap;
-
         // Decode involved contracts
         let mut stateless_contracts = HashMap::new();
         let mut index = 0;
@@ -110,13 +111,23 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             .map(H160::from_bytes)
             .collect();
 
+        let adapter_file_path = format!(
+            "src/protocol/vm/assets/{}",
+            to_adapter_file_name(
+                snapshot
+                    .component
+                    .protocol_system
+                    .as_str(),
+            )
+        );
+
         let pool_state = VMPoolState::new(
             id,
             tokens,
             block,
             balances,
             balance_owner,
-            "todo".to_string(), // TODO: map for adapter paths needed
+            adapter_file_path,
             involved_contracts,
             stateless_contracts,
             manual_updates,
@@ -127,4 +138,20 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
 
         Ok(pool_state)
     }
+}
+
+/// Converts a protocol system name to the name of the adapter file. For example, `balancer_v2`
+/// would be converted to `BalancerV2SwapAdapter.evm.runtime`.
+fn to_adapter_file_name(protocol_system: &str) -> String {
+    protocol_system
+        .split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<String>()
+        + "SwapAdapter.evm.runtime"
 }
