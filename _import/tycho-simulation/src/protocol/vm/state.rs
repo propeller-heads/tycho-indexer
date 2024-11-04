@@ -2,7 +2,25 @@
 #![allow(dead_code)]
 
 use std::any::Any;
+use std::collections::{HashMap, HashSet};
+
+use chrono::Utc;
+use ethers::{
+    abi::{decode, ParamType},
+    prelude::U256,
+    types::H160,
+    utils::to_checksum,
+};
+use itertools::Itertools;
+use revm::{
+    DatabaseRef,
+    primitives::{
+        AccountInfo, Address as rAddress, alloy_primitives::Keccak256, B256, Bytecode, Bytes,
+        keccak256, KECCAK_EMPTY, U256 as rU256,
+    },
+};
 use tracing::warn;
+use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
     evm::{
@@ -22,29 +40,6 @@ use crate::{
 // Necessary for the init_account method to be in scope
 #[allow(unused_imports)]
 use crate::evm::engine_db_interface::EngineDatabaseInterface;
-use crate::protocol::vm::{
-    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
-    models::Capability,
-    utils::SlotId,
-};
-use chrono::Utc;
-use ethers::{
-    abi::{decode, ParamType},
-    prelude::U256,
-    types::H160,
-    utils::to_checksum,
-};
-use itertools::Itertools;
-use revm::{
-    primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
-        B256, KECCAK_EMPTY, U256 as rU256,
-    },
-    DatabaseRef,
-};
-use std::collections::{HashMap, HashSet};
-use tycho_core::dto::ProtocolStateDelta;
-
 // Necessary for the init_account method to be in scope
 #[allow(unused_imports)]
 use crate::protocol::{
@@ -52,6 +47,11 @@ use crate::protocol::{
     events::{EVMLogMeta, LogIndex},
     models::GetAmountOutResult,
     state::{ProtocolEvent, ProtocolSim},
+};
+use crate::protocol::vm::{
+    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
+    models::Capability,
+    utils::SlotId,
 };
 
 #[derive(Clone, Debug)]
@@ -420,7 +420,7 @@ impl VMPoolState<PreCachedDB> {
                             &(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>(),
                         ),
                     )
-                    .await?,
+                        .await?,
                 ),
             )
             .await;
@@ -789,7 +789,7 @@ mod tests {
             rU256::from_str(
                 "110136159478993350616340414857413728709904511599989695046923576775517543504731",
             )
-            .unwrap(),
+                .unwrap(),
             rU256::from_str("2500000000000000000000000000000000000").unwrap(),
         );
         // allowance for Adapter contract to spend EOA's DAI
@@ -797,7 +797,7 @@ mod tests {
             rU256::from_str(
                 "58546993237423525698686728856645416951692145960565761888391937184176623942864",
             )
-            .unwrap(),
+                .unwrap(),
             rU256::from_str("2500000000000000000000000000000000000").unwrap(),
         );
         let dai = ERC20Token::new(
@@ -839,7 +839,7 @@ mod tests {
             hash: H256::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
-            .expect("Invalid block hash"),
+                .expect("Invalid block hash"),
             timestamp: 0,
         };
 
@@ -869,8 +869,8 @@ mod tests {
             HashMap::new(),
             false,
         )
-        .await
-        .expect("Failed to initialize pool state")
+            .await
+            .expect("Failed to initialize pool state")
     }
 
     #[tokio::test]
@@ -887,8 +887,8 @@ mod tests {
             Capability::PriceFunction,
             Capability::HardLimits,
         ]
-        .into_iter()
-        .collect::<HashSet<_>>();
+            .into_iter()
+            .collect::<HashSet<_>>();
 
         let capabilities_adapter_contract = pool_state
             .clone()
@@ -944,6 +944,28 @@ mod tests {
         // Assert 3 entries in block lasting overwrites: one for the in token, one for the out
         // token, and one for the balancer vault.
         assert_eq!(new_state.block_lasting_overwrites.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_amount_out_dust() {
+        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
+            .await
+            .unwrap();
+
+        let pool_state = setup_pool_state().await;
+
+        let (amount_out, gas_used, new_state) = pool_state
+            .get_amount_out(
+                pool_state.tokens[0].clone(),
+                U256::from(1),
+                pool_state.tokens[1].clone(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(amount_out, U256::from(0));
+        assert_eq!(gas_used, U256::from(85756));
+        assert_eq!(pool_state.spot_prices, new_state.spot_prices)
     }
 
     #[tokio::test]
