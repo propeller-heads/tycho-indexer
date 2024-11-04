@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_protosim_py"
-version = "0.27.0"
+version = "0.32.0"
 dependencies = [
  "ethers",
  "num-bigint",
@@ -5262,7 +5262,7 @@ dependencies = [
 
 [[package]]
 name = "protosim"
-version = "0.27.0"
+version = "0.32.0"
 dependencies = [
  "approx",
  "chrono",
@@ -5273,6 +5273,7 @@ dependencies = [
  "foundry-evm",
  "futures 0.3.28",
  "hex",
+ "itertools 0.10.5",
  "lazy_static",
  "mini-moka",
  "mockito",

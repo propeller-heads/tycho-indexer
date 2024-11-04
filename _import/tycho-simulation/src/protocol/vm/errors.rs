@@ -1,9 +1,12 @@
 // TODO: remove skips for clippy
 
-use crate::evm::simulation::SimulationError;
-use serde_json::Error as SerdeError;
 use std::io;
+
+use ethers::prelude::ProviderError;
+use serde_json::Error as SerdeError;
 use thiserror::Error;
+
+use crate::evm::simulation::SimulationError;
 
 /// Represents the outer-level, user-facing errors of the Protosim package.
 ///
@@ -16,6 +19,14 @@ use thiserror::Error;
 /// - `SimulationFailure`: Wraps errors that occur during simulation, containing a
 ///   `SimulationError`.
 /// - `DecodingError`: Indicates an error in decoding data.
+/// - `RPCError`: Indicates an error related to RPC interaction.
+/// - `UnsupportedCapability`: Denotes an error when a pool state does not support a necessary
+///   capability.
+/// - `UninitializedAdapter`: Indicates an error when trying to use the Adapter before initializing
+///   it.
+/// - `CapabilityRetrievalFailure`: Indicates an error when trying to retrieve capabilities.
+/// - `EngineNotSet`: Indicates an error when trying to use the engine before setting it.
+//   the adapter.
 #[derive(Error, Debug)]
 pub enum ProtosimError {
     #[error("ABI loading error: {0}")]
@@ -26,6 +37,14 @@ pub enum ProtosimError {
     SimulationFailure(SimulationError),
     #[error("Decoding error: {0}")]
     DecodingError(String),
+    #[error("RPC related error {0}")]
+    RpcError(RpcError),
+    #[error("Unsupported Capability: {0}")]
+    UnsupportedCapability(String),
+    #[error("Adapter not initialized: {0}")]
+    UninitializedAdapter(String),
+    #[error("Engine not set")]
+    EngineNotSet(),
 }
 
 #[derive(Debug, Error)]
@@ -65,5 +84,27 @@ impl From<FileError> for ProtosimError {
 impl From<SimulationError> for ProtosimError {
     fn from(err: SimulationError) -> Self {
         ProtosimError::SimulationFailure(err)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum RpcError {
+    #[error("Invalid Request: {0}")]
+    InvalidRequest(String),
+    #[error("Invalid Response: {0}")]
+    InvalidResponse(ProviderError),
+    #[error("Empty Response")]
+    EmptyResponse(),
+}
+
+impl From<RpcError> for ProtosimError {
+    fn from(err: RpcError) -> Self {
+        ProtosimError::RpcError(err)
+    }
+}
+
+impl From<ethers::abi::Error> for ProtosimError {
+    fn from(err: ethers::abi::Error) -> Self {
+        ProtosimError::DecodingError(err.to_string())
     }
 }

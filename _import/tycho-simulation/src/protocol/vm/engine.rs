@@ -6,13 +6,18 @@ use crate::{
 };
 use lazy_static::lazy_static;
 use revm::{
-    primitives::{AccountInfo, Address},
+    primitives::{AccountInfo, Address, KECCAK_EMPTY},
     DatabaseRef,
 };
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::RwLock;
 
-use crate::evm::{simulation::SimulationEngine, tycho_db::PreCachedDB};
+use crate::evm::{
+    simulation::SimulationEngine,
+    simulation_db::BlockHeader,
+    tycho_db::PreCachedDB,
+    tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
+};
 
 lazy_static! {
     pub static ref SHARED_TYCHO_DB: Arc<RwLock<PreCachedDB>> =
@@ -47,7 +52,7 @@ where
         let info = AccountInfo {
             balance: Default::default(),
             nonce: 0,
-            code_hash: Default::default(),
+            code_hash: KECCAK_EMPTY,
             code: None,
         };
         engine.state.init_account(
@@ -60,12 +65,49 @@ where
 
     engine.state.init_account(
         *EXTERNAL_ACCOUNT,
-        AccountInfo { balance: *MAX_BALANCE, nonce: 0, code_hash: Default::default(), code: None },
+        AccountInfo { balance: *MAX_BALANCE, nonce: 0, code_hash: KECCAK_EMPTY, code: None },
         None,
         false,
     );
 
     engine
+}
+
+pub async fn update_engine(
+    db: Arc<RwLock<PreCachedDB>>,
+    block: BlockHeader,
+    vm_storage: Option<HashMap<Address, ResponseAccount>>,
+    account_updates: HashMap<Address, AccountUpdate>,
+) -> Vec<AccountUpdate> {
+    let db_write = db.write().await;
+
+    let mut vm_updates: Vec<AccountUpdate> = Vec::new();
+
+    for (_address, account_update) in account_updates.iter() {
+        vm_updates.push(account_update.clone());
+    }
+
+    if let Some(vm_storage_values) = vm_storage {
+        for (_address, vm_storage_values) in vm_storage_values.iter() {
+            // ResponseAccount objects to AccountUpdate objects as required by the update method
+            vm_updates.push(AccountUpdate {
+                address: vm_storage_values.address,
+                chain: vm_storage_values.chain,
+                slots: vm_storage_values.slots.clone(),
+                balance: Some(vm_storage_values.balance),
+                code: Some(vm_storage_values.code.clone()),
+                change: ChangeType::Creation,
+            });
+        }
+    }
+
+    if !vm_updates.is_empty() {
+        db_write
+            .update(vm_updates.clone(), Some(block))
+            .await;
+    }
+
+    vm_updates
 }
 
 #[cfg(test)]
@@ -153,7 +195,7 @@ mod tests {
                 .clone();
             assert_eq!(account.balance, U256::default());
             assert_eq!(account.nonce, 0);
-            assert_eq!(account.code_hash, B256::default());
+            assert_eq!(account.code_hash, KECCAK_EMPTY);
             assert!(account.code.is_none());
         }
 
@@ -168,7 +210,7 @@ mod tests {
             .clone();
         assert_eq!(external_account.balance, *MAX_BALANCE);
         assert_eq!(external_account.nonce, 0);
-        assert_eq!(external_account.code_hash, B256::default());
+        assert_eq!(external_account.code_hash, KECCAK_EMPTY);
         assert!(external_account.code.is_none());
     }
 

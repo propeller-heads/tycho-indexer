@@ -1,3 +1,59 @@
+## [0.32.0](https://github.com/propeller-heads/protosim/compare/0.31.0...0.32.0) (2024-11-04)
+
+
+### Features
+
+* Implement ProtocolSim for VMPoolstate get_spot_prices ([241a596](https://github.com/propeller-heads/protosim/commit/241a596d4f42111882deb5021d143e8bef07d46b))
+
+## [0.31.0](https://github.com/propeller-heads/protosim/compare/0.30.1...0.31.0) (2024-10-31)
+
+
+### Features
+
+* Add ensure_capabilities to set_spot_prices ([3cf7257](https://github.com/propeller-heads/protosim/commit/3cf7257eaf652cccd6de1265f609cac037726624))
+* Add get_sell_amount_limit ([fea627a](https://github.com/propeller-heads/protosim/commit/fea627a729d56e49a56352a3c6de2725c3e95908))
+* Add involved_contracts and token_storage_slots to state overwrites ([4198a67](https://github.com/propeller-heads/protosim/commit/4198a6746b37816b2973c7ec4258ef19e17ef773))
+* Add overwrites to VMPoolState ([20aba87](https://github.com/propeller-heads/protosim/commit/20aba873257d35feb0873e85cf0a4f958360341a))
+* Add spot prices logic to VMPoolState ([1e25aa1](https://github.com/propeller-heads/protosim/commit/1e25aa130b37e4fc18ca1c4440d3f637db4b28e1))
+* Rewrite set_spot_prices to get_spot_prices ([0459516](https://github.com/propeller-heads/protosim/commit/0459516595267b210ca3f35228b493a4af3f4ca6))
+
+
+### Bug Fixes
+
+* Fix types in state.rs tests ([c197690](https://github.com/propeller-heads/protosim/commit/c197690e1c6105c801a136b0d2ec8611f6573057))
+* Miscellaneous fixes ([b6d2545](https://github.com/propeller-heads/protosim/commit/b6d25453cacb175a0c16a829fb00b6b5fa221465))
+* rAddress discrepancies from OverwriteFactory ([ffb4cb3](https://github.com/propeller-heads/protosim/commit/ffb4cb3ae514907bcccd3a6c5617505ff1f43d65))
+* Update get_code_for_address and get_contract_bytecode to return Bytecode ([04214ba](https://github.com/propeller-heads/protosim/commit/04214bad018a6459f49adc2d6d552dbd93ceec60))
+
+## [0.30.1](https://github.com/propeller-heads/protosim/compare/0.30.0...0.30.1) (2024-10-31)
+
+## [0.30.0](https://github.com/propeller-heads/protosim/compare/0.29.0...0.30.0) (2024-10-30)
+
+
+### Features
+
+* (VMPoolState) set and ensure capabilities ([c4d4bd2](https://github.com/propeller-heads/protosim/commit/c4d4bd23a443ecf209c3a3d0b8c3c1389c80a80f))
+
+## [0.29.0](https://github.com/propeller-heads/protosim/compare/0.28.0...0.29.0) (2024-10-29)
+
+
+### Features
+
+* Add adapter_contract to EVMPoolState ([345ad1b](https://github.com/propeller-heads/protosim/commit/345ad1bc038acce1886c94997df2bdb15f9f7de9))
+
+
+### Bug Fixes
+
+* Convert to capabilities correctly ([71a1e22](https://github.com/propeller-heads/protosim/commit/71a1e22304185b58133b8f83944d4b5bc6c1ac77))
+* Use KECCAK_EMPTY instead of code_hash: Default::default() ([629bd76](https://github.com/propeller-heads/protosim/commit/629bd76259345cdd4392a319341c4f3a81fd9edf))
+
+## [0.28.0](https://github.com/propeller-heads/protosim/compare/0.27.0...0.28.0) (2024-10-29)
+
+
+### Features
+
+* (WIP) Implement update_engine ([4c18c89](https://github.com/propeller-heads/protosim/commit/4c18c89fb6de66e4b6c8579d7b97e93c9f90ec74))
+
 ## [0.27.0](https://github.com/propeller-heads/protosim/compare/0.26.0...0.27.0) (2024-10-28)
 
 
