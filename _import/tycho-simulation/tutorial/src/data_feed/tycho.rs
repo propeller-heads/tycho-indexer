@@ -2,107 +2,45 @@ use ethers::types::H160;
 use std::{
     collections::{hash_map::Entry, HashMap},
     str::FromStr,
-    sync::{mpsc::Sender, Arc},
-    time::Duration,
+    sync::mpsc::Sender,
 };
 use tracing::{debug, info, warn};
 
 use tycho_client::{
-    deltas::DeltasClient,
-    feed::{
-        component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer,
-        BlockSynchronizer,
-    },
-    rpc::RPCClient,
-    HttpRPCClient, WsDeltasClient,
+    feed::component_tracker::ComponentFilter, rpc::RPCClient, stream::TychoStreamBuilder,
+    HttpRPCClient,
 };
-use tycho_core::dto::{Chain, ExtractorIdentity};
+use tycho_core::dto::Chain;
 
 use protosim::{
     models::ERC20Token,
     protocol::{
         models::ProtocolComponent, state::ProtocolSim, uniswap_v2::state::UniswapV2State,
-        uniswap_v3::state::UniswapV3State,
+        uniswap_v3::state::UniswapV3State, BytesConvertible,
     },
 };
 
-use super::state::BlockState;
+use crate::data_feed::state::BlockState;
 
 // TODO: Make extractors configurable
 async fn process_messages(
-    ws_url: String,
-    rpc_url: String,
-    auth_key: Option<&str>,
+    tycho_url: String,
+    auth_key: Option<String>,
     state_tx: Sender<BlockState>,
     tvl_threshold: f64,
 ) {
     // Connect to Tycho
-    let ws_client = WsDeltasClient::new(&ws_url, auth_key).unwrap();
-    ws_client
-        .connect()
+    let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
+        .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .auth_key(auth_key.clone())
+        .build()
         .await
-        .expect("ws client connection error");
+        .expect("Failed to build tycho stream");
 
-    let rpc_client = HttpRPCClient::new(&rpc_url, auth_key).unwrap();
+    let mut all_tokens = load_all_tokens(tycho_url.as_str(), auth_key.as_deref()).await;
 
-    // Load all tokens from Tycho
-    #[allow(clippy::mutable_key_type)]
-    let mut all_tokens = rpc_client
-        .get_all_tokens(Chain::Ethereum, Some(100), Some(42), 3_000)
-        .await
-        .expect("Unable to load tokens")
-        .into_iter()
-        .map(|token| {
-            let token_clone = token.clone();
-            (
-                token.address.clone(),
-                token.try_into().unwrap_or_else(|_| {
-                    panic!("Couldn't convert {:?} into ERC20 token.", token_clone)
-                }),
-            )
-        })
-        .collect::<HashMap<_, ERC20Token>>();
-
-    info!("Got {} tokens from Tycho", all_tokens.len());
-
-    // Register UniswapV2 and UniswapV3 synchronizers
-    let usv2_id = ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap_v2".to_string() };
-    let usv2_sync = ProtocolStateSynchronizer::new(
-        usv2_id.clone(),
-        false,
-        ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold), /* TODO: adapt CLI to use
-                                                                        * a range */
-        3,
-        true,
-        rpc_client.clone(),
-        ws_client.clone(),
-    );
-
-    let usv3_id = ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap_v3".to_string() };
-    let usv3_sync = ProtocolStateSynchronizer::new(
-        usv3_id.clone(),
-        false,
-        ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold), /* TODO: adapt CLI to use
-                                                                        * a range */
-        3,
-        true,
-        rpc_client.clone(),
-        ws_client.clone(),
-    );
-
-    let block_sync = BlockSynchronizer::new(Duration::from_secs(600), Duration::from_secs(1))
-        .register_synchronizer(usv3_id.clone(), usv3_sync)
-        .register_synchronizer(usv2_id.clone(), usv2_sync);
-
-    info!("Subscribed to {} tycho synchronizer", usv3_id);
-    info!("Subscribed to {} tycho synchronizer", usv2_id);
-
-    let (jh, mut rx) = block_sync
-        .run()
-        .await
-        .expect("block sync start error");
-
-    // monitors the last block a protocol sent a message
+    // maps protocols to the the last block we've seen a message for it
     let mut active_protocols: HashMap<String, u64> = HashMap::new();
 
     // persist all protocol states between messages
@@ -110,7 +48,7 @@ async fn process_messages(
     let mut stored_states: HashMap<H160, Box<dyn ProtocolSim>> = HashMap::new();
 
     // Loop through tycho messages
-    while let Some(msg) = rx.recv().await {
+    while let Some(msg) = tycho_stream.recv().await {
         // stores all states updated in this tick/msg
         let mut updated_states = HashMap::new();
         let mut new_pairs = HashMap::new();
@@ -132,7 +70,7 @@ async fn process_messages(
                     .for_each(|(addr, token)| {
                         if token.quality >= 51 {
                             all_tokens
-                                .entry(addr.clone())
+                                .entry(H160::from_bytes(addr))
                                 .or_insert_with(|| {
                                     token
                                         .clone()
@@ -153,7 +91,11 @@ async fn process_messages(
                         let tokens = comp
                             .tokens
                             .iter()
-                            .flat_map(|addr| all_tokens.get(addr).cloned())
+                            .flat_map(|addr| {
+                                all_tokens
+                                    .get(&H160::from_bytes(addr))
+                                    .cloned()
+                            })
                             .collect::<Vec<_>>();
                         let id = H160::from_str(id.as_ref()).unwrap_or_else(|_| {
                             panic!("Failed parsing H160 from id string {}", id)
@@ -168,7 +110,8 @@ async fn process_messages(
 
             let mut new_components = HashMap::new();
 
-            // snapshots
+            // PROCESS SNAPSHOTS
+
             for (id, snapshot) in protocol_msg
                 .snapshots
                 .get_states()
@@ -180,7 +123,7 @@ async fn process_messages(
                 let mut skip_pool = false;
 
                 for token in snapshot.component.tokens.clone() {
-                    match all_tokens.get(&token) {
+                    match all_tokens.get(&H160::from_bytes(&token)) {
                         Some(token) => pair_tokens.push(token.clone()),
                         None => {
                             debug!(
@@ -222,7 +165,8 @@ async fn process_messages(
             }
             updated_states.extend(new_components);
 
-            // deltas
+            // PROCESS DELTAS
+
             if let Some(deltas) = protocol_msg.deltas.clone() {
                 for (id, update) in deltas.state_updates {
                     let id = H160::from_str(id.as_ref())
@@ -294,6 +238,28 @@ async fn process_messages(
     jh.await.unwrap();
 }
 
+pub async fn load_all_tokens(tycho_url: &str, auth_key: Option<&str>) -> HashMap<H160, ERC20Token> {
+    let rpc_url = format!("https://{tycho_url}");
+    let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key).unwrap();
+
+    #[allow(clippy::mutable_key_type)]
+    rpc_client
+        .get_all_tokens(Chain::Ethereum, Some(100), Some(42), 3_000)
+        .await
+        .expect("Unable to load tokens")
+        .into_iter()
+        .map(|token| {
+            let token_clone = token.clone();
+            (
+                H160::from_bytes(&token.address),
+                token.try_into().unwrap_or_else(|_| {
+                    panic!("Couldn't convert {:?} into ERC20 token.", token_clone)
+                }),
+            )
+        })
+        .collect::<HashMap<_, ERC20Token>>()
+}
+
 pub fn start(
     tycho_url: String,
     auth_key: Option<String>,
@@ -304,25 +270,9 @@ pub fn start(
 
     info!("Starting tycho data feed...");
 
-    let ws_url = format!("wss://{tycho_url}");
-    let rpc_url = format!("https://{tycho_url}");
-
-    // Wrap `auth_key` in an Arc<Option<String>> to make it 'static
-    let auth_key = Arc::new(auth_key);
-
     rt.block_on(async {
-        let auth_key_clone = Arc::clone(&auth_key);
-
         tokio::spawn(async move {
-            process_messages(
-                ws_url,
-                rpc_url,
-                auth_key_clone.as_deref(), /* `as_deref` converts `Option<String>` to
-                                            * `Option<&str>` */
-                state_tx,
-                tvl_threshold,
-            )
-            .await;
+            process_messages(tycho_url, auth_key, state_tx, tvl_threshold).await;
         })
         .await
         .unwrap();
