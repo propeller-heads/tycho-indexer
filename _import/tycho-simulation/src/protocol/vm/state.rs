@@ -1,6 +1,7 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
+use std::any::Any;
 use tracing::warn;
 
 use crate::{
@@ -46,7 +47,6 @@ use tycho_core::dto::ProtocolStateDelta;
 
 // Necessary for the init_account method to be in scope
 #[allow(unused_imports)]
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use crate::protocol::{
     errors::{TradeSimulationError, TransitionError},
     events::{EVMLogMeta, LogIndex},
@@ -86,8 +86,6 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
     /// If set, vm will emit detailed traces about the execution
     pub trace: bool,
-    /// Marginal prices of the pool by token pair
-    pub marginal_prices: HashMap<(Address, Address), f64>,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<ProtosimContract<D>>,
@@ -107,7 +105,6 @@ impl VMPoolState<PreCachedDB> {
         involved_contracts: HashSet<H160>,
         token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
-        marginal_prices: HashMap<(Address, Address), f64>,
         trace: bool,
     ) -> Result<Self, ProtosimError> {
         let mut state = VMPoolState {
@@ -125,7 +122,6 @@ impl VMPoolState<PreCachedDB> {
             trace,
             engine: None,
             adapter_contract: None,
-            marginal_prices,
         };
         state
             .set_engine(adapter_contract_path)
@@ -613,21 +609,18 @@ impl VMPoolState<PreCachedDB> {
             }
         }
 
-        // Calculate the new price and update marginal prices
+        // Update spot prices
         let new_price = trade.price;
         if new_price != 0.0f64 {
             new_state
-                .marginal_prices
+                .spot_prices
                 .insert((sell_token.address, buy_token.address), new_price);
             new_state
-                .marginal_prices
+                .spot_prices
                 .insert((buy_token.address, sell_token.address), 1.0f64 / new_price);
         }
 
-        // Convert the received amount to buy token units
         let buy_amount = trade.received_amount;
-
-        // Return the buy amount, gas used, and the new state
         Ok((buy_amount, trade.gas_used, new_state))
     }
 }
@@ -839,7 +832,6 @@ mod tests {
             HashSet::new(),
             HashMap::new(),
             HashMap::new(),
-            HashMap::new(),
             false,
         )
         .await
@@ -913,9 +905,9 @@ mod tests {
 
         assert_eq!(amount_out, U256::from_dec_str("137780051463393923").unwrap());
         assert_eq!(gas_used, U256::from_dec_str("89623").unwrap());
-        assert_ne!(new_state.marginal_prices, pool_state.marginal_prices);
-        // Assert 3 block lasting overwrites: one for the in token, one for the out token, and one
-        // for the balancer vault.
+        assert_ne!(new_state.spot_prices, pool_state.spot_prices);
+        // Assert 3 entries in block lasting overwrites: one for the in token, one for the out
+        // token, and one for the balancer vault.
         assert_eq!(new_state.block_lasting_overwrites.len(), 3);
     }
 
