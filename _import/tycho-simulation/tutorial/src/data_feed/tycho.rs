@@ -144,7 +144,7 @@ async fn process_messages(
                     "uniswap_v3" => match UniswapV3State::try_from(snapshot) {
                         Ok(state) => Box::new(state),
                         Err(e) => {
-                            warn!("Failed parsing uniswap-v3 snapshot! {} for pool {:x?}", e, id);
+                            debug!("Failed parsing uniswap-v3 snapshot! {} for pool {:x?}", e, id);
                             continue;
                         }
                     },

@@ -74,14 +74,21 @@ fn handle_state(
         }
     }
 
-    info!("{:?} pairs were updated on this block", block_state.states.len());
+    info!(
+        "{:?} uniswap_v2 and uniswap_v3 pairs were updated on this block",
+        block_state.states.len()
+    );
     for (address, state) in block_state.states {
         if let std::collections::hash_map::Entry::Occupied(mut e) = pool_graph.entry(address) {
-            info!("Pair: {:?} price has changed on block: {:?}", address, block_state.time);
+            info!(
+                "USDC-WETH pair: {:?} price has changed on block: {:?}",
+                address, block_state.time
+            );
             e.insert(state.clone());
         }
     }
 
+    info!("");
     info!("Found {} direct USDC-WETH pairs", pool_graph.len());
 
     let (mut best_price, mut worst_price) = (None, None);
@@ -95,8 +102,10 @@ fn handle_state(
         worst_price = Some(worst_price.map_or(spot_price, |wp: f64| wp.min(spot_price)));
     }
 
+    info!("");
     info!("Best spot price: {:?}", best_price.unwrap());
     info!("Worst spot price: {:?}", worst_price.unwrap());
+    info!("----------------------------------------------------");
 }
 
 pub async fn start_app() {
