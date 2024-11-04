@@ -1,5 +1,6 @@
 use clap::Parser;
 use ethers::types::U256;
+use protosim::protocol::state::ProtocolSim;
 use std::collections::HashMap;
 use std::{
     env,
@@ -13,7 +14,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use protosim::models::ERC20Token;
 
-use tutorial::data_feed::{tick::Tick, tycho};
+use tutorial::data_feed::{state::BlockState, tycho};
 
 /// Graph based solver
 #[derive(Parser)]
@@ -23,9 +24,26 @@ struct Cli {
     tvl_threshold: f64,
 }
 
-pub fn process_ticks(rx: mpsc::Receiver<Tick>) {
-    let mut pool_graph = HashMap::new();
+pub fn process_ticks(rx: mpsc::Receiver<BlockState>) {
+    let mut pool_graph: HashMap<ethers::types::H160, Box<dyn ProtocolSim>> = HashMap::new();
 
+    loop {
+        match rx.recv() {
+            Ok(state) => {
+                handle_state(state, &mut pool_graph);
+            }
+
+            Err(e) => {
+                error!("Error receiving tick: {:?}", e);
+            }
+        }
+    }
+}
+
+fn handle_state(
+    block_state: BlockState,
+    pool_graph: &mut HashMap<ethers::types::H160, Box<dyn ProtocolSim>>,
+) {
     let usdc =
         ERC20Token::new("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, "USDC", U256::from(10000));
 
@@ -36,62 +54,49 @@ pub fn process_ticks(rx: mpsc::Receiver<Tick>) {
         U256::from(15000),
     );
 
-    loop {
-        match rx.recv() {
-            Ok(tick) => {
-                info!("Received block update: {:?}", tick.time);
-                info!(
-                    "Found {:?} new pairs. Adding to the graph if they match the criteria",
-                    tick.new_pairs.len()
-                );
-                for (address, component) in tick.new_pairs {
-                    let state = tick.states.get(&address);
-                    if state.is_none() {
-                        error!("State not found for new pair: {:?}", address);
-                        continue;
-                    }
-                    // Check if token0.address == usdc and token1.address == weth
-                    if component.tokens[0].address == usdc.address
-                        && component.tokens[1].address == weth.address
-                    {
-                        debug!("Found USDC-WETH pair: {:?}", address);
-                        pool_graph.insert(address, state.unwrap().clone());
-                    }
-                }
-
-                info!("{:?} pairs were updated on this block", tick.states.len());
-                for (address, state) in tick.states {
-                    if let std::collections::hash_map::Entry::Occupied(mut e) =
-                        pool_graph.entry(address)
-                    {
-                        info!("Pair: {:?} price has changed on block: {:?}", address, tick.time);
-                        e.insert(state.clone());
-                    }
-                }
-
-                info!("Found {} direct USDC-WETH pairs", pool_graph.len());
-
-                let (mut best_price, mut worst_price) = (None, None);
-
-                for (id, pair) in pool_graph.iter() {
-                    info!("USDC-WETH pair: {:?}", id);
-                    let spot_price = pair.spot_price(&weth, &usdc);
-                    info!("Price: {:?}", spot_price);
-
-                    best_price = Some(best_price.map_or(spot_price, |bp: f64| bp.max(spot_price)));
-                    worst_price =
-                        Some(worst_price.map_or(spot_price, |wp: f64| wp.min(spot_price)));
-                }
-
-                info!("Best spot price: {:?}", best_price.unwrap());
-                info!("Worst spot price: {:?}", worst_price.unwrap());
-            }
-
-            Err(e) => {
-                error!("Error receiving tick: {:?}", e);
-            }
+    info!("Received block update: {:?}", block_state.time);
+    info!(
+        "Found {:?} new pairs. Adding to the graph if they match the criteria",
+        block_state.new_pairs.len()
+    );
+    for (address, component) in block_state.new_pairs {
+        let state = block_state.states.get(&address);
+        if state.is_none() {
+            debug!("State not found for new pair: {:?}", address);
+            continue;
+        }
+        // Check if token0.address == usdc and token1.address == weth
+        if component.tokens[0].address == usdc.address
+            && component.tokens[1].address == weth.address
+        {
+            debug!("Found USDC-WETH pair: {:?}", address);
+            pool_graph.insert(address, state.unwrap().clone());
         }
     }
+
+    info!("{:?} pairs were updated on this block", block_state.states.len());
+    for (address, state) in block_state.states {
+        if let std::collections::hash_map::Entry::Occupied(mut e) = pool_graph.entry(address) {
+            info!("Pair: {:?} price has changed on block: {:?}", address, block_state.time);
+            e.insert(state.clone());
+        }
+    }
+
+    info!("Found {} direct USDC-WETH pairs", pool_graph.len());
+
+    let (mut best_price, mut worst_price) = (None, None);
+
+    for (id, pair) in pool_graph.iter() {
+        info!("USDC-WETH pair: {:?}", id);
+        let spot_price = pair.spot_price(&weth, &usdc);
+        info!("Price: {:?}", spot_price);
+
+        best_price = Some(best_price.map_or(spot_price, |bp: f64| bp.max(spot_price)));
+        worst_price = Some(worst_price.map_or(spot_price, |wp: f64| wp.min(spot_price)));
+    }
+
+    info!("Best spot price: {:?}", best_price.unwrap());
+    info!("Worst spot price: {:?}", worst_price.unwrap());
 }
 
 pub async fn start_app() {
@@ -104,7 +109,7 @@ pub async fn start_app() {
 
     // Create communication channels for inter-thread communication
     let (ctrl_tx, ctrl_rx) = mpsc::channel::<()>();
-    let (tick_tx, tick_rx) = mpsc::channel::<Tick>();
+    let (tick_tx, tick_rx) = mpsc::channel::<BlockState>();
 
     // Spawn a new thread to process data feeds
     let feed_ctrl_tx = ctrl_tx.clone();

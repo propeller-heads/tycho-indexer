@@ -26,14 +26,14 @@ use protosim::{
     },
 };
 
-use crate::data_feed::tick::Tick;
+use super::state::BlockState;
 
 // TODO: Make extractors configurable
 async fn process_messages(
     ws_url: String,
     rpc_url: String,
     auth_key: Option<&str>,
-    tick_tx: Sender<Tick>,
+    state_tx: Sender<BlockState>,
     tvl_threshold: f64,
 ) {
     // Connect to Tycho
@@ -283,10 +283,11 @@ async fn process_messages(
         );
 
         // Send the tick with all updated states
-        let tick = Tick::new(block_id, updated_states, new_pairs).set_removed_pairs(removed_pairs);
+        let state =
+            BlockState::new(block_id, updated_states, new_pairs).set_removed_pairs(removed_pairs);
 
-        tick_tx
-            .send(tick)
+        state_tx
+            .send(state)
             .expect("Sending tick failed!")
     }
 
@@ -296,7 +297,7 @@ async fn process_messages(
 pub fn start(
     tycho_url: String,
     auth_key: Option<String>,
-    tick_tx: Sender<Tick>,
+    state_tx: Sender<BlockState>,
     tvl_threshold: f64,
 ) {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -318,7 +319,7 @@ pub fn start(
                 rpc_url,
                 auth_key_clone.as_deref(), /* `as_deref` converts `Option<String>` to
                                             * `Option<&str>` */
-                tick_tx,
+                state_tx,
                 tvl_threshold,
             )
             .await;
