@@ -5,10 +5,10 @@ edition = "2021"
 
 [[bin]]
 name = "tutorial"
-path = "tutorial/src/main.rs"
+path = "src/main.rs"
 
 [dependencies]
-protosim = { path=".." }
+protosim = { path = ".." }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -17,5 +17,3 @@ clap = { version = "4.5.3", features = ["derive"] }
 anyhow = "1.0.79"
 tycho-core = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.34.0" }
 tycho-client = { git = "ssh://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.34.0" }
-
-

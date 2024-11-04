@@ -303,8 +303,8 @@ pub fn start(
 
     info!("Starting tycho data feed...");
 
-    let ws_url = format!("ws://{tycho_url}");
-    let rpc_url = format!("http://{tycho_url}");
+    let ws_url = format!("wss://{tycho_url}");
+    let rpc_url = format!("https://{tycho_url}");
 
     // Wrap `auth_key` in an Arc<Option<String>> to make it 'static
     let auth_key = Arc::new(auth_key);
