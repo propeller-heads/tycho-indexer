@@ -549,6 +549,41 @@ impl VMPoolState<PreCachedDB> {
         sell_amount: U256,
         buy_token: ERC20Token,
     ) -> Result<(U256, U256, VMPoolState<PreCachedDB>), ProtosimError> {
+        if self
+            .capabilities
+            .contains(&Capability::HardLimits)
+        {
+            let sell_amount_limit = self
+                .clone()
+                .get_sell_amount_limit(vec![sell_token.clone(), buy_token.clone()])
+                .await?;
+            println!("sell_amount_limit {:?}", sell_amount_limit);
+            if sell_amount_limit < sell_amount {
+                let (partial_buy_amount, partial_gas_used, new_state) = self
+                    .get_amount_out_no_limit_check(
+                        sell_token.clone(),
+                        sell_amount_limit,
+                        buy_token.clone(),
+                    )
+                    .await?;
+                return Err(ProtosimError::SellAmountTooHigh(
+                    partial_buy_amount,
+                    partial_gas_used,
+                    new_state,
+                    sell_amount_limit,
+                ));
+            }
+        }
+        self.get_amount_out_no_limit_check(sell_token, sell_amount, buy_token)
+            .await
+    }
+
+    async fn get_amount_out_no_limit_check(
+        &self,
+        sell_token: ERC20Token,
+        sell_amount: U256,
+        buy_token: ERC20Token,
+    ) -> Result<(U256, U256, VMPoolState<PreCachedDB>), ProtosimError> {
         let sell_amount_limit = self
             .clone()
             .get_sell_amount_limit(vec![sell_token.clone(), buy_token.clone()])
@@ -909,6 +944,32 @@ mod tests {
         // Assert 3 entries in block lasting overwrites: one for the in token, one for the out
         // token, and one for the balancer vault.
         assert_eq!(new_state.block_lasting_overwrites.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_amount_out_sell_limit() {
+        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
+            .await
+            .unwrap();
+
+        let pool_state = setup_pool_state().await;
+
+        let result = pool_state
+            .get_amount_out(
+                pool_state.tokens[0].clone(),
+                // sell limit is 100279494253364362835
+                U256::from_dec_str("100379494253364362835").unwrap(),
+                pool_state.tokens[1].clone(),
+            )
+            .await;
+
+        assert!(result.is_err());
+        match result {
+            Err(e) => {
+                assert!(matches!(e, ProtosimError::SellAmountTooHigh(_, _, _, _)));
+            }
+            _ => panic!("Test failed: was expecting an Err value"),
+        };
     }
 
     #[tokio::test]

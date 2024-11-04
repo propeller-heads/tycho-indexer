@@ -1,6 +1,8 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
+use std::collections::HashMap;
+
 use chrono::Utc;
 use ethers::{
     abi::{decode, encode, Abi, ParamType, Token},
@@ -11,7 +13,6 @@ use revm::{
     db::DatabaseRef,
     primitives::{alloy_primitives::Keccak256, Address},
 };
-use std::collections::HashMap;
 use tracing::warn;
 
 use crate::{
@@ -191,9 +192,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
     use std::str::FromStr;
+
+    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
+
+    use super::*;
 
     #[derive(Debug, Clone)]
     struct MockDatabase;

@@ -2,11 +2,14 @@
 
 use std::io;
 
-use ethers::prelude::ProviderError;
+use ethers::{prelude::ProviderError, types::U256};
 use serde_json::Error as SerdeError;
 use thiserror::Error;
 
-use crate::evm::simulation::SimulationError;
+use crate::{
+    evm::{simulation::SimulationError, tycho_db::PreCachedDB},
+    protocol::vm::state::VMPoolState,
+};
 
 /// Represents the outer-level, user-facing errors of the Protosim package.
 ///
@@ -25,8 +28,9 @@ use crate::evm::simulation::SimulationError;
 /// - `UninitializedAdapter`: Indicates an error when trying to use the Adapter before initializing
 ///   it.
 /// - `CapabilityRetrievalFailure`: Indicates an error when trying to retrieve capabilities.
-/// - `EngineNotSet`: Indicates an error when trying to use the engine before setting it.
-//   the adapter.
+/// - `EngineNotSet`: Indicates an error when trying to use the engine before setting it. the
+///   adapter.
+/// - `SellAmountTooHigh`: Indicates an error when the sell amount is higher than the sell limit.
 #[derive(Error, Debug)]
 pub enum ProtosimError {
     #[error("ABI loading error: {0}")]
@@ -45,6 +49,8 @@ pub enum ProtosimError {
     UninitializedAdapter(String),
     #[error("Engine not set")]
     EngineNotSet(),
+    #[error("Sell amount is higher than sell limit")]
+    SellAmountTooHigh(U256, U256, VMPoolState<PreCachedDB>, U256),
 }
 
 #[derive(Debug, Error)]
@@ -81,6 +87,7 @@ impl From<FileError> for ProtosimError {
         ProtosimError::AbiError(err)
     }
 }
+
 impl From<SimulationError> for ProtosimError {
     fn from(err: SimulationError) -> Self {
         ProtosimError::SimulationFailure(err)
