@@ -1,8 +1,10 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
-use std::any::Any;
-use std::collections::{HashMap, HashSet};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+};
 
 use chrono::Utc;
 use ethers::{
@@ -13,11 +15,11 @@ use ethers::{
 };
 use itertools::Itertools;
 use revm::{
-    DatabaseRef,
     primitives::{
-        AccountInfo, Address as rAddress, alloy_primitives::Keccak256, B256, Bytecode, Bytes,
-        keccak256, KECCAK_EMPTY, U256 as rU256,
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
+        B256, KECCAK_EMPTY, U256 as rU256,
     },
+    DatabaseRef,
 };
 use tracing::warn;
 use tycho_core::dto::ProtocolStateDelta;
@@ -41,17 +43,17 @@ use crate::{
 #[allow(unused_imports)]
 use crate::evm::engine_db_interface::EngineDatabaseInterface;
 // Necessary for the init_account method to be in scope
+use crate::protocol::vm::{
+    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
+    models::Capability,
+    utils::SlotId,
+};
 #[allow(unused_imports)]
 use crate::protocol::{
     errors::{TradeSimulationError, TransitionError},
     events::{EVMLogMeta, LogIndex},
     models::GetAmountOutResult,
     state::{ProtocolEvent, ProtocolSim},
-};
-use crate::protocol::vm::{
-    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
-    models::Capability,
-    utils::SlotId,
 };
 
 #[derive(Clone, Debug)]
@@ -420,7 +422,7 @@ impl VMPoolState<PreCachedDB> {
                             &(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>(),
                         ),
                     )
-                        .await?,
+                    .await?,
                 ),
             )
             .await;
@@ -789,7 +791,7 @@ mod tests {
             rU256::from_str(
                 "110136159478993350616340414857413728709904511599989695046923576775517543504731",
             )
-                .unwrap(),
+            .unwrap(),
             rU256::from_str("2500000000000000000000000000000000000").unwrap(),
         );
         // allowance for Adapter contract to spend EOA's DAI
@@ -797,7 +799,7 @@ mod tests {
             rU256::from_str(
                 "58546993237423525698686728856645416951692145960565761888391937184176623942864",
             )
-                .unwrap(),
+            .unwrap(),
             rU256::from_str("2500000000000000000000000000000000000").unwrap(),
         );
         let dai = ERC20Token::new(
@@ -839,7 +841,7 @@ mod tests {
             hash: H256::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
-                .expect("Invalid block hash"),
+            .expect("Invalid block hash"),
             timestamp: 0,
         };
 
@@ -869,8 +871,8 @@ mod tests {
             HashMap::new(),
             false,
         )
-            .await
-            .expect("Failed to initialize pool state")
+        .await
+        .expect("Failed to initialize pool state")
     }
 
     #[tokio::test]
@@ -887,8 +889,8 @@ mod tests {
             Capability::PriceFunction,
             Capability::HardLimits,
         ]
-            .into_iter()
-            .collect::<HashSet<_>>();
+        .into_iter()
+        .collect::<HashSet<_>>();
 
         let capabilities_adapter_contract = pool_state
             .clone()
