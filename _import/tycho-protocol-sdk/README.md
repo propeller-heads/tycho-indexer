@@ -1,5 +1,5 @@
-# Propeller Protocol Lib
+# Tycho Protocol SDK
 
-Protocol lib is a library used by Propellerheads.xyz solvers to integrate decentralized protocols. Currently, only swap/exchange protocols are supported.
+Tycho Protocol SDK is a library used by solvers to integrate DEX liquidity.
 
 Please refer to the [README.md](docs/README.md) for more information.
