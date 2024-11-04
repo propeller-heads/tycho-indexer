@@ -42,18 +42,18 @@ use crate::{
 // Necessary for the init_account method to be in scope
 #[allow(unused_imports)]
 use crate::evm::engine_db_interface::EngineDatabaseInterface;
-// Necessary for the init_account method to be in scope
-use crate::protocol::vm::{
-    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
-    models::Capability,
-    utils::SlotId,
-};
 #[allow(unused_imports)]
 use crate::protocol::{
     errors::{TradeSimulationError, TransitionError},
     events::{EVMLogMeta, LogIndex},
     models::GetAmountOutResult,
     state::{ProtocolEvent, ProtocolSim},
+};
+// Necessary for the init_account method to be in scope
+use crate::protocol::vm::{
+    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
+    models::Capability,
+    utils::SlotId,
 };
 
 #[derive(Clone, Debug)]
@@ -442,6 +442,7 @@ impl VMPoolState<PreCachedDB> {
         // Merge `block_lasting_overwrites` with `token_overwrites`
         let merged_overwrites =
             self.merge(&self.block_lasting_overwrites.clone(), &token_overwrites);
+
         self.block_lasting_overwrites = merged_overwrites.clone();
         Ok(merged_overwrites)
     }
@@ -481,10 +482,7 @@ impl VMPoolState<PreCachedDB> {
         // Merge all overwrites into a single HashMap
         Ok(res
             .into_iter()
-            .fold(HashMap::new(), |acc, overwrite| {
-                self.merge(&acc, &overwrite);
-                acc
-            }))
+            .fold(HashMap::new(), |acc, overwrite| self.merge(&acc, &overwrite)))
     }
 
     fn get_balance_overwrites(
@@ -559,7 +557,6 @@ impl VMPoolState<PreCachedDB> {
                 .clone()
                 .get_sell_amount_limit(vec![sell_token.clone(), buy_token.clone()])
                 .await?;
-            println!("sell_amount_limit {:?}", sell_amount_limit);
             if sell_amount_limit < sell_amount {
                 let (partial_buy_amount, partial_gas_used, new_state) = self
                     .get_amount_out_no_limit_check(
@@ -941,7 +938,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(amount_out, U256::from_dec_str("137780051463393923").unwrap());
-        assert_eq!(gas_used, U256::from_dec_str("89623").unwrap());
+        assert_eq!(gas_used, U256::from_dec_str("72523").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
         // Assert 3 entries in block lasting overwrites: one for the in token, one for the out
         // token, and one for the balancer vault.
@@ -966,7 +963,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(amount_out, U256::from(0));
-        assert_eq!(gas_used, U256::from(85756));
+        assert_eq!(gas_used, U256::from(68656));
         assert_eq!(pool_state.spot_prices, new_state.spot_prices)
     }
 
