@@ -32,13 +32,14 @@ jobs:
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+      aws_region: ${{ secrets.AWS_REGION }}
     with:
       runs_on: 'ubuntu-latest'
       yum_packages: "pkgconfig openssl-devel"
       package_root: "protosim_py"
       use_maturin: true
-      role_to_assume: ${{ vars.ROLE_TO_ASSUME }}
-      domain_owner: ${{ vars.DOMAIN_OWNER }}
   build_python_wheel_macos:
     uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
     needs:
@@ -49,9 +50,10 @@ jobs:
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+      aws_region: ${{ secrets.AWS_REGION }}
     with:
       runs_on: 'macos-latest'
       package_root: "protosim_py"
       use_maturin: true
-      role_to_assume: ${{ vars.ROLE_TO_ASSUME }}
-      domain_owner: ${{ vars.DOMAIN_OWNER }}
