@@ -1,3 +1,10 @@
+## [0.32.0](https://github.com/propeller-heads/protosim/compare/0.31.0...0.32.0) (2024-11-04)
+
+
+### Features
+
+* Implement ProtocolSim for VMPoolstate get_spot_prices ([241a596](https://github.com/propeller-heads/protosim/commit/241a596d4f42111882deb5021d143e8bef07d46b))
+
 ## [0.31.0](https://github.com/propeller-heads/protosim/compare/0.30.1...0.31.0) (2024-10-31)
 
 
