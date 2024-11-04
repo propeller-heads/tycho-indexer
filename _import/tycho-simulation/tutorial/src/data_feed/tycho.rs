@@ -1,11 +1,3 @@
-use crate::{
-    data_feed::tick::Tick,
-    models::ERC20Token,
-    protocol::{
-        models::ProtocolComponent, state::ProtocolSim, uniswap_v2::state::UniswapV2State,
-        uniswap_v3::state::UniswapV3State,
-    },
-};
 use ethers::types::H160;
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -14,6 +6,7 @@ use std::{
     time::Duration,
 };
 use tracing::{debug, info, warn};
+
 use tycho_client::{
     deltas::DeltasClient,
     feed::{
@@ -24,7 +17,16 @@ use tycho_client::{
     HttpRPCClient, WsDeltasClient,
 };
 use tycho_core::dto::{Chain, ExtractorIdentity};
-// use crate::graph::tick::Tick;
+
+use protosim::{
+    models::ERC20Token,
+    protocol::{
+        models::ProtocolComponent, state::ProtocolSim, uniswap_v2::state::UniswapV2State,
+        uniswap_v3::state::UniswapV3State,
+    },
+};
+
+use crate::data_feed::tick::Tick;
 
 // TODO: Make extractors configurable
 async fn process_messages(

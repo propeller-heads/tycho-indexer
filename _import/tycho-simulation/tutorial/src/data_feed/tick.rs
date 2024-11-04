@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use ethers::types::H160;
 
-use crate::protocol::{models::ProtocolComponent, state::ProtocolSim};
+use protosim::protocol::{models::ProtocolComponent, state::ProtocolSim};
 
 #[derive(Debug)]
 pub struct Tick {

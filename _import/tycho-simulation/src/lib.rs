@@ -18,7 +18,6 @@
 // Reexports
 pub use num_traits;
 
-pub mod data_feed;
 pub mod evm;
 pub mod models;
 pub mod protocol;

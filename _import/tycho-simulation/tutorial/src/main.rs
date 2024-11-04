@@ -1,9 +1,5 @@
 use clap::Parser;
-use ethers::types::{U256};
-use protosim::{
-    data_feed, data_feed::tick::Tick, models::ERC20Token,
-    u256_num::u256_to_f64,
-};
+use ethers::types::U256;
 use std::collections::HashMap;
 use std::{
     env,
@@ -14,6 +10,10 @@ use std::{
 };
 use tracing::{debug, error, info};
 use tracing_subscriber::{fmt, EnvFilter};
+
+use protosim::models::ERC20Token;
+
+use tutorial::data_feed::{tick::Tick, tycho};
 
 /// Graph based solver
 #[derive(Parser)]
@@ -40,7 +40,10 @@ pub fn process_ticks(rx: mpsc::Receiver<Tick>) {
         match rx.recv() {
             Ok(tick) => {
                 info!("Received block update: {:?}", tick.time);
-                info!("Found {:?} new pairs. Adding to the graph if they match the criteria", tick.new_pairs.len());
+                info!(
+                    "Found {:?} new pairs. Adding to the graph if they match the criteria",
+                    tick.new_pairs.len()
+                );
                 for (address, component) in tick.new_pairs {
                     let state = tick.states.get(&address);
                     if state.is_none() {
@@ -58,9 +61,11 @@ pub fn process_ticks(rx: mpsc::Receiver<Tick>) {
 
                 info!("{:?} pairs were updated on this block", tick.states.len());
                 for (address, state) in tick.states {
-                    if pool_graph.contains_key(&address) {
+                    if let std::collections::hash_map::Entry::Occupied(mut e) =
+                        pool_graph.entry(address)
+                    {
                         info!("Pair: {:?} price has changed on block: {:?}", address, tick.time);
-                        pool_graph.insert(address, state.clone());
+                        e.insert(state.clone());
                     }
                 }
 
@@ -89,7 +94,6 @@ pub fn process_ticks(rx: mpsc::Receiver<Tick>) {
     }
 }
 
-
 pub async fn start_app() {
     // Parse command-line arguments into a Cli struct
     let cli = Cli::parse();
@@ -107,7 +111,7 @@ pub async fn start_app() {
     let _feed_handler = thread::spawn(move || {
         info!("Starting data feed thread...");
         let _ = panic::catch_unwind(AssertUnwindSafe(move || {
-            data_feed::tycho::start(tycho_url, Some(tycho_api_key), tick_tx, cli.tvl_threshold);
+            tycho::start(tycho_url, Some(tycho_api_key), tick_tx, cli.tvl_threshold);
         }));
         if feed_ctrl_tx.send(()).is_err() {
             error!("Fatal feed thread panicked and failed trying to communicate with main thread.");

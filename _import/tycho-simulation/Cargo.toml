@@ -41,6 +41,10 @@ mockito = "1.1.1"
 warp = "0.3.5"
 approx = "0.5.1"
 rstest = "0.18.2"
+tracing-subscriber = { version = "0.3.17", default-features = false, features = [
+    "env-filter",
+    "fmt",
+] }
 tempfile = "3.13.0"
 [features]
 default = []
