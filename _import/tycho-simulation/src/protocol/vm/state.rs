@@ -68,7 +68,7 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// simulations
     pub balance_owner: Option<H160>,
     /// Spot prices of the pool by token pair
-    pub spot_prices: HashMap<(ERC20Token, ERC20Token), f64>,
+    pub spot_prices: HashMap<(H160, H160), f64>,
     /// The supported capabilities of this pool
     pub capabilities: HashSet<Capability>,
     /// Storage overwrites that will be applied to all simulations. They will be cleared
@@ -386,7 +386,7 @@ impl VMPoolState<PreCachedDB> {
             };
 
             self.spot_prices
-                .insert(((*sell_token).clone(), (*buy_token).clone()), price);
+                .insert((sell_token.address, buy_token.address), price);
         }
         Ok(())
     }
@@ -551,7 +551,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
     fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64 {
         *self
             .spot_prices
-            .get(&(base.clone(), quote.clone()))
+            .get(&(base.address, quote.address))
             .expect("Spot price not found")
     }
 
@@ -795,11 +795,11 @@ mod tests {
 
         let dai_bal_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[0].clone(), pool_state.tokens[1].clone()))
+            .get(&(pool_state.tokens[0].address, pool_state.tokens[1].address))
             .unwrap();
         let bal_dai_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[1].clone(), pool_state.tokens[0].clone()))
+            .get(&(pool_state.tokens[1].address, pool_state.tokens[0].address))
             .unwrap();
         assert_eq!(dai_bal_spot_price, &0.137_778_914_319_047_9);
         assert_eq!(bal_dai_spot_price, &7.071_503_245_428_246);
