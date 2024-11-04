@@ -1,5 +1,9 @@
 # Protosim
 
+**Disclaimer: This repository is currently in its alpha release stage and is intended for workshop use only.
+It is not production-ready, and we will not ensure backward compatibility at this stage.
+A proper launch will follow soon.**
+
 Moves slow on-chain computations off-chain to solve optimization problems.
 
 This crate allows simulating a set of supported protocols off-chain. Currently, it has a focus on token exchange
@@ -19,7 +23,7 @@ aware of the state-mutating events and can transition their state correctly give
 - Uniswap V2 and Forks
 - Uniswap V3
 
-See also `evm_simulation` module which can simulate any transaction.
+See also `evm` module which can simulate any transaction.
 
 ## Adding a new Protocol
 
