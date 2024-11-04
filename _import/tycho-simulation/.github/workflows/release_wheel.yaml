@@ -37,6 +37,8 @@ jobs:
       yum_packages: "pkgconfig openssl-devel"
       package_root: "protosim_py"
       use_maturin: true
+      role_to_assume: ${{ vars.ROLE_TO_ASSUME }}
+      domain_owner: ${{ vars.DOMAIN_OWNER }}
   build_python_wheel_macos:
     uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
     needs:
@@ -51,3 +53,5 @@ jobs:
       runs_on: 'macos-latest'
       package_root: "protosim_py"
       use_maturin: true
+      role_to_assume: ${{ vars.ROLE_TO_ASSUME }}
+      domain_owner: ${{ vars.DOMAIN_OWNER }}
