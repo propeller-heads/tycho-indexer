@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "tycho-py"
+name = "tycho-simulation-py"
 version = "0.32.0"
 requires-python = ">=3.7"
 classifiers = [
