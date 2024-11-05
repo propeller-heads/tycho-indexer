@@ -154,6 +154,7 @@ impl UniswapV3State {
                             Some(GetAmountOutResult::new(
                                 state.amount_calculated.abs().into_raw(),
                                 gas_used,
+                                None,
                             )),
                         ))
                     }
@@ -281,6 +282,7 @@ impl ProtocolSim for UniswapV3State {
                 .abs()
                 .into_raw(),
             result.gas_used,
+            None,
         ))
     }
 

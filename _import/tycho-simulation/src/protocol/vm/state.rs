@@ -558,44 +558,22 @@ impl VMPoolState<PreCachedDB> {
         sell_amount: U256,
         buy_token: ERC20Token,
     ) -> Result<(U256, U256, VMPoolState<PreCachedDB>), TychoSimulationError> {
-        if self
-            .capabilities
-            .contains(&Capability::HardLimits)
-        {
-            let sell_amount_limit = self
-                .clone()
-                .get_sell_amount_limit(vec![sell_token.clone(), buy_token.clone()])
-                .await?;
-            if sell_amount_limit < sell_amount {
-                let (partial_buy_amount, partial_gas_used, new_state) = self
-                    .get_amount_out_no_limit_check(
-                        sell_token.clone(),
-                        sell_amount_limit,
-                        buy_token.clone(),
-                    )
-                    .await?;
-                return Err(TychoSimulationError::SellAmountTooHigh(
-                    partial_buy_amount,
-                    partial_gas_used,
-                    new_state,
-                    sell_amount_limit,
-                ));
-            }
-        }
-        self.get_amount_out_no_limit_check(sell_token, sell_amount, buy_token)
-            .await
-    }
+        let mut sell_amount_respecting_limit = sell_amount;
+        let mut sell_amount_exceeds_limit = false;
 
-    async fn get_amount_out_no_limit_check(
-        &self,
-        sell_token: ERC20Token,
-        sell_amount: U256,
-        buy_token: ERC20Token,
-    ) -> Result<(U256, U256, VMPoolState<PreCachedDB>), TychoSimulationError> {
         let sell_amount_limit = self
             .clone()
             .get_sell_amount_limit(vec![sell_token.clone(), buy_token.clone()])
             .await?;
+
+        if self
+            .capabilities
+            .contains(&Capability::HardLimits) &&
+            sell_amount_limit < sell_amount
+        {
+            sell_amount_respecting_limit = sell_amount_limit;
+            sell_amount_exceeds_limit = true;
+        }
 
         let overwrites = self
             .clone()
@@ -617,7 +595,7 @@ impl VMPoolState<PreCachedDB> {
                 sell_token.clone().address,
                 buy_token.clone().address,
                 false,
-                sell_amount,
+                sell_amount_respecting_limit,
                 self.block.number,
                 Some(overwrites),
             )
@@ -664,6 +642,16 @@ impl VMPoolState<PreCachedDB> {
         }
 
         let buy_amount = trade.received_amount;
+
+        if sell_amount_exceeds_limit {
+            return Err(TychoSimulationError::SellAmountTooHigh(
+                // Partial buy amount and gas used
+                buy_amount,
+                trade.gas_used,
+                new_state,
+                sell_amount_limit,
+            ));
+        }
         Ok((buy_amount, trade.gas_used, new_state))
     }
 }

@@ -75,12 +75,13 @@ impl PartialEq for Pair {
 pub struct GetAmountOutResult {
     pub amount: U256,
     pub gas: U256,
+    pub new_state: Option<Box<dyn ProtocolSim>>,
 }
 
 impl GetAmountOutResult {
     /// Constructs a new GetAmountOutResult struct with the given amount and gas
-    pub fn new(amount: U256, gas: U256) -> Self {
-        GetAmountOutResult { amount, gas }
+    pub fn new(amount: U256, gas: U256, new_state: Option<Box<dyn ProtocolSim>>) -> Self {
+        GetAmountOutResult { amount, gas, new_state }
     }
 
     /// Aggregates the given GetAmountOutResult struct to the current one.

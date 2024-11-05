@@ -118,7 +118,7 @@ impl ProtocolSim for UniswapV2State {
 
         let amount_out = safe_div_u256(numerator, denominator)?;
 
-        Ok(GetAmountOutResult::new(amount_out, U256::from(120_000)))
+        Ok(GetAmountOutResult::new(amount_out, U256::from(120_000), None))
     }
 
     fn delta_transition(

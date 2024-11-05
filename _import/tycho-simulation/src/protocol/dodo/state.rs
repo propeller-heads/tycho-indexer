@@ -173,7 +173,11 @@ where
             .pool_abi
             .decode_output::<U256, _>("querySellBaseToken", simulation_result.result)
             .expect("DODO: Failed decoding get_amount_out result!");
-        Ok(GetAmountOutResult { amount: amount_out, gas: U256::from(simulation_result.gas_used) })
+        Ok(GetAmountOutResult {
+            amount: amount_out,
+            gas: U256::from(simulation_result.gas_used),
+            new_state: None,
+        })
     }
 
     #[allow(unused_variables)]
