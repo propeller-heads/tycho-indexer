@@ -29,7 +29,7 @@ pub fn maybe_coerce_error(
     err: &SimulationError,
     pool_state: &str,
     gas_limit: Option<u64>,
-) -> SimulationError {
+) -> TradeSimulationError {
     match err {
         // Check for revert situation (if error message starts with "0x")
         SimulationError::TransactionError { ref data, ref gas_used } if data.starts_with("0x") => {

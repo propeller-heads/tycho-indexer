@@ -145,7 +145,7 @@ where
         _token_out: &crate::models::ERC20Token,
     ) -> Result<
         crate::protocol::models::GetAmountOutResult,
-        crate::protocol::errors::TradeSimulationError,
+        crate::protocol::errors::NativeSimulationError,
     > {
         let calldata = if self.base_token == token_in.address {
             self.helper_abi

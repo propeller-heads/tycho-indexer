@@ -1,4 +1,11 @@
 //! Protocol generic errors
+use crate::{
+    evm::simulation::SimulationError,
+    protocol::{
+        errors::TychoSimulationError::VMError,
+        vm::errors::{FileError, RpcError, VMError},
+    },
+};
 use thiserror::Error;
 
 use super::models::GetAmountOutResult;
@@ -18,19 +25,19 @@ pub enum TradeSimulationErrorKind {
     U256Overflow,
 }
 
-/// Struct representing a trade simulation error.
+/// Struct representing a native simulation error.
 #[derive(Debug)]
-pub struct TradeSimulationError {
+pub struct NativeSimulationError {
     /// The kind of error that occurred.
     pub kind: TradeSimulationErrorKind,
     /// The partial result of the simulation, if any.
     pub partial_result: Option<GetAmountOutResult>,
 }
 
-impl TradeSimulationError {
+impl NativeSimulationError {
     /// Creates a new trade simulation error with the given kind and partial result.
     pub fn new(kind: TradeSimulationErrorKind, partial_result: Option<GetAmountOutResult>) -> Self {
-        TradeSimulationError { kind, partial_result }
+        NativeSimulationError { kind, partial_result }
     }
 }
 
@@ -48,4 +55,28 @@ pub enum InvalidSnapshotError {
     MissingAttribute(String),
     #[error("Value error {0}")]
     ValueError(String),
+}
+
+/// Represents the outer-level, user-facing errors of the tycho-simulation package.
+///
+/// `TychoSimulationError` encompasses all possible errors that can occur in the package,
+/// wrapping lower-level errors in a user-friendly way for easier handling and display.
+#[derive(Error, Debug)]
+pub enum TychoSimulationError {
+    #[error("VM simulation error: {0}")]
+    VMError(VMError),
+    #[error("Native simulation error: {0}")]
+    NativeSimulationError(NativeSimulationError),
+}
+
+impl From<VMError> for TychoSimulationError {
+    fn from(err: VMError) -> Self {
+        TychoSimulationError::VMError(err)
+    }
+}
+
+impl From<NativeSimulationError> for TychoSimulationError {
+    fn from(err: NativeSimulationError) -> Self {
+        TychoSimulationError::NativeSimulationError(err)
+    }
 }

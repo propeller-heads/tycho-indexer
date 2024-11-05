@@ -14,7 +14,6 @@ use crate::{
     protocol::vm::{
         constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
         engine::{create_engine, SHARED_TYCHO_DB},
-        errors::TychoSimulationError,
         tycho_simulation_contract::TychoSimulationContract,
         utils::{get_code_for_contract, get_contract_bytecode},
     },
@@ -47,7 +46,7 @@ use tycho_core::dto::ProtocolStateDelta;
 #[allow(unused_imports)]
 use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use crate::protocol::{
-    errors::{TradeSimulationError, TransitionError},
+    errors::{NativeSimulationError, TransitionError, TychoSimulationError},
     events::{EVMLogMeta, LogIndex},
     models::GetAmountOutResult,
     state::{ProtocolEvent, ProtocolSim},
@@ -569,7 +568,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         _amount_in: U256,
         _token_in: &ERC20Token,
         _token_out: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TradeSimulationError> {
+    ) -> Result<GetAmountOutResult, NativeSimulationError> {
         todo!()
     }
 

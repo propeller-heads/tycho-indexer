@@ -1,5 +1,5 @@
 // TODO: remove skip for clippy dead_code check
-use crate::protocol::vm::errors::TychoSimulationError;
+use crate::protocol::errors::TychoSimulationError;
 use ethers::abi::Uint;
 use strum_macros::Display;
 

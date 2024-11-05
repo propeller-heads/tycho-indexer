@@ -16,11 +16,13 @@ use tracing::warn;
 
 use crate::{
     evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
-    protocol::vm::{
-        constants::EXTERNAL_ACCOUNT,
-        erc20_overwrite_factory::Overwrites,
+    protocol::{
         errors::TychoSimulationError,
-        utils::{load_swap_abi, maybe_coerce_error},
+        vm::{
+            constants::EXTERNAL_ACCOUNT,
+            erc20_overwrite_factory::Overwrites,
+            utils::{load_swap_abi, maybe_coerce_error},
+        },
     },
 };
 

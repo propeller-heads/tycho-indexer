@@ -6,7 +6,7 @@ use tycho_core::dto::ProtocolStateDelta;
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        errors::{NativeSimulationError, TradeSimulationErrorKind, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -93,9 +93,9 @@ impl ProtocolSim for UniswapV2State {
         amount_in: U256,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TradeSimulationError> {
+    ) -> Result<GetAmountOutResult, NativeSimulationError> {
         if amount_in == U256::zero() {
-            return Result::Err(TradeSimulationError::new(
+            return Result::Err(NativeSimulationError::new(
                 TradeSimulationErrorKind::InsufficientAmount,
                 None,
             ));
@@ -105,7 +105,7 @@ impl ProtocolSim for UniswapV2State {
         let reserve_buy = if zero2one { self.reserve1 } else { self.reserve0 };
 
         if reserve_sell == U256::zero() || reserve_buy == U256::zero() {
-            return Result::Err(TradeSimulationError::new(
+            return Result::Err(NativeSimulationError::new(
                 TradeSimulationErrorKind::NoLiquidity,
                 None,
             ));

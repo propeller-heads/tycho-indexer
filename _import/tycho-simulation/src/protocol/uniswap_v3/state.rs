@@ -7,7 +7,7 @@ use tycho_core::{dto::ProtocolStateDelta, Bytes};
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        errors::{NativeSimulationError, TradeSimulationErrorKind, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -110,9 +110,9 @@ impl UniswapV3State {
         zero_for_one: bool,
         amount_specified: I256,
         sqrt_price_limit: Option<U256>,
-    ) -> Result<SwapResults, TradeSimulationError> {
+    ) -> Result<SwapResults, NativeSimulationError> {
         if self.liquidity == 0 {
-            return Err(TradeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None));
+            return Err(NativeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None));
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -149,7 +149,7 @@ impl UniswapV3State {
                 Ok((tick, init)) => (tick, init),
                 Err(tick_err) => match tick_err.kind {
                     super::tick_list::TickListErrorKind::TicksExeeded => {
-                        return Err(TradeSimulationError::new(
+                        return Err(NativeSimulationError::new(
                             TradeSimulationErrorKind::InsufficientData,
                             Some(GetAmountOutResult::new(
                                 state.amount_calculated.abs().into_raw(),
@@ -158,7 +158,7 @@ impl UniswapV3State {
                         ))
                     }
                     _ => {
-                        return Err(TradeSimulationError::new(
+                        return Err(NativeSimulationError::new(
                             TradeSimulationErrorKind::Unknown,
                             None,
                         ))
@@ -267,7 +267,7 @@ impl ProtocolSim for UniswapV3State {
         amount_in: U256,
         token_a: &ERC20Token,
         token_b: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TradeSimulationError> {
+    ) -> Result<GetAmountOutResult, NativeSimulationError> {
         let zero_for_one = token_a < token_b;
         let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
 

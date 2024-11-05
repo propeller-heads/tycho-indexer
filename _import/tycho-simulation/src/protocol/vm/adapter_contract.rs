@@ -3,9 +3,12 @@
 
 use crate::{
     evm::account_storage::StateUpdate,
-    protocol::vm::{
-        erc20_overwrite_factory::Overwrites, errors::TychoSimulationError, models::Capability,
-        tycho_simulation_contract::TychoSimulationContract,
+    protocol::{
+        errors::TychoSimulationError,
+        vm::{
+            erc20_overwrite_factory::Overwrites, models::Capability,
+            tycho_simulation_contract::TychoSimulationContract,
+        },
     },
 };
 use ethers::{
