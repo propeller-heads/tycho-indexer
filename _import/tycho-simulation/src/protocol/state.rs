@@ -18,9 +18,9 @@
 //! # Examples
 //! ```
 //! use ethers::types::U256;
-//! use protosim::protocol::state::{ProtocolSim};
-//! use protosim::protocol::uniswap_v2::state::UniswapV2State;
-//! use protosim::models::ERC20Token;
+//! use tycho_simulation::protocol::state::{ProtocolSim};
+//! use tycho_simulation::protocol::uniswap_v2::state::UniswapV2State;
+//! use tycho_simulation::models::ERC20Token;
 //!
 //! // Initialize the UniswapV2 state with token reserves
 //! let state: Box<dyn ProtocolSim> = Box::new(UniswapV2State::new(

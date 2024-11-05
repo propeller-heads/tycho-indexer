@@ -10,5 +10,5 @@ ENV PATH="/root/.cargo/bin:$PATH"
 
 RUN /opt/python/cp39-cp39/bin/python -m pip install maturin
 
-WORKDIR /prop-builder/protosim_py
+WORKDIR /tycho_simulation/tycho_simulation_py
 CMD /opt/python/cp39-cp39/bin/python -m maturin build --release --compatibility manylinux2014 -i /opt/python/cp39-cp39/bin/python

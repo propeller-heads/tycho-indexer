@@ -9,13 +9,13 @@ from hexbytes import HexBytes
 
 from tycho_indexer_client.dto import ChangeType
 
-from protosim_py.evm import AccountInfo, AccountUpdate, BlockHeader
-from protosim_py.evm.adapter_contract import AdapterContract
-from protosim_py.evm.pool_state import ThirdPartyPool
-from protosim_py.evm.storage import TychoDBSingleton
-from protosim_py.evm.utils import parse_account_info, create_engine
-from protosim_py.exceptions import RecoverableSimulationException
-from protosim_py.models import EVMBlock, Capability, EthereumToken, Blockchain
+from tycho_simulation_py.evm import AccountInfo, AccountUpdate, BlockHeader
+from tycho_simulation_py.evm.adapter_contract import AdapterContract
+from tycho_simulation_py.evm.pool_state import ThirdPartyPool
+from tycho_simulation_py.evm.storage import TychoDBSingleton
+from tycho_simulation_py.evm.utils import parse_account_info, create_engine
+from tycho_simulation_py.exceptions import RecoverableSimulationException
+from tycho_simulation_py.models import EVMBlock, Capability, EthereumToken, Blockchain
 
 ADDRESS_ZERO = "0x0000000000000000000000000000000000000000"
 
@@ -192,7 +192,7 @@ def test_get_amount_out_sell_limit(pool_state):
 
 
 def test_stateless_contract_pool(asset_dir):
-    with patch("protosim_py.evm.pool_state.get_code_for_address") as mock_get_code:
+    with patch("tycho_simulation_py.evm.pool_state.get_code_for_address") as mock_get_code:
         mock_get_code.return_value = bytes.fromhex("363d")
 
         dai, bal = Token("DAI"), Token("BAL")

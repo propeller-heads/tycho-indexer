@@ -1,5 +1,5 @@
 // TODO: remove skip for clippy dead_code check
-use crate::protocol::vm::errors::ProtosimError;
+use crate::protocol::vm::errors::TychoSimulationError;
 use ethers::abi::Uint;
 use strum_macros::Display;
 
@@ -18,7 +18,7 @@ pub enum Capability {
 }
 
 impl Capability {
-    pub fn from_uint(value: Uint) -> Result<Self, ProtosimError> {
+    pub fn from_uint(value: Uint) -> Result<Self, TychoSimulationError> {
         match value.as_u32() {
             1 => Ok(Capability::SellSide),
             2 => Ok(Capability::BuySide),
@@ -29,9 +29,10 @@ impl Capability {
             7 => Ok(Capability::ScaledPrice),
             8 => Ok(Capability::HardLimits),
             9 => Ok(Capability::MarginalPrice),
-            _ => {
-                Err(ProtosimError::DecodingError(format!("Unexpected Capability value: {}", value)))
-            }
+            _ => Err(TychoSimulationError::DecodingError(format!(
+                "Unexpected Capability value: {}",
+                value
+            ))),
         }
     }
 }

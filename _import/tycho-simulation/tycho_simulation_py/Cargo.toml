@@ -1,17 +1,17 @@
 [package]
-name = "_protosim_py"
-version = "0.31.0"
+name = "_tycho_simulation_py"
+version = "0.32.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "_protosim_py"
+name = "_tycho_simulation_py"
 crate-type = ["cdylib"]
 
 [dependencies]
 num-bigint = "0.4.3"
 pyo3 = { version = "0.19", features = ["num-bigint", "extension-module"] }
-protosim = { path = "../"}
+tycho-simulation = { path = "../" }
 tokio = { version = "1.38.0", features = ["full"] }
 ethers = "2.0.13"
 revm = { version = "12.1.0", features = [

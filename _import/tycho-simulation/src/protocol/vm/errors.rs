@@ -11,9 +11,9 @@ use crate::{
     protocol::vm::state::VMPoolState,
 };
 
-/// Represents the outer-level, user-facing errors of the Protosim package.
+/// Represents the outer-level, user-facing errors of the tycho-simulation package.
 ///
-/// `ProtosimError` encompasses all possible errors that can occur in the package,
+/// `TychoSimulationError` encompasses all possible errors that can occur in the package,
 /// wrapping lower-level errors in a user-friendly way for easier handling and display.
 ///
 /// Variants:
@@ -32,7 +32,7 @@ use crate::{
 ///   adapter.
 /// - `SellAmountTooHigh`: Indicates an error when the sell amount is higher than the sell limit.
 #[derive(Error, Debug)]
-pub enum ProtosimError {
+pub enum TychoSimulationError {
     #[error("ABI loading error: {0}")]
     AbiError(FileError),
     #[error("Encoding error: {0}")]
@@ -82,15 +82,15 @@ impl From<SerdeError> for FileError {
     }
 }
 
-impl From<FileError> for ProtosimError {
+impl From<FileError> for TychoSimulationError {
     fn from(err: FileError) -> Self {
-        ProtosimError::AbiError(err)
+        TychoSimulationError::AbiError(err)
     }
 }
 
-impl From<SimulationError> for ProtosimError {
+impl From<SimulationError> for TychoSimulationError {
     fn from(err: SimulationError) -> Self {
-        ProtosimError::SimulationFailure(err)
+        TychoSimulationError::SimulationFailure(err)
     }
 }
 
@@ -104,14 +104,14 @@ pub enum RpcError {
     EmptyResponse(),
 }
 
-impl From<RpcError> for ProtosimError {
+impl From<RpcError> for TychoSimulationError {
     fn from(err: RpcError) -> Self {
-        ProtosimError::RpcError(err)
+        TychoSimulationError::RpcError(err)
     }
 }
 
-impl From<ethers::abi::Error> for ProtosimError {
+impl From<ethers::abi::Error> for TychoSimulationError {
     fn from(err: ethers::abi::Error) -> Self {
-        ProtosimError::DecodingError(err.to_string())
+        TychoSimulationError::DecodingError(err.to_string())
     }
 }
