@@ -11,7 +11,7 @@ mod structs_py;
 
 /// Transaction simulation using EVM implemented in Rust
 #[pymodule]
-fn _protosim_py(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _tycho_simulation_py(_py: Python, m: &PyModule) -> PyResult<()> {
     // initialize up a logger
     pyo3_log::init();
 

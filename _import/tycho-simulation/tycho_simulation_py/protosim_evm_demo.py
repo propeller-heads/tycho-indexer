@@ -1,11 +1,11 @@
 """Example of running a simulation in Rust from Python.
 
-(Build and) install the `protosim_py` package in your Python before running this.
+(Build and) install the `tycho_simulation_py` package in your Python before running this.
 See the Readme.md file for instructions.
 """
 
 import os
-from protosim_py import (
+from tycho_simulation_py import (
     SimulationEngine,
     SimulationParameters,
     AccountInfo,

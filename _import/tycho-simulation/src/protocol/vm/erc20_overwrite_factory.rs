@@ -54,7 +54,7 @@ impl ERC20OverwriteFactory {
             .insert(self.total_supply_slot, supply);
     }
 
-    pub fn get_protosim_overwrites(&self) -> HashMap<rAddress, Overwrites> {
+    pub fn get_overwrites(&self) -> HashMap<rAddress, Overwrites> {
         let mut result = HashMap::new();
         result.insert(self.token_address, self.overwrites.clone());
         result
@@ -158,12 +158,12 @@ mod tests {
     }
 
     #[test]
-    fn test_get_protosim_overwrites() {
+    fn test_get_overwrites() {
         let mut factory = setup_factory();
         let supply = U256::from(1_000_000);
         factory.set_total_supply(supply);
 
-        let overwrites = factory.get_protosim_overwrites();
+        let overwrites = factory.get_overwrites();
 
         assert_eq!(overwrites.len(), 1);
         assert!(overwrites.contains_key(&factory.token_address));

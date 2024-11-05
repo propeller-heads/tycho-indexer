@@ -34,13 +34,13 @@ class Trade(NamedTuple):
     price: float
 
 
-class ProtoSimResponse:
+class TychoSimulationResponse:
     def __init__(self, return_value: Any, simulation_result: SimulationResult):
         self.return_value = return_value
         self.simulation_result = simulation_result
 
 
-class ProtoSimContract:
+class TychoSimulationContract:
     def __init__(self, address: Address, abi_name: str, engine: SimulationEngine):
         self.abi = load_abi(abi_name)
         self.address = address
@@ -52,7 +52,7 @@ class ProtoSimContract:
         self._functions = {f["name"]: f for f in functions}
         if len(self._functions) != len(functions):
             raise ValueError(
-                f"ProtoSimContract does not support overloaded function names! "
+                f"TychoSimulationContract does not support overloaded function names! "
                 f"Encountered while loading {abi_name}."
             )
 
@@ -68,15 +68,15 @@ class ProtoSimContract:
         return eth_abi.decode(types, bytearray(encoded))
 
     def call(
-        self,
-        fname: str,
-        *args: list[Union[int, str, bool, bytes]],
-        block_number,
-        timestamp: int = None,
-        overrides: TStateOverwrites = None,
-        caller: Address = EXTERNAL_ACCOUNT,
-        value: int = 0,
-    ) -> ProtoSimResponse:
+            self,
+            fname: str,
+            *args: list[Union[int, str, bool, bytes]],
+            block_number,
+            timestamp: int = None,
+            overrides: TStateOverwrites = None,
+            caller: Address = EXTERNAL_ACCOUNT,
+            value: int = 0,
+    ) -> TychoSimulationResponse:
         call_data = self._encode_input(fname, *args)
         params = SimulationParameters(
             data=call_data,
@@ -93,7 +93,7 @@ class ProtoSimContract:
         except DecodingError:
             log.warning("Failed to decode output")
             output = None
-        return ProtoSimResponse(output, sim_result)
+        return TychoSimulationResponse(output, sim_result)
 
     def _simulate(self, params: SimulationParameters) -> "SimulationResult":
         """Run simulation and handle errors.
@@ -121,7 +121,7 @@ class ProtoSimContract:
                 raise coerced_err
 
 
-class AdapterContract(ProtoSimContract):
+class AdapterContract(TychoSimulationContract):
     """
     The AdapterContract provides an interface to interact with the protocols implemented
     by third parties using the `propeller-protocol-lib`.
@@ -131,13 +131,13 @@ class AdapterContract(ProtoSimContract):
         super().__init__(address, "ISwapAdapter", engine)
 
     def price(
-        self,
-        pair_id: HexStr,
-        sell_token: EthereumToken,
-        buy_token: EthereumToken,
-        amounts: list[int],
-        block: EVMBlock,
-        overwrites: TStateOverwrites = None,
+            self,
+            pair_id: HexStr,
+            sell_token: EthereumToken,
+            buy_token: EthereumToken,
+            amounts: list[int],
+            block: EVMBlock,
+            overwrites: TStateOverwrites = None,
     ) -> list[Fraction]:
         args = [HexBytes(pair_id), sell_token.address, buy_token.address, amounts]
         res = self.call(
@@ -150,14 +150,14 @@ class AdapterContract(ProtoSimContract):
         return list(map(lambda x: Fraction(*x), res.return_value[0]))
 
     def swap(
-        self,
-        pair_id: HexStr,
-        sell_token: EthereumToken,
-        buy_token: EthereumToken,
-        is_buy: bool,
-        amount: Decimal,
-        block: EVMBlock,
-        overwrites: TStateOverwrites = None,
+            self,
+            pair_id: HexStr,
+            sell_token: EthereumToken,
+            buy_token: EthereumToken,
+            is_buy: bool,
+            amount: Decimal,
+            block: EVMBlock,
+            overwrites: TStateOverwrites = None,
     ) -> tuple[Trade, dict[str, StateUpdate]]:
         args = [
             HexBytes(pair_id),
@@ -177,12 +177,12 @@ class AdapterContract(ProtoSimContract):
         return Trade(amount, gas, Fraction(*price)), res.simulation_result.state_updates
 
     def get_limits(
-        self,
-        pair_id: HexStr,
-        sell_token: EthereumToken,
-        buy_token: EthereumToken,
-        block: EVMBlock,
-        overwrites: TStateOverwrites = None,
+            self,
+            pair_id: HexStr,
+            sell_token: EthereumToken,
+            buy_token: EthereumToken,
+            block: EVMBlock,
+            overwrites: TStateOverwrites = None,
     ) -> tuple[int, int]:
         args = [HexBytes(pair_id), sell_token.address, buy_token.address]
         res = self.call(
@@ -195,7 +195,7 @@ class AdapterContract(ProtoSimContract):
         return res.return_value[0]
 
     def get_capabilities(
-        self, pair_id: HexStr, sell_token: EthereumToken, buy_token: EthereumToken
+            self, pair_id: HexStr, sell_token: EthereumToken, buy_token: EthereumToken
     ) -> set[Capability]:
         args = [HexBytes(pair_id), sell_token.address, buy_token.address]
         res = self.call("getCapabilities", args, block_number=1)

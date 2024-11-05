@@ -1,4 +1,4 @@
-//! Protosim: a decentralized exchange simulation library
+//! Tycho Simulation: a decentralized exchange simulation library
 //!
 //! This library allows to simulate trades against a wide range
 //! of different protocols, including uniswap-v2 and uniswap-v3.
