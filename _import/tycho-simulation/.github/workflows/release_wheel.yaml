@@ -32,6 +32,9 @@ jobs:
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+      aws_region: ${{ secrets.AWS_REGION }}
     with:
       runs_on: 'ubuntu-latest'
       yum_packages: "pkgconfig openssl-devel"
@@ -47,6 +50,9 @@ jobs:
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+      aws_region: ${{ secrets.AWS_REGION }}
     with:
       runs_on: 'macos-latest'
       package_root: "tycho_simulation_py"
