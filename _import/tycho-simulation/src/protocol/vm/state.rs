@@ -14,8 +14,8 @@ use crate::{
     protocol::vm::{
         constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
         engine::{create_engine, SHARED_TYCHO_DB},
-        errors::ProtosimError,
-        protosim_contract::ProtosimContract,
+        errors::TychoSimulationError,
+        tycho_simulation_contract::TychoSimulationContract,
         utils::{get_code_for_contract, get_contract_bytecode},
     },
 };
@@ -87,7 +87,7 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub trace: bool,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
-    adapter_contract: Option<ProtosimContract<D>>,
+    adapter_contract: Option<TychoSimulationContract<D>>,
 }
 
 impl VMPoolState<PreCachedDB> {
@@ -105,7 +105,7 @@ impl VMPoolState<PreCachedDB> {
         token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
         trace: bool,
-    ) -> Result<Self, ProtosimError> {
+    ) -> Result<Self, TychoSimulationError> {
         let mut state = VMPoolState {
             id,
             tokens,
@@ -125,19 +125,22 @@ impl VMPoolState<PreCachedDB> {
         state
             .set_engine(adapter_contract_path)
             .await?;
-        state.adapter_contract = Some(ProtosimContract::new(
+        state.adapter_contract = Some(TychoSimulationContract::new(
             *ADAPTER_ADDRESS,
             state
                 .engine
                 .clone()
-                .ok_or_else(ProtosimError::EngineNotSet)?,
+                .ok_or_else(TychoSimulationError::EngineNotSet)?,
         )?);
         state.set_capabilities().await?;
         // TODO: add init_token_storage_slots() in 3796
         Ok(state)
     }
 
-    async fn set_engine(&mut self, adapter_contract_path: String) -> Result<(), ProtosimError> {
+    async fn set_engine(
+        &mut self,
+        adapter_contract_path: String,
+    ) -> Result<(), TychoSimulationError> {
         if self.engine.is_none() {
             let token_addresses = self
                 .tokens
@@ -200,7 +203,7 @@ impl VMPoolState<PreCachedDB> {
                 } else {
                     let code =
                         Bytecode::new_raw(Bytes::from(bytecode.clone().ok_or_else(|| {
-                            ProtosimError::DecodingError("Expected bytecode".into())
+                            TychoSimulationError::DecodingError("Expected bytecode".into())
                         })?));
                     let code_hash = B256::from(keccak256(code.clone().bytes()));
                     (Some(code), code_hash)
@@ -232,11 +235,13 @@ impl VMPoolState<PreCachedDB> {
         &self,
         engine: &SimulationEngine<PreCachedDB>,
         decoded: &str,
-    ) -> Result<rAddress, ProtosimError> {
+    ) -> Result<rAddress, TychoSimulationError> {
         let method_name = decoded
             .split(':')
             .last()
-            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string format".into()))?;
+            .ok_or_else(|| {
+                TychoSimulationError::DecodingError("Invalid decoded string format".into())
+            })?;
 
         let selector = {
             let mut hasher = Keccak256::new();
@@ -248,7 +253,9 @@ impl VMPoolState<PreCachedDB> {
         let to_address = decoded
             .split(':')
             .nth(1)
-            .ok_or_else(|| ProtosimError::DecodingError("Invalid decoded string format".into()))?;
+            .ok_or_else(|| {
+                TychoSimulationError::DecodingError("Invalid decoded string format".into())
+            })?;
 
         let timestamp = Utc::now()
             .naive_utc()
@@ -257,7 +264,7 @@ impl VMPoolState<PreCachedDB> {
 
         let parsed_address: rAddress = to_address
             .parse()
-            .map_err(|_| ProtosimError::DecodingError("Invalid address format".into()))?;
+            .map_err(|_| TychoSimulationError::DecodingError("Invalid address format".into()))?;
 
         let sim_params = SimulationParameters {
             data: selector.to_vec().into(),
@@ -272,30 +279,30 @@ impl VMPoolState<PreCachedDB> {
 
         let sim_result = engine
             .simulate(&sim_params)
-            .map_err(ProtosimError::SimulationFailure)?;
+            .map_err(TychoSimulationError::SimulationFailure)?;
 
         let address = decode(&[ParamType::Address], &sim_result.result)?
             .into_iter()
             .next()
             .ok_or_else(|| {
-                ProtosimError::DecodingError("Expected an address in the result".into())
+                TychoSimulationError::DecodingError("Expected an address in the result".into())
             })?;
 
         address
             .to_string()
             .parse()
-            .map_err(|_| ProtosimError::DecodingError("Expected an Address".into()))
+            .map_err(|_| TychoSimulationError::DecodingError("Expected an Address".into()))
     }
 
     /// Ensures the pool supports the given capability
-    fn ensure_capability(&self, capability: Capability) -> Result<(), ProtosimError> {
+    fn ensure_capability(&self, capability: Capability) -> Result<(), TychoSimulationError> {
         if !self.capabilities.contains(&capability) {
-            return Err(ProtosimError::UnsupportedCapability(capability.to_string()));
+            return Err(TychoSimulationError::UnsupportedCapability(capability.to_string()));
         }
         Ok(())
     }
 
-    async fn set_capabilities(&mut self) -> Result<(), ProtosimError> {
+    async fn set_capabilities(&mut self) -> Result<(), TychoSimulationError> {
         let mut capabilities = Vec::new();
 
         // Generate all permutations of tokens and retrieve capabilities
@@ -306,7 +313,7 @@ impl VMPoolState<PreCachedDB> {
                     .adapter_contract
                     .clone()
                     .ok_or_else(|| {
-                        ProtosimError::UninitializedAdapter(
+                        TychoSimulationError::UninitializedAdapter(
                             "Adapter contract must be initialized before setting capabilities"
                                 .to_string(),
                         )
@@ -341,7 +348,10 @@ impl VMPoolState<PreCachedDB> {
         Ok(())
     }
 
-    pub async fn set_spot_prices(&mut self, tokens: Vec<ERC20Token>) -> Result<(), ProtosimError> {
+    pub async fn set_spot_prices(
+        &mut self,
+        tokens: Vec<ERC20Token>,
+    ) -> Result<(), TychoSimulationError> {
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
             .iter()
@@ -355,7 +365,7 @@ impl VMPoolState<PreCachedDB> {
                 .adapter_contract
                 .clone()
                 .ok_or_else(|| {
-                    ProtosimError::UninitializedAdapter(
+                    TychoSimulationError::UninitializedAdapter(
                         "Adapter contract must be initialized before setting capabilities"
                             .to_string(),
                     )
@@ -374,13 +384,13 @@ impl VMPoolState<PreCachedDB> {
                 .capabilities
                 .contains(&Capability::ScaledPrice)
             {
-                *price_result
-                    .first()
-                    .ok_or_else(|| ProtosimError::DecodingError("Expected a u64".to_string()))?
+                *price_result.first().ok_or_else(|| {
+                    TychoSimulationError::DecodingError("Expected a u64".to_string())
+                })?
             } else {
-                let unscaled_price = price_result
-                    .first()
-                    .ok_or_else(|| ProtosimError::DecodingError("Expected a u64".to_string()))?;
+                let unscaled_price = price_result.first().ok_or_else(|| {
+                    TychoSimulationError::DecodingError("Expected a u64".to_string())
+                })?;
                 *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
                     10f64.powi(buy_token.decimals as i32)
             };
@@ -397,12 +407,12 @@ impl VMPoolState<PreCachedDB> {
     async fn get_sell_amount_limit(
         &mut self,
         tokens: Vec<ERC20Token>,
-    ) -> Result<U256, ProtosimError> {
+    ) -> Result<U256, TychoSimulationError> {
         let binding = self
             .adapter_contract
             .clone()
             .ok_or_else(|| {
-                ProtosimError::UninitializedAdapter(
+                TychoSimulationError::UninitializedAdapter(
                     "Adapter contract must be initialized before setting capabilities".to_string(),
                 )
             })?;
@@ -431,7 +441,7 @@ impl VMPoolState<PreCachedDB> {
         &mut self,
         tokens: Vec<ERC20Token>,
         max_amount: U256,
-    ) -> Result<HashMap<rAddress, Overwrites>, ProtosimError> {
+    ) -> Result<HashMap<rAddress, Overwrites>, TychoSimulationError> {
         let token_overwrites = self
             .get_token_overwrites(tokens, max_amount)
             .await?;
@@ -447,7 +457,7 @@ impl VMPoolState<PreCachedDB> {
         &self,
         tokens: Vec<ERC20Token>,
         max_amount: U256,
-    ) -> Result<HashMap<rAddress, Overwrites>, ProtosimError> {
+    ) -> Result<HashMap<rAddress, Overwrites>, TychoSimulationError> {
         let sell_token = &tokens[0].clone();
         let mut res: Vec<HashMap<rAddress, Overwrites>> = Vec::new();
         if !self
@@ -473,7 +483,7 @@ impl VMPoolState<PreCachedDB> {
             H160::from_slice(&*EXTERNAL_ACCOUNT.0),
         );
 
-        res.push(overwrites.get_protosim_overwrites());
+        res.push(overwrites.get_overwrites());
 
         // Merge all overwrites into a single HashMap
         Ok(res
@@ -487,14 +497,13 @@ impl VMPoolState<PreCachedDB> {
     fn get_balance_overwrites(
         &self,
         tokens: Vec<ERC20Token>,
-    ) -> Result<HashMap<rAddress, Overwrites>, ProtosimError> {
+    ) -> Result<HashMap<rAddress, Overwrites>, TychoSimulationError> {
         let mut balance_overwrites: HashMap<rAddress, Overwrites> = HashMap::new();
         let address = match self.balance_owner {
             Some(address) => Ok(address),
-            None => self
-                .id
-                .parse()
-                .map_err(|_| ProtosimError::EncodingError("Pool ID is not an address".into())),
+            None => self.id.parse().map_err(|_| {
+                TychoSimulationError::EncodingError("Pool ID is not an address".into())
+            }),
         }?;
 
         for token in &tokens {
@@ -506,7 +515,7 @@ impl VMPoolState<PreCachedDB> {
                     .get(&token.address)
                     .cloned()
                     .ok_or_else(|| {
-                        ProtosimError::EncodingError("Token storage slots not found".into())
+                        TychoSimulationError::EncodingError("Token storage slots not found".into())
                     })?
             } else {
                 (SlotId::from(0), SlotId::from(1))
@@ -520,7 +529,7 @@ impl VMPoolState<PreCachedDB> {
                     .unwrap_or_default(),
                 address,
             );
-            balance_overwrites.extend(overwrites.get_protosim_overwrites());
+            balance_overwrites.extend(overwrites.get_overwrites());
         }
         Ok(balance_overwrites)
     }

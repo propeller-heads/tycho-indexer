@@ -13,18 +13,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "_protosim_py"
+name = "_tycho_simulation_py"
 version = "0.32.0"
 dependencies = [
  "ethers",
  "num-bigint",
- "protosim",
  "pyo3",
  "pyo3-log",
  "revm",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tycho-simulation",
 ]
 
 [[package]]
@@ -5261,42 +5261,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "protosim"
-version = "0.32.0"
-dependencies = [
- "approx",
- "chrono",
- "dotenv",
- "ethabi 13.0.0",
- "ethers",
- "foundry-config",
- "foundry-evm",
- "futures 0.3.28",
- "hex",
- "itertools 0.10.5",
- "lazy_static",
- "mini-moka",
- "mockito",
- "num-traits",
- "revm",
- "revm-inspectors",
- "rstest",
- "serde",
- "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.2",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "tycho-client",
- "tycho-core",
- "uuid 1.4.1",
- "warp",
-]
-
-[[package]]
 name = "pulldown-cmark"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7349,12 +7313,12 @@ dependencies = [
  "anyhow",
  "clap",
  "ethers",
- "protosim",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "tycho-client",
  "tycho-core",
+ "tycho-simulation",
 ]
 
 [[package]]
@@ -7404,6 +7368,42 @@ dependencies = [
  "typetag",
  "utoipa",
  "uuid 1.4.1",
+]
+
+[[package]]
+name = "tycho-simulation"
+version = "0.32.0"
+dependencies = [
+ "approx",
+ "chrono",
+ "dotenv",
+ "ethabi 13.0.0",
+ "ethers",
+ "foundry-config",
+ "foundry-evm",
+ "futures 0.3.28",
+ "hex",
+ "itertools 0.10.5",
+ "lazy_static",
+ "mini-moka",
+ "mockito",
+ "num-traits",
+ "revm",
+ "revm-inspectors",
+ "rstest",
+ "serde",
+ "serde_json",
+ "strum 0.25.0",
+ "strum_macros 0.25.2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "tycho-client",
+ "tycho-core",
+ "uuid 1.4.1",
+ "warp",
 ]
 
 [[package]]

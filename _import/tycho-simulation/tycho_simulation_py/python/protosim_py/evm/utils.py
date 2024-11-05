@@ -11,7 +11,7 @@ import eth_utils
 from eth_typing import HexStr
 from hexbytes import HexBytes
 import requests
-from protosim_py.evm import AccountUpdate
+from tycho_simulation_py.evm import AccountUpdate
 
 from . import SimulationEngine, AccountInfo
 from .constants import EXTERNAL_ACCOUNT, MAX_BALANCE, ASSETS_FOLDER
@@ -28,7 +28,7 @@ def decode_tycho_exchange(exchange: str) -> str:
 
 
 def create_engine(
-    mocked_tokens: list[Address], trace: bool = False
+        mocked_tokens: list[Address], trace: bool = False
 ) -> SimulationEngine:
     """Create a simulation engine with a mocked ERC20 contract at given addresses.
 
@@ -63,7 +63,7 @@ def create_engine(
 
 
 class ERC20OverwriteFactory:
-    def __init__(self, token: EthereumToken, token_slots = (0, 1)):
+    def __init__(self, token: EthereumToken, token_slots=(0, 1)):
         """
         Initialize the ERC20OverwriteFactory.
 
@@ -124,7 +124,7 @@ class ERC20OverwriteFactory:
             5, f"Override total supply: token={self._token.address} supply={supply}"
         )
 
-    def get_protosim_overwrites(self) -> dict[Address, dict[int, int]]:
+    def get_tycho_overwrites(self) -> dict[Address, dict[int, int]]:
         """
         Get the overwrites dictionary of previously collected values.
 
@@ -132,7 +132,7 @@ class ERC20OverwriteFactory:
             dict[Address, dict]: A dictionary containing the token's address
             and the overwrites.
         """
-        # Protosim returns lowercase addresses in state updates returned from simulation
+        # Tycho returns lowercase addresses in state updates returned from simulation
 
         return {self._token.address.lower(): self._overwrites}
 
@@ -283,7 +283,7 @@ def parse_solidity_error_message(data) -> str:
 
 
 def maybe_coerce_error(
-    err: RuntimeError, pool_state: Any, gas_limit: int = None
+        err: RuntimeError, pool_state: Any, gas_limit: int = None
 ) -> Exception:
     details = err.args[0]
     # we got bytes as data, so this was a revert

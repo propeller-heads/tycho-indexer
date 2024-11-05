@@ -19,22 +19,22 @@ use crate::{
     protocol::vm::{
         constants::EXTERNAL_ACCOUNT,
         erc20_overwrite_factory::Overwrites,
-        errors::ProtosimError,
+        errors::TychoSimulationError,
         utils::{load_swap_abi, maybe_coerce_error},
     },
 };
 
 #[derive(Debug, Clone)]
-pub struct ProtoSimResponse {
+pub struct TychoSimulationResponse {
     pub return_value: Vec<Token>,
     pub simulation_result: SimulationResult,
 }
 
-/// Represents a contract interface that interacts with the Protosim environment to perform
+/// Represents a contract interface that interacts with the tycho_simulation environment to perform
 /// simulations on Ethereum smart contracts.
 ///
-/// `ProtosimContract` is a wrapper around the low-level details of encoding and decoding inputs
-/// and outputs, simulating transactions, and handling ABI interactions specific to the Protosim
+/// `TychoSimulationContract` is a wrapper around the low-level details of encoding and decoding
+/// inputs and outputs, simulating transactions, and handling ABI interactions specific to the Tycho
 /// environment. It is designed to be used by applications requiring smart contract simulations
 /// and includes methods for encoding function calls, decoding transaction results, and interacting
 /// with the `SimulationEngine`.
@@ -51,38 +51,41 @@ pub struct ProtoSimResponse {
 ///   the contract's state.
 ///
 /// # Errors
-/// Returns errors of type `ProtosimError` when encoding, decoding, or simulation operations fail.
-/// These errors provide detailed feedback on potential issues.
+/// Returns errors of type `TychoSimulationError` when encoding, decoding, or simulation operations
+/// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
-pub struct ProtosimContract<D: DatabaseRef + std::clone::Clone> {
+pub struct TychoSimulationContract<D: DatabaseRef + std::clone::Clone> {
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> ProtosimContract<D>
+impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
 where
     D::Error: std::fmt::Debug,
 {
-    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, ProtosimError> {
+    pub fn new(
+        address: Address,
+        engine: SimulationEngine<D>,
+    ) -> Result<Self, TychoSimulationError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
     }
-    fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, ProtosimError> {
+    fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, TychoSimulationError> {
         let function = self
             .abi
             .functions
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                ProtosimError::EncodingError(format!(
+                TychoSimulationError::EncodingError(format!(
                     "Function name {} not found in the ABI",
                     fname
                 ))
             })?;
 
         if function.inputs.len() != args.len() {
-            return Err(ProtosimError::EncodingError("Invalid argument count".to_string()));
+            return Err(TychoSimulationError::EncodingError("Invalid argument count".to_string()));
         }
 
         let input_types: String = function
@@ -111,14 +114,14 @@ where
         &self,
         fname: &str,
         encoded: Vec<u8>,
-    ) -> Result<Vec<Token>, ProtosimError> {
+    ) -> Result<Vec<Token>, TychoSimulationError> {
         let function = self
             .abi
             .functions
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                ProtosimError::DecodingError(format!(
+                TychoSimulationError::DecodingError(format!(
                     "Function name {} not found in the ABI",
                     fname
                 ))
@@ -130,7 +133,7 @@ where
             .map(|output| output.kind.clone())
             .collect();
         let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
-            ProtosimError::DecodingError(format!("Failed to decode output: {:?}", e))
+            TychoSimulationError::DecodingError(format!("Failed to decode output: {:?}", e))
         })?;
 
         Ok(decoded_tokens)
@@ -146,7 +149,7 @@ where
         overrides: Option<HashMap<Address, Overwrites>>,
         caller: Option<Address>,
         value: U256,
-    ) -> Result<ProtoSimResponse, ProtosimError> {
+    ) -> Result<TychoSimulationResponse, TychoSimulationError> {
         let call_data = self.encode_input(fname, args)?;
         let params = SimulationParameters {
             data: Bytes::from(call_data),
@@ -173,14 +176,17 @@ where
                 Vec::new() // Set to empty if decoding fails
             });
 
-        Ok(ProtoSimResponse { return_value: output, simulation_result: sim_result })
+        Ok(TychoSimulationResponse { return_value: output, simulation_result: sim_result })
     }
 
-    fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, ProtosimError> {
+    fn simulate(
+        &self,
+        params: SimulationParameters,
+    ) -> Result<SimulationResult, TychoSimulationError> {
         self.engine
             .simulate(&params)
             .map_err(|e| {
-                ProtosimError::SimulationFailure(maybe_coerce_error(
+                TychoSimulationError::SimulationFailure(maybe_coerce_error(
                     &e,
                     "pool_state",
                     params.gas_limit,
@@ -229,10 +235,10 @@ mod tests {
         SimulationEngine::new(MockDatabase, false)
     }
 
-    fn create_contract() -> ProtosimContract<MockDatabase> {
+    fn create_contract() -> TychoSimulationContract<MockDatabase> {
         let address = Address::ZERO;
         let engine = create_mock_engine();
-        ProtosimContract::new(address, engine).unwrap()
+        TychoSimulationContract::new(address, engine).unwrap()
     }
 
     #[test]

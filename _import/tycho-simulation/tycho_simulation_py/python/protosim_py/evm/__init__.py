@@ -1,4 +1,4 @@
-from protosim_py._protosim_py import (
+from tycho_simulation_py._tycho_simulation_py import (
     SimulationEngine,
     SimulationParameters,
     SimulationResult,

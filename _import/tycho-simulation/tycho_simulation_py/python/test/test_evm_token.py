@@ -2,13 +2,13 @@ import os
 
 import pytest
 
-from protosim_py.evm.storage import TychoDBSingleton
-from protosim_py.evm.token import brute_force_slots
-from protosim_py.evm.utils import (
+from tycho_simulation_py.evm.storage import TychoDBSingleton
+from tycho_simulation_py.evm.token import brute_force_slots
+from tycho_simulation_py.evm.utils import (
     create_engine,
 )
 from test.evm.utils import init_contract_via_rpc
-from protosim_py.models import EthereumToken, EVMBlock
+from tycho_simulation_py.models import EthereumToken, EVMBlock
 
 _ETH_RPC_URL = os.getenv("ETH_RPC_URL")
 

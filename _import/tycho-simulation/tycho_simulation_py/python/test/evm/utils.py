@@ -1,11 +1,11 @@
-from protosim_py.evm import AccountInfo, StateUpdate, BlockHeader, SimulationEngine
-from protosim_py.evm.constants import MAX_BALANCE
-from protosim_py.evm.utils import exec_rpc_method, get_code_for_address
-from protosim_py.models import Address, EVMBlock
+from tycho_simulation_py.evm import AccountInfo, StateUpdate, BlockHeader, SimulationEngine
+from tycho_simulation_py.evm.constants import MAX_BALANCE
+from tycho_simulation_py.evm.utils import exec_rpc_method, get_code_for_address
+from tycho_simulation_py.models import Address, EVMBlock
 
 
 def read_account_storage_from_rpc(
-    address: Address, block_hash: str, connection_string: str = None
+        address: Address, block_hash: str, connection_string: str = None
 ) -> dict[str, str]:
     """Reads complete storage of a contract from a Geth instance.
 
@@ -51,10 +51,10 @@ def read_account_storage_from_rpc(
 
 
 def init_contract_via_rpc(
-    block: EVMBlock,
-    contract_address: Address,
-    engine: SimulationEngine,
-    connection_string: str,
+        block: EVMBlock,
+        contract_address: Address,
+        engine: SimulationEngine,
+        connection_string: str,
 ):
     """Initializes a contract in the simulation engine using data fetched via RPC.
 

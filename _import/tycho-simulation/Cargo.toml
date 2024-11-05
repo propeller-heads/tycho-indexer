@@ -1,10 +1,10 @@
 [package]
-name = "protosim"
+name = "tycho-simulation"
 version = "0.32.0"
 edition = "2021"
 
 [workspace]
-members = ["protosim_py", "tutorial"]
+members = ["tycho_simulation_py", "tutorial"]
 
 [dependencies]
 ethabi = "13.0"

@@ -4,8 +4,8 @@
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::vm::{
-        erc20_overwrite_factory::Overwrites, errors::ProtosimError, models::Capability,
-        protosim_contract::ProtosimContract,
+        erc20_overwrite_factory::Overwrites, errors::TychoSimulationError, models::Capability,
+        tycho_simulation_contract::TychoSimulationContract,
     },
 };
 use ethers::{
@@ -22,12 +22,12 @@ pub struct Trade {
     price: f64,
 }
 
-/// An implementation of `ProtosimContract` specific to the `AdapterContract` ABI interface,
+/// An implementation of `TychoSimulationContract` specific to the `AdapterContract` ABI interface,
 /// providing methods for price calculations, token swaps, capability checks, and more.
 ///
 /// This struct facilitates interaction with the `AdapterContract` by encoding and decoding data
 /// according to its ABI specification. Each method corresponds to a function in the adapter
-/// contract's interface, enabling seamless integration with Protosim’s simulation environment.
+/// contract's interface, enabling seamless integration with tycho's simulation environment.
 ///
 /// # Methods
 /// - `price`: Calculates price information for a token pair within the adapter.
@@ -35,7 +35,7 @@ pub struct Trade {
 /// - `get_limits`: Retrieves the trade limits for a given token pair.
 /// - `get_capabilities`: Checks the capabilities of the adapter for a specific token pair.
 /// - `min_gas_usage`: Queries the minimum gas usage required for operations within the adapter.
-impl<D: DatabaseRef + std::clone::Clone> ProtosimContract<D>
+impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -47,7 +47,7 @@ where
         amounts: Vec<U256>,
         block: u64,
         overwrites: Option<HashMap<rAddress, Overwrites>>,
-    ) -> Result<Vec<f64>, ProtosimError> {
+    ) -> Result<Vec<f64>, TychoSimulationError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -78,7 +78,8 @@ where
         amount: U256,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
-    ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), ProtosimError> {
+    ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), TychoSimulationError>
+    {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -112,7 +113,7 @@ where
         buy_token: Address,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
-    ) -> Result<(U256, U256), ProtosimError> {
+    ) -> Result<(U256, U256), TychoSimulationError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -132,7 +133,7 @@ where
             }
         }
 
-        Err(ProtosimError::DecodingError("Unexpected response format".into()))
+        Err(TychoSimulationError::DecodingError("Unexpected response format".into()))
     }
 
     pub async fn get_capabilities(
@@ -140,7 +141,7 @@ where
         pair_id: String,
         sell_token: Address,
         buy_token: Address,
-    ) -> Result<HashSet<Capability>, ProtosimError> {
+    ) -> Result<HashSet<Capability>, TychoSimulationError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -165,7 +166,7 @@ where
         Ok(capabilities)
     }
 
-    pub async fn min_gas_usage(&self) -> Result<u64, ProtosimError> {
+    pub async fn min_gas_usage(&self) -> Result<u64, TychoSimulationError> {
         let res = self
             .call("minGasUsage", vec![], 1, None, None, None, U256::zero())
             .await?
@@ -177,14 +178,14 @@ where
             .as_u64())
     }
 
-    fn hexstring_to_bytes(&self, pair_id: &str) -> Result<Token, ProtosimError> {
+    fn hexstring_to_bytes(&self, pair_id: &str) -> Result<Token, TychoSimulationError> {
         let bytes = hex::decode(pair_id).map_err(|_| {
-            ProtosimError::EncodingError(format!("Invalid hex string: {}", pair_id))
+            TychoSimulationError::EncodingError(format!("Invalid hex string: {}", pair_id))
         })?;
         Ok(Token::FixedBytes(bytes))
     }
 
-    fn calculate_price(&self, value: Token) -> Result<Vec<f64>, ProtosimError> {
+    fn calculate_price(&self, value: Token) -> Result<Vec<f64>, TychoSimulationError> {
         if let Token::Array(fractions) = value {
             // Map over each `Token::Tuple` in the array
             fractions
@@ -200,17 +201,21 @@ where
                             .into_uint()
                             .unwrap();
                         if denominator.is_zero() {
-                            Err(ProtosimError::DecodingError("Denominator is zero".to_string()))
+                            Err(TychoSimulationError::DecodingError(
+                                "Denominator is zero".to_string(),
+                            ))
                         } else {
                             Ok((numerator.as_u128() as f64) / (denominator.as_u128() as f64))
                         }
                     } else {
-                        Err(ProtosimError::DecodingError("Invalid fraction tuple".to_string()))
+                        Err(TychoSimulationError::DecodingError(
+                            "Invalid fraction tuple".to_string(),
+                        ))
                     }
                 })
                 .collect()
         } else {
-            Err(ProtosimError::DecodingError("Expected Token::Array".to_string()))
+            Err(TychoSimulationError::DecodingError("Expected Token::Array".to_string()))
         }
     }
 }

@@ -1,4 +1,4 @@
-from .adapter_contract import ProtoSimContract
+from .adapter_contract import TychoSimulationContract
 from .utils import ERC20OverwriteFactory
 from .constants import EXTERNAL_ACCOUNT
 from . import SimulationEngine
@@ -7,11 +7,13 @@ from ..models import EVMBlock, EthereumToken
 _MARKER_VALUE = 314159265358979323846264338327950288419716939937510
 _SPENDER = "0x08d967bb0134F2d07f7cfb6E246680c53927DD30"
 
+
 class SlotDetectionFailure(Exception):
     pass
 
+
 def brute_force_slots(
-    t: EthereumToken, block: EVMBlock, engine: SimulationEngine
+        t: EthereumToken, block: EVMBlock, engine: SimulationEngine
 ) -> tuple[int, int]:
     """Brute-force detection of storage slots for token allowances and balances.
 
@@ -45,7 +47,7 @@ def brute_force_slots(
         If the function fails to detect a valid slot for either balances or allowances
         after checking all possible slots (0-19).
     """
-    token_contract = ProtoSimContract(t.address, "ERC20", engine)
+    token_contract = TychoSimulationContract(t.address, "ERC20", engine)
     balance_slot = None
     for i in range(20):
         overwrite_factory = ERC20OverwriteFactory(t, (i, 1))
@@ -55,7 +57,7 @@ def brute_force_slots(
             [EXTERNAL_ACCOUNT],
             block_number=block.id,
             timestamp=int(block.ts.timestamp()),
-            overrides=overwrite_factory.get_protosim_overwrites(),
+            overrides=overwrite_factory.get_tycho_overwrites(),
             caller=EXTERNAL_ACCOUNT,
             value=0,
         )
@@ -74,7 +76,7 @@ def brute_force_slots(
             [EXTERNAL_ACCOUNT, _SPENDER],
             block_number=block.id,
             timestamp=int(block.ts.timestamp()),
-            overrides=overwrite_factory.get_protosim_overwrites(),
+            overrides=overwrite_factory.get_tycho_overwrites(),
             caller=EXTERNAL_ACCOUNT,
             value=0,
         )
@@ -91,6 +93,3 @@ def brute_force_slots(
         raise SlotDetectionFailure(f"Failed to infer allowance slot for {t.address}")
 
     return balance_slot, allowance_slot
-
-
-

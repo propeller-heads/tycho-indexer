@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "protosim-py"
+name = "tycho-py"
 version = "0.32.0"
 requires-python = ">=3.7"
 classifiers = [
@@ -28,5 +28,5 @@ testing = [
 
 [tool.maturin]
 python-source = "python"
-module-name = "protosim_py._protosim_py"
+module-name = "tycho_simulation_py._tycho_simulation_py"
 features = ["pyo3/extension-module"]

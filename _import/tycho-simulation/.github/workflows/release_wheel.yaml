@@ -35,7 +35,7 @@ jobs:
     with:
       runs_on: 'ubuntu-latest'
       yum_packages: "pkgconfig openssl-devel"
-      package_root: "protosim_py"
+      package_root: "tycho_simulation_py"
       use_maturin: true
   build_python_wheel_macos:
     uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
@@ -49,5 +49,5 @@ jobs:
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
     with:
       runs_on: 'macos-latest'
-      package_root: "protosim_py"
+      package_root: "tycho_simulation_py"
       use_maturin: true

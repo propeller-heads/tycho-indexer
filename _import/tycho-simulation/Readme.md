@@ -1,4 +1,4 @@
-# Protosim
+# Tycho Simulation
 
 **Disclaimer: This repository is currently in its alpha release stage and is intended for workshop use only.
 It is not production-ready, and we will not ensure backward compatibility at this stage.
@@ -32,7 +32,7 @@ To add a new protocol, you will need to complete the following high-level steps:
 1. Create a protocol state struct that implements the `ProtocolSim` struct.
 2. _(legacy information)_ Add associated events and implement the transition method on the protocol state struct.
 
-Each protocol should have its own module under `protosim/src/protocol`.
+Each protocol should have its own module under `tycho-simulation/src/protocol`.
 
 ### 1\. Adding state & behaviour
 
