@@ -6,7 +6,7 @@ use ethers::prelude::ProviderError;
 use serde_json::Error as SerdeError;
 use thiserror::Error;
 
-use crate::{evm::simulation::SimulationError, protocol::errors::NativeSimulationError};
+use crate::evm::simulation::SimulationError;
 
 /// VM specific errors.
 /// Variants:
@@ -85,6 +85,12 @@ pub enum RpcError {
 impl From<RpcError> for VMError {
     fn from(err: RpcError) -> Self {
         VMError::RpcError(err)
+    }
+}
+
+impl From<FileError> for VMError {
+    fn from(err: FileError) -> Self {
+        VMError::AbiError(err)
     }
 }
 

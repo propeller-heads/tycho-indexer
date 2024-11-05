@@ -12,7 +12,7 @@ use mini_moka::sync::Cache;
 
 use crate::{
     evm::simulation::SimulationError,
-    protocol::vm::errors::{FileError, RpcError},
+    protocol::vm::errors::{FileError, RpcError, VMError},
 };
 use ethers::types::U256;
 use revm::primitives::{Bytecode, Bytes};
@@ -29,7 +29,7 @@ pub fn maybe_coerce_error(
     err: &SimulationError,
     pool_state: &str,
     gas_limit: Option<u64>,
-) -> TradeSimulationError {
+) -> SimulationError {
     match err {
         // Check for revert situation (if error message starts with "0x")
         SimulationError::TransactionError { ref data, ref gas_used } if data.starts_with("0x") => {
@@ -219,16 +219,16 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
 pub async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
-) -> Result<Bytecode, RpcError> {
+) -> Result<Bytecode, VMError> {
     // Get the connection string, defaulting to the RPC_URL environment variable
     let connection_string = connection_string.or_else(|| env::var("RPC_URL").ok());
 
     let connection_string = match connection_string {
         Some(url) => url,
         None => {
-            return Err(RpcError::InvalidRequest(
+            return Err(VMError::from(RpcError::InvalidRequest(
                 "RPC_URL environment variable is not set".to_string(),
-            ))
+            )))
         }
     };
 
@@ -237,20 +237,20 @@ pub async fn get_code_for_contract(
         Provider::<Http>::try_from(connection_string).expect("could not instantiate HTTP Provider");
 
     // Parse the address
-    let addr: H160 = address
-        .parse()
-        .map_err(|_| RpcError::InvalidRequest(format!("Failed to parse address: {}", address)))?;
+    let addr: H160 = address.parse().map_err(|_| {
+        VMError::from(RpcError::InvalidRequest(format!("Failed to parse address: {}", address)))
+    })?;
 
     // Call eth_getCode to get the bytecode of the contract
     match provider.get_code(addr, None).await {
-        Ok(code) if code.is_empty() => Err(RpcError::EmptyResponse()),
+        Ok(code) if code.is_empty() => Err(VMError::from(RpcError::EmptyResponse())),
         Ok(code) => {
             let bytecode = Bytecode::new_raw(Bytes::from(code.to_vec()));
             Ok(bytecode)
         }
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
-            Err(RpcError::InvalidResponse(e))
+            Err(VMError::from(RpcError::InvalidResponse(e)))
         }
     }
 }

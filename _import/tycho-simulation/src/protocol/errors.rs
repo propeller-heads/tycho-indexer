@@ -1,11 +1,5 @@
 //! Protocol generic errors
-use crate::{
-    evm::simulation::SimulationError,
-    protocol::{
-        errors::TychoSimulationError::VMError,
-        vm::errors::{FileError, RpcError, VMError},
-    },
-};
+use crate::protocol::vm::errors::VMError;
 use thiserror::Error;
 
 use super::models::GetAmountOutResult;
@@ -38,6 +32,52 @@ impl NativeSimulationError {
     /// Creates a new trade simulation error with the given kind and partial result.
     pub fn new(kind: TradeSimulationErrorKind, partial_result: Option<GetAmountOutResult>) -> Self {
         NativeSimulationError { kind, partial_result }
+    }
+}
+
+use std::fmt;
+
+impl fmt::Display for TradeSimulationErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TradeSimulationErrorKind::InsufficientData => {
+                write!(f, "Insufficient data to perform the simulation")
+            }
+            TradeSimulationErrorKind::NoLiquidity => {
+                write!(f, "No liquidity in the venue to complete the trade")
+            }
+            TradeSimulationErrorKind::Unknown => {
+                write!(f, "An unknown error occurred during the simulation")
+            }
+            TradeSimulationErrorKind::InsufficientAmount => {
+                write!(f, "Insufficient amount provided for the trade")
+            }
+            TradeSimulationErrorKind::U256Overflow => {
+                write!(f, "Arithmetic operation resulted in a U256 overflow")
+            }
+        }
+    }
+}
+
+impl fmt::Display for NativeSimulationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Native simulation error: {}", self.kind)?;
+
+        if let Some(partial_result) = &self.partial_result {
+            write!(
+                f,
+                " | Partial result: amount = {}, gas = {}",
+                partial_result.amount, partial_result.gas
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
+impl fmt::Display for GetAmountOutResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "amount = {}, gas = {}", self.amount, self.gas)
     }
 }
 

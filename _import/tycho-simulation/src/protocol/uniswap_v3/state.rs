@@ -7,7 +7,9 @@ use tycho_core::{dto::ProtocolStateDelta, Bytes};
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{NativeSimulationError, TradeSimulationErrorKind, TransitionError},
+        errors::{
+            NativeSimulationError, TradeSimulationErrorKind, TransitionError, TychoSimulationError,
+        },
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -110,9 +112,12 @@ impl UniswapV3State {
         zero_for_one: bool,
         amount_specified: I256,
         sqrt_price_limit: Option<U256>,
-    ) -> Result<SwapResults, NativeSimulationError> {
+    ) -> Result<SwapResults, TychoSimulationError> {
         if self.liquidity == 0 {
-            return Err(NativeSimulationError::new(TradeSimulationErrorKind::NoLiquidity, None));
+            return Err(TychoSimulationError::from(NativeSimulationError::new(
+                TradeSimulationErrorKind::NoLiquidity,
+                None,
+            )));
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -149,19 +154,19 @@ impl UniswapV3State {
                 Ok((tick, init)) => (tick, init),
                 Err(tick_err) => match tick_err.kind {
                     super::tick_list::TickListErrorKind::TicksExeeded => {
-                        return Err(NativeSimulationError::new(
+                        return Err(TychoSimulationError::from(NativeSimulationError::new(
                             TradeSimulationErrorKind::InsufficientData,
                             Some(GetAmountOutResult::new(
                                 state.amount_calculated.abs().into_raw(),
                                 gas_used,
                             )),
-                        ))
+                        )))
                     }
                     _ => {
-                        return Err(NativeSimulationError::new(
+                        return Err(TychoSimulationError::from(NativeSimulationError::new(
                             TradeSimulationErrorKind::Unknown,
                             None,
-                        ))
+                        )))
                     }
                 },
             };
@@ -267,7 +272,7 @@ impl ProtocolSim for UniswapV3State {
         amount_in: U256,
         token_a: &ERC20Token,
         token_b: &ERC20Token,
-    ) -> Result<GetAmountOutResult, NativeSimulationError> {
+    ) -> Result<GetAmountOutResult, TychoSimulationError> {
         let zero_for_one = token_a < token_b;
         let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
 
@@ -617,10 +622,15 @@ mod tests {
         let err = pool
             .get_amount_out(amount_in, &usdc, &dai)
             .unwrap_err();
-        let res = err.partial_result.unwrap();
 
-        assert_eq!(err.kind, TradeSimulationErrorKind::InsufficientData);
-        assert_eq!(res.amount, exp);
+        match err {
+            TychoSimulationError::NativeSimulationError(e) => {
+                let res = e.partial_result.unwrap();
+                assert_eq!(res.amount, exp);
+                assert_eq!(e.kind, TradeSimulationErrorKind::InsufficientData);
+            }
+            _ => panic!("Test failed: was expecting a NativeSimulationError"),
+        }
     }
 
     fn logmeta() -> EVMLogMeta {
