@@ -12,7 +12,7 @@ use crate::u256_num::u256_to_f64;
 /// # Example
 /// ```
 /// use ethers::types::U256;
-/// use protosim::protocol::uniswap_v2::reserve_price::spot_price_from_reserves;
+/// use tycho_simulation::protocol::uniswap_v2::reserve_price::spot_price_from_reserves;
 ///
 /// let res = spot_price_from_reserves(U256::from(100), U256::from(200), 6, 6);
 ///

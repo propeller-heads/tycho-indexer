@@ -12,7 +12,7 @@ use tycho_client::{
 };
 use tycho_core::dto::Chain;
 
-use protosim::{
+use tycho_simulation::{
     models::ERC20Token,
     protocol::{
         models::ProtocolComponent, state::ProtocolSim, uniswap_v2::state::UniswapV2State,

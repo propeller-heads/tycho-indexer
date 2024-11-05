@@ -1,8 +1,7 @@
 use clap::Parser;
 use ethers::types::U256;
-use protosim::protocol::state::ProtocolSim;
-use std::collections::HashMap;
 use std::{
+    collections::HashMap,
     env,
     panic::{self, AssertUnwindSafe},
     process,
@@ -11,8 +10,9 @@ use std::{
 };
 use tracing::{debug, error, info};
 use tracing_subscriber::{fmt, EnvFilter};
+use tycho_simulation::protocol::state::ProtocolSim;
 
-use protosim::models::ERC20Token;
+use tycho_simulation::models::ERC20Token;
 
 use tutorial::data_feed::{state::BlockState, tycho};
 
@@ -66,8 +66,8 @@ fn handle_state(
             continue;
         }
         // Check if token0.address == usdc and token1.address == weth
-        if component.tokens[0].address == usdc.address
-            && component.tokens[1].address == weth.address
+        if component.tokens[0].address == usdc.address &&
+            component.tokens[1].address == weth.address
         {
             debug!("Found USDC-WETH pair: {:?}", address);
             pool_graph.insert(address, state.unwrap().clone());

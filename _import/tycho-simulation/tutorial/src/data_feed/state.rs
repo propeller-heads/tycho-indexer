@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use ethers::types::H160;
 
-use protosim::protocol::{models::ProtocolComponent, state::ProtocolSim};
+use tycho_simulation::protocol::{models::ProtocolComponent, state::ProtocolSim};
 
 #[derive(Debug)]
 pub struct BlockState {

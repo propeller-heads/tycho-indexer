@@ -6,12 +6,12 @@ use crate::structs_py::{
     AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
     SimulationResult, StateUpdate, TychoDB,
 };
-use protosim::evm::{
+use pyo3::{prelude::*, types::PyType};
+use std::{collections::HashMap, str::FromStr};
+use tycho_simulation::evm::{
     account_storage, engine_db_interface::EngineDatabaseInterface, simulation, simulation_db,
     tycho_db,
 };
-use pyo3::{prelude::*, types::PyType};
-use std::{collections::HashMap, str::FromStr};
 
 #[derive(Clone, Copy)]
 enum DatabaseType {
@@ -203,7 +203,7 @@ impl SimulationEngine {
         updates: HashMap<String, StateUpdate>,
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
-        let block = protosim::evm::simulation_db::BlockHeader::from(block);
+        let block = tycho_simulation::evm::simulation_db::BlockHeader::from(block);
         let mut rust_updates: HashMap<Address, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(
