@@ -16,9 +16,10 @@ use ethers::{
 };
 use itertools::Itertools;
 use revm::{
+    precompile::{Address as rAddress, Bytes},
     primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Address as rAddress, Bytecode, Bytes,
-        B256, KECCAK_EMPTY, U256 as rU256,
+        alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
+        U256 as rU256,
     },
     DatabaseRef,
 };
@@ -33,7 +34,7 @@ use crate::{
     },
     models::ERC20Token,
     protocol::{
-        errors::{SimulationError, TransitionError},
+        errors::TransitionError,
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -51,13 +52,14 @@ use crate::{
 // Necessary for the init_account method to be in scope
 #[allow(unused_imports)]
 use crate::evm::engine_db_interface::EngineDatabaseInterface;
+use crate::protocol::errors::SimulationError;
 
 #[derive(Clone, Debug)]
 pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// The pool's identifier
     pub id: String,
-    /// The pools tokens
-    pub tokens: Vec<ERC20Token>,
+    /// The pool's token's addresses
+    pub tokens: Vec<H160>,
     /// The current block, will be used to set vm context
     pub block: BlockHeader,
     /// The pools token balances
@@ -84,6 +86,10 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
     /// If set, vm will emit detailed traces about the execution
     pub trace: bool,
+    /// Indicates if the protocol uses custom update rules and requires update
+    /// triggers to recalculate spot prices ect. Default is to update on all changes on
+    /// the pool.
+    pub manual_updates: bool,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<TychoSimulationContract<D>>,
@@ -93,16 +99,14 @@ impl VMPoolState<PreCachedDB> {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         id: String,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<H160>,
         block: BlockHeader,
         balances: HashMap<H160, U256>,
         balance_owner: Option<H160>,
         adapter_contract_path: String,
-        capabilities: HashSet<Capability>,
-        block_lasting_overwrites: HashMap<rAddress, Overwrites>,
         involved_contracts: HashSet<H160>,
-        token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
         stateless_contracts: HashMap<String, Option<Vec<u8>>>,
+        manual_updates: bool,
         trace: bool,
     ) -> Result<Self, SimulationError> {
         let mut state = VMPoolState {
@@ -112,14 +116,15 @@ impl VMPoolState<PreCachedDB> {
             balances,
             balance_owner,
             spot_prices: HashMap::new(),
-            capabilities,
-            block_lasting_overwrites,
+            capabilities: HashSet::new(),
+            block_lasting_overwrites: HashMap::new(),
             involved_contracts,
-            token_storage_slots,
+            token_storage_slots: HashMap::new(),
             stateless_contracts,
             trace,
             engine: None,
             adapter_contract: None,
+            manual_updates,
         };
         state
             .set_engine(adapter_contract_path)
@@ -141,7 +146,7 @@ impl VMPoolState<PreCachedDB> {
             let token_addresses = self
                 .tokens
                 .iter()
-                .map(|token| to_checksum(&token.address, None))
+                .map(|addr| to_checksum(addr, None))
                 .collect();
             let engine: SimulationEngine<_> =
                 create_engine(SHARED_TYCHO_DB.clone(), token_addresses, self.trace).await;
@@ -313,12 +318,12 @@ impl VMPoolState<PreCachedDB> {
         // Generate all permutations of tokens and retrieve capabilities
         for tokens_pair in self.tokens.iter().permutations(2) {
             // Manually unpack the inner vector
-            if let [t0, t1] = &tokens_pair[..] {
+            if let [t0, t1] = tokens_pair[..] {
                 let caps = self
                     .adapter_contract
                     .clone()
                     .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
-                    .get_capabilities(self.id.clone()[2..].to_string(), t0.address, t1.address)
+                    .get_capabilities(self.id.clone()[2..].to_string(), *t0, *t1)
                     .await?;
                 capabilities.push(caps);
             }
@@ -360,14 +365,14 @@ impl VMPoolState<PreCachedDB> {
         {
             let overwrites = Some(
                 self.get_overwrites(
-                    vec![(*sell_token).clone(), (*buy_token).clone()],
+                    vec![(*sell_token).clone().address, (*buy_token).clone().address],
                     U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
                 )
                 .await?,
             );
             let sell_amount_limit = self
                 .get_sell_amount_limit(
-                    vec![(*sell_token).clone(), (*buy_token).clone()],
+                    vec![(sell_token.address), (buy_token.address)],
                     overwrites.clone(),
                 )
                 .await?;
@@ -411,7 +416,7 @@ impl VMPoolState<PreCachedDB> {
     /// is significant and determines the direction of the price query.
     async fn get_sell_amount_limit(
         &mut self,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<H160>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<U256, SimulationError> {
         let binding = self
@@ -421,8 +426,8 @@ impl VMPoolState<PreCachedDB> {
         let limits = binding
             .get_limits(
                 self.id.clone()[2..].to_string(),
-                tokens[0].address,
-                tokens[1].address,
+                tokens[0],
+                tokens[1],
                 self.block.number,
                 overwrites,
             )
@@ -433,7 +438,7 @@ impl VMPoolState<PreCachedDB> {
 
     pub async fn get_overwrites(
         &self,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<H160>,
         max_amount: U256,
     ) -> Result<HashMap<rAddress, Overwrites>, SimulationError> {
         let token_overwrites = self
@@ -449,7 +454,7 @@ impl VMPoolState<PreCachedDB> {
 
     async fn get_token_overwrites(
         &self,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<H160>,
         max_amount: U256,
     ) -> Result<HashMap<rAddress, Overwrites>, SimulationError> {
         let sell_token = &tokens[0].clone();
@@ -461,10 +466,10 @@ impl VMPoolState<PreCachedDB> {
             res.push(self.get_balance_overwrites(tokens)?);
         }
         let mut overwrites = ERC20OverwriteFactory::new(
-            rAddress::from_slice(&sell_token.address.0),
+            rAddress::from_slice(&sell_token.0),
             *self
                 .token_storage_slots
-                .get(&sell_token.address)
+                .get(sell_token)
                 .unwrap_or(&(SlotId::from(0), SlotId::from(1))),
         );
 
@@ -487,7 +492,7 @@ impl VMPoolState<PreCachedDB> {
 
     fn get_balance_overwrites(
         &self,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<H160>,
     ) -> Result<HashMap<rAddress, Overwrites>, SimulationError> {
         let mut balance_overwrites: HashMap<rAddress, Overwrites> = HashMap::new();
         let address = match self.balance_owner {
@@ -499,12 +504,9 @@ impl VMPoolState<PreCachedDB> {
         }?;
 
         for token in &tokens {
-            let slots = if self
-                .involved_contracts
-                .contains(&token.address)
-            {
+            let slots = if self.involved_contracts.contains(token) {
                 self.token_storage_slots
-                    .get(&token.address)
+                    .get(token)
                     .cloned()
                     .ok_or_else(|| {
                         SimulationError::EncodingError("Token storage slots not found".into())
@@ -513,10 +515,10 @@ impl VMPoolState<PreCachedDB> {
                 (SlotId::from(0), SlotId::from(1))
             };
 
-            let mut overwrites = ERC20OverwriteFactory::new(rAddress::from(token.address.0), slots);
+            let mut overwrites = ERC20OverwriteFactory::new(rAddress::from(token.0), slots);
             overwrites.set_balance(
                 self.balances
-                    .get(&token.address)
+                    .get(token)
                     .cloned()
                     .unwrap_or_default(),
                 address,
@@ -545,24 +547,21 @@ impl VMPoolState<PreCachedDB> {
 
     async fn get_amount_out(
         &self,
-        sell_token: ERC20Token,
+        sell_token: H160,
         sell_amount: U256,
-        buy_token: ERC20Token,
+        buy_token: H160,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let mut sell_amount_respecting_limit = sell_amount;
         let mut sell_amount_exceeds_limit = false;
         let overwrites = self
             .get_overwrites(
-                vec![sell_token.clone(), buy_token.clone()],
+                vec![sell_token, buy_token],
                 U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
             )
             .await?;
         let sell_amount_limit = self
             .clone()
-            .get_sell_amount_limit(
-                vec![sell_token.clone(), buy_token.clone()],
-                Some(overwrites.clone()),
-            )
+            .get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))
             .await?;
 
         if self
@@ -576,7 +575,7 @@ impl VMPoolState<PreCachedDB> {
 
         let overwrites_with_sell_limit = self
             .clone()
-            .get_overwrites(vec![sell_token.clone(), buy_token.clone()], sell_amount_limit)
+            .get_overwrites(vec![sell_token, buy_token], sell_amount_limit)
             .await?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
         let pool_id = self.clone().id;
@@ -587,8 +586,8 @@ impl VMPoolState<PreCachedDB> {
             .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
             .swap(
                 pool_id[2..].to_string(),
-                sell_token.clone().address,
-                buy_token.clone().address,
+                sell_token,
+                buy_token,
                 false,
                 sell_amount_respecting_limit,
                 self.block.number,
@@ -630,10 +629,10 @@ impl VMPoolState<PreCachedDB> {
         if new_price != 0.0f64 {
             new_state
                 .spot_prices
-                .insert((sell_token.address, buy_token.address), new_price);
+                .insert((sell_token, buy_token), new_price);
             new_state
                 .spot_prices
-                .insert((buy_token.address, sell_token.address), 1.0f64 / new_price);
+                .insert((buy_token, sell_token), 1.0f64 / new_price);
         }
 
         let buy_amount = trade.received_amount;
@@ -709,6 +708,12 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use ethers::{
+        prelude::{H256, U256},
+        types::Address as EthAddress,
+    };
+    use serde_json::Value;
     use std::{
         collections::{HashMap, HashSet},
         fs::File,
@@ -716,19 +721,10 @@ mod tests {
         str::FromStr,
     };
 
-    use ethers::{
-        prelude::{H256, U256},
-        types::Address as EthAddress,
-    };
-    use serde_json::Value;
-
     use crate::{
         evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
-        models::ERC20Token,
         protocol::vm::models::Capability,
     };
-
-    use super::*;
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(asset_path)?;
@@ -769,42 +765,47 @@ mod tests {
             .update(accounts, Some(block))
             .await;
 
-        // let onchain_bytecode =
-        // revm::precompile::Bytes::from(ethers::utils::hex::decode("
-        // 608060405234801561000f575f80fd5b50600436106100a6575f3560e01c8063395093511161006e578063395093511461011f57806370a082311461013257806395d89b411461015a578063a457c2d714610162578063a9059cbb14610175578063dd62ed3e14610188575f80fd5b806306fdde03146100aa578063095ea7b3146100c857806318160ddd146100eb57806323b872dd146100fd578063313ce56714610110575b5f80fd5b6100b261019b565b6040516100bf91906105b9565b60405180910390f35b6100db6100d636600461061f565b61022b565b60405190151581526020016100bf565b6002545b6040519081526020016100bf565b6100db61010b366004610647565b610244565b604051601281526020016100bf565b6100db61012d36600461061f565b610267565b6100ef610140366004610680565b6001600160a01b03165f9081526020819052604090205490565b6100b2610288565b6100db61017036600461061f565b610297565b6100db61018336600461061f565b6102f2565b6100ef6101963660046106a0565b6102ff565b6060600380546101aa906106d1565b80601f01602080910402602001604051908101604052809291908181526020018280546101d6906106d1565b80156102215780601f106101f857610100808354040283529160200191610221565b820191905f5260205f20905b81548152906001019060200180831161020457829003601f168201915b5050505050905090565b5f33610238818585610329565b60019150505b92915050565b5f336102518582856103dc565b61025c85858561043e565b506001949350505050565b5f3361023881858561027983836102ff565b6102839190610709565b610329565b6060600480546101aa906106d1565b5f33816102a482866102ff565b9050838110156102e557604051632983c0c360e21b81526001600160a01b038616600482015260248101829052604481018590526064015b60405180910390fd5b61025c8286868403610329565b5f3361023881858561043e565b6001600160a01b039182165f90815260016020908152604080832093909416825291909152205490565b6001600160a01b0383166103525760405163e602df0560e01b81525f60048201526024016102dc565b6001600160a01b03821661037b57604051634a1406b160e11b81525f60048201526024016102dc565b6001600160a01b038381165f8181526001602090815260408083209487168084529482529182902085905590518481527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a3505050565b5f6103e784846102ff565b90505f198114610438578181101561042b57604051637dc7a0d960e11b81526001600160a01b038416600482015260248101829052604481018390526064016102dc565b6104388484848403610329565b50505050565b6001600160a01b03831661046757604051634b637e8f60e11b81525f60048201526024016102dc565b6001600160a01b0382166104905760405163ec442f0560e01b81525f60048201526024016102dc565b61049b8383836104a0565b505050565b6001600160a01b0383166104ca578060025f8282546104bf9190610709565b9091555061053a9050565b6001600160a01b0383165f908152602081905260409020548181101561051c5760405163391434e360e21b81526001600160a01b038516600482015260248101829052604481018390526064016102dc565b6001600160a01b0384165f9081526020819052604090209082900390555b6001600160a01b03821661055657600280548290039055610574565b6001600160a01b0382165f9081526020819052604090208054820190555b816001600160a01b0316836001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516103cf91815260200190565b5f6020808352835180828501525f5b818110156105e4578581018301518582016040015282016105c8565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b038116811461061a575f80fd5b919050565b5f8060408385031215610630575f80fd5b61063983610604565b946020939093013593505050565b5f805f60608486031215610659575f80fd5b61066284610604565b925061067060208501610604565b9150604084013590509250925092565b5f60208284031215610690575f80fd5b61069982610604565b9392505050565b5f80604083850312156106b1575f80fd5b6106ba83610604565b91506106c860208401610604565b90509250929050565b600181811c908216806106e557607f821691505b60208210810361070357634e487b7160e01b5f52602260045260245ffd5b50919050565b8082018082111561023e57634e487b7160e01b5f52601160045260245ffdfea2646970667358221220dfc123d5852c9246ea16b645b377b4436e2f778438195cc6d6c435e8c73a20e764736f6c63430008140033000000000000000000000000000000000000000000000000000000000000000000"
-        // )?); let code = Bytecode::new_raw(onchain_bytecode);
-        // let contract_acc_info = AccountInfo::new(rU256::from(0), 0, code.hash_slow(), code);
-        //
-        // // Adding permanent storage for balance and approval - necessary for amount out
-        // calculation let mut storage = HashMap::default();
-        // // balance of EOA
-        // storage.insert(
-        //     rU256::from_str(
-        //         "110136159478993350616340414857413728709904511599989695046923576775517543504731",
-        //     )
-        //     .unwrap(),
-        //     rU256::from_str("2500000000000000000000000000000000000").unwrap(),
-        // );
-        // // allowance for Adapter contract to spend EOA's DAI
-        // storage.insert(
-        //     rU256::from_str(
-        //         "58546993237423525698686728856645416951692145960565761888391937184176623942864",
-        //     )
-        //     .unwrap(),
-        //     rU256::from_str("2500000000000000000000000000000000000").unwrap(),
-        // );
-        // let dai = ERC20Token::new(
-        //     "0x6b175474e89094c44da98b954eedeac495271d0f",
-        //     18,
-        //     "DAI",
-        //     U256::from(10_000),
-        // );
-        // db_write.init_account(
-        //     rAddress::from_slice(dai.address.as_bytes()),
-        //     contract_acc_info,
-        //     Some(storage),
-        //     true,
-        // );
+        let onchain_bytecode = revm::precompile::Bytes::from(ethers::utils::hex::decode("608060405234801561000f575f80fd5b50600436106100a6575f3560e01c8063395093511161006e578063395093511461011f57806370a082311461013257806395d89b411461015a578063a457c2d714610162578063a9059cbb14610175578063dd62ed3e14610188575f80fd5b806306fdde03146100aa578063095ea7b3146100c857806318160ddd146100eb57806323b872dd146100fd578063313ce56714610110575b5f80fd5b6100b261019b565b6040516100bf91906105b9565b60405180910390f35b6100db6100d636600461061f565b61022b565b60405190151581526020016100bf565b6002545b6040519081526020016100bf565b6100db61010b366004610647565b610244565b604051601281526020016100bf565b6100db61012d36600461061f565b610267565b6100ef610140366004610680565b6001600160a01b03165f9081526020819052604090205490565b6100b2610288565b6100db61017036600461061f565b610297565b6100db61018336600461061f565b6102f2565b6100ef6101963660046106a0565b6102ff565b6060600380546101aa906106d1565b80601f01602080910402602001604051908101604052809291908181526020018280546101d6906106d1565b80156102215780601f106101f857610100808354040283529160200191610221565b820191905f5260205f20905b81548152906001019060200180831161020457829003601f168201915b5050505050905090565b5f33610238818585610329565b60019150505b92915050565b5f336102518582856103dc565b61025c85858561043e565b506001949350505050565b5f3361023881858561027983836102ff565b6102839190610709565b610329565b6060600480546101aa906106d1565b5f33816102a482866102ff565b9050838110156102e557604051632983c0c360e21b81526001600160a01b038616600482015260248101829052604481018590526064015b60405180910390fd5b61025c8286868403610329565b5f3361023881858561043e565b6001600160a01b039182165f90815260016020908152604080832093909416825291909152205490565b6001600160a01b0383166103525760405163e602df0560e01b81525f60048201526024016102dc565b6001600160a01b03821661037b57604051634a1406b160e11b81525f60048201526024016102dc565b6001600160a01b038381165f8181526001602090815260408083209487168084529482529182902085905590518481527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a3505050565b5f6103e784846102ff565b90505f198114610438578181101561042b57604051637dc7a0d960e11b81526001600160a01b038416600482015260248101829052604481018390526064016102dc565b6104388484848403610329565b50505050565b6001600160a01b03831661046757604051634b637e8f60e11b81525f60048201526024016102dc565b6001600160a01b0382166104905760405163ec442f0560e01b81525f60048201526024016102dc565b61049b8383836104a0565b505050565b6001600160a01b0383166104ca578060025f8282546104bf9190610709565b9091555061053a9050565b6001600160a01b0383165f908152602081905260409020548181101561051c5760405163391434e360e21b81526001600160a01b038516600482015260248101829052604481018390526064016102dc565b6001600160a01b0384165f9081526020819052604090209082900390555b6001600160a01b03821661055657600280548290039055610574565b6001600160a01b0382165f9081526020819052604090208054820190555b816001600160a01b0316836001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516103cf91815260200190565b5f6020808352835180828501525f5b818110156105e4578581018301518582016040015282016105c8565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b038116811461061a575f80fd5b919050565b5f8060408385031215610630575f80fd5b61063983610604565b946020939093013593505050565b5f805f60608486031215610659575f80fd5b61066284610604565b925061067060208501610604565b9150604084013590509250925092565b5f60208284031215610690575f80fd5b61069982610604565b9392505050565b5f80604083850312156106b1575f80fd5b6106ba83610604565b91506106c860208401610604565b90509250929050565b600181811c908216806106e557607f821691505b60208210810361070357634e487b7160e01b5f52602260045260245ffd5b50919050565b8082018082111561023e57634e487b7160e01b5f52601160045260245ffdfea2646970667358221220dfc123d5852c9246ea16b645b377b4436e2f778438195cc6d6c435e8c73a20e764736f6c63430008140033000000000000000000000000000000000000000000000000000000000000000000")?);
+        let code = Bytecode::new_raw(onchain_bytecode);
+        let contract_acc_info = AccountInfo::new(rU256::from(0), 0, code.hash_slow(), code);
+
+        // Adding permanent storage for balance and approval - necessary for amount out calculation
+        let mut storage: HashMap<rU256, rU256> = HashMap::default();
+
+        // balance of EOA
+        storage.insert(
+            rU256::from_str(
+                "110136159478993350616340414857413728709904511599989695046923576775517543504731",
+            )
+            .expect("Can't parse balance key"),
+            rU256::from_str("2500000000000000000000000000000000000").unwrap(),
+        );
+
+        // allowance for Adapter contract to spend EOA's DAI
+        storage.insert(
+            rU256::from_str(
+                "58546993237423525698686728856645416951692145960565761888391937184176623942864",
+            )
+            .unwrap(),
+            rU256::from_str("2500000000000000000000000000000000000").unwrap(),
+        );
+
+
+        let dai = ERC20Token::new(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            18,
+            "DAI",
+            U256::from(10_000),
+        );
+
+
+        db_write.init_account(
+            rAddress::from_slice(dai.address.as_bytes()),
+            contract_acc_info,
+            Some(storage),
+            true,
+        );
+
         Ok(())
     }
 
@@ -813,20 +814,10 @@ mod tests {
             .await
             .expect("Failed to set up database");
 
-        let dai = ERC20Token::new(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-            18,
-            "DAI",
-            U256::from(10_000),
-        );
-        let bal = ERC20Token::new(
-            "0xba100000625a3754423978a60c9317c58a424e3d",
-            18,
-            "BAL",
-            U256::from(10_000),
-        );
+        let dai_addr = H160::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+        let bal_addr = H160::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap();
 
-        let tokens = vec![dai.clone(), bal.clone()];
+        let tokens = vec![dai_addr, bal_addr];
         let block = BlockHeader {
             number: 18485417,
             hash: H256::from_str(
@@ -845,21 +836,16 @@ mod tests {
             block,
             HashMap::from([
                 (
-                    EthAddress::from(dai.address.0),
+                    EthAddress::from(dai_addr.0),
                     U256::from_dec_str("178754012737301807104").unwrap(),
                 ),
-                (
-                    EthAddress::from(bal.address.0),
-                    U256::from_dec_str("91082987763369885696").unwrap(),
-                ),
+                (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
             ]),
             Some(EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap()),
             "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             HashSet::new(),
             HashMap::new(),
-            HashSet::new(),
-            HashMap::new(),
-            HashMap::new(),
+            false,
             false,
         )
         .await
@@ -889,8 +875,8 @@ mod tests {
             .unwrap()
             .get_capabilities(
                 pool_state.id[2..].to_string(),
-                pool_state.tokens[0].address,
-                pool_state.tokens[1].address,
+                pool_state.tokens[0],
+                pool_state.tokens[1],
             )
             .await
             .unwrap();
@@ -915,18 +901,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_amount_out() {
+    async fn test_get_amount_out() -> Result<(), Box<dyn std::error::Error>> {
         setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
-            .await
-            .unwrap();
+            .await?;
 
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
             .get_amount_out(
-                pool_state.tokens[0].clone(),
+                pool_state.tokens[0],
                 U256::from_dec_str("1000000000000000000").unwrap(),
-                pool_state.tokens[1].clone(),
+                pool_state.tokens[1],
             )
             .await
             .unwrap();
@@ -938,6 +923,8 @@ mod tests {
         assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
         assert_eq!(result.gas, U256::from_dec_str("72523").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
+
+        Ok(())
     }
 
     #[tokio::test]
@@ -949,11 +936,7 @@ mod tests {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
-            .get_amount_out(
-                pool_state.tokens[0].clone(),
-                U256::from(1),
-                pool_state.tokens[1].clone(),
-            )
+            .get_amount_out(pool_state.tokens[0], U256::from(1), pool_state.tokens[1])
             .await
             .unwrap();
 
@@ -977,10 +960,10 @@ mod tests {
 
         let result = pool_state
             .get_amount_out(
-                pool_state.tokens[0].clone(),
+                pool_state.tokens[0],
                 // sell limit is 100279494253364362835
                 U256::from_dec_str("100379494253364362835").unwrap(),
-                pool_state.tokens[1].clone(),
+                pool_state.tokens[1],
             )
             .await;
 
@@ -993,28 +976,33 @@ mod tests {
         };
     }
 
+    fn dai() -> ERC20Token {
+        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
+    }
+
+    fn bal() -> ERC20Token {
+        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
+    }
+
     #[tokio::test]
     async fn test_get_sell_amount_limit() {
         let mut pool_state = setup_pool_state().await;
         let overwrites = pool_state
             .get_overwrites(
-                vec![pool_state.tokens[0].clone(), pool_state.tokens[1].clone()],
+                vec![pool_state.tokens[0], pool_state.tokens[1]],
                 U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
             )
             .await
             .unwrap();
         let dai_limit = pool_state
-            .get_sell_amount_limit(
-                vec![pool_state.tokens[0].clone(), pool_state.tokens[1].clone()],
-                Some(overwrites.clone()),
-            )
+            .get_sell_amount_limit(vec![dai().address, bal().address], Some(overwrites.clone()))
             .await
             .unwrap();
         assert_eq!(dai_limit, U256::from_dec_str("100279494253364362835").unwrap());
 
         let bal_limit = pool_state
             .get_sell_amount_limit(
-                vec![pool_state.tokens[1].clone(), pool_state.tokens[0].clone()],
+                vec![pool_state.tokens[1], pool_state.tokens[0]],
                 Some(overwrites),
             )
             .await
@@ -1027,17 +1015,17 @@ mod tests {
         let mut pool_state = setup_pool_state().await;
 
         pool_state
-            .set_spot_prices(pool_state.tokens.clone())
+            .set_spot_prices(vec![bal(), dai()])
             .await
             .unwrap();
 
         let dai_bal_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[0].address, pool_state.tokens[1].address))
+            .get(&(pool_state.tokens[0], pool_state.tokens[1]))
             .unwrap();
         let bal_dai_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[1].address, pool_state.tokens[0].address))
+            .get(&(pool_state.tokens[1], pool_state.tokens[0]))
             .unwrap();
         assert_eq!(dai_bal_spot_price, &0.137_778_914_319_047_9);
         assert_eq!(bal_dai_spot_price, &7.071_503_245_428_246);

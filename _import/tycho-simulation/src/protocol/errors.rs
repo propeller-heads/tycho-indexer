@@ -21,12 +21,20 @@ pub enum TransitionError<T> {
     InvalidEventType(),
 }
 
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum InvalidSnapshotError {
     #[error("Missing attributes {0}")]
     MissingAttribute(String),
     #[error("Value error {0}")]
     ValueError(String),
+    #[error("Unable to set up vm state on the engine: {0}")]
+    VMError(SimulationError),
+}
+
+impl From<SimulationError> for InvalidSnapshotError {
+    fn from(error: SimulationError) -> Self {
+        InvalidSnapshotError::VMError(error)
+    }
 }
 
 /// Represents the outer-level, user-facing errors of the tycho-simulation package.

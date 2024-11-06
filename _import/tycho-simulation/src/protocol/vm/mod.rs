@@ -4,6 +4,7 @@ mod engine;
 mod erc20_overwrite_factory;
 pub mod errors;
 mod models;
-mod state;
+pub mod state;
+pub mod tycho_decoder;
 mod tycho_simulation_contract;
 pub mod utils;

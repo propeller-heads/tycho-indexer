@@ -269,10 +269,10 @@ mod tests {
         let result = UniswapV3State::try_from(snapshot);
 
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.err().unwrap(),
-            InvalidSnapshotError::MissingAttribute(missing_attribute)
-        );
+            InvalidSnapshotError::MissingAttribute(attr) if attr == missing_attribute
+        ));
     }
 
     #[test]
@@ -295,10 +295,10 @@ mod tests {
         let result = UniswapV3State::try_from(snapshot);
 
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.err().unwrap(),
-            InvalidSnapshotError::ValueError("Unsupported fee amount".to_string())
-        );
+            InvalidSnapshotError::ValueError(err) if err == *"Unsupported fee amount"
+        ));
     }
 
     #[test]
