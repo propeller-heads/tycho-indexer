@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde_json::from_str;
 use std::{str::FromStr, sync::Arc};
 use tracing::{instrument, warn};
+use unicode_segmentation::UnicodeSegmentation;
 use url::Url;
 
 use ethrpc::{http::HttpTransport, Web3, Web3Transport};
@@ -143,7 +144,11 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
 
             tokens_info.push(CurrencyToken {
                 address,
-                symbol: symbol.replace('\0', ""),
+                symbol: symbol
+                    .replace('\0', "")
+                    .graphemes(true)
+                    .take(255)
+                    .collect::<String>(),
                 decimals: decimals.into(),
                 tax: tax.unwrap_or(0),
                 gas: gas

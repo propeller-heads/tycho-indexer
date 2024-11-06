@@ -143,6 +143,7 @@ use tycho_core::{
     models::{Chain, TxHash},
     storage::{BlockIdentifier, BlockOrTimestamp, StorageError, Version, VersionKind},
 };
+use unicode_segmentation::UnicodeSegmentation;
 
 pub mod builder;
 pub mod cache;
@@ -327,6 +328,22 @@ impl From<StorageError> for PostgresError {
     fn from(value: StorageError) -> Self {
         PostgresError(value)
     }
+}
+
+fn truncate_to_byte_limit(input: &str, limit: usize) -> String {
+    let mut result = String::new();
+    let mut byte_count = 0;
+
+    for grapheme in input.graphemes(true) {
+        let grapheme_len = grapheme.len(); // UTF-8 byte length of the grapheme
+        if byte_count + grapheme_len > limit {
+            break;
+        }
+        result.push_str(grapheme);
+        byte_count += grapheme_len;
+    }
+
+    result
 }
 
 fn storage_error_from_diesel(

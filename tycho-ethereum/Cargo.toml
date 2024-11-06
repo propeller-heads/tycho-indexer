@@ -30,3 +30,4 @@ clap = { version = "4", features = ["derive", "env"] }
 humantime = "2.1.0"
 reqwest.workspace = true
 url.workspace = true
+unicode-segmentation = "1.12.0"

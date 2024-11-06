@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use crate::postgres::truncate_to_byte_limit;
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
@@ -8,7 +9,6 @@ use diesel::{
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
 use tracing::{error, instrument, trace, warn};
-use unicode_segmentation::UnicodeSegmentation;
 
 use tycho_core::{
     models::{
@@ -984,10 +984,8 @@ impl PostgresGateway {
         let titles: Vec<String> = tokens
             .iter()
             .map(|token| {
-                format!("{:?}_{}", token.chain, token.symbol)
-                    .graphemes(true)
-                    .take(255)
-                    .collect::<String>()
+                let formatted = format!("{:?}_{}", token.chain, token.symbol);
+                truncate_to_byte_limit(&formatted, 255)
             })
             .collect();
 
@@ -1043,7 +1041,9 @@ impl PostgresGateway {
                     .get(&account_key)
                     .expect("Account ID not found");
 
-                orm::NewToken::from_token(account_id, token)
+                let mut new_token = orm::NewToken::from_token(account_id, token);
+                new_token.symbol = truncate_to_byte_limit(&token.symbol, 255);
+                new_token
             })
             .collect();
 
@@ -3661,5 +3661,36 @@ mod test {
             .collect::<HashMap<_, _>>();
 
         assert_eq!(tvl_values, exp);
+    }
+
+    #[tokio::test]
+    async fn test_truncate_token_title() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let too_long_symbol = "🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛🦏🐪🐫🦒🦘🦬🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🦮🐕\u{200d}🦺🐈🐈\u{200d}⬛🐓🦤🦚🦜🦢🦩🕊🐇🦝🦨🦡🦫🦦🦥🐁🐀🐿🦔🐾🐉🐲🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛🦏🐪🐫🦒🦘🦬🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🦮🐕\u{200d}🦺🐈🐈\u{200d}⬛🐓🦤🦚🦜🦢🦩🕊🐇🦝🦨🦡🦫🦦🦥🐁🐀🐿🦔🐾🐉🐲🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀".to_string();
+        let tokens = [models::token::CurrencyToken::new(
+            &Bytes::from("0x052313a7af625b5a08fd3816ea0da1912ced8c8b"),
+            &too_long_symbol,
+            6,
+            0,
+            &[Some(64), None],
+            Chain::Ethereum,
+            100,
+        )];
+
+        gw.add_tokens(&tokens, &mut conn)
+            .await
+            .unwrap();
+
+        let inserted_account: &Account = &orm::Account::by_address(
+            &Bytes::from_str("0x052313a7af625b5a08fd3816ea0da1912ced8c8b".trim_start_matches("0x"))
+                .expect("address ok"),
+            &mut conn,
+        )
+        .await
+        .unwrap()[0];
+        assert_eq!(inserted_account.title, "Ethereum_🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛".to_string());
     }
 }
