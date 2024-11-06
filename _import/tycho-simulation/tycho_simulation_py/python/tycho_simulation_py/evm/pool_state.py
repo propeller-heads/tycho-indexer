@@ -19,6 +19,7 @@ from .constants import MAX_BALANCE, EXTERNAL_ACCOUNT
 from ..exceptions import RecoverableSimulationException
 from ..models import EVMBlock, Capability, Address, EthereumToken
 from .utils import (
+    ContractCompiler,
     create_engine,
     get_contract_bytecode,
     frac_to_decimal,
@@ -97,8 +98,8 @@ class ThirdPartyPool:
         self.involved_contracts: set[Address] = involved_contracts or set()
         """A set of all contract addresses involved in the simulation of this pool."""
 
-        self.token_storage_slots: dict[Address, tuple[int, int]] = (
-            token_storage_slots or {}
+        self.token_storage_slots: dict[Address, tuple[tuple[int, int], ContractCompiler]] = (
+                token_storage_slots or {}
         )
         """Allows the specification of custom storage slots for token allowances and
         balances. This is particularly useful for token contracts involved in protocol
@@ -177,7 +178,7 @@ class ThirdPartyPool:
                 t1,
                 [sell_amount],
                 block=self.block,
-                overwrites=self.block_lasting_overwrites,
+                overwrites=self._get_overwrites(t0,t1),
             )[0]
             if Capability.ScaledPrices in self.capabilities:
                 self.marginal_prices[(t0, t1)] = frac_to_decimal(frac)
@@ -298,9 +299,11 @@ class ThirdPartyPool:
             max_amount = sell_token.to_onchain_amount(
                 self.get_sell_amount_limit(sell_token, buy_token)
             )
+        slots, compiler = self.token_storage_slots.get(sell_token.address, ((0, 1), ContractCompiler.Solidity))
         overwrites = ERC20OverwriteFactory(
             sell_token,
-            token_slots=self.token_storage_slots.get(sell_token.address, (0, 1)),
+            token_slots=slots,
+            compiler=compiler
         )
         overwrites.set_balance(max_amount, EXTERNAL_ACCOUNT)
         overwrites.set_allowance(
@@ -318,9 +321,10 @@ class ThirdPartyPool:
         address = self.balance_owner or self.id_
         for t in self.tokens:
             slots = (0, 1)
+            compiler = ContractCompiler.Solidity
             if t.address in self.involved_contracts:
-                slots = self.token_storage_slots.get(t.address)
-            overwrites = ERC20OverwriteFactory(t, token_slots=slots)
+                slots, compiler = self.token_storage_slots.get(t.address)
+            overwrites = ERC20OverwriteFactory(t, token_slots=slots, compiler=compiler)
             overwrites.set_balance(
                 t.to_onchain_amount(self.balances[t.address]), address
             )

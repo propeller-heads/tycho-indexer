@@ -1,5 +1,5 @@
 from .adapter_contract import TychoSimulationContract
-from .utils import ERC20OverwriteFactory
+from .utils import ContractCompiler, ERC20OverwriteFactory
 from .constants import EXTERNAL_ACCOUNT
 from . import SimulationEngine
 from ..models import EVMBlock, EthereumToken
@@ -14,7 +14,7 @@ class SlotDetectionFailure(Exception):
 
 def brute_force_slots(
         t: EthereumToken, block: EVMBlock, engine: SimulationEngine
-) -> tuple[int, int]:
+) -> tuple[tuple[int, int], ContractCompiler]:
     """Brute-force detection of storage slots for token allowances and balances.
 
     This function attempts to determine the storage slots used by the token contract for
@@ -37,9 +37,9 @@ def brute_force_slots(
 
     Returns
     -------
-    tuple[int, int]
-        A tuple containing the detected balance storage slot and the allowance
-        storage slot, respectively.
+    tuple[tuple[int, int], ContractCompiler]
+        A tuple containing a tuple containing the detected balance storage slot and the allowance
+        storage slot, respectively and in what compiler was used for this contract.
 
     Raises
     ------
@@ -49,47 +49,52 @@ def brute_force_slots(
     """
     token_contract = TychoSimulationContract(t.address, "ERC20", engine)
     balance_slot = None
-    for i in range(20):
-        overwrite_factory = ERC20OverwriteFactory(t, (i, 1))
-        overwrite_factory.set_balance(_MARKER_VALUE, EXTERNAL_ACCOUNT)
-        res = token_contract.call(
-            "balanceOf",
-            [EXTERNAL_ACCOUNT],
-            block_number=block.id,
-            timestamp=int(block.ts.timestamp()),
-            overrides=overwrite_factory.get_tycho_overwrites(),
-            caller=EXTERNAL_ACCOUNT,
-            value=0,
-        )
-        if res.return_value is None:
-            continue
-        if res.return_value[0] == _MARKER_VALUE:
-            balance_slot = i
-            break
+    compiler = ContractCompiler.Solidity
+    for i in range(100):
+        for compiler_flag in [ContractCompiler.Solidity, ContractCompiler.Vyper]:
+            overwrite_factory = ERC20OverwriteFactory(t, (i, 1), compiler=compiler_flag)
+            overwrite_factory.set_balance(_MARKER_VALUE, EXTERNAL_ACCOUNT)
+            res = token_contract.call(
+                "balanceOf",
+                [EXTERNAL_ACCOUNT],
+                block_number=block.id,
+                timestamp=int(block.ts.timestamp()),
+                overrides=overwrite_factory.get_tycho_overwrites(),
+                caller=EXTERNAL_ACCOUNT,
+                value=0,
+            )
 
-    allowance_slot = None
-    for i in range(20):
-        overwrite_factory = ERC20OverwriteFactory(t, (0, i))
-        overwrite_factory.set_allowance(_MARKER_VALUE, _SPENDER, EXTERNAL_ACCOUNT)
-        res = token_contract.call(
-            "allowance",
-            [EXTERNAL_ACCOUNT, _SPENDER],
-            block_number=block.id,
-            timestamp=int(block.ts.timestamp()),
-            overrides=overwrite_factory.get_tycho_overwrites(),
-            caller=EXTERNAL_ACCOUNT,
-            value=0,
-        )
-        if res.return_value is None:
-            continue
-        if res.return_value[0] == _MARKER_VALUE:
-            allowance_slot = i
-            break
+            if res.return_value is None:
+                continue
+            if res.return_value[0] == _MARKER_VALUE:
+                balance_slot = i
+                compiler = compiler_flag
+                break
 
     if balance_slot is None:
         raise SlotDetectionFailure(f"Failed to infer balance slot for {t.address}")
 
+    allowance_slot = None
+    for i in range(100):
+            overwrite_factory = ERC20OverwriteFactory(t, (0, i), compiler=compiler)
+            overwrite_factory.set_allowance(_MARKER_VALUE, _SPENDER, EXTERNAL_ACCOUNT)
+            res = token_contract.call(
+                "allowance",
+                [EXTERNAL_ACCOUNT, _SPENDER],
+                block_number=block.id,
+                timestamp=int(block.ts.timestamp()),
+                overrides=overwrite_factory.get_tycho_overwrites(),
+                caller=EXTERNAL_ACCOUNT,
+                value=0,
+            )
+            if res.return_value is None:
+                continue
+            if res.return_value[0] == _MARKER_VALUE:
+                allowance_slot = i
+                break
+
+
     if allowance_slot is None:
         raise SlotDetectionFailure(f"Failed to infer allowance slot for {t.address}")
 
-    return balance_slot, allowance_slot
+    return ((balance_slot, allowance_slot), compiler)
