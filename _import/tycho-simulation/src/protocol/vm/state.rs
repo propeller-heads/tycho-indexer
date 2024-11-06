@@ -545,7 +545,7 @@ impl VMPoolState<PreCachedDB> {
         sell_token: ERC20Token,
         sell_amount: U256,
         buy_token: ERC20Token,
-    ) -> Result<GetAmountOutResult, TychoSimulationError> {
+    ) -> Result<GetAmountOutResult, SimulationError> {
         let mut sell_amount_respecting_limit = sell_amount;
         let mut sell_amount_exceeds_limit = false;
 
@@ -573,11 +573,7 @@ impl VMPoolState<PreCachedDB> {
         let (trade, state_changes) = self
             .adapter_contract
             .clone()
-            .ok_or_else(|| {
-                VMError::UninitializedAdapter(
-                    "Adapter contract must be initialized before setting capabilities".to_string(),
-                )
-            })?
+            .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
             .swap(
                 pool_id[2..].to_string(),
                 sell_token.clone().address,
@@ -604,10 +600,12 @@ impl VMPoolState<PreCachedDB> {
                         .or_default()
                         .insert(
                             U256::from_dec_str(&slot_str).map_err(|_| {
-                                VMError::DecodingError("Failed to decode slot index".to_string())
+                                SimulationError::DecodingError(
+                                    "Failed to decode slot index".to_string(),
+                                )
                             })?,
                             U256::from_dec_str(&value_str).map_err(|_| {
-                                VMError::DecodingError(
+                                SimulationError::DecodingError(
                                     "Failed to decode slot overwrite".to_string(),
                                 )
                             })?,
@@ -630,13 +628,13 @@ impl VMPoolState<PreCachedDB> {
         let buy_amount = trade.received_amount;
 
         if sell_amount_exceeds_limit {
-            return Err(TychoSimulationError::from(VMError::SellAmountTooHigh(
-                // Partial buy amount and gas used
-                buy_amount,
-                trade.gas_used,
-                new_state,
-                sell_amount_limit,
-            )));
+            return Err(SimulationError::SellAmountTooHigh(
+                // // Partial buy amount and gas used TODO: make this better
+                // buy_amount,
+                // trade.gas_used,
+                // new_state,
+                // sell_amount_limit,
+            ));
         }
         Ok(GetAmountOutResult::new(buy_amount, trade.gas_used, Box::new(new_state.clone())))
     }
@@ -976,10 +974,7 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(e) => {
-                assert!(matches!(
-                    e,
-                    TychoSimulationError::VMError(VMError::SellAmountTooHigh(_, _, _, _))
-                ));
+                assert!(matches!(e, SimulationError::SellAmountTooHigh()));
             }
             _ => panic!("Test failed: was expecting an Err value"),
         };

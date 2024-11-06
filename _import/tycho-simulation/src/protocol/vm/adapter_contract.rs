@@ -102,7 +102,7 @@ where
             let received_amount = match &return_value[0] {
                 Token::Uint(amount) => *amount,
                 _ => {
-                    return Err(VMError::DecodingError(
+                    return Err(SimulationError::DecodingError(
                         "Expected a uint for received_amount".into(),
                     ));
                 }
@@ -111,27 +111,31 @@ where
             let gas_used = match &return_value[1] {
                 Token::Uint(gas) => *gas,
                 _ => {
-                    return Err(VMError::DecodingError("Expected a uint for gas_used".into()));
+                    return Err(SimulationError::DecodingError(
+                        "Expected a uint for gas_used".into(),
+                    ));
                 }
             };
 
             let price_token = match &return_value[2] {
                 Token::Tuple(elements) => Token::Array(vec![Token::Tuple(elements.clone())]),
                 _ => {
-                    return Err(VMError::DecodingError("Expected a tuple for price_token".into()));
+                    return Err(SimulationError::DecodingError(
+                        "Expected a tuple for price_token".into(),
+                    ));
                 }
             };
             let price = self
                 .calculate_price(price_token)?
                 .first()
                 .cloned()
-                .ok_or(VMError::DecodingError(
+                .ok_or(SimulationError::DecodingError(
                     "Expected at least one element in the calculated price".into(),
                 ))?;
 
             Ok((received_amount, gas_used, price))
         } else {
-            Err(VMError::DecodingError("Expected return_value to be a Token::Tuple".into()))
+            Err(SimulationError::DecodingError("Expected return_value to be a Token::Tuple".into()))
         }?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))

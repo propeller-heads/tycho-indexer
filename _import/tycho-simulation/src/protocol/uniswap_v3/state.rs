@@ -149,19 +149,10 @@ impl UniswapV3State {
                 Ok((tick, init)) => (tick, init),
                 Err(tick_err) => match tick_err.kind {
                     super::tick_list::TickListErrorKind::TicksExeeded => {
-                        return Err(TychoSimulationError::from(NativeSimulationError::new(
-                            TradeSimulationErrorKind::InsufficientData,
-                            Some(GetAmountOutResult::new(
-                                state.amount_calculated.abs().into_raw(),
-                                gas_used,
-                                self.clone_box(),
-                            )),
-                        )))
-                    }
-                    _ => {
-                        return Err(TychoSimulationError::from(NativeSimulationError::new(
-                            TradeSimulationErrorKind::Unknown,
-                            None,
+                        return Err(SimulationError::InsufficientData(GetAmountOutResult::new(
+                            state.amount_calculated.abs().into_raw(),
+                            gas_used,
+                            self.clone_box(),
                         )))
                     }
                     _ => return Err(SimulationError::Unknown()),

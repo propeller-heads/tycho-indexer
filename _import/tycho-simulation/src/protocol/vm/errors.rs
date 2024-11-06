@@ -2,7 +2,7 @@
 
 use std::io;
 
-use ethers::{prelude::ProviderError, types::U256};
+use ethers::prelude::ProviderError;
 use serde_json::Error as SerdeError;
 use thiserror::Error;
 
