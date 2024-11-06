@@ -79,7 +79,11 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     ///   BTC/USDT, BTC would be the base asset.
     /// * `b` - Quote Token: refers to the token that is the price of a pair. For the symbol
     ///   BTC/USDT, USDT would be the quote asset.
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64;
+    fn spot_price(
+        &self,
+        base: &ERC20Token,
+        quote: &ERC20Token,
+    ) -> Result<f64, TychoSimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
     ///

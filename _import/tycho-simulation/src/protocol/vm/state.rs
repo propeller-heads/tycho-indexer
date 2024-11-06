@@ -1,29 +1,11 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
-use std::any::Any;
-use tracing::warn;
-
-use crate::{
-    evm::{
-        simulation::{SimulationEngine, SimulationParameters},
-        simulation_db::BlockHeader,
-        tycho_db::PreCachedDB,
-    },
-    models::ERC20Token,
-    protocol::vm::{
-        constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-        engine::{create_engine, SHARED_TYCHO_DB},
-        tycho_simulation_contract::TychoSimulationContract,
-        utils::{get_code_for_contract, get_contract_bytecode},
-    },
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
 };
 
-use crate::protocol::vm::{
-    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
-    models::Capability,
-    utils::SlotId,
-};
 use chrono::Utc;
 use ethers::{
     abi::{decode, ParamType},
@@ -39,8 +21,26 @@ use revm::{
     },
     DatabaseRef,
 };
-use std::collections::{HashMap, HashSet};
+use tracing::warn;
+
 use tycho_core::dto::ProtocolStateDelta;
+
+use crate::{
+    evm::{
+        simulation::{SimulationEngine, SimulationParameters},
+        simulation_db::BlockHeader,
+        tycho_db::PreCachedDB,
+    },
+    models::ERC20Token,
+    protocol::vm::{
+        constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+        engine::{create_engine, SHARED_TYCHO_DB},
+        erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
+        models::Capability,
+        tycho_simulation_contract::TychoSimulationContract,
+        utils::{get_code_for_contract, get_contract_bytecode, SlotId},
+    },
+};
 
 // Necessary for the init_account method to be in scope
 #[allow(unused_imports)]
@@ -127,10 +127,9 @@ impl VMPoolState<PreCachedDB> {
             .await?;
         state.adapter_contract = Some(TychoSimulationContract::new(
             *ADAPTER_ADDRESS,
-            state
-                .engine
-                .clone()
-                .ok_or_else(|| TychoSimulationError::from(VMError::EngineNotSet()))?,
+            state.engine.clone().ok_or_else(|| {
+                TychoSimulationError::from(VMError::NotInitialized("Simulation engine".to_string()))
+            })?,
         )?);
         state.set_capabilities().await?;
         // TODO: add init_token_storage_slots() in 3796
@@ -205,7 +204,7 @@ impl VMPoolState<PreCachedDB> {
                     let code =
                         Bytecode::new_raw(Bytes::from(bytecode.clone().ok_or_else(|| {
                             TychoSimulationError::from(VMError::DecodingError(
-                                "Expected bytecode".into(),
+                                "Byte code from stateless contracts is None".into(),
                             ))
                         })?));
                     let code_hash = B256::from(keccak256(code.clone().bytes()));
@@ -296,7 +295,7 @@ impl VMPoolState<PreCachedDB> {
             .next()
             .ok_or_else(|| {
                 TychoSimulationError::from(VMError::DecodingError(
-                    "Expected an address in the result".into(),
+                    "Couldn't retrieve address from simulation for stateless contracts".into(),
                 ))
             })?;
 
@@ -304,16 +303,19 @@ impl VMPoolState<PreCachedDB> {
             .to_string()
             .parse()
             .map_err(|_| {
-                TychoSimulationError::from(VMError::DecodingError("Expected an Address".into()))
+                TychoSimulationError::from(VMError::DecodingError(
+                    "Couldn't parse address to string".into(),
+                ))
             })
     }
 
     /// Ensures the pool supports the given capability
     fn ensure_capability(&self, capability: Capability) -> Result<(), TychoSimulationError> {
         if !self.capabilities.contains(&capability) {
-            return Err(TychoSimulationError::from(VMError::UnsupportedCapability(
-                capability.to_string(),
-            )));
+            return Err(TychoSimulationError::from(VMError::NotFound(format!(
+                "capability {:?}",
+                capability.to_string()
+            ))));
         }
         Ok(())
     }
@@ -329,9 +331,8 @@ impl VMPoolState<PreCachedDB> {
                     .adapter_contract
                     .clone()
                     .ok_or_else(|| {
-                        TychoSimulationError::from(VMError::UninitializedAdapter(
-                            "Adapter contract must be initialized before setting capabilities"
-                                .to_string(),
+                        TychoSimulationError::from(VMError::NotInitialized(
+                            "Adapter contract".to_string(),
                         ))
                     })?
                     .get_capabilities(self.id.clone()[2..].to_string(), t0.address, t1.address)
@@ -381,9 +382,8 @@ impl VMPoolState<PreCachedDB> {
                 .adapter_contract
                 .clone()
                 .ok_or_else(|| {
-                    TychoSimulationError::from(VMError::UninitializedAdapter(
-                        "Adapter contract must be initialized before setting capabilities"
-                            .to_string(),
+                    TychoSimulationError::from(VMError::NotInitialized(
+                        "Adapter contract".to_string(),
                     ))
                 })?
                 .price(
@@ -401,11 +401,15 @@ impl VMPoolState<PreCachedDB> {
                 .contains(&Capability::ScaledPrice)
             {
                 *price_result.first().ok_or_else(|| {
-                    TychoSimulationError::from(VMError::DecodingError("Expected a u64".to_string()))
+                    TychoSimulationError::from(VMError::DecodingError(
+                        "Spot price is not a u64".to_string(),
+                    ))
                 })?
             } else {
                 let unscaled_price = price_result.first().ok_or_else(|| {
-                    TychoSimulationError::from(VMError::DecodingError("Expected a u64".to_string()))
+                    TychoSimulationError::from(VMError::DecodingError(
+                        "Spot price is not a u64".to_string(),
+                    ))
                 })?;
                 *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
                     10f64.powi(buy_token.decimals as i32)
@@ -428,9 +432,7 @@ impl VMPoolState<PreCachedDB> {
             .adapter_contract
             .clone()
             .ok_or_else(|| {
-                TychoSimulationError::from(VMError::UninitializedAdapter(
-                    "Adapter contract must be initialized before setting capabilities".to_string(),
-                ))
+                TychoSimulationError::from(VMError::NotInitialized("Adapter contract".to_string()))
             })?;
         let limits = binding
             .get_limits(
@@ -577,11 +579,15 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         todo!()
     }
 
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64 {
-        *self
-            .spot_prices
+    fn spot_price(
+        &self,
+        base: &ERC20Token,
+        quote: &ERC20Token,
+    ) -> Result<f64, TychoSimulationError> {
+        self.spot_prices
             .get(&(base.address, quote.address))
-            .expect("Spot price not found")
+            .cloned()
+            .ok_or(TychoSimulationError::from(VMError::NotFound("Spot prices".to_string())))
     }
 
     fn get_amount_out(

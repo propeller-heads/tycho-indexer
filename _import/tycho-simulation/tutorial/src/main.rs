@@ -95,7 +95,7 @@ fn handle_state(
 
     for (id, pair) in pool_graph.iter() {
         info!("USDC-WETH pair: {:?}", id);
-        let spot_price = pair.spot_price(&weth, &usdc);
+        let spot_price = pair.spot_price(&weth, &usdc).unwrap();
         info!("Price: {:?}", spot_price);
 
         best_price = Some(best_price.map_or(spot_price, |bp: f64| bp.max(spot_price)));

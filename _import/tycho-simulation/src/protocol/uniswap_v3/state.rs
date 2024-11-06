@@ -259,11 +259,12 @@ impl ProtocolSim for UniswapV3State {
         (self.fee as u32) as f64 / 1_000_000.0
     }
 
-    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
+    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> Result<f64, TychoSimulationError> {
         if a < b {
-            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32)
+            Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32))
         } else {
-            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32)
+            Ok(1.0f64 /
+                sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32))
         }
     }
 

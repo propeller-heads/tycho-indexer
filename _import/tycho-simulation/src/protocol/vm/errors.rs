@@ -35,12 +35,10 @@ pub enum VMError {
     DecodingError(String),
     #[error("RPC related error {0}")]
     RpcError(RpcError),
-    #[error("Unsupported Capability: {0}")]
-    UnsupportedCapability(String),
-    #[error("Adapter not initialized: {0}")]
-    UninitializedAdapter(String),
-    #[error("Engine not set")]
-    EngineNotSet(),
+    #[error("Not found: {0}")]
+    NotFound(String),
+    #[error("Not initialized: {0}")]
+    NotInitialized(String),
 }
 
 #[derive(Debug, Error)]

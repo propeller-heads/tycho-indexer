@@ -59,21 +59,25 @@ impl ProtocolSim for UniswapV2State {
     /// # Returns
     ///
     /// * `f64` - Spot price of the tokens.
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64 {
+    fn spot_price(
+        &self,
+        base: &ERC20Token,
+        quote: &ERC20Token,
+    ) -> Result<f64, TychoSimulationError> {
         if base < quote {
-            spot_price_from_reserves(
+            Ok(spot_price_from_reserves(
                 self.reserve0,
                 self.reserve1,
                 base.decimals as u32,
                 quote.decimals as u32,
-            )
+            ))
         } else {
-            spot_price_from_reserves(
+            Ok(spot_price_from_reserves(
                 self.reserve1,
                 self.reserve0,
                 base.decimals as u32,
                 quote.decimals as u32,
-            )
+            ))
         }
     }
 
@@ -296,9 +300,9 @@ mod tests {
         );
 
         let res = if zero_to_one {
-            state.spot_price(&usdc, &weth)
+            state.spot_price(&usdc, &weth).unwrap()
         } else {
-            state.spot_price(&weth, &usdc)
+            state.spot_price(&weth, &usdc).unwrap()
         };
 
         assert_ulps_eq!(res, exp);
