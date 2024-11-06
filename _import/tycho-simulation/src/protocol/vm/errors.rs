@@ -6,40 +6,7 @@ use ethers::prelude::ProviderError;
 use serde_json::Error as SerdeError;
 use thiserror::Error;
 
-use crate::evm::simulation::SimulationError;
-
-/// VM specific errors.
-/// Variants:
-/// - `AbiError`: Represents an error when loading the ABI file, encapsulating a `FileError`.
-/// - `EncodingError`: Denotes an error in encoding data.
-/// - `SimulationFailure`: Wraps errors that occur during simulation, containing a
-///   `SimulationError`.
-/// - `DecodingError`: Indicates an error in decoding data.
-/// - `RPCError`: Indicates an error related to RPC interaction.
-/// - `UnsupportedCapability`: Denotes an error when a pool state does not support a necessary
-///   capability.
-/// - `UninitializedAdapter`: Indicates an error when trying to use the Adapter before initializing
-///   it.
-/// - `CapabilityRetrievalFailure`: Indicates an error when trying to retrieve capabilities.
-/// - `EngineNotSet`: Indicates an error when trying to use the engine before setting it.
-//   the adapter.
-#[derive(Error, Debug)]
-pub enum VMError {
-    #[error("ABI loading error: {0}")]
-    AbiError(FileError),
-    #[error("Encoding error: {0}")]
-    EncodingError(String),
-    #[error("Simulation failure error: {0}")]
-    SimulationFailure(SimulationError),
-    #[error("Decoding error: {0}")]
-    DecodingError(String),
-    #[error("RPC related error {0}")]
-    RpcError(RpcError),
-    #[error("Not found: {0}")]
-    NotFound(String),
-    #[error("Not initialized: {0}")]
-    NotInitialized(String),
-}
+use crate::protocol::errors::SimulationError;
 
 #[derive(Debug, Error)]
 pub enum FileError {
@@ -80,20 +47,20 @@ pub enum RpcError {
     EmptyResponse(),
 }
 
-impl From<RpcError> for VMError {
+impl From<RpcError> for SimulationError {
     fn from(err: RpcError) -> Self {
-        VMError::RpcError(err)
+        SimulationError::RpcError(err)
     }
 }
 
-impl From<FileError> for VMError {
+impl From<FileError> for SimulationError {
     fn from(err: FileError) -> Self {
-        VMError::AbiError(err)
+        SimulationError::AbiError(err)
     }
 }
 
-impl From<ethers::abi::Error> for VMError {
+impl From<ethers::abi::Error> for SimulationError {
     fn from(err: ethers::abi::Error) -> Self {
-        VMError::DecodingError(err.to_string())
+        SimulationError::DecodingError(err.to_string())
     }
 }

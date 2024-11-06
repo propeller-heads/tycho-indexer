@@ -3,9 +3,7 @@ use std::any::Any;
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{
-            NativeSimulationError, TradeSimulationErrorKind, TransitionError, TychoSimulationError,
-        },
+        errors::{SimulationError, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -59,11 +57,7 @@ impl ProtocolSim for UniswapV2State {
     /// # Returns
     ///
     /// * `f64` - Spot price of the tokens.
-    fn spot_price(
-        &self,
-        base: &ERC20Token,
-        quote: &ERC20Token,
-    ) -> Result<f64, TychoSimulationError> {
+    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
         if base < quote {
             Ok(spot_price_from_reserves(
                 self.reserve0,
@@ -98,22 +92,16 @@ impl ProtocolSim for UniswapV2State {
         amount_in: U256,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TychoSimulationError> {
+    ) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in == U256::zero() {
-            return Result::Err(TychoSimulationError::from(NativeSimulationError::new(
-                TradeSimulationErrorKind::InsufficientAmount,
-                None,
-            )));
+            return Err(SimulationError::InsufficientAmount());
         }
         let zero2one = token_in.address < token_out.address;
         let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
         let reserve_buy = if zero2one { self.reserve1 } else { self.reserve0 };
 
         if reserve_sell == U256::zero() || reserve_buy == U256::zero() {
-            return Result::Err(TychoSimulationError::from(NativeSimulationError::new(
-                TradeSimulationErrorKind::NoLiquidity,
-                None,
-            )));
+            return Err(SimulationError::NoLiquidity());
         }
 
         let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
@@ -273,12 +261,7 @@ mod tests {
         let res = state.get_amount_out(amount_in, &t0, &t1);
         assert!(res.is_err());
         let err = res.err().unwrap();
-        match err {
-            TychoSimulationError::NativeSimulationError(e) => {
-                assert_eq!(e.kind, TradeSimulationErrorKind::U256Overflow)
-            }
-            _ => panic!("Test failed: was expecting a NativeSimulationError"),
-        }
+        assert!(matches!(err, SimulationError::U256Overflow()));
     }
 
     #[rstest]

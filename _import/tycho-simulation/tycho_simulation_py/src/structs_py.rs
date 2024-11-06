@@ -441,16 +441,16 @@ impl From<SimulationErrorDetails> for PyErr {
 
 // This indirection is needed cause SimulationError
 //  is defined in an external create
-impl From<simulation::SimulationError> for SimulationErrorDetails {
-    fn from(err: simulation::SimulationError) -> Self {
+impl From<simulation::SimulationEngineError> for SimulationErrorDetails {
+    fn from(err: simulation::SimulationEngineError) -> Self {
         match err {
-            simulation::SimulationError::StorageError(reason) => {
+            simulation::SimulationEngineError::StorageError(reason) => {
                 SimulationErrorDetails { data: reason, gas_used: None }
             }
-            simulation::SimulationError::TransactionError { data, gas_used } => {
+            simulation::SimulationEngineError::TransactionError { data, gas_used } => {
                 SimulationErrorDetails { data, gas_used }
             }
-            simulation::SimulationError::OutOfGas(reason, _) => {
+            simulation::SimulationEngineError::OutOfGas(reason, _) => {
                 SimulationErrorDetails { data: reason, gas_used: None }
             }
         }

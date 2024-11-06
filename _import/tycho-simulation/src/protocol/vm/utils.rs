@@ -11,8 +11,11 @@ use hex::FromHex;
 use mini_moka::sync::Cache;
 
 use crate::{
-    evm::simulation::SimulationError,
-    protocol::vm::errors::{FileError, RpcError, VMError},
+    evm::simulation::SimulationEngineError,
+    protocol::{
+        errors::SimulationError,
+        vm::errors::{FileError, RpcError},
+    },
 };
 use ethers::types::U256;
 use revm::primitives::{Bytecode, Bytes};
@@ -26,15 +29,17 @@ use std::{
 };
 
 pub fn maybe_coerce_error(
-    err: &SimulationError,
+    err: &SimulationEngineError,
     pool_state: &str,
     gas_limit: Option<u64>,
-) -> SimulationError {
+) -> SimulationEngineError {
     match err {
         // Check for revert situation (if error message starts with "0x")
-        SimulationError::TransactionError { ref data, ref gas_used } if data.starts_with("0x") => {
+        SimulationEngineError::TransactionError { ref data, ref gas_used }
+            if data.starts_with("0x") =>
+        {
             let reason = parse_solidity_error_message(data);
-            let err = SimulationError::TransactionError {
+            let err = SimulationEngineError::TransactionError {
                 data: format!("Revert! Reason: {}", reason),
                 gas_used: *gas_used,
             };
@@ -44,7 +49,7 @@ pub fn maybe_coerce_error(
                 // if we used up 97% or more issue a OutOfGas error.
                 let usage = *gas_used as f64 / gas_limit as f64;
                 if usage >= 0.97 {
-                    return SimulationError::OutOfGas(
+                    return SimulationEngineError::OutOfGas(
                         format!(
                             "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. Original error: {}",
                             usage * 100.0,
@@ -57,7 +62,7 @@ pub fn maybe_coerce_error(
             err
         }
         // Check if "OutOfGas" is part of the error message
-        SimulationError::TransactionError { ref data, ref gas_used }
+        SimulationEngineError::TransactionError { ref data, ref gas_used }
             if data.contains("OutOfGas") =>
         {
             let usage_msg = if let (Some(gas_limit), Some(gas_used)) = (gas_limit, gas_used) {
@@ -67,7 +72,7 @@ pub fn maybe_coerce_error(
                 String::new()
             };
 
-            SimulationError::OutOfGas(
+            SimulationEngineError::OutOfGas(
                 format!("SimulationError: out-of-gas. {} Original error: {}", usage_msg, data),
                 pool_state.to_string(),
             )
@@ -219,14 +224,14 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
 pub async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
-) -> Result<Bytecode, VMError> {
+) -> Result<Bytecode, SimulationError> {
     // Get the connection string, defaulting to the RPC_URL environment variable
     let connection_string = connection_string.or_else(|| env::var("RPC_URL").ok());
 
     let connection_string = match connection_string {
         Some(url) => url,
         None => {
-            return Err(VMError::from(RpcError::InvalidRequest(
+            return Err(SimulationError::from(RpcError::InvalidRequest(
                 "RPC_URL environment variable is not set".to_string(),
             )))
         }
@@ -238,19 +243,22 @@ pub async fn get_code_for_contract(
 
     // Parse the address
     let addr: H160 = address.parse().map_err(|_| {
-        VMError::from(RpcError::InvalidRequest(format!("Failed to parse address: {}", address)))
+        SimulationError::from(RpcError::InvalidRequest(format!(
+            "Failed to parse address: {}",
+            address
+        )))
     })?;
 
     // Call eth_getCode to get the bytecode of the contract
     match provider.get_code(addr, None).await {
-        Ok(code) if code.is_empty() => Err(VMError::from(RpcError::EmptyResponse())),
+        Ok(code) if code.is_empty() => Err(SimulationError::from(RpcError::EmptyResponse())),
         Ok(code) => {
             let bytecode = Bytecode::new_raw(Bytes::from(code.to_vec()));
             Ok(bytecode)
         }
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
-            Err(VMError::from(RpcError::InvalidResponse(e)))
+            Err(SimulationError::from(RpcError::InvalidResponse(e)))
         }
     }
 }
@@ -330,14 +338,14 @@ mod tests {
 
     #[test]
     fn test_maybe_coerce_error_revert_no_gas_info() {
-        let err = SimulationError::TransactionError{
+        let err = SimulationEngineError::TransactionError{
             data: "0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string(),
             gas_used: None
         };
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationError::TransactionError { ref data, gas_used: _ } = result {
+        if let SimulationEngineError::TransactionError { ref data, gas_used: _ } = result {
             assert!(data.contains("Revert! Reason: Invalid operation"));
         } else {
             panic!("Expected SolidityError error");
@@ -347,14 +355,14 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_out_of_gas() {
         // Test out-of-gas situation with gas limit and gas used provided
-        let err = SimulationError::TransactionError{
+        let err = SimulationEngineError::TransactionError{
             data: "0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000011496e76616c6964206f7065726174696f6e000000000000000000000000000000".to_string(),
             gas_used: Some(980)
         };
 
         let result = maybe_coerce_error(&err, "test_pool", Some(1000));
 
-        if let SimulationError::OutOfGas(message, pool_state) = result {
+        if let SimulationEngineError::OutOfGas(message, pool_state) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
             assert_eq!(pool_state, "test_pool");
         } else {
@@ -365,12 +373,14 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_no_gas_limit_info() {
         // Test out-of-gas situation without gas limit info
-        let err =
-            SimulationError::TransactionError { data: "OutOfGas".to_string(), gas_used: None };
+        let err = SimulationEngineError::TransactionError {
+            data: "OutOfGas".to_string(),
+            gas_used: None,
+        };
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationError::OutOfGas(message, pool_state) = result {
+        if let SimulationEngineError::OutOfGas(message, pool_state) = result {
             assert!(message.contains("Original error: OutOfGas"));
             assert_eq!(pool_state, "test_pool");
         } else {
@@ -380,11 +390,11 @@ mod tests {
 
     #[test]
     fn test_maybe_coerce_error_storage_error() {
-        let err = SimulationError::StorageError("Storage error:".to_string());
+        let err = SimulationEngineError::StorageError("Storage error:".to_string());
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationError::StorageError(message) = result {
+        if let SimulationEngineError::StorageError(message) = result {
             assert_eq!(message, "Storage error:");
         } else {
             panic!("Expected storage error");
@@ -394,14 +404,14 @@ mod tests {
     #[test]
     fn test_maybe_coerce_error_no_match() {
         // Test for non-revert, non-out-of-gas, non-storage errors
-        let err = SimulationError::TransactionError {
+        let err = SimulationEngineError::TransactionError {
             data: "Some other error".to_string(),
             gas_used: None,
         };
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationError::TransactionError { ref data, gas_used: _ } = result {
+        if let SimulationEngineError::TransactionError { ref data, gas_used: _ } = result {
             assert_eq!(data, "Some other error");
         } else {
             panic!("Expected solidity error");
