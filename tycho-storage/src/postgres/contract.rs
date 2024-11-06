@@ -1390,8 +1390,8 @@ impl PostgresGateway {
 #[cfg(test)]
 mod test {
     use crate::postgres::{
-        db_fixtures,
-        db_fixtures::{yesterday_midnight, yesterday_one_am},
+        db_fixtures::{self, yesterday_midnight, yesterday_one_am},
+        MAX_VERSION_TS,
     };
     use diesel_async::AsyncConnection;
     use rstest::rstest;
@@ -2183,7 +2183,7 @@ mod test {
         // Query the stored slots from the database
         let fetched_slot_data: ContractStore = schema::contract_storage::table
             .select((schema::contract_storage::slot, schema::contract_storage::value))
-            .filter(schema::contract_storage::valid_to.eq(MAX_TS))
+            .filter(schema::contract_storage::valid_to.gt(*MAX_VERSION_TS))
             .get_results(&mut conn)
             .await
             .unwrap()
@@ -2253,7 +2253,7 @@ mod test {
         // Query the stored slots from the database
         let fetched_slot_data: ContractStore = schema::contract_storage::table
             .select((schema::contract_storage::slot, schema::contract_storage::value))
-            .filter(schema::contract_storage::valid_to.eq(MAX_TS))
+            .filter(schema::contract_storage::valid_to.gt(*MAX_VERSION_TS))
             .get_results(&mut conn)
             .await
             .unwrap()

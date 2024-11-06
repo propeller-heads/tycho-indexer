@@ -373,16 +373,17 @@ impl PostgresGateway {
         let mut res: HashMap<Address, (String, Bytes)> = HashMap::new();
         schema::protocol_component::table
             .inner_join(schema::protocol_component_holds_token::table)
-            .inner_join(schema::component_balance::table)
+            .inner_join(schema::component_balance_default::table)
             .select((
-                schema::component_balance::token_id,
+                schema::component_balance_default::token_id,
                 schema::protocol_component::external_id,
-                schema::component_balance::new_balance,
+                schema::component_balance_default::new_balance,
             ))
             .filter(schema::protocol_component::chain_id.eq(chain_id))
-            .filter(schema::component_balance::balance_float.ge(min_balance.unwrap_or(0f64)))
-            .filter(schema::component_balance::valid_to.eq(MAX_TS))
-            .filter(schema::component_balance::token_id.eq_any(token_ids.keys()))
+            .filter(
+                schema::component_balance_default::balance_float.ge(min_balance.unwrap_or(0f64)),
+            )
+            .filter(schema::component_balance_default::token_id.eq_any(token_ids.keys()))
             .get_results::<(i64, String, Bytes)>(conn)
             .await
             .map_err(PostgresError::from)?
