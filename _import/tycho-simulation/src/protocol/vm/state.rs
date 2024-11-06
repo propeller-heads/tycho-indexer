@@ -559,6 +559,7 @@ impl VMPoolState<PreCachedDB> {
                 U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
             )
             .await?;
+
         let sell_amount_limit = self
             .clone()
             .get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))
@@ -726,6 +727,14 @@ mod tests {
         protocol::vm::models::Capability,
     };
 
+    fn dai() -> ERC20Token {
+        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
+    }
+
+    fn bal() -> ERC20Token {
+        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
+    }
+
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(asset_path)?;
         let data: Value = serde_json::from_reader(file)?;
@@ -769,40 +778,10 @@ mod tests {
         let code = Bytecode::new_raw(onchain_bytecode);
         let contract_acc_info = AccountInfo::new(rU256::from(0), 0, code.hash_slow(), code);
 
-        // Adding permanent storage for balance and approval - necessary for amount out calculation
-        let mut storage: HashMap<rU256, rU256> = HashMap::default();
-
-        // balance of EOA
-        storage.insert(
-            rU256::from_str(
-                "110136159478993350616340414857413728709904511599989695046923576775517543504731",
-            )
-            .expect("Can't parse balance key"),
-            rU256::from_str("2500000000000000000000000000000000000").unwrap(),
-        );
-
-        // allowance for Adapter contract to spend EOA's DAI
-        storage.insert(
-            rU256::from_str(
-                "58546993237423525698686728856645416951692145960565761888391937184176623942864",
-            )
-            .unwrap(),
-            rU256::from_str("2500000000000000000000000000000000000").unwrap(),
-        );
-
-
-        let dai = ERC20Token::new(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-            18,
-            "DAI",
-            U256::from(10_000),
-        );
-
-
         db_write.init_account(
-            rAddress::from_slice(dai.address.as_bytes()),
+            rAddress::from_slice(dai().address.as_bytes()),
             contract_acc_info,
-            Some(storage),
+            None,
             true,
         );
 
@@ -974,14 +953,6 @@ mod tests {
             }
             _ => panic!("Test failed: was expecting an Err value"),
         };
-    }
-
-    fn dai() -> ERC20Token {
-        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
-    }
-
-    fn bal() -> ERC20Token {
-        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
     }
 
     #[tokio::test]
