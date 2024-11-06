@@ -86,7 +86,7 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
-    manual_updates: bool,
+    pub manual_updates: bool,
     engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
     adapter_contract: Option<TychoSimulationContract<D>>,
