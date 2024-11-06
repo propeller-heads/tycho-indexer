@@ -1,3 +1,18 @@
+## [0.33.0](https://github.com/propeller-heads/tycho-simulation/compare/0.32.0...0.33.0) (2024-11-06)
+
+
+### Features
+
+* create simple solver for tycho demo ([956b2db](https://github.com/propeller-heads/tycho-simulation/commit/956b2db61c3d8e962b508cde2d69b166a8728c0c))
+* move tutorial to a separate package and make it simpler ([266616d](https://github.com/propeller-heads/tycho-simulation/commit/266616dbcf80218319e7fb986c270b72ea799c9a))
+* **tutorial:** move tutorial files into tutorial directory ([2350e71](https://github.com/propeller-heads/tycho-simulation/commit/2350e7179d9d5dcf93b1ec3c58ad398fc7ebc340))
+
+
+### Bug Fixes
+
+* Update foundry and revm dependencies ([ccfbde5](https://github.com/propeller-heads/tycho-simulation/commit/ccfbde51ffb375020f662e66985b0d4d9348b9b9))
+* Update python revm version ([d9f069a](https://github.com/propeller-heads/tycho-simulation/commit/d9f069aa3a16194e2ce6dcd43f85ebdf283583a4))
+
 ## [0.32.0](https://github.com/propeller-heads/protosim/compare/0.31.0...0.32.0) (2024-11-04)
 
 

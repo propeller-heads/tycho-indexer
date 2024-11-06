@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.32.0"
+version = "0.33.0"
 edition = "2021"
 
 [workspace]
@@ -58,7 +58,7 @@ tempfile = "3.13.0"
 clap = { version = "4.5.3", features = ["derive"] }
 anyhow = "1.0.79"
 ratatui = "0.29.0"
-crossterm = { version = "0.28.1" , features = ["event-stream"]}
+crossterm = { version = "0.28.1",  features = ["event-stream"]}
 
 [features]
 default = []
