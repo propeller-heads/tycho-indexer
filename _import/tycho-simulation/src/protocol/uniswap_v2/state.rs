@@ -1,12 +1,9 @@
 use std::any::Any;
 
-use ethers::types::U256;
-use tycho_core::dto::ProtocolStateDelta;
-
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TradeSimulationErrorKind, TransitionError},
+        errors::{SimulationError, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -14,6 +11,8 @@ use crate::{
     },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
 };
+use ethers::types::U256;
+use tycho_core::dto::ProtocolStateDelta;
 
 use super::{events::UniswapV2Sync, reserve_price::spot_price_from_reserves};
 
@@ -58,21 +57,21 @@ impl ProtocolSim for UniswapV2State {
     /// # Returns
     ///
     /// * `f64` - Spot price of the tokens.
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64 {
+    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
         if base < quote {
-            spot_price_from_reserves(
+            Ok(spot_price_from_reserves(
                 self.reserve0,
                 self.reserve1,
                 base.decimals as u32,
                 quote.decimals as u32,
-            )
+            ))
         } else {
-            spot_price_from_reserves(
+            Ok(spot_price_from_reserves(
                 self.reserve1,
                 self.reserve0,
                 base.decimals as u32,
                 quote.decimals as u32,
-            )
+            ))
         }
     }
 
@@ -93,22 +92,16 @@ impl ProtocolSim for UniswapV2State {
         amount_in: U256,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TradeSimulationError> {
+    ) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in == U256::zero() {
-            return Result::Err(TradeSimulationError::new(
-                TradeSimulationErrorKind::InsufficientAmount,
-                None,
-            ));
+            return Err(SimulationError::InsufficientAmount());
         }
         let zero2one = token_in.address < token_out.address;
         let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
         let reserve_buy = if zero2one { self.reserve1 } else { self.reserve0 };
 
         if reserve_sell == U256::zero() || reserve_buy == U256::zero() {
-            return Result::Err(TradeSimulationError::new(
-                TradeSimulationErrorKind::NoLiquidity,
-                None,
-            ));
+            return Err(SimulationError::NoLiquidity());
         }
 
         let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
@@ -267,7 +260,8 @@ mod tests {
 
         let res = state.get_amount_out(amount_in, &t0, &t1);
         assert!(res.is_err());
-        assert_eq!(res.err().unwrap().kind, TradeSimulationErrorKind::U256Overflow)
+        let err = res.err().unwrap();
+        assert!(matches!(err, SimulationError::ArithmeticOverflow()));
     }
 
     #[rstest]
@@ -289,9 +283,9 @@ mod tests {
         );
 
         let res = if zero_to_one {
-            state.spot_price(&usdc, &weth)
+            state.spot_price(&usdc, &weth).unwrap()
         } else {
-            state.spot_price(&weth, &usdc)
+            state.spot_price(&weth, &usdc).unwrap()
         };
 
         assert_ulps_eq!(res, exp);
