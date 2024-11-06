@@ -43,7 +43,7 @@ const config = {
                     "toml set --toml-path tycho_simulation_py/Cargo.toml package.version ${nextRelease.version}",
                     "toml set --toml-path tycho_simulation_py/pyproject.toml project.version ${nextRelease.version}",
                     "cargo update -p tycho-simulation",
-                    "cargo update -p tycho-simulation-py",
+                    "cargo update -p _tycho_simulation_py",
                 ].join(" && "),
             },
         ],

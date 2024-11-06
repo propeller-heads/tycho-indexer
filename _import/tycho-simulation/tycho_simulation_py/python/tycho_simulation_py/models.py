@@ -113,6 +113,6 @@ class Capability(IntEnum):
     FeeOnTransfer = auto()
     ConstantPrice = auto()
     TokenBalanceIndependent = auto()
-    ScaledPrice = auto()
+    ScaledPrices = auto()
     HardLimits = auto()
     MarginalPrice = auto()

@@ -1,3 +1,38 @@
+## [0.34.0](https://github.com/propeller-heads/tycho-simulation/compare/0.33.0...0.34.0) (2024-11-06)
+
+
+### Features
+
+* **vm_pool:** add VMError to InvalidSnapshotError ([7f52eaa](https://github.com/propeller-heads/tycho-simulation/commit/7f52eaaaa5b063bef7746c9999c59dfb976e5108))
+* **vm_pool:** configure adapter file path ([4e70f80](https://github.com/propeller-heads/tycho-simulation/commit/4e70f801023aec08dff4b36421c3893042317235))
+* **vm_pool:** decode balance owner ([4d9ef93](https://github.com/propeller-heads/tycho-simulation/commit/4d9ef93738048adc7fd9f3062e974c74dec3add8))
+* **vm_pool:** decode manual updates attribute ([18c8f67](https://github.com/propeller-heads/tycho-simulation/commit/18c8f6717e7966875143ed1e23e5a450350d3bd1))
+* **vm_pool:** decode stateless_contracts and involved_contracts ([b8a4fc1](https://github.com/propeller-heads/tycho-simulation/commit/b8a4fc1a262f26cae549f6fb7090f6ce2c7eda41))
+* **vm_pool:** initial VMPoolState decoder ([919a9ac](https://github.com/propeller-heads/tycho-simulation/commit/919a9ac88e4ccf735030c1a38c7e5d4346424e5a))
+* **vm_state:** convert tokens property to String ([41d9097](https://github.com/propeller-heads/tycho-simulation/commit/41d9097708cdba973088cdfd14cb8aff476f5283))
+
+
+### Bug Fixes
+
+* fix rebase errors and improve docs ([41e86e3](https://github.com/propeller-heads/tycho-simulation/commit/41e86e32aad108473760e3b067627e918654b7b7))
+* fix rebase issues and remove unnecessary constructor params ([bb822b6](https://github.com/propeller-heads/tycho-simulation/commit/bb822b681c07790408831fa54cd5cd6b9d4a1f3e))
+* **protosim_py:** fix ScaledPrices capacity name ([c7138da](https://github.com/propeller-heads/tycho-simulation/commit/c7138dad3130be166a6c538be40970d8d10864e5))
+
+## [0.33.0](https://github.com/propeller-heads/tycho-simulation/compare/0.32.0...0.33.0) (2024-11-06)
+
+
+### Features
+
+* create simple solver for tycho demo ([956b2db](https://github.com/propeller-heads/tycho-simulation/commit/956b2db61c3d8e962b508cde2d69b166a8728c0c))
+* move tutorial to a separate package and make it simpler ([266616d](https://github.com/propeller-heads/tycho-simulation/commit/266616dbcf80218319e7fb986c270b72ea799c9a))
+* **tutorial:** move tutorial files into tutorial directory ([2350e71](https://github.com/propeller-heads/tycho-simulation/commit/2350e7179d9d5dcf93b1ec3c58ad398fc7ebc340))
+
+
+### Bug Fixes
+
+* Update foundry and revm dependencies ([ccfbde5](https://github.com/propeller-heads/tycho-simulation/commit/ccfbde51ffb375020f662e66985b0d4d9348b9b9))
+* Update python revm version ([d9f069a](https://github.com/propeller-heads/tycho-simulation/commit/d9f069aa3a16194e2ce6dcd43f85ebdf283583a4))
+
 ## [0.32.0](https://github.com/propeller-heads/protosim/compare/0.31.0...0.32.0) (2024-11-04)
 
 

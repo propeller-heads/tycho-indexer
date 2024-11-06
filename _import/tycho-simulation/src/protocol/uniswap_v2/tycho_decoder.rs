@@ -49,10 +49,6 @@ mod tests {
             .unwrap()
             .naive_utc(); //Sample timestamp
 
-        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("attr1".to_string(), "0x000012".into());
-        static_attributes.insert("attr2".to_string(), "0x000005".into());
-
         ProtocolComponent {
             id: "State1".to_string(),
             protocol_system: "system1".to_string(),
@@ -110,9 +106,10 @@ mod tests {
         let result = UniswapV2State::try_from(snapshot);
 
         assert!(result.is_err());
-        assert_eq!(
+
+        assert!(matches!(
             result.err().unwrap(),
-            InvalidSnapshotError::MissingAttribute("reserve1".to_string())
-        );
+            InvalidSnapshotError::MissingAttribute(attr) if attr == *"reserve1"
+        ));
     }
 }
