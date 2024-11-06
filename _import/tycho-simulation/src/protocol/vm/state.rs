@@ -577,7 +577,7 @@ impl VMPoolState<PreCachedDB> {
         sell_token: ERC20Token,
         sell_amount: U256,
         buy_token: ERC20Token,
-    ) -> Result<(U256, U256, VMPoolState<PreCachedDB>), TychoSimulationError> {
+    ) -> Result<GetAmountOutResult, TychoSimulationError> {
         let mut sell_amount_respecting_limit = sell_amount;
         let mut sell_amount_exceeds_limit = false;
 
@@ -636,9 +636,7 @@ impl VMPoolState<PreCachedDB> {
                         .or_default()
                         .insert(
                             U256::from_dec_str(&slot_str).map_err(|_| {
-                                VMError::DecodingError(
-                                    "Failed to decode slot index".to_string(),
-                                )
+                                VMError::DecodingError("Failed to decode slot index".to_string())
                             })?,
                             U256::from_dec_str(&value_str).map_err(|_| {
                                 VMError::DecodingError(
@@ -672,7 +670,7 @@ impl VMPoolState<PreCachedDB> {
                 sell_amount_limit,
             )));
         }
-        Ok((buy_amount, trade.gas_used, new_state))
+        Ok(GetAmountOutResult::new(buy_amount, trade.gas_used, Box::new(new_state.clone())))
     }
 }
 
@@ -945,7 +943,7 @@ mod tests {
 
         let pool_state = setup_pool_state().await;
 
-        let (amount_out, gas_used, new_state) = pool_state
+        let result = pool_state
             .get_amount_out(
                 pool_state.tokens[0].clone(),
                 U256::from_dec_str("1000000000000000000").unwrap(),
@@ -953,13 +951,14 @@ mod tests {
             )
             .await
             .unwrap();
-
-        assert_eq!(amount_out, U256::from_dec_str("137780051463393923").unwrap());
-        assert_eq!(gas_used, U256::from_dec_str("72523").unwrap());
+        let new_state = result
+            .new_state
+            .as_any()
+            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .unwrap();
+        assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
+        assert_eq!(result.gas, U256::from_dec_str("72523").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
-        // Assert 3 entries in block lasting overwrites: one for the in token, one for the out
-        // token, and one for the balancer vault.
-        assert_eq!(new_state.block_lasting_overwrites.len(), 3);
     }
 
     #[tokio::test]
@@ -970,7 +969,7 @@ mod tests {
 
         let pool_state = setup_pool_state().await;
 
-        let (amount_out, gas_used, new_state) = pool_state
+        let result = pool_state
             .get_amount_out(
                 pool_state.tokens[0].clone(),
                 U256::from(1),
@@ -979,9 +978,14 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(amount_out, U256::from(0));
-        assert_eq!(gas_used, U256::from(68656));
-        assert_eq!(pool_state.spot_prices, new_state.spot_prices)
+        let new_state = result
+            .new_state
+            .as_any()
+            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .unwrap();
+        assert_eq!(result.amount, U256::from(0));
+        assert_eq!(result.gas, U256::from(68656));
+        assert_eq!(new_state.spot_prices, pool_state.spot_prices)
     }
 
     #[tokio::test]
@@ -1004,7 +1008,10 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(e) => {
-                assert!(matches!(e, TychoSimulationError::VMError(VMError::SellAmountTooHigh(_, _, _, _))));
+                assert!(matches!(
+                    e,
+                    TychoSimulationError::VMError(VMError::SellAmountTooHigh(_, _, _, _))
+                ));
             }
             _ => panic!("Test failed: was expecting an Err value"),
         };

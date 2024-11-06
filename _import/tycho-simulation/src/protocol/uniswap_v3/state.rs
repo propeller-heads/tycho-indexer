@@ -159,7 +159,7 @@ impl UniswapV3State {
                             Some(GetAmountOutResult::new(
                                 state.amount_calculated.abs().into_raw(),
                                 gas_used,
-                                None,
+                                self.clone_box(),
                             )),
                         )))
                     }
@@ -280,6 +280,10 @@ impl ProtocolSim for UniswapV3State {
         let result = self.swap(zero_for_one, amount_specified, None)?;
 
         trace!(?amount_in, ?token_a, ?token_b, ?zero_for_one, ?result, "V3 SWAP");
+        let mut new_state = self.clone();
+        new_state.liquidity = result.liquidity;
+        new_state.tick = result.tick;
+        new_state.sqrt_price = result.sqrt_price;
 
         Ok(GetAmountOutResult::new(
             result
@@ -287,7 +291,7 @@ impl ProtocolSim for UniswapV3State {
                 .abs()
                 .into_raw(),
             result.gas_used,
-            None,
+            new_state.clone_box(),
         ))
     }
 

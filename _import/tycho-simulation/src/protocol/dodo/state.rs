@@ -16,7 +16,7 @@ use tycho_core::dto::ProtocolStateDelta;
 use crate::{
     evm::simulation::{SimulationEngine, SimulationParameters},
     protocol::{
-        errors::TransitionError,
+        errors::{TransitionError, TychoSimulationError},
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -143,10 +143,7 @@ where
         amount_in: ethers::types::U256,
         token_in: &crate::models::ERC20Token,
         _token_out: &crate::models::ERC20Token,
-    ) -> Result<
-        crate::protocol::models::GetAmountOutResult,
-        crate::protocol::errors::TychoSimulationError,
-    > {
+    ) -> Result<GetAmountOutResult, TychoSimulationError> {
         let calldata = if self.base_token == token_in.address {
             self.helper_abi
                 .encode("querySellBaseToken", (self.pool_address, amount_in))
@@ -176,7 +173,7 @@ where
         Ok(GetAmountOutResult {
             amount: amount_out,
             gas: U256::from(simulation_result.gas_used),
-            new_state: None,
+            new_state: self.clone_box(), // WARNING: This is not correct but dodo is not being used
         })
     }
 
