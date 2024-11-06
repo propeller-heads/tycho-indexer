@@ -139,7 +139,7 @@ impl App {
                 .states
                 .get(&comp.address)
                 .map(|el| el.spot_price(&comp.tokens[0], &comp.tokens[1]))
-                .unwrap_or(0.0);
+                .unwrap_or(Ok(0.0));
 
             self.items.push(Data {
                 component: comp.clone(),
@@ -150,7 +150,7 @@ impl App {
                     .clone(),
                 name,
                 tokens,
-                price: format!("{}", price),
+                price: format!("{}", price.expect("Expected f64 as spot price")),
             });
         }
 
@@ -162,7 +162,7 @@ impl App {
             if let Some((index, _)) = entry {
                 let row = self.items.get_mut(index).unwrap();
                 let price = state.spot_price(&row.component.tokens[0], &row.component.tokens[1]);
-                row.price = format!("{}", price);
+                row.price = format!("{}", price.expect("Expected f64 as spot price"));
                 row.state = state.clone();
             }
         }
