@@ -1,7 +1,7 @@
 //! Protocol generic errors
 use thiserror::Error;
 
-use super::{models::GetAmountOutResult, vm::errors::ProtosimError};
+use super::{models::GetAmountOutResult, vm::errors::TychoSimulationError};
 
 /// Enumeration of possible errors that can occur during a trade simulation.
 #[derive(Debug, PartialEq)]
@@ -49,11 +49,11 @@ pub enum InvalidSnapshotError {
     #[error("Value error {0}")]
     ValueError(String),
     #[error("Unable to set up vm state on the engine: {0}")]
-    VMError(ProtosimError),
+    VMError(TychoSimulationError),
 }
 
-impl From<ProtosimError> for InvalidSnapshotError {
-    fn from(error: ProtosimError) -> Self {
+impl From<TychoSimulationError> for InvalidSnapshotError {
+    fn from(error: TychoSimulationError) -> Self {
         InvalidSnapshotError::VMError(error)
     }
 }

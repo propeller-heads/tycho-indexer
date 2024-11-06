@@ -66,8 +66,8 @@ fn handle_state(
             continue;
         }
         // Check if token0.address == usdc and token1.address == weth
-        if component.tokens[0].address == usdc.address
-            && component.tokens[1].address == weth.address
+        if component.tokens[0].address == usdc.address &&
+            component.tokens[1].address == weth.address
         {
             debug!("Found USDC-WETH pair: {:?}", address);
             pool_graph.insert(address, state.unwrap().clone());

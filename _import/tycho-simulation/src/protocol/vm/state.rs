@@ -392,8 +392,8 @@ impl VMPoolState<PreCachedDB> {
                 let unscaled_price = price_result.first().ok_or_else(|| {
                     TychoSimulationError::DecodingError("Expected a u64".to_string())
                 })?;
-                *unscaled_price * 10f64.powi(sell_token.decimals as i32)
-                    / 10f64.powi(buy_token.decimals as i32)
+                *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
+                    10f64.powi(buy_token.decimals as i32)
             };
 
             self.spot_prices
