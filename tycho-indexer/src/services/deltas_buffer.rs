@@ -80,6 +80,12 @@ pub trait PendingDeltasBuffer {
         version: BlockNumberOrTimestamp,
         protocol_system: &str,
     ) -> Result<Option<FinalityStatus>>;
+
+    fn search_block(
+        &self,
+        f: &dyn Fn(&BlockAggregatedChanges) -> bool,
+        protocol_system: &str,
+    ) -> Result<Option<BlockAggregatedChanges>>;
 }
 
 impl PendingDeltas {
@@ -432,6 +438,31 @@ impl PendingDeltasBuffer for PendingDeltas {
         })?;
 
         Ok(guard.get_finality_status(version))
+    }
+
+    fn search_block(
+        &self,
+        f: &dyn Fn(&BlockAggregatedChanges) -> bool,
+        protocol_system: &str,
+    ) -> Result<Option<BlockAggregatedChanges>> {
+        let buffer = self
+            .buffers
+            .get(protocol_system)
+            .ok_or_else(|| {
+                error!("Missing reorg buffer for {}", protocol_system);
+                PendingDeltasError::UnknownExtractor(protocol_system.to_string())
+            })?;
+        let guard = buffer.lock().map_err(|e| {
+            PendingDeltasError::LockError(protocol_system.to_string(), e.to_string())
+        })?;
+
+        for block in guard.get_block_range(None, None)? {
+            if f(block) {
+                return Ok(Some(block.clone()));
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -836,5 +867,26 @@ mod test {
                 assert!(finality_status.is_some());
             }
         }
+    }
+
+    #[rstest]
+    // cached block
+    #[case(Bytes::from(1u8).lpad(32, 0), Some(native_block_deltas()))]
+    // missing block
+    #[case(Bytes::from(9u8).lpad(32, 0), None)]
+    fn test_search_block(
+        #[case] block_hash: Bytes,
+        #[case] expected_res: Option<BlockAggregatedChanges>,
+    ) {
+        let buffer = PendingDeltas::new(["native:extractor"]);
+        buffer
+            .insert(Arc::new(native_block_deltas()))
+            .unwrap();
+
+        let res = buffer
+            .search_block(&|b| b.block.hash == block_hash, "native:extractor")
+            .unwrap();
+
+        assert_eq!(res, expected_res);
     }
 }

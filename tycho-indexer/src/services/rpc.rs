@@ -20,7 +20,7 @@ use crate::{
 
 use tycho_core::{
     dto::{self, PaginationResponse},
-    models::{Address, Chain, PaginationParams},
+    models::{blockchain::BlockAggregatedChanges, Address, Chain, PaginationParams},
     storage::{BlockIdentifier, BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
     Bytes,
 };
@@ -234,6 +234,37 @@ where
         let ordered_version = match request_version {
             BlockOrTimestamp::Block(BlockIdentifier::Number((_, no))) => {
                 BlockNumberOrTimestamp::Number(*no as u64)
+            }
+            BlockOrTimestamp::Block(BlockIdentifier::Hash(hash)) => {
+                let block_number = if let Some(block_number) = self
+                    .pending_deltas
+                    .as_ref()
+                    .and_then(|pending| {
+                        pending
+                            .search_block(
+                                &|b: &BlockAggregatedChanges| &b.block.hash == hash,
+                                protocol_system,
+                            )
+                            .ok()
+                    })
+                    .and_then(|block| block.map(|b| b.block.number))
+                {
+                    Some(block_number)
+                } else {
+                    self.db_gateway
+                        .get_block(&BlockIdentifier::Hash(hash.clone()))
+                        .await
+                        .ok()
+                        .map(|block| block.number)
+                }
+                .ok_or_else(|| {
+                    RpcError::Storage(StorageError::NotFound(
+                        "Version".to_string(),
+                        format!("{:?}", request_version),
+                    ))
+                })?;
+
+                BlockNumberOrTimestamp::Number(block_number)
             }
             BlockOrTimestamp::Timestamp(ts) => BlockNumberOrTimestamp::Timestamp(*ts),
             BlockOrTimestamp::Block(block_id) => BlockNumberOrTimestamp::Number(
@@ -827,6 +858,7 @@ mod tests {
     use mockall::mock;
     use tycho_core::{
         models::{
+            blockchain::BlockAggregatedChanges,
             contract::Account,
             protocol::{ProtocolComponent, ProtocolComponentState},
             token::CurrencyToken,
@@ -874,6 +906,12 @@ mod tests {
                 version: BlockNumberOrTimestamp,
                 protocol_system: &'a str,
             ) -> Result<Option<FinalityStatus>, PendingDeltasError>;
+
+            fn search_block<'a>(
+                &self,
+                f: &dyn Fn(&BlockAggregatedChanges) -> bool,
+                protocol_system: &'a str,
+            ) -> Result<Option<BlockAggregatedChanges>,PendingDeltasError>;
         }
     }
 
