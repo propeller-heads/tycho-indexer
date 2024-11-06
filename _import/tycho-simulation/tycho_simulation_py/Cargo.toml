@@ -14,7 +14,7 @@ pyo3 = { version = "0.19", features = ["num-bigint", "extension-module"] }
 tycho-simulation = { path = "../" }
 tokio = { version = "1.38.0", features = ["full"] }
 ethers = "2.0.13"
-revm = { version = "12.1.0", features = [
+revm = { version = "17.1.0", features = [
     "ethersdb",
 ] }
 tracing = "0.1.40"
