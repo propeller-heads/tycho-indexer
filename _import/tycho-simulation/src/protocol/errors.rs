@@ -37,7 +37,7 @@ pub enum InvalidSnapshotError {
 /// - `AbiError`: Represents an error when loading the ABI file, encapsulating a `FileError`.
 /// - `EncodingError`: Denotes an error in encoding data.
 /// - `SimulationFailure`: Wraps errors that occur during simulation, containing a
-///   `SimulationError`.
+///   `SimulationEngineError`.
 /// - `DecodingError`: Indicates an error in decoding data.
 /// - `RPCError`: Indicates an error related to RPC interaction.
 /// - `NotFound`: Indicates that something was not found (could be a capability, spot price, etc.)
@@ -46,21 +46,21 @@ pub enum InvalidSnapshotError {
 /// - `InsufficientData`: Error indicating that there is insufficient data to perform the
 ///   simulation. It returns a partial result of the simulation.
 /// - `NoLiquidity`: Error indicating that there is no liquidity in the venue to complete the trade.
-/// - `InsufficientAmount`: Error indicating that the amount provided for the trade is insufficient.
-/// - `U256Overflow`: Error indicating that an arithmetic operation got an U256 to overflow
+/// - `InsufficientAmount`: Error indicating that the amount provided for the trade is too low.
+/// - `ArithmeticOverflow`: Error indicating that an arithmetic operation got an U256 to overflow
 /// - `Unknown`: Error indicating that an unknown error occurred during the simulation.
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("ABI loading error: {0}")]
-    AbiError(FileError),
+    AbiError(#[from] FileError),
     #[error("Encoding error: {0}")]
     EncodingError(String),
     #[error("Simulation failure error: {0}")]
-    SimulationFailure(SimulationEngineError),
+    SimulationEngineError(SimulationEngineError),
     #[error("Decoding error: {0}")]
     DecodingError(String),
     #[error("RPC related error: {0}")]
-    RpcError(RpcError),
+    RpcError(#[from] RpcError),
     #[error("Not found: {0}")]
     NotFound(String),
     #[error("Not initialized: {0}")]
@@ -72,7 +72,7 @@ pub enum SimulationError {
     #[error("Insufficient amount")]
     InsufficientAmount(),
     #[error("U256 overflow")]
-    U256Overflow(),
+    ArithmeticOverflow(),
     #[error("Unknown error")]
     Unknown(),
 }

@@ -182,7 +182,7 @@ where
         self.engine
             .simulate(&params)
             .map_err(|e| {
-                SimulationError::SimulationFailure(maybe_coerce_error(
+                SimulationError::SimulationEngineError(maybe_coerce_error(
                     &e,
                     "pool_state",
                     params.gas_limit,

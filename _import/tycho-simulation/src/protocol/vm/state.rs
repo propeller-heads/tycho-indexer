@@ -278,7 +278,7 @@ impl VMPoolState<PreCachedDB> {
 
         let sim_result = engine
             .simulate(&sim_params)
-            .map_err(SimulationError::SimulationFailure)?;
+            .map_err(SimulationError::SimulationEngineError)?;
 
         let address = decode(&[ParamType::Address], &sim_result.result)
             .map_err(|_| SimulationError::DecodingError("Failed to decode ABI".into()))?

@@ -30,7 +30,7 @@ pub fn safe_sub_u256(a: U256, b: U256) -> Result<U256, SimulationError> {
 
 pub fn _construc_result_u256(res: Option<U256>) -> Result<U256, SimulationError> {
     match res {
-        None => Err(SimulationError::U256Overflow()),
+        None => Err(SimulationError::ArithmeticOverflow()),
         Some(value) => Ok(value),
     }
 }
@@ -57,7 +57,7 @@ pub fn safe_sub_u512(a: U512, b: U512) -> Result<U512, SimulationError> {
 
 pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, SimulationError> {
     match res {
-        None => Err(SimulationError::U256Overflow()),
+        None => Err(SimulationError::ArithmeticOverflow()),
         Some(value) => Ok(value),
     }
 }
@@ -84,7 +84,7 @@ pub fn safe_sub_i256(a: I256, b: I256) -> Result<I256, SimulationError> {
 
 pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, SimulationError> {
     match res {
-        None => Err(SimulationError::U256Overflow()),
+        None => Err(SimulationError::ArithmeticOverflow()),
         Some(value) => Ok(value),
     }
 }

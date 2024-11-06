@@ -261,7 +261,7 @@ mod tests {
         let res = state.get_amount_out(amount_in, &t0, &t1);
         assert!(res.is_err());
         let err = res.err().unwrap();
-        assert!(matches!(err, SimulationError::U256Overflow()));
+        assert!(matches!(err, SimulationError::ArithmeticOverflow()));
     }
 
     #[rstest]

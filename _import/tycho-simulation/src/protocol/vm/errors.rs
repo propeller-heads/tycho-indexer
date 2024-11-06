@@ -47,18 +47,6 @@ pub enum RpcError {
     EmptyResponse(),
 }
 
-impl From<RpcError> for SimulationError {
-    fn from(err: RpcError) -> Self {
-        SimulationError::RpcError(err)
-    }
-}
-
-impl From<FileError> for SimulationError {
-    fn from(err: FileError) -> Self {
-        SimulationError::AbiError(err)
-    }
-}
-
 impl From<ethers::abi::Error> for SimulationError {
     fn from(err: ethers::abi::Error) -> Self {
         SimulationError::DecodingError(err.to_string())
