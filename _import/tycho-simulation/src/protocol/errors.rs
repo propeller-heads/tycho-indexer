@@ -1,7 +1,7 @@
 //! Protocol generic errors
 use thiserror::Error;
 
-use super::models::GetAmountOutResult;
+use super::{models::GetAmountOutResult, vm::errors::TychoSimulationError};
 
 /// Enumeration of possible errors that can occur during a trade simulation.
 #[derive(Debug, PartialEq)]
@@ -42,10 +42,18 @@ pub enum TransitionError<T> {
     InvalidEventType(),
 }
 
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum InvalidSnapshotError {
     #[error("Missing attributes {0}")]
     MissingAttribute(String),
     #[error("Value error {0}")]
     ValueError(String),
+    #[error("Unable to set up vm state on the engine: {0}")]
+    VMError(TychoSimulationError),
+}
+
+impl From<TychoSimulationError> for InvalidSnapshotError {
+    fn from(error: TychoSimulationError) -> Self {
+        InvalidSnapshotError::VMError(error)
+    }
 }
