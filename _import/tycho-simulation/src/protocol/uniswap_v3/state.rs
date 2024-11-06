@@ -7,9 +7,7 @@ use tycho_core::{dto::ProtocolStateDelta, Bytes};
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{
-            NativeSimulationError, TradeSimulationErrorKind, TransitionError, TychoSimulationError,
-        },
+        errors::{SimulationError, TransitionError},
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -112,12 +110,9 @@ impl UniswapV3State {
         zero_for_one: bool,
         amount_specified: I256,
         sqrt_price_limit: Option<U256>,
-    ) -> Result<SwapResults, TychoSimulationError> {
+    ) -> Result<SwapResults, SimulationError> {
         if self.liquidity == 0 {
-            return Err(TychoSimulationError::from(NativeSimulationError::new(
-                TradeSimulationErrorKind::NoLiquidity,
-                None,
-            )));
+            return Err(SimulationError::NoLiquidity());
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -169,6 +164,7 @@ impl UniswapV3State {
                             None,
                         )))
                     }
+                    _ => return Err(SimulationError::Unknown()),
                 },
             };
 
@@ -260,11 +256,12 @@ impl ProtocolSim for UniswapV3State {
         (self.fee as u32) as f64 / 1_000_000.0
     }
 
-    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> f64 {
+    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> Result<f64, SimulationError> {
         if a < b {
-            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32)
+            Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32))
         } else {
-            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32)
+            Ok(1.0f64 /
+                sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32))
         }
     }
 
@@ -273,7 +270,7 @@ impl ProtocolSim for UniswapV3State {
         amount_in: U256,
         token_a: &ERC20Token,
         token_b: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TychoSimulationError> {
+    ) -> Result<GetAmountOutResult, SimulationError> {
         let zero_for_one = token_a < token_b;
         let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
 
@@ -630,12 +627,10 @@ mod tests {
             .unwrap_err();
 
         match err {
-            TychoSimulationError::NativeSimulationError(e) => {
-                let res = e.partial_result.unwrap();
-                assert_eq!(res.amount, exp);
-                assert_eq!(e.kind, TradeSimulationErrorKind::InsufficientData);
+            SimulationError::InsufficientData(ref e) => {
+                assert_eq!(e.amount, exp);
             }
-            _ => panic!("Test failed: was expecting a NativeSimulationError"),
+            _ => panic!("Test failed: was expecting a SimulationError::InsufficientData"),
         }
     }
 

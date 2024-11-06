@@ -17,11 +17,13 @@ use tracing::warn;
 
 use crate::{
     evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
-    protocol::vm::{
-        constants::EXTERNAL_ACCOUNT,
-        erc20_overwrite_factory::Overwrites,
-        errors::VMError,
-        utils::{load_swap_abi, maybe_coerce_error},
+    protocol::{
+        errors::SimulationError,
+        vm::{
+            constants::EXTERNAL_ACCOUNT,
+            erc20_overwrite_factory::Overwrites,
+            utils::{load_swap_abi, maybe_coerce_error},
+        },
     },
 };
 
@@ -52,7 +54,7 @@ pub struct TychoSimulationResponse {
 ///   the contract's state.
 ///
 /// # Errors
-/// Returns errors of type `VMError` when encoding, decoding, or simulation operations
+/// Returns errors of type `SimulationError` when encoding, decoding, or simulation operations
 /// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
 pub struct TychoSimulationContract<D: DatabaseRef + std::clone::Clone> {
@@ -65,22 +67,25 @@ impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
 where
     D::Error: std::fmt::Debug,
 {
-    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, VMError> {
+    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
     }
-    fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, VMError> {
+    fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, SimulationError> {
         let function = self
             .abi
             .functions
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                VMError::EncodingError(format!("Function name {} not found in the ABI", fname))
+                SimulationError::EncodingError(format!(
+                    "Function name {} not found in the ABI",
+                    fname
+                ))
             })?;
 
         if function.inputs.len() != args.len() {
-            return Err(VMError::EncodingError("Invalid argument count".to_string()));
+            return Err(SimulationError::EncodingError("Invalid argument count".to_string()));
         }
 
         let input_types: String = function
@@ -105,14 +110,21 @@ where
         Ok(result)
     }
 
-    pub fn decode_output(&self, fname: &str, encoded: Vec<u8>) -> Result<Vec<Token>, VMError> {
+    pub fn decode_output(
+        &self,
+        fname: &str,
+        encoded: Vec<u8>,
+    ) -> Result<Vec<Token>, SimulationError> {
         let function = self
             .abi
             .functions
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                VMError::DecodingError(format!("Function name {} not found in the ABI", fname))
+                SimulationError::DecodingError(format!(
+                    "Function name {} not found in the ABI",
+                    fname
+                ))
             })?;
 
         let output_types: Vec<ParamType> = function
@@ -120,8 +132,9 @@ where
             .iter()
             .map(|output| output.kind.clone())
             .collect();
-        let decoded_tokens = decode(&output_types, &encoded)
-            .map_err(|e| VMError::DecodingError(format!("Failed to decode output: {:?}", e)))?;
+        let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
+            SimulationError::DecodingError(format!("Failed to decode output: {:?}", e))
+        })?;
 
         Ok(decoded_tokens)
     }
@@ -136,7 +149,7 @@ where
         overrides: Option<HashMap<Address, Overwrites>>,
         caller: Option<Address>,
         value: U256,
-    ) -> Result<TychoSimulationResponse, VMError> {
+    ) -> Result<TychoSimulationResponse, SimulationError> {
         let call_data = self.encode_input(fname, args)?;
         let params = SimulationParameters {
             data: Bytes::from(call_data),
@@ -166,11 +179,15 @@ where
         Ok(TychoSimulationResponse { return_value: output, simulation_result: sim_result })
     }
 
-    fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, VMError> {
+    fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
         self.engine
             .simulate(&params)
             .map_err(|e| {
-                VMError::SimulationFailure(maybe_coerce_error(&e, "pool_state", params.gas_limit))
+                SimulationError::SimulationEngineError(maybe_coerce_error(
+                    &e,
+                    "pool_state",
+                    params.gas_limit,
+                ))
             })
     }
 }
