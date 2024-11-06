@@ -1,5 +1,5 @@
 // TODO: remove skip for clippy dead_code check
-use crate::protocol::vm::errors::TychoSimulationError;
+use crate::protocol::{errors::TychoSimulationError, vm::errors::VMError};
 use ethers::abi::Uint;
 use strum_macros::Display;
 
@@ -29,10 +29,10 @@ impl Capability {
             7 => Ok(Capability::ScaledPrice),
             8 => Ok(Capability::HardLimits),
             9 => Ok(Capability::MarginalPrice),
-            _ => Err(TychoSimulationError::DecodingError(format!(
+            _ => Err(TychoSimulationError::from(VMError::DecodingError(format!(
                 "Unexpected Capability value: {}",
                 value
-            ))),
+            )))),
         }
     }
 }

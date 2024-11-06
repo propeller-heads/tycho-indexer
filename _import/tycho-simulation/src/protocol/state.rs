@@ -49,7 +49,7 @@ use tycho_core::dto::ProtocolStateDelta;
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TransitionError},
+        errors::{TransitionError, TychoSimulationError},
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
     },
@@ -98,7 +98,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
         amount_in: U256,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TradeSimulationError>;
+    ) -> Result<GetAmountOutResult, TychoSimulationError>;
 
     /// Decodes and applies a protocol state delta to the state
     ///

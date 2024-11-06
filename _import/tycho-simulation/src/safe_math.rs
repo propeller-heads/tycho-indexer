@@ -5,86 +5,86 @@
 //! will be returned.
 //! Functions for the types I256, U256, U512 are available.
 
-use crate::protocol::errors::{TradeSimulationError, TradeSimulationErrorKind};
+use crate::protocol::errors::{NativeSimulationError, TradeSimulationErrorKind};
 use ethers::types::{I256, U256, U512};
 
-pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
+pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, NativeSimulationError> {
     let res = a.checked_mul(b);
     _construc_result_u256(res)
 }
 
-pub fn safe_div_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
+pub fn safe_div_u256(a: U256, b: U256) -> Result<U256, NativeSimulationError> {
     let res = a.checked_div(b);
     _construc_result_u256(res)
 }
 
-pub fn safe_add_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
+pub fn safe_add_u256(a: U256, b: U256) -> Result<U256, NativeSimulationError> {
     let res = a.checked_add(b);
     _construc_result_u256(res)
 }
 
-pub fn safe_sub_u256(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
+pub fn safe_sub_u256(a: U256, b: U256) -> Result<U256, NativeSimulationError> {
     let res = a.checked_sub(b);
     _construc_result_u256(res)
 }
 
-pub fn _construc_result_u256(res: Option<U256>) -> Result<U256, TradeSimulationError> {
+pub fn _construc_result_u256(res: Option<U256>) -> Result<U256, NativeSimulationError> {
     match res {
-        None => Err(TradeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
+        None => Err(NativeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
         Some(value) => Ok(value),
     }
 }
 
-pub fn safe_mul_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
+pub fn safe_mul_u512(a: U512, b: U512) -> Result<U512, NativeSimulationError> {
     let res = a.checked_mul(b);
     _construc_result_u512(res)
 }
 
-pub fn safe_div_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
+pub fn safe_div_u512(a: U512, b: U512) -> Result<U512, NativeSimulationError> {
     let res = a.checked_div(b);
     _construc_result_u512(res)
 }
 
-pub fn safe_add_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
+pub fn safe_add_u512(a: U512, b: U512) -> Result<U512, NativeSimulationError> {
     let res = a.checked_add(b);
     _construc_result_u512(res)
 }
 
-pub fn safe_sub_u512(a: U512, b: U512) -> Result<U512, TradeSimulationError> {
+pub fn safe_sub_u512(a: U512, b: U512) -> Result<U512, NativeSimulationError> {
     let res = a.checked_sub(b);
     _construc_result_u512(res)
 }
 
-pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, TradeSimulationError> {
+pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, NativeSimulationError> {
     match res {
-        None => Err(TradeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
+        None => Err(NativeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
         Some(value) => Ok(value),
     }
 }
 
-pub fn safe_mul_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+pub fn safe_mul_i256(a: I256, b: I256) -> Result<I256, NativeSimulationError> {
     let res = a.checked_mul(b);
     _construc_result_i256(res)
 }
 
-pub fn safe_div_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+pub fn safe_div_i256(a: I256, b: I256) -> Result<I256, NativeSimulationError> {
     let res = a.checked_div(b);
     _construc_result_i256(res)
 }
 
-pub fn safe_add_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+pub fn safe_add_i256(a: I256, b: I256) -> Result<I256, NativeSimulationError> {
     let res = a.checked_add(b);
     _construc_result_i256(res)
 }
 
-pub fn safe_sub_i256(a: I256, b: I256) -> Result<I256, TradeSimulationError> {
+pub fn safe_sub_i256(a: I256, b: I256) -> Result<I256, NativeSimulationError> {
     let res = a.checked_sub(b);
     _construc_result_i256(res)
 }
 
-pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, TradeSimulationError> {
+pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, NativeSimulationError> {
     match res {
-        None => Err(TradeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
+        None => Err(NativeSimulationError::new(TradeSimulationErrorKind::U256Overflow, None)),
         Some(value) => Ok(value),
     }
 }

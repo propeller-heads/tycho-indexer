@@ -11,11 +11,7 @@ use crate::{
     protocol::vm::state::VMPoolState,
 };
 
-/// Represents the outer-level, user-facing errors of the tycho-simulation package.
-///
-/// `TychoSimulationError` encompasses all possible errors that can occur in the package,
-/// wrapping lower-level errors in a user-friendly way for easier handling and display.
-///
+/// VM specific errors.
 /// Variants:
 /// - `AbiError`: Represents an error when loading the ABI file, encapsulating a `FileError`.
 /// - `EncodingError`: Denotes an error in encoding data.
@@ -32,7 +28,7 @@ use crate::{
 ///   adapter.
 /// - `SellAmountTooHigh`: Indicates an error when the sell amount is higher than the sell limit.
 #[derive(Error, Debug)]
-pub enum TychoSimulationError {
+pub enum VMError {
     #[error("ABI loading error: {0}")]
     AbiError(FileError),
     #[error("Encoding error: {0}")]
@@ -82,18 +78,6 @@ impl From<SerdeError> for FileError {
     }
 }
 
-impl From<FileError> for TychoSimulationError {
-    fn from(err: FileError) -> Self {
-        TychoSimulationError::AbiError(err)
-    }
-}
-
-impl From<SimulationError> for TychoSimulationError {
-    fn from(err: SimulationError) -> Self {
-        TychoSimulationError::SimulationFailure(err)
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum RpcError {
     #[error("Invalid Request: {0}")]
@@ -104,14 +88,20 @@ pub enum RpcError {
     EmptyResponse(),
 }
 
-impl From<RpcError> for TychoSimulationError {
+impl From<RpcError> for VMError {
     fn from(err: RpcError) -> Self {
-        TychoSimulationError::RpcError(err)
+        VMError::RpcError(err)
     }
 }
 
-impl From<ethers::abi::Error> for TychoSimulationError {
+impl From<FileError> for VMError {
+    fn from(err: FileError) -> Self {
+        VMError::AbiError(err)
+    }
+}
+
+impl From<ethers::abi::Error> for VMError {
     fn from(err: ethers::abi::Error) -> Self {
-        TychoSimulationError::DecodingError(err.to_string())
+        VMError::DecodingError(err.to_string())
     }
 }

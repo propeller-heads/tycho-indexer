@@ -12,7 +12,7 @@ use revm::{primitives::Address as rAddress, DatabaseRef};
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::vm::{
-        erc20_overwrite_factory::Overwrites, errors::TychoSimulationError, models::Capability,
+        erc20_overwrite_factory::Overwrites, errors::VMError, models::Capability,
         tycho_simulation_contract::TychoSimulationContract,
     },
 };
@@ -49,7 +49,7 @@ where
         amounts: Vec<U256>,
         block: u64,
         overwrites: Option<HashMap<rAddress, Overwrites>>,
-    ) -> Result<Vec<f64>, TychoSimulationError> {
+    ) -> Result<Vec<f64>, VMError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -80,8 +80,7 @@ where
         amount: U256,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
-    ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), TychoSimulationError>
-    {
+    ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), VMError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -147,7 +146,7 @@ where
         buy_token: Address,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
-    ) -> Result<(U256, U256), TychoSimulationError> {
+    ) -> Result<(U256, U256), VMError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -167,7 +166,7 @@ where
             }
         }
 
-        Err(TychoSimulationError::DecodingError("Unexpected response format".into()))
+        Err(VMError::DecodingError("Unexpected response format".into()))
     }
 
     pub async fn get_capabilities(
@@ -175,7 +174,7 @@ where
         pair_id: String,
         sell_token: Address,
         buy_token: Address,
-    ) -> Result<HashSet<Capability>, TychoSimulationError> {
+    ) -> Result<HashSet<Capability>, VMError> {
         let args = vec![
             self.hexstring_to_bytes(&pair_id)?,
             Token::Address(sell_token),
@@ -200,7 +199,7 @@ where
         Ok(capabilities)
     }
 
-    pub async fn min_gas_usage(&self) -> Result<u64, TychoSimulationError> {
+    pub async fn min_gas_usage(&self) -> Result<u64, VMError> {
         let res = self
             .call("minGasUsage", vec![], 1, None, None, None, U256::zero())
             .await?
@@ -212,14 +211,13 @@ where
             .as_u64())
     }
 
-    fn hexstring_to_bytes(&self, pair_id: &str) -> Result<Token, TychoSimulationError> {
-        let bytes = hex::decode(pair_id).map_err(|_| {
-            TychoSimulationError::EncodingError(format!("Invalid hex string: {}", pair_id))
-        })?;
+    fn hexstring_to_bytes(&self, pair_id: &str) -> Result<Token, VMError> {
+        let bytes = hex::decode(pair_id)
+            .map_err(|_| VMError::EncodingError(format!("Invalid hex string: {}", pair_id)))?;
         Ok(Token::FixedBytes(bytes))
     }
 
-    fn calculate_price(&self, value: Token) -> Result<Vec<f64>, TychoSimulationError> {
+    fn calculate_price(&self, value: Token) -> Result<Vec<f64>, VMError> {
         if let Token::Array(fractions) = value {
             // Map over each `Token::Tuple` in the array
             fractions
@@ -235,21 +233,17 @@ where
                             .into_uint()
                             .unwrap();
                         if denominator.is_zero() {
-                            Err(TychoSimulationError::DecodingError(
-                                "Denominator is zero".to_string(),
-                            ))
+                            Err(VMError::DecodingError("Denominator is zero".to_string()))
                         } else {
                             Ok((numerator.as_u128() as f64) / (denominator.as_u128() as f64))
                         }
                     } else {
-                        Err(TychoSimulationError::DecodingError(
-                            "Invalid fraction tuple".to_string(),
-                        ))
+                        Err(VMError::DecodingError("Invalid fraction tuple".to_string()))
                     }
                 })
                 .collect()
         } else {
-            Err(TychoSimulationError::DecodingError("Expected Token::Array".to_string()))
+            Err(VMError::DecodingError("Expected Token::Array".to_string()))
         }
     }
 }
