@@ -98,7 +98,7 @@ where
                 let received_amount = match &return_value[0] {
                     Token::Uint(amount) => *amount,
                     _ => {
-                        return Err(TychoSimulationError::DecodingError(
+                        return Err(VMError::DecodingError(
                             "Expected a uint for received_amount".into(),
                         ));
                     }
@@ -107,7 +107,7 @@ where
                 let gas_used = match &return_value[1] {
                     Token::Uint(gas) => *gas,
                     _ => {
-                        return Err(TychoSimulationError::DecodingError(
+                        return Err(VMError::DecodingError(
                             "Expected a uint for gas_used".into(),
                         ));
                     }
@@ -116,7 +116,7 @@ where
                 let price_token = match &return_value[2] {
                     Token::Tuple(elements) => Token::Array(vec![Token::Tuple(elements.clone())]),
                     _ => {
-                        return Err(TychoSimulationError::DecodingError(
+                        return Err(VMError::DecodingError(
                             "Expected a tuple for price_token".into(),
                         ));
                     }
@@ -125,13 +125,13 @@ where
                     .calculate_price(price_token)?
                     .first()
                     .cloned()
-                    .ok_or(TychoSimulationError::DecodingError(
+                    .ok_or(VMError::DecodingError(
                         "Expected at least one element in the calculated price".into(),
                     ))?;
 
                 Ok((received_amount, gas_used, price))
             } else {
-                Err(TychoSimulationError::DecodingError(
+                Err(VMError::DecodingError(
                     "Expected return_value to be a Token::Tuple".into(),
                 ))
             }?;

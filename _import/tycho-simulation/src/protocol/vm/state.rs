@@ -606,7 +606,7 @@ impl VMPoolState<PreCachedDB> {
             .adapter_contract
             .clone()
             .ok_or_else(|| {
-                TychoSimulationError::UninitializedAdapter(
+                VMError::UninitializedAdapter(
                     "Adapter contract must be initialized before setting capabilities".to_string(),
                 )
             })?
@@ -636,12 +636,12 @@ impl VMPoolState<PreCachedDB> {
                         .or_default()
                         .insert(
                             U256::from_dec_str(&slot_str).map_err(|_| {
-                                TychoSimulationError::DecodingError(
+                                VMError::DecodingError(
                                     "Failed to decode slot index".to_string(),
                                 )
                             })?,
                             U256::from_dec_str(&value_str).map_err(|_| {
-                                TychoSimulationError::DecodingError(
+                                VMError::DecodingError(
                                     "Failed to decode slot overwrite".to_string(),
                                 )
                             })?,
@@ -664,13 +664,13 @@ impl VMPoolState<PreCachedDB> {
         let buy_amount = trade.received_amount;
 
         if sell_amount_exceeds_limit {
-            return Err(TychoSimulationError::SellAmountTooHigh(
+            return Err(TychoSimulationError::from(VMError::SellAmountTooHigh(
                 // Partial buy amount and gas used
                 buy_amount,
                 trade.gas_used,
                 new_state,
                 sell_amount_limit,
-            ));
+            )));
         }
         Ok((buy_amount, trade.gas_used, new_state))
     }
@@ -1004,7 +1004,7 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(e) => {
-                assert!(matches!(e, TychoSimulationError::SellAmountTooHigh(_, _, _, _)));
+                assert!(matches!(e, TychoSimulationError::VMError(VMError::SellAmountTooHigh(_, _, _, _))));
             }
             _ => panic!("Test failed: was expecting an Err value"),
         };
