@@ -13,7 +13,7 @@ serde_json = "1.0.105"
 serde = { version = "1.0", features = ["rc"] }
 tokio = { version = "1.38.0", features = ["full"] }
 futures = "0.3.31"
-revm = { version = "12.1.0", features = ["ethersdb", "serde"] }
+revm = { version = "17.1.0", features = ["ethersdb", "serde"] }
 hex = "0.4.3"
 thiserror = "1"
 chrono = { version = "0.4.26", features = ["serde"] }
@@ -30,9 +30,14 @@ num-traits = "0.2.17"
 dotenv = "0.15.0"
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.41.0" }
 tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.41.0" }
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "2544793" }
-revm-inspectors = { version = "0.5", features = ["serde"] }
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e" }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e" }
+alloy-primitives = { version = "0.8.9", features = [
+    "getrandom",
+    "rand",
+    "map-foldhash",
+] }
+revm-inspectors = { version = "0.10.0", features = ["serde"] }
 mini-moka = "0.10"
 lazy_static = "1.4.0"
 itertools = "0.10.5"
