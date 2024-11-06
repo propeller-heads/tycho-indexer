@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::default::Default;
 
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
-use foundry_evm::traces::TraceKind;
+use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
     db::DatabaseRef,
     inspector_handle_register,
@@ -13,6 +14,7 @@ use revm::{
     },
     Evm,
 };
+use revm::primitives::alloy_primitives;
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
 use tokio::runtime::Runtime;
@@ -166,7 +168,13 @@ where
 
         let trace_res = TraceResult {
             success: matches!(exit_reason, return_ok!()),
-            traces: Some(vec![(TraceKind::Execution, tracer.into_traces())]),
+            traces: Some(vec![(
+                TraceKind::Execution,
+                SparsedTraceArena {
+                    arena: tracer.into_traces(),
+                    ignored: alloy_primitives::map::HashMap::default(),
+                })]
+            ),
             gas_used,
         };
 
