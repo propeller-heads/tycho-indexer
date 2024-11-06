@@ -1,5 +1,8 @@
+#[cfg(feature = "onchain_data")]
 pub mod account_extractor;
+#[cfg(feature = "onchain_data")]
 pub mod token_analyzer;
+#[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
 
 use ethers::{
@@ -7,8 +10,9 @@ use ethers::{
     types::{H160, H256, U256},
 };
 use thiserror::Error;
-use tycho_core::{models::blockchain::BlockTag, Bytes};
 use web3::types::BlockNumber;
+
+use tycho_core::{models::blockchain::BlockTag, Bytes};
 
 #[derive(Error, Debug)]
 pub enum RPCError {
@@ -44,7 +48,7 @@ impl From<BlockTagWrapper> for BlockNumber {
 /// let bytes: Bytes = h160_value.to_bytes(); // Converts H160 to Bytes
 /// let new_h160 = H160::from_bytes(bytes);   // Converts Bytes back to H160
 /// ```
-pub trait BytesConvertible {
+pub trait BytesCodec {
     /// Converts the current type into a `Bytes` object.
     fn to_bytes(self) -> Bytes;
 
@@ -60,8 +64,8 @@ pub trait BytesConvertible {
     fn from_bytes(bytes: &Bytes) -> Self;
 }
 
-// Implementing `BytesConvertible` for `H160`.
-impl BytesConvertible for H160 {
+// Implementing `BytesCodec` for `H160`.
+impl BytesCodec for H160 {
     /// Converts `H160` to `Bytes`.
     fn to_bytes(self) -> Bytes {
         Bytes::from(self.0.to_vec())
@@ -77,8 +81,8 @@ impl BytesConvertible for H160 {
     }
 }
 
-// Implementing `BytesConvertible` for `H256`.
-impl BytesConvertible for H256 {
+// Implementing `BytesCodec` for `H256`.
+impl BytesCodec for H256 {
     /// Converts `H256` to `Bytes`.
     fn to_bytes(self) -> Bytes {
         Bytes::from(self.0.to_vec())
@@ -94,8 +98,8 @@ impl BytesConvertible for H256 {
     }
 }
 
-// Implementing `BytesConvertible` for `U256`.
-impl BytesConvertible for U256 {
+// Implementing `BytesCodec` for `U256`.
+impl BytesCodec for U256 {
     /// Converts `U256` to `Bytes`.
     fn to_bytes(self) -> Bytes {
         let mut buf = [0u8; 32];
@@ -103,7 +107,7 @@ impl BytesConvertible for U256 {
         Bytes::from(buf.to_vec())
     }
 
-    /// Converts `Bytes` to `U256`.
+    /// Converts `Bytes` to `U256` using big-endian.
     ///
     /// # Panics
     ///
@@ -115,9 +119,9 @@ impl BytesConvertible for U256 {
         let mut u256_bytes: [u8; 32] = [0; 32];
 
         // Copy bytes from `bytes_slice` to `u256_bytes`.
-        u256_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
+        u256_bytes[32 - bytes_slice.len()..].copy_from_slice(bytes_slice);
 
-        // Convert the byte array to `U256` using little-endian.
-        U256::from_little_endian(&u256_bytes)
+        // Convert the byte array to `U256` using big-endian.
+        U256::from_big_endian(&u256_bytes)
     }
 }

@@ -37,7 +37,7 @@ uuid = { version = "1.4.1", features = [
 hex = "0.4.3"
 tycho-core = { path = "tycho-core" }
 tycho-storage = { path = "./tycho-storage" }
-tycho-ethereum = { path = "./tycho-ethereum" }
+tycho-ethereum = { path = "./tycho-ethereum", features = ["onchain_data"]}
 tycho-client = { path = "./tycho-client" }
 futures03 = { version = "0.3.1", package = "futures", features = ["compat"] }
 thiserror = "1"

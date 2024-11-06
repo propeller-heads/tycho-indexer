@@ -1,17 +1,17 @@
 /// To run: cargo run --example run-analysis
-use std::{collections::HashMap, str::FromStr, sync::Arc};
-
 use anyhow::Result;
 use ethers::types::{H160, U256};
 use ethrpc::{http::HttpTransport, Web3, Web3Transport};
 use reqwest::Client;
+use std::{collections::HashMap, str::FromStr, sync::Arc};
+use url::Url;
+
 use tycho_core::{
     models::{blockchain::BlockTag, token::TokenOwnerStore},
     traits::TokenAnalyzer,
     Bytes,
 };
-use tycho_ethereum::{token_analyzer::trace_call::TraceCallDetector, BytesConvertible};
-use url::Url;
+use tycho_ethereum::{token_analyzer::trace_call::TraceCallDetector, BytesCodec};
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {

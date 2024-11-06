@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use ethers::{
@@ -7,14 +5,16 @@ use ethers::{
     prelude::{BlockId, Http, Provider, H160, H256, U256},
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::trace;
+
 use tycho_core::{
     models::{blockchain::Block, contract::AccountDelta, Address, Chain, ChangeType},
     traits::AccountExtractor,
     Bytes,
 };
 
-use crate::{BytesConvertible, RPCError};
+use crate::{BytesCodec, RPCError};
 
 pub struct EVMAccountExtractor {
     provider: Provider<Http>,
@@ -63,7 +63,7 @@ impl AccountExtractor for EVMAccountExtractor {
                     address: address.to_bytes(),
                     chain: self.chain,
                     slots,
-                    balance: balance.map(BytesConvertible::to_bytes),
+                    balance: balance.map(BytesCodec::to_bytes),
                     code,
                     change: ChangeType::Creation,
                 },

@@ -1017,7 +1017,7 @@ impl AsRef<str> for ProtocolId {
 pub struct ResponseProtocolState {
     pub component_id: String,
     /// Attributes of the component. If an attribute's value is a `bigint`,
-    /// it will be encoded as a little endian signed hex string.
+    /// it will be encoded as a big endian signed hex string.
     #[schema(value_type=HashMap<String, String>)]
     #[serde(with = "hex_hashmap_value")]
     pub attributes: HashMap<String, Bytes>,

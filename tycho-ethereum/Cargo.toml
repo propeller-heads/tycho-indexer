@@ -3,8 +3,6 @@ name = "tycho-ethereum"
 version = "0.41.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow.workspace = true
 serde_json.workspace = true
@@ -15,18 +13,24 @@ tycho-core.workspace = true
 serde.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
-
-
-ethers = "^2.0.2"
-primitive-types = "0.12"
-contracts = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51" }
-ethrpc = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51" }
-ethcontract = { version = "0.25.4", default-features = false, features = [
-    "aws-kms",
-] }
-web3 = { version = "0.19", default-features = false }
-mockall = "0.11"
-clap = { version = "4", features = ["derive", "env"] }
-humantime = "2.1.0"
 reqwest.workspace = true
 url.workspace = true
+
+# Required dependencies
+ethers = "^2.0.2"
+primitive-types = "0.12"
+web3 = { version = "0.19", default-features = false }
+
+# Optional dependencies
+contracts = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true}
+ethrpc = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true}
+ethcontract = { version = "0.25.4", default-features = false, features = [
+    "aws-kms",
+], optional = true}
+clap = { version = "4", features = ["derive", "env"], optional = true}
+humantime = { version = "2.1.0", optional = true }
+
+
+[features]
+default = []
+onchain_data = ["ethrpc", "ethcontract", "dep:contracts", "humantime", "clap"]
