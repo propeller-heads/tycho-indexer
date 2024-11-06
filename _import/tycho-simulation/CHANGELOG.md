@@ -1,3 +1,19 @@
+## [0.35.0](https://github.com/propeller-heads/tycho-simulation/compare/0.34.0...0.35.0) (2024-11-06)
+
+
+### Features
+
+* Merge VMError and NativeSimulationError into Simulation Error ([3d87a80](https://github.com/propeller-heads/tycho-simulation/commit/3d87a8043b5b8ab3cec6f71e2b347e7bac30077e))
+* Return Result<> on spot_prices() in ProtocolSim ([3771b55](https://github.com/propeller-heads/tycho-simulation/commit/3771b5503a67298ba40cd0a7067be9a17e93a637))
+
+
+### Bug Fixes
+
+* Address PR reviews ([ad70185](https://github.com/propeller-heads/tycho-simulation/commit/ad7018564eecc55ac311962d082e202a26472507))
+* After merge fix. Update example with new spot prices result ([abf4ae3](https://github.com/propeller-heads/tycho-simulation/commit/abf4ae31ee7a1bc59435e98ce851efdc68543edf))
+* Finish refactor of error messages ([4a8d7b8](https://github.com/propeller-heads/tycho-simulation/commit/4a8d7b8198d0df204dd03c25da95f434b5de6c02))
+* Include functional Cargo.lock ([2b1ee58](https://github.com/propeller-heads/tycho-simulation/commit/2b1ee5836bcdaa7c8c7c7bc08cd2160547bc7e11))
+
 ## [0.34.0](https://github.com/propeller-heads/tycho-simulation/compare/0.33.0...0.34.0) (2024-11-06)
 
 
