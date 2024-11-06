@@ -1,15 +1,15 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, default::Default};
 
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
-use foundry_evm::traces::TraceKind;
+use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
     db::DatabaseRef,
     inspector_handle_register,
     interpreter::{return_ok, InstructionResult},
     primitives::{
-        bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult, Output,
-        ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
+        alloy_primitives, bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult,
+        Output, ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
     },
     Evm,
 };
@@ -166,7 +166,13 @@ where
 
         let trace_res = TraceResult {
             success: matches!(exit_reason, return_ok!()),
-            traces: Some(vec![(TraceKind::Execution, tracer.into_traces())]),
+            traces: Some(vec![(
+                TraceKind::Execution,
+                SparsedTraceArena {
+                    arena: tracer.into_traces(),
+                    ignored: alloy_primitives::map::HashMap::default(),
+                },
+            )]),
             gas_used,
         };
 
@@ -535,7 +541,7 @@ mod tests {
                 gas_used: 100_u64,
                 output: revm::primitives::Bytes::from_static(b"output"),
             },
-            state: rState::new(),
+            state: rState::default(),
         });
 
         let result = interpret_evm_result(evm_result);
@@ -561,7 +567,7 @@ mod tests {
                 reason: HaltReason::OutOfGas(OutOfGasError::Basic),
                 gas_used: 100_u64,
             },
-            state: rState::new(),
+            state: rState::default(),
         });
 
         let result = interpret_evm_result(evm_result);

@@ -2,8 +2,8 @@ use ethers::types::H160;
 use std::{
     collections::{hash_map::Entry, HashMap},
     str::FromStr,
-    sync::mpsc::Sender,
 };
+use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
 use tycho_client::{
@@ -23,7 +23,7 @@ use tycho_simulation::{
 use crate::data_feed::state::BlockState;
 
 // TODO: Make extractors configurable
-async fn process_messages(
+pub async fn process_messages(
     tycho_url: String,
     auth_key: Option<String>,
     state_tx: Sender<BlockState>,
@@ -232,6 +232,7 @@ async fn process_messages(
 
         state_tx
             .send(state)
+            .await
             .expect("Sending tick failed!")
     }
 
