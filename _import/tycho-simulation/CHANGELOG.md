@@ -1,3 +1,10 @@
+## [0.39.0](https://github.com/propeller-heads/tycho-simulation/compare/0.38.1...0.39.0) (2024-11-07)
+
+
+### Features
+
+* Make engine public ([df4ea3a](https://github.com/propeller-heads/tycho-simulation/commit/df4ea3a60f86108d8a54d376f1896f2975603343))
+
 ## [0.38.1](https://github.com/propeller-heads/tycho-simulation/compare/0.38.0...0.38.1) (2024-11-07)
 
 
