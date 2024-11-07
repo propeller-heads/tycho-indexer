@@ -20,6 +20,7 @@ from ..exceptions import RecoverableSimulationException
 from ..models import EVMBlock, Capability, Address, EthereumToken
 from .utils import (
     ContractCompiler,
+    ERC20Slots,
     create_engine,
     get_contract_bytecode,
     frac_to_decimal,
@@ -98,12 +99,14 @@ class ThirdPartyPool:
         self.involved_contracts: set[Address] = involved_contracts or set()
         """A set of all contract addresses involved in the simulation of this pool."""
 
-        self.token_storage_slots: dict[Address, tuple[tuple[int, int], ContractCompiler]] = (
+        self.token_storage_slots: dict[Address, tuple[ERC20Slots, ContractCompiler]] = (
                 token_storage_slots or {}
         )
         """Allows the specification of custom storage slots for token allowances and
         balances. This is particularly useful for token contracts involved in protocol
         logic that extends beyond simple transfer functionality.
+        Each entry also specify the compiler with which the target contract was compiled.
+        This is later used to compute storage slot for maps.
         """
 
         self._engine: Optional[SimulationEngine] = None
@@ -299,7 +302,7 @@ class ThirdPartyPool:
             max_amount = sell_token.to_onchain_amount(
                 self.get_sell_amount_limit(sell_token, buy_token)
             )
-        slots, compiler = self.token_storage_slots.get(sell_token.address, ((0, 1), ContractCompiler.Solidity))
+        slots, compiler = self.token_storage_slots.get(sell_token.address, (ERC20Slots(0, 1), ContractCompiler.Solidity))
         overwrites = ERC20OverwriteFactory(
             sell_token,
             token_slots=slots,
@@ -320,7 +323,7 @@ class ThirdPartyPool:
         balance_overwrites = {}
         address = self.balance_owner or self.id_
         for t in self.tokens:
-            slots = (0, 1)
+            slots = ERC20Slots(0, 1)
             compiler = ContractCompiler.Solidity
             if t.address in self.involved_contracts:
                 slots, compiler = self.token_storage_slots.get(t.address)

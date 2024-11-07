@@ -1,5 +1,5 @@
 from .adapter_contract import TychoSimulationContract
-from .utils import ContractCompiler, ERC20OverwriteFactory
+from .utils import ContractCompiler, ERC20OverwriteFactory, ERC20Slots
 from .constants import EXTERNAL_ACCOUNT
 from . import SimulationEngine
 from ..models import EVMBlock, EthereumToken
@@ -14,7 +14,7 @@ class SlotDetectionFailure(Exception):
 
 def brute_force_slots(
         t: EthereumToken, block: EVMBlock, engine: SimulationEngine
-) -> tuple[tuple[int, int], ContractCompiler]:
+) -> tuple[ERC20Slots, ContractCompiler]:
     """Brute-force detection of storage slots for token allowances and balances.
 
     This function attempts to determine the storage slots used by the token contract for
@@ -52,7 +52,7 @@ def brute_force_slots(
     compiler = ContractCompiler.Solidity
     for i in range(100):
         for compiler_flag in [ContractCompiler.Solidity, ContractCompiler.Vyper]:
-            overwrite_factory = ERC20OverwriteFactory(t, (i, 1), compiler=compiler_flag)
+            overwrite_factory = ERC20OverwriteFactory(t, ERC20Slots(i, 1), compiler=compiler_flag)
             overwrite_factory.set_balance(_MARKER_VALUE, EXTERNAL_ACCOUNT)
             res = token_contract.call(
                 "balanceOf",
@@ -76,7 +76,7 @@ def brute_force_slots(
 
     allowance_slot = None
     for i in range(100):
-            overwrite_factory = ERC20OverwriteFactory(t, (0, i), compiler=compiler)
+            overwrite_factory = ERC20OverwriteFactory(t, ERC20Slots(0, i), compiler=compiler)
             overwrite_factory.set_allowance(_MARKER_VALUE, _SPENDER, EXTERNAL_ACCOUNT)
             res = token_contract.call(
                 "allowance",
@@ -97,4 +97,4 @@ def brute_force_slots(
     if allowance_slot is None:
         raise SlotDetectionFailure(f"Failed to infer allowance slot for {t.address}")
 
-    return ((balance_slot, allowance_slot), compiler)
+    return (ERC20Slots(balance_slot, allowance_slot), compiler)

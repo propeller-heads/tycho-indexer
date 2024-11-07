@@ -5,7 +5,7 @@ from decimal import Decimal
 from fractions import Fraction
 from functools import lru_cache
 from logging import getLogger
-from typing import Final, Any
+from typing import Final, Any, NamedTuple
 
 import eth_abi
 import eth_utils
@@ -65,10 +65,23 @@ def create_engine(
 class ContractCompiler(enum.Enum):
     Solidity = enum.auto()
     Vyper = enum.auto()
+    
+    def compute_map_slot(self, map_base_slot: bytes, key: bytes) -> bytes:
+        if self == ContractCompiler.Solidity:
+            return eth_utils.keccak(key + map_base_slot)
+        elif self == ContractCompiler.Vyper:
+            return eth_utils.keccak(map_base_slot + key)
+        else:
+            raise NotImplementedError(f"compute_map_slot not implemented for {self.name}")
+    
+    
+class ERC20Slots(NamedTuple):
+    balance_map: int
+    allowance_map: int
 
 
 class ERC20OverwriteFactory:
-    def __init__(self, token: EthereumToken, token_slots=(0, 1), compiler: ContractCompiler = ContractCompiler.Solidity):
+    def __init__(self, token: EthereumToken, token_slots: ERC20Slots = ERC20Slots(0, 1), compiler: ContractCompiler = ContractCompiler.Solidity):
         """
         Initialize the ERC20OverwriteFactory.
 
@@ -78,8 +91,8 @@ class ERC20OverwriteFactory:
         self._token = token
         self._overwrites = dict()
         self._contract_compiler = compiler
-        self._balance_slot: int = token_slots[0]
-        self._allowance_slot: int = token_slots[1]
+        self._balance_slot: int = token_slots.balance_map
+        self._allowance_slot: int = token_slots.allowance_map
         self._total_supply_slot: Final[int] = 2
 
     def set_balance(self, balance: int, owner: Address):
@@ -159,7 +172,7 @@ class ERC20OverwriteFactory:
         return {self._token.address: {"stateDiff": formatted_overwrites, "code": code}}
 
 
-def get_storage_slot_at_key(key: Address, mapping_slot: int, lang = ContractCompiler.Solidity) -> int:
+def get_storage_slot_at_key(key: Address, mapping_slot: int, compiler = ContractCompiler.Solidity) -> int:
     """Get storage slot index of a value stored at a certain key in a mapping
 
     Parameters
@@ -170,6 +183,10 @@ def get_storage_slot_at_key(key: Address, mapping_slot: int, lang = ContractComp
     mapping_slot
         Storage slot at which the mapping itself is stored. See the examples for more
         explanation.
+        
+    compiler
+        The compiler with which the target contract was compiled. Solidity and Vyper handle 
+        maps differently. This defaults to Solidity because it's the most used. 
 
     Returns
     -------
@@ -199,9 +216,7 @@ def get_storage_slot_at_key(key: Address, mapping_slot: int, lang = ContractComp
     """
     key_bytes = bytes.fromhex(key[2:]).rjust(32, b"\0")
     mapping_slot_bytes = int.to_bytes(mapping_slot, 32, "big")
-    slot_bytes = eth_utils.keccak(key_bytes + mapping_slot_bytes)
-    if lang == ContractCompiler.Vyper:
-        slot_bytes = eth_utils.keccak(mapping_slot_bytes + key_bytes)
+    slot_bytes = compiler.compute_map_slot(mapping_slot_bytes, key_bytes)
     return int.from_bytes(slot_bytes, "big")
 
 
