@@ -200,8 +200,7 @@ impl VMPoolState<PreCachedDB> {
                             .to_string();
                     }
                     let code = get_code_for_contract(&addr_str, None).await?;
-                    let code_hash = B256::from(keccak256(code.clone().bytes()));
-                    (Some(code), code_hash)
+                    (Some(code.clone()), code.hash_slow())
                 } else {
                     let code =
                         Bytecode::new_raw(Bytes::from(bytecode.clone().ok_or_else(|| {
@@ -209,8 +208,7 @@ impl VMPoolState<PreCachedDB> {
                                 "Byte code from stateless contracts is None".into(),
                             )
                         })?));
-                    let code_hash = B256::from(keccak256(code.clone().bytes()));
-                    (Some(code), code_hash)
+                    (Some(code.clone()), code.hash_slow())
                 };
                 engine.state.init_account(
                     address.parse().unwrap(),
@@ -424,7 +422,7 @@ impl VMPoolState<PreCachedDB> {
         Ok(limits?.0)
     }
 
-    pub fn get_overwrites(
+    fn get_overwrites(
         &self,
         tokens: Vec<H160>,
         max_amount: U256,
@@ -530,13 +528,29 @@ impl VMPoolState<PreCachedDB> {
 
         merged
     }
+}
+
+impl ProtocolSim for VMPoolState<PreCachedDB> {
+    fn fee(&self) -> f64 {
+        todo!()
+    }
+
+    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
+        self.spot_prices
+            .get(&(base.address, quote.address))
+            .cloned()
+            .ok_or(SimulationError::NotFound("Spot prices".to_string()))
+    }
 
     fn get_amount_out(
         &self,
-        sell_token: H160,
-        sell_amount: U256,
-        buy_token: H160,
+        amount_in: U256,
+        token_in: &ERC20Token,
+        token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
+        let sell_token = token_in.address;
+        let buy_token = token_out.address;
+        let sell_amount = amount_in;
         let overwrites = self.get_overwrites(
             vec![sell_token, buy_token],
             U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
@@ -619,28 +633,6 @@ impl VMPoolState<PreCachedDB> {
         }
         Ok(GetAmountOutResult::new(buy_amount, trade.gas_used, Box::new(new_state.clone())))
     }
-}
-
-impl ProtocolSim for VMPoolState<PreCachedDB> {
-    fn fee(&self) -> f64 {
-        todo!()
-    }
-
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
-        self.spot_prices
-            .get(&(base.address, quote.address))
-            .cloned()
-            .ok_or(SimulationError::NotFound("Spot prices".to_string()))
-    }
-
-    fn get_amount_out(
-        &self,
-        _amount_in: U256,
-        _token_in: &ERC20Token,
-        _token_out: &ERC20Token,
-    ) -> Result<GetAmountOutResult, SimulationError> {
-        todo!()
-    }
 
     fn delta_transition(
         &mut self,
@@ -715,10 +707,7 @@ mod tests {
         let db = SHARED_TYCHO_DB.clone();
         let engine: SimulationEngine<_> = create_engine(
             db.clone(),
-            vec![
-                String::from("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
-                String::from("0xba100000625a3754423978a60c9317c58a424e3D"),
-            ],
+            vec![dai().address.to_string(), bal().address.to_string()],
             false,
         )
         .await?;
@@ -760,8 +749,8 @@ mod tests {
             .await
             .expect("Failed to set up database");
 
-        let dai_addr = H160::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-        let bal_addr = H160::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap();
+        let dai_addr = dai().address;
+        let bal_addr = bal().address;
 
         let tokens = vec![dai_addr, bal_addr];
         let block = BlockHeader {
@@ -853,11 +842,7 @@ mod tests {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
-            .get_amount_out(
-                pool_state.tokens[0],
-                U256::from_dec_str("1000000000000000000").unwrap(),
-                pool_state.tokens[1],
-            )
+            .get_amount_out(U256::from_dec_str("1000000000000000000").unwrap(), &dai(), &bal())
             .unwrap();
         let new_state = result
             .new_state
@@ -882,7 +867,7 @@ mod tests {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
-            .get_amount_out(pool_state.tokens[0], U256::from(1), pool_state.tokens[1])
+            .get_amount_out(U256::from(1), &dai(), &bal())
             .unwrap();
 
         let new_state = result
@@ -904,10 +889,10 @@ mod tests {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state.get_amount_out(
-            pool_state.tokens[0],
             // sell limit is 100279494253364362835
             U256::from_dec_str("100379494253364362835").unwrap(),
-            pool_state.tokens[1],
+            &dai(),
+            &bal(),
         );
 
         assert!(result.is_err());
