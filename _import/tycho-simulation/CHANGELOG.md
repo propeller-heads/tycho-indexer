@@ -1,3 +1,10 @@
+## [0.38.0](https://github.com/propeller-heads/tycho-simulation/compare/0.37.0...0.38.0) (2024-11-07)
+
+
+### Features
+
+* Get rid of extra unnecessary Arc<RwLock<>> ([eb374e7](https://github.com/propeller-heads/tycho-simulation/commit/eb374e7b41a6229c6e3bb61df56e21a6b502c427))
+
 ## [0.37.0](https://github.com/propeller-heads/tycho-simulation/compare/0.36.0...0.37.0) (2024-11-07)
 
 
