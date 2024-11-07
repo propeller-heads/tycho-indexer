@@ -62,8 +62,8 @@ pub struct ComponentWithState {
 
 #[derive(Clone, PartialEq, Debug, Default, Serialize)]
 pub struct Snapshot {
-    states: HashMap<String, ComponentWithState>,
-    vm_storage: HashMap<Bytes, ResponseAccount>,
+    pub states: HashMap<String, ComponentWithState>,
+    pub vm_storage: HashMap<Bytes, ResponseAccount>,
 }
 
 impl Snapshot {
