@@ -96,46 +96,29 @@ where
             .call("swap", args, block, None, overwrites, None, U256::zero())
             .await?;
 
-        let (received_amount, gas_used, price) = if let Token::Tuple(return_value) =
-            res.return_value[0].clone()
+        let (received_amount, gas_used, price) = if let Token::Tuple(ref return_value) =
+            res.return_value[0]
         {
-            let received_amount = match &return_value[0] {
-                Token::Uint(amount) => *amount,
-                _ => {
-                    return Err(SimulationError::DecodingError(
-                        "Expected a uint for received_amount".into(),
-                    ));
-                }
-            };
+            match &return_value[..] {
+                [Token::Uint(amount), Token::Uint(gas), Token::Tuple(price_elements)] => {
+                    let received_amount = *amount;
+                    let gas_used = *gas;
 
-            let gas_used = match &return_value[1] {
-                Token::Uint(gas) => *gas,
-                _ => {
-                    return Err(SimulationError::DecodingError(
-                        "Expected a uint for gas_used".into(),
-                    ));
-                }
-            };
+                    let price_token = Token::Array(vec![Token::Tuple(price_elements.clone())]);
+                    let price = self
+                        .calculate_price(price_token)?
+                        .first()
+                        .cloned()
+                        .ok_or_else(|| {
+                            SimulationError::DecodingError("There wasn't a calculated price".into())
+                        })?;
 
-            let price_token = match &return_value[2] {
-                Token::Tuple(elements) => Token::Array(vec![Token::Tuple(elements.clone())]),
-                _ => {
-                    return Err(SimulationError::DecodingError(
-                        "Expected a tuple for price_token".into(),
-                    ));
+                    Ok((received_amount, gas_used, price))
                 }
-            };
-            let price = self
-                .calculate_price(price_token)?
-                .first()
-                .cloned()
-                .ok_or(SimulationError::DecodingError(
-                    "Expected at least one element in the calculated price".into(),
-                ))?;
-
-            Ok((received_amount, gas_used, price))
+                _ => Err(SimulationError::DecodingError("Incorrect types found for price".into())),
+            }
         } else {
-            Err(SimulationError::DecodingError("Expected return_value to be a Token::Tuple".into()))
+            Err(SimulationError::DecodingError("return_value is not a Token::Tuple".into()))
         }?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
@@ -246,7 +229,7 @@ where
                 })
                 .collect()
         } else {
-            Err(SimulationError::DecodingError("Expected Token::Array".to_string()))
+            Err(SimulationError::DecodingError("Price is not a Token::Array".to_string()))
         }
     }
 }

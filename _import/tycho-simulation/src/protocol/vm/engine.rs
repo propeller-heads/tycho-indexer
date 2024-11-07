@@ -19,7 +19,7 @@ use crate::{
         tycho_db::PreCachedDB,
         tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
     },
-    protocol::vm::{errors::FileError, utils::load_erc20_bytecode},
+    protocol::{errors::SimulationError, vm::utils::load_erc20_bytecode},
 };
 
 lazy_static! {
@@ -42,7 +42,7 @@ pub async fn create_engine<D: EngineDatabaseInterface + Clone + DatabaseRef>(
     db: Arc<RwLock<D>>,
     tokens: Vec<String>,
     trace: bool,
-) -> Result<SimulationEngine<D>, FileError>
+) -> Result<SimulationEngine<D>, SimulationError>
 where
     <D as EngineDatabaseInterface>::Error: Debug,
     <D as DatabaseRef>::Error: Debug,
@@ -61,8 +61,9 @@ where
             code: Some(contract_bytecode.clone()),
         };
         engine.state.init_account(
-            Address::parse_checksummed(token, None)
-                .expect("checksum for token address must be valid"),
+            Address::parse_checksummed(token, None).map_err(|_| {
+                SimulationError::EncodingError("checksum for token address must be valid".into())
+            })?,
             info,
             None,
             false,
@@ -191,7 +192,6 @@ mod tests {
         for token in tokens {
             let token_address = Address::parse_checksummed(token, None).expect("valid checksum");
             let account = state_data
-                .clone()
                 .borrow()
                 .get(&token_address)
                 .unwrap()

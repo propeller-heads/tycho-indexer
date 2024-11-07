@@ -194,11 +194,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
-
     use super::*;
+    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
+    use std::str::FromStr;
 
     #[derive(Debug, Clone)]
     struct MockDatabase;

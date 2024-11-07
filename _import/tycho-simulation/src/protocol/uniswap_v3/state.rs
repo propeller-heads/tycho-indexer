@@ -279,7 +279,7 @@ impl ProtocolSim for UniswapV3State {
                 .abs()
                 .into_raw(),
             result.gas_used,
-            new_state.clone_box(),
+            Box::new(new_state),
         ))
     }
 

@@ -415,7 +415,7 @@ impl VMPoolState<PreCachedDB> {
     /// as the sell token and the second as the buy token. The order of tokens in the input vector
     /// is significant and determines the direction of the price query.
     async fn get_sell_amount_limit(
-        &mut self,
+        &self,
         tokens: Vec<H160>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<U256, SimulationError> {
@@ -551,39 +551,34 @@ impl VMPoolState<PreCachedDB> {
         sell_amount: U256,
         buy_token: H160,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        let mut sell_amount_respecting_limit = sell_amount;
-        let mut sell_amount_exceeds_limit = false;
         let overwrites = self
             .get_overwrites(
                 vec![sell_token, buy_token],
                 U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
             )
             .await?;
-
         let sell_amount_limit = self
-            .clone()
             .get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))
             .await?;
-
-        if self
+        let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
             .contains(&Capability::HardLimits) &&
             sell_amount_limit < sell_amount
         {
-            sell_amount_respecting_limit = sell_amount_limit;
-            sell_amount_exceeds_limit = true;
-        }
+            (sell_amount_limit, true)
+        } else {
+            (sell_amount, false)
+        };
 
         let overwrites_with_sell_limit = self
-            .clone()
             .get_overwrites(vec![sell_token, buy_token], sell_amount_limit)
             .await?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
-        let pool_id = self.clone().id;
+        let pool_id = self.id.clone();
 
         let (trade, state_changes) = self
             .adapter_contract
-            .clone()
+            .as_ref()
             .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
             .swap(
                 pool_id[2..].to_string(),
@@ -601,26 +596,20 @@ impl VMPoolState<PreCachedDB> {
         // Apply state changes to the new state
         for (address, state_update) in state_changes {
             if let Some(storage) = state_update.storage {
+                let block_overwrites = new_state
+                    .block_lasting_overwrites
+                    .entry(address)
+                    .or_default();
                 for (slot, value) in storage {
-                    let slot_str = slot.to_string();
-                    let value_str = value.to_string();
-
-                    new_state
-                        .block_lasting_overwrites
-                        .entry(address)
-                        .or_default()
-                        .insert(
-                            U256::from_dec_str(&slot_str).map_err(|_| {
-                                SimulationError::DecodingError(
-                                    "Failed to decode slot index".to_string(),
-                                )
-                            })?,
-                            U256::from_dec_str(&value_str).map_err(|_| {
-                                SimulationError::DecodingError(
-                                    "Failed to decode slot overwrite".to_string(),
-                                )
-                            })?,
-                        );
+                    let slot = U256::from_dec_str(&slot.to_string()).map_err(|_| {
+                        SimulationError::DecodingError("Failed to decode slot index".to_string())
+                    })?;
+                    let value = U256::from_dec_str(&value.to_string()).map_err(|_| {
+                        SimulationError::DecodingError(
+                            "Failed to decode slot overwrite".to_string(),
+                        )
+                    })?;
+                    block_overwrites.insert(slot, value);
                 }
             }
         }
@@ -899,7 +888,9 @@ mod tests {
         assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
         assert_eq!(result.gas, U256::from_dec_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
-
+        assert!(pool_state
+            .block_lasting_overwrites
+            .is_empty());
         Ok(())
     }
 
@@ -954,7 +945,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_sell_amount_limit() {
-        let mut pool_state = setup_pool_state().await;
+        let pool_state = setup_pool_state().await;
         let overwrites = pool_state
             .get_overwrites(
                 vec![pool_state.tokens[0], pool_state.tokens[1]],

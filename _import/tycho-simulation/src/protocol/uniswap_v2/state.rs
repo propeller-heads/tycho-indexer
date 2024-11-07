@@ -16,7 +16,7 @@ use tycho_core::dto::ProtocolStateDelta;
 
 use super::{events::UniswapV2Sync, reserve_price::spot_price_from_reserves};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
@@ -110,7 +110,7 @@ impl ProtocolSim for UniswapV2State {
             safe_add_u256(safe_mul_u256(reserve_sell, U256::from(1000))?, amount_in_with_fee)?;
 
         let amount_out = safe_div_u256(numerator, denominator)?;
-        let mut new_state = *self;
+        let mut new_state = self.clone();
         if zero2one {
             new_state.reserve0 = safe_add_u256(self.reserve0, amount_in)?;
             new_state.reserve1 = safe_sub_u256(self.reserve1, amount_out)?;
@@ -118,7 +118,7 @@ impl ProtocolSim for UniswapV2State {
             new_state.reserve0 = safe_sub_u256(self.reserve0, amount_out)?;
             new_state.reserve1 = safe_add_u256(self.reserve1, amount_in)?;
         };
-        Ok(GetAmountOutResult::new(amount_out, U256::from(120_000), new_state.clone_box()))
+        Ok(GetAmountOutResult::new(amount_out, U256::from(120_000), Box::new(new_state)))
     }
 
     fn delta_transition(
@@ -161,7 +161,7 @@ impl ProtocolSim for UniswapV2State {
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
-        Box::new(*self)
+        Box::new(self.clone())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -242,22 +242,16 @@ mod tests {
             .unwrap();
 
         assert_eq!(res.amount, exp);
-        assert_eq!(
-            res.new_state
-                .as_any()
-                .downcast_ref::<UniswapV2State>()
-                .unwrap()
-                .reserve0,
-            r0 + amount_in
-        );
-        assert_eq!(
-            res.new_state
-                .as_any()
-                .downcast_ref::<UniswapV2State>()
-                .unwrap()
-                .reserve1,
-            r1 - exp
-        );
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<UniswapV2State>()
+            .unwrap();
+        assert_eq!(new_state.reserve0, r0 + amount_in);
+        assert_eq!(new_state.reserve1, r1 - exp);
+        // Assert that the old state is unchanged
+        assert_eq!(state.reserve0, r0);
+        assert_eq!(state.reserve1, r1);
     }
 
     #[test]
