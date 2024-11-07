@@ -1,3 +1,10 @@
+## [0.38.1](https://github.com/propeller-heads/tycho-simulation/compare/0.38.0...0.38.1) (2024-11-07)
+
+
+### Bug Fixes
+
+* return new state on partially successful simulations ([8dc7c3c](https://github.com/propeller-heads/tycho-simulation/commit/8dc7c3c061c33e12a60b0e8a69b2faa8cd8056fb))
+
 ## [0.38.0](https://github.com/propeller-heads/tycho-simulation/compare/0.37.0...0.38.0) (2024-11-07)
 
 
