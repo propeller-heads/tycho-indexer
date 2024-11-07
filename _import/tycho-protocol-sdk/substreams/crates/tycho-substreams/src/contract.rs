@@ -59,7 +59,7 @@ pub fn extract_contract_changes<F: Fn(&[u8]) -> bool>(
                 changed_contracts
                     .clone()
                     .into_values()
-                    .map(|change| change.into()),
+                    .filter_map(|change| change.into()),
             );
     })
 }

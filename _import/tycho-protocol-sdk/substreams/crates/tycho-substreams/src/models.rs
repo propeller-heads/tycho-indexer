@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use substreams_ethereum::pb::eth::v2::{self as sf, StorageChange};
 
 // re-export the protobuf types here.
@@ -114,6 +114,13 @@ impl TransactionChangesBuilder {
                     .into_iter()
                     .map(|a| (a.name.clone(), a))
                     .collect(),
+                created_attributes: change
+                    .attributes
+                    .clone()
+                    .iter()
+                    .filter(|&attr| (attr.change == i32::from(ChangeType::Creation)))
+                    .map(|attr| attr.name.clone())
+                    .collect(),
             });
     }
 
@@ -141,34 +148,31 @@ impl TransactionChangesBuilder {
     }
 
     pub fn build(self) -> Option<TransactionChanges> {
-        if self.contract_changes.is_empty() &&
-            self.component_changes.is_empty() &&
-            self.balance_changes.is_empty() &&
-            self.entity_changes.is_empty()
-        {
+        let tx_changes = TransactionChanges {
+            tx: self.tx,
+            contract_changes: self
+                .contract_changes
+                .into_values()
+                .filter_map(|interim| interim.into())
+                .collect::<Vec<_>>(),
+            entity_changes: self
+                .entity_changes
+                .into_values()
+                .filter_map(|interim| interim.into())
+                .collect::<Vec<_>>(),
+            component_changes: self
+                .component_changes
+                .into_values()
+                .collect::<Vec<_>>(),
+            balance_changes: self
+                .balance_changes
+                .into_values()
+                .collect::<Vec<_>>(),
+        };
+        if tx_changes.is_empty() {
             None
         } else {
-            Some(TransactionChanges {
-                tx: self.tx,
-                contract_changes: self
-                    .contract_changes
-                    .into_values()
-                    .map(|interim| interim.into())
-                    .collect::<Vec<_>>(),
-                entity_changes: self
-                    .entity_changes
-                    .into_values()
-                    .map(|interim| interim.into())
-                    .collect::<Vec<_>>(),
-                component_changes: self
-                    .component_changes
-                    .into_values()
-                    .collect::<Vec<_>>(),
-                balance_changes: self
-                    .balance_changes
-                    .into_values()
-                    .collect::<Vec<_>>(),
-            })
+            Some(tx_changes)
         }
     }
 }
@@ -389,6 +393,8 @@ impl ProtocolComponent {
 pub struct InterimEntityChanges {
     component_id: String,
     attributes: HashMap<String, Attribute>,
+    /// A set of created attributes during this transaction
+    created_attributes: HashSet<String>,
 }
 
 impl InterimEntityChanges {
@@ -397,26 +403,45 @@ impl InterimEntityChanges {
     }
 
     pub fn set_attribute(&mut self, attr: &Attribute) {
-        self.attributes
-            .entry(attr.name.clone())
-            .and_modify(|existing| *existing = attr.clone())
-            .or_insert(attr.clone());
+        // Add any attribute creation to the map
+        if attr.change == i32::from(ChangeType::Creation) {
+            self.created_attributes
+                .insert(attr.name.clone());
+        }
+
+        if attr.change == i32::from(ChangeType::Deletion) &&
+            self.created_attributes
+                .contains(&attr.name)
+        {
+            // If a freshly created attribute is deleted, remove the creation.
+            self.attributes.remove(&attr.name);
+        } else {
+            self.attributes
+                .entry(attr.name.clone())
+                .and_modify(|existing| *existing = attr.clone())
+                .or_insert(attr.clone());
+        }
     }
 }
 
-impl From<InterimEntityChanges> for EntityChanges {
+impl From<InterimEntityChanges> for Option<EntityChanges> {
     fn from(value: InterimEntityChanges) -> Self {
-        EntityChanges {
+        let changes = EntityChanges {
             component_id: value.component_id.clone(),
             attributes: value
                 .attributes
                 .into_values()
                 .collect::<Vec<_>>(),
+        };
+        if changes.attributes.is_empty() {
+            None
+        } else {
+            Some(changes)
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SlotValue {
     new_value: Vec<u8>,
     start_value: Vec<u8>,
@@ -435,7 +460,7 @@ impl From<&StorageChange> for SlotValue {
 }
 
 // Uses a map for slots, protobuf does not allow bytes in hashmap keys
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InterimContractChange {
     address: Vec<u8>,
     balance: Vec<u8>,
@@ -492,9 +517,9 @@ impl InterimContractChange {
     }
 }
 
-impl From<InterimContractChange> for ContractChange {
+impl From<InterimContractChange> for Option<ContractChange> {
     fn from(value: InterimContractChange) -> Self {
-        ContractChange {
+        let contract_change = ContractChange {
             address: value.address,
             balance: value.balance,
             code: value.code,
@@ -505,6 +530,87 @@ impl From<InterimContractChange> for ContractChange {
                 .map(|(slot, value)| ContractSlot { slot, value: value.new_value })
                 .collect(),
             change: value.change.into(),
+        };
+        if contract_change.is_empty() {
+            None
+        } else {
+            Some(contract_change)
         }
+    }
+}
+
+impl ContractChange {
+    fn is_empty(&self) -> bool {
+        self.balance.is_empty() &&
+            self.slots.is_empty() &&
+            self.code.is_empty() &&
+            self.change == i32::from(ChangeType::Update)
+    }
+}
+
+impl TransactionChanges {
+    fn is_empty(&self) -> bool {
+        self.contract_changes.is_empty() &&
+            self.component_changes.is_empty() &&
+            self.balance_changes.is_empty() &&
+            self.entity_changes.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use substreams_ethereum::pb::eth::v2::StorageChange;
+
+    use crate::models::{Attribute, ChangeType, EntityChanges};
+
+    use super::{InterimContractChange, TransactionChangesBuilder};
+
+    #[test]
+    fn test_transaction_changes_builder_ignored_contract_changes() {
+        let mut builder = TransactionChangesBuilder::new(&super::Transaction::default());
+        let mut contract_changes = InterimContractChange::new(&[1], false);
+        contract_changes.upsert_slot(&StorageChange {
+            address: [1].to_vec(),
+            key: [0].to_vec(),
+            old_value: [1].to_vec(),
+            new_value: [1].to_vec(), //Same old and new value, must be ignored
+            ordinal: 1,
+        });
+        builder.add_contract_changes(&contract_changes);
+
+        let tx_changes = builder.build();
+        assert!(tx_changes.is_none());
+    }
+
+    #[test]
+    fn test_transaction_changes_builder_ignored_deletion() {
+        let mut builder = TransactionChangesBuilder::new(&super::Transaction::default());
+
+        // Create an attribute
+        let changes = EntityChanges {
+            component_id: "component".to_string(),
+            attributes: vec![Attribute {
+                name: "attribute".to_string(),
+                value: vec![1],
+                change: ChangeType::Creation.into(),
+            }],
+        };
+
+        builder.add_entity_change(&changes);
+
+        // Delete the attribute
+        let changes = EntityChanges {
+            component_id: "component".to_string(),
+            attributes: vec![Attribute {
+                name: "attribute".to_string(),
+                value: vec![0],
+                change: ChangeType::Deletion.into(),
+            }],
+        };
+
+        builder.add_entity_change(&changes);
+
+        let tx_changes = builder.build();
+        assert!(tx_changes.is_none());
     }
 }
