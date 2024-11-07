@@ -28,8 +28,8 @@ uuid = { version = "1.4.1", features = [
 ] }
 num-traits = "0.2.17"
 dotenv = "0.15.0"
-tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.41.0" }
-tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.41.0" }
+tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", rev = "baf2619d8021b6ebcfe06a04774249c79aba25e9"  }
+tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "baf2619d8021b6ebcfe06a04774249c79aba25e9"  }
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e" }
 foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e" }
 alloy-primitives = { version = "0.8.9", features = [
