@@ -1,3 +1,25 @@
+## [0.37.0](https://github.com/propeller-heads/tycho-simulation/compare/0.36.0...0.37.0) (2024-11-07)
+
+
+### Features
+
+* (VMPoolState) implement get_amount_out ([dd7b551](https://github.com/propeller-heads/tycho-simulation/commit/dd7b551cbea8f770e47b55f77b99601430d1d237))
+* Don't make new_state optional in GetAmountOutResult ([98a078d](https://github.com/propeller-heads/tycho-simulation/commit/98a078dab9c62d14224c9dac4d74f0f4a75b0e71))
+* move logic from get_amount_out to ProtocolSim trait impl ([43fad10](https://github.com/propeller-heads/tycho-simulation/commit/43fad10e32f98f6269118be8ff85ce132fe8e768))
+* Remove unnecessary async methods ([a068a18](https://github.com/propeller-heads/tycho-simulation/commit/a068a18fb874d0f29e3ada4801360cfa888a0412))
+
+
+### Bug Fixes
+
+* (VMPoolState) check for hard limit in get_amount_out ([2fe7ce9](https://github.com/propeller-heads/tycho-simulation/commit/2fe7ce9322ec12a4b90f79e1905eb2f3c7f9f199))
+* Adjust errors after merge with errors refactor ([5aa6dad](https://github.com/propeller-heads/tycho-simulation/commit/5aa6dad1e0fdb7b224f44b38c2453de1dca9b996))
+* Fix tests (problem with not checksummed addresses) ([4892b76](https://github.com/propeller-heads/tycho-simulation/commit/4892b768661e2702ad928eb49966e1001084df9a))
+* initialize token bytecode when creating engine ([17f8305](https://github.com/propeller-heads/tycho-simulation/commit/17f8305e51cbbb262d241a99da2d032a2fbf4a76))
+* overwrites merging bug ([3e8a47a](https://github.com/propeller-heads/tycho-simulation/commit/3e8a47adc02075d8e5063d77916608e26d662b01))
+* Return new state in `GetAmountOutResult` ([d4e3050](https://github.com/propeller-heads/tycho-simulation/commit/d4e3050271bac811241a02ee62c493d5926c2dc7))
+* TEMPORARY ([7ccdee6](https://github.com/propeller-heads/tycho-simulation/commit/7ccdee664961d3d4bfe5a15c1f39202e74e839b8))
+* Update spot_prices in instead of marginal_prices in get_amount_out ([d4a0d8b](https://github.com/propeller-heads/tycho-simulation/commit/d4a0d8bb5fb858549dde1b534ef9062a753e653d))
+
 ## [0.36.0](https://github.com/propeller-heads/tycho-simulation/compare/0.35.0...0.36.0) (2024-11-07)
 
 
