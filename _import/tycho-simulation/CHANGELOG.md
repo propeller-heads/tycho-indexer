@@ -1,3 +1,10 @@
+## [0.39.1](https://github.com/propeller-heads/tycho-simulation/compare/0.39.0...0.39.1) (2024-11-07)
+
+
+### Bug Fixes
+
+* make TryFromWithBlock trait public ([7258820](https://github.com/propeller-heads/tycho-simulation/commit/725882087d93db18b104c92a74ab8e0cce06b340))
+
 ## [0.39.0](https://github.com/propeller-heads/tycho-simulation/compare/0.38.1...0.39.0) (2024-11-07)
 
 
