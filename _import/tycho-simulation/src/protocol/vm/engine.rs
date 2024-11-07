@@ -62,7 +62,7 @@ where
         };
         engine.state.init_account(
             Address::parse_checksummed(token, None).map_err(|_| {
-                SimulationError::EncodingError("checksum for token address must be valid".into())
+                SimulationError::EncodingError("Checksum for token address must be valid".into())
             })?,
             info,
             None,

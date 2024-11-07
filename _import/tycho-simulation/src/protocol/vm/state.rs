@@ -690,11 +690,11 @@ mod tests {
     };
 
     fn dai() -> ERC20Token {
-        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
+        ERC20Token::new("0x6B175474E89094C44Da98b954EedeAC495271d0F", 18, "DAI", U256::from(10_000))
     }
 
     fn bal() -> ERC20Token {
-        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
+        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3D", 18, "BAL", U256::from(10_000))
     }
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -707,7 +707,7 @@ mod tests {
         let db = SHARED_TYCHO_DB.clone();
         let engine: SimulationEngine<_> = create_engine(
             db.clone(),
-            vec![dai().address.to_string(), bal().address.to_string()],
+            vec![to_checksum(&dai().address, None), to_checksum(&bal().address, None)],
             false,
         )
         .await?;
@@ -764,7 +764,7 @@ mod tests {
 
         let pool_id: String =
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
-
+        dbg!(&tokens);
         VMPoolState::<PreCachedDB>::new(
             pool_id,
             tokens,
