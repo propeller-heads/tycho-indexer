@@ -4,9 +4,9 @@
 //! Should an operation cause an overflow a result containing TradeSimulationError
 //! will be returned.
 //! Functions for the types I256, U256, U512 are available.
+use ethers::types::{I256, U256, U512};
 
 use crate::protocol::errors::SimulationError;
-use ethers::types::{I256, U256, U512};
 
 pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, SimulationError> {
     let res = a.checked_mul(b);
@@ -92,6 +92,7 @@ pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, SimulationError>
 #[cfg(test)]
 mod safe_math_tests {
     use super::*;
+
     use rstest::rstest;
 
     fn u256(s: &str) -> U256 {

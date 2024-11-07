@@ -44,6 +44,7 @@
 use std::any::Any;
 
 use ethers::types::U256;
+
 use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{

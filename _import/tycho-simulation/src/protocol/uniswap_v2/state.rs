@@ -1,5 +1,9 @@
 use std::any::Any;
 
+use ethers::types::U256;
+
+use tycho_core::dto::ProtocolStateDelta;
+
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -11,8 +15,6 @@ use crate::{
     },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
 };
-use ethers::types::U256;
-use tycho_core::dto::ProtocolStateDelta;
 
 use super::{events::UniswapV2Sync, reserve_price::spot_price_from_reserves};
 
@@ -182,6 +184,8 @@ impl ProtocolSim for UniswapV2State {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use std::{
         collections::{HashMap, HashSet},
         str::FromStr,
@@ -190,9 +194,8 @@ mod tests {
     use approx::assert_ulps_eq;
     use ethers::types::{H160, H256};
     use rstest::rstest;
-    use tycho_core::hex_bytes::Bytes;
 
-    use super::*;
+    use tycho_core::hex_bytes::Bytes;
 
     fn u256(s: &str) -> U256 {
         U256::from_dec_str(s).unwrap()

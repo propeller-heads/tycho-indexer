@@ -2,6 +2,7 @@ use std::any::Any;
 
 use ethers::types::{Sign, I256, U256};
 use tracing::trace;
+
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
@@ -58,7 +59,6 @@ struct StepComputation {
 }
 
 // TODO: these attributes allow updating the state after a swap
-#[allow(dead_code)]
 #[derive(Debug)]
 struct SwapResults {
     amount_calculated: I256,

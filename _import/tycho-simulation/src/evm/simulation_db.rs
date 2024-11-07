@@ -1,17 +1,17 @@
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
+
 use ethers::{
     providers::Middleware,
     types::{BlockId, H160, H256},
 };
-use tracing::{debug, info};
-
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
-
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use revm::{
     db::DatabaseRef,
     interpreter::analysis::to_analysed,
     primitives::{AccountInfo, Address, Bytecode, B256, U256 as rU256},
 };
+use tracing::{debug, info};
+
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
 
 use super::account_storage::{AccountStorage, StateUpdate};
 

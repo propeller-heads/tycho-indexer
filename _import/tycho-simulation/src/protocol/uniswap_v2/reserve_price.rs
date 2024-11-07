@@ -30,11 +30,10 @@ pub fn spot_price_from_reserves(
 
 #[cfg(test)]
 mod test {
+    use super::*;
 
     use approx::assert_ulps_eq;
     use rstest::rstest;
-
-    use super::*;
 
     fn u256_str(dec_str: &str) -> U256 {
         U256::from_dec_str(dec_str).unwrap()

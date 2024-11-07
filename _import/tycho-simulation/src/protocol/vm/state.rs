@@ -1,12 +1,9 @@
-// TODO: remove skip for clippy dead_code check
-#![allow(dead_code)]
-
-use alloy_primitives::Address;
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
 };
 
+use alloy_primitives::Address;
 use chrono::Utc;
 use ethers::{
     abi::{decode, ParamType},
@@ -24,17 +21,19 @@ use revm::{
     DatabaseRef,
 };
 use tracing::warn;
+
 use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
     evm::{
+        engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters},
         simulation_db::BlockHeader,
         tycho_db::PreCachedDB,
     },
     models::ERC20Token,
     protocol::{
-        errors::TransitionError,
+        errors::{SimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
@@ -48,11 +47,6 @@ use crate::{
         },
     },
 };
-
-// Necessary for the init_account method to be in scope
-#[allow(unused_imports)]
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
-use crate::protocol::errors::SimulationError;
 
 #[derive(Clone, Debug)]
 pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {

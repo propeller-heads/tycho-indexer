@@ -1,7 +1,8 @@
 use std::cmp;
 
-use super::tick_math;
 use ethers::types::U256;
+
+use super::tick_math;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {

@@ -1,24 +1,28 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
-use crate::{
-    evm::engine_db_interface::EngineDatabaseInterface,
-    protocol::vm::constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-};
+use std::{collections::HashMap, fmt::Debug};
+
 use lazy_static::lazy_static;
 use revm::{
     primitives::{AccountInfo, Address, KECCAK_EMPTY},
     DatabaseRef,
 };
-use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     evm::{
+        engine_db_interface::EngineDatabaseInterface,
         simulation::SimulationEngine,
         simulation_db::BlockHeader,
         tycho_db::PreCachedDB,
         tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
     },
-    protocol::{errors::SimulationError, vm::utils::load_erc20_bytecode},
+    protocol::{
+        errors::SimulationError,
+        vm::{
+            constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
+            utils::load_erc20_bytecode,
+        },
+    },
 };
 
 lazy_static! {

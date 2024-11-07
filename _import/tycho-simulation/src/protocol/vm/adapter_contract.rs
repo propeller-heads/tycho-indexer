@@ -1,6 +1,3 @@
-// TODO: remove skip for clippy dead_code check
-#![allow(dead_code)]
-
 use std::collections::{HashMap, HashSet};
 
 use ethers::{
@@ -179,6 +176,7 @@ where
         Ok(capabilities)
     }
 
+    #[allow(dead_code)]
     pub fn min_gas_usage(&self) -> Result<u64, SimulationError> {
         let res = self
             .call("minGasUsage", vec![], 1, None, None, None, U256::zero())?

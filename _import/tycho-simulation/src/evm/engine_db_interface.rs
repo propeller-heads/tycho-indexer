@@ -1,7 +1,9 @@
-use revm::{precompile::Address, primitives::AccountInfo};
 use std::collections::HashMap;
 
-use revm::primitives::U256 as rU256;
+use revm::{
+    precompile::Address,
+    primitives::{AccountInfo, U256 as rU256},
+};
 
 pub trait EngineDatabaseInterface {
     type Error;

@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
-use thiserror::Error;
-use tokio::sync::RwLock;
-use tracing::{debug, error, info, instrument, warn};
 
 use revm::{
     db::DatabaseRef,
     primitives::{AccountInfo, Address, Bytecode, Bytes, B256, U256 as rU256},
 };
+use thiserror::Error;
+use tokio::sync::RwLock;
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
@@ -356,15 +356,14 @@ impl DatabaseRef for PreCachedDB {
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
+    use super::*;
 
+    use chrono::DateTime;
     use revm::primitives::U256 as rU256;
     use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr};
 
     use crate::evm::tycho_models::{AccountUpdate, Block, Chain, ChangeType};
-
-    use super::*;
 
     #[fixture]
     pub fn mock_db() -> PreCachedDB {

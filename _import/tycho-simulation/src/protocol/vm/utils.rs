@@ -1,24 +1,3 @@
-// TODO: remove skip for clippy dead_code check
-#![allow(dead_code)]
-use ethabi::{self, decode, ParamType};
-use ethers::{
-    abi::Abi,
-    core::utils::keccak256,
-    providers::{Http, Middleware, Provider},
-    types::{Address, H160},
-};
-use hex::FromHex;
-use mini_moka::sync::Cache;
-
-use crate::{
-    evm::simulation::SimulationEngineError,
-    protocol::{
-        errors::SimulationError,
-        vm::errors::{FileError, RpcError},
-    },
-};
-use ethers::types::U256;
-use revm::primitives::{Bytecode, Bytes};
 use std::{
     collections::HashMap,
     env,
@@ -26,6 +5,25 @@ use std::{
     io::Read,
     path::Path,
     sync::{Arc, LazyLock},
+};
+
+use ethabi::{self, decode, ParamType};
+use ethers::{
+    abi::Abi,
+    core::utils::keccak256,
+    providers::{Http, Middleware, Provider},
+    types::{Address, H160, U256},
+};
+use hex::FromHex;
+use mini_moka::sync::Cache;
+use revm::primitives::{Bytecode, Bytes};
+
+use crate::{
+    evm::simulation::SimulationEngineError,
+    protocol::{
+        errors::SimulationError,
+        vm::errors::{FileError, RpcError},
+    },
 };
 
 pub fn maybe_coerce_error(
@@ -315,11 +313,11 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use dotenv::dotenv;
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
-
-    use super::*;
 
     #[tokio::test]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
