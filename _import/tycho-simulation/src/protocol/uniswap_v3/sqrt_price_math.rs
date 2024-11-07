@@ -2,7 +2,7 @@ use crate::u256_num::u256_to_f64;
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
 use crate::{
-    protocol::errors::TradeSimulationError,
+    protocol::errors::SimulationError,
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
 };
 use ethers::types::U256;
@@ -19,7 +19,7 @@ fn maybe_flip_ratios(a: U256, b: U256) -> (U256, U256) {
     }
 }
 
-fn div_rounding_up(a: U256, b: U256) -> Result<U256, TradeSimulationError> {
+fn div_rounding_up(a: U256, b: U256) -> Result<U256, SimulationError> {
     let (result, rest) = a.div_mod(b);
     if rest > U256::zero() {
         let res = safe_add_u256(result, U256::one())?;
@@ -34,7 +34,7 @@ pub fn get_amount0_delta(
     b: U256,
     liquidity: u128,
     round_up: bool,
-) -> Result<U256, TradeSimulationError> {
+) -> Result<U256, SimulationError> {
     let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
 
     let numerator1 = U256::from(liquidity) << RESOLUTION;
@@ -54,7 +54,7 @@ pub fn get_amount1_delta(
     b: U256,
     liquidity: u128,
     round_up: bool,
-) -> Result<U256, TradeSimulationError> {
+) -> Result<U256, SimulationError> {
     let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
     if round_up {
         mul_div_rounding_up(U256::from(liquidity), sqrt_ratio_b - sqrt_ratio_a, Q96)
@@ -71,7 +71,7 @@ pub fn get_next_sqrt_price_from_input(
     liquidity: u128,
     amount_in: U256,
     zero_for_one: bool,
-) -> Result<U256, TradeSimulationError> {
+) -> Result<U256, SimulationError> {
     assert!(sqrt_price > U256::zero());
 
     if zero_for_one {
@@ -86,7 +86,7 @@ pub fn get_next_sqrt_price_from_output(
     liquidity: u128,
     amount_in: U256,
     zero_for_one: bool,
-) -> Result<U256, TradeSimulationError> {
+) -> Result<U256, SimulationError> {
     assert!(sqrt_price > U256::zero());
     assert!(liquidity > 0);
 
@@ -102,7 +102,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
     liquidity: u128,
     amount: U256,
     add: bool,
-) -> Result<U256, TradeSimulationError> {
+) -> Result<U256, SimulationError> {
     if amount == U256::zero() {
         return Ok(sqrt_price);
     }
@@ -133,7 +133,7 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
     liquidity: u128,
     amount: U256,
     add: bool,
-) -> Result<U256, TradeSimulationError> {
+) -> Result<U256, SimulationError> {
     if add {
         let quotient = if amount <= U160_MAX {
             safe_div_u256(amount << RESOLUTION, U256::from(liquidity))

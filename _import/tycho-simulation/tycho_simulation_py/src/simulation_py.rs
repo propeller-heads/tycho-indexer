@@ -31,7 +31,7 @@ impl SimulationEngineInner {
     fn simulate(
         &self,
         params: &simulation::SimulationParameters,
-    ) -> Result<simulation::SimulationResult, simulation::SimulationError> {
+    ) -> Result<simulation::SimulationResult, simulation::SimulationEngineError> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine.simulate(params),
             SimulationEngineInner::TychoDB(engine) => engine.simulate(params),

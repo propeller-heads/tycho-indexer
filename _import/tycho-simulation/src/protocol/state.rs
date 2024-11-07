@@ -38,7 +38,7 @@
 //!
 //! // Get the amount out for swapping WETH to USDC
 //! let out = state.get_amount_out(weth.one(), &weth, &usdc).unwrap().amount;
-//! assert_eq!(state.spot_price(&weth, &usdc), 1218.0683462769755f64);
+//! assert_eq!(state.spot_price(&weth, &usdc).unwrap(), 1218.0683462769755f64);
 //! assert_eq!(out, U256::from(1214374202));
 //! ```
 use std::any::Any;
@@ -49,7 +49,7 @@ use tycho_core::dto::ProtocolStateDelta;
 use crate::{
     models::ERC20Token,
     protocol::{
-        errors::{TradeSimulationError, TransitionError},
+        errors::{SimulationError, TransitionError},
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
     },
@@ -79,7 +79,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     ///   BTC/USDT, BTC would be the base asset.
     /// * `b` - Quote Token: refers to the token that is the price of a pair. For the symbol
     ///   BTC/USDT, USDT would be the quote asset.
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> f64;
+    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
     ///
@@ -98,7 +98,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
         amount_in: U256,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
-    ) -> Result<GetAmountOutResult, TradeSimulationError>;
+    ) -> Result<GetAmountOutResult, SimulationError>;
 
     /// Decodes and applies a protocol state delta to the state
     ///

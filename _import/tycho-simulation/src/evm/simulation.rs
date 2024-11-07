@@ -30,7 +30,7 @@ use super::{
 
 /// An error representing any transaction simulation result other than successful execution
 #[derive(Debug, Display, Clone)]
-pub enum SimulationError {
+pub enum SimulationEngineError {
     /// Something went wrong while getting storage; might be caused by network issues.
     /// Retrying may help.
     StorageError(String),
@@ -82,7 +82,7 @@ where
     pub fn simulate(
         &self,
         params: &SimulationParameters,
-    ) -> Result<SimulationResult, SimulationError> {
+    ) -> Result<SimulationResult, SimulationEngineError> {
         // We allocate a new EVM so we can work with a simple referenced DB instead of a fully
         // concurrently save shared reference and write locked object. Note that concurrently
         // calling this method is therefore not possible.
@@ -204,40 +204,42 @@ where
 /// * `SimulationError` - simulation wasn't successful for any reason. See variants for details.
 fn interpret_evm_result<DBError: std::fmt::Debug>(
     evm_result: EVMResult<DBError>,
-) -> Result<SimulationResult, SimulationError> {
+) -> Result<SimulationResult, SimulationEngineError> {
     match evm_result {
         Ok(result_and_state) => match result_and_state.result {
             ExecutionResult::Success { gas_used, gas_refunded, output, .. } => {
                 Ok(interpret_evm_success(gas_used, gas_refunded, output, result_and_state.state))
             }
             ExecutionResult::Revert { output, gas_used } => {
-                Err(SimulationError::TransactionError {
+                Err(SimulationEngineError::TransactionError {
                     data: format!("0x{}", hex::encode(output)),
                     gas_used: Some(gas_used),
                 })
             }
-            ExecutionResult::Halt { reason, gas_used } => Err(SimulationError::TransactionError {
-                data: format!("{:?}", reason),
-                gas_used: Some(gas_used),
-            }),
+            ExecutionResult::Halt { reason, gas_used } => {
+                Err(SimulationEngineError::TransactionError {
+                    data: format!("{:?}", reason),
+                    gas_used: Some(gas_used),
+                })
+            }
         },
         Err(evm_error) => match evm_error {
-            EVMError::Transaction(invalid_tx) => Err(SimulationError::TransactionError {
+            EVMError::Transaction(invalid_tx) => Err(SimulationEngineError::TransactionError {
                 data: format!("EVM error: {invalid_tx:?}"),
                 gas_used: None,
             }),
             EVMError::Database(db_error) => {
-                Err(SimulationError::StorageError(format!("Storage error: {:?}", db_error)))
+                Err(SimulationEngineError::StorageError(format!("Storage error: {:?}", db_error)))
             }
-            EVMError::Custom(err) => Err(SimulationError::TransactionError {
+            EVMError::Custom(err) => Err(SimulationEngineError::TransactionError {
                 data: format!("Unexpected error {}", err),
                 gas_used: None,
             }),
-            EVMError::Header(err) => Err(SimulationError::TransactionError {
+            EVMError::Header(err) => Err(SimulationEngineError::TransactionError {
                 data: format!("Unexpected error {}", err),
                 gas_used: None,
             }),
-            EVMError::Precompile(err) => Err(SimulationError::TransactionError {
+            EVMError::Precompile(err) => Err(SimulationEngineError::TransactionError {
                 data: format!("Unexpected error {}", err),
                 gas_used: None,
             }),
@@ -547,7 +549,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError { data: _, gas_used } => {
+            SimulationEngineError::TransactionError { data: _, gas_used } => {
                 assert_eq!(
                     format!("0x{}", hex::encode::<Vec<u8>>("output".into())),
                     "0x6f7574707574"
@@ -573,7 +575,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError { data, gas_used } => {
+            SimulationEngineError::TransactionError { data, gas_used } => {
                 assert_eq!(data, "OutOfGas(Basic)");
                 assert_eq!(gas_used, Some(100));
             }
@@ -591,7 +593,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::TransactionError { data, gas_used } => {
+            SimulationEngineError::TransactionError { data, gas_used } => {
                 assert_eq!(data, "EVM error: PriorityFeeGreaterThanMaxFee");
                 assert_eq!(gas_used, None);
             }
@@ -609,7 +611,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         match err {
-            SimulationError::StorageError(msg) => {
+            SimulationEngineError::StorageError(msg) => {
                 assert_eq!(msg, "Storage error: CustomError(\"boo\")")
             }
             _ => panic!("Wrong type of SimulationError!"),

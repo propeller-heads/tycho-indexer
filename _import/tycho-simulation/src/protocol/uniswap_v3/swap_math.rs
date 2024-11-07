@@ -1,4 +1,4 @@
-use crate::{protocol::errors::TradeSimulationError, safe_math::safe_sub_u256};
+use crate::{protocol::errors::SimulationError, safe_math::safe_sub_u256};
 use ethers::types::{I256, U256};
 
 use super::{
@@ -12,7 +12,7 @@ pub fn compute_swap_step(
     liquidity: u128,
     amount_remaining: I256,
     fee_pips: u32,
-) -> Result<(U256, U256, U256, U256), TradeSimulationError> {
+) -> Result<(U256, U256, U256, U256), SimulationError> {
     let zero_for_one = sqrt_ratio_current >= sqrt_ratio_target;
     let exact_in = amount_remaining >= I256::zero();
     let sqrt_ratio_next: U256;
