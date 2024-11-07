@@ -140,7 +140,7 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn call(
+    pub fn call(
         &self,
         fname: &str,
         args: Vec<Token>,

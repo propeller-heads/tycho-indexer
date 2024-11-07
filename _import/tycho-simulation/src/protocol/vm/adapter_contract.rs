@@ -44,7 +44,7 @@ impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
 where
     D::Error: std::fmt::Debug,
 {
-    pub async fn price(
+    pub fn price(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -66,15 +66,14 @@ where
         ];
 
         let res = self
-            .call("price", args, block, None, overwrites, None, U256::zero())
-            .await?
+            .call("price", args, block, None, overwrites, None, U256::zero())?
             .return_value;
         let price = self.calculate_price(res[0].clone())?;
         Ok(price)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn swap(
+    pub fn swap(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -92,9 +91,7 @@ where
             Token::Uint(amount),
         ];
 
-        let res = self
-            .call("swap", args, block, None, overwrites, None, U256::zero())
-            .await?;
+        let res = self.call("swap", args, block, None, overwrites, None, U256::zero())?;
 
         let (received_amount, gas_used, price) = if let Token::Tuple(ref return_value) =
             res.return_value[0]
@@ -124,7 +121,7 @@ where
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
     }
 
-    pub async fn get_limits(
+    pub fn get_limits(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -139,8 +136,7 @@ where
         ];
 
         let res = self
-            .call("getLimits", args, block, None, overwrites, None, U256::zero())
-            .await?
+            .call("getLimits", args, block, None, overwrites, None, U256::zero())?
             .return_value;
 
         if let Some(Token::Array(inner)) = res.first() {
@@ -154,7 +150,7 @@ where
         Err(SimulationError::DecodingError("Unexpected response format".into()))
     }
 
-    pub async fn get_capabilities(
+    pub fn get_capabilities(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -167,8 +163,7 @@ where
         ];
 
         let res = self
-            .call("getCapabilities", args, 1, None, None, None, U256::zero())
-            .await?
+            .call("getCapabilities", args, 1, None, None, None, U256::zero())?
             .return_value;
         let capabilities: HashSet<Capability> = match res.first() {
             Some(Token::Array(inner_tokens)) => inner_tokens
@@ -184,10 +179,9 @@ where
         Ok(capabilities)
     }
 
-    pub async fn min_gas_usage(&self) -> Result<u64, SimulationError> {
+    pub fn min_gas_usage(&self) -> Result<u64, SimulationError> {
         let res = self
-            .call("minGasUsage", vec![], 1, None, None, None, U256::zero())
-            .await?
+            .call("minGasUsage", vec![], 1, None, None, None, U256::zero())?
             .return_value;
         Ok(res[0]
             .clone()

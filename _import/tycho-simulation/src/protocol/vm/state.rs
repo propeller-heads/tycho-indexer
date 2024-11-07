@@ -136,7 +136,7 @@ impl VMPoolState<PreCachedDB> {
                 .clone()
                 .ok_or_else(|| SimulationError::NotInitialized("Simulation engine".to_string()))?,
         )?);
-        state.set_capabilities().await?;
+        state.set_capabilities()?;
         // TODO: add init_token_storage_slots() in 3796
         Ok(state)
     }
@@ -312,7 +312,7 @@ impl VMPoolState<PreCachedDB> {
         Ok(())
     }
 
-    async fn set_capabilities(&mut self) -> Result<(), SimulationError> {
+    fn set_capabilities(&mut self) -> Result<(), SimulationError> {
         let mut capabilities = Vec::new();
 
         // Generate all permutations of tokens and retrieve capabilities
@@ -323,8 +323,7 @@ impl VMPoolState<PreCachedDB> {
                     .adapter_contract
                     .clone()
                     .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
-                    .get_capabilities(self.id.clone()[2..].to_string(), *t0, *t1)
-                    .await?;
+                    .get_capabilities(self.id.clone()[2..].to_string(), *t0, *t1)?;
                 capabilities.push(caps);
             }
         }
@@ -353,29 +352,21 @@ impl VMPoolState<PreCachedDB> {
         Ok(())
     }
 
-    pub async fn set_spot_prices(
-        &mut self,
-        tokens: Vec<ERC20Token>,
-    ) -> Result<(), SimulationError> {
+    pub fn set_spot_prices(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
             .iter()
             .permutations(2)
             .map(|p| [p[0], p[1]])
         {
-            let overwrites = Some(
-                self.get_overwrites(
-                    vec![(*sell_token).clone().address, (*buy_token).clone().address],
-                    U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
-                )
-                .await?,
-            );
-            let sell_amount_limit = self
-                .get_sell_amount_limit(
-                    vec![(sell_token.address), (buy_token.address)],
-                    overwrites.clone(),
-                )
-                .await?;
+            let overwrites = Some(self.get_overwrites(
+                vec![(*sell_token).clone().address, (*buy_token).clone().address],
+                U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
+            )?);
+            let sell_amount_limit = self.get_sell_amount_limit(
+                vec![(sell_token.address), (buy_token.address)],
+                overwrites.clone(),
+            )?;
             let price_result = self
                 .adapter_contract
                 .clone()
@@ -387,8 +378,7 @@ impl VMPoolState<PreCachedDB> {
                     vec![sell_amount_limit / U256::from(100)],
                     self.block.number,
                     overwrites,
-                )
-                .await?;
+                )?;
 
             let price = if self
                 .capabilities
@@ -414,7 +404,7 @@ impl VMPoolState<PreCachedDB> {
     /// Retrieves the sell amount limit for a given pair of tokens, where the first token is treated
     /// as the sell token and the second as the buy token. The order of tokens in the input vector
     /// is significant and determines the direction of the price query.
-    async fn get_sell_amount_limit(
+    fn get_sell_amount_limit(
         &self,
         tokens: Vec<H160>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
@@ -423,27 +413,23 @@ impl VMPoolState<PreCachedDB> {
             .adapter_contract
             .clone()
             .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?;
-        let limits = binding
-            .get_limits(
-                self.id.clone()[2..].to_string(),
-                tokens[0],
-                tokens[1],
-                self.block.number,
-                overwrites,
-            )
-            .await;
+        let limits = binding.get_limits(
+            self.id.clone()[2..].to_string(),
+            tokens[0],
+            tokens[1],
+            self.block.number,
+            overwrites,
+        );
 
         Ok(limits?.0)
     }
 
-    pub async fn get_overwrites(
+    pub fn get_overwrites(
         &self,
         tokens: Vec<H160>,
         max_amount: U256,
     ) -> Result<HashMap<rAddress, Overwrites>, SimulationError> {
-        let token_overwrites = self
-            .get_token_overwrites(tokens, max_amount)
-            .await?;
+        let token_overwrites = self.get_token_overwrites(tokens, max_amount)?;
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
         let merged_overwrites =
@@ -452,7 +438,7 @@ impl VMPoolState<PreCachedDB> {
         Ok(merged_overwrites)
     }
 
-    async fn get_token_overwrites(
+    fn get_token_overwrites(
         &self,
         tokens: Vec<H160>,
         max_amount: U256,
@@ -545,21 +531,18 @@ impl VMPoolState<PreCachedDB> {
         merged
     }
 
-    async fn get_amount_out(
+    fn get_amount_out(
         &self,
         sell_token: H160,
         sell_amount: U256,
         buy_token: H160,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        let overwrites = self
-            .get_overwrites(
-                vec![sell_token, buy_token],
-                U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
-            )
-            .await?;
-        let sell_amount_limit = self
-            .get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))
-            .await?;
+        let overwrites = self.get_overwrites(
+            vec![sell_token, buy_token],
+            U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
+        )?;
+        let sell_amount_limit =
+            self.get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))?;
         let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
             .contains(&Capability::HardLimits) &&
@@ -570,9 +553,8 @@ impl VMPoolState<PreCachedDB> {
             (sell_amount, false)
         };
 
-        let overwrites_with_sell_limit = self
-            .get_overwrites(vec![sell_token, buy_token], sell_amount_limit)
-            .await?;
+        let overwrites_with_sell_limit =
+            self.get_overwrites(vec![sell_token, buy_token], sell_amount_limit)?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
         let pool_id = self.id.clone();
 
@@ -588,8 +570,7 @@ impl VMPoolState<PreCachedDB> {
                 sell_amount_respecting_limit,
                 self.block.number,
                 Some(complete_overwrites),
-            )
-            .await?;
+            )?;
 
         let mut new_state = self.clone();
 
@@ -843,7 +824,6 @@ mod tests {
                 pool_state.tokens[0],
                 pool_state.tokens[1],
             )
-            .await
             .unwrap();
 
         assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());
@@ -878,7 +858,6 @@ mod tests {
                 U256::from_dec_str("1000000000000000000").unwrap(),
                 pool_state.tokens[1],
             )
-            .await
             .unwrap();
         let new_state = result
             .new_state
@@ -904,7 +883,6 @@ mod tests {
 
         let result = pool_state
             .get_amount_out(pool_state.tokens[0], U256::from(1), pool_state.tokens[1])
-            .await
             .unwrap();
 
         let new_state = result
@@ -925,14 +903,12 @@ mod tests {
 
         let pool_state = setup_pool_state().await;
 
-        let result = pool_state
-            .get_amount_out(
-                pool_state.tokens[0],
-                // sell limit is 100279494253364362835
-                U256::from_dec_str("100379494253364362835").unwrap(),
-                pool_state.tokens[1],
-            )
-            .await;
+        let result = pool_state.get_amount_out(
+            pool_state.tokens[0],
+            // sell limit is 100279494253364362835
+            U256::from_dec_str("100379494253364362835").unwrap(),
+            pool_state.tokens[1],
+        );
 
         assert!(result.is_err());
         match result {
@@ -951,11 +927,9 @@ mod tests {
                 vec![pool_state.tokens[0], pool_state.tokens[1]],
                 U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
             )
-            .await
             .unwrap();
         let dai_limit = pool_state
             .get_sell_amount_limit(vec![dai().address, bal().address], Some(overwrites.clone()))
-            .await
             .unwrap();
         assert_eq!(dai_limit, U256::from_dec_str("100279494253364362835").unwrap());
 
@@ -964,7 +938,6 @@ mod tests {
                 vec![pool_state.tokens[1], pool_state.tokens[0]],
                 Some(overwrites),
             )
-            .await
             .unwrap();
         assert_eq!(bal_limit, U256::from_dec_str("13997408640689987484").unwrap());
     }
@@ -975,7 +948,6 @@ mod tests {
 
         pool_state
             .set_spot_prices(vec![bal(), dai()])
-            .await
             .unwrap();
 
         let dai_bal_spot_price = pool_state
