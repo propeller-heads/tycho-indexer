@@ -1,6 +1,8 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
+use std::collections::HashMap;
+
 use chrono::Utc;
 use ethers::{
     abi::{decode, encode, Abi, ParamType, Token},
@@ -11,7 +13,6 @@ use revm::{
     db::DatabaseRef,
     primitives::{alloy_primitives::Keccak256, Address},
 };
-use std::collections::HashMap;
 use tracing::warn;
 
 use crate::{
@@ -139,7 +140,7 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn call(
+    pub fn call(
         &self,
         fname: &str,
         args: Vec<Token>,

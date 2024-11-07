@@ -1,6 +1,14 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
 
+use std::collections::{HashMap, HashSet};
+
+use ethers::{
+    abi::{Address, Token},
+    types::U256,
+};
+use revm::{primitives::Address as rAddress, DatabaseRef};
+
 use crate::{
     evm::account_storage::StateUpdate,
     protocol::{
@@ -11,18 +19,12 @@ use crate::{
         },
     },
 };
-use ethers::{
-    abi::{Address, Token},
-    types::U256,
-};
-use revm::{primitives::Address as rAddress, DatabaseRef};
-use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct Trade {
-    received_amount: U256,
-    gas_used: U256,
-    price: f64,
+    pub received_amount: U256,
+    pub gas_used: U256,
+    pub price: f64,
 }
 
 /// An implementation of `TychoSimulationContract` specific to the `AdapterContract` ABI interface,
@@ -42,7 +44,7 @@ impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
 where
     D::Error: std::fmt::Debug,
 {
-    pub async fn price(
+    pub fn price(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -64,15 +66,14 @@ where
         ];
 
         let res = self
-            .call("price", args, block, None, overwrites, None, U256::zero())
-            .await?
+            .call("price", args, block, None, overwrites, None, U256::zero())?
             .return_value;
         let price = self.calculate_price(res[0].clone())?;
         Ok(price)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn swap(
+    pub fn swap(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -90,25 +91,37 @@ where
             Token::Uint(amount),
         ];
 
-        let res = self
-            .call("swap", args, block, None, overwrites, None, U256::zero())
-            .await?;
-        let received_amount = res.return_value[0]
-            .clone()
-            .into_uint()
-            .unwrap();
-        let gas_used = res.return_value[1]
-            .clone()
-            .into_uint()
-            .unwrap();
-        let price = self
-            .calculate_price(res.return_value[2].clone())
-            .unwrap()[0];
+        let res = self.call("swap", args, block, None, overwrites, None, U256::zero())?;
+
+        let (received_amount, gas_used, price) = if let Token::Tuple(ref return_value) =
+            res.return_value[0]
+        {
+            match &return_value[..] {
+                [Token::Uint(amount), Token::Uint(gas), Token::Tuple(price_elements)] => {
+                    let received_amount = *amount;
+                    let gas_used = *gas;
+
+                    let price_token = Token::Array(vec![Token::Tuple(price_elements.clone())]);
+                    let price = self
+                        .calculate_price(price_token)?
+                        .first()
+                        .cloned()
+                        .ok_or_else(|| {
+                            SimulationError::DecodingError("There wasn't a calculated price".into())
+                        })?;
+
+                    Ok((received_amount, gas_used, price))
+                }
+                _ => Err(SimulationError::DecodingError("Incorrect types found for price".into())),
+            }
+        } else {
+            Err(SimulationError::DecodingError("return_value is not a Token::Tuple".into()))
+        }?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
     }
 
-    pub async fn get_limits(
+    pub fn get_limits(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -123,8 +136,7 @@ where
         ];
 
         let res = self
-            .call("getLimits", args, block, None, overwrites, None, U256::zero())
-            .await?
+            .call("getLimits", args, block, None, overwrites, None, U256::zero())?
             .return_value;
 
         if let Some(Token::Array(inner)) = res.first() {
@@ -138,7 +150,7 @@ where
         Err(SimulationError::DecodingError("Unexpected response format".into()))
     }
 
-    pub async fn get_capabilities(
+    pub fn get_capabilities(
         &self,
         pair_id: String,
         sell_token: Address,
@@ -151,8 +163,7 @@ where
         ];
 
         let res = self
-            .call("getCapabilities", args, 1, None, None, None, U256::zero())
-            .await?
+            .call("getCapabilities", args, 1, None, None, None, U256::zero())?
             .return_value;
         let capabilities: HashSet<Capability> = match res.first() {
             Some(Token::Array(inner_tokens)) => inner_tokens
@@ -168,10 +179,9 @@ where
         Ok(capabilities)
     }
 
-    pub async fn min_gas_usage(&self) -> Result<u64, SimulationError> {
+    pub fn min_gas_usage(&self) -> Result<u64, SimulationError> {
         let res = self
-            .call("minGasUsage", vec![], 1, None, None, None, U256::zero())
-            .await?
+            .call("minGasUsage", vec![], 1, None, None, None, U256::zero())?
             .return_value;
         Ok(res[0]
             .clone()
@@ -213,7 +223,7 @@ where
                 })
                 .collect()
         } else {
-            Err(SimulationError::DecodingError("Expected Token::Array".to_string()))
+            Err(SimulationError::DecodingError("Price is not a Token::Array".to_string()))
         }
     }
 }

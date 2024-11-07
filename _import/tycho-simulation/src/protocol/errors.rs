@@ -57,6 +57,7 @@ impl From<SimulationError> for InvalidSnapshotError {
 /// - `InsufficientAmount`: Error indicating that the amount provided for the trade is too low.
 /// - `ArithmeticOverflow`: Error indicating that an arithmetic operation got an U256 to overflow
 /// - `Unknown`: Error indicating that an unknown error occurred during the simulation.
+/// - `SellAmountTooHigh`: Indicates an error when the sell amount is higher than the sell limit.
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("ABI loading error: {0}")]
@@ -83,4 +84,6 @@ pub enum SimulationError {
     ArithmeticOverflow(),
     #[error("Unknown error")]
     Unknown(),
+    #[error("Sell amount is higher than sell limit")]
+    SellAmountTooHigh(), // TODO: Make it recoverable
 }

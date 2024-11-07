@@ -29,7 +29,7 @@ use super::{
 };
 
 /// An error representing any transaction simulation result other than successful execution
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Display, Clone, PartialEq)]
 pub enum SimulationEngineError {
     /// Something went wrong while getting storage; might be caused by network issues.
     /// Retrying may help.
@@ -298,6 +298,7 @@ fn interpret_evm_success(
         gas_used: gas_used - gas_refunded,
     }
 }
+
 #[derive(Debug)]
 /// Data needed to invoke a transaction simulation
 pub struct SimulationParameters {
@@ -635,9 +636,9 @@ mod tests {
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
         let router_addr = Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")?;
         let router_abi = BaseContract::from(
-        parse_abi(&[
-            "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory amounts)",
-        ])?
+            parse_abi(&[
+                "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory amounts)",
+            ])?
         );
         let weth_addr = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")?;
         let usdc_addr = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")?;

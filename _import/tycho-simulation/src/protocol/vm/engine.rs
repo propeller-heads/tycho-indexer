@@ -12,11 +12,14 @@ use revm::{
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::RwLock;
 
-use crate::evm::{
-    simulation::SimulationEngine,
-    simulation_db::BlockHeader,
-    tycho_db::PreCachedDB,
-    tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
+use crate::{
+    evm::{
+        simulation::SimulationEngine,
+        simulation_db::BlockHeader,
+        tycho_db::PreCachedDB,
+        tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
+    },
+    protocol::{errors::SimulationError, vm::utils::load_erc20_bytecode},
 };
 
 lazy_static! {
@@ -39,7 +42,7 @@ pub async fn create_engine<D: EngineDatabaseInterface + Clone + DatabaseRef>(
     db: Arc<RwLock<D>>,
     tokens: Vec<String>,
     trace: bool,
-) -> SimulationEngine<D>
+) -> Result<SimulationEngine<D>, SimulationError>
 where
     <D as EngineDatabaseInterface>::Error: Debug,
     <D as DatabaseRef>::Error: Debug,
@@ -48,15 +51,19 @@ where
     let db_read = db.read().await;
     let engine = SimulationEngine::new(db_read.clone(), trace);
 
+    let contract_bytecode = load_erc20_bytecode()?;
+
     for token in tokens {
         let info = AccountInfo {
             balance: Default::default(),
             nonce: 0,
             code_hash: KECCAK_EMPTY,
-            code: None,
+            code: Some(contract_bytecode.clone()),
         };
         engine.state.init_account(
-            Address::parse_checksummed(token, None).expect("Invalid checksum for token address"),
+            Address::parse_checksummed(token, None).map_err(|_| {
+                SimulationError::EncodingError("Checksum for token address must be valid".into())
+            })?,
             info,
             None,
             false,
@@ -70,7 +77,7 @@ where
         false,
     );
 
-    engine
+    Ok(engine)
 }
 
 pub async fn update_engine(
@@ -180,15 +187,11 @@ mod tests {
 
         let engine = create_engine(db, tokens.clone(), false).await;
 
-        // Verify trace flag is unset
-        assert!(!engine.trace);
-
+        let state_data = engine.unwrap().state.data;
         // Verify all tokens are initialized
         for token in tokens {
             let token_address = Address::parse_checksummed(token, None).expect("valid checksum");
-            let account = engine
-                .state
-                .data
+            let account = state_data
                 .borrow()
                 .get(&token_address)
                 .unwrap()
@@ -196,14 +199,12 @@ mod tests {
             assert_eq!(account.balance, U256::default());
             assert_eq!(account.nonce, 0);
             assert_eq!(account.code_hash, KECCAK_EMPTY);
-            assert!(account.code.is_none());
+            assert!(account.code.is_some());
         }
 
         // Verify external account initialization
         let external_account_address = *EXTERNAL_ACCOUNT;
-        let external_account = engine
-            .state
-            .data
+        let external_account = state_data
             .borrow()
             .get(&external_account_address)
             .unwrap()
@@ -222,6 +223,6 @@ mod tests {
         let engine = create_engine(db, tokens, true).await;
 
         // Verify trace flag is set
-        assert!(engine.trace);
+        assert!(engine.unwrap().trace);
     }
 }

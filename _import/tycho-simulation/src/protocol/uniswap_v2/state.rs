@@ -9,14 +9,14 @@ use crate::{
         state::{ProtocolEvent, ProtocolSim},
         BytesConvertible,
     },
-    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
 };
 use ethers::types::U256;
 use tycho_core::dto::ProtocolStateDelta;
 
 use super::{events::UniswapV2Sync, reserve_price::spot_price_from_reserves};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
@@ -110,8 +110,15 @@ impl ProtocolSim for UniswapV2State {
             safe_add_u256(safe_mul_u256(reserve_sell, U256::from(1000))?, amount_in_with_fee)?;
 
         let amount_out = safe_div_u256(numerator, denominator)?;
-
-        Ok(GetAmountOutResult::new(amount_out, U256::from(120_000)))
+        let mut new_state = self.clone();
+        if zero2one {
+            new_state.reserve0 = safe_add_u256(self.reserve0, amount_in)?;
+            new_state.reserve1 = safe_sub_u256(self.reserve1, amount_out)?;
+        } else {
+            new_state.reserve0 = safe_sub_u256(self.reserve0, amount_out)?;
+            new_state.reserve1 = safe_add_u256(self.reserve1, amount_in)?;
+        };
+        Ok(GetAmountOutResult::new(amount_out, U256::from(120_000), Box::new(new_state)))
     }
 
     fn delta_transition(
@@ -154,7 +161,7 @@ impl ProtocolSim for UniswapV2State {
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
-        Box::new(*self)
+        Box::new(self.clone())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -211,20 +218,20 @@ mod tests {
     fn test_get_amount_out(
         #[case] r0: U256,
         #[case] r1: U256,
-        #[case] t0d: usize,
-        #[case] t1d: usize,
+        #[case] token_0_decimals: usize,
+        #[case] token_1_decimals: usize,
         #[case] amount_in: U256,
         #[case] exp: U256,
     ) {
         let t0 = ERC20Token::new(
             "0x0000000000000000000000000000000000000000",
-            t0d,
+            token_0_decimals,
             "T0",
             U256::from(10_000),
         );
         let t1 = ERC20Token::new(
             "0x0000000000000000000000000000000000000001",
-            t1d,
+            token_1_decimals,
             "T0",
             U256::from(10_000),
         );
@@ -235,6 +242,16 @@ mod tests {
             .unwrap();
 
         assert_eq!(res.amount, exp);
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<UniswapV2State>()
+            .unwrap();
+        assert_eq!(new_state.reserve0, r0 + amount_in);
+        assert_eq!(new_state.reserve1, r1 - exp);
+        // Assert that the old state is unchanged
+        assert_eq!(state.reserve0, r0);
+        assert_eq!(state.reserve1, r1);
     }
 
     #[test]
