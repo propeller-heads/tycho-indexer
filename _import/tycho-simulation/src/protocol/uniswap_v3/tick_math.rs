@@ -131,8 +131,8 @@ pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, SimulationError> 
     let tmp1 = I256::from_raw(U256([6552757943157144234, 184476617836266586, 0, 0]));
 
     let tick_low: I256 = (log_sqrt10001 - tmp1).asr(128);
-    let tick_high: I256 = (log_sqrt10001
-        + I256::from_raw(U256([4998474450511881007, 15793544031827761793, 0, 0])))
+    let tick_high: I256 = (log_sqrt10001 +
+        I256::from_raw(U256([4998474450511881007, 15793544031827761793, 0, 0])))
     .asr(128);
 
     if tick_low == tick_high {

@@ -157,8 +157,8 @@ fn to_adapter_file_name(protocol_system: &str) -> String {
                 None => String::new(),
             }
         })
-        .collect::<String>()
-        + "SwapAdapter.evm.runtime"
+        .collect::<String>() +
+        "SwapAdapter.evm.runtime"
 }
 
 #[cfg(test)]
