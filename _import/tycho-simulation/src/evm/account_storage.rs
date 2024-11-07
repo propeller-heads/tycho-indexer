@@ -1,7 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry::Vacant, HashMap};
 
 use revm::primitives::{AccountInfo, Address, U256 as rU256};
-use std::collections::hash_map::Entry::Vacant;
 use tracing::{debug, warn};
 
 /// Represents an account in the account storage.
@@ -231,10 +230,12 @@ impl AccountStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::StateUpdate;
-    use crate::evm::account_storage::{Account, AccountStorage};
+    use super::*;
+
     use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY, U256 as rU256};
     use std::{collections::HashMap, error::Error, str::FromStr};
+
+    use crate::evm::account_storage::{Account, AccountStorage};
 
     #[test]
     fn test_insert_account() -> Result<(), Box<dyn Error>> {

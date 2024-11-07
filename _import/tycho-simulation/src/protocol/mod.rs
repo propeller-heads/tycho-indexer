@@ -1,7 +1,8 @@
 //! Supported Swap Protocols
-
 use ethers::types::{H160, H256, U256};
+
 use tycho_core::Bytes;
+
 pub mod errors;
 pub mod events;
 pub mod models;

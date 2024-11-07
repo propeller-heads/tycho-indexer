@@ -1,5 +1,3 @@
-// TODO: remove skips for clippy
-
 use std::io;
 
 use ethers::prelude::ProviderError;

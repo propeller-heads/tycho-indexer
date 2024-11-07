@@ -1,8 +1,9 @@
+use ethers::types::{U256, U512};
+
 use crate::{
     protocol::errors::SimulationError,
     safe_math::{safe_div_u512, safe_mul_u512},
 };
-use ethers::types::{U256, U512};
 
 pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> Result<U256, SimulationError> {
     let a_big = U512::from(a);

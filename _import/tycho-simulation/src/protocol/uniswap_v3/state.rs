@@ -2,6 +2,7 @@ use std::any::Any;
 
 use ethers::types::{Sign, I256, U256};
 use tracing::trace;
+
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
@@ -58,7 +59,6 @@ struct StepComputation {
 }
 
 // TODO: these attributes allow updating the state after a swap
-#[allow(dead_code)]
 #[derive(Debug)]
 struct SwapResults {
     amount_calculated: I256,
@@ -255,8 +255,8 @@ impl ProtocolSim for UniswapV3State {
         if a < b {
             Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32))
         } else {
-            Ok(1.0f64 /
-                sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32))
+            Ok(1.0f64
+                / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32))
         }
     }
 
@@ -412,11 +412,11 @@ impl ProtocolSim for UniswapV3State {
             .as_any()
             .downcast_ref::<UniswapV3State>()
         {
-            self.liquidity == other_state.liquidity &&
-                self.sqrt_price == other_state.sqrt_price &&
-                self.fee == other_state.fee &&
-                self.tick == other_state.tick &&
-                self.ticks == other_state.ticks
+            self.liquidity == other_state.liquidity
+                && self.sqrt_price == other_state.sqrt_price
+                && self.fee == other_state.fee
+                && self.tick == other_state.tick
+                && self.ticks == other_state.ticks
         } else {
             false
         }

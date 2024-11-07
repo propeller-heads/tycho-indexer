@@ -1,11 +1,14 @@
 //! Protocol generic errors
-use crate::protocol::vm::errors::{FileError, RpcError};
+use std::fmt;
+
 use thiserror::Error;
 
-use super::models::GetAmountOutResult;
+use crate::{
+    evm::simulation::SimulationEngineError,
+    protocol::vm::errors::{FileError, RpcError},
+};
 
-use crate::evm::simulation::SimulationEngineError;
-use std::fmt;
+use super::models::GetAmountOutResult;
 
 impl fmt::Display for GetAmountOutResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

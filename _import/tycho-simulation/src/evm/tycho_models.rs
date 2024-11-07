@@ -8,9 +8,9 @@ use std::fmt::Display;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-use super::simulation_db::BlockHeader;
-
 use crate::serde_helpers::{hex_bytes, hex_bytes_option};
+
+use super::simulation_db::BlockHeader;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct ExtractorIdentity {

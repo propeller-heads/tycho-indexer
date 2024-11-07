@@ -1,12 +1,14 @@
 // TODO: remove skip for clippy dead_code check
 #![allow(dead_code)]
+use std::{collections::HashMap, path::Path};
+
+use ethers::{abi::Address, types::U256};
+use revm::primitives::Address as rAddress;
+
 use crate::protocol::vm::{
     errors::FileError,
     utils::{get_contract_bytecode, get_storage_slot_index_at_key, SlotId},
 };
-use ethers::{abi::Address, types::U256};
-use revm::primitives::Address as rAddress;
-use std::{collections::HashMap, path::Path};
 
 pub struct GethOverwrite {
     /// the formatted overwrites

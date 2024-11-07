@@ -1,9 +1,8 @@
-// TODO: remove skip for clippy dead_code check
-use crate::protocol::errors::SimulationError;
 use ethers::abi::Uint;
 use strum_macros::Display;
 
-#[allow(dead_code)]
+use crate::protocol::errors::SimulationError;
+
 #[derive(Eq, PartialEq, Hash, Debug, Display, Clone)]
 pub enum Capability {
     SellSide = 1,

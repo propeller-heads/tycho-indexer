@@ -1,6 +1,3 @@
-// TODO: remove skip for clippy dead_code check
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
 use chrono::Utc;
@@ -195,6 +192,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
     use std::str::FromStr;
 

@@ -1,5 +1,4 @@
 //! Numeric methods for the U256 type
-
 use std::{cmp::max, panic};
 
 use ethers::types::U256;
@@ -91,8 +90,8 @@ pub fn u256_to_f64(x: U256) -> f64 {
 
 #[cfg(test)]
 mod test {
-
     use super::*;
+
     use rstest::rstest;
 
     #[rstest]
