@@ -1,6 +1,6 @@
 mod adapter_contract;
 mod constants;
-mod engine;
+pub mod engine;
 mod erc20_overwrite_factory;
 pub mod errors;
 mod models;
