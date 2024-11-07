@@ -2,7 +2,7 @@ from logging import getLogger
 from typing import Union
 
 from eth_utils import to_checksum_address
-from protosim_py.models import EthereumToken
+from tycho_simulation_py.models import EthereumToken
 from tycho_indexer_client.dto import (
     ResponseProtocolState,
     ProtocolComponent,

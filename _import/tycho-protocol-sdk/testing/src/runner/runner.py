@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import List
 
 import yaml
-from protosim_py.evm.decoders import ThirdPartyPoolTychoDecoder
-from protosim_py.evm.storage import TychoDBSingleton
-from protosim_py.models import EVMBlock
+from tycho_simulation_py.evm.decoders import ThirdPartyPoolTychoDecoder
+from tycho_simulation_py.evm.storage import TychoDBSingleton
+from tycho_simulation_py.models import EVMBlock
 from pydantic import BaseModel
 from tycho_indexer_client.dto import (
     Chain,
@@ -247,6 +247,8 @@ class TestRunner:
                 self.config.adapter_build_signature,
                 self.config.adapter_build_args,
             )
+            
+        TychoDBSingleton.clear_instance()
 
         decoder = ThirdPartyPoolTychoDecoder(
             token_factory_func=self._token_factory_func,
