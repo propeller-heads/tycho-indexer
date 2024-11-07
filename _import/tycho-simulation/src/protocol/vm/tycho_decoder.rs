@@ -12,9 +12,10 @@ use crate::{
     protocol::{errors::InvalidSnapshotError, vm::state::VMPoolState, BytesConvertible},
 };
 
-#[allow(dead_code)]
-trait TryFromWithBlock<T> {
+pub trait TryFromWithBlock<T> {
     type Error;
+
+    #[allow(async_fn_in_trait)]
     async fn try_from_with_block(value: T, block: Header) -> Result<Self, Self::Error>
     where
         Self: Sized;
