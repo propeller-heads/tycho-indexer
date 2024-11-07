@@ -1,3 +1,10 @@
+## [0.36.0](https://github.com/propeller-heads/tycho-simulation/compare/0.35.0...0.36.0) (2024-11-07)
+
+
+### Features
+
+* **simulation-py:** make token bruteforce compatible with vyper ([71519c1](https://github.com/propeller-heads/tycho-simulation/commit/71519c11278aadcb1714b664229b0c0ea7080b59))
+
 ## [0.35.0](https://github.com/propeller-heads/tycho-simulation/compare/0.34.0...0.35.0) (2024-11-06)
 
 
