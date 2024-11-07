@@ -149,11 +149,15 @@ impl UniswapV3State {
                 Ok((tick, init)) => (tick, init),
                 Err(tick_err) => match tick_err.kind {
                     super::tick_list::TickListErrorKind::TicksExeeded => {
+                        let mut new_state = self.clone();
+                        new_state.liquidity = state.liquidity;
+                        new_state.tick = state.tick;
+                        new_state.sqrt_price = state.sqrt_price;
                         return Err(SimulationError::InsufficientData(GetAmountOutResult::new(
                             state.amount_calculated.abs().into_raw(),
                             gas_used,
-                            self.clone_box(),
-                        )))
+                            Box::new(new_state),
+                        )));
                     }
                     _ => return Err(SimulationError::Unknown()),
                 },
@@ -620,6 +624,13 @@ mod tests {
         match err {
             SimulationError::InsufficientData(ref e) => {
                 assert_eq!(e.amount, exp);
+                let new_state = e
+                    .new_state
+                    .as_any()
+                    .downcast_ref::<UniswapV3State>()
+                    .unwrap();
+                assert_ne!(new_state.tick, pool.tick);
+                assert_ne!(new_state.liquidity, pool.liquidity);
             }
             _ => panic!("Test failed: was expecting a SimulationError::InsufficientData"),
         }
