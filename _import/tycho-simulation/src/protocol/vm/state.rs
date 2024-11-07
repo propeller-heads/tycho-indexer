@@ -149,7 +149,7 @@ impl VMPoolState<PreCachedDB> {
                 .map(|addr| to_checksum(addr, None))
                 .collect();
             let engine: SimulationEngine<_> =
-                create_engine(SHARED_TYCHO_DB.clone(), token_addresses, self.trace).await?;
+                create_engine(SHARED_TYCHO_DB.clone(), token_addresses, self.trace)?;
             engine.state.init_account(
                 "0x0000000000000000000000000000000000000000"
                     .parse()
@@ -709,8 +709,7 @@ mod tests {
             db.clone(),
             vec![to_checksum(&dai().address, None), to_checksum(&bal().address, None)],
             false,
-        )
-        .await?;
+        )?;
 
         let block = BlockHeader {
             number: 20463609,
@@ -736,10 +735,7 @@ mod tests {
                 false,
             );
         }
-        let db_write = db.write().await;
-        db_write
-            .update(accounts, Some(block))
-            .await;
+        db.update(accounts, Some(block)).await;
 
         Ok(())
     }

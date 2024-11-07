@@ -9,8 +9,7 @@ use revm::{
     primitives::{AccountInfo, Address, KECCAK_EMPTY},
     DatabaseRef,
 };
-use std::{collections::HashMap, fmt::Debug, sync::Arc};
-use tokio::sync::RwLock;
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     evm::{
@@ -23,12 +22,8 @@ use crate::{
 };
 
 lazy_static! {
-    pub static ref SHARED_TYCHO_DB: Arc<RwLock<PreCachedDB>> =
-        create_shared_db_ref(PreCachedDB::new().expect("Failed to create PreCachedDB"));
-}
-
-pub fn create_shared_db_ref<D: EngineDatabaseInterface + DatabaseRef>(db: D) -> Arc<RwLock<D>> {
-    Arc::new(RwLock::new(db))
+    pub static ref SHARED_TYCHO_DB: PreCachedDB =
+        PreCachedDB::new().expect("Failed to create PreCachedDB");
 }
 
 /// Creates a simulation engine with a mocked ERC20 contract at the given addresses.
@@ -38,8 +33,8 @@ pub fn create_shared_db_ref<D: EngineDatabaseInterface + DatabaseRef>(db: D) -> 
 /// - `mocked_tokens`: A list of addresses at which a mocked ERC20 contract should be inserted.
 /// - `trace`: Whether to trace calls. Only meant for debugging purposes, might print a lot of data
 ///   to stdout.
-pub async fn create_engine<D: EngineDatabaseInterface + Clone + DatabaseRef>(
-    db: Arc<RwLock<D>>,
+pub fn create_engine<D: EngineDatabaseInterface + Clone + DatabaseRef>(
+    db: D,
     tokens: Vec<String>,
     trace: bool,
 ) -> Result<SimulationEngine<D>, SimulationError>
@@ -47,9 +42,7 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
     <D as DatabaseRef>::Error: Debug,
 {
-    // Acquire a read lock for the database instance
-    let db_read = db.read().await;
-    let engine = SimulationEngine::new(db_read.clone(), trace);
+    let engine = SimulationEngine::new(db.clone(), trace);
 
     let contract_bytecode = load_erc20_bytecode()?;
 
@@ -81,13 +74,11 @@ where
 }
 
 pub async fn update_engine(
-    db: Arc<RwLock<PreCachedDB>>,
+    db: PreCachedDB,
     block: BlockHeader,
     vm_storage: Option<HashMap<Address, ResponseAccount>>,
     account_updates: HashMap<Address, AccountUpdate>,
 ) -> Vec<AccountUpdate> {
-    let db_write = db.write().await;
-
     let mut vm_updates: Vec<AccountUpdate> = Vec::new();
 
     for (_address, account_update) in account_updates.iter() {
@@ -109,8 +100,7 @@ pub async fn update_engine(
     }
 
     if !vm_updates.is_empty() {
-        db_write
-            .update(vm_updates.clone(), Some(block))
+        db.update(vm_updates.clone(), Some(block))
             .await;
     }
 
@@ -124,8 +114,8 @@ mod tests {
         precompile::B256,
         primitives::{Address, Bytecode, U256},
     };
-    use std::{cell::RefCell, collections::HashMap, sync::Arc};
-    use tokio::sync::RwLock;
+    use rstest::rstest;
+    use std::{cell::RefCell, collections::HashMap};
 
     // Mock Database implementation for testing
     #[derive(Clone, Default)]
@@ -177,15 +167,15 @@ mod tests {
     unsafe impl Send for MockDatabase {}
     unsafe impl Sync for MockDatabase {}
 
-    #[tokio::test]
-    async fn test_create_engine() {
-        let db = Arc::new(RwLock::new(MockDatabase::default()));
+    #[rstest]
+    fn test_create_engine() {
+        let db = MockDatabase::default();
         let tokens = vec![
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
         ];
 
-        let engine = create_engine(db, tokens.clone(), false).await;
+        let engine = create_engine(db, tokens.clone(), false);
 
         let state_data = engine.unwrap().state.data;
         // Verify all tokens are initialized
@@ -215,12 +205,12 @@ mod tests {
         assert!(external_account.code.is_none());
     }
 
-    #[tokio::test]
-    async fn test_create_engine_with_trace() {
-        let db = Arc::new(RwLock::new(MockDatabase::default()));
+    #[rstest]
+    fn test_create_engine_with_trace() {
+        let db = MockDatabase::default();
         let tokens = vec!["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()];
 
-        let engine = create_engine(db, tokens, true).await;
+        let engine = create_engine(db, tokens, true);
 
         // Verify trace flag is set
         assert!(engine.unwrap().trace);
