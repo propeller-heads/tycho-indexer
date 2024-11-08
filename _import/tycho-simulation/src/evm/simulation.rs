@@ -14,6 +14,7 @@ use revm::{
     Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
+use std::clone::Clone;
 use strum_macros::Display;
 use tokio::runtime::Runtime;
 use tracing::debug;
@@ -51,15 +52,12 @@ pub struct SimulationResult {
 
 /// Simulation engine
 #[derive(Debug, Clone)]
-pub struct SimulationEngine<D: DatabaseRef + std::clone::Clone>
-where
-    D: Clone,
-{
+pub struct SimulationEngine<D: DatabaseRef + Clone> {
     pub state: D,
     pub trace: bool,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> SimulationEngine<D>
+impl<D: DatabaseRef + Clone> SimulationEngine<D>
 where
     D::Error: std::fmt::Debug,
 {

@@ -64,7 +64,20 @@ impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
 where
     D::Error: std::fmt::Debug,
 {
-    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
+    // Creates a new instance
+    pub fn new(
+        address: Address,
+        engine: SimulationEngine<D>,
+        abi: Abi,
+    ) -> Result<Self, SimulationError> {
+        Ok(Self { address, abi, engine })
+    }
+
+    // Creates a new `ProtosimContract` with the ISwapAdapter ABI
+    pub fn new_swap_adapter(
+        address: Address,
+        engine: SimulationEngine<D>,
+    ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
     }
@@ -233,7 +246,7 @@ mod tests {
     fn create_contract() -> TychoSimulationContract<MockDatabase> {
         let address = Address::ZERO;
         let engine = create_mock_engine();
-        TychoSimulationContract::new(address, engine).unwrap()
+        TychoSimulationContract::new_swap_adapter(address, engine).unwrap()
     }
 
     #[test]

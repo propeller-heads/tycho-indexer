@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_erc20_abi() {
+    fn test_load_erc20_bytecode() {
         let result = load_erc20_bytecode();
         assert!(result.is_ok());
 

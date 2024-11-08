@@ -123,7 +123,7 @@ impl VMPoolState<PreCachedDB> {
         state
             .set_engine(adapter_contract_path)
             .await?;
-        state.adapter_contract = Some(TychoSimulationContract::new(
+        state.adapter_contract = Some(TychoSimulationContract::new_swap_adapter(
             *ADAPTER_ADDRESS,
             state
                 .engine
