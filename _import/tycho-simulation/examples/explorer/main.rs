@@ -8,6 +8,8 @@ use data_feed::{state::BlockState, tycho};
 use futures::future::select_all;
 use std::env;
 use tokio::{sync::mpsc, task::JoinHandle};
+use tracing::info;
+use tracing_subscriber::{fmt, EnvFilter};
 
 #[derive(Parser)]
 struct Cli {
@@ -19,6 +21,15 @@ struct Cli {
 #[tokio::main]
 async fn main() {
     // Parse command-line arguments into a Cli struct
+    let format = fmt::format()
+        .with_level(true) // Show log levels
+        .with_target(false) // Hide module paths
+        .compact(); // Use a compact format
+
+    fmt()
+        .event_format(format)
+        .with_env_filter(EnvFilter::from_default_env()) // Use RUST_LOG for log levels
+        .init();
     let cli = Cli::parse();
 
     let tycho_url =
@@ -34,13 +45,14 @@ async fn main() {
         anyhow::Result::Ok(())
     });
 
-    let terminal = ratatui::init();
-    let terminal_app = tokio::spawn(async move {
-        ui::App::new(tick_rx)
-            .run(terminal)
-            .await
-    });
-    let tasks = [terminal_app, tycho_message_processor];
+    // let terminal = ratatui::init();
+    // let terminal_app = tokio::spawn(async move {
+    //     ui::App::new(tick_rx)
+    //         .run(terminal)
+    //         .await
+    // });
+    let tasks = [tycho_message_processor];
     let _ = select_all(tasks).await;
-    ratatui::restore();
+    info!("Is it over?");
+    // ratatui::restore();
 }

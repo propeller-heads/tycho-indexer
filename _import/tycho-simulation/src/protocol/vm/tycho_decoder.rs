@@ -4,6 +4,7 @@ use std::{
 };
 
 use ethers::types::{H160, H256, U256};
+use tracing::info;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 
@@ -125,9 +126,9 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             });
         let adapter_file_path =
             format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
-
+        info!("Creating a new pool state for balancer pool with id {}", &id);
         let pool_state = VMPoolState::new(
-            id,
+            id.clone(),
             tokens,
             block,
             balances,
@@ -140,7 +141,7 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
         )
         .await
         .map_err(InvalidSnapshotError::VMError)?;
-
+        info!("Finished creating balancer pool with id {}", &id);
         Ok(pool_state)
     }
 }

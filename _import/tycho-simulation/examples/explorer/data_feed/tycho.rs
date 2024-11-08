@@ -76,6 +76,7 @@ pub async fn process_messages(
             .expect("Missing sync messages!")
             .header
             .clone();
+        info!("Received block {}", header.number);
         let block_id = header.clone().number;
         let block_hash = header.clone().hash;
         let block = BlockHeader {
@@ -139,6 +140,7 @@ pub async fn process_messages(
                 .get_states()
                 .clone()
             {
+                info!("Processing snapshot");
                 let id = Bytes::from_str(&id)
                     .unwrap_or_else(|_| panic!("Failed parsing H160 from id string {}", id));
                 let mut pair_tokens = Vec::new();
@@ -200,8 +202,10 @@ pub async fn process_messages(
                 .into_iter()
                 .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
                 .collect();
+            info!("Updating engine with snapshot");
             update_engine(SHARED_TYCHO_DB.clone(), block, Some(storage_by_address), HashMap::new())
                 .await;
+            info!("Engine updated with snapshot");
             if !new_components.is_empty() {
                 info!("Decoded {} snapshots for protocol {}", new_components.len(), protocol);
             }
@@ -211,6 +215,7 @@ pub async fn process_messages(
 
             if let Some(deltas) = protocol_msg.deltas.clone() {
                 for (id, update) in deltas.state_updates {
+                    info!("Processing deltas");
                     let id = Bytes::from_str(&id)
                         .unwrap_or_else(|_| panic!("Failed parsing H160 from id string {}", id));
                     match updated_states.entry(id.clone()) {
@@ -245,8 +250,10 @@ pub async fn process_messages(
                     .into_iter()
                     .map(|(key, value)| (Address::from_slice(&key[..20]), value.into()))
                     .collect();
+                info!("Updating engine with deltas");
                 update_engine(SHARED_TYCHO_DB.clone(), block, None, account_update_by_address)
                     .await;
+                info!("Engine updated with deltas");
             };
 
             // update active protocols
