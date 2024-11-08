@@ -2,14 +2,16 @@ use alloy_primitives::Address;
 use chrono::Utc;
 use ethers::{prelude::H256, types::H160};
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     str::FromStr,
 };
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
 use tycho_client::{
-    feed::component_tracker::ComponentFilter, rpc::RPCClient, stream::TychoStreamBuilder,
+    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
+    rpc::RPCClient,
+    stream::TychoStreamBuilder,
     HttpRPCClient,
 };
 use tycho_core::{dto::Chain, Bytes};
@@ -35,6 +37,65 @@ use tycho_simulation::{
 };
 
 use crate::data_feed::state::BlockState;
+use once_cell::sync::Lazy;
+
+static UNSUPPORTED_BALANCER_POOL_TYPES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    [
+        "ERC4626LinearPoolFactory",
+        "EulerLinearPoolFactory",
+        "SiloLinearPoolFactory",
+        "YearnLinearPoolFactory",
+        "ComposableStablePoolFactory",
+    ]
+        .iter()
+        .cloned()
+        .collect()
+});
+
+const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+
+
+fn balancer_pool_filter(component: &ComponentWithState) -> bool {
+    // Check for rate_providers in static_attributes
+    info!("Checking Balancer pool {}", component.component.id);
+    if let Some(rate_providers_data) = component
+        .component
+        .static_attributes
+        .get("rate_providers")
+    {
+        let rate_providers_str = rate_providers_data.clone().to_string();
+        if let Ok(rate_providers) = serde_json::from_str::<Vec<String>>(&rate_providers_str) {
+            if rate_providers
+                .iter()
+                .any(|provider| provider != ZERO_ADDRESS)
+            {
+                info!(
+                    "Filtering out Balancer pool {} because it has dynamic rate_providers",
+                    component.component.id
+                );
+                return false;
+            }
+        }
+    }
+
+    // Check pool_type in static_attributes
+    if let Some(pool_type_data) = component
+        .component
+        .static_attributes
+        .get("pool_type")
+    {
+        let pool_type = pool_type_data.clone().to_string();
+        if UNSUPPORTED_BALANCER_POOL_TYPES.contains(&pool_type.as_str()) {
+            debug!(
+                "Filtering out Balancer pool {} because it has type {}",
+                component.component.id, pool_type
+            );
+            return false;
+        }
+    }
+    info!("Balancer pool will not be filtered out.");
+    true
+}
 
 // TODO: Make extractors configurable
 pub async fn process_messages(
@@ -43,6 +104,8 @@ pub async fn process_messages(
     state_tx: Sender<BlockState>,
     tvl_threshold: f64,
 ) {
+    // TODO remove
+    info!("1 - processing messages");
     // Connect to Tycho
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
         .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
@@ -53,6 +116,9 @@ pub async fn process_messages(
         .await
         .expect("Failed to build tycho stream");
 
+    // TODO remove
+    // It doesn't get this far without failing with "not all synchronizers on same block!"
+    info!("2 - built tycho stream");
     let mut all_tokens = load_all_tokens(tycho_url.as_str(), auth_key.as_deref()).await;
 
     // maps protocols to the the last block we've seen a message for it
@@ -62,6 +128,8 @@ pub async fn process_messages(
     // note - the current tick implementation expects addresses (H160) as component ids
     let mut stored_states: HashMap<Bytes, Box<dyn ProtocolSim>> = HashMap::new();
 
+    // TODO remove
+    info!("3 - loaded all tokens");
     // Loop through tycho messages
     while let Some(msg) = tycho_stream.recv().await {
         // stores all states updated in this tick/msg
@@ -165,14 +233,14 @@ pub async fn process_messages(
                 }
 
                 let state: Box<dyn ProtocolSim> = match protocol.as_str() {
-                    "uniswap_v3" => match UniswapV3State::try_from(snapshot) {
+                    "uniswap_v3" => match UniswapV3State::try_from(snapshot.clone()) {
                         Ok(state) => Box::new(state),
                         Err(e) => {
                             debug!("Failed parsing uniswap-v3 snapshot! {} for pool {:x?}", e, id);
                             continue;
                         }
                     },
-                    "uniswap_v2" => match UniswapV2State::try_from(snapshot) {
+                    "uniswap_v2" => match UniswapV2State::try_from(snapshot.clone()) {
                         Ok(state) => Box::new(state),
                         Err(e) => {
                             warn!("Failed parsing uniswap-v2 snapshot! {} for pool {:x?}", e, id);
@@ -180,8 +248,14 @@ pub async fn process_messages(
                         }
                     },
                     "vm:balancer" => {
-                        match VMPoolState::try_from_with_block(snapshot, header.clone()).await {
-                            Ok(state) => Box::new(state),
+                        match VMPoolState::try_from_with_block(snapshot.clone(), header.clone()).await {
+                            Ok(state) => {
+                                // Skip balancer pool if it doesn't pass the filter
+                                if !balancer_pool_filter(&snapshot){
+                                    continue;
+                                }
+                                Box::new(state)
+                            },
                             Err(e) => {
                                 warn!(
                                     "Failed parsing balancer-v2 snapshot! {} for pool {:x?}",
