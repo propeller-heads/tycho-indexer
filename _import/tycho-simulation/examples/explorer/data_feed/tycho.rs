@@ -1,4 +1,6 @@
-use ethers::types::H160;
+use alloy_primitives::Address;
+use chrono::Utc;
+use ethers::{prelude::H256, types::H160};
 use std::{
     collections::{hash_map::Entry, HashMap},
     str::FromStr,
@@ -10,13 +12,25 @@ use tycho_client::{
     feed::component_tracker::ComponentFilter, rpc::RPCClient, stream::TychoStreamBuilder,
     HttpRPCClient,
 };
-use tycho_core::dto::Chain;
+use tycho_core::{dto::Chain, Bytes};
 
 use tycho_simulation::{
+    evm::{
+        simulation_db::BlockHeader,
+        tycho_models::{AccountUpdate, ResponseAccount},
+    },
     models::ERC20Token,
     protocol::{
-        models::ProtocolComponent, state::ProtocolSim, uniswap_v2::state::UniswapV2State,
-        uniswap_v3::state::UniswapV3State, BytesConvertible,
+        models::ProtocolComponent,
+        state::ProtocolSim,
+        uniswap_v2::state::UniswapV2State,
+        uniswap_v3::state::UniswapV3State,
+        vm::{
+            engine::{update_engine, SHARED_TYCHO_DB},
+            state::VMPoolState,
+            tycho_decoder::TryFromWithBlock,
+        },
+        BytesConvertible,
     },
 };
 
@@ -33,6 +47,7 @@ pub async fn process_messages(
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
         .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -45,7 +60,7 @@ pub async fn process_messages(
 
     // persist all protocol states between messages
     // note - the current tick implementation expects addresses (H160) as component ids
-    let mut stored_states: HashMap<H160, Box<dyn ProtocolSim>> = HashMap::new();
+    let mut stored_states: HashMap<Bytes, Box<dyn ProtocolSim>> = HashMap::new();
 
     // Loop through tycho messages
     while let Some(msg) = tycho_stream.recv().await {
@@ -54,13 +69,20 @@ pub async fn process_messages(
         let mut new_pairs = HashMap::new();
         let mut removed_pairs = HashMap::new();
 
-        let block_id = msg
+        let header = msg
             .state_msgs
             .values()
             .next()
             .expect("Missing sync messages!")
             .header
-            .number;
+            .clone();
+        let block_id = header.clone().number;
+        let block_hash = header.clone().hash;
+        let block = BlockHeader {
+            number: block_id,
+            hash: H256::from_slice(&block_hash[..]),
+            timestamp: Utc::now().timestamp() as u64,
+        };
 
         for (protocol, protocol_msg) in msg.state_msgs.iter() {
             if let Some(deltas) = protocol_msg.deltas.as_ref() {
@@ -87,7 +109,7 @@ pub async fn process_messages(
                 protocol_msg
                     .removed_components
                     .iter()
-                    .flat_map(|(id, comp)| {
+                    .flat_map(|(&ref id, comp)| {
                         let tokens = comp
                             .tokens
                             .iter()
@@ -97,11 +119,11 @@ pub async fn process_messages(
                                     .cloned()
                             })
                             .collect::<Vec<_>>();
-                        let id = H160::from_str(id.as_ref()).unwrap_or_else(|_| {
+                        let id = Bytes::from_str(id).unwrap_or_else(|_| {
                             panic!("Failed parsing H160 from id string {}", id)
                         });
                         if tokens.len() == comp.tokens.len() {
-                            Some((id, ProtocolComponent::new(id, tokens)))
+                            Some((id.clone(), ProtocolComponent::new(id, tokens)))
                         } else {
                             None
                         }
@@ -117,7 +139,7 @@ pub async fn process_messages(
                 .get_states()
                 .clone()
             {
-                let id = H160::from_str(id.as_ref())
+                let id = Bytes::from_str(&id)
                     .unwrap_or_else(|_| panic!("Failed parsing H160 from id string {}", id));
                 let mut pair_tokens = Vec::new();
                 let mut skip_pool = false;
@@ -137,7 +159,7 @@ pub async fn process_messages(
                 }
 
                 if !skip_pool {
-                    new_pairs.insert(id, ProtocolComponent::new(id, pair_tokens));
+                    new_pairs.insert(id.clone(), ProtocolComponent::new(id.clone(), pair_tokens));
                 }
 
                 let state: Box<dyn ProtocolSim> = match protocol.as_str() {
@@ -155,11 +177,31 @@ pub async fn process_messages(
                             continue;
                         }
                     },
+                    "vm:balancer" => {
+                        match VMPoolState::try_from_with_block(snapshot, header.clone()).await {
+                            Ok(state) => Box::new(state),
+                            Err(e) => {
+                                warn!(
+                                    "Failed parsing balancer-v2 snapshot! {} for pool {:x?}",
+                                    e, id
+                                );
+                                continue;
+                            }
+                        }
+                    }
                     _ => panic!("VM snapshot not supported!"),
                 };
                 new_components.insert(id, state);
             }
-
+            let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
+                .clone()
+                .snapshots
+                .get_vm_storage()
+                .into_iter()
+                .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                .collect();
+            update_engine(SHARED_TYCHO_DB.clone(), block, Some(storage_by_address), HashMap::new())
+                .await;
             if !new_components.is_empty() {
                 info!("Decoded {} snapshots for protocol {}", new_components.len(), protocol);
             }
@@ -169,9 +211,9 @@ pub async fn process_messages(
 
             if let Some(deltas) = protocol_msg.deltas.clone() {
                 for (id, update) in deltas.state_updates {
-                    let id = H160::from_str(id.as_ref())
+                    let id = Bytes::from_str(&id)
                         .unwrap_or_else(|_| panic!("Failed parsing H160 from id string {}", id));
-                    match updated_states.entry(id) {
+                    match updated_states.entry(id.clone()) {
                         Entry::Occupied(mut entry) => {
                             // if state exists in updated_states, apply the delta to it
                             let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
@@ -180,7 +222,7 @@ pub async fn process_messages(
                                 .expect("Failed applying state update!");
                         }
                         Entry::Vacant(_) => {
-                            match stored_states.get(&id) {
+                            match stored_states.get(&id.clone()) {
                                 // if state does not exist in updated_states, apply the delta to the stored state
                                 Some(stored_state) => {
                                     let mut state = stored_state.clone();
@@ -197,6 +239,14 @@ pub async fn process_messages(
                         }
                     }
                 }
+                let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
+                    .account_updates
+                    .clone()
+                    .into_iter()
+                    .map(|(key, value)| (Address::from_slice(&key[..20]), value.into()))
+                    .collect();
+                update_engine(SHARED_TYCHO_DB.clone(), block, None, account_update_by_address)
+                    .await;
             };
 
             // update active protocols
@@ -223,7 +273,7 @@ pub async fn process_messages(
         stored_states.extend(
             updated_states
                 .iter()
-                .map(|(id, state)| (*id, state.clone())),
+                .map(|(id, state)| (id.clone(), state.clone())),
         );
 
         // Send the tick with all updated states
