@@ -64,7 +64,6 @@ impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
 where
     D::Error: std::fmt::Debug,
 {
-    // Creates a new instance
     pub fn new(
         address: Address,
         engine: SimulationEngine<D>,
@@ -73,7 +72,7 @@ where
         Ok(Self { address, abi, engine })
     }
 
-    // Creates a new `ProtosimContract` with the ISwapAdapter ABI
+    // Creates a new instance with the ISwapAdapter ABI
     pub fn new_swap_adapter(
         address: Address,
         engine: SimulationEngine<D>,

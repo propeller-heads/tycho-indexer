@@ -33,8 +33,8 @@ impl ContractCompiler {
     ///
     /// # Notes
     ///
-    /// - For `Solidity`, the slot is computed as `keccak256(key || map_base_slot)`.
-    /// - For `Vyper`, the slot is computed as `keccak256(map_base_slot || key)`.
+    /// - For `Solidity`, the slot is computed as `keccak256(key + map_base_slot)`.
+    /// - For `Vyper`, the slot is computed as `keccak256(map_base_slot + key)`.
     pub fn compute_map_slot(&self, map_base_slot: &[u8], key: &[u8]) -> SlotId {
         let concatenated = match &self {
             ContractCompiler::Solidity => [key, map_base_slot].concat(),

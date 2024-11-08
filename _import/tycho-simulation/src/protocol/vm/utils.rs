@@ -129,7 +129,9 @@ pub type SlotId = U256;
 #[derive(Clone, Debug, PartialEq)]
 /// A struct representing ERC20 tokens storage slots.
 pub struct ERC20Slots {
+    // Base slot for the balance map
     pub balance_map: SlotId,
+    // Base slot for the allowance map
     pub allowance_map: SlotId,
 }
 

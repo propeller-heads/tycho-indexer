@@ -50,12 +50,8 @@ pub enum TokenError {
 /// - `Ok((ERC20Slots, ContractCompiler))`: A tuple of detected storage slots (`ERC20Slots`) for
 ///   balances and allowances, and the compiler type (`ContractCompiler`) used for the token
 ///   contract.
-/// - `Err(TokenError)`: An error if the brute-force detection fails.
-///
-/// # Errors
-///
-/// Returns `TokenError::BruteForceFailed` if the function fails to detect a valid
-/// slot for either balances or allowances after checking a range of slots.
+/// - `Err(TokenError)`: if the function fails to detect a valid slot for either balances or
+///   allowances after checking the first 100 slots.
 ///
 /// # Notes
 ///
