@@ -29,6 +29,7 @@ use crate::{
         engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters},
         simulation_db::BlockHeader,
+        token,
         tycho_db::PreCachedDB,
     },
     models::ERC20Token,
@@ -131,7 +132,7 @@ impl VMPoolState<PreCachedDB> {
                 .ok_or_else(|| SimulationError::NotInitialized("Simulation engine".to_string()))?,
         )?);
         state.set_capabilities()?;
-        // TODO: add init_token_storage_slots() in 3796
+        state.init_token_storage_slots();
         Ok(state)
     }
 
@@ -521,6 +522,24 @@ impl VMPoolState<PreCachedDB> {
         }
 
         merged
+    }
+
+    fn init_token_storage_slots(&mut self) {
+        for t in self.tokens.iter() {
+            if self.involved_contracts.contains(t) && !self.token_storage_slots.contains_key(t) {
+                self.token_storage_slots.insert(
+                    *t,
+                    token::brute_force_slots(
+                        t,
+                        &self.block,
+                        self.engine
+                            .as_ref()
+                            .expect("engine should be set"),
+                    )
+                    .unwrap_or_else(|_| panic!("Couldn't brute force slots for {}", t)),
+                );
+            }
+        }
     }
 }
 
