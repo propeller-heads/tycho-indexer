@@ -9,11 +9,7 @@ use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 
 use crate::{
     evm::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
-    protocol::{
-        errors::{InvalidSnapshotError, SimulationError},
-        vm::state::VMPoolState,
-        BytesConvertible,
-    },
+    protocol::{errors::InvalidSnapshotError, vm::state::VMPoolState, BytesConvertible},
 };
 
 pub trait TryFromWithBlock<T> {
@@ -121,7 +117,12 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             .component
             .protocol_system
             .strip_prefix("vm:")
-            .ok_or_else(|| InvalidSnapshotError::VMError(SimulationError::DecodingError("Invalid protocol system name: VMPoolStates expect a protocol name starting with 'vm:'".to_string())))?;
+            .unwrap_or({
+                snapshot
+                    .component
+                    .protocol_system
+                    .as_str()
+            });
         let adapter_file_path =
             format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
 
@@ -250,38 +251,5 @@ mod tests {
             .insert(H160::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap());
         assert_eq!(res.involved_contracts, exp_involved_contracts);
         assert!(res.manual_updates);
-    }
-
-    #[tokio::test]
-    async fn test_try_from_with_block_invalid() {
-        let mut component = vm_component();
-        component.protocol_system = "balancer".to_string();
-        let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
-                component_id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011"
-                    .to_owned(),
-                attributes: HashMap::new(),
-                balances: HashMap::new(),
-            },
-            component,
-        };
-        let block = Header {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-        };
-
-        let result = VMPoolState::try_from_with_block(snapshot, block).await;
-
-        assert!(result.is_err());
-        if let Err(InvalidSnapshotError::VMError(SimulationError::DecodingError(msg))) = result {
-            assert_eq!(
-            msg,
-            "Invalid protocol system name: VMPoolStates expect a protocol name starting with 'vm:'"
-        );
-        } else {
-            panic!("Expected InvalidSnapshotError::VMError with DecodingError, got {:?}", result);
-        }
     }
 }
