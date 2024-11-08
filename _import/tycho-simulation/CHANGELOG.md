@@ -1,3 +1,11 @@
+## [0.39.2](https://github.com/propeller-heads/tycho-simulation/compare/0.39.1...0.39.2) (2024-11-08)
+
+
+### Bug Fixes
+
+* do not expect VMPoolState protocol system name to start with 'vm:' ([8d08147](https://github.com/propeller-heads/tycho-simulation/commit/8d08147297714f1a43c233377bacde5e19c6475e))
+* protocol name to adapter file path conversion ([79ef30b](https://github.com/propeller-heads/tycho-simulation/commit/79ef30b1d62794a2eb2c103493b4a634fe074cb9))
+
 ## [0.39.1](https://github.com/propeller-heads/tycho-simulation/compare/0.39.0...0.39.1) (2024-11-07)
 
 
