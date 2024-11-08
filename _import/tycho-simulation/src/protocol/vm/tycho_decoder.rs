@@ -121,9 +121,7 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             .component
             .protocol_system
             .strip_prefix("vm:")
-            .unwrap_or({
-                Err(InvalidSnapshotError::VMError(SimulationError::DecodingError("Invalid protocol system name: VMPoolStates expect a protocol name starting with 'vm:'".to_string())))?
-            });
+            .ok_or_else(|| InvalidSnapshotError::VMError(SimulationError::DecodingError("Invalid protocol system name: VMPoolStates expect a protocol name starting with 'vm:'".to_string())))?;
         let adapter_file_path =
             format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
 
@@ -191,7 +189,7 @@ mod tests {
 
         ProtocolComponent {
             id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string(),
-            protocol_system: "vm:balancer_v2".to_string(),
+            protocol_system: "vm:balancer".to_string(),
             protocol_type_name: "balancer_v2_pool".to_string(),
             chain: Chain::Ethereum,
             tokens,
@@ -256,6 +254,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_with_block_invalid() {
+        let mut component = vm_component();
+        component.protocol_system = "balancer".to_string();
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011"
@@ -263,7 +263,7 @@ mod tests {
                 attributes: HashMap::new(),
                 balances: HashMap::new(),
             },
-            component: vm_component(),
+            component,
         };
         let block = Header {
             number: 1,
