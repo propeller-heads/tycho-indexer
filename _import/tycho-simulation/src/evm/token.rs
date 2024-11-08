@@ -9,7 +9,7 @@ use ethers::{
 use lazy_static::lazy_static;
 use revm::{primitives::Address, DatabaseRef};
 use serde_json::from_str;
-use std::str::FromStr;
+use std::{fmt::Debug, str::FromStr};
 use thiserror::Error;
 
 use super::{simulation::SimulationEngine, simulation_db::BlockHeader, ContractCompiler};
@@ -73,7 +73,7 @@ pub fn brute_force_slots<D: DatabaseRef + Clone>(
     engine: &SimulationEngine<D>,
 ) -> Result<(ERC20Slots, ContractCompiler), TokenError>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
 {
     let token_contract = TychoSimulationContract::new(
         Address::from_slice(token_addr.as_bytes()),

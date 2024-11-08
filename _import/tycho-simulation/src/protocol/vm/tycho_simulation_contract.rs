@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use chrono::Utc;
 use ethers::{
@@ -54,15 +54,15 @@ pub struct TychoSimulationResponse {
 /// Returns errors of type `SimulationError` when encoding, decoding, or simulation operations
 /// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
-pub struct TychoSimulationContract<D: DatabaseRef + std::clone::Clone> {
+pub struct TychoSimulationContract<D: DatabaseRef + Clone> {
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
+impl<D: DatabaseRef + Clone> TychoSimulationContract<D>
 where
-    D::Error: std::fmt::Debug,
+    D::Error: Debug,
 {
     pub fn new(
         address: Address,
