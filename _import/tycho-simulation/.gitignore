@@ -22,13 +22,7 @@ flamegraph.svg
 .data/
 
 # VS Code
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-!.vscode/*.code-snippets
-
+.vscode
 # Pycharm User-specific stuff
 .idea/*
 
@@ -37,5 +31,4 @@ flamegraph.svg
 
 # Built Visual Studio Code Extensions
 *.vsix
-.vscode/launch.json
 .env
