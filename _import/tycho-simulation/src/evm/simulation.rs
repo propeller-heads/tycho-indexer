@@ -618,10 +618,7 @@ mod tests {
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
-        let client = Provider::<Http>::try_from(
-            "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-        )
-        .unwrap();
+        let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
         let client = Arc::new(client);
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
@@ -697,10 +694,7 @@ mod tests {
     #[test]
     fn test_contract_deployment() -> Result<(), Box<dyn Error>> {
         fn new_state() -> SimulationDB<Provider<Http>> {
-            let client = Provider::<Http>::try_from(
-                "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-            )
-            .unwrap();
+            let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
             let client = Arc::new(client);
             let runtime = tokio::runtime::Handle::try_current()
                 .is_err()
