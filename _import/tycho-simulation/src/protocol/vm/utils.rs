@@ -10,7 +10,6 @@ use std::{
 use ethabi::{self, decode, ParamType};
 use ethers::{
     abi::Abi,
-    core::utils::keccak256,
     providers::{Http, Middleware, Provider},
     types::{Address, H160, U256},
 };
@@ -19,7 +18,7 @@ use mini_moka::sync::Cache;
 use revm::primitives::{Bytecode, Bytes};
 
 use crate::{
-    evm::simulation::SimulationEngineError,
+    evm::{simulation::SimulationEngineError, ContractCompiler},
     protocol::{
         errors::SimulationError,
         vm::errors::{FileError, RpcError},
@@ -127,6 +126,19 @@ fn parse_solidity_error_message(data: &str) -> String {
 
 pub type SlotId = U256;
 
+#[derive(Clone, Debug, PartialEq)]
+/// A struct representing ERC20 tokens storage slots.
+pub struct ERC20Slots {
+    pub balance_map: SlotId,
+    pub allowance_map: SlotId,
+}
+
+impl ERC20Slots {
+    pub fn new(balance: SlotId, allowance: SlotId) -> Self {
+        Self { balance_map: balance, allowance_map: allowance }
+    }
+}
+
 /// Get storage slot index of a value stored at a certain key in a mapping
 ///
 /// # Arguments
@@ -134,6 +146,8 @@ pub type SlotId = U256;
 /// * `key`: Key in a mapping. Can be any H160 value (such as an address).
 /// * `mapping_slot`: An `U256` representing the storage slot at which the mapping itself is stored.
 ///   See the examples for more explanation.
+/// * `compiler`: The compiler with which the target contract was compiled. Solidity and Vyper
+///   handle maps differently.
 ///
 /// # Returns
 ///
@@ -170,7 +184,11 @@ pub type SlotId = U256;
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotId) -> SlotId {
+pub fn get_storage_slot_index_at_key(
+    key: Address,
+    mapping_slot: SlotId,
+    compiler: ContractCompiler,
+) -> SlotId {
     let mut key_bytes = key.as_bytes().to_vec();
     if key_bytes.len() < 32 {
         let padding = vec![0u8; 32 - key_bytes.len()];
@@ -179,8 +197,7 @@ pub fn get_storage_slot_index_at_key(key: Address, mapping_slot: SlotId) -> Slot
     let mut mapping_slot_bytes = [0u8; 32];
     mapping_slot.to_big_endian(&mut mapping_slot_bytes);
 
-    let slot_bytes = keccak256([&key_bytes[..], &mapping_slot_bytes[..]].concat());
-    SlotId::from_big_endian(&slot_bytes)
+    compiler.compute_map_slot(&mapping_slot_bytes, &key_bytes)
 }
 
 fn get_solidity_panic_codes() -> HashMap<u64, String> {

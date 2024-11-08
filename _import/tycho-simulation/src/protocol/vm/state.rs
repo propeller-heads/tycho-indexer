@@ -24,6 +24,7 @@ use tracing::warn;
 
 use tycho_core::dto::ProtocolStateDelta;
 
+use super::utils::ERC20Slots;
 use crate::{
     evm::{
         engine_db_interface::EngineDatabaseInterface,
@@ -31,6 +32,7 @@ use crate::{
         simulation_db::BlockHeader,
         token,
         tycho_db::PreCachedDB,
+        ContractCompiler,
     },
     models::ERC20Token,
     protocol::{
@@ -75,7 +77,9 @@ pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
     /// Allows the specification of custom storage slots for token allowances and
     /// balances. This is particularly useful for token contracts involved in protocol
     /// logic that extends beyond simple transfer functionality.
-    pub token_storage_slots: HashMap<H160, (SlotId, SlotId)>,
+    /// Each entry also specify the compiler with which the target contract was compiled. This is
+    /// later used to compute storage slot for maps.
+    pub token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
     /// The address to bytecode map of all stateless contracts used by the protocol
     /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
     pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
@@ -444,12 +448,20 @@ impl VMPoolState<PreCachedDB> {
         {
             res.push(self.get_balance_overwrites(tokens)?);
         }
+
+        let (slots, compiler) = self
+            .token_storage_slots
+            .get(sell_token)
+            .cloned()
+            .unwrap_or((
+                ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
+                ContractCompiler::Solidity,
+            ));
+
         let mut overwrites = ERC20OverwriteFactory::new(
             rAddress::from_slice(&sell_token.0),
-            *self
-                .token_storage_slots
-                .get(sell_token)
-                .unwrap_or(&(SlotId::from(0), SlotId::from(1))),
+            slots.clone(),
+            compiler,
         );
 
         overwrites.set_balance(max_amount, H160::from_slice(&*EXTERNAL_ACCOUNT.0));
@@ -483,7 +495,7 @@ impl VMPoolState<PreCachedDB> {
         }?;
 
         for token in &tokens {
-            let slots = if self.involved_contracts.contains(token) {
+            let (slots, compiler) = if self.involved_contracts.contains(token) {
                 self.token_storage_slots
                     .get(token)
                     .cloned()
@@ -491,10 +503,11 @@ impl VMPoolState<PreCachedDB> {
                         SimulationError::EncodingError("Token storage slots not found".into())
                     })?
             } else {
-                (SlotId::from(0), SlotId::from(1))
+                (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
             };
 
-            let mut overwrites = ERC20OverwriteFactory::new(rAddress::from(token.0), slots);
+            let mut overwrites =
+                ERC20OverwriteFactory::new(rAddress::from(token.0), slots, compiler);
             overwrites.set_balance(
                 self.balances
                     .get(token)
