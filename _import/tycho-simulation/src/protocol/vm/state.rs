@@ -767,7 +767,7 @@ mod tests {
                 (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
             ]),
             Some(EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap()),
-            "src/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
+            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
             HashSet::new(),
             HashMap::new(),
             false,

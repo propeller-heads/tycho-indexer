@@ -2,20 +2,17 @@ import json
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch, call
-from venv import create
 
 import pytest
 from hexbytes import HexBytes
 
-from tycho_indexer_client.dto import ChangeType
-
-from tycho_simulation_py.evm import AccountInfo, AccountUpdate, BlockHeader
+from tycho_simulation_py.evm import AccountInfo, BlockHeader
 from tycho_simulation_py.evm.adapter_contract import AdapterContract
 from tycho_simulation_py.evm.pool_state import ThirdPartyPool
 from tycho_simulation_py.evm.storage import TychoDBSingleton
 from tycho_simulation_py.evm.utils import parse_account_info, create_engine
 from tycho_simulation_py.exceptions import RecoverableSimulationException
-from tycho_simulation_py.models import EVMBlock, Capability, EthereumToken, Blockchain
+from tycho_simulation_py.models import EVMBlock, Capability, EthereumToken
 
 ADDRESS_ZERO = "0x0000000000000000000000000000000000000000"
 
@@ -42,8 +39,8 @@ def Token(name: str) -> EthereumToken:
 
 
 @pytest.fixture()
-def adapter_contract_path(asset_dir) -> Path:
-    return Path(__file__).parent / "assets" / "BalancerV2SwapAdapter.evm.runtime"
+def adapter_contract_path(asset_dir) -> str:
+    return str(asset_dir / "BalancerSwapAdapter.evm.runtime")
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -98,7 +95,7 @@ def test_init(asset_dir):
         tokens=(dai, bal),
         marginal_prices={},
         balances={dai.address: "178.7540127373018", bal.address: "91.08298776336989"},
-        adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
+        adapter_contract_path=adapter_contract_path(asset_dir),
     )
 
     assert pool.capabilities == {
@@ -129,7 +126,7 @@ def pool_state(asset_dir):
             (dai, bal): Decimal("0.1377789143190479049114331557"),
         },
         balances={dai.address: "178.7540127373018", bal.address: "91.08298776336989"},
-        adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
+        adapter_contract_path=adapter_contract_path(asset_dir),
         balance_owner="0xBA12222222228d8Ba445958a75a0704d566BF2C8",
     )
     return pool
@@ -192,7 +189,9 @@ def test_get_amount_out_sell_limit(pool_state):
 
 
 def test_stateless_contract_pool(asset_dir):
-    with patch("tycho_simulation_py.evm.pool_state.get_code_for_address") as mock_get_code:
+    with patch(
+        "tycho_simulation_py.evm.pool_state.get_code_for_address"
+    ) as mock_get_code:
         mock_get_code.return_value = bytes.fromhex("363d")
 
         dai, bal = Token("DAI"), Token("BAL")
@@ -212,7 +211,7 @@ def test_stateless_contract_pool(asset_dir):
                 dai.address: "178.7540127373018",
                 bal.address: "91.08298776336989",
             },
-            adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
+            adapter_contract_path=adapter_contract_path(asset_dir),
             balance_owner="0xBA12222222228d8Ba445958a75a0704d566BF2C8",
             stateless_contracts={
                 "call:0xba12222222228d8ba445958a75a0704d566bf2c8:getAuthorizer()": None,
@@ -259,11 +258,7 @@ def test_overwrites_custom_erc20(asset_dir):
     engine = create_engine([])
     engine.init_account(
         address=sfrxEth.address,
-        account=AccountInfo(
-            nonce=0,
-            balance=0,
-            code=bytearray(code),
-        ),
+        account=AccountInfo(nonce=0, balance=0, code=bytearray(code)),
         mocked=True,
         permanent_storage=None,
     )
@@ -280,7 +275,7 @@ def test_overwrites_custom_erc20(asset_dir):
             dai.address: "178.7540127373018",
             sfrxEth.address: "91.08298776336989",
         },
-        adapter_contract_path=str(asset_dir / "BalancerV2SwapAdapter.evm.runtime"),
+        adapter_contract_path=adapter_contract_path(asset_dir),
         balance_owner="0xBA12222222228d8Ba445958a75a0704d566BF2C8",
         involved_contracts={sfrxEth.address},
     )
@@ -304,7 +299,7 @@ def test_overwrites_custom_erc20(asset_dir):
     }
     assert overwrites_one2zero == {
         "0x6b175474e89094c44da98b954eedeac495271d0f": {
-            24060209162895628919861412957428278191632570471602070876674374646072182449944: 178754012737301800000,
+            24060209162895628919861412957428278191632570471602070876674374646072182449944: 178754012737301800000
         },
         "0xac3e018457b222d93114458476f3e3416abbe38f": {
             26260780229836133480733911416306220824002130525338603371401637394485347754320: 91082987763369890000,

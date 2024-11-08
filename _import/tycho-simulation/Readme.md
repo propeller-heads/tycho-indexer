@@ -13,15 +13,11 @@ protocols, but it is not necessarily limited to this.
 > The `evm_simulation` module allows for simulating _any_ transaction; it is agnostic to protocol. See module's
 > documentation.
 
-To further help solve hard problems in the context of exchanging tokens, the crate provides the ProtoGraph structure,
-which can be queried for chained token exchanges and their parameters. This graph structure evolves over time as
-protocol states are changed by user actions. These changes are captured using events. The implemented protocols are
-aware of the state-mutating events and can transition their state correctly given such events.
-
 ## Currently supported protocols:
 
 - Uniswap V2 and Forks
 - Uniswap V3
+- VM enabled protocols
 
 See also `evm` module which can simulate any transaction.
 
@@ -29,10 +25,19 @@ See also `evm` module which can simulate any transaction.
 
 To add a new protocol, you will need to complete the following high-level steps:
 
-1. Create a protocol state struct that implements the `ProtocolSim` struct.
-2. _(legacy information)_ Add associated events and implement the transition method on the protocol state struct.
+#### Native protocol:
 
-Each protocol should have its own module under `tycho-simulation/src/protocol`.
+1. Create a protocol state struct that implements the `ProtocolSim` struct.
+2. Create a tycho decoder for the protocol state: i.e. implement `TryFrom` for `ComponentWithState` to your new 
+protocol state.
+
+Each native protocol should have its own module under `tycho-simulation/src/protocol`.
+
+#### VM protocol:
+
+1. Add the associated adapter runtime file to `tycho-simulations/src/protocol/assets`. Make sure to name the file
+according to the protocol name used by tycho in the following format: `<Protocol><Version>Adapter.evm.runtime`. 
+For example: `vm:balancer_v2` will be `BalancerV2Adapter.evm.runtime`.
 
 ### 1\. Adding state & behaviour
 
