@@ -38,6 +38,7 @@ use tycho_simulation::{
 
 use crate::data_feed::state::BlockState;
 use once_cell::sync::Lazy;
+use tycho_simulation::evm::tycho_db::PreCachedDB;
 
 static UNSUPPORTED_BALANCER_POOL_TYPES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     [
@@ -47,13 +48,12 @@ static UNSUPPORTED_BALANCER_POOL_TYPES: Lazy<HashSet<&'static str>> = Lazy::new(
         "YearnLinearPoolFactory",
         "ComposableStablePoolFactory",
     ]
-        .iter()
-        .cloned()
-        .collect()
+    .iter()
+    .cloned()
+    .collect()
 });
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
-
 
 fn balancer_pool_filter(component: &ComponentWithState) -> bool {
     // Check for rate_providers in static_attributes
@@ -108,9 +108,14 @@ pub async fn process_messages(
     info!("1 - processing messages");
     // Connect to Tycho
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
-        .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .exchange(
+            "vm:balancer",
+            ComponentFilter::Ids(vec![
+                "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014".to_string(),
+            ]),
+        )
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -248,14 +253,20 @@ pub async fn process_messages(
                         }
                     },
                     "vm:balancer" => {
-                        match VMPoolState::try_from_with_block(snapshot.clone(), header.clone()).await {
+                        match VMPoolState::try_from_with_block(
+                            snapshot.clone(),
+                            header.clone(),
+                            all_tokens.clone(),
+                        )
+                        .await
+                        {
                             Ok(state) => {
                                 // Skip balancer pool if it doesn't pass the filter
-                                if !balancer_pool_filter(&snapshot){
+                                if !balancer_pool_filter(&snapshot) {
                                     continue;
                                 }
                                 Box::new(state)
-                            },
+                            }
                             Err(e) => {
                                 warn!(
                                     "Failed parsing balancer-v2 snapshot! {} for pool {:x?}",
@@ -296,18 +307,47 @@ pub async fn process_messages(
                         Entry::Occupied(mut entry) => {
                             // if state exists in updated_states, apply the delta to it
                             let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
-                            state
-                                .delta_transition(update)
-                                .expect("Failed applying state update!");
+                            if let Some(mut vm_state) = state
+                                .as_any_mut()
+                                .downcast_mut::<VMPoolState<PreCachedDB>>()
+                            {
+                                let tokens: Vec<ERC20Token> = vm_state
+                                    .tokens
+                                    .iter()
+                                    .filter_map(|token_address| all_tokens.get(token_address))
+                                    .cloned()
+                                    .collect();
+
+                                vm_state
+                                    .delta_transition(update, tokens)
+                                    .expect("Failed applying state update!");
+                            } else {
+                                state
+                                    .delta_transition(update, vec![])
+                                    .expect("Failed applying state update!");
+                            }
                         }
                         Entry::Vacant(_) => {
                             match stored_states.get(&id.clone()) {
                                 // if state does not exist in updated_states, apply the delta to the stored state
                                 Some(stored_state) => {
                                     let mut state = stored_state.clone();
-                                    state
-                                        .delta_transition(update)
-                                        .expect("Failed applying state update!");
+                                    if let Some(mut vm_state) = state.as_any_mut()
+                                        .downcast_mut::<VMPoolState<PreCachedDB>>() {
+                                        let tokens: Vec<ERC20Token> = vm_state.tokens
+                                            .iter()
+                                            .filter_map(|token_address| all_tokens.get(token_address))
+                                            .cloned()
+                                            .collect();
+
+                                        vm_state.delta_transition(update, tokens)
+                                            .expect("Failed applying state update!");
+                                    } else {
+                                        state
+                                            .delta_transition(update, vec![])
+                                            .expect("Failed applying state update!");
+                                    }
+
                                     updated_states.insert(id, state);
                                 }
                                 None => warn!(

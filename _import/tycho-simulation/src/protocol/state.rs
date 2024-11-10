@@ -117,6 +117,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
+        tokens: Vec<ERC20Token>,
     ) -> Result<(), TransitionError<String>>;
 
     /// Applies an event transition to the protocol's state.
@@ -144,6 +145,8 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
 
     /// Allows downcasting of the trait object to its underlying type.
     fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 
     /// Compares two protocol states for equality.
     /// This method must be implemented to define how two protocol states are considered equal

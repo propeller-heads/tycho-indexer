@@ -22,6 +22,7 @@ pub enum TransitionError<T> {
     MissingAttribute(String),
     DecodeError(String),
     InvalidEventType(),
+    SimulationError(SimulationError),
 }
 
 #[derive(Debug, Error)]
@@ -89,4 +90,10 @@ pub enum SimulationError {
     Unknown(),
     #[error("Sell amount is higher than sell limit")]
     SellAmountTooHigh(), // TODO: Make it recoverable
+}
+
+impl<T> From<SimulationError> for TransitionError<T> {
+    fn from(error: SimulationError) -> Self {
+        TransitionError::SimulationError(error)
+    }
 }

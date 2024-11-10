@@ -290,6 +290,7 @@ impl ProtocolSim for UniswapV3State {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
+        _tokens: Vec<ERC20Token>,
     ) -> Result<(), TransitionError<String>> {
         // apply attribute changes
         if let Some(liquidity) = delta
@@ -404,6 +405,10 @@ impl ProtocolSim for UniswapV3State {
     }
 
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -784,7 +789,8 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        pool.delta_transition(delta).unwrap();
+        pool.delta_transition(delta, vec![])
+            .unwrap();
 
         assert_eq!(pool.liquidity, 2000);
         assert_eq!(pool.sqrt_price, U256::from(1001));
