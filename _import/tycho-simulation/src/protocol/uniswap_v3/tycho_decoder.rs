@@ -1,19 +1,24 @@
 use ethers::types::U256;
 
-use crate::protocol::{
-    errors::InvalidSnapshotError,
-    uniswap_v3::{enums::FeeAmount, state::UniswapV3State, tick_list::TickInfo},
-};
-use tycho_client::feed::synchronizer::ComponentWithState;
+use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 use tycho_ethereum::BytesCodec;
 
-impl TryFrom<ComponentWithState> for UniswapV3State {
+use crate::protocol::{
+    errors::InvalidSnapshotError,
+    models::TryFromWithBlock,
+    uniswap_v3::{enums::FeeAmount, state::UniswapV3State, tick_list::TickInfo},
+};
+
+impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
     type Error = InvalidSnapshotError;
 
     /// Decodes a `ComponentWithState` into a `UniswapV3State`. Errors with a `InvalidSnapshotError`
     /// if the snapshot is missing any required attributes or if the fee amount is not supported.
-    fn try_from(snapshot: ComponentWithState) -> Result<Self, Self::Error> {
+    async fn try_from_with_block(
+        snapshot: ComponentWithState,
+        _block: Header,
+    ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
             .attributes
@@ -189,8 +194,17 @@ mod tests {
         .collect::<HashMap<String, Bytes>>()
     }
 
-    #[test]
-    fn test_usv3_try_from() {
+    fn header() -> Header {
+        Header {
+            number: 1,
+            hash: Bytes::from(vec![0; 32]),
+            parent_hash: Bytes::from(vec![0; 32]),
+            revert: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_usv3_try_from() {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
@@ -200,7 +214,7 @@ mod tests {
             component: usv3_component(),
         };
 
-        let result = UniswapV3State::try_from(snapshot);
+        let result = UniswapV3State::try_from_with_block(snapshot, header()).await;
 
         assert!(result.is_ok());
         let expected = UniswapV3State::new(
@@ -213,13 +227,14 @@ mod tests {
         assert_eq!(result.unwrap(), expected);
     }
 
+    #[tokio::test]
     #[rstest]
     #[case::missing_liquidity("liquidity")]
     #[case::missing_sqrt_price("sqrt_price")]
     #[case::missing_tick("tick")]
     #[case::missing_tick_liquidity("tick_liquidities")]
     #[case::missing_fee("fee")]
-    fn test_usv3_try_from_invalid(#[case] missing_attribute: String) {
+    async fn test_usv3_try_from_invalid(#[case] missing_attribute: String) {
         // remove missing attribute
         let mut attributes = usv3_attributes();
         attributes.remove(&missing_attribute);
@@ -248,7 +263,7 @@ mod tests {
             component,
         };
 
-        let result = UniswapV3State::try_from(snapshot);
+        let result = UniswapV3State::try_from_with_block(snapshot, header()).await;
 
         assert!(result.is_err());
         assert!(matches!(
@@ -257,8 +272,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn test_usv3_try_from_invalid_fee() {
+    #[tokio::test]
+    async fn test_usv3_try_from_invalid_fee() {
         // set an invalid fee amount (100, 500, 3_000 and 10_000 are the only valid fee amounts)
         let mut component = usv3_component();
         component
@@ -274,7 +289,7 @@ mod tests {
             component,
         };
 
-        let result = UniswapV3State::try_from(snapshot);
+        let result = UniswapV3State::try_from_with_block(snapshot, header()).await;
 
         assert!(result.is_err());
         assert!(matches!(

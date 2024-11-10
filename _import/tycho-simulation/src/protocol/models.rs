@@ -24,8 +24,12 @@
 //! It's worth emphasizin that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
-use ethers::types::U256;
+use std::collections::HashMap;
+
+use ethers::types::{H160, U256};
 use tycho_core::Bytes;
+
+use tycho_client::feed::Header;
 
 use crate::models::ERC20Token;
 
@@ -48,6 +52,19 @@ impl ProtocolComponent {
         tokens.sort_unstable_by_key(|t| t.address);
         ProtocolComponent { address, tokens }
     }
+}
+
+pub trait TryFromWithBlock<T> {
+    type Error;
+
+    #[allow(async_fn_in_trait)]
+    async fn try_from_with_block(
+        value: T,
+        block: Header,
+        all_tokens: HashMap<H160, ERC20Token>,
+    ) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
 }
 
 /// Pair struct represents a trading pair with its properties and state

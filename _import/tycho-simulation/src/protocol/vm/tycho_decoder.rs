@@ -6,29 +6,18 @@ use std::{
 use ethers::types::{H160, H256, U256};
 use tracing::info;
 
+use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_ethereum::BytesCodec;
+
 use crate::{
     evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
     models::ERC20Token,
     protocol::{
         errors::InvalidSnapshotError,
+        models::TryFromWithBlock,
         vm::{state::VMPoolState, state_builder::VMPoolStateBuilder},
     },
 };
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_ethereum::BytesCodec;
-
-pub trait TryFromWithBlock<T> {
-    type Error;
-
-    #[allow(async_fn_in_trait)]
-    async fn try_from_with_block(
-        value: T,
-        block: Header,
-        all_tokens: HashMap<H160, ERC20Token>,
-    ) -> Result<Self, Self::Error>
-    where
-        Self: Sized;
-}
 
 impl From<Header> for BlockHeader {
     fn from(header: Header) -> Self {
@@ -197,6 +186,12 @@ mod tests {
         Bytes,
     };
 
+    #[test]
+    fn test_to_adapter_file_name() {
+        assert_eq!(to_adapter_file_name("balancer_v2"), "BalancerV2SwapAdapter.evm.runtime");
+        assert_eq!(to_adapter_file_name("uniswap_v3"), "UniswapV3SwapAdapter.evm.runtime");
+    }
+
     fn vm_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
             .unwrap()
@@ -225,10 +220,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_to_adapter_file_name() {
-        assert_eq!(to_adapter_file_name("balancer_v2"), "BalancerV2SwapAdapter.evm.runtime");
-        assert_eq!(to_adapter_file_name("uniswap_v3"), "UniswapV3SwapAdapter.evm.runtime");
+    fn header() -> Header {
+        Header {
+            number: 1,
+            hash: Bytes::from(vec![0; 32]),
+            parent_hash: Bytes::from(vec![0; 32]),
+            revert: false,
+        }
     }
 
     #[tokio::test]
@@ -252,14 +250,8 @@ mod tests {
             component: vm_component(),
         };
 
-        let block = Header {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-        };
         // TODO: fix test
-        let result = VMPoolState::try_from_with_block(snapshot, block, HashMap::new()).await;
+        let result = VMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();
