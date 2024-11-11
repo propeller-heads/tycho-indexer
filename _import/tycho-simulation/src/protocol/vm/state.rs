@@ -185,21 +185,6 @@ impl VMPoolState<PreCachedDB> {
                 false,
             );
 
-            // // Initialize the balance owner if it is set
-            if let Some(balance_owner) = self.balance_owner {
-                engine.state.init_account(
-                    rAddress::from(balance_owner.0),
-                    AccountInfo {
-                        balance: Default::default(),
-                        nonce: 0,
-                        code_hash: KECCAK_EMPTY,
-                        code: None,
-                    },
-                    None,
-                    false,
-                );
-            }
-
             for (address, bytecode) in self.stateless_contracts.iter() {
                 let (code, code_hash) = if bytecode.is_none() {
                     let mut addr_str = format!("{:?}", address);

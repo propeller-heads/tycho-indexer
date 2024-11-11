@@ -206,8 +206,20 @@ pub async fn process_messages(
 
             let mut new_components = HashMap::new();
 
-            // PROCESS SNAPSHOTS
+            // UPDATE ENGINE
+            let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
+                .clone()
+                .snapshots
+                .get_vm_storage()
+                .into_iter()
+                .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                .collect();
+            info!("Updating engine with snapshot");
+            update_engine(SHARED_TYCHO_DB.clone(), block, Some(storage_by_address), HashMap::new())
+                .await;
+            info!("Engine updated with snapshot");
 
+            // PROCESS SNAPSHOTS
             for (id, snapshot) in protocol_msg
                 .snapshots
                 .get_states()
@@ -280,17 +292,7 @@ pub async fn process_messages(
                 };
                 new_components.insert(id, state);
             }
-            let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
-                .clone()
-                .snapshots
-                .get_vm_storage()
-                .into_iter()
-                .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
-                .collect();
-            info!("Updating engine with snapshot");
-            update_engine(SHARED_TYCHO_DB.clone(), block, Some(storage_by_address), HashMap::new())
-                .await;
-            info!("Engine updated with snapshot");
+
             if !new_components.is_empty() {
                 info!("Decoded {} snapshots for protocol {}", new_components.len(), protocol);
             }
@@ -299,6 +301,17 @@ pub async fn process_messages(
             // PROCESS DELTAS
 
             if let Some(deltas) = protocol_msg.deltas.clone() {
+                let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
+                    .account_updates
+                    .clone()
+                    .into_iter()
+                    .map(|(key, value)| (Address::from_slice(&key[..20]), value.into()))
+                    .collect();
+                info!("Updating engine with deltas");
+                update_engine(SHARED_TYCHO_DB.clone(), block, None, account_update_by_address)
+                    .await;
+                info!("Engine updated with deltas");
+
                 for (id, update) in deltas.state_updates {
                     info!("Processing deltas");
                     let id = Bytes::from_str(&id)
@@ -340,6 +353,7 @@ pub async fn process_messages(
                                             .cloned()
                                             .collect();
 
+                                        // TODO SIMULATION HAPPENS HERE
                                         vm_state.delta_transition(update, tokens)
                                             .expect("Failed applying state update!");
                                     } else {
@@ -358,16 +372,6 @@ pub async fn process_messages(
                         }
                     }
                 }
-                let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
-                    .account_updates
-                    .clone()
-                    .into_iter()
-                    .map(|(key, value)| (Address::from_slice(&key[..20]), value.into()))
-                    .collect();
-                info!("Updating engine with deltas");
-                update_engine(SHARED_TYCHO_DB.clone(), block, None, account_update_by_address)
-                    .await;
-                info!("Engine updated with deltas");
             };
 
             // update active protocols
