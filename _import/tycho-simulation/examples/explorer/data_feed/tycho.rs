@@ -42,24 +42,15 @@ use crate::data_feed::state::BlockState;
 use once_cell::sync::Lazy;
 use tycho_simulation::evm::tycho_db::PreCachedDB;
 
-static UNSUPPORTED_BALANCER_POOL_TYPES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    [
-        "ERC4626LinearPoolFactory",
-        "EulerLinearPoolFactory",
-        "SiloLinearPoolFactory",
-        "YearnLinearPoolFactory",
-        "ComposableStablePoolFactory",
-    ]
-    .iter()
-    .cloned()
-    .collect()
-});
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 
 fn balancer_pool_filter(component: &ComponentWithState) -> bool {
     // Check for rate_providers in static_attributes
     info!("Checking Balancer pool {}", component.component.id);
+    if component.component.protocol_system != "vm:balancer" {
+        return true;
+    }
     if let Some(rate_providers_data) = component
         .component
         .static_attributes
@@ -91,6 +82,7 @@ fn balancer_pool_filter(component: &ComponentWithState) -> bool {
         "SiloLinearPoolFactory",
         "YearnLinearPoolFactory",
         "ComposableStablePoolFactory",
+        "WeightedPool2TokensFactory"
     ]
     .iter()
     .cloned()
@@ -265,52 +257,53 @@ pub async fn process_messages(
                     }
                 }
 
-                if !skip_pool {
-                    new_pairs.insert(id.clone(), ProtocolComponent::new(id.clone(), pair_tokens));
+                // Skip balancer pool if it doesn't pass the filter
+                if !skip_pool && !balancer_pool_filter(&snapshot) {
+                    skip_pool = true;
                 }
 
-                let state: Box<dyn ProtocolSim> = match protocol.as_str() {
-                    "uniswap_v3" => match UniswapV3State::try_from(snapshot.clone()) {
-                        Ok(state) => Box::new(state),
-                        Err(e) => {
-                            debug!("Failed parsing uniswap-v3 snapshot! {} for pool {:x?}", e, id);
-                            continue;
-                        }
-                    },
-                    "uniswap_v2" => match UniswapV2State::try_from(snapshot.clone()) {
-                        Ok(state) => Box::new(state),
-                        Err(e) => {
-                            warn!("Failed parsing uniswap-v2 snapshot! {} for pool {:x?}", e, id);
-                            continue;
-                        }
-                    },
-                    "vm:balancer" => {
-                        match VMPoolState::try_from_with_block(
-                            snapshot.clone(),
-                            header.clone(),
-                            all_tokens.clone(),
-                        )
-                        .await
-                        {
-                            Ok(state) => {
-                                // Skip balancer pool if it doesn't pass the filter
-                                if !balancer_pool_filter(&snapshot) {
-                                    continue;
-                                }
-                                Box::new(state)
-                            }
+                if !skip_pool {
+                    new_pairs.insert(id.clone(), ProtocolComponent::new(id.clone(), pair_tokens));
+
+                    let state: Box<dyn ProtocolSim> = match protocol.as_str() {
+                        "uniswap_v3" => match UniswapV3State::try_from(snapshot.clone()) {
+                            Ok(state) => Box::new(state),
                             Err(e) => {
-                                warn!(
+                                debug!("Failed parsing uniswap-v3 snapshot! {} for pool {:x?}", e, id);
+                                continue;
+                            }
+                        },
+                        "uniswap_v2" => match UniswapV2State::try_from(snapshot.clone()) {
+                            Ok(state) => Box::new(state),
+                            Err(e) => {
+                                warn!("Failed parsing uniswap-v2 snapshot! {} for pool {:x?}", e, id);
+                                continue;
+                            }
+                        },
+                        "vm:balancer" => {
+                            match VMPoolState::try_from_with_block(
+                                snapshot.clone(),
+                                header.clone(),
+                                all_tokens.clone(),
+                            )
+                                .await
+                            {
+                                Ok(state) => {
+                                    Box::new(state)
+                                }
+                                Err(e) => {
+                                    warn!(
                                     "Failed parsing balancer-v2 snapshot! {} for pool {:x?}",
                                     e, id
                                 );
-                                continue;
+                                    continue;
+                                }
                             }
                         }
-                    }
-                    _ => panic!("VM snapshot not supported!"),
-                };
-                new_components.insert(id, state);
+                        _ => panic!("VM snapshot not supported!"),
+                    };
+                    new_components.insert(id, state);
+                }
             }
 
             if !new_components.is_empty() {
@@ -319,7 +312,6 @@ pub async fn process_messages(
             updated_states.extend(new_components);
 
             // PROCESS DELTAS
-
             if let Some(deltas) = protocol_msg.deltas.clone() {
                 let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
                     .account_updates
@@ -391,6 +383,7 @@ pub async fn process_messages(
                         }
                     }
                 }
+                info!("Finished processing delta state updates.");
             };
 
             // update active protocols
@@ -424,10 +417,14 @@ pub async fn process_messages(
         let state =
             BlockState::new(block_id, updated_states, new_pairs).set_removed_pairs(removed_pairs);
 
-        state_tx
+        info!("Sending tick!");
+        let res = state_tx
             .send(state)
             .await
-            .expect("Sending tick failed!")
+            .expect("Sending tick failed!");
+        info!("Tick sent!");
+        res
+
     }
 
     jh.await.unwrap();
