@@ -8,6 +8,8 @@ use std::{
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
+use std::str;
+
 use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
     rpc::RPCClient,
@@ -63,20 +65,36 @@ fn balancer_pool_filter(component: &ComponentWithState) -> bool {
         .static_attributes
         .get("rate_providers")
     {
-        let rate_providers_str = rate_providers_data.clone().to_string();
-        if let Ok(rate_providers) = serde_json::from_str::<Vec<String>>(&rate_providers_str) {
-            if rate_providers
-                .iter()
-                .any(|provider| provider != ZERO_ADDRESS)
-            {
-                info!(
-                    "Filtering out Balancer pool {} because it has dynamic rate_providers",
-                    component.component.id
-                );
-                return false;
-            }
+        let rate_providers_str = str::from_utf8(&rate_providers_data).expect("Invalid UTF-8 data");
+        let parsed_rate_providers =
+            serde_json::from_str::<Vec<String>>(&rate_providers_str).expect("Invalid JSON format");
+
+        info!("Parsed rate providers: {:?}", parsed_rate_providers);
+        let has_dynamic_rate_provider = parsed_rate_providers
+            .iter()
+            .any(|provider| provider != ZERO_ADDRESS);
+
+        info!("Has dynamic rate provider: {:?}", has_dynamic_rate_provider);
+        if has_dynamic_rate_provider {
+            info!(
+                "Filtering out Balancer pool {} because it has dynamic rate_providers",
+                component.component.id
+            );
+            return false;
         }
+    } else {
+        info!("Balancer pool does not have `rate_providers` attribute");
     }
+    let unsupported_pool_types: HashSet<&str> = [
+        "ERC4626LinearPoolFactory",
+        "EulerLinearPoolFactory",
+        "SiloLinearPoolFactory",
+        "YearnLinearPoolFactory",
+        "ComposableStablePoolFactory",
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     // Check pool_type in static_attributes
     if let Some(pool_type_data) = component
@@ -84,15 +102,22 @@ fn balancer_pool_filter(component: &ComponentWithState) -> bool {
         .static_attributes
         .get("pool_type")
     {
-        let pool_type = pool_type_data.clone().to_string();
-        if UNSUPPORTED_BALANCER_POOL_TYPES.contains(&pool_type.as_str()) {
-            debug!(
+        // Convert the decoded bytes to a UTF-8 string
+        let pool_type = str::from_utf8(pool_type_data).expect("Invalid UTF-8 data");
+        if unsupported_pool_types.contains(pool_type) {
+            info!(
                 "Filtering out Balancer pool {} because it has type {}",
                 component.component.id, pool_type
             );
             return false;
+        } else {
+            info!("Balancer pool with type {} will not be filtered out.", pool_type);
         }
     }
+    info!(
+        "Balancer pool with static attributes {:?} will not be filtered out.",
+        component.component.static_attributes
+    );
     info!("Balancer pool will not be filtered out.");
     true
 }
@@ -110,12 +135,7 @@ pub async fn process_messages(
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
         // .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         // .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        .exchange(
-            "vm:balancer",
-            ComponentFilter::Ids(vec![
-                "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014".to_string(),
-            ]),
-        )
+        .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -353,7 +373,6 @@ pub async fn process_messages(
                                             .cloned()
                                             .collect();
 
-                                        // TODO SIMULATION HAPPENS HERE
                                         vm_state.delta_transition(update, tokens)
                                             .expect("Failed applying state update!");
                                     } else {
