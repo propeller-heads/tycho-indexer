@@ -136,7 +136,7 @@ impl VMPoolState<PreCachedDB> {
                 .ok_or_else(|| SimulationError::NotInitialized("Simulation engine".to_string()))?,
         )?);
         state.set_capabilities()?;
-        state.init_token_storage_slots();
+        state.init_token_storage_slots()?;
         Ok(state)
     }
 
@@ -537,7 +537,7 @@ impl VMPoolState<PreCachedDB> {
         merged
     }
 
-    fn init_token_storage_slots(&mut self) {
+    fn init_token_storage_slots(&mut self) -> Result<(), SimulationError> {
         for t in self.tokens.iter() {
             if self.involved_contracts.contains(t) && !self.token_storage_slots.contains_key(t) {
                 self.token_storage_slots.insert(
@@ -548,11 +548,11 @@ impl VMPoolState<PreCachedDB> {
                         self.engine
                             .as_ref()
                             .expect("engine should be set"),
-                    )
-                    .unwrap_or_else(|_| panic!("Couldn't brute force slots for {}", t)),
+                    )?,
                 );
             }
         }
+        Ok(())
     }
 }
 
