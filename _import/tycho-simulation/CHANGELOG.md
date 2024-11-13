@@ -1,3 +1,11 @@
+## [0.40.0](https://github.com/propeller-heads/tycho-simulation/compare/0.39.2...0.40.0) (2024-11-13)
+
+
+### Features
+
+* **simulation:** try to bruteforce token slots when they are unknown ([482ac49](https://github.com/propeller-heads/tycho-simulation/commit/482ac49d184b1566fcd4ec0c78e3f1fbab7d5446))
+* **token:** handle bruteforcing slots for Vyper contracts. ([9902dd8](https://github.com/propeller-heads/tycho-simulation/commit/9902dd880f5c1422fc1500687eefbb4aaadd184a))
+
 ## [0.39.2](https://github.com/propeller-heads/tycho-simulation/compare/0.39.1...0.39.2) (2024-11-08)
 
 
