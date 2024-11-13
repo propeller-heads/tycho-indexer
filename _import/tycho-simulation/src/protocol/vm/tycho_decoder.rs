@@ -113,15 +113,18 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             .map(H160::from_bytes)
             .collect();
 
-        let adapter_file_path = format!(
-            "src/protocol/vm/assets/{}",
-            to_adapter_file_name(
+        let protocol_name = snapshot
+            .component
+            .protocol_system
+            .strip_prefix("vm:")
+            .unwrap_or({
                 snapshot
                     .component
                     .protocol_system
-                    .as_str(),
-            )
-        );
+                    .as_str()
+            });
+        let adapter_file_path =
+            format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
 
         let pool_state = VMPoolState::new(
             id,
@@ -187,7 +190,7 @@ mod tests {
 
         ProtocolComponent {
             id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string(),
-            protocol_system: "balancer_v2".to_string(),
+            protocol_system: "vm:balancer".to_string(),
             protocol_type_name: "balancer_v2_pool".to_string(),
             chain: Chain::Ethereum,
             tokens,

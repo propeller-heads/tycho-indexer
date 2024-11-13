@@ -1,5 +1,3 @@
-// TODO: remove skip for clippy dead_code check
-#![allow(dead_code)]
 use std::{collections::HashMap, fmt::Debug};
 
 use lazy_static::lazy_static;
