@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use chrono::Utc;
 use ethers::{
@@ -54,17 +54,29 @@ pub struct TychoSimulationResponse {
 /// Returns errors of type `SimulationError` when encoding, decoding, or simulation operations
 /// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
-pub struct TychoSimulationContract<D: DatabaseRef + std::clone::Clone> {
+pub struct TychoSimulationContract<D: DatabaseRef + Clone> {
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> TychoSimulationContract<D>
+impl<D: DatabaseRef + Clone> TychoSimulationContract<D>
 where
-    D::Error: std::fmt::Debug,
+    D::Error: Debug,
 {
-    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
+    pub fn new(
+        address: Address,
+        engine: SimulationEngine<D>,
+        abi: Abi,
+    ) -> Result<Self, SimulationError> {
+        Ok(Self { address, abi, engine })
+    }
+
+    // Creates a new instance with the ISwapAdapter ABI
+    pub fn new_swap_adapter(
+        address: Address,
+        engine: SimulationEngine<D>,
+    ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
         Ok(Self { address, abi, engine })
     }
@@ -233,7 +245,7 @@ mod tests {
     fn create_contract() -> TychoSimulationContract<MockDatabase> {
         let address = Address::ZERO;
         let engine = create_mock_engine();
-        TychoSimulationContract::new(address, engine).unwrap()
+        TychoSimulationContract::new_swap_adapter(address, engine).unwrap()
     }
 
     #[test]
