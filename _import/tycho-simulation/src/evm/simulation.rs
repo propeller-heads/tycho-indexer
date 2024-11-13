@@ -14,6 +14,7 @@ use revm::{
     Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
+use std::clone::Clone;
 use strum_macros::Display;
 use tokio::runtime::Runtime;
 use tracing::{debug, info};
@@ -51,15 +52,12 @@ pub struct SimulationResult {
 
 /// Simulation engine
 #[derive(Debug, Clone)]
-pub struct SimulationEngine<D: DatabaseRef + std::clone::Clone>
-where
-    D: Clone,
-{
+pub struct SimulationEngine<D: DatabaseRef + Clone> {
     pub state: D,
     pub trace: bool,
 }
 
-impl<D: DatabaseRef + std::clone::Clone> SimulationEngine<D>
+impl<D: DatabaseRef + Clone> SimulationEngine<D>
 where
     D::Error: std::fmt::Debug,
 {
@@ -619,10 +617,7 @@ mod tests {
 
     #[test]
     fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
-        let client = Provider::<Http>::try_from(
-            "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-        )
-        .unwrap();
+        let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
         let client = Arc::new(client);
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
@@ -698,10 +693,7 @@ mod tests {
     #[test]
     fn test_contract_deployment() -> Result<(), Box<dyn Error>> {
         fn new_state() -> SimulationDB<Provider<Http>> {
-            let client = Provider::<Http>::try_from(
-                "https://eth-mainnet.g.alchemy.com/v2/OTD5W7gdTPrzpVot41Lx9tJD9LUiAhbs",
-            )
-            .unwrap();
+            let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
             let client = Arc::new(client);
             let runtime = tokio::runtime::Handle::try_current()
                 .is_err()

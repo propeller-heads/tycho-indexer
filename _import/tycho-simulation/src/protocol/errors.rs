@@ -4,7 +4,7 @@ use std::fmt;
 use thiserror::Error;
 
 use crate::{
-    evm::simulation::SimulationEngineError,
+    evm::{simulation::SimulationEngineError, token::TokenError},
     protocol::vm::errors::{FileError, RpcError},
 };
 
@@ -90,6 +90,8 @@ pub enum SimulationError {
     Unknown(),
     #[error("Sell amount is higher than sell limit")]
     SellAmountTooHigh(), // TODO: Make it recoverable
+    #[error("Token slot brute-forcing error: {0}")]
+    TokenError(#[from] TokenError),
 }
 
 impl<T> From<SimulationError> for TransitionError<T> {

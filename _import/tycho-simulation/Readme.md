@@ -1,5 +1,7 @@
 # Tycho Simulation
 
+![Tycho Simulation](./assets/tycho-simulation.png)
+
 **Disclaimer: This repository is currently in its alpha release stage and is intended for workshop use only.
 It is not production-ready, and we will not ensure backward compatibility at this stage.
 A proper launch will follow soon.**

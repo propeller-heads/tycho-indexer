@@ -1,5 +1,0 @@
-{
-  "rust-analyzer.linkedProjects": [
-    "./tycho_simulation_py/Cargo.toml"
-  ]
-}
