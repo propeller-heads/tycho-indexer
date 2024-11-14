@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use alloy_primitives::bytes::Bytes;
 use chrono::{NaiveDateTime, Utc};
 use ethers::types::H256;
 use revm::primitives::{Address, B256, U256, U256 as rU256};
@@ -11,6 +12,28 @@ use uuid::Uuid;
 use crate::serde_helpers::{hex_bytes, hex_bytes_option};
 
 use super::simulation_db::BlockHeader;
+
+// TODO move this to utils
+fn bytes_to_ru256(bytes: Bytes) -> rU256 {
+    // Ensure the input is exactly 32 bytes
+    let mut padded_bytes = [0u8; 32];
+
+    // Copy the input bytes into the padded array from the right
+    let start = 32 - bytes.len().min(32);
+    padded_bytes[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
+
+    // Convert the padded byte array into rU256
+    rU256::from_be_slice(&padded_bytes)
+}
+
+fn map_slots_to_ru256(
+    slots: HashMap<tycho_core::hex_bytes::Bytes, tycho_core::hex_bytes::Bytes>,
+) -> HashMap<rU256, rU256> {
+    slots
+        .into_iter()
+        .map(|(k, v)| (bytes_to_ru256(k.into()), bytes_to_ru256(v.into())))
+        .collect()
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct ExtractorIdentity {
@@ -121,12 +144,36 @@ pub enum Chain {
     ZkSync,
 }
 
+impl From<tycho_core::dto::Chain> for Chain {
+    fn from(value: tycho_core::dto::Chain) -> Self {
+        match value {
+            tycho_core::dto::Chain::Ethereum => Chain::Ethereum,
+            tycho_core::dto::Chain::ZkSync => Chain::ZkSync,
+            // TODO remove Starknet and Arbitrum from dto?
+            tycho_core::dto::Chain::Starknet => Chain::Ethereum,
+            tycho_core::dto::Chain::Arbitrum => Chain::Ethereum,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, Display, EnumString)]
 pub enum ChangeType {
     #[default]
     Update,
     Deletion,
     Creation,
+}
+
+impl From<tycho_core::dto::ChangeType> for ChangeType {
+    fn from(value: tycho_core::dto::ChangeType) -> Self {
+        match value {
+            tycho_core::dto::ChangeType::Update => ChangeType::Update,
+            tycho_core::dto::ChangeType::Deletion => ChangeType::Deletion,
+            tycho_core::dto::ChangeType::Creation => ChangeType::Creation,
+            // TODO double check this default
+            tycho_core::dto::ChangeType::Unspecified => ChangeType::Update,
+        }
+    }
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -151,6 +198,21 @@ impl AccountUpdate {
         change: ChangeType,
     ) -> Self {
         Self { address, chain, slots, balance, code, change }
+    }
+}
+
+impl From<tycho_core::dto::AccountUpdate> for AccountUpdate {
+    fn from(value: tycho_core::dto::AccountUpdate) -> Self {
+        Self {
+            chain: value.chain.into(),
+            address: Address::from_slice(&value.address[..20]), // Convert address field to Address
+            slots: map_slots_to_ru256(value.slots),
+            balance: value
+                .balance
+                .map(|balance| bytes_to_ru256(balance.into())),
+            code: value.code.map(|code| code.to_vec()),
+            change: value.change.into(),
+        }
     }
 }
 
@@ -258,6 +320,25 @@ impl std::fmt::Debug for ResponseAccount {
             .field("code_modify_tx", &self.code_modify_tx)
             .field("creation_tx", &self.creation_tx)
             .finish()
+    }
+}
+
+impl From<tycho_core::dto::ResponseAccount> for ResponseAccount {
+    fn from(value: tycho_core::dto::ResponseAccount) -> Self {
+        Self {
+            chain: value.chain.into(),
+            address: Address::from_slice(&value.address[..20]), // Convert address field to Address
+            title: value.title.clone(),
+            slots: map_slots_to_ru256(value.slots),
+            balance: bytes_to_ru256(value.native_balance.into()),
+            code: value.code.to_vec(),
+            code_hash: B256::from_slice(&value.code_hash[..]),
+            balance_modify_tx: B256::from_slice(&value.balance_modify_tx[..]),
+            code_modify_tx: B256::from_slice(&value.code_modify_tx[..]),
+            creation_tx: value
+                .creation_tx
+                .map(|tx| B256::from_slice(&tx[..])), // Optionally map creation_tx if present
+        }
     }
 }
 

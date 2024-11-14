@@ -24,7 +24,8 @@
 //! It's worth emphasizin that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
-use ethers::types::{H160, U256};
+use ethers::types::U256;
+use tycho_core::Bytes;
 
 use crate::models::ERC20Token;
 
@@ -34,16 +35,16 @@ use super::state::ProtocolSim;
 ///
 /// # Fields
 ///
-/// * `address`: H160, the address of the trading pair
+/// * `address`: String, the address of the trading pair
 /// * `tokens`: `Vec<ERC20Token>`, the tokens of the trading pair
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProtocolComponent {
-    pub address: H160,
+    pub address: Bytes,
     pub tokens: Vec<ERC20Token>,
 }
 
 impl ProtocolComponent {
-    pub fn new(address: H160, mut tokens: Vec<ERC20Token>) -> Self {
+    pub fn new(address: Bytes, mut tokens: Vec<ERC20Token>) -> Self {
         tokens.sort_unstable_by_key(|t| t.address);
         ProtocolComponent { address, tokens }
     }

@@ -126,6 +126,7 @@ impl ProtocolSim for UniswapV2State {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
+        _tokens: Vec<ERC20Token>,
     ) -> Result<(), TransitionError<String>> {
         // reserve0 and reserve1 are considered required attributes and are expected in every delta
         // we process
@@ -167,6 +168,9 @@ impl ProtocolSim for UniswapV2State {
     }
 
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -359,7 +363,7 @@ mod tests {
             deleted_attributes: HashSet::new(), // usv2 doesn't have any deletable attributes
         };
 
-        let res = state.delta_transition(delta);
+        let res = state.delta_transition(delta, vec![]);
 
         assert!(res.is_ok());
         assert_eq!(state.reserve0, u256("1500"));
@@ -379,7 +383,7 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        let res = state.delta_transition(delta);
+        let res = state.delta_transition(delta, vec![]);
 
         assert!(res.is_err());
         // assert it errors for the missing reserve1 attribute delta

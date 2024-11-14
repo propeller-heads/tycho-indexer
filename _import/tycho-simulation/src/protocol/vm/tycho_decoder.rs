@@ -4,11 +4,13 @@ use std::{
 };
 
 use ethers::types::{H160, H256, U256};
+use tracing::info;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 
 use crate::{
     evm::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
+    models::ERC20Token,
     protocol::{errors::InvalidSnapshotError, vm::state::VMPoolState, BytesConvertible},
 };
 
@@ -16,7 +18,11 @@ pub trait TryFromWithBlock<T> {
     type Error;
 
     #[allow(async_fn_in_trait)]
-    async fn try_from_with_block(value: T, block: Header) -> Result<Self, Self::Error>
+    async fn try_from_with_block(
+        value: T,
+        block: Header,
+        all_tokens: HashMap<H160, ERC20Token>,
+    ) -> Result<Self, Self::Error>
     where
         Self: Sized;
 }
@@ -40,9 +46,10 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         block: Header,
+        all_tokens: HashMap<H160, ERC20Token>,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
-        let tokens = snapshot
+        let tokens: Vec<H160> = snapshot
             .component
             .tokens
             .clone()
@@ -125,10 +132,10 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             });
         let adapter_file_path =
             format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
-
-        let pool_state = VMPoolState::new(
-            id,
-            tokens,
+        info!("Creating a new pool state for balancer pool with id {}", &id);
+        let mut pool_state = VMPoolState::new(
+            id.clone(),
+            tokens.clone(),
             block,
             balances,
             balance_owner,
@@ -140,6 +147,13 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
         )
         .await
         .map_err(InvalidSnapshotError::VMError)?;
+        let erc20_tokens = tokens
+            .iter()
+            .filter_map(|token_address| all_tokens.get(token_address))
+            .cloned()
+            .collect();
+        pool_state.set_spot_prices(erc20_tokens)?;
+        info!("Finished creating balancer pool with id {}", &id);
 
         Ok(pool_state)
     }
@@ -237,8 +251,8 @@ mod tests {
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
         };
-
-        let result = VMPoolState::try_from_with_block(snapshot, block).await;
+        // TODO: fix test
+        let result = VMPoolState::try_from_with_block(snapshot, block, HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();

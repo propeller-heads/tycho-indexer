@@ -1,26 +1,116 @@
-use ethers::types::H160;
+use alloy_primitives::Address;
+use chrono::Utc;
+use ethers::{prelude::H256, types::H160};
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     str::FromStr,
 };
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
+use std::str;
+
 use tycho_client::{
-    feed::component_tracker::ComponentFilter, rpc::RPCClient, stream::TychoStreamBuilder,
+    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
+    rpc::RPCClient,
+    stream::TychoStreamBuilder,
     HttpRPCClient,
 };
-use tycho_core::dto::Chain;
+use tycho_core::{dto::Chain, Bytes};
 
 use tycho_simulation::{
+    evm::{
+        simulation_db::BlockHeader,
+        tycho_models::{AccountUpdate, ResponseAccount},
+    },
     models::ERC20Token,
     protocol::{
-        models::ProtocolComponent, state::ProtocolSim, uniswap_v2::state::UniswapV2State,
-        uniswap_v3::state::UniswapV3State, BytesConvertible,
+        models::ProtocolComponent,
+        state::ProtocolSim,
+        uniswap_v2::state::UniswapV2State,
+        uniswap_v3::state::UniswapV3State,
+        vm::{
+            engine::{update_engine, SHARED_TYCHO_DB},
+            state::VMPoolState,
+            tycho_decoder::TryFromWithBlock,
+        },
+        BytesConvertible,
     },
 };
 
 use crate::data_feed::state::BlockState;
+use tycho_simulation::evm::tycho_db::PreCachedDB;
+
+const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+
+fn balancer_pool_filter(component: &ComponentWithState) -> bool {
+    // Check for rate_providers in static_attributes
+    info!("Checking Balancer pool {}", component.component.id);
+    if component.component.protocol_system != "vm:balancer" {
+        return true;
+    }
+    if let Some(rate_providers_data) = component
+        .component
+        .static_attributes
+        .get("rate_providers")
+    {
+        let rate_providers_str = str::from_utf8(rate_providers_data).expect("Invalid UTF-8 data");
+        let parsed_rate_providers =
+            serde_json::from_str::<Vec<String>>(rate_providers_str).expect("Invalid JSON format");
+
+        info!("Parsed rate providers: {:?}", parsed_rate_providers);
+        let has_dynamic_rate_provider = parsed_rate_providers
+            .iter()
+            .any(|provider| provider != ZERO_ADDRESS);
+
+        info!("Has dynamic rate provider: {:?}", has_dynamic_rate_provider);
+        if has_dynamic_rate_provider {
+            info!(
+                "Filtering out Balancer pool {} because it has dynamic rate_providers",
+                component.component.id
+            );
+            return false;
+        }
+    } else {
+        info!("Balancer pool does not have `rate_providers` attribute");
+    }
+    let unsupported_pool_types: HashSet<&str> = [
+        "ERC4626LinearPoolFactory",
+        "EulerLinearPoolFactory",
+        "SiloLinearPoolFactory",
+        "YearnLinearPoolFactory",
+        "ComposableStablePoolFactory",
+        "WeightedPool2TokensFactory",
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
+    // Check pool_type in static_attributes
+    if let Some(pool_type_data) = component
+        .component
+        .static_attributes
+        .get("pool_type")
+    {
+        // Convert the decoded bytes to a UTF-8 string
+        let pool_type = str::from_utf8(pool_type_data).expect("Invalid UTF-8 data");
+        if unsupported_pool_types.contains(pool_type) {
+            info!(
+                "Filtering out Balancer pool {} because it has type {}",
+                component.component.id, pool_type
+            );
+            return false;
+        } else {
+            info!("Balancer pool with type {} will not be filtered out.", pool_type);
+        }
+    }
+    info!(
+        "Balancer pool with static attributes {:?} will not be filtered out.",
+        component.component.static_attributes
+    );
+    info!("Balancer pool will not be filtered out.");
+    true
+}
 
 // TODO: Make extractors configurable
 pub async fn process_messages(
@@ -31,8 +121,9 @@ pub async fn process_messages(
 ) {
     // Connect to Tycho
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
-        .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -45,22 +136,29 @@ pub async fn process_messages(
 
     // persist all protocol states between messages
     // note - the current tick implementation expects addresses (H160) as component ids
-    let mut stored_states: HashMap<H160, Box<dyn ProtocolSim>> = HashMap::new();
+    let mut stored_states: HashMap<Bytes, Box<dyn ProtocolSim>> = HashMap::new();
 
-    // Loop through tycho messages
     while let Some(msg) = tycho_stream.recv().await {
         // stores all states updated in this tick/msg
         let mut updated_states = HashMap::new();
         let mut new_pairs = HashMap::new();
         let mut removed_pairs = HashMap::new();
 
-        let block_id = msg
+        let header = msg
             .state_msgs
             .values()
             .next()
             .expect("Missing sync messages!")
             .header
-            .number;
+            .clone();
+        info!("Received block {}", header.number);
+        let block_id = header.clone().number;
+        let block_hash = header.clone().hash;
+        let block = BlockHeader {
+            number: block_id,
+            hash: H256::from_slice(&block_hash[..]),
+            timestamp: Utc::now().timestamp() as u64,
+        };
 
         for (protocol, protocol_msg) in msg.state_msgs.iter() {
             if let Some(deltas) = protocol_msg.deltas.as_ref() {
@@ -97,11 +195,11 @@ pub async fn process_messages(
                                     .cloned()
                             })
                             .collect::<Vec<_>>();
-                        let id = H160::from_str(id.as_ref()).unwrap_or_else(|_| {
+                        let id = Bytes::from_str(id).unwrap_or_else(|_| {
                             panic!("Failed parsing H160 from id string {}", id)
                         });
                         if tokens.len() == comp.tokens.len() {
-                            Some((id, ProtocolComponent::new(id, tokens)))
+                            Some((id.clone(), ProtocolComponent::new(id, tokens)))
                         } else {
                             None
                         }
@@ -110,14 +208,27 @@ pub async fn process_messages(
 
             let mut new_components = HashMap::new();
 
-            // PROCESS SNAPSHOTS
+            // UPDATE ENGINE
+            let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
+                .clone()
+                .snapshots
+                .get_vm_storage()
+                .iter()
+                .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                .collect();
+            info!("Updating engine with snapshot");
+            update_engine(SHARED_TYCHO_DB.clone(), block, Some(storage_by_address), HashMap::new())
+                .await;
+            info!("Engine updated with snapshot");
 
+            // PROCESS SNAPSHOTS
             for (id, snapshot) in protocol_msg
                 .snapshots
                 .get_states()
                 .clone()
             {
-                let id = H160::from_str(id.as_ref())
+                info!("Processing snapshot");
+                let id = Bytes::from_str(&id)
                     .unwrap_or_else(|_| panic!("Failed parsing H160 from id string {}", id));
                 let mut pair_tokens = Vec::new();
                 let mut skip_pool = false;
@@ -136,28 +247,57 @@ pub async fn process_messages(
                     }
                 }
 
-                if !skip_pool {
-                    new_pairs.insert(id, ProtocolComponent::new(id, pair_tokens));
+                // Skip balancer pool if it doesn't pass the filter
+                if !skip_pool && !balancer_pool_filter(&snapshot) {
+                    skip_pool = true;
                 }
 
-                let state: Box<dyn ProtocolSim> = match protocol.as_str() {
-                    "uniswap_v3" => match UniswapV3State::try_from(snapshot) {
-                        Ok(state) => Box::new(state),
-                        Err(e) => {
-                            debug!("Failed parsing uniswap-v3 snapshot! {} for pool {:x?}", e, id);
-                            continue;
+                if !skip_pool {
+                    new_pairs.insert(id.clone(), ProtocolComponent::new(id.clone(), pair_tokens));
+
+                    let state: Box<dyn ProtocolSim> = match protocol.as_str() {
+                        "uniswap_v3" => match UniswapV3State::try_from(snapshot.clone()) {
+                            Ok(state) => Box::new(state),
+                            Err(e) => {
+                                debug!(
+                                    "Failed parsing uniswap-v3 snapshot! {} for pool {:x?}",
+                                    e, id
+                                );
+                                continue;
+                            }
+                        },
+                        "uniswap_v2" => match UniswapV2State::try_from(snapshot.clone()) {
+                            Ok(state) => Box::new(state),
+                            Err(e) => {
+                                warn!(
+                                    "Failed parsing uniswap-v2 snapshot! {} for pool {:x?}",
+                                    e, id
+                                );
+                                continue;
+                            }
+                        },
+                        "vm:balancer" => {
+                            match VMPoolState::try_from_with_block(
+                                snapshot.clone(),
+                                header.clone(),
+                                all_tokens.clone(),
+                            )
+                            .await
+                            {
+                                Ok(state) => Box::new(state),
+                                Err(e) => {
+                                    warn!(
+                                        "Failed parsing balancer-v2 snapshot! {} for pool {:x?}",
+                                        e, id
+                                    );
+                                    continue;
+                                }
+                            }
                         }
-                    },
-                    "uniswap_v2" => match UniswapV2State::try_from(snapshot) {
-                        Ok(state) => Box::new(state),
-                        Err(e) => {
-                            warn!("Failed parsing uniswap-v2 snapshot! {} for pool {:x?}", e, id);
-                            continue;
-                        }
-                    },
-                    _ => panic!("VM snapshot not supported!"),
-                };
-                new_components.insert(id, state);
+                        _ => panic!("VM snapshot not supported!"),
+                    };
+                    new_components.insert(id, state);
+                }
             }
 
             if !new_components.is_empty() {
@@ -166,27 +306,67 @@ pub async fn process_messages(
             updated_states.extend(new_components);
 
             // PROCESS DELTAS
-
             if let Some(deltas) = protocol_msg.deltas.clone() {
+                let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
+                    .account_updates
+                    .clone()
+                    .iter()
+                    .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                    .collect();
+                info!("Updating engine with deltas");
+                update_engine(SHARED_TYCHO_DB.clone(), block, None, account_update_by_address)
+                    .await;
+                info!("Engine updated with deltas");
+
                 for (id, update) in deltas.state_updates {
-                    let id = H160::from_str(id.as_ref())
+                    info!("Processing deltas");
+                    let id = Bytes::from_str(&id)
                         .unwrap_or_else(|_| panic!("Failed parsing H160 from id string {}", id));
-                    match updated_states.entry(id) {
+                    match updated_states.entry(id.clone()) {
                         Entry::Occupied(mut entry) => {
                             // if state exists in updated_states, apply the delta to it
                             let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
-                            state
-                                .delta_transition(update)
-                                .expect("Failed applying state update!");
+                            if let Some(vm_state) = state
+                                .as_any_mut()
+                                .downcast_mut::<VMPoolState<PreCachedDB>>()
+                            {
+                                let tokens: Vec<ERC20Token> = vm_state
+                                    .tokens
+                                    .iter()
+                                    .filter_map(|token_address| all_tokens.get(token_address))
+                                    .cloned()
+                                    .collect();
+
+                                vm_state
+                                    .delta_transition(update, tokens)
+                                    .expect("Failed applying state update!");
+                            } else {
+                                state
+                                    .delta_transition(update, vec![])
+                                    .expect("Failed applying state update!");
+                            }
                         }
                         Entry::Vacant(_) => {
-                            match stored_states.get(&id) {
+                            match stored_states.get(&id.clone()) {
                                 // if state does not exist in updated_states, apply the delta to the stored state
                                 Some(stored_state) => {
                                     let mut state = stored_state.clone();
-                                    state
-                                        .delta_transition(update)
-                                        .expect("Failed applying state update!");
+                                    if let Some(vm_state) = state.as_any_mut()
+                                        .downcast_mut::<VMPoolState<PreCachedDB>>() {
+                                        let tokens: Vec<ERC20Token> = vm_state.tokens
+                                            .iter()
+                                            .filter_map(|token_address| all_tokens.get(token_address))
+                                            .cloned()
+                                            .collect();
+
+                                        vm_state.delta_transition(update, tokens)
+                                            .expect("Failed applying state update!");
+                                    } else {
+                                        state
+                                            .delta_transition(update, vec![])
+                                            .expect("Failed applying state update!");
+                                    }
+
                                     updated_states.insert(id, state);
                                 }
                                 None => warn!(
@@ -197,6 +377,7 @@ pub async fn process_messages(
                         }
                     }
                 }
+                info!("Finished processing delta state updates.");
             };
 
             // update active protocols
@@ -223,17 +404,18 @@ pub async fn process_messages(
         stored_states.extend(
             updated_states
                 .iter()
-                .map(|(id, state)| (*id, state.clone())),
+                .map(|(id, state)| (id.clone(), state.clone())),
         );
 
         // Send the tick with all updated states
         let state =
             BlockState::new(block_id, updated_states, new_pairs).set_removed_pairs(removed_pairs);
 
+        info!("Sending tick!");
         state_tx
             .send(state)
             .await
-            .expect("Sending tick failed!")
+            .expect("Sending tick failed!");
     }
 
     jh.await.unwrap();

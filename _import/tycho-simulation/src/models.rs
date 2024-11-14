@@ -13,6 +13,7 @@ use std::{
 
 use ethers::types::{H160, U256};
 use serde::{Deserialize, Serialize};
+use tycho_core::Bytes;
 
 use tycho_core::dto::ResponseToken;
 
@@ -108,7 +109,7 @@ pub struct Swap {
     amount_in: U256,
     token_out: H160,
     amount_out: U256,
-    address: H160,
+    address: Bytes,
 }
 
 impl Swap {
@@ -127,7 +128,7 @@ impl Swap {
         amount_in: U256,
         token_out: H160,
         amount_out: U256,
-        address: H160,
+        address: Bytes,
     ) -> Self {
         Swap { token_in, amount_in, token_out, amount_out, address }
     }
@@ -163,8 +164,8 @@ impl Swap {
     /// Getter for address
     ///
     /// Returns the address of the user making the swap.
-    pub fn address(&self) -> H160 {
-        self.address
+    pub fn address(&self) -> Bytes {
+        self.address.clone()
     }
 }
 #[derive(Debug)]

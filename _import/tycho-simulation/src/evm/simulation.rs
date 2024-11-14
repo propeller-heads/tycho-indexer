@@ -17,7 +17,7 @@ use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use std::clone::Clone;
 use strum_macros::Display;
 use tokio::runtime::Runtime;
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::evm::simulation_db::OverriddenSimulationDB;
 
@@ -224,6 +224,7 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                 gas_used: None,
             }),
             EVMError::Database(db_error) => {
+                info!("Are we at database error? {:?}", &db_error);
                 Err(SimulationEngineError::StorageError(format!("Storage error: {:?}", db_error)))
             }
             EVMError::Custom(err) => Err(SimulationEngineError::TransactionError {
