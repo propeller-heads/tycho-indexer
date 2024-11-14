@@ -1,3 +1,23 @@
+## [0.41.0](https://github.com/propeller-heads/tycho-simulation/compare/0.40.0...0.41.0) (2024-11-14)
+
+
+### Features
+
+* (WIP) add balancer pool filter to tycho.rs ([67647d6](https://github.com/propeller-heads/tycho-simulation/commit/67647d653e973dfa74483804646644766c31ccbd))
+* Add balancer to example ([7339063](https://github.com/propeller-heads/tycho-simulation/commit/73390639171f56e9ee7af84b2705d472896f8165))
+* Change H160 to Bytes ([d5f3ea5](https://github.com/propeller-heads/tycho-simulation/commit/d5f3ea565c3491b98c6f58251b15374a722bf6cf))
+* Implement delta_transition for VMPoolState - it sets spot prices ([e0883da](https://github.com/propeller-heads/tycho-simulation/commit/e0883dae08d5cf7593607253dae69194255fac24))
+* implement From trait from dto objs to tycho_models ([4f2a777](https://github.com/propeller-heads/tycho-simulation/commit/4f2a77745e1025628841038cf7ea5499ffde8d18))
+
+
+### Bug Fixes
+
+* (WIP) fix pool filter ([901939d](https://github.com/propeller-heads/tycho-simulation/commit/901939dfa7e5d30c53d321bfa7b7445072b579c3))
+* call `update_engine` before creating pool state ([0d3b1c4](https://github.com/propeller-heads/tycho-simulation/commit/0d3b1c4b12863a9567b07ea3c029ce965b5e5c02))
+* Change tag of tycho-client and indexer ([0a4a6f2](https://github.com/propeller-heads/tycho-simulation/commit/0a4a6f2105c4d0714e2a0da94fa3c487f938ab8b))
+* fix pool filter call order ([cfb907c](https://github.com/propeller-heads/tycho-simulation/commit/cfb907c15a4c61df99422c3a08628486e7bb8be8))
+* Use same dependency of tycho-core as quoter ([5705236](https://github.com/propeller-heads/tycho-simulation/commit/5705236994ea9a102669ce4fcfb514500399bd6d))
+
 ## [0.40.0](https://github.com/propeller-heads/tycho-simulation/compare/0.39.2...0.40.0) (2024-11-13)
 
 

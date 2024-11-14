@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.40.0"
+version = "0.41.0"
 edition = "2021"
 
 [workspace]
