@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use revm::{
     precompile::Address,
     primitives::{AccountInfo, U256 as rU256},
+    DatabaseRef,
 };
 
-pub trait EngineDatabaseInterface {
+pub trait EngineDatabaseInterface: DatabaseRef {
     type Error;
 
     /// Sets up a single account
