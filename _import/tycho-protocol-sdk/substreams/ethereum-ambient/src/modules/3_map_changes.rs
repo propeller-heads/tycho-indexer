@@ -290,7 +290,7 @@ fn map_changes(
                 tx_change
                     .tx
                     .as_ref()
-                    .map_or(false, |tx| tx.hash == tx_hash)
+                    .is_some_and(|tx| tx.hash == tx_hash)
             })
         {
             tx_change
@@ -342,7 +342,7 @@ fn map_changes(
                 tx_change
                     .tx
                     .as_ref()
-                    .map_or(false, |tx| tx.hash == tx_hash)
+                    .is_some_and(|tx| tx.hash == tx_hash)
             })
         {
             tx_change
