@@ -35,7 +35,7 @@ lazy_static! {
 /// - `mocked_tokens`: A list of addresses at which a mocked ERC20 contract should be inserted.
 /// - `trace`: Whether to trace calls. Only meant for debugging purposes, might print a lot of data
 ///   to stdout.
-pub fn create_engine<D: EngineDatabaseInterface + Clone + DatabaseRef>(
+pub fn create_engine<D: EngineDatabaseInterface + Clone>(
     db: D,
     tokens: Vec<String>,
     trace: bool,
