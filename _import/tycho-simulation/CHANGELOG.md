@@ -1,3 +1,10 @@
+## [0.42.0](https://github.com/propeller-heads/tycho-simulation/compare/0.41.0...0.42.0) (2024-11-19)
+
+
+### Features
+
+* change usv2 from little to big endian decoding ([6192c19](https://github.com/propeller-heads/tycho-simulation/commit/6192c1957d0a5b43d9ac429a58af1698786d601d))
+
 ## [0.41.0](https://github.com/propeller-heads/tycho-simulation/compare/0.40.0...0.41.0) (2024-11-14)
 
 
