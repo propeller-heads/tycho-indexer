@@ -62,10 +62,14 @@ pub async fn print_traces(
         .as_mut()
         .expect("No traces found");
 
-    println!("Traces:");
+    let mut traces_strings = Vec::new();
     for (_, arena) in traces {
         decode_trace_arena(arena, decoder).await?;
-        println!("{}", render_trace_arena(arena));
+        traces_strings.push(render_trace_arena(arena));
+    }
+    println!("Traces:");
+    for t in traces_strings {
+        println!("{}", t);
     }
     println!();
 
