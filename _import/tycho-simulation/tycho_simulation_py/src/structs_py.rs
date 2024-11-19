@@ -538,12 +538,8 @@ impl TychoDB {
 
         let block = block.map(tycho_simulation::evm::simulation_db::BlockHeader::from);
 
-        let runtime = tokio::runtime::Runtime::new().unwrap(); // Create a new Tokio runtime
-        runtime.block_on(async {
-            self_
-                .inner
-                .update(account_updates, block)
-                .await;
-        })
+        self_
+            .inner
+            .update(account_updates, block);
     }
 }
