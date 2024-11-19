@@ -6,13 +6,13 @@ use std::{
 use ethers::types::{H160, H256, U256};
 use tracing::info;
 
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-
 use crate::{
     evm::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
     models::ERC20Token,
-    protocol::{errors::InvalidSnapshotError, vm::state::VMPoolState, BytesConvertible},
+    protocol::{errors::InvalidSnapshotError, vm::state::VMPoolState},
 };
+use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_ethereum::BytesCodec;
 
 pub trait TryFromWithBlock<T> {
     type Error;
