@@ -3,8 +3,6 @@ use std::any::Any;
 use ethers::types::{Sign, I256, U256};
 use tracing::trace;
 
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
-
 use crate::{
     models::ERC20Token,
     protocol::{
@@ -12,10 +10,11 @@ use crate::{
         events::{check_log_idx, EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
-        BytesConvertible,
     },
     safe_math::{safe_add_u256, safe_sub_u256},
 };
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
+use tycho_ethereum::BytesCodec;
 
 use super::{
     enums::FeeAmount,
@@ -25,7 +24,7 @@ use super::{
     swap_math,
     tick_list::{TickInfo, TickList},
     tick_math,
-    tycho_decoder::i24_le_bytes_to_i32,
+    tycho_decoder::i24_be_bytes_to_i32,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -339,7 +338,7 @@ impl ProtocolSim for UniswapV3State {
             } else {
                 tick.clone()
             };
-            self.tick = i24_le_bytes_to_i32(&ticks_4_bytes);
+            self.tick = i24_be_bytes_to_i32(&ticks_4_bytes);
         }
 
         // apply tick changes
@@ -769,16 +768,16 @@ mod tests {
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
         );
         let attributes: HashMap<String, Bytes> = [
-            ("liquidity".to_string(), Bytes::from(2000_u64.to_le_bytes().to_vec())),
-            ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_le_bytes().to_vec())),
-            ("tick".to_string(), Bytes::from(120_i32.to_le_bytes().to_vec())),
+            ("liquidity".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
+            ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_be_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(120_i32.to_be_bytes().to_vec())),
             (
                 "ticks/-255760/net_liquidity".to_string(),
-                Bytes::from(10200_u64.to_le_bytes().to_vec()),
+                Bytes::from(10200_u64.to_be_bytes().to_vec()),
             ),
             (
                 "ticks/255900/net_liquidity".to_string(),
-                Bytes::from(9800_u64.to_le_bytes().to_vec()),
+                Bytes::from(9800_u64.to_be_bytes().to_vec()),
             ),
         ]
         .into_iter()

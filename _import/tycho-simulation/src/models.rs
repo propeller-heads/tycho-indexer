@@ -16,8 +16,7 @@ use serde::{Deserialize, Serialize};
 use tycho_core::Bytes;
 
 use tycho_core::dto::ResponseToken;
-
-use crate::protocol::BytesConvertible;
+use tycho_ethereum::BytesCodec;
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
