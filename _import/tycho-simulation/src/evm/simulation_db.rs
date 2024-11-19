@@ -40,7 +40,7 @@ impl<'a, DB: DatabaseRef> OverriddenSimulationDB<'a, DB> {
     }
 }
 
-impl<'a, DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'a, DB> {
+impl<DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'_, DB> {
     type Error = DB::Error;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
