@@ -14,10 +14,7 @@ use ethers::{
 use itertools::Itertools;
 use revm::{
     precompile::{Address as rAddress, Bytes},
-    primitives::{
-        alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
-        U256 as rU256,
-    },
+    primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode, KECCAK_EMPTY, U256 as rU256},
 };
 use tracing::{info, warn};
 
@@ -45,7 +42,7 @@ use crate::{
             erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
             models::Capability,
             tycho_simulation_contract::TychoSimulationContract,
-            utils::{get_code_for_contract, get_contract_bytecode, SlotId},
+            utils::{get_code_for_contract, SlotId},
         },
     },
 };
@@ -124,11 +121,10 @@ impl VMPoolState<PreCachedDB> {
             adapter_contract: None,
             manual_updates,
         };
-        state
-            .set_engine(adapter_contract_path)
-            .await?;
+        state.set_engine().await?;
         state.adapter_contract = Some(TychoSimulationContract::new_swap_adapter(
             *ADAPTER_ADDRESS,
+            adapter_contract_path,
             state
                 .engine
                 .clone()
@@ -139,7 +135,7 @@ impl VMPoolState<PreCachedDB> {
         Ok(state)
     }
 
-    async fn set_engine(&mut self, adapter_contract_path: String) -> Result<(), SimulationError> {
+    async fn set_engine(&mut self) -> Result<(), SimulationError> {
         if self.engine.is_none() {
             let token_addresses = self
                 .tokens
@@ -169,21 +165,6 @@ impl VMPoolState<PreCachedDB> {
                     nonce: 0,
                     code_hash: KECCAK_EMPTY,
                     code: None,
-                },
-                None,
-                false,
-            );
-            let adapter_contract_code =
-                get_contract_bytecode(&adapter_contract_path).map_err(SimulationError::AbiError)?;
-
-            engine.state.init_account(
-                rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
-                    .expect("Invalid checksum for external account address"),
-                AccountInfo {
-                    balance: *MAX_BALANCE,
-                    nonce: 0,
-                    code_hash: B256::from(keccak256(adapter_contract_code.clone().bytes())),
-                    code: Some(adapter_contract_code),
                 },
                 None,
                 false,

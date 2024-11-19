@@ -1,3 +1,4 @@
+use alloy_primitives::{keccak256, B256};
 use std::{collections::HashMap, fmt::Debug};
 
 use chrono::Utc;
@@ -8,18 +9,22 @@ use ethers::{
 };
 use revm::{
     db::DatabaseRef,
-    primitives::{alloy_primitives::Keccak256, Address},
+    precompile::Address as rAddress,
+    primitives::{alloy_primitives::Keccak256, AccountInfo, Address},
 };
 use tracing::warn;
 
 use crate::{
-    evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
+    evm::{
+        engine_db_interface::EngineDatabaseInterface,
+        simulation::{SimulationEngine, SimulationParameters, SimulationResult},
+    },
     protocol::{
         errors::SimulationError,
         vm::{
-            constants::EXTERNAL_ACCOUNT,
+            constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
             erc20_overwrite_factory::Overwrites,
-            utils::{load_swap_abi, maybe_coerce_error},
+            utils::{get_contract_bytecode, load_swap_abi, maybe_coerce_error},
         },
     },
 };
@@ -54,15 +59,16 @@ pub struct TychoSimulationResponse {
 /// Returns errors of type `SimulationError` when encoding, decoding, or simulation operations
 /// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
-pub struct TychoSimulationContract<D: DatabaseRef + Clone> {
+pub struct TychoSimulationContract<D: EngineDatabaseInterface + Clone> {
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + Clone> TychoSimulationContract<D>
+impl<D: EngineDatabaseInterface + Clone> TychoSimulationContract<D>
 where
-    D::Error: Debug,
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     pub fn new(
         address: Address,
@@ -75,9 +81,27 @@ where
     // Creates a new instance with the ISwapAdapter ABI
     pub fn new_swap_adapter(
         address: Address,
+        adapter_contract_path: String,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
+
+        let adapter_contract_code =
+            get_contract_bytecode(&adapter_contract_path).map_err(SimulationError::AbiError)?;
+
+        engine.state.init_account(
+            rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
+                .expect("Invalid checksum for external account address"),
+            AccountInfo {
+                balance: *MAX_BALANCE,
+                nonce: 0,
+                code_hash: B256::from(keccak256(adapter_contract_code.clone().bytes())),
+                code: Some(adapter_contract_code),
+            },
+            None,
+            false,
+        );
+
         Ok(Self { address, abi, engine })
     }
     fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, SimulationError> {
@@ -238,6 +262,20 @@ mod tests {
         }
     }
 
+    impl EngineDatabaseInterface for MockDatabase {
+        type Error = String;
+
+        fn init_account(
+            &self,
+            _address: Address,
+            _account: AccountInfo,
+            _permanent_storage: Option<HashMap<alloy_primitives::U256, alloy_primitives::U256>>,
+            _mocked: bool,
+        ) {
+            // Do nothing
+        }
+    }
+
     fn create_mock_engine() -> SimulationEngine<MockDatabase> {
         SimulationEngine::new(MockDatabase, false)
     }
@@ -245,7 +283,12 @@ mod tests {
     fn create_contract() -> TychoSimulationContract<MockDatabase> {
         let address = Address::ZERO;
         let engine = create_mock_engine();
-        TychoSimulationContract::new_swap_adapter(address, engine).unwrap()
+        TychoSimulationContract::new_swap_adapter(
+            address,
+            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+            engine,
+        )
+        .unwrap()
     }
 
     #[test]
