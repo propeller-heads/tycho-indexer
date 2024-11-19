@@ -29,4 +29,6 @@ pub trait EngineDatabaseInterface: DatabaseRef {
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
     );
+
+    fn clear_temp_storage(&mut self);
 }

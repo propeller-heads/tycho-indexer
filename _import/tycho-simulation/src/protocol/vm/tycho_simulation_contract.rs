@@ -7,13 +7,16 @@ use ethers::{
     prelude::*,
 };
 use revm::{
-    db::DatabaseRef,
     primitives::{alloy_primitives::Keccak256, Address},
+    DatabaseRef,
 };
 use tracing::warn;
 
 use crate::{
-    evm::simulation::{SimulationEngine, SimulationParameters, SimulationResult},
+    evm::{
+        engine_db_interface::EngineDatabaseInterface,
+        simulation::{SimulationEngine, SimulationParameters, SimulationResult},
+    },
     protocol::{
         errors::SimulationError,
         vm::{
@@ -54,15 +57,20 @@ pub struct TychoSimulationResponse {
 /// Returns errors of type `SimulationError` when encoding, decoding, or simulation operations
 /// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
-pub struct TychoSimulationContract<D: DatabaseRef + Clone> {
+pub struct TychoSimulationContract<D: EngineDatabaseInterface + Clone>
+where
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+{
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
 }
 
-impl<D: DatabaseRef + Clone> TychoSimulationContract<D>
+impl<D: EngineDatabaseInterface + Clone> TychoSimulationContract<D>
 where
-    D::Error: Debug,
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     pub fn new(
         address: Address,
@@ -205,7 +213,11 @@ where
 mod tests {
     use super::*;
 
-    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
+    use crate::evm::engine_db_interface::EngineDatabaseInterface;
+    use revm::{
+        db::DatabaseRef,
+        primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},
+    };
     use std::str::FromStr;
 
     #[derive(Debug, Clone)]
@@ -235,6 +247,24 @@ mod tests {
 
         fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
             Ok(B256::default())
+        }
+    }
+
+    impl EngineDatabaseInterface for MockDatabase {
+        type Error = String;
+
+        fn init_account(
+            &self,
+            _address: Address,
+            _account: AccountInfo,
+            _permanent_storage: Option<HashMap<rU256, rU256>>,
+            _mocked: bool,
+        ) {
+            // Do nothing
+        }
+
+        fn clear_temp_storage(&mut self) {
+            // Do nothing
         }
     }
 

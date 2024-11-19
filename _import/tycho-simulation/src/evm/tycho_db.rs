@@ -229,11 +229,6 @@ impl PreCachedDB {
         })
     }
 
-    /// Deprecated in TychoDB
-    pub fn clear_temp_storage(&mut self) {
-        info!("Temp storage in TychoDB is never set, nothing to clear");
-    }
-
     /// If block is set, returns the number. Otherwise returns None.
     pub fn block_number(&self) -> Option<u64> {
         self.block_on(async { self.inner.read().await.block })
@@ -269,6 +264,11 @@ impl EngineDatabaseInterface for PreCachedDB {
                 .accounts
                 .init_account(address, to_analysed(account), permanent_storage, true)
         });
+    }
+
+    /// Deprecated in TychoDB
+    fn clear_temp_storage(&mut self) {
+        debug!("Temp storage in TychoDB is never set, nothing to clear");
     }
 }
 

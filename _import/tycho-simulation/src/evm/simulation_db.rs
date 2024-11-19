@@ -169,16 +169,6 @@ impl<M: Middleware> SimulationDB<M> {
         revert_updates
     }
 
-    /// Clears temp storage
-    ///
-    /// It is recommended to call this after a new block is received,
-    /// to avoid stored state leading to wrong results.
-    pub fn clear_temp_storage(&mut self) {
-        self.account_storage
-            .borrow_mut()
-            .clear_temp_storage();
-    }
-
     /// Query information about an Ethereum account.
     /// Gets account information not including storage.
     ///
@@ -299,6 +289,16 @@ impl<M: Middleware> EngineDatabaseInterface for SimulationDB<M> {
         self.account_storage
             .borrow_mut()
             .init_account(address, account, permanent_storage, mocked);
+    }
+
+    /// Clears temp storage
+    ///
+    /// It is recommended to call this after a new block is received,
+    /// to avoid stored state leading to wrong results.
+    fn clear_temp_storage(&mut self) {
+        self.account_storage
+            .borrow_mut()
+            .clear_temp_storage();
     }
 }
 
