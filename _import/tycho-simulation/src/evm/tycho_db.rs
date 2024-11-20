@@ -50,7 +50,7 @@ pub enum PreCachedDBError {
 #[derive(Clone, Debug)]
 pub struct PreCachedDBInner {
     /// Storage for accounts
-    accounts: AccountStorage,
+    pub accounts: AccountStorage,
     /// Current block
     block: Option<BlockHeader>,
 }

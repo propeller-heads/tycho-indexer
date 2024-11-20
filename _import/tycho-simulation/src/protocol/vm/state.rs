@@ -20,7 +20,7 @@ use tracing::{info, warn};
 
 use tycho_core::dto::ProtocolStateDelta;
 
-use super::utils::ERC20Slots;
+use super::utils::{load_erc20_bytecode, ERC20Slots};
 use crate::{
     evm::{
         engine_db_interface::EngineDatabaseInterface,
@@ -137,19 +137,35 @@ impl VMPoolState<PreCachedDB> {
 
     async fn set_engine(&mut self) -> Result<(), SimulationError> {
         if self.engine.is_none() {
-            let token_addresses = self
-                .tokens
-                .iter()
-                .map(|addr| to_checksum(addr, None))
-                .collect();
-            let engine: SimulationEngine<_> =
-                create_engine(SHARED_TYCHO_DB.clone(), token_addresses, self.trace)?;
-            engine.state.init_account(
-                "0x0000000000000000000000000000000000000000"
-                    .parse()
-                    .unwrap(),
-                AccountInfo {
+            let engine: SimulationEngine<_> = create_engine(SHARED_TYCHO_DB.clone(), self.trace)?;
+
+            // Mock the ERC20 contract at the given token addresses.
+            let mocked_contract_bytecode = load_erc20_bytecode()?;
+            for token_address in &self.tokens {
+                let info = AccountInfo {
                     balance: Default::default(),
+                    nonce: 0,
+                    code_hash: KECCAK_EMPTY,
+                    code: Some(mocked_contract_bytecode.clone()),
+                };
+                engine.state.init_account(
+                    Address::parse_checksummed(to_checksum(token_address, None), None).map_err(
+                        |_| {
+                            SimulationError::EncodingError(
+                                "Checksum for token address must be valid".into(),
+                            )
+                        },
+                    )?,
+                    info,
+                    None,
+                    false,
+                );
+            }
+
+            engine.state.init_account(
+                *EXTERNAL_ACCOUNT,
+                AccountInfo {
+                    balance: *MAX_BALANCE,
                     nonce: 0,
                     code_hash: KECCAK_EMPTY,
                     code: None,
@@ -157,15 +173,25 @@ impl VMPoolState<PreCachedDB> {
                 None,
                 false,
             );
+
+            let zero_account_info = AccountInfo {
+                balance: Default::default(),
+                nonce: 0,
+                code_hash: KECCAK_EMPTY,
+                code: None,
+            };
+
+            engine.state.init_account(
+                rAddress::parse_checksummed("0x0000000000000000000000000000000000000000", None)
+                    .expect("Invalid checksum for external account address"),
+                zero_account_info.clone(),
+                None,
+                false,
+            );
             engine.state.init_account(
                 rAddress::parse_checksummed("0x0000000000000000000000000000000000000004", None)
                     .expect("Invalid checksum for external account address"),
-                AccountInfo {
-                    balance: Default::default(),
-                    nonce: 0,
-                    code_hash: KECCAK_EMPTY,
-                    code: None,
-                },
+                zero_account_info.clone(),
                 None,
                 false,
             );
@@ -190,7 +216,8 @@ impl VMPoolState<PreCachedDB> {
                     (Some(code.clone()), code.hash_slow())
                 };
                 engine.state.init_account(
-                    address.parse().unwrap(),
+                    rAddress::parse_checksummed(address, None)
+                        .expect("Invalid checksum for external account address"),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
@@ -733,11 +760,7 @@ mod tests {
             .expect("Expected accounts to match AccountUpdate structure");
 
         let db = SHARED_TYCHO_DB.clone();
-        let engine: SimulationEngine<_> = create_engine(
-            db.clone(),
-            vec![to_checksum(&dai().address, None), to_checksum(&bal().address, None)],
-            false,
-        )?;
+        let engine: SimulationEngine<_> = create_engine(db.clone(), false)?;
 
         let block = BlockHeader {
             number: 20463609,
@@ -856,6 +879,38 @@ mod tests {
             .clone()
             .ensure_capability(Capability::MarginalPrice)
             .is_err());
+
+        // Verify all tokens are initialized in the engine
+        let engine_accounts = pool_state
+            .engine
+            .unwrap()
+            .state
+            .inner
+            .read()
+            .await
+            .clone()
+            .accounts
+            .accounts;
+        for token in pool_state.tokens.clone() {
+            let token_address = rAddress::parse_checksummed(to_checksum(&token, None), None)
+                .expect("valid checksum");
+            let account = engine_accounts
+                .get(&token_address)
+                .unwrap();
+            assert_eq!(account.info.balance, rU256::from(0));
+            assert_eq!(account.info.nonce, 0u64);
+            assert_eq!(account.info.code_hash, KECCAK_EMPTY);
+            assert!(account.info.code.is_some());
+        }
+
+        // Verify external account is initialized in the engine
+        let external_account = engine_accounts
+            .get(&*EXTERNAL_ACCOUNT)
+            .unwrap();
+        assert_eq!(external_account.info.balance, rU256::from(*MAX_BALANCE));
+        assert_eq!(external_account.info.nonce, 0u64);
+        assert_eq!(external_account.info.code_hash, KECCAK_EMPTY);
+        assert!(external_account.info.code.is_none());
     }
 
     #[tokio::test]
