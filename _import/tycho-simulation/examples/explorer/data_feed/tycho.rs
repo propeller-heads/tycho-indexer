@@ -17,7 +17,7 @@ use tycho_client::{
     HttpRPCClient,
 };
 use tycho_core::{dto::Chain, Bytes};
-
+use tycho_ethereum::BytesCodec;
 use tycho_simulation::{
     evm::{
         simulation_db::BlockHeader,
@@ -34,7 +34,6 @@ use tycho_simulation::{
             state::VMPoolState,
             tycho_decoder::TryFromWithBlock,
         },
-        BytesConvertible,
     },
 };
 

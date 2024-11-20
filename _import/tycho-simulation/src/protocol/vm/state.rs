@@ -18,7 +18,6 @@ use revm::{
         alloy_primitives::Keccak256, keccak256, AccountInfo, Bytecode, B256, KECCAK_EMPTY,
         U256 as rU256,
     },
-    DatabaseRef,
 };
 use tracing::{info, warn};
 
@@ -52,7 +51,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct VMPoolState<D: DatabaseRef + EngineDatabaseInterface + Clone> {
+pub struct VMPoolState<D: EngineDatabaseInterface + Clone> {
     /// The pool's identifier
     pub id: String,
     /// The pool's token's addresses

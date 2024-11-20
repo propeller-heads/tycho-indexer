@@ -1,10 +1,8 @@
 use ethers::types::U256;
 
+use crate::protocol::{errors::InvalidSnapshotError, uniswap_v2::state::UniswapV2State};
 use tycho_client::feed::synchronizer::ComponentWithState;
-
-use crate::protocol::{
-    errors::InvalidSnapshotError, uniswap_v2::state::UniswapV2State, BytesConvertible,
-};
+use tycho_ethereum::BytesCodec;
 
 impl TryFrom<ComponentWithState> for UniswapV2State {
     type Error = InvalidSnapshotError;
@@ -66,8 +64,8 @@ mod tests {
     #[test]
     fn test_usv2_try_from() {
         let attributes: HashMap<String, Bytes> = vec![
-            ("reserve0".to_string(), Bytes::from(100_u64.to_le_bytes().to_vec())),
-            ("reserve1".to_string(), Bytes::from(200_u64.to_le_bytes().to_vec())),
+            ("reserve0".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec())),
+            ("reserve1".to_string(), Bytes::from(200_u64.to_be_bytes().to_vec())),
         ]
         .into_iter()
         .collect();
@@ -91,7 +89,7 @@ mod tests {
     #[test]
     fn test_usv2_try_from_invalid() {
         let attributes: HashMap<String, Bytes> =
-            vec![("reserve0".to_string(), Bytes::from(100_u64.to_le_bytes().to_vec()))]
+            vec![("reserve0".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec()))]
                 .into_iter()
                 .collect();
         let snapshot = ComponentWithState {
