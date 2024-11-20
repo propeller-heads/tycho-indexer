@@ -217,7 +217,7 @@ mod test {
         let exp = vec![
             CurrencyToken::new(
                 &Bytes::from("0x228c6fcd7376177ff0cff304043f461189752750"),
-                "BLITZ",
+                "BLITZzz",
                 9,
                 500,
                 &[Some(66_960)],
