@@ -1,3 +1,4 @@
+#![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
 use ethers::{
     providers::{Http, Provider},
     types::{Bytes, H256, U256},
