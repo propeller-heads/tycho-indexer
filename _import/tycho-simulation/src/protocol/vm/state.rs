@@ -216,7 +216,17 @@ impl VMPoolState<PreCachedDB> {
                     (Some(code.clone()), code.hash_slow())
                 };
                 engine.state.init_account(
-                    rAddress::parse_checksummed(address, None)
+                    rAddress::parse_checksummed(
+                        to_checksum(
+                            &address.parse().map_err(|_| {
+                                SimulationError::DecodingError(
+                                    "Couldn't parse address into string".into(),
+                                )
+                            })?,
+                            None,
+                        ),
+                        None,
+                    )
                         .expect("Invalid checksum for external account address"),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
@@ -745,11 +755,11 @@ mod tests {
     };
 
     fn dai() -> ERC20Token {
-        ERC20Token::new("0x6B175474E89094C44Da98b954EedeAC495271d0F", 18, "DAI", U256::from(10_000))
+        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
     }
 
     fn bal() -> ERC20Token {
-        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3D", 18, "BAL", U256::from(10_000))
+        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
     }
 
     async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -812,6 +822,11 @@ mod tests {
         let pool_id: String =
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
         dbg!(&tokens);
+
+        let mut stateless_contracts = HashMap::new();
+        stateless_contracts
+            .insert(String::from("0x3de27efa2f1aa663ae5d458857e731c129069f29"), Some(vec![]));
+
         VMPoolState::<PreCachedDB>::new(
             pool_id,
             tokens,
@@ -826,7 +841,7 @@ mod tests {
             Some(EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap()),
             "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
             HashSet::new(),
-            HashMap::new(),
+            stateless_contracts,
             false,
             false,
         )
