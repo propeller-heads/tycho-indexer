@@ -15,6 +15,7 @@ use itertools::Itertools;
 use revm::{
     precompile::{Address as rAddress, Bytes},
     primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode, KECCAK_EMPTY, U256 as rU256},
+    DatabaseRef,
 };
 use tracing::{info, warn};
 
@@ -48,7 +49,11 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct VMPoolState<D: EngineDatabaseInterface + Clone> {
+pub struct VMPoolState<D: EngineDatabaseInterface + Clone>
+where
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+{
     /// The pool's identifier
     pub id: String,
     /// The pool's token's addresses
@@ -418,6 +423,16 @@ impl VMPoolState<PreCachedDB> {
         Ok(limits?.0)
     }
 
+    fn clear_all_cache(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
+        self.engine
+            .as_mut()
+            .ok_or_else(|| SimulationError::NotInitialized("Simulation engine".to_string()))?
+            .clear_temp_storage();
+        self.block_lasting_overwrites.clear();
+        self.set_spot_prices(tokens)?;
+        Ok(())
+    }
+
     fn get_overwrites(
         &self,
         tokens: Vec<H160>,
@@ -670,11 +685,11 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
             {
                 // Assuming `marker` is of type `Bytes`, check its value for "truthiness"
                 if !marker.is_empty() && marker[0] != 0 {
-                    self.set_spot_prices(tokens)?;
+                    self.clear_all_cache(tokens)?;
                 }
             }
         } else {
-            self.set_spot_prices(tokens)?;
+            self.clear_all_cache(tokens)?;
         }
 
         Ok(())
@@ -774,7 +789,7 @@ mod tests {
                 false,
             );
         }
-        db.update(accounts, Some(block)).await;
+        db.update(accounts, Some(block));
 
         Ok(())
     }

@@ -59,7 +59,11 @@ pub struct TychoSimulationResponse {
 /// Returns errors of type `SimulationError` when encoding, decoding, or simulation operations
 /// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
-pub struct TychoSimulationContract<D: EngineDatabaseInterface + Clone> {
+pub struct TychoSimulationContract<D: EngineDatabaseInterface + Clone>
+where
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+{
     abi: Abi,
     address: Address,
     engine: SimulationEngine<D>,
@@ -229,7 +233,11 @@ where
 mod tests {
     use super::*;
 
-    use revm::primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256};
+    use crate::evm::engine_db_interface::EngineDatabaseInterface;
+    use revm::{
+        db::DatabaseRef,
+        primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},
+    };
     use std::str::FromStr;
 
     #[derive(Debug, Clone)]
@@ -269,9 +277,13 @@ mod tests {
             &self,
             _address: Address,
             _account: AccountInfo,
-            _permanent_storage: Option<HashMap<alloy_primitives::U256, alloy_primitives::U256>>,
+            _permanent_storage: Option<HashMap<rU256, rU256>>,
             _mocked: bool,
         ) {
+            // Do nothing
+        }
+
+        fn clear_temp_storage(&mut self) {
             // Do nothing
         }
     }

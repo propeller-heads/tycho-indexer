@@ -1,3 +1,23 @@
+## [0.43.0](https://github.com/propeller-heads/tycho-simulation/compare/0.42.1...0.43.0) (2024-11-21)
+
+
+### Features
+
+* Implement clear_all_cache ([8440caa](https://github.com/propeller-heads/tycho-simulation/commit/8440caa4e81c9a326251b4d64783f10daf846118))
+
+
+### Bug Fixes
+
+* Do not clone self in `clear_all_cache` ([0dc0e88](https://github.com/propeller-heads/tycho-simulation/commit/0dc0e8879eb3037732d504ba19901dd4faddeebb))
+
+## [0.42.1](https://github.com/propeller-heads/tycho-simulation/compare/0.42.0...0.42.1) (2024-11-21)
+
+
+### Bug Fixes
+
+* **db:** avoid deadlocks on the `RwLock` ([b18c60c](https://github.com/propeller-heads/tycho-simulation/commit/b18c60c68e4fc289f35d68b0260719e50fff04bd))
+* **simulation:** correctly handle tokio runtime for traces ([62309a6](https://github.com/propeller-heads/tycho-simulation/commit/62309a6e8726608c96e1986e594e3674c8ea1a75))
+
 ## [0.42.0](https://github.com/propeller-heads/tycho-simulation/compare/0.41.0...0.42.0) (2024-11-19)
 
 

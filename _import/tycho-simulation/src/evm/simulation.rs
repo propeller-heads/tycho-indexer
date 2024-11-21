@@ -1,22 +1,22 @@
 use std::{collections::HashMap, default::Default};
 
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
-    db::DatabaseRef,
     inspector_handle_register,
     interpreter::{return_ok, InstructionResult},
     primitives::{
         alloy_primitives, bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult,
         Output, ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
     },
-    Evm,
+    DatabaseRef, Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use std::clone::Clone;
 use strum_macros::Display;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Handle, Runtime};
 use tracing::{debug, info};
 
 use crate::evm::simulation_db::OverriddenSimulationDB;
@@ -52,14 +52,19 @@ pub struct SimulationResult {
 
 /// Simulation engine
 #[derive(Debug, Clone)]
-pub struct SimulationEngine<D: DatabaseRef + Clone> {
+pub struct SimulationEngine<D: EngineDatabaseInterface + Clone>
+where
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+{
     pub state: D,
     pub trace: bool,
 }
 
-impl<D: DatabaseRef + Clone> SimulationEngine<D>
+impl<D: EngineDatabaseInterface + Clone> SimulationEngine<D>
 where
-    D::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     /// Create a new simulation engine
     ///
@@ -144,6 +149,10 @@ where
         interpret_evm_result(evm_result)
     }
 
+    pub fn clear_temp_storage(&mut self) {
+        self.state.clear_temp_storage();
+    }
+
     fn print_traces(tracer: TracingInspector, res: &ResultAndState) {
         let ResultAndState { result, state: _ } = res;
         let (exit_reason, _gas_refunded, gas_used, _out, _exec_logs) = match result.clone() {
@@ -171,14 +180,21 @@ where
             gas_used,
         };
 
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| Runtime::new().unwrap())
-            .unwrap();
-
-        runtime
-            .block_on(handle_traces(trace_res, &Config::default(), Some(Chain::default()), true))
-            .expect("failure handling traces");
+        tokio::task::block_in_place(|| {
+            let future = async {
+                handle_traces(trace_res, &Config::default(), Some(Chain::default()), true)
+                    .await
+                    .expect("failure handling traces");
+            };
+            if let Ok(handle) = Handle::try_current() {
+                // If successful, use the existing runtime to block on the future
+                handle.block_on(future)
+            } else {
+                // If no runtime is found, create a new one and block on the future
+                let rt = Runtime::new().expect("Failed to create a new runtime");
+                rt.block_on(future)
+            }
+        });
     }
 }
 

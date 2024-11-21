@@ -1,4 +1,5 @@
 //! Safe Math
+//!
 //! This module contains basic functions to perform arithmetic operations on
 //! numerical types of the ethers crate and preventing them from overflowing.
 //! Should an operation cause an overflow a result containing TradeSimulationError

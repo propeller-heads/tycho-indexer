@@ -88,8 +88,7 @@ pub async fn update_engine(
     }
 
     if !vm_updates.is_empty() {
-        db.update(vm_updates.clone(), Some(block))
-            .await;
+        db.update(vm_updates.clone(), Some(block));
     }
 
     vm_updates
