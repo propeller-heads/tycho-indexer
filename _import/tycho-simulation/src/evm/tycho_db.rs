@@ -212,6 +212,15 @@ impl PreCachedDB {
         revert_updates
     }
 
+    #[cfg(test)]
+    pub fn get_account_storage(&self) -> AccountStorage {
+        self.inner
+            .read()
+            .unwrap()
+            .accounts
+            .clone()
+    }
+
     /// If block is set, returns the number. Otherwise returns None.
     pub fn block_number(&self) -> Option<u64> {
         self.inner

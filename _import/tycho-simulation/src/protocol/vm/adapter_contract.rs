@@ -4,7 +4,7 @@ use ethers::{
     abi::{Address, Token},
     types::U256,
 };
-use revm::primitives::Address as rAddress;
+use revm::{primitives::Address as rAddress, DatabaseRef};
 
 use crate::{
     evm::{account_storage::StateUpdate, engine_db_interface::EngineDatabaseInterface},
@@ -39,8 +39,8 @@ pub struct Trade {
 /// - `min_gas_usage`: Queries the minimum gas usage required for operations within the adapter.
 impl<D: EngineDatabaseInterface + std::clone::Clone> TychoSimulationContract<D>
 where
+    <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
-    <D as revm::DatabaseRef>::Error: std::fmt::Debug,
 {
     pub fn price(
         &self,
