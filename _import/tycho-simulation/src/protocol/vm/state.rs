@@ -428,8 +428,8 @@ impl VMPoolState<PreCachedDB> {
     }
 
     fn clear_all_cache(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
-        self.clone()
-            .engine
+        self.engine
+            .as_mut()
             .ok_or_else(|| SimulationError::NotInitialized("Simulation engine".to_string()))?
             .clear_temp_storage();
         self.block_lasting_overwrites.clear();
