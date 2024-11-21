@@ -1,13 +1,12 @@
 use ethers::types::U256;
 
-use tycho_client::feed::synchronizer::ComponentWithState;
-use tycho_core::Bytes;
-
 use crate::protocol::{
     errors::InvalidSnapshotError,
     uniswap_v3::{enums::FeeAmount, state::UniswapV3State, tick_list::TickInfo},
-    BytesConvertible,
 };
+use tycho_client::feed::synchronizer::ComponentWithState;
+use tycho_core::Bytes;
+use tycho_ethereum::BytesCodec;
 
 impl TryFrom<ComponentWithState> for UniswapV3State {
     type Error = InvalidSnapshotError;
@@ -83,7 +82,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
         } else {
             tick
         };
-        let tick = i24_le_bytes_to_i32(&ticks_4_bytes);
+        let tick = i24_be_bytes_to_i32(&ticks_4_bytes);
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
@@ -95,9 +94,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
                         key.split('/')
                             .nth(1)?
                             .parse::<i32>()
-                            .map(|tick_index| {
-                                TickInfo::new(tick_index, decode_le_bytes_as_i128(value))
-                            })
+                            .map(|tick_index| TickInfo::new(tick_index, i128::from(value.clone())))
                             .map_err(|err| InvalidSnapshotError::ValueError(err.to_string())),
                     )
                 } else {
@@ -120,7 +117,7 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
     }
 }
 
-/// Converts a slice of bytes representing a little-endian 24-bit signed integer
+/// Converts a slice of bytes representing a big-endian 24-bit signed integer
 /// to a 32-bit signed integer.
 ///
 /// # Arguments
@@ -128,36 +125,21 @@ impl TryFrom<ComponentWithState> for UniswapV3State {
 ///
 /// # Returns
 /// * The 32-bit signed integer representation of the input bytes.
-pub fn i24_le_bytes_to_i32(val: &Bytes) -> i32 {
+pub fn i24_be_bytes_to_i32(val: &Bytes) -> i32 {
     let bytes_slice = val.as_ref();
     let bytes_len = bytes_slice.len();
     let mut result = 0i32;
 
     for (i, &byte) in bytes_slice.iter().enumerate() {
-        result |= (byte as i32) << (8 * i);
+        result |= (byte as i32) << (8 * (bytes_len - 1 - i));
     }
 
-    // If the last byte is in the input and its most significant bit is set (0x80),
-    // perform sign extension. This is for handling negative numbers.
-    if bytes_len > 0 && bytes_slice[bytes_len - 1] & 0x80 != 0 {
+    // If the first byte (most significant byte) has its most significant bit set (0x80),
+    // perform sign extension for negative numbers.
+    if bytes_len > 0 && bytes_slice[0] & 0x80 != 0 {
         result |= -1i32 << (8 * bytes_len);
     }
     result
-}
-
-fn decode_le_bytes_as_i128(src: &Bytes) -> i128 {
-    let bytes_slice = src.as_ref();
-    let bytes_len = bytes_slice.len();
-    let msb = bytes_slice[bytes_len - 1] & 0x80 != 0;
-
-    // Create an array with zeros.
-    let mut u128_bytes: [u8; 16] = if msb { [0xFF; 16] } else { [0x00; 16] };
-
-    // Copy bytes from bytes_slice to u128_bytes.
-    u128_bytes[..bytes_slice.len()].copy_from_slice(bytes_slice);
-
-    // Convert to i128 using little-endian
-    i128::from_le_bytes(u128_bytes)
 }
 
 #[cfg(test)]
@@ -180,7 +162,7 @@ mod tests {
 
         // Add a static attribute "fee"
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".to_string(), Bytes::from(3000_i32.to_le_bytes().to_vec()));
+        static_attributes.insert("fee".to_string(), Bytes::from(3000_i32.to_be_bytes().to_vec()));
 
         ProtocolComponent {
             id: "State1".to_string(),
@@ -198,10 +180,10 @@ mod tests {
 
     fn usv3_attributes() -> HashMap<String, Bytes> {
         vec![
-            ("liquidity".to_string(), Bytes::from(100_u64.to_le_bytes().to_vec())),
-            ("sqrt_price_x96".to_string(), Bytes::from(200_u64.to_le_bytes().to_vec())),
-            ("tick".to_string(), Bytes::from(300_i32.to_le_bytes().to_vec())),
-            ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_le_bytes().to_vec())),
+            ("liquidity".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec())),
+            ("sqrt_price_x96".to_string(), Bytes::from(200_u64.to_be_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(300_i32.to_be_bytes().to_vec())),
+            ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_be_bytes().to_vec())),
         ]
         .into_iter()
         .collect::<HashMap<String, Bytes>>()
@@ -281,7 +263,7 @@ mod tests {
         let mut component = usv3_component();
         component
             .static_attributes
-            .insert("fee".to_string(), Bytes::from(4000_i32.to_le_bytes().to_vec()));
+            .insert("fee".to_string(), Bytes::from(4000_i32.to_be_bytes().to_vec()));
 
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
@@ -302,22 +284,15 @@ mod tests {
     }
 
     #[test]
-    fn test_i24_le_bytes_to_i32() {
-        let val = Bytes::from_str("0xc6affe").unwrap();
-        let converted = i24_le_bytes_to_i32(&val);
+    fn test_i24_be_bytes_to_i32() {
+        let val = Bytes::from_str("0xfeafc6").unwrap();
+        let converted = i24_be_bytes_to_i32(&val);
         assert_eq!(converted, -86074);
-        let val = Bytes::from_str("0xdd02").unwrap();
-        let converted = i24_le_bytes_to_i32(&val);
+        let val = Bytes::from_str("0x02dd").unwrap();
+        let converted = i24_be_bytes_to_i32(&val);
         assert_eq!(converted, 733);
-        let val = Bytes::from_str("0xbbe2").unwrap();
-        let converted = i24_le_bytes_to_i32(&val);
+        let val = Bytes::from_str("0xe2bb").unwrap();
+        let converted = i24_be_bytes_to_i32(&val);
         assert_eq!(converted, -7493);
-    }
-
-    #[test]
-    fn test_i24_le_bytes_to() {
-        let val = Bytes::from_str("0xe0629dfd41bec2e5").unwrap();
-        let converted = decode_le_bytes_as_i128(&val);
-        assert_eq!(converted, -1890739702905085216);
     }
 }

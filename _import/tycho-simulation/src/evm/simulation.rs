@@ -16,7 +16,7 @@ use revm::{
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use std::clone::Clone;
 use strum_macros::Display;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Handle, Runtime};
 use tracing::{debug, info};
 
 use crate::evm::simulation_db::OverriddenSimulationDB;
@@ -180,14 +180,21 @@ where
             gas_used,
         };
 
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| Runtime::new().unwrap())
-            .unwrap();
-
-        runtime
-            .block_on(handle_traces(trace_res, &Config::default(), Some(Chain::default()), true))
-            .expect("failure handling traces");
+        tokio::task::block_in_place(|| {
+            let future = async {
+                handle_traces(trace_res, &Config::default(), Some(Chain::default()), true)
+                    .await
+                    .expect("failure handling traces");
+            };
+            if let Ok(handle) = Handle::try_current() {
+                // If successful, use the existing runtime to block on the future
+                handle.block_on(future)
+            } else {
+                // If no runtime is found, create a new one and block on the future
+                let rt = Runtime::new().expect("Failed to create a new runtime");
+                rt.block_on(future)
+            }
+        });
     }
 }
 
