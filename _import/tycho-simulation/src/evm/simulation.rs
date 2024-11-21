@@ -1,17 +1,17 @@
 use std::{collections::HashMap, default::Default};
 
+use crate::evm::engine_db_interface::EngineDatabaseInterface;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
-    db::DatabaseRef,
     inspector_handle_register,
     interpreter::{return_ok, InstructionResult},
     primitives::{
         alloy_primitives, bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult,
         Output, ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
     },
-    Evm,
+    DatabaseRef, Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use std::clone::Clone;
@@ -52,14 +52,19 @@ pub struct SimulationResult {
 
 /// Simulation engine
 #[derive(Debug, Clone)]
-pub struct SimulationEngine<D: DatabaseRef + Clone> {
+pub struct SimulationEngine<D: EngineDatabaseInterface + Clone>
+where
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+{
     pub state: D,
     pub trace: bool,
 }
 
-impl<D: DatabaseRef + Clone> SimulationEngine<D>
+impl<D: EngineDatabaseInterface + Clone> SimulationEngine<D>
 where
-    D::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     /// Create a new simulation engine
     ///
@@ -142,6 +147,10 @@ where
         };
 
         interpret_evm_result(evm_result)
+    }
+
+    pub fn clear_temp_storage(&mut self) {
+        self.state.clear_temp_storage();
     }
 
     fn print_traces(tracer: TracingInspector, res: &ResultAndState) {

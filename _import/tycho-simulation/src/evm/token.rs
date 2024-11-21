@@ -1,6 +1,9 @@
-use crate::protocol::vm::{
-    constants::EXTERNAL_ACCOUNT, erc20_overwrite_factory::ERC20OverwriteFactory,
-    tycho_simulation_contract::TychoSimulationContract, utils::ERC20Slots,
+use crate::{
+    evm::engine_db_interface::EngineDatabaseInterface,
+    protocol::vm::{
+        constants::EXTERNAL_ACCOUNT, erc20_overwrite_factory::ERC20OverwriteFactory,
+        tycho_simulation_contract::TychoSimulationContract, utils::ERC20Slots,
+    },
 };
 use ethers::{
     abi::{Abi, Token},
@@ -67,13 +70,14 @@ pub enum TokenError {
 ///   testing both compiler configurations.
 /// - Once the balance slot is found, it uses the detected compiler to search for the allowance
 ///   slot, which is dependent on the balance slot.
-pub fn brute_force_slots<D: DatabaseRef + Clone>(
+pub fn brute_force_slots<D: EngineDatabaseInterface + Clone>(
     token_addr: &H160,
     block: &BlockHeader,
     engine: &SimulationEngine<D>,
 ) -> Result<(ERC20Slots, ContractCompiler), TokenError>
 where
-    <D as DatabaseRef>::Error: Debug,
+    <D as DatabaseRef>::Error: std::fmt::Debug,
+    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     let token_contract = TychoSimulationContract::new(
         Address::from_slice(token_addr.as_bytes()),

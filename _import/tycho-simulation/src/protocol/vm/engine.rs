@@ -138,6 +138,10 @@ mod tests {
                 .borrow_mut()
                 .insert(address, account);
         }
+
+        fn clear_temp_storage(&mut self) {
+            // Do nothing
+        }
     }
 
     impl DatabaseRef for MockDatabase {
