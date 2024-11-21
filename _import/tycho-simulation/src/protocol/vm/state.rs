@@ -21,7 +21,7 @@ use tracing::{info, warn};
 
 use tycho_core::dto::ProtocolStateDelta;
 
-use super::utils::{load_erc20_bytecode, ERC20Slots};
+use super::utils::{hexstring_to_vec, load_erc20_bytecode, ERC20Slots};
 use crate::{
     evm::{
         engine_db_interface::EngineDatabaseInterface,
@@ -311,6 +311,7 @@ impl VMPoolState<PreCachedDB> {
 
     fn set_capabilities(&mut self) -> Result<(), SimulationError> {
         let mut capabilities = Vec::new();
+        let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
 
         // Generate all permutations of tokens and retrieve capabilities
         for tokens_pair in self.tokens.iter().permutations(2) {
@@ -320,7 +321,7 @@ impl VMPoolState<PreCachedDB> {
                     .adapter_contract
                     .clone()
                     .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
-                    .get_capabilities(self.id.clone()[2..].to_string(), *t0, *t1)?;
+                    .get_capabilities(pool_id_vec.clone(), *t0, *t1)?;
                 capabilities.push(caps);
             }
         }
@@ -350,7 +351,7 @@ impl VMPoolState<PreCachedDB> {
     }
 
     pub fn set_spot_prices(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
-        info!("Setting spot prices for pool {}", self.id);
+        info!("Setting spot prices for pool {}", self.id.clone());
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
             .iter()
@@ -366,12 +367,13 @@ impl VMPoolState<PreCachedDB> {
                 overwrites.clone(),
             )?;
             info!("Got sell amount limit for spot prices {:?}", &sell_amount_limit);
+            let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
             let price_result = self
                 .adapter_contract
                 .clone()
                 .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
                 .price(
-                    self.id.clone()[2..].to_string(),
+                    pool_id_vec,
                     sell_token.address,
                     buy_token.address,
                     vec![sell_amount_limit / U256::from(100)],
@@ -412,13 +414,9 @@ impl VMPoolState<PreCachedDB> {
             .adapter_contract
             .clone()
             .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?;
-        let limits = binding.get_limits(
-            self.id.clone()[2..].to_string(),
-            tokens[0],
-            tokens[1],
-            self.block.number,
-            overwrites,
-        );
+        let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
+        let limits =
+            binding.get_limits(pool_id_vec, tokens[0], tokens[1], self.block.number, overwrites);
 
         Ok(limits?.0)
     }
@@ -609,13 +607,14 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
             self.get_overwrites(vec![sell_token, buy_token], sell_amount_limit)?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
         let pool_id = self.id.clone();
+        let pool_id_vec = hexstring_to_vec(&pool_id).unwrap();
 
         let (trade, state_changes) = self
             .adapter_contract
             .as_ref()
             .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
             .swap(
-                pool_id[2..].to_string(),
+                pool_id_vec,
                 sell_token,
                 buy_token,
                 false,
@@ -859,15 +858,13 @@ mod tests {
         .into_iter()
         .collect::<HashSet<_>>();
 
+        let pool_id_vec = hexstring_to_vec(&pool_state.id).unwrap();
+
         let capabilities_adapter_contract = pool_state
             .clone()
             .adapter_contract
             .unwrap()
-            .get_capabilities(
-                pool_state.id[2..].to_string(),
-                pool_state.tokens[0],
-                pool_state.tokens[1],
-            )
+            .get_capabilities(pool_id_vec, pool_state.tokens[0], pool_state.tokens[1])
             .unwrap();
 
         assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());

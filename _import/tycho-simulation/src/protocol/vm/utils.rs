@@ -330,6 +330,13 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     Ok(erc_20_bytecode)
 }
 
+pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
+    let bytes = hex::decode(&hexstring[2..]).map_err(|_| {
+        SimulationError::EncodingError(format!("Invalid hex string: {}", hexstring))
+    })?;
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
