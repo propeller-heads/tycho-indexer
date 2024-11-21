@@ -1,3 +1,11 @@
+## [0.43.1](https://github.com/propeller-heads/tycho-simulation/compare/0.43.0...0.43.1) (2024-11-21)
+
+
+### Bug Fixes
+
+* checksum address before converting to rAddress ([d38cec8](https://github.com/propeller-heads/tycho-simulation/commit/d38cec8d3162c8fcd9351edb6db1977013189cc2))
+* Do not make accounts public ([832b873](https://github.com/propeller-heads/tycho-simulation/commit/832b87377fc84e625978f8ec8d7e3ee4afc0ea92))
+
 ## [0.43.0](https://github.com/propeller-heads/tycho-simulation/compare/0.42.1...0.43.0) (2024-11-21)
 
 
