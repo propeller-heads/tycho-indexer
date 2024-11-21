@@ -782,7 +782,7 @@ mod tests {
                 false,
             );
         }
-        db.update(accounts, Some(block)).await;
+        db.update(accounts, Some(block));
 
         Ok(())
     }

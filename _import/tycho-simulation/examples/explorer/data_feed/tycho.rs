@@ -79,7 +79,6 @@ fn balancer_pool_filter(component: &ComponentWithState) -> bool {
         "SiloLinearPoolFactory",
         "YearnLinearPoolFactory",
         "ComposableStablePoolFactory",
-        "WeightedPool2TokensFactory",
     ]
     .iter()
     .cloned()
