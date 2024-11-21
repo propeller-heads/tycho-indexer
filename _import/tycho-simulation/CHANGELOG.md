@@ -1,3 +1,15 @@
+## [0.43.0](https://github.com/propeller-heads/tycho-simulation/compare/0.42.1...0.43.0) (2024-11-21)
+
+
+### Features
+
+* Implement clear_all_cache ([8440caa](https://github.com/propeller-heads/tycho-simulation/commit/8440caa4e81c9a326251b4d64783f10daf846118))
+
+
+### Bug Fixes
+
+* Do not clone self in `clear_all_cache` ([0dc0e88](https://github.com/propeller-heads/tycho-simulation/commit/0dc0e8879eb3037732d504ba19901dd4faddeebb))
+
 ## [0.42.1](https://github.com/propeller-heads/tycho-simulation/compare/0.42.0...0.42.1) (2024-11-21)
 
 
