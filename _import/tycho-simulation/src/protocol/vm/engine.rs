@@ -1,7 +1,10 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use lazy_static::lazy_static;
-use revm::{primitives::Address, DatabaseRef};
+use revm::{
+    primitives::{AccountInfo, Address, KECCAK_EMPTY},
+    DatabaseRef,
+};
 
 use crate::{
     evm::{
@@ -13,6 +16,7 @@ use crate::{
     },
     protocol::errors::SimulationError,
 };
+use revm::precompile::Address as rAddress;
 
 lazy_static! {
     pub static ref SHARED_TYCHO_DB: PreCachedDB =
@@ -34,6 +38,26 @@ where
     <D as DatabaseRef>::Error: Debug,
 {
     let engine = SimulationEngine::new(db.clone(), trace);
+
+    let zero_account_info =
+        AccountInfo { balance: Default::default(), nonce: 0, code_hash: KECCAK_EMPTY, code: None };
+
+    // Accounts necessary for enabling pre-compilation are initialized by default.
+    engine.state.init_account(
+        rAddress::parse_checksummed("0x0000000000000000000000000000000000000000", None)
+            .expect("Invalid checksum for precompile-enabling address"),
+        zero_account_info.clone(),
+        None,
+        false,
+    );
+    engine.state.init_account(
+        rAddress::parse_checksummed("0x0000000000000000000000000000000000000004", None)
+            .expect("Invalid checksum for precompile-enabling address"),
+        zero_account_info.clone(),
+        None,
+        false,
+    );
+
     Ok(engine)
 }
 

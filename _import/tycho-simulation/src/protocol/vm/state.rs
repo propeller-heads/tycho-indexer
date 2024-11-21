@@ -174,28 +174,6 @@ impl VMPoolState<PreCachedDB> {
                 false,
             );
 
-            let zero_account_info = AccountInfo {
-                balance: Default::default(),
-                nonce: 0,
-                code_hash: KECCAK_EMPTY,
-                code: None,
-            };
-
-            engine.state.init_account(
-                rAddress::parse_checksummed("0x0000000000000000000000000000000000000000", None)
-                    .expect("Invalid checksum for external account address"),
-                zero_account_info.clone(),
-                None,
-                false,
-            );
-            engine.state.init_account(
-                rAddress::parse_checksummed("0x0000000000000000000000000000000000000004", None)
-                    .expect("Invalid checksum for external account address"),
-                zero_account_info.clone(),
-                None,
-                false,
-            );
-
             for (address, bytecode) in self.stateless_contracts.iter() {
                 let (code, code_hash) = if bytecode.is_none() {
                     let mut addr_str = format!("{:?}", address);
@@ -227,7 +205,7 @@ impl VMPoolState<PreCachedDB> {
                         ),
                         None,
                     )
-                        .expect("Invalid checksum for external account address"),
+                    .expect("Invalid checksum for external account address"),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
