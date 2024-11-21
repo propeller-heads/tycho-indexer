@@ -27,7 +27,7 @@ pub struct StateUpdate {
 #[derive(Clone, Default, Debug)]
 /// A simpler implementation of CacheDB that can't query a node. It just stores data.
 pub struct AccountStorage {
-    pub accounts: HashMap<Address, Account>,
+    accounts: HashMap<Address, Account>,
 }
 
 impl AccountStorage {

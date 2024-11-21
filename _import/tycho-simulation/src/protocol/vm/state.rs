@@ -885,32 +885,28 @@ mod tests {
             .engine
             .unwrap()
             .state
-            .inner
-            .read()
-            .await
             .clone()
-            .accounts
-            .accounts;
+            .get_account_storage();
         for token in pool_state.tokens.clone() {
             let token_address = rAddress::parse_checksummed(to_checksum(&token, None), None)
                 .expect("valid checksum");
             let account = engine_accounts
-                .get(&token_address)
+                .get_account_info(&token_address)
                 .unwrap();
-            assert_eq!(account.info.balance, rU256::from(0));
-            assert_eq!(account.info.nonce, 0u64);
-            assert_eq!(account.info.code_hash, KECCAK_EMPTY);
-            assert!(account.info.code.is_some());
+            assert_eq!(account.balance, rU256::from(0));
+            assert_eq!(account.nonce, 0u64);
+            assert_eq!(account.code_hash, KECCAK_EMPTY);
+            assert!(account.code.is_some());
         }
 
         // Verify external account is initialized in the engine
         let external_account = engine_accounts
-            .get(&*EXTERNAL_ACCOUNT)
+            .get_account_info(&EXTERNAL_ACCOUNT)
             .unwrap();
-        assert_eq!(external_account.info.balance, rU256::from(*MAX_BALANCE));
-        assert_eq!(external_account.info.nonce, 0u64);
-        assert_eq!(external_account.info.code_hash, KECCAK_EMPTY);
-        assert!(external_account.info.code.is_none());
+        assert_eq!(external_account.balance, rU256::from(*MAX_BALANCE));
+        assert_eq!(external_account.nonce, 0u64);
+        assert_eq!(external_account.code_hash, KECCAK_EMPTY);
+        assert!(external_account.code.is_none());
     }
 
     #[tokio::test]

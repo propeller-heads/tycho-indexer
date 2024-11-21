@@ -50,7 +50,7 @@ pub enum PreCachedDBError {
 #[derive(Clone, Debug)]
 pub struct PreCachedDBInner {
     /// Storage for accounts
-    pub accounts: AccountStorage,
+    accounts: AccountStorage,
     /// Current block
     block: Option<BlockHeader>,
 }
@@ -227,6 +227,11 @@ impl PreCachedDB {
 
             revert_updates
         })
+    }
+
+    #[cfg(test)]
+    pub fn get_account_storage(&self) -> AccountStorage {
+        self.block_on(async { self.inner.read().await.accounts.clone() })
     }
 
     /// Deprecated in TychoDB
