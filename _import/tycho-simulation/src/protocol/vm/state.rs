@@ -4,32 +4,18 @@ use std::{
 };
 
 use alloy_primitives::Address;
-use chrono::Utc;
-use ethers::{
-    abi::{decode, ParamType},
-    prelude::U256,
-    types::H160,
-    utils::to_checksum,
-};
+use ethers::{prelude::U256, types::H160};
 use itertools::Itertools;
-use revm::{
-    precompile::{Address as rAddress, Bytes},
-    primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode, KECCAK_EMPTY, U256 as rU256},
-    DatabaseRef,
-};
-use tracing::{info, warn};
+use revm::{precompile::Address as rAddress, primitives::U256 as rU256, DatabaseRef};
+use tracing::info;
 
 use tycho_core::dto::ProtocolStateDelta;
 
 use super::utils::{hexstring_to_vec, load_erc20_bytecode, ERC20Slots};
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface,
-        simulation::{SimulationEngine, SimulationParameters},
-        simulation_db::BlockHeader,
-        token,
-        tycho_db::PreCachedDB,
-        ContractCompiler,
+        engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
+        tycho_db::PreCachedDB, ContractCompiler,
     },
     models::ERC20Token,
     protocol::{
@@ -39,11 +25,10 @@ use crate::{
         state::{ProtocolEvent, ProtocolSim},
         vm::{
             constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-            engine::{create_engine, SHARED_TYCHO_DB},
             erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
             models::Capability,
             tycho_simulation_contract::TychoSimulationContract,
-            utils::{get_code_for_contract, SlotId},
+            utils::SlotId,
         },
     },
 };
@@ -81,223 +66,15 @@ where
     /// Each entry also specify the compiler with which the target contract was compiled. This is
     /// later used to compute storage slot for maps.
     pub token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
-    /// The address to bytecode map of all stateless contracts used by the protocol
-    /// for simulations. If the bytecode is None, an RPC call is done to get the code from our node
-    pub stateless_contracts: HashMap<String, Option<Vec<u8>>>,
-    /// If set, vm will emit detailed traces about the execution
-    pub trace: bool,
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
     pub manual_updates: bool,
-    engine: Option<SimulationEngine<D>>,
     /// The adapter contract. This is used to run simulations
-    adapter_contract: Option<TychoSimulationContract<D>>,
+    pub adapter_contract: TychoSimulationContract<D>,
 }
 
 impl VMPoolState<PreCachedDB> {
-    #[allow(clippy::too_many_arguments)]
-    pub async fn new(
-        id: String,
-        tokens: Vec<H160>,
-        block: BlockHeader,
-        balances: HashMap<H160, U256>,
-        balance_owner: Option<H160>,
-        adapter_contract_path: String,
-        involved_contracts: HashSet<H160>,
-        stateless_contracts: HashMap<String, Option<Vec<u8>>>,
-        manual_updates: bool,
-        trace: bool,
-    ) -> Result<Self, SimulationError> {
-        let mut state = VMPoolState {
-            id,
-            tokens,
-            block,
-            balances,
-            balance_owner,
-            spot_prices: HashMap::new(),
-            capabilities: HashSet::new(),
-            block_lasting_overwrites: HashMap::new(),
-            involved_contracts,
-            token_storage_slots: HashMap::new(),
-            stateless_contracts,
-            trace,
-            engine: None,
-            adapter_contract: None,
-            manual_updates,
-        };
-        state.set_engine().await?;
-        state.adapter_contract = Some(TychoSimulationContract::new_swap_adapter(
-            *ADAPTER_ADDRESS,
-            adapter_contract_path,
-            state
-                .engine
-                .clone()
-                .ok_or_else(|| SimulationError::NotInitialized("Simulation engine".to_string()))?,
-        )?);
-        state.set_capabilities()?;
-        state.init_token_storage_slots()?;
-        Ok(state)
-    }
-
-    async fn set_engine(&mut self) -> Result<(), SimulationError> {
-        if self.engine.is_none() {
-            let engine: SimulationEngine<_> = create_engine(SHARED_TYCHO_DB.clone(), self.trace)?;
-
-            // Mock the ERC20 contract at the given token addresses.
-            let mocked_contract_bytecode = load_erc20_bytecode()?;
-            for token_address in &self.tokens {
-                let info = AccountInfo {
-                    balance: Default::default(),
-                    nonce: 0,
-                    code_hash: KECCAK_EMPTY,
-                    code: Some(mocked_contract_bytecode.clone()),
-                };
-                engine.state.init_account(
-                    Address::parse_checksummed(to_checksum(token_address, None), None).map_err(
-                        |_| {
-                            SimulationError::EncodingError(
-                                "Checksum for token address must be valid".into(),
-                            )
-                        },
-                    )?,
-                    info,
-                    None,
-                    false,
-                );
-            }
-
-            engine.state.init_account(
-                *EXTERNAL_ACCOUNT,
-                AccountInfo {
-                    balance: *MAX_BALANCE,
-                    nonce: 0,
-                    code_hash: KECCAK_EMPTY,
-                    code: None,
-                },
-                None,
-                false,
-            );
-
-            for (address, bytecode) in self.stateless_contracts.iter() {
-                let (code, code_hash) = if bytecode.is_none() {
-                    let mut addr_str = format!("{:?}", address);
-                    if addr_str.starts_with("call") {
-                        addr_str = self
-                            .get_address_from_call(&engine, &addr_str)?
-                            .to_string();
-                    }
-                    let code = get_code_for_contract(&addr_str, None).await?;
-                    (Some(code.clone()), code.hash_slow())
-                } else {
-                    let code =
-                        Bytecode::new_raw(Bytes::from(bytecode.clone().ok_or_else(|| {
-                            SimulationError::DecodingError(
-                                "Byte code from stateless contracts is None".into(),
-                            )
-                        })?));
-                    (Some(code.clone()), code.hash_slow())
-                };
-                engine.state.init_account(
-                    rAddress::parse_checksummed(
-                        to_checksum(
-                            &address.parse().map_err(|_| {
-                                SimulationError::DecodingError(
-                                    "Couldn't parse address into string".into(),
-                                )
-                            })?,
-                            None,
-                        ),
-                        None,
-                    )
-                    .expect("Invalid checksum for external account address"),
-                    AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
-                    None,
-                    false,
-                );
-            }
-            self.engine = Some(engine);
-            Ok(())
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Gets the address of the code - mostly used for dynamic proxy implementations. For example,
-    /// some protocols have some dynamic math implementation that is given by the factory. When
-    /// we swap on the pools for such protocols, it will call the factory to get the implementation
-    /// and use it for the swap.
-    /// This method simulates the call to the pool, which gives us the address of the
-    /// implementation.
-    ///
-    /// # See Also
-    /// [Dynamic Address Resolution Example](https://github.com/propeller-heads/propeller-protocol-lib/blob/main/docs/indexing/reserved-attributes.md#description-2)
-    fn get_address_from_call(
-        &self,
-        engine: &SimulationEngine<PreCachedDB>,
-        decoded: &str,
-    ) -> Result<rAddress, SimulationError> {
-        let method_name = decoded
-            .split(':')
-            .last()
-            .ok_or_else(|| {
-                SimulationError::DecodingError("Invalid decoded string format".into())
-            })?;
-
-        let selector = {
-            let mut hasher = Keccak256::new();
-            hasher.update(method_name.as_bytes());
-            let result = hasher.finalize();
-            result[..4].to_vec()
-        };
-
-        let to_address = decoded
-            .split(':')
-            .nth(1)
-            .ok_or_else(|| {
-                SimulationError::DecodingError("Invalid decoded string format".into())
-            })?;
-
-        let timestamp = Utc::now()
-            .naive_utc()
-            .and_utc()
-            .timestamp() as u64;
-
-        let parsed_address: rAddress = to_address
-            .parse()
-            .map_err(|_| SimulationError::DecodingError("Invalid address format".into()))?;
-
-        let sim_params = SimulationParameters {
-            data: selector.to_vec().into(),
-            to: parsed_address,
-            block_number: self.block.number,
-            timestamp,
-            overrides: Some(HashMap::new()),
-            caller: *EXTERNAL_ACCOUNT,
-            value: 0.into(),
-            gas_limit: None,
-        };
-
-        let sim_result = engine
-            .simulate(&sim_params)
-            .map_err(SimulationError::SimulationEngineError)?;
-
-        let address = decode(&[ParamType::Address], &sim_result.result)
-            .map_err(|_| SimulationError::DecodingError("Failed to decode ABI".into()))?
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                SimulationError::DecodingError(
-                    "Couldn't retrieve address from simulation for stateless contracts".into(),
-                )
-            })?;
-
-        address
-            .to_string()
-            .parse()
-            .map_err(|_| SimulationError::DecodingError("Couldn't parse address to string".into()))
-    }
-
     /// Ensures the pool supports the given capability
     fn ensure_capability(&self, capability: Capability) -> Result<(), SimulationError> {
         if !self.capabilities.contains(&capability) {
@@ -305,47 +82,6 @@ impl VMPoolState<PreCachedDB> {
                 "capability {:?}",
                 capability.to_string()
             )));
-        }
-        Ok(())
-    }
-
-    fn set_capabilities(&mut self) -> Result<(), SimulationError> {
-        let mut capabilities = Vec::new();
-        let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
-
-        // Generate all permutations of tokens and retrieve capabilities
-        for tokens_pair in self.tokens.iter().permutations(2) {
-            // Manually unpack the inner vector
-            if let [t0, t1] = tokens_pair[..] {
-                let caps = self
-                    .adapter_contract
-                    .clone()
-                    .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
-                    .get_capabilities(pool_id_vec.clone(), *t0, *t1)?;
-                capabilities.push(caps);
-            }
-        }
-
-        // Find the maximum capabilities length
-        let max_capabilities = capabilities
-            .iter()
-            .map(|c| c.len())
-            .max()
-            .unwrap_or(0);
-
-        // Intersect all capability sets
-        let common_capabilities: HashSet<_> = capabilities
-            .iter()
-            .fold(capabilities[0].clone(), |acc, cap| acc.intersection(cap).cloned().collect());
-
-        self.capabilities = common_capabilities;
-
-        // Check for mismatches in capabilities
-        if self.capabilities.len() < max_capabilities {
-            warn!(
-                "Warning: Pool {} has different capabilities depending on the token pair!",
-                self.id
-            );
         }
         Ok(())
     }
@@ -368,18 +104,14 @@ impl VMPoolState<PreCachedDB> {
             )?;
             info!("Got sell amount limit for spot prices {:?}", &sell_amount_limit);
             let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
-            let price_result = self
-                .adapter_contract
-                .clone()
-                .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
-                .price(
-                    pool_id_vec,
-                    sell_token.address,
-                    buy_token.address,
-                    vec![sell_amount_limit / U256::from(100)],
-                    self.block.number,
-                    overwrites,
-                )?;
+            let price_result = self.adapter_contract.price(
+                pool_id_vec,
+                sell_token.address,
+                buy_token.address,
+                vec![sell_amount_limit / U256::from(100)],
+                self.block.number,
+                overwrites,
+            )?;
 
             let price = if self
                 .capabilities
@@ -410,21 +142,21 @@ impl VMPoolState<PreCachedDB> {
         tokens: Vec<H160>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<U256, SimulationError> {
-        let binding = self
-            .adapter_contract
-            .clone()
-            .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?;
         let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
-        let limits =
-            binding.get_limits(pool_id_vec, tokens[0], tokens[1], self.block.number, overwrites);
+        let limits = self.adapter_contract.get_limits(
+            pool_id_vec,
+            tokens[0],
+            tokens[1],
+            self.block.number,
+            overwrites,
+        );
 
         Ok(limits?.0)
     }
 
     fn clear_all_cache(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
-        self.engine
-            .as_mut()
-            .ok_or_else(|| SimulationError::NotInitialized("Simulation engine".to_string()))?
+        self.adapter_contract
+            .engine
             .clear_temp_storage();
         self.block_lasting_overwrites.clear();
         self.set_spot_prices(tokens)?;
@@ -546,24 +278,6 @@ impl VMPoolState<PreCachedDB> {
 
         merged
     }
-
-    fn init_token_storage_slots(&mut self) -> Result<(), SimulationError> {
-        for t in self.tokens.iter() {
-            if self.involved_contracts.contains(t) && !self.token_storage_slots.contains_key(t) {
-                self.token_storage_slots.insert(
-                    *t,
-                    token::brute_force_slots(
-                        t,
-                        &self.block,
-                        self.engine
-                            .as_ref()
-                            .expect("engine should be set"),
-                    )?,
-                );
-            }
-        }
-        Ok(())
-    }
 }
 
 impl ProtocolSim for VMPoolState<PreCachedDB> {
@@ -609,19 +323,15 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         let pool_id = self.id.clone();
         let pool_id_vec = hexstring_to_vec(&pool_id).unwrap();
 
-        let (trade, state_changes) = self
-            .adapter_contract
-            .as_ref()
-            .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
-            .swap(
-                pool_id_vec,
-                sell_token,
-                buy_token,
-                false,
-                sell_amount_respecting_limit,
-                self.block.number,
-                Some(complete_overwrites),
-            )?;
+        let (trade, state_changes) = self.adapter_contract.swap(
+            pool_id_vec,
+            sell_token,
+            buy_token,
+            false,
+            sell_amount_respecting_limit,
+            self.block.number,
+            Some(complete_overwrites),
+        )?;
 
         let mut new_state = self.clone();
 
@@ -732,7 +442,9 @@ mod tests {
     use ethers::{
         prelude::{H256, U256},
         types::Address as EthAddress,
+        utils::to_checksum,
     };
+    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
     use std::{
         collections::{HashMap, HashSet},
@@ -742,8 +454,14 @@ mod tests {
     };
 
     use crate::{
-        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
-        protocol::vm::models::Capability,
+        evm::{
+            simulation::SimulationEngine, simulation_db::BlockHeader, tycho_models::AccountUpdate,
+        },
+        protocol::vm::{
+            engine::{create_engine, SHARED_TYCHO_DB},
+            models::Capability,
+            state_builder::VMPoolStateBuilder,
+        },
     };
 
     fn dai() -> ERC20Token {
@@ -815,30 +533,29 @@ mod tests {
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
         dbg!(&tokens);
 
-        let mut stateless_contracts = HashMap::new();
-        stateless_contracts
-            .insert(String::from("0x3de27efa2f1aa663ae5d458857e731c129069f29"), Some(vec![]));
+        let stateless_contracts = HashMap::from([(
+            String::from("0x3de27efa2f1aa663ae5d458857e731c129069f29"),
+            Some(Vec::new()),
+        )]);
 
-        VMPoolState::<PreCachedDB>::new(
-            pool_id,
-            tokens,
-            block,
-            HashMap::from([
+        VMPoolStateBuilder::new(pool_id, tokens, block)
+            .balances(HashMap::from([
                 (
                     EthAddress::from(dai_addr.0),
                     U256::from_dec_str("178754012737301807104").unwrap(),
                 ),
                 (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
-            ]),
-            Some(EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap()),
-            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
-            HashSet::new(),
-            stateless_contracts,
-            false,
-            false,
-        )
-        .await
-        .expect("Failed to initialize pool state")
+            ]))
+            .balance_owner(
+                EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
+            )
+            .adapter_contract_path(
+                "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+            )
+            .stateless_contracts(stateless_contracts)
+            .build()
+            .await
+            .expect("Failed to build pool state")
     }
 
     #[tokio::test]
@@ -861,9 +578,7 @@ mod tests {
         let pool_id_vec = hexstring_to_vec(&pool_state.id).unwrap();
 
         let capabilities_adapter_contract = pool_state
-            .clone()
             .adapter_contract
-            .unwrap()
             .get_capabilities(pool_id_vec, pool_state.tokens[0], pool_state.tokens[1])
             .unwrap();
 
@@ -887,8 +602,8 @@ mod tests {
 
         // Verify all tokens are initialized in the engine
         let engine_accounts = pool_state
+            .adapter_contract
             .engine
-            .unwrap()
             .state
             .clone()
             .get_account_storage();
