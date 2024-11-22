@@ -448,9 +448,8 @@ mod tests {
     use serde_json::Value;
     use std::{
         collections::{HashMap, HashSet},
-        fs::File,
-        path::Path,
         str::FromStr,
+        sync::OnceLock,
     };
 
     use crate::{
@@ -472,21 +471,30 @@ mod tests {
         ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
     }
 
-    async fn setup_db(asset_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-        let file = File::open(asset_path)?;
-        let data: Value = serde_json::from_reader(file)?;
+    static BALANCER_20463609_FIXTURE: OnceLock<Value> = OnceLock::new();
+
+    fn get_balancer_fixture() -> &'static Value {
+        BALANCER_20463609_FIXTURE.get_or_init(|| {
+            let data = include_str!("assets/balancer_contract_storage_block_20463609.json");
+            serde_json::from_str(data).expect("Failed to parse JSON")
+        })
+    }
+
+    async fn setup_pool_state() -> VMPoolState<PreCachedDB> {
+        let data = get_balancer_fixture();
 
         let accounts: Vec<AccountUpdate> = serde_json::from_value(data["accounts"].clone())
             .expect("Expected accounts to match AccountUpdate structure");
 
         let db = SHARED_TYCHO_DB.clone();
-        let engine: SimulationEngine<_> = create_engine(db.clone(), false)?;
+        let engine: SimulationEngine<_> = create_engine(db.clone(), false).unwrap();
 
         let block = BlockHeader {
             number: 20463609,
             hash: H256::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
-            )?,
+            )
+            .unwrap(),
             timestamp: 1722875891,
         };
 
@@ -508,14 +516,6 @@ mod tests {
         }
         db.update(accounts, Some(block));
 
-        Ok(())
-    }
-
-    async fn setup_pool_state() -> VMPoolState<PreCachedDB> {
-        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
-            .await
-            .expect("Failed to set up database");
-
         let dai_addr = dai().address;
         let bal_addr = bal().address;
 
@@ -531,7 +531,6 @@ mod tests {
 
         let pool_id: String =
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
-        dbg!(&tokens);
 
         let stateless_contracts = HashMap::from([(
             String::from("0x3de27efa2f1aa663ae5d458857e731c129069f29"),
@@ -560,10 +559,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_init() {
-        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
-            .await
-            .unwrap();
-
         let pool_state = setup_pool_state().await;
 
         let expected_capabilities = vec![
@@ -631,9 +626,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_amount_out() -> Result<(), Box<dyn std::error::Error>> {
-        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
-            .await?;
-
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
@@ -655,10 +647,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_amount_out_dust() {
-        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
-            .await
-            .unwrap();
-
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
@@ -677,10 +665,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_amount_out_sell_limit() {
-        setup_db("src/protocol/vm/assets/balancer_contract_storage_block_20463609.json".as_ref())
-            .await
-            .unwrap();
-
         let pool_state = setup_pool_state().await;
 
         let result = pool_state.get_amount_out(
