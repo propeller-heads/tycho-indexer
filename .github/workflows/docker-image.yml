@@ -13,11 +13,6 @@ jobs:
   publish-docker-image:
     name: Publish docker image
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        project: 
-          - target: solvers
-            image: indexer
     steps:
       - uses: actions/checkout@v2
 
@@ -28,18 +23,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: ${{ env.DOCKER_REGISTRY }}
 
-      - name: Tag
-        uses: olegtarasov/get-tag@v2.1
-      - name: Sha
-        uses: benjlevesque/short-sha@v1.2
+      - uses: benjlevesque/short-sha@v1.2
+        id: short-sha
+
+      - uses: olegtarasov/get-tag@v2.1
+        id: tag-name
 
       - name: Publish docker image
         uses: docker/build-push-action@v3
         with:
           push: true
           context: .
-          target: ${{ matrix.project.target }}
-          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}-${{ matrix.project.image }}:sha-${{ env.SHA }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:sha-${{ steps.short-sha.outputs.sha }}
 
       - name: Publish docker image with tag
         uses: docker/build-push-action@v3
@@ -47,6 +43,7 @@ jobs:
         with:
           push: true
           context: .
-          target: solvers
-          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}-${{ matrix.project.image }}:${{ env.GIT_TAG_NAME }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${{ steps.tag-name.outputs.tag }}
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:latest
 
