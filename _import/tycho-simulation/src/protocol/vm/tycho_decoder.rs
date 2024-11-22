@@ -7,7 +7,7 @@ use ethers::types::{H160, H256, U256};
 use tracing::info;
 
 use crate::{
-    evm::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
+    evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
     models::ERC20Token,
     protocol::{errors::InvalidSnapshotError, vm::state::VMPoolState},
 };

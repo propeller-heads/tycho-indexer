@@ -8,10 +8,11 @@ use revm::{
 
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface,
+        engine_db::{
+            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
+            tycho_db::PreCachedDB,
+        },
         simulation::SimulationEngine,
-        simulation_db::BlockHeader,
-        tycho_db::PreCachedDB,
         tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
     },
     protocol::errors::SimulationError,

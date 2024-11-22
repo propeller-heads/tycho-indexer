@@ -24,12 +24,12 @@ use tycho_core::dto::ProtocolStateDelta;
 use super::utils::{hexstring_to_vec, load_erc20_bytecode, ERC20Slots};
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface,
+        engine_db::{
+            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
+            tycho_db::PreCachedDB,
+        },
         simulation::{SimulationEngine, SimulationParameters},
-        simulation_db::BlockHeader,
-        token,
-        tycho_db::PreCachedDB,
-        ContractCompiler,
+        token, ContractCompiler,
     },
     models::ERC20Token,
     protocol::{
@@ -742,7 +742,7 @@ mod tests {
     };
 
     use crate::{
-        evm::{simulation_db::BlockHeader, tycho_models::AccountUpdate},
+        evm::{engine_db::simulation_db::BlockHeader, tycho_models::AccountUpdate},
         protocol::vm::models::Capability,
     };
 

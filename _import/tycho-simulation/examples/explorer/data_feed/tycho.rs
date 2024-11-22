@@ -20,7 +20,7 @@ use tycho_core::{dto::Chain, Bytes};
 use tycho_ethereum::BytesCodec;
 use tycho_simulation::{
     evm::{
-        simulation_db::BlockHeader,
+        engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
         tycho_models::{AccountUpdate, ResponseAccount},
     },
     models::ERC20Token,
@@ -38,7 +38,6 @@ use tycho_simulation::{
 };
 
 use crate::data_feed::state::BlockState;
-use tycho_simulation::evm::tycho_db::PreCachedDB;
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 

@@ -7,7 +7,7 @@ use ethers::{
 use revm::{primitives::Address as rAddress, DatabaseRef};
 
 use crate::{
-    evm::{account_storage::StateUpdate, engine_db_interface::EngineDatabaseInterface},
+    evm::{account_storage::StateUpdate, engine_db::engine_db_interface::EngineDatabaseInterface},
     protocol::{
         errors::SimulationError,
         vm::{

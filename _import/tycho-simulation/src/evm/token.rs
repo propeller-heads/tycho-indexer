@@ -1,5 +1,5 @@
 use crate::{
-    evm::engine_db_interface::EngineDatabaseInterface,
+    evm::engine_db::engine_db_interface::EngineDatabaseInterface,
     protocol::vm::{
         constants::EXTERNAL_ACCOUNT, erc20_overwrite_factory::ERC20OverwriteFactory,
         tycho_simulation_contract::TychoSimulationContract, utils::ERC20Slots,
@@ -15,7 +15,9 @@ use serde_json::from_str;
 use std::{fmt::Debug, str::FromStr};
 use thiserror::Error;
 
-use super::{simulation::SimulationEngine, simulation_db::BlockHeader, ContractCompiler};
+use super::{
+    engine_db::simulation_db::BlockHeader, simulation::SimulationEngine, ContractCompiler,
+};
 
 const MARKER_VALUE: u128 = 3141592653589793238462643383;
 const SPENDER: &str = "08d967bb0134F2d07f7cfb6E246680c53927DD30";
@@ -179,8 +181,8 @@ mod test {
 
     use crate::{
         evm::{
+            engine_db::simulation_db::{BlockHeader, SimulationDB},
             simulation::SimulationEngine,
-            simulation_db::{BlockHeader, SimulationDB},
             ContractCompiler,
         },
         protocol::vm::utils::ERC20Slots,
