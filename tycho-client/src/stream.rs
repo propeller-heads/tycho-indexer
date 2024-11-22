@@ -200,7 +200,7 @@ mod tests {
     #[tokio::test]
     async fn teat_simple_build() {
         let token = env::var("TYCHO_AUTH_TOKEN").unwrap();
-        let receiver = TychoStreamBuilder::new("tycho-beta.propellerheads.xyz", Chain::Ethereum)
+        let receiver = TychoStreamBuilder::new("tycho-dev.propellerheads.xyz", Chain::Ethereum)
             .exchange("uniswap_v2", ComponentFilter::with_tvl_range(100.0, 100.0))
             .auth_key(Some(token))
             .build()

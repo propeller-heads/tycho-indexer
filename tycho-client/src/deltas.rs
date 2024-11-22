@@ -620,7 +620,7 @@ impl DeltasClient for WsDeltasClient {
                     .header(SEC_WEBSOCKET_VERSION, 13)
                     .header(CONNECTION, "Upgrade")
                     .header(UPGRADE, "websocket")
-                    .header(HOST, "tycho-beta.propellerheads.xyz")
+                    .header(HOST, "tycho-dev.propellerheads.xyz")
                     .header(USER_AGENT, format!("tycho-client-{}", env!("CARGO_PKG_VERSION")));
 
                 // Add Authorization if one is given
