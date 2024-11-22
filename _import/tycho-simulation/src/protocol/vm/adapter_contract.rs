@@ -44,7 +44,7 @@ where
 {
     pub fn price(
         &self,
-        pair_id: String,
+        pair_id: Vec<u8>,
         sell_token: Address,
         buy_token: Address,
         amounts: Vec<U256>,
@@ -52,7 +52,7 @@ where
         overwrites: Option<HashMap<rAddress, Overwrites>>,
     ) -> Result<Vec<f64>, SimulationError> {
         let args = vec![
-            self.hexstring_to_bytes(&pair_id)?,
+            Token::FixedBytes(pair_id),
             Token::Address(sell_token),
             Token::Address(buy_token),
             Token::Array(
@@ -73,7 +73,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn swap(
         &self,
-        pair_id: String,
+        pair_id: Vec<u8>,
         sell_token: Address,
         buy_token: Address,
         is_buy: bool,
@@ -82,7 +82,7 @@ where
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
     ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), SimulationError> {
         let args = vec![
-            self.hexstring_to_bytes(&pair_id)?,
+            Token::FixedBytes(pair_id),
             Token::Address(sell_token),
             Token::Address(buy_token),
             Token::Bool(is_buy),
@@ -121,17 +121,14 @@ where
 
     pub fn get_limits(
         &self,
-        pair_id: String,
+        pair_id: Vec<u8>,
         sell_token: Address,
         buy_token: Address,
         block: u64,
         overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
     ) -> Result<(U256, U256), SimulationError> {
-        let args = vec![
-            self.hexstring_to_bytes(&pair_id)?,
-            Token::Address(sell_token),
-            Token::Address(buy_token),
-        ];
+        let args =
+            vec![Token::FixedBytes(pair_id), Token::Address(sell_token), Token::Address(buy_token)];
 
         let res = self
             .call("getLimits", args, block, None, overwrites, None, U256::zero())?
@@ -150,15 +147,12 @@ where
 
     pub fn get_capabilities(
         &self,
-        pair_id: String,
+        pair_id: Vec<u8>,
         sell_token: Address,
         buy_token: Address,
     ) -> Result<HashSet<Capability>, SimulationError> {
-        let args = vec![
-            self.hexstring_to_bytes(&pair_id)?,
-            Token::Address(sell_token),
-            Token::Address(buy_token),
-        ];
+        let args =
+            vec![Token::FixedBytes(pair_id), Token::Address(sell_token), Token::Address(buy_token)];
 
         let res = self
             .call("getCapabilities", args, 1, None, None, None, U256::zero())?
@@ -187,13 +181,6 @@ where
             .into_uint()
             .unwrap()
             .as_u64())
-    }
-
-    fn hexstring_to_bytes(&self, pair_id: &str) -> Result<Token, SimulationError> {
-        let bytes = hex::decode(pair_id).map_err(|_| {
-            SimulationError::EncodingError(format!("Invalid hex string: {}", pair_id))
-        })?;
-        Ok(Token::FixedBytes(bytes))
     }
 
     fn calculate_price(&self, value: Token) -> Result<Vec<f64>, SimulationError> {
