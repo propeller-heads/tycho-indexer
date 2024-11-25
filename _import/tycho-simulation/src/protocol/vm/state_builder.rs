@@ -205,27 +205,23 @@ impl VMPoolStateBuilder {
         } else {
             self.get_default_capabilities()?
         };
-
-        Ok(VMPoolState {
-            id: self.id,
-            tokens: self.tokens,
-            block: self.block,
-            balances: self.balances.unwrap_or_default(),
-            balance_owner: self.balance_owner,
-            spot_prices: HashMap::new(),
+        Ok(VMPoolState::new(
+            self.id,
+            self.tokens,
+            self.block,
+            self.balances.unwrap_or_default(),
+            self.balance_owner,
+            HashMap::new(),
             capabilities,
-            block_lasting_overwrites: HashMap::new(),
-            involved_contracts: self
-                .involved_contracts
+            HashMap::new(),
+            self.involved_contracts
                 .unwrap_or_default(),
-            token_storage_slots: self
-                .token_storage_slots
+            self.token_storage_slots
                 .unwrap_or_default(),
-            manual_updates: self.manual_updates.unwrap_or(false),
-            adapter_contract: self
-                .adapter_contract
+            self.manual_updates.unwrap_or(false),
+            self.adapter_contract
                 .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?,
-        })
+        ))
     }
 
     async fn get_default_engine(

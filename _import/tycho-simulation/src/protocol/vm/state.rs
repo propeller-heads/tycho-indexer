@@ -71,10 +71,41 @@ where
     /// the pool.
     pub manual_updates: bool,
     /// The adapter contract. This is used to run simulations
-    pub adapter_contract: TychoSimulationContract<D>,
+    adapter_contract: TychoSimulationContract<D>,
 }
 
 impl VMPoolState<PreCachedDB> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: String,
+        tokens: Vec<H160>,
+        block: BlockHeader,
+        balances: HashMap<H160, U256>,
+        balance_owner: Option<H160>,
+        spot_prices: HashMap<(H160, H160), f64>,
+        capabilities: HashSet<Capability>,
+        block_lasting_overwrites: HashMap<rAddress, Overwrites>,
+        involved_contracts: HashSet<H160>,
+        token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
+        manual_updates: bool,
+        adapter_contract: TychoSimulationContract<PreCachedDB>,
+    ) -> Self {
+        Self {
+            id,
+            tokens,
+            block,
+            balances,
+            balance_owner,
+            spot_prices,
+            capabilities,
+            block_lasting_overwrites,
+            involved_contracts,
+            token_storage_slots,
+            manual_updates,
+            adapter_contract,
+        }
+    }
+
     /// Ensures the pool supports the given capability
     fn ensure_capability(&self, capability: Capability) -> Result<(), SimulationError> {
         if !self.capabilities.contains(&capability) {
