@@ -46,6 +46,38 @@ use crate::{
 /// `VMPoolState`. This struct provides a flexible way to construct `VMPoolState` objects with
 /// multiple optional parameters. It handles the validation of required fields and applies default
 /// values for optional parameters where necessary.
+/// # Example
+/// Constructing a `VMPoolState` with only the required parameters:
+/// ```rust
+/// use ethers::types::H160;
+/// use crate::evm::simulation_db::BlockHeader;
+/// use crate::protocol::errors::SimulationError;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), SimulationError> {
+///     // Required parameters
+///     let pool_id = "0xabc123".to_string();
+///     let tokens = vec![H160::zero()];
+///     let block = BlockHeader {
+///         number: 1,
+///         hash: Default::default(),
+///         timestamp: 1632456789,
+///     };
+///     
+///     // Optional: Add token balances
+///     let mut balances = HashMap::new();
+///     balances.insert(H160::zero(), U256::from(1000));
+///
+///     // Build the VMPoolState
+///     let pool_state = VMPoolStateBuilder::new(pool_id, tokens, block)
+///         .balances(balances)
+///         .build()
+///         .await?;
+///
+///     println!("Successfully created VMPoolState: {:?}", pool_state);
+///     Ok(())
+/// }
+/// ```
 pub struct VMPoolStateBuilder {
     id: String,
     tokens: Vec<H160>,
