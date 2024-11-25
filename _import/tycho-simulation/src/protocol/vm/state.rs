@@ -112,8 +112,8 @@ impl VMPoolState<PreCachedDB> {
     /// Ensures the pool supports the given capability
     fn ensure_capability(&self, capability: Capability) -> Result<(), SimulationError> {
         if !self.capabilities.contains(&capability) {
-            return Err(SimulationError::NotFound(format!(
-                "capability {:?}",
+            return Err(SimulationError::FatalError(format!(
+                "capability {:?} not found",
                 capability.to_string()
             )));
         }
@@ -323,7 +323,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         self.spot_prices
             .get(&(base.address, quote.address))
             .cloned()
-            .ok_or(SimulationError::NotFound("Spot prices".to_string()))
+            .ok_or(SimulationError::FatalError("Spot prices not found".to_string()))
     }
 
     fn get_amount_out(
@@ -404,7 +404,8 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         let buy_amount = trade.received_amount;
 
         if sell_amount_exceeds_limit {
-            return Err(SimulationError::SellAmountTooHigh(
+            return Err(SimulationError::RetryDifferentInput(
+                "Sell amount exceeds limit".to_string(),
                 // // Partial buy amount and gas used TODO: make this better
                 // buy_amount,
                 // trade.gas_used,
@@ -701,9 +702,10 @@ mod tests {
         );
 
         assert!(result.is_err());
+
         match result {
             Err(e) => {
-                assert!(matches!(e, SimulationError::SellAmountTooHigh()));
+                assert!(matches!(e, SimulationError::RetryDifferentInput(_)));
             }
             _ => panic!("Test failed: was expecting an Err value"),
         };

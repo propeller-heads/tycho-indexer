@@ -195,7 +195,7 @@ impl VMPoolStateBuilder {
                 self.adapter_contract_path
                     .as_ref()
                     .ok_or_else(|| {
-                        SimulationError::NotInitialized("Adapter contract".to_string())
+                        SimulationError::FatalError("Adapter contract not initialized".to_string())
                     })?,
                 engine.clone(),
             )?)
@@ -221,8 +221,9 @@ impl VMPoolStateBuilder {
             self.token_storage_slots
                 .unwrap_or_default(),
             self.manual_updates.unwrap_or(false),
-            self.adapter_contract
-                .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?,
+            self.adapter_contract.ok_or_else(|| {
+                SimulationError::FatalError("Adapter contract not initialized".to_string())
+            })?,
         ))
     }
 
@@ -232,7 +233,7 @@ impl VMPoolStateBuilder {
         let engine = create_engine(SHARED_TYCHO_DB.clone(), self.trace.unwrap_or(false))?;
 
         // Mock the ERC20 contract at the given token addresses.
-        let mocked_contract_bytecode = load_erc20_bytecode()?;
+        let mocked_contract_bytecode: Bytecode = load_erc20_bytecode()?;
         for token_address in &self.tokens {
             let info = AccountInfo {
                 balance: Default::default(),
@@ -341,7 +342,9 @@ impl VMPoolStateBuilder {
                 let caps = self
                     .adapter_contract
                     .clone()
-                    .ok_or_else(|| SimulationError::NotInitialized("Adapter contract".to_string()))?
+                    .ok_or_else(|| {
+                        SimulationError::FatalError("Adapter contract not initialized".to_string())
+                    })?
                     .get_capabilities(hexstring_to_vec(&self.id)?, *t0, *t1)?;
                 capabilities.push(caps);
             }
@@ -462,7 +465,9 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            SimulationError::NotInitialized(field) => assert_eq!(field, "Adapter contract"),
+            SimulationError::FatalError(field) => {
+                assert_eq!(field, "Adapter contract not initialized")
+            }
             _ => panic!("Unexpected error type"),
         }
     }

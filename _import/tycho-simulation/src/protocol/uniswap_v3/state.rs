@@ -111,7 +111,7 @@ impl UniswapV3State {
         sqrt_price_limit: Option<U256>,
     ) -> Result<SwapResults, SimulationError> {
         if self.liquidity == 0 {
-            return Err(SimulationError::NoLiquidity());
+            return Err(SimulationError::RetryLater("No liquidity".to_string()));
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -158,7 +158,7 @@ impl UniswapV3State {
                             Box::new(new_state),
                         )));
                     }
-                    _ => return Err(SimulationError::Unknown()),
+                    _ => return Err(SimulationError::FatalError("Unknown error".to_string())),
                 },
             };
 

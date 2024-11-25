@@ -1,6 +1,5 @@
 use std::io;
 
-use ethers::prelude::ProviderError;
 use serde_json::Error as SerdeError;
 use thiserror::Error;
 
@@ -23,6 +22,18 @@ pub enum FileError {
     Parse(SerdeError),
 }
 
+impl From<FileError> for String {
+    fn from(error: FileError) -> Self {
+        match error {
+            FileError::MalformedABI(msg) => format!("Malformed ABI error: {}", msg),
+            FileError::Structure(msg) => format!("Structure error: {}", msg),
+            FileError::FilePath(msg) => format!("File path conversion error: {}", msg),
+            FileError::Io(err) => format!("I/O error: {}", err),
+            FileError::Parse(err) => format!("Json parsing error: {}", err),
+        }
+    }
+}
+
 impl From<io::Error> for FileError {
     fn from(err: io::Error) -> Self {
         FileError::Io(err)
@@ -33,16 +44,6 @@ impl From<SerdeError> for FileError {
     fn from(err: SerdeError) -> Self {
         FileError::Parse(err)
     }
-}
-
-#[derive(Debug, Error)]
-pub enum RpcError {
-    #[error("Invalid Request: {0}")]
-    InvalidRequest(String),
-    #[error("Invalid Response: {0}")]
-    InvalidResponse(ProviderError),
-    #[error("Empty Response")]
-    EmptyResponse(),
 }
 
 impl From<ethers::abi::Error> for SimulationError {

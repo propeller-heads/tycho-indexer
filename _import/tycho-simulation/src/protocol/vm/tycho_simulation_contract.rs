@@ -91,8 +91,8 @@ where
     ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
 
-        let adapter_contract_code =
-            get_contract_bytecode(adapter_contract_path).map_err(SimulationError::AbiError)?;
+        let adapter_contract_code = get_contract_bytecode(adapter_contract_path)
+            .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         engine.state.init_account(
             rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
@@ -221,13 +221,7 @@ where
     fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
         self.engine
             .simulate(&params)
-            .map_err(|e| {
-                SimulationError::SimulationEngineError(maybe_coerce_error(
-                    &e,
-                    "pool_state",
-                    params.gas_limit,
-                ))
-            })
+            .map_err(|e| maybe_coerce_error(&e, "pool_state", params.gas_limit))
     }
 }
 

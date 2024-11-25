@@ -3,10 +3,7 @@ use std::fmt;
 
 use thiserror::Error;
 
-use crate::{
-    evm::{simulation::SimulationEngineError, token::TokenError},
-    protocol::vm::errors::{FileError, RpcError},
-};
+use crate::protocol::vm::errors::FileError;
 
 use super::models::GetAmountOutResult;
 
@@ -46,56 +43,36 @@ impl From<SimulationError> for InvalidSnapshotError {
 /// `SimulationError` encompasses all possible errors that can occur in the package,
 /// wrapping lower-level errors in a user-friendly way for easier handling and display.
 /// Variants:
-/// - `AbiError`: Represents an error when loading the ABI file, encapsulating a `FileError`.
+/// - `RetryLater`: Indicates that the simulation should be retried later. It may have failed due to
+///   a temporary issue, such as a network problem.
+/// - `TryDifferentInput`: Indicated that the simulation should be retried with different inputs.
+/// - `FatalError`: There is a bug with this pool or protocol - do not attempt simulation again.
 /// - `EncodingError`: Denotes an error in encoding data.
-/// - `SimulationFailure`: Wraps errors that occur during simulation, containing a
-///   `SimulationEngineError`.
-/// - `DecodingError`: Indicates an error in decoding data.
-/// - `RPCError`: Indicates an error related to RPC interaction.
-/// - `NotFound`: Indicates that something was not found (could be a capability, spot price, etc.)
-/// - `NotInitialized`: Indicates that something was not initialized before trying to use it (could
-///   be engine or adapter contract)
 /// - `InsufficientData`: Error indicating that there is insufficient data to perform the
 ///   simulation. It returns a partial result of the simulation.
-/// - `NoLiquidity`: Error indicating that there is no liquidity in the venue to complete the trade.
-/// - `InsufficientAmount`: Error indicating that the amount provided for the trade is too low.
-/// - `ArithmeticOverflow`: Error indicating that an arithmetic operation got an U256 to overflow
-/// - `Unknown`: Error indicating that an unknown error occurred during the simulation.
-/// - `SellAmountTooHigh`: Indicates an error when the sell amount is higher than the sell limit.
 #[derive(Error, Debug)]
 pub enum SimulationError {
-    #[error("ABI loading error: {0}")]
-    AbiError(#[from] FileError),
+    #[error("Fatal error: {0}")]
+    FatalError(String),
+    #[error("Retry with a different input: {0}")]
+    RetryDifferentInput(String),
+    #[error("Retry later: {0}")]
+    RetryLater(String),
+    // TODO delete these errors
     #[error("Encoding error: {0}")]
     EncodingError(String),
-    #[error("Simulation failure error: {0}")]
-    SimulationEngineError(SimulationEngineError),
-    #[error("Decoding error: {0}")]
-    DecodingError(String),
-    #[error("RPC related error: {0}")]
-    RpcError(#[from] RpcError),
-    #[error("Not found: {0}")]
-    NotFound(String),
-    #[error("Not initialized: {0}")]
-    NotInitialized(String),
     #[error("Insufficient data")]
     InsufficientData(GetAmountOutResult),
-    #[error("No liquidity")]
-    NoLiquidity(),
-    #[error("Insufficient amount")]
-    InsufficientAmount(),
-    #[error("U256 overflow")]
-    ArithmeticOverflow(),
-    #[error("Unknown error")]
-    Unknown(),
-    #[error("Sell amount is higher than sell limit")]
-    SellAmountTooHigh(), // TODO: Make it recoverable
-    #[error("Token slot brute-forcing error: {0}")]
-    TokenError(#[from] TokenError),
 }
 
 impl<T> From<SimulationError> for TransitionError<T> {
     fn from(error: SimulationError) -> Self {
         TransitionError::SimulationError(error)
+    }
+}
+
+impl From<FileError> for SimulationError {
+    fn from(error: FileError) -> Self {
+        SimulationError::FatalError(error.to_string())
     }
 }

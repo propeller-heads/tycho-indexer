@@ -95,14 +95,16 @@ impl ProtocolSim for UniswapV2State {
         token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in == U256::zero() {
-            return Err(SimulationError::InsufficientAmount());
+            return Err(SimulationError::RetryDifferentInput(
+                "Amount in cannot be zero".to_string(),
+            ));
         }
         let zero2one = token_in.address < token_out.address;
         let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
         let reserve_buy = if zero2one { self.reserve1 } else { self.reserve0 };
 
         if reserve_sell == U256::zero() || reserve_buy == U256::zero() {
-            return Err(SimulationError::NoLiquidity());
+            return Err(SimulationError::RetryLater("No liquidity".to_string()));
         }
 
         let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
@@ -284,7 +286,7 @@ mod tests {
         let res = state.get_amount_out(amount_in, &t0, &t1);
         assert!(res.is_err());
         let err = res.err().unwrap();
-        assert!(matches!(err, SimulationError::ArithmeticOverflow()));
+        assert!(matches!(err, SimulationError::FatalError(_)));
     }
 
     #[rstest]
