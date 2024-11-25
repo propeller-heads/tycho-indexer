@@ -1,3 +1,10 @@
+## [0.44.0](https://github.com/propeller-heads/tycho-simulation/compare/0.43.2...0.44.0) (2024-11-25)
+
+
+### Features
+
+* add `VMPoolStateBuilder` and refactor TychoSimulationContract to improve engine handling ([58319b6](https://github.com/propeller-heads/tycho-simulation/commit/58319b6f389455b0372bbfbb8c0606b6c3b4289d))
+
 ## [0.43.2](https://github.com/propeller-heads/tycho-simulation/compare/0.43.1...0.43.2) (2024-11-22)
 
 ## [0.43.1](https://github.com/propeller-heads/tycho-simulation/compare/0.43.0...0.43.1) (2024-11-21)
