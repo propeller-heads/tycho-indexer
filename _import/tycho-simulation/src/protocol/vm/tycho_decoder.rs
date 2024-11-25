@@ -9,7 +9,10 @@ use tracing::info;
 use crate::{
     evm::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
     models::ERC20Token,
-    protocol::{errors::InvalidSnapshotError, vm::state::VMPoolState},
+    protocol::{
+        errors::InvalidSnapshotError,
+        vm::{state::VMPoolState, state_builder::VMPoolStateBuilder},
+    },
 };
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_ethereum::BytesCodec;
@@ -133,25 +136,29 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
         let adapter_file_path =
             format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
         info!("Creating a new pool state for balancer pool with id {}", &id);
-        let mut pool_state = VMPoolState::new(
-            id.clone(),
-            tokens.clone(),
-            block,
-            balances,
-            balance_owner,
-            adapter_file_path,
-            involved_contracts,
-            stateless_contracts,
-            manual_updates,
-            false,
-        )
-        .await
-        .map_err(InvalidSnapshotError::VMError)?;
+
+        let mut pool_state_builder = VMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
+            .balances(balances)
+            .adapter_contract_path(adapter_file_path)
+            .involved_contracts(involved_contracts)
+            .stateless_contracts(stateless_contracts)
+            .manual_updates(manual_updates);
+
+        if let Some(balance_owner) = balance_owner {
+            pool_state_builder = pool_state_builder.balance_owner(balance_owner)
+        };
+
+        let mut pool_state = pool_state_builder
+            .build()
+            .await
+            .map_err(InvalidSnapshotError::VMError)?;
+
         let erc20_tokens = tokens
             .iter()
             .filter_map(|token_address| all_tokens.get(token_address))
             .cloned()
             .collect();
+
         pool_state.set_spot_prices(erc20_tokens)?;
         info!("Finished creating balancer pool with id {}", &id);
 
