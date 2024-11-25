@@ -11,7 +11,7 @@ use tracing::info;
 
 use tycho_core::dto::ProtocolStateDelta;
 
-use super::utils::{hexstring_to_vec, load_erc20_bytecode, ERC20Slots};
+use super::utils::{hexstring_to_vec, ERC20Slots};
 use crate::{
     evm::{
         engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
@@ -480,7 +480,6 @@ mod tests {
     use std::{
         collections::{HashMap, HashSet},
         str::FromStr,
-        sync::OnceLock,
     };
 
     use crate::{
