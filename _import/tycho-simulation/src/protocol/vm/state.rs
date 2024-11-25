@@ -471,17 +471,9 @@ mod tests {
         ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
     }
 
-    static BALANCER_20463609_FIXTURE: OnceLock<Value> = OnceLock::new();
-
-    fn get_balancer_fixture() -> &'static Value {
-        BALANCER_20463609_FIXTURE.get_or_init(|| {
-            let data = include_str!("assets/balancer_contract_storage_block_20463609.json");
-            serde_json::from_str(data).expect("Failed to parse JSON")
-        })
-    }
-
     async fn setup_pool_state() -> VMPoolState<PreCachedDB> {
-        let data = get_balancer_fixture();
+        let data_str = include_str!("assets/balancer_contract_storage_block_20463609.json");
+        let data: Value = serde_json::from_str(data_str).expect("Failed to parse JSON");
 
         let accounts: Vec<AccountUpdate> = serde_json::from_value(data["accounts"].clone())
             .expect("Expected accounts to match AccountUpdate structure");
