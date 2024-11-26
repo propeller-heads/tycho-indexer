@@ -244,7 +244,7 @@ impl VMPoolStateBuilder {
             engine.state.init_account(
                 Address::parse_checksummed(to_checksum(token_address, None), None).map_err(
                     |_| {
-                        SimulationError::EncodingError(
+                        SimulationError::FatalError(
                             "Checksum for token address must be valid".into(),
                         )
                     },

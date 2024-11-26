@@ -364,9 +364,8 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
 pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
     let hexstring_no_prefix =
         if let Some(stripped) = hexstring.strip_prefix("0x") { stripped } else { hexstring };
-    let bytes = hex::decode(hexstring_no_prefix).map_err(|_| {
-        SimulationError::EncodingError(format!("Invalid hex string: {}", hexstring))
-    })?;
+    let bytes = hex::decode(hexstring_no_prefix)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid hex string: {}", hexstring)))?;
     Ok(bytes)
 }
 
@@ -575,7 +574,7 @@ mod tests {
         let hexstring = "0x68656c6c6z"; // Invalid character 'z'
         let result = hexstring_to_vec(hexstring);
         assert!(result.is_err());
-        if let Err(SimulationError::EncodingError(msg)) = result {
+        if let Err(SimulationError::FatalError(msg)) = result {
             assert!(msg.contains("Invalid hex string"));
         } else {
             panic!("Expected EncodingError");

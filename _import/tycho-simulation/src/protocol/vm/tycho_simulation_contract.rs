@@ -117,14 +117,11 @@ where
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::EncodingError(format!(
-                    "Function name {} not found in the ABI",
-                    fname
-                ))
+                SimulationError::FatalError(format!("Function name {} not found in the ABI", fname))
             })?;
 
         if function.inputs.len() != args.len() {
-            return Err(SimulationError::EncodingError("Invalid argument count".to_string()));
+            return Err(SimulationError::FatalError("Invalid argument count".to_string()));
         }
 
         let input_types: String = function

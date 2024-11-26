@@ -267,7 +267,7 @@ impl VMPoolState<PreCachedDB> {
             None => self
                 .id
                 .parse()
-                .map_err(|_| SimulationError::EncodingError("Pool ID is not an address".into())),
+                .map_err(|_| SimulationError::FatalError("Pool ID is not an address".into())),
         }?;
 
         for token in &tokens {
@@ -276,7 +276,7 @@ impl VMPoolState<PreCachedDB> {
                     .get(token)
                     .cloned()
                     .ok_or_else(|| {
-                        SimulationError::EncodingError("Token storage slots not found".into())
+                        SimulationError::FatalError("Token storage slots not found".into())
                     })?
             } else {
                 (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
