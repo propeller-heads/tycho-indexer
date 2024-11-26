@@ -7880,7 +7880,6 @@ dependencies = [
  "mini-moka",
  "mockito",
  "num-traits",
- "once_cell",
  "ratatui",
  "revm",
  "revm-inspectors",
