@@ -253,7 +253,7 @@ pub async fn process_messages(
 
                     let state: Box<dyn ProtocolSim> = match protocol.as_str() {
                         "uniswap_v3" => match UniswapV3State::try_from_with_block(
-                            snapshot.clone(),
+                            snapshot,
                             header.clone(),
                             HashMap::new(),
                         )
@@ -269,7 +269,7 @@ pub async fn process_messages(
                             }
                         },
                         "uniswap_v2" => match UniswapV2State::try_from_with_block(
-                            snapshot.clone(),
+                            snapshot,
                             header.clone(),
                             HashMap::new(),
                         )
@@ -286,7 +286,7 @@ pub async fn process_messages(
                         },
                         "vm:balancer" => {
                             match VMPoolState::try_from_with_block(
-                                snapshot.clone(),
+                                snapshot,
                                 header.clone(),
                                 all_tokens.clone(),
                             )
