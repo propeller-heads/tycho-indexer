@@ -47,8 +47,6 @@ impl From<SimulationError> for InvalidSnapshotError {
 ///   a temporary issue, such as a network problem.
 /// - `TryDifferentInput`: Indicated that the simulation should be retried with different inputs.
 /// - `FatalError`: There is a bug with this pool or protocol - do not attempt simulation again.
-/// - `InsufficientData`: Error indicating that there is insufficient data to perform the
-///   simulation. It returns a partial result of the simulation.
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("Fatal error: {0}")]
@@ -57,9 +55,6 @@ pub enum SimulationError {
     RetryDifferentInput(String, Option<GetAmountOutResult>),
     #[error("Retry later: {0}")]
     RetryLater(String),
-    // TODO delete these errors
-    #[error("Insufficient data")]
-    InsufficientData(GetAmountOutResult),
 }
 
 impl<T> From<SimulationError> for TransitionError<T> {

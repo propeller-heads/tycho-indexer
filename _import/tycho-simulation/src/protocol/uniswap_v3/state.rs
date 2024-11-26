@@ -152,11 +152,14 @@ impl UniswapV3State {
                         new_state.liquidity = state.liquidity;
                         new_state.tick = state.tick;
                         new_state.sqrt_price = state.sqrt_price;
-                        return Err(SimulationError::InsufficientData(GetAmountOutResult::new(
-                            state.amount_calculated.abs().into_raw(),
-                            gas_used,
-                            Box::new(new_state),
-                        )));
+                        return Err(SimulationError::RetryDifferentInput(
+                            "Insufficient data".into(),
+                            Some(GetAmountOutResult::new(
+                                state.amount_calculated.abs().into_raw(),
+                                gas_used,
+                                Box::new(new_state),
+                            )),
+                        ));
                     }
                     _ => return Err(SimulationError::FatalError("Unknown error".to_string())),
                 },
@@ -626,15 +629,20 @@ mod tests {
             .unwrap_err();
 
         match err {
-            SimulationError::InsufficientData(ref e) => {
-                assert_eq!(e.amount, exp);
-                let new_state = e
-                    .new_state
-                    .as_any()
-                    .downcast_ref::<UniswapV3State>()
-                    .unwrap();
-                assert_ne!(new_state.tick, pool.tick);
-                assert_ne!(new_state.liquidity, pool.liquidity);
+            SimulationError::RetryDifferentInput(ref _err, ref amount_out_result) => {
+                match amount_out_result {
+                    Some(amount_out_result) => {
+                        assert_eq!(amount_out_result.amount, exp);
+                        let new_state = amount_out_result
+                            .new_state
+                            .as_any()
+                            .downcast_ref::<UniswapV3State>()
+                            .unwrap();
+                        assert_ne!(new_state.tick, pool.tick);
+                        assert_ne!(new_state.liquidity, pool.liquidity);
+                    }
+                    _ => panic!("Partial amount out result is None. Expected partial result."),
+                }
             }
             _ => panic!("Test failed: was expecting a SimulationError::InsufficientData"),
         }
