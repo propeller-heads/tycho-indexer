@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.43.2"
+version = "0.44.0"
 dependencies = [
  "ethers",
  "num-bigint",
@@ -7475,6 +7475,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-test"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2468baabc3311435b55dd935f702f42cd1b8abb7e754fb7dfb16bd36aa88f9f7"
+dependencies = [
+ "async-stream",
+ "bytes",
+ "futures-core",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "tokio-tungstenite"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7847,7 +7860,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.43.2"
+version = "0.44.0"
 dependencies = [
  "alloy-primitives",
  "anyhow",
@@ -7879,6 +7892,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-test",
  "tracing",
  "tracing-subscriber",
  "tycho-client",

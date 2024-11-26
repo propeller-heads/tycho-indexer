@@ -66,7 +66,8 @@ where
 {
     abi: Abi,
     address: Address,
-    engine: SimulationEngine<D>,
+    pub(crate) engine: SimulationEngine<D>, /* TODO: Should we expose it directly or make some
+                                             * getter functions? */
 }
 
 impl<D: EngineDatabaseInterface + Clone> TychoSimulationContract<D>
@@ -85,13 +86,13 @@ where
     // Creates a new instance with the ISwapAdapter ABI
     pub fn new_swap_adapter(
         address: Address,
-        adapter_contract_path: String,
+        adapter_contract_path: &str,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
 
         let adapter_contract_code =
-            get_contract_bytecode(&adapter_contract_path).map_err(SimulationError::AbiError)?;
+            get_contract_bytecode(adapter_contract_path).map_err(SimulationError::AbiError)?;
 
         engine.state.init_account(
             rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
@@ -108,6 +109,7 @@ where
 
         Ok(Self { address, abi, engine })
     }
+
     fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, SimulationError> {
         let function = self
             .abi
@@ -297,7 +299,7 @@ mod tests {
         let engine = create_mock_engine();
         TychoSimulationContract::new_swap_adapter(
             address,
-            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime",
             engine,
         )
         .unwrap()
