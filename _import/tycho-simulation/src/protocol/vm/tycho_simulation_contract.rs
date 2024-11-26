@@ -160,10 +160,7 @@ where
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::DecodingError(format!(
-                    "Function name {} not found in the ABI",
-                    fname
-                ))
+                SimulationError::FatalError(format!("Function name {} not found in the ABI", fname))
             })?;
 
         let output_types: Vec<ParamType> = function
@@ -172,7 +169,7 @@ where
             .map(|output| output.kind.clone())
             .collect();
         let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
-            SimulationError::DecodingError(format!("Failed to decode output: {:?}", e))
+            SimulationError::FatalError(format!("Failed to decode output: {:?}", e))
         })?;
 
         Ok(decoded_tokens)

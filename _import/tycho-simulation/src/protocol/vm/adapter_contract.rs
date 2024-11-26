@@ -105,15 +105,15 @@ where
                         .first()
                         .cloned()
                         .ok_or_else(|| {
-                            SimulationError::DecodingError("There wasn't a calculated price".into())
+                            SimulationError::FatalError("There wasn't a calculated price".into())
                         })?;
 
                     Ok((received_amount, gas_used, price))
                 }
-                _ => Err(SimulationError::DecodingError("Incorrect types found for price".into())),
+                _ => Err(SimulationError::FatalError("Incorrect types found for price".into())),
             }
         } else {
-            Err(SimulationError::DecodingError("return_value is not a Token::Tuple".into()))
+            Err(SimulationError::FatalError("return_value is not a Token::Tuple".into()))
         }?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
@@ -142,7 +142,7 @@ where
             }
         }
 
-        Err(SimulationError::DecodingError("Unexpected response format".into()))
+        Err(SimulationError::FatalError("Unexpected response format".into()))
     }
 
     pub fn get_capabilities(
@@ -199,17 +199,17 @@ where
                             .into_uint()
                             .unwrap();
                         if denominator.is_zero() {
-                            Err(SimulationError::DecodingError("Denominator is zero".to_string()))
+                            Err(SimulationError::FatalError("Denominator is zero".to_string()))
                         } else {
                             Ok((numerator.as_u128() as f64) / (denominator.as_u128() as f64))
                         }
                     } else {
-                        Err(SimulationError::DecodingError("Invalid fraction tuple".to_string()))
+                        Err(SimulationError::FatalError("Invalid fraction tuple".to_string()))
                     }
                 })
                 .collect()
         } else {
-            Err(SimulationError::DecodingError("Price is not a Token::Array".to_string()))
+            Err(SimulationError::FatalError("Price is not a Token::Array".to_string()))
         }
     }
 }

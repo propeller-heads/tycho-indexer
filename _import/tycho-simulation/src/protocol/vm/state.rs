@@ -152,11 +152,11 @@ impl VMPoolState<PreCachedDB> {
                 .contains(&Capability::ScaledPrice)
             {
                 *price_result.first().ok_or_else(|| {
-                    SimulationError::DecodingError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Spot price is not a u64".to_string())
                 })?
             } else {
                 let unscaled_price = price_result.first().ok_or_else(|| {
-                    SimulationError::DecodingError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Spot price is not a u64".to_string())
                 })?;
                 *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
                     10f64.powi(buy_token.decimals as i32)
@@ -378,12 +378,10 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
                     .or_default();
                 for (slot, value) in storage {
                     let slot = U256::from_dec_str(&slot.to_string()).map_err(|_| {
-                        SimulationError::DecodingError("Failed to decode slot index".to_string())
+                        SimulationError::FatalError("Failed to decode slot index".to_string())
                     })?;
                     let value = U256::from_dec_str(&value.to_string()).map_err(|_| {
-                        SimulationError::DecodingError(
-                            "Failed to decode slot overwrite".to_string(),
-                        )
+                        SimulationError::FatalError("Failed to decode slot overwrite".to_string())
                     })?;
                     block_overwrites.insert(slot, value);
                 }

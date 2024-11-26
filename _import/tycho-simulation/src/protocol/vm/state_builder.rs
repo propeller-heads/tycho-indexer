@@ -276,7 +276,7 @@ impl VMPoolStateBuilder {
                 } else {
                     let code =
                         Bytecode::new_raw(Bytes::from(bytecode.clone().ok_or_else(|| {
-                            SimulationError::DecodingError(
+                            SimulationError::FatalError(
                                 "Byte code from stateless contracts is None".into(),
                             )
                         })?));
@@ -286,7 +286,7 @@ impl VMPoolStateBuilder {
                     rAddress::parse_checksummed(
                         to_checksum(
                             &address.parse().map_err(|_| {
-                                SimulationError::DecodingError(
+                                SimulationError::FatalError(
                                     "Couldn't parse address into string".into(),
                                 )
                             })?,
@@ -389,9 +389,7 @@ impl VMPoolStateBuilder {
         let method_name = decoded
             .split(':')
             .last()
-            .ok_or_else(|| {
-                SimulationError::DecodingError("Invalid decoded string format".into())
-            })?;
+            .ok_or_else(|| SimulationError::FatalError("Invalid decoded string format".into()))?;
 
         let selector = {
             let mut hasher = Keccak256::new();
@@ -403,9 +401,7 @@ impl VMPoolStateBuilder {
         let to_address = decoded
             .split(':')
             .nth(1)
-            .ok_or_else(|| {
-                SimulationError::DecodingError("Invalid decoded string format".into())
-            })?;
+            .ok_or_else(|| SimulationError::FatalError("Invalid decoded string format".into()))?;
 
         let timestamp = Utc::now()
             .naive_utc()
@@ -414,7 +410,7 @@ impl VMPoolStateBuilder {
 
         let parsed_address: rAddress = to_address
             .parse()
-            .map_err(|_| SimulationError::DecodingError("Invalid address format".into()))?;
+            .map_err(|_| SimulationError::FatalError("Invalid address format".into()))?;
 
         let sim_params = SimulationParameters {
             data: selector.to_vec().into(),
@@ -432,11 +428,11 @@ impl VMPoolStateBuilder {
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         let address = decode(&[ParamType::Address], &sim_result.result)
-            .map_err(|_| SimulationError::DecodingError("Failed to decode ABI".into()))?
+            .map_err(|_| SimulationError::FatalError("Failed to decode ABI".into()))?
             .into_iter()
             .next()
             .ok_or_else(|| {
-                SimulationError::DecodingError(
+                SimulationError::FatalError(
                     "Couldn't retrieve address from simulation for stateless contracts".into(),
                 )
             })?;
@@ -444,7 +440,7 @@ impl VMPoolStateBuilder {
         address
             .to_string()
             .parse()
-            .map_err(|_| SimulationError::DecodingError("Couldn't parse address to string".into()))
+            .map_err(|_| SimulationError::FatalError("Couldn't parse address to string".into()))
     }
 }
 

@@ -48,6 +48,6 @@ impl From<SerdeError> for FileError {
 
 impl From<ethers::abi::Error> for SimulationError {
     fn from(err: ethers::abi::Error) -> Self {
-        SimulationError::DecodingError(err.to_string())
+        SimulationError::FatalError(err.to_string())
     }
 }
