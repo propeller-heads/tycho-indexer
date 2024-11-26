@@ -1,3 +1,11 @@
+## [0.45.1](https://github.com/propeller-heads/tycho-simulation/compare/0.45.0...0.45.1) (2024-11-26)
+
+
+### Bug Fixes
+
+* fix rebase issues ([bd16d3a](https://github.com/propeller-heads/tycho-simulation/commit/bd16d3adb9f8370b7a7d6aab96a5db4143bad3c3))
+* Update trait usage in explorer example ([fc1f8c5](https://github.com/propeller-heads/tycho-simulation/commit/fc1f8c5988369b15173fb65054f184ef31f2732a))
+
 ## [0.45.0](https://github.com/propeller-heads/tycho-simulation/compare/0.44.1...0.45.0) (2024-11-26)
 
 
