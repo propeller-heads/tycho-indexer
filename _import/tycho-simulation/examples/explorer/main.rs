@@ -3,12 +3,14 @@ mod ui;
 
 extern crate tycho_simulation;
 
-use clap::Parser;
-use data_feed::{state::BlockState, tycho};
-use futures::future::select_all;
 use std::env;
+
+use clap::Parser;
+use futures::future::select_all;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing_subscriber::{fmt, EnvFilter};
+
+use data_feed::{state::BlockState, tycho};
 
 #[derive(Parser)]
 struct Cli {

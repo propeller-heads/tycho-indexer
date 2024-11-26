@@ -4,8 +4,8 @@
 //! for example, on the Ethereum network, a BlockState is emitted every block and contains
 //! all the changes from that block.
 use std::collections::HashMap;
-use tycho_core::Bytes;
 
+use tycho_core::Bytes;
 use tycho_simulation::protocol::{models::ProtocolComponent, state::ProtocolSim};
 
 #[derive(Debug)]

@@ -1,16 +1,15 @@
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    str,
+    str::FromStr,
+};
+
 use alloy_primitives::Address;
 use chrono::Utc;
 use ethers::{prelude::H256, types::H160};
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    str::FromStr,
-};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
-use std::str;
-
-use crate::data_feed::state::BlockState;
 use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
     rpc::RPCClient,
