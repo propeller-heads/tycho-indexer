@@ -1,3 +1,15 @@
+## [0.45.0](https://github.com/propeller-heads/tycho-simulation/compare/0.44.1...0.45.0) (2024-11-26)
+
+
+### Features
+
+* use tycho dev as default URL for example ([183aa46](https://github.com/propeller-heads/tycho-simulation/commit/183aa462b04836eab165d923703d65e96bdc501e))
+
+
+### Bug Fixes
+
+* re-enable uniswap_v2 & v3 and disable balancer ([ca8fca6](https://github.com/propeller-heads/tycho-simulation/commit/ca8fca6cce0d8c9a8f350c6643cfad01f2b03355))
+
 ## [0.44.1](https://github.com/propeller-heads/tycho-simulation/compare/0.44.0...0.44.1) (2024-11-26)
 
 ## [0.44.0](https://github.com/propeller-heads/tycho-simulation/compare/0.43.2...0.44.0) (2024-11-25)
