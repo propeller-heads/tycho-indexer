@@ -3,12 +3,10 @@ use tycho_core::keccak256;
 use crate::protocol::vm::utils::SlotId;
 
 pub mod account_storage;
-pub mod engine_db_interface;
+pub mod engine_db;
 pub mod simulation;
-pub mod simulation_db;
 pub mod token;
 pub mod traces;
-pub mod tycho_db;
 pub mod tycho_models;
 
 /// Enum representing the type of contract compiler.

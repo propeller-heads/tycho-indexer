@@ -12,8 +12,7 @@ use tracing::{debug, error, info, instrument, warn};
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
-    engine_db_interface::EngineDatabaseInterface,
-    simulation_db::BlockHeader,
+    engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
     tycho_models::{AccountUpdate, ChangeType},
 };
 
@@ -583,7 +582,7 @@ mod tests {
     /// Then run the test with:
     /// ```bash
     /// cargo test --package src --lib -- --ignored --exact --nocapture
-    /// evm::tycho_db::tests::test_tycho_db_connection
+    /// evm::engine_db::tycho_db::tests::test_tycho_db_connection
     /// ```
     #[ignore]
     #[rstest]

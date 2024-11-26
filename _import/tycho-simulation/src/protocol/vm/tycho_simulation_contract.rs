@@ -16,7 +16,7 @@ use tracing::warn;
 
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface,
+        engine_db::engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     },
     protocol::{
@@ -235,7 +235,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::evm::engine_db_interface::EngineDatabaseInterface;
+    use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
     use revm::{
         db::DatabaseRef,
         primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},

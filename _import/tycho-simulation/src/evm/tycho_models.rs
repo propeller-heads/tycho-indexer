@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::serde_helpers::{hex_bytes, hex_bytes_option};
 
-use super::simulation_db::BlockHeader;
+use super::engine_db::simulation_db::BlockHeader;
 
 // TODO move this to utils
 fn bytes_to_ru256(bytes: Bytes) -> rU256 {

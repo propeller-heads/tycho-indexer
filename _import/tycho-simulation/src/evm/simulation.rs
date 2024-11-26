@@ -1,6 +1,6 @@
 use std::{collections::HashMap, default::Default};
 
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
+use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
 use ethers::types::{Bytes, U256};
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::{SparsedTraceArena, TraceKind};
@@ -19,7 +19,7 @@ use strum_macros::Display;
 use tokio::runtime::{Handle, Runtime};
 use tracing::{debug, info};
 
-use crate::evm::simulation_db::OverriddenSimulationDB;
+use crate::evm::engine_db::simulation_db::OverriddenSimulationDB;
 
 use super::{
     account_storage::StateUpdate,
@@ -401,7 +401,9 @@ mod tests {
         OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
 
-    use crate::evm::{engine_db_interface::EngineDatabaseInterface, simulation_db::SimulationDB};
+    use crate::evm::engine_db::{
+        engine_db_interface::EngineDatabaseInterface, simulation_db::SimulationDB,
+    };
 
     #[test]
     fn test_converting_to_revm() {

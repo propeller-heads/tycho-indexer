@@ -9,8 +9,9 @@ use crate::structs_py::{
 use pyo3::{prelude::*, types::PyType};
 use std::{collections::HashMap, str::FromStr};
 use tycho_simulation::evm::{
-    account_storage, engine_db_interface::EngineDatabaseInterface, simulation, simulation_db,
-    tycho_db,
+    account_storage,
+    engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db, tycho_db},
+    simulation,
 };
 
 #[derive(Clone, Copy)]
@@ -203,7 +204,7 @@ impl SimulationEngine {
         updates: HashMap<String, StateUpdate>,
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
-        let block = tycho_simulation::evm::simulation_db::BlockHeader::from(block);
+        let block = tycho_simulation::evm::engine_db::simulation_db::BlockHeader::from(block);
         let mut rust_updates: HashMap<Address, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(

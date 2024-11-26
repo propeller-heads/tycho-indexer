@@ -22,12 +22,12 @@ use super::{
 };
 use crate::{
     evm::{
-        engine_db_interface::EngineDatabaseInterface,
+        engine_db::{
+            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
+            tycho_db::PreCachedDB,
+        },
         simulation::{SimulationEngine, SimulationParameters},
-        simulation_db::BlockHeader,
-        token,
-        tycho_db::PreCachedDB,
-        ContractCompiler,
+        token, ContractCompiler,
     },
     protocol::{
         errors::SimulationError,
@@ -43,7 +43,9 @@ use crate::{
 
 #[derive(Debug)]
 /// `VMPoolStateBuilder` is a builder pattern implementation for creating instances of
-/// `VMPoolState`. This struct provides a flexible way to construct `VMPoolState` objects with
+/// `VMPoolState`.
+///
+/// This struct provides a flexible way to construct `VMPoolState` objects with
 /// multiple optional parameters. It handles the validation of required fields and applies default
 /// values for optional parameters where necessary.
 /// # Example

@@ -11,9 +11,9 @@ use revm::{
 };
 use tracing::{debug, info};
 
-use crate::evm::engine_db_interface::EngineDatabaseInterface;
+use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
 
-use super::account_storage::{AccountStorage, StateUpdate};
+use super::super::account_storage::{AccountStorage, StateUpdate};
 
 /// A wrapper over an actual SimulationDB that allows overriding specific storage slots
 pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {

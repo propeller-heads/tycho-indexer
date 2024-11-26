@@ -12,7 +12,11 @@ use tracing::info;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use std::fmt::Debug;
-use tycho_simulation::evm::{account_storage, simulation, simulation_db, tycho_db, tycho_models};
+use tycho_simulation::evm::{
+    account_storage,
+    engine_db::{simulation_db, tycho_db},
+    simulation, tycho_models,
+};
 
 /// Data needed to invoke a transaction simulation
 ///
@@ -403,9 +407,9 @@ impl BlockHeader {
     }
 }
 
-impl From<BlockHeader> for tycho_simulation::evm::simulation_db::BlockHeader {
+impl From<BlockHeader> for tycho_simulation::evm::engine_db::simulation_db::BlockHeader {
     fn from(py_header: BlockHeader) -> Self {
-        tycho_simulation::evm::simulation_db::BlockHeader {
+        tycho_simulation::evm::engine_db::simulation_db::BlockHeader {
             number: py_header.number,
             hash: H256::from_str(&py_header.hash).unwrap(),
             timestamp: py_header.timestamp,
@@ -537,7 +541,7 @@ impl TychoDB {
             .map(Into::into)
             .collect();
 
-        let block = block.map(tycho_simulation::evm::simulation_db::BlockHeader::from);
+        let block = block.map(tycho_simulation::evm::engine_db::simulation_db::BlockHeader::from);
 
         self_
             .inner
