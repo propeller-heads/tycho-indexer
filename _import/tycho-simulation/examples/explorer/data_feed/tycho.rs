@@ -1,14 +1,14 @@
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    str,
+    str::FromStr,
+};
+
 use alloy_primitives::Address;
 use chrono::Utc;
 use ethers::{prelude::H256, types::H160};
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    str::FromStr,
-};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
-
-use std::str;
 
 use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
@@ -25,14 +25,13 @@ use tycho_simulation::{
     },
     models::ERC20Token,
     protocol::{
-        models::ProtocolComponent,
+        models::{ProtocolComponent, TryFromWithBlock},
         state::ProtocolSim,
         uniswap_v2::state::UniswapV2State,
         uniswap_v3::state::UniswapV3State,
         vm::{
             engine::{update_engine, SHARED_TYCHO_DB},
             state::VMPoolState,
-            tycho_decoder::TryFromWithBlock,
         },
     },
 };
@@ -253,7 +252,13 @@ pub async fn process_messages(
                     new_pairs.insert(id.clone(), ProtocolComponent::new(id.clone(), pair_tokens));
 
                     let state: Box<dyn ProtocolSim> = match protocol.as_str() {
-                        "uniswap_v3" => match UniswapV3State::try_from(snapshot.clone()) {
+                        "uniswap_v3" => match UniswapV3State::try_from_with_block(
+                            snapshot,
+                            header.clone(),
+                            HashMap::new(),
+                        )
+                        .await
+                        {
                             Ok(state) => Box::new(state),
                             Err(e) => {
                                 debug!(
@@ -263,7 +268,13 @@ pub async fn process_messages(
                                 continue;
                             }
                         },
-                        "uniswap_v2" => match UniswapV2State::try_from(snapshot.clone()) {
+                        "uniswap_v2" => match UniswapV2State::try_from_with_block(
+                            snapshot,
+                            header.clone(),
+                            HashMap::new(),
+                        )
+                        .await
+                        {
                             Ok(state) => Box::new(state),
                             Err(e) => {
                                 warn!(
@@ -275,7 +286,7 @@ pub async fn process_messages(
                         },
                         "vm:balancer" => {
                             match VMPoolState::try_from_with_block(
-                                snapshot.clone(),
+                                snapshot,
                                 header.clone(),
                                 all_tokens.clone(),
                             )
@@ -380,20 +391,20 @@ pub async fn process_messages(
             // update active protocols
             active_protocols
                 .entry(protocol.clone())
-                .and_modify(|block| *block = block_id)
-                .or_insert(block_id);
+                .and_modify(|block| *block = header.number)
+                .or_insert(header.number);
         }
 
         // checks all registered extractors have sent a message in the last 10 blocks
         active_protocols
             .iter()
             .for_each(|(protocol, last_block)| {
-                if *last_block > block_id {
+                if *last_block > header.number {
                     // old block message received - likely caused by a tycho-client restart. We don't skip processing the message
                     // as the restart provides a clean slate of new snapshots and corresponding deltas
-                    warn!("Extractor {} sent an old block message. Last message at block {}, current block {}", protocol, block_id, last_block)
-                } else if block_id - last_block > 10 {
-                    panic!("Extractor {} has not sent a message in the last 10 blocks! Last message at block {}, current block {}", protocol, block_id, last_block);
+                    warn!("Extractor {} sent an old block message. Last message at block {}, current block {}", protocol, header.number, last_block)
+                } else if header.number - last_block > 10 {
+                    panic!("Extractor {} has not sent a message in the last 10 blocks! Last message at block {}, current block {}", protocol, header.number, last_block);
                 }
             });
 
@@ -405,8 +416,8 @@ pub async fn process_messages(
         );
 
         // Send the tick with all updated states
-        let state =
-            BlockState::new(block_id, updated_states, new_pairs).set_removed_pairs(removed_pairs);
+        let state = BlockState::new(header.number, updated_states, new_pairs)
+            .set_removed_pairs(removed_pairs);
 
         info!("Sending tick!");
         state_tx

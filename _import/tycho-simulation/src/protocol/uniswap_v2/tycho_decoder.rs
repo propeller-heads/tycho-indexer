@@ -1,15 +1,27 @@
-use ethers::types::U256;
+use std::collections::HashMap;
 
-use crate::protocol::{errors::InvalidSnapshotError, uniswap_v2::state::UniswapV2State};
-use tycho_client::feed::synchronizer::ComponentWithState;
+use ethers::types::{H160, U256};
+
+use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_ethereum::BytesCodec;
 
-impl TryFrom<ComponentWithState> for UniswapV2State {
+use crate::{
+    models::ERC20Token,
+    protocol::{
+        errors::InvalidSnapshotError, models::TryFromWithBlock, uniswap_v2::state::UniswapV2State,
+    },
+};
+
+impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     type Error = InvalidSnapshotError;
 
     /// Decodes a `ComponentWithState` into a `UniswapV2State`. Errors with a `InvalidSnapshotError`
     /// if either reserve0 or reserve1 attributes are missing.
-    fn try_from(snapshot: ComponentWithState) -> Result<Self, Self::Error> {
+    async fn try_from_with_block(
+        snapshot: ComponentWithState,
+        _block: Header,
+        _all_tokens: HashMap<H160, ERC20Token>,
+    ) -> Result<Self, Self::Error> {
         let reserve0 = U256::from_bytes(
             snapshot
                 .state
@@ -61,8 +73,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_usv2_try_from() {
+    fn header() -> Header {
+        Header {
+            number: 1,
+            hash: Bytes::from(vec![0; 32]),
+            parent_hash: Bytes::from(vec![0; 32]),
+            revert: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_usv2_try_from() {
         let attributes: HashMap<String, Bytes> = vec![
             ("reserve0".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec())),
             ("reserve1".to_string(), Bytes::from(200_u64.to_be_bytes().to_vec())),
@@ -78,7 +99,7 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from(snapshot);
+        let result = UniswapV2State::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();
@@ -86,8 +107,8 @@ mod tests {
         assert_eq!(res.reserve1, 200.into());
     }
 
-    #[test]
-    fn test_usv2_try_from_invalid() {
+    #[tokio::test]
+    async fn test_usv2_try_from_invalid() {
         let attributes: HashMap<String, Bytes> =
             vec![("reserve0".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec()))]
                 .into_iter()
@@ -101,7 +122,7 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from(snapshot);
+        let result = UniswapV2State::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_err());
 

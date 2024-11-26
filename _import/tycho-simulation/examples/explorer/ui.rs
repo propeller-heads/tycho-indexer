@@ -1,4 +1,5 @@
-use crate::data_feed::state::BlockState;
+use std::{cmp::max, time::Instant};
+
 use ethers::types::U256;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -13,9 +14,11 @@ use ratatui::{
     },
     DefaultTerminal, Frame,
 };
-use std::{cmp::max, time::Instant};
 use tokio::{select, sync::mpsc::Receiver};
+
 use tycho_simulation::protocol::{models::ProtocolComponent, state::ProtocolSim};
+
+use crate::data_feed::state::BlockState;
 
 const INFO_TEXT: [&str; 2] = [
     "(Esc) quit | (↑) move up | (↓) move down | (↵) Toggle Quote | (+) Increase Quote Amount",
