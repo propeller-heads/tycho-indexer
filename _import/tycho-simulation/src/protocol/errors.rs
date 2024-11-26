@@ -54,7 +54,7 @@ pub enum SimulationError {
     #[error("Fatal error: {0}")]
     FatalError(String),
     #[error("Retry with a different input: {0}")]
-    RetryDifferentInput(String),
+    RetryDifferentInput(String, Option<GetAmountOutResult>),
     #[error("Retry later: {0}")]
     RetryLater(String),
     // TODO delete these errors

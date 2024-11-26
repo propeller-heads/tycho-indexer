@@ -43,14 +43,17 @@ pub fn maybe_coerce_error(
                 // if we used up 97% or more issue a OutOfGas error.
                 let usage = *gas_used as f64 / gas_limit as f64;
                 if usage >= 0.97 {
-                    return SimulationError::RetryDifferentInput(format!(
-                        "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. \
+                    return SimulationError::RetryDifferentInput(
+                        format!(
+                            "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. \
                             Original error: {}. \
                             Pool state: {}",
-                        usage * 100.0,
-                        err,
-                        pool_state,
-                    ));
+                            usage * 100.0,
+                            err,
+                            pool_state,
+                        ),
+                        None,
+                    );
                 }
             }
             SimulationError::FatalError(format!(
@@ -69,10 +72,13 @@ pub fn maybe_coerce_error(
                 String::new()
             };
 
-            SimulationError::RetryDifferentInput(format!(
-                "SimulationError: out-of-gas. {} Original error: {}. Pool state: {}",
-                usage_msg, data, pool_state
-            ))
+            SimulationError::RetryDifferentInput(
+                format!(
+                    "SimulationError: out-of-gas. {} Original error: {}. Pool state: {}",
+                    usage_msg, data, pool_state
+                ),
+                None,
+            )
         }
         SimulationEngineError::TransactionError { ref data, .. } => {
             SimulationError::FatalError(format!("TransactionError: {}", data))
@@ -257,6 +263,7 @@ pub async fn get_code_for_contract(
         None => {
             return Err(SimulationError::RetryDifferentInput(
                 "RPC_URL environment variable is not set".to_string(),
+                None,
             ))
         }
     };
@@ -267,7 +274,7 @@ pub async fn get_code_for_contract(
 
     // Parse the address
     let addr: H160 = address.parse().map_err(|_| {
-        SimulationError::RetryDifferentInput(format!("Failed to parse address: {}", address))
+        SimulationError::RetryDifferentInput(format!("Failed to parse address: {}", address), None)
     })?;
 
     // Call eth_getCode to get the bytecode of the contract
@@ -420,7 +427,7 @@ mod tests {
 
         let result = maybe_coerce_error(&err, "test_pool", Some(1000));
 
-        if let SimulationError::RetryDifferentInput(message) = result {
+        if let SimulationError::RetryDifferentInput(message, _partial_result) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
             assert!(message.contains("test_pool"));
         } else {
@@ -438,7 +445,7 @@ mod tests {
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationError::RetryDifferentInput(message) = result {
+        if let SimulationError::RetryDifferentInput(message, _partial_result) = result {
             assert!(message.contains("Original error: OutOfGas"));
             assert!(message.contains("Pool state: test_pool"));
         } else {

@@ -403,12 +403,12 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
 
         if sell_amount_exceeds_limit {
             return Err(SimulationError::RetryDifferentInput(
-                "Sell amount exceeds limit".to_string(),
-                // // Partial buy amount and gas used TODO: make this better
-                // buy_amount,
-                // trade.gas_used,
-                // new_state,
-                // sell_amount_limit,
+                format!("Sell amount exceeds limit {}", sell_amount_limit),
+                Some(GetAmountOutResult::new(
+                    buy_amount,
+                    trade.gas_used,
+                    Box::new(new_state.clone()),
+                )),
             ));
         }
         Ok(GetAmountOutResult::new(buy_amount, trade.gas_used, Box::new(new_state.clone())))
@@ -703,7 +703,7 @@ mod tests {
 
         match result {
             Err(e) => {
-                assert!(matches!(e, SimulationError::RetryDifferentInput(_)));
+                assert!(matches!(e, SimulationError::RetryDifferentInput(_, _)));
             }
             _ => panic!("Test failed: was expecting an Err value"),
         };

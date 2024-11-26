@@ -97,6 +97,7 @@ impl ProtocolSim for UniswapV2State {
         if amount_in == U256::zero() {
             return Err(SimulationError::RetryDifferentInput(
                 "Amount in cannot be zero".to_string(),
+                None,
             ));
         }
         let zero2one = token_in.address < token_out.address;
