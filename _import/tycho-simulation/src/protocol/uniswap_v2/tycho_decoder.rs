@@ -1,10 +1,15 @@
-use ethers::types::U256;
+use std::collections::HashMap;
+
+use ethers::types::{H160, U256};
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_ethereum::BytesCodec;
 
-use crate::protocol::{
-    errors::InvalidSnapshotError, models::TryFromWithBlock, uniswap_v2::state::UniswapV2State,
+use crate::{
+    models::ERC20Token,
+    protocol::{
+        errors::InvalidSnapshotError, models::TryFromWithBlock, uniswap_v2::state::UniswapV2State,
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
@@ -15,6 +20,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
+        _all_tokens: HashMap<H160, ERC20Token>,
     ) -> Result<Self, Self::Error> {
         let reserve0 = U256::from_bytes(
             snapshot
@@ -93,7 +99,7 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from_with_block(snapshot, header()).await;
+        let result = UniswapV2State::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();
@@ -116,7 +122,7 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from_with_block(snapshot, header()).await;
+        let result = UniswapV2State::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_err());
 

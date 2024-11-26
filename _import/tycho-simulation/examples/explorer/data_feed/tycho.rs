@@ -33,7 +33,6 @@ use tycho_simulation::{
         vm::{
             engine::{update_engine, SHARED_TYCHO_DB},
             state::VMPoolState,
-            tycho_decoder::TryFromWithBlock,
         },
     },
 };
@@ -258,7 +257,9 @@ pub async fn process_messages(
                             snapshot.clone(),
                             header.clone(),
                             HashMap::new(),
-                        ) {
+                        )
+                        .await
+                        {
                             Ok(state) => Box::new(state),
                             Err(e) => {
                                 debug!(
@@ -272,7 +273,9 @@ pub async fn process_messages(
                             snapshot.clone(),
                             header.clone(),
                             HashMap::new(),
-                        ) {
+                        )
+                        .await
+                        {
                             Ok(state) => Box::new(state),
                             Err(e) => {
                                 warn!(
