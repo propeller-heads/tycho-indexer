@@ -429,7 +429,7 @@ impl VMPoolStateBuilder {
 
         let sim_result = engine
             .simulate(&sim_params)
-            .map_err(SimulationError::SimulationEngineError)?;
+            .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         let address = decode(&[ParamType::Address], &sim_result.result)
             .map_err(|_| SimulationError::DecodingError("Failed to decode ABI".into()))?

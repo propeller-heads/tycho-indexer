@@ -19,17 +19,14 @@ use revm::primitives::{Bytecode, Bytes};
 
 use crate::{
     evm::{simulation::SimulationEngineError, ContractCompiler},
-    protocol::{
-        errors::SimulationError,
-        vm::errors::{FileError, RpcError},
-    },
+    protocol::{errors::SimulationError, vm::errors::FileError},
 };
 
 pub fn maybe_coerce_error(
     err: &SimulationEngineError,
     pool_state: &str,
     gas_limit: Option<u64>,
-) -> SimulationEngineError {
+) -> SimulationError {
     match err {
         // Check for revert situation (if error message starts with "0x")
         SimulationEngineError::TransactionError { ref data, ref gas_used }
@@ -46,17 +43,20 @@ pub fn maybe_coerce_error(
                 // if we used up 97% or more issue a OutOfGas error.
                 let usage = *gas_used as f64 / gas_limit as f64;
                 if usage >= 0.97 {
-                    return SimulationEngineError::OutOfGas(
-                        format!(
-                            "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. Original error: {}",
-                            usage * 100.0,
-                            err
-                        ),
-                        pool_state.to_string(),
-                    );
+                    return SimulationError::RetryDifferentInput(format!(
+                        "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. \
+                            Original error: {}. \
+                            Pool state: {}",
+                        usage * 100.0,
+                        err,
+                        pool_state,
+                    ));
                 }
             }
-            err
+            SimulationError::FatalError(format!(
+                "Simulation reverted for unknown reason: {}",
+                reason
+            ))
         }
         // Check if "OutOfGas" is part of the error message
         SimulationEngineError::TransactionError { ref data, ref gas_used }
@@ -69,12 +69,19 @@ pub fn maybe_coerce_error(
                 String::new()
             };
 
-            SimulationEngineError::OutOfGas(
-                format!("SimulationError: out-of-gas. {} Original error: {}", usage_msg, data),
-                pool_state.to_string(),
-            )
+            SimulationError::RetryDifferentInput(format!(
+                "SimulationError: out-of-gas. {} Original error: {}. Pool state: {}",
+                usage_msg, data, pool_state
+            ))
         }
-        _ => err.clone(), // Otherwise return the original error
+        SimulationEngineError::TransactionError { ref data, .. } => {
+            SimulationError::FatalError(format!("TransactionError: {}", data))
+        }
+        SimulationEngineError::StorageError(message) => {
+            SimulationError::RetryLater(message.clone())
+        }
+        _ => SimulationError::FatalError(err.clone().to_string()), /* Otherwise return the
+                                                                    * original error */
     }
 }
 
@@ -248,9 +255,9 @@ pub async fn get_code_for_contract(
     let connection_string = match connection_string {
         Some(url) => url,
         None => {
-            return Err(SimulationError::from(RpcError::InvalidRequest(
+            return Err(SimulationError::RetryDifferentInput(
                 "RPC_URL environment variable is not set".to_string(),
-            )))
+            ))
         }
     };
 
@@ -260,22 +267,24 @@ pub async fn get_code_for_contract(
 
     // Parse the address
     let addr: H160 = address.parse().map_err(|_| {
-        SimulationError::from(RpcError::InvalidRequest(format!(
-            "Failed to parse address: {}",
-            address
-        )))
+        SimulationError::RetryDifferentInput(format!("Failed to parse address: {}", address))
     })?;
 
     // Call eth_getCode to get the bytecode of the contract
     match provider.get_code(addr, None).await {
-        Ok(code) if code.is_empty() => Err(SimulationError::from(RpcError::EmptyResponse())),
+        Ok(code) if code.is_empty() => {
+            Err(SimulationError::RetryLater("Empty response from RPC".to_string()))
+        }
         Ok(code) => {
             let bytecode = Bytecode::new_raw(Bytes::from(code.to_vec()));
             Ok(bytecode)
         }
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
-            Err(SimulationError::from(RpcError::InvalidResponse(e)))
+            Err(SimulationError::RetryLater(format!(
+                "Invalid response from RPC: {:?}",
+                e.to_string()
+            )))
         }
     }
 }
@@ -395,8 +404,8 @@ mod tests {
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationEngineError::TransactionError { ref data, gas_used: _ } = result {
-            assert!(data.contains("Revert! Reason: Invalid operation"));
+        if let SimulationError::FatalError(msg) = result {
+            assert!(msg.contains("Simulation reverted for unknown reason: Invalid operation"));
         } else {
             panic!("Expected SolidityError error");
         }
@@ -412,9 +421,9 @@ mod tests {
 
         let result = maybe_coerce_error(&err, "test_pool", Some(1000));
 
-        if let SimulationEngineError::OutOfGas(message, pool_state) = result {
+        if let SimulationError::RetryDifferentInput(message) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
-            assert_eq!(pool_state, "test_pool");
+            assert!(message.contains("test_pool"));
         } else {
             panic!("Expected OutOfGas error");
         }
@@ -430,11 +439,11 @@ mod tests {
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationEngineError::OutOfGas(message, pool_state) = result {
+        if let SimulationError::RetryDifferentInput(message) = result {
             assert!(message.contains("Original error: OutOfGas"));
-            assert_eq!(pool_state, "test_pool");
+            assert!(message.contains("Pool state: test_pool"));
         } else {
-            panic!("Expected OutOfGas error");
+            panic!("Expected RetryDifferentInput error");
         }
     }
 
@@ -444,10 +453,11 @@ mod tests {
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationEngineError::StorageError(message) = result {
+        if let SimulationError::RetryLater(message) = result {
             assert_eq!(message, "Storage error:");
         } else {
-            panic!("Expected storage error");
+            println!("{:?}", result);
+            panic!("Expected RetryLater error");
         }
     }
 
@@ -461,8 +471,8 @@ mod tests {
 
         let result = maybe_coerce_error(&err, "test_pool", None);
 
-        if let SimulationEngineError::TransactionError { ref data, gas_used: _ } = result {
-            assert_eq!(data, "Some other error");
+        if let SimulationError::FatalError(message) = result {
+            assert_eq!(message, "TransactionError: Some other error");
         } else {
             panic!("Expected solidity error");
         }
