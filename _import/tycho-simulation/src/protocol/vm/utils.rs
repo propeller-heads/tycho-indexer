@@ -22,7 +22,7 @@ use crate::{
     protocol::{errors::SimulationError, vm::errors::FileError},
 };
 
-pub fn maybe_coerce_error(
+pub fn coerce_error(
     err: &SimulationEngineError,
     pool_state: &str,
     gas_limit: Option<u64>,
@@ -408,7 +408,7 @@ mod tests {
             gas_used: None
         };
 
-        let result = maybe_coerce_error(&err, "test_pool", None);
+        let result = coerce_error(&err, "test_pool", None);
 
         if let SimulationError::FatalError(msg) = result {
             assert!(msg.contains("Simulation reverted for unknown reason: Invalid operation"));
@@ -425,7 +425,7 @@ mod tests {
             gas_used: Some(980)
         };
 
-        let result = maybe_coerce_error(&err, "test_pool", Some(1000));
+        let result = coerce_error(&err, "test_pool", Some(1000));
 
         if let SimulationError::RetryDifferentInput(message, _partial_result) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
@@ -443,7 +443,7 @@ mod tests {
             gas_used: None,
         };
 
-        let result = maybe_coerce_error(&err, "test_pool", None);
+        let result = coerce_error(&err, "test_pool", None);
 
         if let SimulationError::RetryDifferentInput(message, _partial_result) = result {
             assert!(message.contains("Original error: OutOfGas"));
@@ -457,7 +457,7 @@ mod tests {
     fn test_maybe_coerce_error_storage_error() {
         let err = SimulationEngineError::StorageError("Storage error:".to_string());
 
-        let result = maybe_coerce_error(&err, "test_pool", None);
+        let result = coerce_error(&err, "test_pool", None);
 
         if let SimulationError::RetryLater(message) = result {
             assert_eq!(message, "Storage error:");
@@ -475,7 +475,7 @@ mod tests {
             gas_used: None,
         };
 
-        let result = maybe_coerce_error(&err, "test_pool", None);
+        let result = coerce_error(&err, "test_pool", None);
 
         if let SimulationError::FatalError(message) = result {
             assert_eq!(message, "TransactionError: Some other error");

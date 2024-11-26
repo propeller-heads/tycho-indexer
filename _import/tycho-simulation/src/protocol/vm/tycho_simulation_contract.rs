@@ -24,7 +24,7 @@ use crate::{
         vm::{
             constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
             erc20_overwrite_factory::Overwrites,
-            utils::{get_contract_bytecode, load_swap_abi, maybe_coerce_error},
+            utils::{coerce_error, get_contract_bytecode, load_swap_abi},
         },
     },
 };
@@ -215,7 +215,7 @@ where
     fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
         self.engine
             .simulate(&params)
-            .map_err(|e| maybe_coerce_error(&e, "pool_state", params.gas_limit))
+            .map_err(|e| coerce_error(&e, "pool_state", params.gas_limit))
     }
 }
 
