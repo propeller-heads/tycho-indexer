@@ -43,36 +43,36 @@ where
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     /// The pool's identifier
-    pub id: String,
+    id: String,
     /// The pool's token's addresses
     pub tokens: Vec<H160>,
     /// The current block, will be used to set vm context
-    pub block: BlockHeader,
+    block: BlockHeader,
     /// The pools token balances
-    pub balances: HashMap<H160, U256>,
+    balances: HashMap<H160, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
     /// If given, balances will be overwritten here instead of on the pool contract during
     /// simulations
-    pub balance_owner: Option<H160>,
+    balance_owner: Option<H160>,
     /// Spot prices of the pool by token pair
-    pub spot_prices: HashMap<(H160, H160), f64>,
+    spot_prices: HashMap<(H160, H160), f64>,
     /// The supported capabilities of this pool
-    pub capabilities: HashSet<Capability>,
+    capabilities: HashSet<Capability>,
     /// Storage overwrites that will be applied to all simulations. They will be cleared
     /// when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
-    pub block_lasting_overwrites: HashMap<rAddress, Overwrites>,
+    block_lasting_overwrites: HashMap<rAddress, Overwrites>,
     /// A set of all contract addresses involved in the simulation of this pool."""
-    pub involved_contracts: HashSet<H160>,
+    involved_contracts: HashSet<H160>,
     /// Allows the specification of custom storage slots for token allowances and
     /// balances. This is particularly useful for token contracts involved in protocol
     /// logic that extends beyond simple transfer functionality.
     /// Each entry also specify the compiler with which the target contract was compiled. This is
     /// later used to compute storage slot for maps.
-    pub token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
+    token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
-    pub manual_updates: bool,
+    manual_updates: bool,
     /// The adapter contract. This is used to run simulations
     adapter_contract: TychoSimulationContract<D>,
 }
@@ -315,6 +315,21 @@ impl VMPoolState<PreCachedDB> {
         }
 
         merged
+    }
+
+    #[cfg(test)]
+    pub fn get_involved_contracts(&self) -> HashSet<H160> {
+        self.involved_contracts.clone()
+    }
+
+    #[cfg(test)]
+    pub fn get_manual_updates(&self) -> bool {
+        self.manual_updates
+    }
+
+    #[cfg(test)]
+    pub fn get_balance_owner(&self) -> Option<H160> {
+        self.balance_owner
     }
 }
 

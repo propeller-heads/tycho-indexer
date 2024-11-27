@@ -256,13 +256,13 @@ mod tests {
         assert!(result.is_ok());
         let res = result.unwrap();
         assert_eq!(
-            res.balance_owner,
+            res.get_balance_owner(),
             Some(H160::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
         );
         let mut exp_involved_contracts = HashSet::new();
         exp_involved_contracts
             .insert(H160::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap());
-        assert_eq!(res.involved_contracts, exp_involved_contracts);
-        assert!(res.manual_updates);
+        assert_eq!(res.get_involved_contracts(), exp_involved_contracts);
+        assert!(res.get_manual_updates());
     }
 }
