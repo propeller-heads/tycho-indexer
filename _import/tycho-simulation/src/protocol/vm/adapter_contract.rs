@@ -15,6 +15,7 @@ use crate::{
             tycho_simulation_contract::TychoSimulationContract,
         },
     },
+    u256_num::u256_to_f64,
 };
 
 #[derive(Debug)]
@@ -214,7 +215,7 @@ where
                                 "Adapter price calculation failed: Denominator is zero".to_string(),
                             ))
                         } else {
-                            Ok((numerator.as_u128() as f64) / (denominator.as_u128() as f64))
+                            Ok(u256_to_f64(numerator) / u256_to_f64(denominator))
                         }
                     } else {
                         Err(SimulationError::FatalError(

@@ -152,11 +152,11 @@ impl VMPoolState<PreCachedDB> {
                 .contains(&Capability::ScaledPrice)
             {
                 *price_result.first().ok_or_else(|| {
-                    SimulationError::FatalError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Calculated price array is empty".to_string())
                 })?
             } else {
                 let unscaled_price = price_result.first().ok_or_else(|| {
-                    SimulationError::FatalError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Calculated price array is empty".to_string())
                 })?;
                 *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
                     10f64.powi(buy_token.decimals as i32)
