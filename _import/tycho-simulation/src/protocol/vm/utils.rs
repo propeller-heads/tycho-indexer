@@ -262,9 +262,8 @@ pub async fn get_code_for_contract(
     let connection_string = match connection_string {
         Some(url) => url,
         None => {
-            return Err(SimulationError::InvalidInput(
+            return Err(SimulationError::FatalError(
                 "RPC_URL environment variable is not set".to_string(),
-                None,
             ))
         }
     };
