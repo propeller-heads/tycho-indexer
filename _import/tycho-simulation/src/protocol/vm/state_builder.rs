@@ -1,12 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use alloy_primitives::Address;
 use chrono::Utc;
 use ethers::{
     abi::{decode, ParamType},
     prelude::U256,
     types::H160,
-    utils::to_checksum,
 };
 use itertools::Itertools;
 use revm::{
@@ -243,18 +241,9 @@ impl VMPoolStateBuilder {
                 code_hash: KECCAK_EMPTY,
                 code: Some(mocked_contract_bytecode.clone()),
             };
-            engine.state.init_account(
-                Address::parse_checksummed(to_checksum(token_address, None), None).map_err(
-                    |_| {
-                        SimulationError::FatalError(
-                            "Failed to get default engine: Checksum for token address must be valid".into(),
-                        )
-                    },
-                )?,
-                info,
-                None,
-                false,
-            );
+            engine
+                .state
+                .init_account(rAddress::from_slice(&token_address.0), info, None, false);
         }
 
         engine.state.init_account(
@@ -284,19 +273,14 @@ impl VMPoolStateBuilder {
                         })?));
                     (Some(code.clone()), code.hash_slow())
                 };
+                let account_address: H160 = address.parse().map_err(|_| {
+                    SimulationError::FatalError(format!(
+                        "Failed to get default engine: Couldn't parse address string {}",
+                        address
+                    ))
+                })?;
                 engine.state.init_account(
-                    rAddress::parse_checksummed(
-                        to_checksum(
-                            &address.parse().map_err(|_| {
-                                SimulationError::FatalError(
-                                    format!("Failed to get default engine: Couldn't parse address into string {}", address),
-                                )
-                            })?,
-                            None,
-                        ),
-                        None,
-                    )
-                    .expect("Invalid checksum for external account address"),
+                    rAddress::from_slice(&account_address.0),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
@@ -509,10 +493,10 @@ mod tests {
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&Address::from_slice(token2.as_bytes())));
+            .account_present(&rAddress::from_slice(token2.as_bytes())));
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&Address::from_slice(token3.as_bytes())));
+            .account_present(&rAddress::from_slice(token3.as_bytes())));
     }
 }

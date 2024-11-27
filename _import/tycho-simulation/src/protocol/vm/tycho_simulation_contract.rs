@@ -9,7 +9,6 @@ use ethers::{
 };
 use revm::{
     db::DatabaseRef,
-    precompile::Address as rAddress,
     primitives::{alloy_primitives::Keccak256, AccountInfo, Address},
 };
 use tracing::warn;
@@ -95,9 +94,7 @@ where
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         engine.state.init_account(
-            rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None).expect(
-                "Failed to create new swap adapter: Invalid checksum for external account address",
-            ),
+            *ADAPTER_ADDRESS,
             AccountInfo {
                 balance: *MAX_BALANCE,
                 nonce: 0,

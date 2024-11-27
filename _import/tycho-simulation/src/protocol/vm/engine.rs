@@ -45,15 +45,20 @@ where
 
     // Accounts necessary for enabling pre-compilation are initialized by default.
     engine.state.init_account(
-        rAddress::parse_checksummed("0x0000000000000000000000000000000000000000", None)
-            .expect("Invalid checksum for precompile-enabling address"),
+        rAddress::from_slice(
+            &hex::decode("0000000000000000000000000000000000000000")
+                .expect("Invalid string for precompile-enabling address"),
+        ),
         zero_account_info.clone(),
         None,
         false,
     );
+
     engine.state.init_account(
-        rAddress::parse_checksummed("0x0000000000000000000000000000000000000004", None)
-            .expect("Invalid checksum for precompile-enabling address"),
+        rAddress::from_slice(
+            &hex::decode("0000000000000000000000000000000000000004")
+                .expect("Invalid string for precompile-enabling address"),
+        ),
         zero_account_info.clone(),
         None,
         false,
