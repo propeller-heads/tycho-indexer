@@ -1,3 +1,22 @@
+## [0.46.0](https://github.com/propeller-heads/tycho-simulation/compare/0.45.1...0.46.0) (2024-11-27)
+
+
+### Features
+
+* (WIP) Define better user-facing errors ([623dcd8](https://github.com/propeller-heads/tycho-simulation/commit/623dcd841d34d49e933cdf12a2c5e809b52d6c15))
+* Map DecodingError -> FatalError ([0ceb13f](https://github.com/propeller-heads/tycho-simulation/commit/0ceb13f2b8605c1deb8332112598bd7de4d7e69e))
+* Map Encoding -> FatalError ([2dcbf9f](https://github.com/propeller-heads/tycho-simulation/commit/2dcbf9f11679be7b9db1426d8d2ae75779a607cc))
+* map InsufficientData -> RetryDifferentInput ([270ebe0](https://github.com/propeller-heads/tycho-simulation/commit/270ebe0c6daca27e8c666282a56248134e615f5c))
+* Remove SimulationEngineError enum in SimulationError ([34c782f](https://github.com/propeller-heads/tycho-simulation/commit/34c782f6817f94208a7a6a4b64731eee7b9809b2))
+* return optional partial result in RetryDifferentInput ([9fbbaa1](https://github.com/propeller-heads/tycho-simulation/commit/9fbbaa1d0fca80228f05a071a5d49ee5f48e5867))
+
+
+### Bug Fixes
+
+* Clearer error messages and some error type fixes ([fda6527](https://github.com/propeller-heads/tycho-simulation/commit/fda6527a0089e484c64e30c70dc4462e251136d4))
+* raise FatalError if RPC_URL not set ([99dc5ab](https://github.com/propeller-heads/tycho-simulation/commit/99dc5ab8406376ce2329f866ff20236be16e5465))
+* state builder test typo ([c536bbe](https://github.com/propeller-heads/tycho-simulation/commit/c536bbea946390c98e4369049637c203540df24c))
+
 ## [0.45.1](https://github.com/propeller-heads/tycho-simulation/compare/0.45.0...0.45.1) (2024-11-26)
 
 
