@@ -1,6 +1,5 @@
 use std::io;
 
-use ethers::prelude::ProviderError;
 use serde_json::Error as SerdeError;
 use thiserror::Error;
 
@@ -35,18 +34,8 @@ impl From<SerdeError> for FileError {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum RpcError {
-    #[error("Invalid Request: {0}")]
-    InvalidRequest(String),
-    #[error("Invalid Response: {0}")]
-    InvalidResponse(ProviderError),
-    #[error("Empty Response")]
-    EmptyResponse(),
-}
-
 impl From<ethers::abi::Error> for SimulationError {
     fn from(err: ethers::abi::Error) -> Self {
-        SimulationError::DecodingError(err.to_string())
+        SimulationError::FatalError(err.to_string())
     }
 }

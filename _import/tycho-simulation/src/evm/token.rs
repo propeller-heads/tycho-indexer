@@ -1,8 +1,11 @@
 use crate::{
     evm::engine_db::engine_db_interface::EngineDatabaseInterface,
-    protocol::vm::{
-        constants::EXTERNAL_ACCOUNT, erc20_overwrite_factory::ERC20OverwriteFactory,
-        tycho_simulation_contract::TychoSimulationContract, utils::ERC20Slots,
+    protocol::{
+        errors::SimulationError,
+        vm::{
+            constants::EXTERNAL_ACCOUNT, erc20_overwrite_factory::ERC20OverwriteFactory,
+            tycho_simulation_contract::TychoSimulationContract, utils::ERC20Slots,
+        },
     },
 };
 use ethers::{
@@ -12,8 +15,7 @@ use ethers::{
 use lazy_static::lazy_static;
 use revm::{primitives::Address, DatabaseRef};
 use serde_json::from_str;
-use std::{fmt::Debug, str::FromStr};
-use thiserror::Error;
+use std::str::FromStr;
 
 use super::{
     engine_db::simulation_db::BlockHeader, simulation::SimulationEngine, ContractCompiler,
@@ -27,13 +29,6 @@ lazy_static! {
         let abi_json = std::fs::read_to_string(abi_file_path).expect("Failed to read ABI file");
         from_str(&abi_json).expect("Failed to parse ABI JSON")
     };
-}
-
-/// An error r
-#[derive(Error, Debug)]
-pub enum TokenError {
-    #[error("Couldn't bruteforce {0} for token {1}")]
-    BruteForceFailed(String, String),
 }
 
 /// Brute-force detection of storage slots for token balances and allowances.
@@ -76,7 +71,7 @@ pub fn brute_force_slots<D: EngineDatabaseInterface + Clone>(
     token_addr: &H160,
     block: &BlockHeader,
     engine: &SimulationEngine<D>,
-) -> Result<(ERC20Slots, ContractCompiler), TokenError>
+) -> Result<(ERC20Slots, ContractCompiler), SimulationError>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
@@ -123,7 +118,10 @@ where
     }
 
     if balance_slot.is_none() {
-        return Err(TokenError::BruteForceFailed("balance".to_string(), token_addr.to_string()));
+        return Err(SimulationError::FatalError(format!(
+            "Couldn't bruteforce balance for token {:?}",
+            token_addr.to_string()
+        )));
     }
 
     let mut allowance_slot = None;
@@ -163,7 +161,10 @@ where
     }
 
     if allowance_slot.is_none() {
-        return Err(TokenError::BruteForceFailed("allowance".to_string(), token_addr.to_string()));
+        return Err(SimulationError::FatalError(format!(
+            "Couldn't bruteforce allowance for token {:?}",
+            token_addr.to_string()
+        )));
     }
 
     Ok((ERC20Slots::new(balance_slot.unwrap().into(), allowance_slot.unwrap().into()), compiler))

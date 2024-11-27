@@ -112,8 +112,8 @@ impl VMPoolState<PreCachedDB> {
     /// Ensures the pool supports the given capability
     fn ensure_capability(&self, capability: Capability) -> Result<(), SimulationError> {
         if !self.capabilities.contains(&capability) {
-            return Err(SimulationError::NotFound(format!(
-                "capability {:?}",
+            return Err(SimulationError::FatalError(format!(
+                "capability {:?} not supported",
                 capability.to_string()
             )));
         }
@@ -152,11 +152,11 @@ impl VMPoolState<PreCachedDB> {
                 .contains(&Capability::ScaledPrice)
             {
                 *price_result.first().ok_or_else(|| {
-                    SimulationError::DecodingError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Spot price is not a u64".to_string())
                 })?
             } else {
                 let unscaled_price = price_result.first().ok_or_else(|| {
-                    SimulationError::DecodingError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Spot price is not a u64".to_string())
                 })?;
                 *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
                     10f64.powi(buy_token.decimals as i32)
@@ -264,10 +264,11 @@ impl VMPoolState<PreCachedDB> {
         let mut balance_overwrites: HashMap<rAddress, Overwrites> = HashMap::new();
         let address = match self.balance_owner {
             Some(address) => Ok(address),
-            None => self
-                .id
-                .parse()
-                .map_err(|_| SimulationError::EncodingError("Pool ID is not an address".into())),
+            None => self.id.parse().map_err(|_| {
+                SimulationError::FatalError(
+                    "Failed to get balance overwrites: Pool ID is not an address".into(),
+                )
+            }),
         }?;
 
         for token in &tokens {
@@ -276,7 +277,10 @@ impl VMPoolState<PreCachedDB> {
                     .get(token)
                     .cloned()
                     .ok_or_else(|| {
-                        SimulationError::EncodingError("Token storage slots not found".into())
+                        SimulationError::FatalError(
+                            "Failed to get balance overwrites: Token storage slots not found"
+                                .into(),
+                        )
                     })?
             } else {
                 (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
@@ -323,7 +327,10 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         self.spot_prices
             .get(&(base.address, quote.address))
             .cloned()
-            .ok_or(SimulationError::NotFound("Spot prices".to_string()))
+            .ok_or(SimulationError::FatalError(format!(
+                "Spot price not found for base token {} and quote token {}",
+                base.address, quote.address
+            )))
     }
 
     fn get_amount_out(
@@ -378,12 +385,10 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
                     .or_default();
                 for (slot, value) in storage {
                     let slot = U256::from_dec_str(&slot.to_string()).map_err(|_| {
-                        SimulationError::DecodingError("Failed to decode slot index".to_string())
+                        SimulationError::FatalError("Failed to decode slot index".to_string())
                     })?;
                     let value = U256::from_dec_str(&value.to_string()).map_err(|_| {
-                        SimulationError::DecodingError(
-                            "Failed to decode slot overwrite".to_string(),
-                        )
+                        SimulationError::FatalError("Failed to decode slot overwrite".to_string())
                     })?;
                     block_overwrites.insert(slot, value);
                 }
@@ -404,12 +409,13 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         let buy_amount = trade.received_amount;
 
         if sell_amount_exceeds_limit {
-            return Err(SimulationError::SellAmountTooHigh(
-                // // Partial buy amount and gas used TODO: make this better
-                // buy_amount,
-                // trade.gas_used,
-                // new_state,
-                // sell_amount_limit,
+            return Err(SimulationError::InvalidInput(
+                format!("Sell amount exceeds limit {}", sell_amount_limit),
+                Some(GetAmountOutResult::new(
+                    buy_amount,
+                    trade.gas_used,
+                    Box::new(new_state.clone()),
+                )),
             ));
         }
         Ok(GetAmountOutResult::new(buy_amount, trade.gas_used, Box::new(new_state.clone())))
@@ -701,12 +707,14 @@ mod tests {
         );
 
         assert!(result.is_err());
+
         match result {
-            Err(e) => {
-                assert!(matches!(e, SimulationError::SellAmountTooHigh()));
+            Err(SimulationError::InvalidInput(msg1, amount_out_result)) => {
+                assert_eq!(msg1, "Sell amount exceeds limit 100279494253364362835");
+                assert!(amount_out_result.is_some());
             }
-            _ => panic!("Test failed: was expecting an Err value"),
-        };
+            _ => panic!("Test failed: was expecting an Err(SimulationError::RetryDifferentInput(_, _)) value"),
+        }
     }
 
     #[tokio::test]

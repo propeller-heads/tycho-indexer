@@ -24,7 +24,7 @@ use crate::{
         vm::{
             constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
             erc20_overwrite_factory::Overwrites,
-            utils::{get_contract_bytecode, load_swap_abi, maybe_coerce_error},
+            utils::{coerce_error, get_contract_bytecode, load_swap_abi},
         },
     },
 };
@@ -91,12 +91,13 @@ where
     ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
 
-        let adapter_contract_code =
-            get_contract_bytecode(adapter_contract_path).map_err(SimulationError::AbiError)?;
+        let adapter_contract_code = get_contract_bytecode(adapter_contract_path)
+            .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         engine.state.init_account(
-            rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
-                .expect("Invalid checksum for external account address"),
+            rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None).expect(
+                "Failed to create new swap adapter: Invalid checksum for external account address",
+            ),
             AccountInfo {
                 balance: *MAX_BALANCE,
                 nonce: 0,
@@ -117,14 +118,18 @@ where
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::EncodingError(format!(
-                    "Function name {} not found in the ABI",
+                SimulationError::FatalError(format!(
+                    "Tycho simulation contract failed to encode input: \
+                Function name {} not found in the ABI",
                     fname
                 ))
             })?;
 
         if function.inputs.len() != args.len() {
-            return Err(SimulationError::EncodingError("Invalid argument count".to_string()));
+            return Err(SimulationError::FatalError(
+                "Tycho simulation contract failed to encode input: Invalid argument count"
+                    .to_string(),
+            ));
         }
 
         let input_types: String = function
@@ -160,10 +165,7 @@ where
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::DecodingError(format!(
-                    "Function name {} not found in the ABI",
-                    fname
-                ))
+                SimulationError::FatalError(format!("Tycho simulation contract failed to decode output: Function name {} not found in the ABI", fname))
             })?;
 
         let output_types: Vec<ParamType> = function
@@ -172,7 +174,10 @@ where
             .map(|output| output.kind.clone())
             .collect();
         let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
-            SimulationError::DecodingError(format!("Failed to decode output: {:?}", e))
+            SimulationError::FatalError(format!(
+                "Tycho simulation contract failed to decode output: {:?}",
+                e
+            ))
         })?;
 
         Ok(decoded_tokens)
@@ -221,13 +226,7 @@ where
     fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
         self.engine
             .simulate(&params)
-            .map_err(|e| {
-                SimulationError::SimulationEngineError(maybe_coerce_error(
-                    &e,
-                    "pool_state",
-                    params.gas_limit,
-                ))
-            })
+            .map_err(|e| coerce_error(&e, "pool_state", params.gas_limit))
     }
 }
 
