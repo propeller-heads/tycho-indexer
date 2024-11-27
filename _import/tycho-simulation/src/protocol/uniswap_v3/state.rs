@@ -111,7 +111,7 @@ impl UniswapV3State {
         sqrt_price_limit: Option<U256>,
     ) -> Result<SwapResults, SimulationError> {
         if self.liquidity == 0 {
-            return Err(SimulationError::RetryLater("No liquidity".to_string()));
+            return Err(SimulationError::RecoverableError("No liquidity".to_string()));
         }
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
@@ -152,7 +152,7 @@ impl UniswapV3State {
                         new_state.liquidity = state.liquidity;
                         new_state.tick = state.tick;
                         new_state.sqrt_price = state.sqrt_price;
-                        return Err(SimulationError::RetryDifferentInput(
+                        return Err(SimulationError::InvalidInput(
                             "Ticks exceeded".into(),
                             Some(GetAmountOutResult::new(
                                 state.amount_calculated.abs().into_raw(),
@@ -629,7 +629,7 @@ mod tests {
             .unwrap_err();
 
         match err {
-            SimulationError::RetryDifferentInput(ref _err, ref amount_out_result) => {
+            SimulationError::InvalidInput(ref _err, ref amount_out_result) => {
                 match amount_out_result {
                     Some(amount_out_result) => {
                         assert_eq!(amount_out_result.amount, exp);

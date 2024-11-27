@@ -44,7 +44,7 @@ pub fn coerce_error(
                 // if we used up 97% or more issue a OutOfGas error.
                 let usage = *gas_used as f64 / gas_limit as f64;
                 if usage >= 0.97 {
-                    return SimulationError::RetryDifferentInput(
+                    return SimulationError::InvalidInput(
                         format!(
                             "SimulationError: Likely out-of-gas. Used: {:.2}% of gas limit. \
                             Original error: {}. \
@@ -73,7 +73,7 @@ pub fn coerce_error(
                 String::new()
             };
 
-            SimulationError::RetryDifferentInput(
+            SimulationError::InvalidInput(
                 format!(
                     "SimulationError: out-of-gas. {} Original error: {}. Pool state: {}",
                     usage_msg, data, pool_state
@@ -85,7 +85,7 @@ pub fn coerce_error(
             SimulationError::FatalError(format!("TransactionError: {}", data))
         }
         SimulationEngineError::StorageError(message) => {
-            SimulationError::RetryLater(message.clone())
+            SimulationError::RecoverableError(message.clone())
         }
         _ => SimulationError::FatalError(err.clone().to_string()), /* Otherwise return the
                                                                     * original error */
@@ -262,7 +262,7 @@ pub async fn get_code_for_contract(
     let connection_string = match connection_string {
         Some(url) => url,
         None => {
-            return Err(SimulationError::RetryDifferentInput(
+            return Err(SimulationError::InvalidInput(
                 "RPC_URL environment variable is not set".to_string(),
                 None,
             ))
@@ -293,7 +293,7 @@ pub async fn get_code_for_contract(
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
             match e {
-                ProviderError::JsonRpcClientError(err) => Err(SimulationError::RetryLater(
+                ProviderError::JsonRpcClientError(err) => Err(SimulationError::RecoverableError(
                     format!("Failed to get code for contract due to internal RPC error: {:?}", err),
                 )),
                 _ => Err(SimulationError::FatalError(format!(
@@ -436,7 +436,7 @@ mod tests {
 
         let result = coerce_error(&err, "test_pool", Some(1000));
 
-        if let SimulationError::RetryDifferentInput(message, _partial_result) = result {
+        if let SimulationError::InvalidInput(message, _partial_result) = result {
             assert!(message.contains("Used: 98.00% of gas limit."));
             assert!(message.contains("test_pool"));
         } else {
@@ -454,7 +454,7 @@ mod tests {
 
         let result = coerce_error(&err, "test_pool", None);
 
-        if let SimulationError::RetryDifferentInput(message, _partial_result) = result {
+        if let SimulationError::InvalidInput(message, _partial_result) = result {
             assert!(message.contains("Original error: OutOfGas"));
             assert!(message.contains("Pool state: test_pool"));
         } else {
@@ -468,7 +468,7 @@ mod tests {
 
         let result = coerce_error(&err, "test_pool", None);
 
-        if let SimulationError::RetryLater(message) = result {
+        if let SimulationError::RecoverableError(message) = result {
             assert_eq!(message, "Storage error:");
         } else {
             println!("{:?}", result);

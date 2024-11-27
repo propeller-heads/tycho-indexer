@@ -409,7 +409,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         let buy_amount = trade.received_amount;
 
         if sell_amount_exceeds_limit {
-            return Err(SimulationError::RetryDifferentInput(
+            return Err(SimulationError::InvalidInput(
                 format!("Sell amount exceeds limit {}", sell_amount_limit),
                 Some(GetAmountOutResult::new(
                     buy_amount,
@@ -709,7 +709,7 @@ mod tests {
         assert!(result.is_err());
 
         match result {
-            Err(SimulationError::RetryDifferentInput(msg1, amount_out_result)) => {
+            Err(SimulationError::InvalidInput(msg1, amount_out_result)) => {
                 assert_eq!(msg1, "Sell amount exceeds limit 100279494253364362835");
                 assert!(amount_out_result.is_some());
             }

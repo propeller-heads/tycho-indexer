@@ -43,18 +43,19 @@ impl From<SimulationError> for InvalidSnapshotError {
 /// `SimulationError` encompasses all possible errors that can occur in the package,
 /// wrapping lower-level errors in a user-friendly way for easier handling and display.
 /// Variants:
-/// - `RetryLater`: Indicates that the simulation should be retried later. It may have failed due to
-///   a temporary issue, such as a network problem.
-/// - `TryDifferentInput`: Indicated that the simulation should be retried with different inputs.
+/// - `RecoverableError`: Indicates that the simulation has failed with a recoverable error.
+///   Retrying at a later time may succeed. It may have failed due to a temporary issue, such as a
+///   network problem.
+/// - `InvalidInput`: Indicates that the simulation has failed due to bad input parameters.
 /// - `FatalError`: There is a bug with this pool or protocol - do not attempt simulation again.
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("Fatal error: {0}")]
     FatalError(String),
-    #[error("Retry with a different input: {0}")]
-    RetryDifferentInput(String, Option<GetAmountOutResult>),
-    #[error("Retry later: {0}")]
-    RetryLater(String),
+    #[error("Invalid input: {0}")]
+    InvalidInput(String, Option<GetAmountOutResult>),
+    #[error("Recoverable error: {0}")]
+    RecoverableError(String),
 }
 
 impl<T> From<SimulationError> for TransitionError<T> {
