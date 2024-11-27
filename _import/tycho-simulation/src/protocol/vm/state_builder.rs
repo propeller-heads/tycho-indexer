@@ -488,7 +488,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             SimulationError::FatalError(field) => {
-                assert_eq!(field, "Adapter contract not initialized")
+                assert_eq!(field, "Adapter contract path not set")
             }
             _ => panic!("Unexpected error type"),
         }
