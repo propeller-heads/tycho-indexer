@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt::Debug};
 
 use lazy_static::lazy_static;
 use revm::{
+    precompile::Address as rAddress,
     primitives::{AccountInfo, Address, KECCAK_EMPTY},
     DatabaseRef,
 };
@@ -17,7 +18,6 @@ use crate::{
     },
     protocol::errors::SimulationError,
 };
-use revm::precompile::Address as rAddress;
 
 lazy_static! {
     pub static ref SHARED_TYCHO_DB: PreCachedDB =
