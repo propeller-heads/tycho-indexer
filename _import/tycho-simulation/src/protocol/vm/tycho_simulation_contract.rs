@@ -95,8 +95,9 @@ where
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         engine.state.init_account(
-            rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None)
-                .expect("Invalid checksum for external account address"),
+            rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None).expect(
+                "Failed to create new swap adapter: Invalid checksum for external account address",
+            ),
             AccountInfo {
                 balance: *MAX_BALANCE,
                 nonce: 0,
@@ -117,11 +118,18 @@ where
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::FatalError(format!("Function name {} not found in the ABI", fname))
+                SimulationError::FatalError(format!(
+                    "Tycho simulation contract failed to encode input: \
+                Function name {} not found in the ABI",
+                    fname
+                ))
             })?;
 
         if function.inputs.len() != args.len() {
-            return Err(SimulationError::FatalError("Invalid argument count".to_string()));
+            return Err(SimulationError::FatalError(
+                "Tycho simulation contract failed to encode input: Invalid argument count"
+                    .to_string(),
+            ));
         }
 
         let input_types: String = function
@@ -157,7 +165,7 @@ where
             .get(fname)
             .and_then(|funcs| funcs.first())
             .ok_or_else(|| {
-                SimulationError::FatalError(format!("Function name {} not found in the ABI", fname))
+                SimulationError::FatalError(format!("Tycho simulation contract failed to decode output: Function name {} not found in the ABI", fname))
             })?;
 
         let output_types: Vec<ParamType> = function
@@ -166,7 +174,10 @@ where
             .map(|output| output.kind.clone())
             .collect();
         let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to decode output: {:?}", e))
+            SimulationError::FatalError(format!(
+                "Tycho simulation contract failed to decode output: {:?}",
+                e
+            ))
         })?;
 
         Ok(decoded_tokens)

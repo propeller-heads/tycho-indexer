@@ -91,30 +91,38 @@ where
 
         let res = self.call("swap", args, block, None, overwrites, None, U256::zero())?;
 
-        let (received_amount, gas_used, price) = if let Token::Tuple(ref return_value) =
-            res.return_value[0]
-        {
-            match &return_value[..] {
-                [Token::Uint(amount), Token::Uint(gas), Token::Tuple(price_elements)] => {
-                    let received_amount = *amount;
-                    let gas_used = *gas;
+        let (received_amount, gas_used, price) =
+            if let Token::Tuple(ref return_value) = res.return_value[0] {
+                match &return_value[..] {
+                    [Token::Uint(amount), Token::Uint(gas), Token::Tuple(price_elements)] => {
+                        let received_amount = *amount;
+                        let gas_used = *gas;
 
-                    let price_token = Token::Array(vec![Token::Tuple(price_elements.clone())]);
-                    let price = self
-                        .calculate_price(price_token)?
-                        .first()
-                        .cloned()
-                        .ok_or_else(|| {
-                            SimulationError::FatalError("There wasn't a calculated price".into())
-                        })?;
+                        let price_token = Token::Array(vec![Token::Tuple(price_elements.clone())]);
+                        let price =
+                            self.calculate_price(price_token)?
+                                .first()
+                                .cloned()
+                                .ok_or_else(|| {
+                                    SimulationError::FatalError(
+                                "Adapter swap call failed: An empty price list was returned".into(),
+                            )
+                                })?;
 
-                    Ok((received_amount, gas_used, price))
+                        Ok((received_amount, gas_used, price))
+                    }
+                    _ => Err(SimulationError::FatalError(format!(
+                        "Adapter swap call failed: Expected amount, gas, and price elements in \
+                    the format (Uint, Uint, Tuple). Found {:?}",
+                        &return_value[..]
+                    ))),
                 }
-                _ => Err(SimulationError::FatalError("Incorrect types found for price".into())),
-            }
-        } else {
-            Err(SimulationError::FatalError("return_value is not a Token::Tuple".into()))
-        }?;
+            } else {
+                Err(SimulationError::FatalError(format!(
+                "Adapter swap call failed: Expected return_value to be a Token::Tuple. Found {}",
+                res.return_value[0]
+            )))
+            }?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
     }
@@ -142,7 +150,10 @@ where
             }
         }
 
-        Err(SimulationError::FatalError("Unexpected response format".into()))
+        Err(SimulationError::FatalError(format!(
+            "Adapter call to get limits failed: Unexpected response format: {:?}",
+            res
+        )))
     }
 
     pub fn get_capabilities(
@@ -199,17 +210,24 @@ where
                             .into_uint()
                             .unwrap();
                         if denominator.is_zero() {
-                            Err(SimulationError::FatalError("Denominator is zero".to_string()))
+                            Err(SimulationError::FatalError(
+                                "Adapter price calculation failed: Denominator is zero".to_string(),
+                            ))
                         } else {
                             Ok((numerator.as_u128() as f64) / (denominator.as_u128() as f64))
                         }
                     } else {
-                        Err(SimulationError::FatalError("Invalid fraction tuple".to_string()))
+                        Err(SimulationError::FatalError(
+                            "Adapter price calculation failed: Invalid fraction tuple".to_string(),
+                        ))
                     }
                 })
                 .collect()
         } else {
-            Err(SimulationError::FatalError("Price is not a Token::Array".to_string()))
+            Err(SimulationError::FatalError(format!(
+                "Adapter price calculation failed: Price is not a Token::Array: {}",
+                value
+            )))
         }
     }
 }

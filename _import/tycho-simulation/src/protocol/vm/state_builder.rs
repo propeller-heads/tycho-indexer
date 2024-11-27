@@ -195,7 +195,7 @@ impl VMPoolStateBuilder {
                 self.adapter_contract_path
                     .as_ref()
                     .ok_or_else(|| {
-                        SimulationError::FatalError("Adapter contract not initialized".to_string())
+                        SimulationError::FatalError("Adapter contract path not set".to_string())
                     })?,
                 engine.clone(),
             )?)
@@ -222,7 +222,9 @@ impl VMPoolStateBuilder {
                 .unwrap_or_default(),
             self.manual_updates.unwrap_or(false),
             self.adapter_contract.ok_or_else(|| {
-                SimulationError::FatalError("Adapter contract not initialized".to_string())
+                SimulationError::FatalError(
+                    "Failed to get build engine: Adapter contract not initialized".to_string(),
+                )
             })?,
         ))
     }
@@ -245,7 +247,7 @@ impl VMPoolStateBuilder {
                 Address::parse_checksummed(to_checksum(token_address, None), None).map_err(
                     |_| {
                         SimulationError::FatalError(
-                            "Checksum for token address must be valid".into(),
+                            "Failed to get default engine: Checksum for token address must be valid".into(),
                         )
                     },
                 )?,
@@ -277,7 +279,7 @@ impl VMPoolStateBuilder {
                     let code =
                         Bytecode::new_raw(Bytes::from(bytecode.clone().ok_or_else(|| {
                             SimulationError::FatalError(
-                                "Byte code from stateless contracts is None".into(),
+                                "Failed to get default engine: Byte code from stateless contracts is None".into(),
                             )
                         })?));
                     (Some(code.clone()), code.hash_slow())
@@ -287,7 +289,7 @@ impl VMPoolStateBuilder {
                         to_checksum(
                             &address.parse().map_err(|_| {
                                 SimulationError::FatalError(
-                                    "Couldn't parse address into string".into(),
+                                    format!("Failed to get default engine: Couldn't parse address into string {}", address),
                                 )
                             })?,
                             None,
@@ -343,7 +345,10 @@ impl VMPoolStateBuilder {
                     .adapter_contract
                     .clone()
                     .ok_or_else(|| {
-                        SimulationError::FatalError("Adapter contract not initialized".to_string())
+                        SimulationError::FatalError(
+                            "Failed to get default capabilities: Adapter contract not initialized"
+                                .to_string(),
+                        )
                     })?
                     .get_capabilities(hexstring_to_vec(&self.id)?, *t0, *t1)?;
                 capabilities.push(caps);
@@ -389,7 +394,12 @@ impl VMPoolStateBuilder {
         let method_name = decoded
             .split(':')
             .last()
-            .ok_or_else(|| SimulationError::FatalError("Invalid decoded string format".into()))?;
+            .ok_or_else(|| {
+                SimulationError::FatalError(
+                    "Failed to get address from call: Could not decode method name from call"
+                        .into(),
+                )
+            })?;
 
         let selector = {
             let mut hasher = Keccak256::new();
@@ -401,16 +411,23 @@ impl VMPoolStateBuilder {
         let to_address = decoded
             .split(':')
             .nth(1)
-            .ok_or_else(|| SimulationError::FatalError("Invalid decoded string format".into()))?;
+            .ok_or_else(|| {
+                SimulationError::FatalError(
+                    "Failed to get address from call: Could not decode to_address from call".into(),
+                )
+            })?;
 
         let timestamp = Utc::now()
             .naive_utc()
             .and_utc()
             .timestamp() as u64;
 
-        let parsed_address: rAddress = to_address
-            .parse()
-            .map_err(|_| SimulationError::FatalError("Invalid address format".into()))?;
+        let parsed_address: rAddress = to_address.parse().map_err(|_| {
+            SimulationError::FatalError(format!(
+                "Failed to get address from call: Invalid address format: {}",
+                to_address
+            ))
+        })?;
 
         let sim_params = SimulationParameters {
             data: selector.to_vec().into(),
@@ -428,19 +445,28 @@ impl VMPoolStateBuilder {
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         let address = decode(&[ParamType::Address], &sim_result.result)
-            .map_err(|_| SimulationError::FatalError("Failed to decode ABI".into()))?
+            .map_err(|_| {
+                SimulationError::FatalError(
+                    "Failed to get address from call: Failed to decode address list from simulation result".into(),
+                )
+            })?
             .into_iter()
             .next()
             .ok_or_else(|| {
                 SimulationError::FatalError(
-                    "Couldn't retrieve address from simulation for stateless contracts".into(),
+                    "Failed to get address from call: Couldn't retrieve address from simulation for stateless contracts".into(),
                 )
             })?;
 
         address
             .to_string()
             .parse()
-            .map_err(|_| SimulationError::FatalError("Couldn't parse address to string".into()))
+            .map_err(|_| {
+                SimulationError::FatalError(format!(
+                    "Failed to get address from call: Couldn't parse address to string: {}",
+                    address
+                ))
+            })
     }
 }
 

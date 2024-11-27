@@ -153,7 +153,7 @@ impl UniswapV3State {
                         new_state.tick = state.tick;
                         new_state.sqrt_price = state.sqrt_price;
                         return Err(SimulationError::RetryDifferentInput(
-                            "Insufficient data".into(),
+                            "Ticks exceeded".into(),
                             Some(GetAmountOutResult::new(
                                 state.amount_calculated.abs().into_raw(),
                                 gas_used,

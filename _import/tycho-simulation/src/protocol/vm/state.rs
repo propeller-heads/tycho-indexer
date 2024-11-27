@@ -113,7 +113,7 @@ impl VMPoolState<PreCachedDB> {
     fn ensure_capability(&self, capability: Capability) -> Result<(), SimulationError> {
         if !self.capabilities.contains(&capability) {
             return Err(SimulationError::FatalError(format!(
-                "capability {:?} not found",
+                "capability {:?} not supported",
                 capability.to_string()
             )));
         }
@@ -264,10 +264,11 @@ impl VMPoolState<PreCachedDB> {
         let mut balance_overwrites: HashMap<rAddress, Overwrites> = HashMap::new();
         let address = match self.balance_owner {
             Some(address) => Ok(address),
-            None => self
-                .id
-                .parse()
-                .map_err(|_| SimulationError::FatalError("Pool ID is not an address".into())),
+            None => self.id.parse().map_err(|_| {
+                SimulationError::FatalError(
+                    "Failed to get balance overwrites: Pool ID is not an address".into(),
+                )
+            }),
         }?;
 
         for token in &tokens {
@@ -276,7 +277,10 @@ impl VMPoolState<PreCachedDB> {
                     .get(token)
                     .cloned()
                     .ok_or_else(|| {
-                        SimulationError::FatalError("Token storage slots not found".into())
+                        SimulationError::FatalError(
+                            "Failed to get balance overwrites: Token storage slots not found"
+                                .into(),
+                        )
                     })?
             } else {
                 (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
@@ -323,7 +327,10 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
         self.spot_prices
             .get(&(base.address, quote.address))
             .cloned()
-            .ok_or(SimulationError::FatalError("Spot prices not found".to_string()))
+            .ok_or(SimulationError::FatalError(format!(
+                "Spot price not found for base token {} and quote token {}",
+                base.address, quote.address
+            )))
     }
 
     fn get_amount_out(
@@ -702,11 +709,12 @@ mod tests {
         assert!(result.is_err());
 
         match result {
-            Err(e) => {
-                assert!(matches!(e, SimulationError::RetryDifferentInput(_, _)));
+            Err(SimulationError::RetryDifferentInput(msg1, amount_out_result)) => {
+                assert_eq!(msg1, "Sell amount exceeds limit 100279494253364362835");
+                assert!(amount_out_result.is_some());
             }
-            _ => panic!("Test failed: was expecting an Err value"),
-        };
+            _ => panic!("Test failed: was expecting an Err(SimulationError::RetryDifferentInput(_, _)) value"),
+        }
     }
 
     #[tokio::test]

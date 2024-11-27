@@ -22,18 +22,6 @@ pub enum FileError {
     Parse(SerdeError),
 }
 
-impl From<FileError> for String {
-    fn from(error: FileError) -> Self {
-        match error {
-            FileError::MalformedABI(msg) => format!("Malformed ABI error: {}", msg),
-            FileError::Structure(msg) => format!("Structure error: {}", msg),
-            FileError::FilePath(msg) => format!("File path conversion error: {}", msg),
-            FileError::Io(err) => format!("I/O error: {}", err),
-            FileError::Parse(err) => format!("Json parsing error: {}", err),
-        }
-    }
-}
-
 impl From<io::Error> for FileError {
     fn from(err: io::Error) -> Self {
         FileError::Io(err)

@@ -10,6 +10,7 @@ use std::{
 use ethabi::{self, decode, ParamType};
 use ethers::{
     abi::Abi,
+    prelude::ProviderError,
     providers::{Http, Middleware, Provider},
     types::{Address, H160, U256},
 };
@@ -274,13 +275,16 @@ pub async fn get_code_for_contract(
 
     // Parse the address
     let addr: H160 = address.parse().map_err(|_| {
-        SimulationError::RetryDifferentInput(format!("Failed to parse address: {}", address), None)
+        SimulationError::FatalError(format!(
+            "Failed to get code for contract. Could not parse address: {}",
+            address
+        ))
     })?;
 
     // Call eth_getCode to get the bytecode of the contract
     match provider.get_code(addr, None).await {
         Ok(code) if code.is_empty() => {
-            Err(SimulationError::RetryLater("Empty response from RPC".to_string()))
+            Err(SimulationError::FatalError("Empty code response from RPC".to_string()))
         }
         Ok(code) => {
             let bytecode = Bytecode::new_raw(Bytes::from(code.to_vec()));
@@ -288,10 +292,15 @@ pub async fn get_code_for_contract(
         }
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
-            Err(SimulationError::RetryLater(format!(
-                "Invalid response from RPC: {:?}",
-                e.to_string()
-            )))
+            match e {
+                ProviderError::JsonRpcClientError(err) => Err(SimulationError::RetryLater(
+                    format!("Failed to get code for contract due to internal RPC error: {:?}", err),
+                )),
+                _ => Err(SimulationError::FatalError(format!(
+                    "Failed to get code for contract. Invalid response from RPC: {:?}",
+                    e.to_string()
+                ))),
+            }
         }
     }
 }
