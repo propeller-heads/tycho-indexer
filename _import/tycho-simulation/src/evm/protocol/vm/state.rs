@@ -37,7 +37,7 @@ use super::{
 };
 
 #[derive(Clone, Debug)]
-pub struct VMPoolState<D: EngineDatabaseInterface + Clone>
+pub struct EVMPoolState<D: EngineDatabaseInterface + Clone>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
@@ -77,7 +77,7 @@ where
     adapter_contract: TychoSimulationContract<D>,
 }
 
-impl VMPoolState<PreCachedDB> {
+impl EVMPoolState<PreCachedDB> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
@@ -318,7 +318,7 @@ impl VMPoolState<PreCachedDB> {
     }
 }
 
-impl ProtocolSim for VMPoolState<PreCachedDB> {
+impl ProtocolSim for EVMPoolState<PreCachedDB> {
     fn fee(&self) -> f64 {
         todo!()
     }
@@ -467,7 +467,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         if let Some(other_state) = other
             .as_any()
-            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
         {
             self.id == other_state.id
         } else {
@@ -502,7 +502,7 @@ mod tests {
         ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
     }
 
-    async fn setup_pool_state() -> VMPoolState<PreCachedDB> {
+    async fn setup_pool_state() -> EVMPoolState<PreCachedDB> {
         let data_str = include_str!("assets/balancer_contract_storage_block_20463609.json");
         let data: Value = serde_json::from_str(data_str).expect("Failed to parse JSON");
 
@@ -657,7 +657,7 @@ mod tests {
         let new_state = result
             .new_state
             .as_any()
-            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
         assert_eq!(result.gas, U256::from_dec_str("102770").unwrap());
@@ -679,7 +679,7 @@ mod tests {
         let new_state = result
             .new_state
             .as_any()
-            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, U256::from(0));
         assert_eq!(result.gas, U256::from(68656));

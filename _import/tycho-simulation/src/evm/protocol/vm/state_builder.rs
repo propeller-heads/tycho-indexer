@@ -30,7 +30,7 @@ use crate::{
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
     models::Capability,
-    state::VMPoolState,
+    state::EVMPoolState,
     tycho_simulation_contract::TychoSimulationContract,
     utils::{get_code_for_contract, hexstring_to_vec, load_erc20_bytecode, ERC20Slots},
 };
@@ -176,7 +176,7 @@ impl VMPoolStateBuilder {
     }
 
     /// Build the final VMPoolState object
-    pub async fn build(mut self) -> Result<VMPoolState<PreCachedDB>, SimulationError> {
+    pub async fn build(mut self) -> Result<EVMPoolState<PreCachedDB>, SimulationError> {
         let engine = if let Some(engine) = &self.engine {
             engine.clone()
         } else {
@@ -201,7 +201,7 @@ impl VMPoolStateBuilder {
         } else {
             self.get_default_capabilities()?
         };
-        Ok(VMPoolState::new(
+        Ok(EVMPoolState::new(
             self.id,
             self.tokens,
             self.block,

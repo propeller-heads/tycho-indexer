@@ -15,7 +15,7 @@ use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
-use super::{state::VMPoolState, state_builder::VMPoolStateBuilder};
+use super::{state::EVMPoolState, state_builder::VMPoolStateBuilder};
 
 impl From<Header> for BlockHeader {
     fn from(header: Header) -> Self {
@@ -27,7 +27,7 @@ impl From<Header> for BlockHeader {
     }
 }
 
-impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
+impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
     /// Decodes a `ComponentWithState` into a `VMPoolState`.
@@ -249,7 +249,7 @@ mod tests {
         };
 
         // TODO: fix test
-        let result = VMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = EVMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();
