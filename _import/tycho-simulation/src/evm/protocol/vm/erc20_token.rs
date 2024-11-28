@@ -252,11 +252,10 @@ mod tests {
     use crate::evm::engine_db::simulation_db::SimulationDB;
 
     fn setup_factory() -> ERC20OverwriteFactory {
-        let token_address = rAddress::parse_checksummed(
-            String::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
-            None,
-        )
-        .expect("Failed to parse address");
+        let token_address: rAddress = rAddress::from_slice(
+            &hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+                .expect("Invalid token address"),
+        );
 
         let slots = ERC20Slots::new(SlotId::from(5), SlotId::from(6));
         ERC20OverwriteFactory::new(token_address, slots, ContractCompiler::Solidity)

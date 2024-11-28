@@ -484,7 +484,7 @@ mod tests {
 
     use std::str::FromStr;
 
-    use ethers::{prelude::H256, types::Address as EthAddress, utils::to_checksum};
+    use ethers::{prelude::H256, types::Address as EthAddress};
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
 
@@ -626,8 +626,7 @@ mod tests {
             .clone()
             .get_account_storage();
         for token in pool_state.tokens.clone() {
-            let token_address = rAddress::parse_checksummed(to_checksum(&token, None), None)
-                .expect("valid checksum");
+            let token_address = rAddress::from_slice(&token.0);
             let account = engine_accounts
                 .get_account_info(&token_address)
                 .unwrap();
