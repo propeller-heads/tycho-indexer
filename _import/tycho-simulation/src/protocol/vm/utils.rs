@@ -20,7 +20,7 @@ use revm::primitives::{Bytecode, Bytes};
 
 use crate::{
     evm::{simulation::SimulationEngineError, ContractCompiler},
-    protocol::{errors::SimulationError, vm::errors::FileError},
+    protocol::errors::{FileError, SimulationError},
 };
 
 pub fn coerce_error(
