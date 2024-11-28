@@ -121,7 +121,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     .as_str()
             });
         let adapter_file_path =
-            format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
+            format!("src/evm/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
         info!("Creating a new pool state for balancer pool with id {}", &id);
 
         let mut pool_state_builder = VMPoolStateBuilder::new(id.clone(), tokens.clone(), block)

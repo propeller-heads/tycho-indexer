@@ -26,7 +26,7 @@ const MARKER_VALUE: u128 = 3141592653589793238462643383;
 const SPENDER: &str = "08d967bb0134F2d07f7cfb6E246680c53927DD30";
 lazy_static! {
     static ref ERC20_ABI: Abi = {
-        let abi_file_path = "src/protocol/vm/assets/ERC20.abi";
+        let abi_file_path = "src/evm/protocol/vm/assets/ERC20.abi";
         let abi_json = std::fs::read_to_string(abi_file_path).expect("Failed to read ABI file");
         from_str(&abi_json).expect("Failed to parse ABI JSON")
     };

@@ -572,7 +572,7 @@ mod tests {
                 EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
             )
             .adapter_contract_path(
-                "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+                "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
             )
             .stateless_contracts(stateless_contracts)
             .build()

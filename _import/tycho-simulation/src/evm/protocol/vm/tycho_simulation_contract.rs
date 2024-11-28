@@ -233,12 +233,9 @@ where
 mod tests {
     use super::*;
 
-    use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
-    use revm::{
-        db::DatabaseRef,
-        primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},
-    };
     use std::str::FromStr;
+
+    use revm::primitives::{hex, Bytecode, B256, U256 as rU256};
 
     #[derive(Debug, Clone)]
     struct MockDatabase;
@@ -297,7 +294,7 @@ mod tests {
         let engine = create_mock_engine();
         TychoSimulationContract::new_swap_adapter(
             address,
-            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime",
+            "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime",
             engine,
         )
         .unwrap()
