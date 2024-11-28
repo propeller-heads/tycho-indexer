@@ -204,7 +204,12 @@ impl EVMPoolStateBuilder {
             self.id,
             self.tokens,
             self.block,
-            self.balances.unwrap_or_default(),
+            self.balances.ok_or_else(|| {
+                SimulationError::InvalidInput(
+                    "Failed to get build engine: Balances not initialized".to_string(),
+                    None,
+                )
+            })?,
             self.balance_owner,
             HashMap::new(),
             capabilities,

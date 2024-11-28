@@ -292,7 +292,15 @@ impl EVMPoolState<PreCachedDB> {
                 self.balances
                     .get(token)
                     .cloned()
-                    .unwrap_or_default(),
+                    .ok_or_else(|| {
+                        SimulationError::InvalidInput(
+                            format!(
+                                "Failed to get balance overwrites: Token balance not found for {}",
+                                token
+                            ),
+                            None,
+                        )
+                    })?,
                 address,
             );
             balance_overwrites.extend(overwrites.get_overwrites());
