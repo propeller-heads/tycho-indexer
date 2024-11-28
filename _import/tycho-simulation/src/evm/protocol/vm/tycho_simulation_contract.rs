@@ -233,9 +233,13 @@ where
 mod tests {
     use super::*;
 
+    use revm::{
+        db::DatabaseRef,
+        primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},
+    };
     use std::str::FromStr;
 
-    use revm::primitives::{hex, Bytecode, B256, U256 as rU256};
+    use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
 
     #[derive(Debug, Clone)]
     struct MockDatabase;
