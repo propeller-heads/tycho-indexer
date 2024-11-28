@@ -12,12 +12,10 @@ use tycho_ethereum::BytesCodec;
 use crate::{
     evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
     models::ERC20Token,
-    protocol::{
-        errors::InvalidSnapshotError,
-        models::TryFromWithBlock,
-        vm::{state::VMPoolState, state_builder::VMPoolStateBuilder},
-    },
+    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
+
+use super::{state::VMPoolState, state_builder::VMPoolStateBuilder};
 
 impl From<Header> for BlockHeader {
     fn from(header: Header) -> Self {

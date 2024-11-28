@@ -15,11 +15,6 @@ use revm::{
 };
 use tracing::warn;
 
-use super::{
-    constants::ADAPTER_ADDRESS,
-    state::VMPoolState,
-    utils::{hexstring_to_vec, load_erc20_bytecode, ERC20Slots},
-};
 use crate::{
     evm::{
         engine_db::{
@@ -29,16 +24,16 @@ use crate::{
         simulation::{SimulationEngine, SimulationParameters},
         token, ContractCompiler,
     },
-    protocol::{
-        errors::SimulationError,
-        vm::{
-            constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-            engine::{create_engine, SHARED_TYCHO_DB},
-            models::Capability,
-            tycho_simulation_contract::TychoSimulationContract,
-            utils::get_code_for_contract,
-        },
-    },
+    protocol::errors::SimulationError,
+};
+
+use super::{
+    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    engine::{create_engine, SHARED_TYCHO_DB},
+    models::Capability,
+    state::VMPoolState,
+    tycho_simulation_contract::TychoSimulationContract,
+    utils::{get_code_for_contract, hexstring_to_vec, load_erc20_bytecode, ERC20Slots},
 };
 
 #[derive(Debug)]

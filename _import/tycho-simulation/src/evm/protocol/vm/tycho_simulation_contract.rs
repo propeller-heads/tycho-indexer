@@ -1,6 +1,6 @@
-use alloy_primitives::{keccak256, B256};
 use std::{collections::HashMap, fmt::Debug};
 
+use alloy_primitives::{keccak256, B256};
 use chrono::Utc;
 use ethers::{
     abi::{decode, encode, Abi, ParamType, Token},
@@ -19,14 +19,13 @@ use crate::{
         engine_db::engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     },
-    protocol::{
-        errors::SimulationError,
-        vm::{
-            constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-            erc20_overwrite_factory::Overwrites,
-            utils::{coerce_error, get_contract_bytecode, load_swap_abi},
-        },
-    },
+    protocol::errors::SimulationError,
+};
+
+use super::{
+    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_overwrite_factory::Overwrites,
+    utils::{coerce_error, get_contract_bytecode, load_swap_abi},
 };
 
 #[derive(Debug, Clone)]

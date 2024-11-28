@@ -11,14 +11,13 @@ use tracing::info;
 
 use tycho_core::dto::ProtocolStateDelta;
 
-use super::utils::{hexstring_to_vec, ERC20Slots};
 use crate::{
     evm::{
         engine_db::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
             tycho_db::PreCachedDB,
         },
-        ContractCompiler,
+        ContractCompiler, SlotId,
     },
     models::ERC20Token,
     protocol::{
@@ -26,14 +25,15 @@ use crate::{
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
-        vm::{
-            constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-            erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
-            models::Capability,
-            tycho_simulation_contract::TychoSimulationContract,
-            utils::SlotId,
-        },
     },
+};
+
+use super::{
+    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
+    models::Capability,
+    tycho_simulation_contract::TychoSimulationContract,
+    utils::{hexstring_to_vec, ERC20Slots},
 };
 
 #[derive(Clone, Debug)]
@@ -479,29 +479,20 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ethers::{
-        prelude::{H256, U256},
-        types::Address as EthAddress,
-        utils::to_checksum,
-    };
-    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
-    use serde_json::Value;
-    use std::{
-        collections::{HashMap, HashSet},
-        str::FromStr,
+
+    use super::super::{
+        engine::{create_engine, SHARED_TYCHO_DB},
+        models::Capability,
+        state_builder::VMPoolStateBuilder,
     };
 
-    use crate::{
-        evm::{
-            engine_db::simulation_db::BlockHeader, simulation::SimulationEngine,
-            tycho_models::AccountUpdate,
-        },
-        protocol::vm::{
-            engine::{create_engine, SHARED_TYCHO_DB},
-            models::Capability,
-            state_builder::VMPoolStateBuilder,
-        },
-    };
+    use std::str::FromStr;
+
+    use ethers::{prelude::H256, types::Address as EthAddress, utils::to_checksum};
+    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+    use serde_json::Value;
+
+    use crate::evm::{simulation::SimulationEngine, tycho_models::AccountUpdate};
 
     fn dai() -> ERC20Token {
         ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
