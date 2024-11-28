@@ -12,12 +12,10 @@ use tycho_ethereum::BytesCodec;
 use crate::{
     evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
     models::ERC20Token,
-    protocol::{
-        errors::InvalidSnapshotError,
-        models::TryFromWithBlock,
-        vm::{state::VMPoolState, state_builder::VMPoolStateBuilder},
-    },
+    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
+
+use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 
 impl From<Header> for BlockHeader {
     fn from(header: Header) -> Self {
@@ -29,10 +27,10 @@ impl From<Header> for BlockHeader {
     }
 }
 
-impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
+impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState` into a `VMPoolState`.
+    /// Decodes a `ComponentWithState` into a `EVMPoolState`.
     ///
     /// Errors with a `InvalidSnapshotError`.
     async fn try_from_with_block(
@@ -123,10 +121,10 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
                     .as_str()
             });
         let adapter_file_path =
-            format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
+            format!("src/evm/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
         info!("Creating a new pool state for balancer pool with id {}", &id);
 
-        let mut pool_state_builder = VMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
+        let mut pool_state_builder = EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
             .balances(balances)
             .adapter_contract_path(adapter_file_path)
             .involved_contracts(involved_contracts)
@@ -251,7 +249,7 @@ mod tests {
         };
 
         // TODO: fix test
-        let result = VMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = EVMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();

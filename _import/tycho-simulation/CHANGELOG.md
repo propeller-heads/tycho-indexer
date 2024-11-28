@@ -1,3 +1,27 @@
+## [0.47.3](https://github.com/propeller-heads/tycho-simulation/compare/0.47.2...0.47.3) (2024-11-28)
+
+
+### Bug Fixes
+
+* no more address checksumming ([6f7ca5a](https://github.com/propeller-heads/tycho-simulation/commit/6f7ca5a745181b58c03c44c4dbdadbf11c4b16fe))
+
+## [0.47.2](https://github.com/propeller-heads/tycho-simulation/compare/0.47.1...0.47.2) (2024-11-28)
+
+## [0.47.1](https://github.com/propeller-heads/tycho-simulation/compare/0.47.0...0.47.1) (2024-11-28)
+
+## [0.47.0](https://github.com/propeller-heads/tycho-simulation/compare/0.46.0...0.47.0) (2024-11-28)
+
+
+### Features
+
+* Add a check to without the evm feature ([70d23fd](https://github.com/propeller-heads/tycho-simulation/commit/70d23fd060d1a494a1675f27d13212d2948c773e))
+* Feature gate evm dependencies ([fdfe7ed](https://github.com/propeller-heads/tycho-simulation/commit/fdfe7edfff29169701cd4ee3c7d4032165faaf07))
+
+
+### Bug Fixes
+
+* Fix Cargo.toml syntax ([fafee46](https://github.com/propeller-heads/tycho-simulation/commit/fafee46bb0d1e3f1d45ace13f20ec4e706962e57))
+
 ## [0.46.0](https://github.com/propeller-heads/tycho-simulation/compare/0.45.1...0.46.0) (2024-11-27)
 
 

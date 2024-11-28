@@ -1,12 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use alloy_primitives::Address;
 use chrono::Utc;
 use ethers::{
     abi::{decode, ParamType},
     prelude::U256,
     types::H160,
-    utils::to_checksum,
 };
 use itertools::Itertools;
 use revm::{
@@ -15,41 +13,36 @@ use revm::{
 };
 use tracing::warn;
 
-use super::{
-    constants::ADAPTER_ADDRESS,
-    state::VMPoolState,
-    utils::{hexstring_to_vec, load_erc20_bytecode, ERC20Slots},
-};
 use crate::{
     evm::{
         engine_db::{
-            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-            tycho_db::PreCachedDB,
+            create_engine, engine_db_interface::EngineDatabaseInterface,
+            simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB,
         },
         simulation::{SimulationEngine, SimulationParameters},
-        token, ContractCompiler,
+        ContractCompiler,
     },
-    protocol::{
-        errors::SimulationError,
-        vm::{
-            constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-            engine::{create_engine, SHARED_TYCHO_DB},
-            models::Capability,
-            tycho_simulation_contract::TychoSimulationContract,
-            utils::get_code_for_contract,
-        },
-    },
+    protocol::errors::SimulationError,
+};
+
+use super::{
+    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_token::{brute_force_slots, ERC20Slots},
+    models::Capability,
+    state::EVMPoolState,
+    tycho_simulation_contract::TychoSimulationContract,
+    utils::{get_code_for_contract, hexstring_to_vec, load_erc20_bytecode},
 };
 
 #[derive(Debug)]
-/// `VMPoolStateBuilder` is a builder pattern implementation for creating instances of
-/// `VMPoolState`.
+/// `EVMPoolStateBuilder` is a builder pattern implementation for creating instances of
+/// `EVMPoolState`.
 ///
-/// This struct provides a flexible way to construct `VMPoolState` objects with
+/// This struct provides a flexible way to construct `EVMPoolState` objects with
 /// multiple optional parameters. It handles the validation of required fields and applies default
 /// values for optional parameters where necessary.
 /// # Example
-/// Constructing a `VMPoolState` with only the required parameters:
+/// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
 /// use ethers::types::H160;
 /// use crate::evm::simulation_db::BlockHeader;
@@ -70,17 +63,17 @@ use crate::{
 ///     let mut balances = HashMap::new();
 ///     balances.insert(H160::zero(), U256::from(1000));
 ///
-///     // Build the VMPoolState
-///     let pool_state = VMPoolStateBuilder::new(pool_id, tokens, block)
+///     // Build the EVMPoolState
+///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, block)
 ///         .balances(balances)
 ///         .build()
 ///         .await?;
 ///
-///     println!("Successfully created VMPoolState: {:?}", pool_state);
+///     println!("Successfully created EVMPoolState: {:?}", pool_state);
 ///     Ok(())
 /// }
 /// ```
-pub struct VMPoolStateBuilder {
+pub struct EVMPoolStateBuilder {
     id: String,
     tokens: Vec<H160>,
     block: BlockHeader,
@@ -97,7 +90,7 @@ pub struct VMPoolStateBuilder {
     adapter_contract_path: Option<String>,
 }
 
-impl VMPoolStateBuilder {
+impl EVMPoolStateBuilder {
     pub fn new(id: String, tokens: Vec<H160>, block: BlockHeader) -> Self {
         Self {
             id,
@@ -181,8 +174,8 @@ impl VMPoolStateBuilder {
         self
     }
 
-    /// Build the final VMPoolState object
-    pub async fn build(mut self) -> Result<VMPoolState<PreCachedDB>, SimulationError> {
+    /// Build the final EVMPoolState object
+    pub async fn build(mut self) -> Result<EVMPoolState<PreCachedDB>, SimulationError> {
         let engine = if let Some(engine) = &self.engine {
             engine.clone()
         } else {
@@ -207,7 +200,7 @@ impl VMPoolStateBuilder {
         } else {
             self.get_default_capabilities()?
         };
-        Ok(VMPoolState::new(
+        Ok(EVMPoolState::new(
             self.id,
             self.tokens,
             self.block,
@@ -243,18 +236,9 @@ impl VMPoolStateBuilder {
                 code_hash: KECCAK_EMPTY,
                 code: Some(mocked_contract_bytecode.clone()),
             };
-            engine.state.init_account(
-                Address::parse_checksummed(to_checksum(token_address, None), None).map_err(
-                    |_| {
-                        SimulationError::FatalError(
-                            "Failed to get default engine: Checksum for token address must be valid".into(),
-                        )
-                    },
-                )?,
-                info,
-                None,
-                false,
-            );
+            engine
+                .state
+                .init_account(rAddress::from_slice(&token_address.0), info, None, false);
         }
 
         engine.state.init_account(
@@ -284,19 +268,14 @@ impl VMPoolStateBuilder {
                         })?));
                     (Some(code.clone()), code.hash_slow())
                 };
+                let account_address: H160 = address.parse().map_err(|_| {
+                    SimulationError::FatalError(format!(
+                        "Failed to get default engine: Couldn't parse address string {}",
+                        address
+                    ))
+                })?;
                 engine.state.init_account(
-                    rAddress::parse_checksummed(
-                        to_checksum(
-                            &address.parse().map_err(|_| {
-                                SimulationError::FatalError(
-                                    format!("Failed to get default engine: Couldn't parse address into string {}", address),
-                                )
-                            })?,
-                            None,
-                        ),
-                        None,
-                    )
-                    .expect("Invalid checksum for external account address"),
+                    rAddress::from_slice(&account_address.0),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
@@ -321,7 +300,7 @@ impl VMPoolStateBuilder {
                     .get_or_insert(HashMap::new())
                     .insert(
                         *t,
-                        token::brute_force_slots(
+                        brute_force_slots(
                             t,
                             &self.block,
                             self.engine
@@ -472,10 +451,11 @@ impl VMPoolStateBuilder {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use std::str::FromStr;
 
-    use super::*;
-    use ethers::types::{H160, H256};
+    use ethers::types::H256;
 
     #[test]
     fn test_build_without_required_fields() {
@@ -483,7 +463,7 @@ mod tests {
         let tokens = vec![H160::zero()];
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
 
-        let result = tokio_test::block_on(VMPoolStateBuilder::new(id, tokens, block).build());
+        let result = tokio_test::block_on(EVMPoolStateBuilder::new(id, tokens, block).build());
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -502,17 +482,17 @@ mod tests {
         let tokens = vec![token2, token3];
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
 
-        let mut builder = VMPoolStateBuilder::new(id, tokens, block);
+        let mut builder = EVMPoolStateBuilder::new(id, tokens, block);
 
         let engine = tokio_test::block_on(builder.get_default_engine()).unwrap();
 
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&Address::from_slice(token2.as_bytes())));
+            .account_present(&rAddress::from_slice(token2.as_bytes())));
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&Address::from_slice(token3.as_bytes())));
+            .account_present(&rAddress::from_slice(token3.as_bytes())));
     }
 }
