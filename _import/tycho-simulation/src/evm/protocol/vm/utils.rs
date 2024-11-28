@@ -336,9 +336,10 @@ pub fn load_swap_abi() -> Result<Abi, FileError> {
 
 pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
-        .parent()
+        .ancestors()
+        .nth(3)
         .ok_or_else(|| {
-            FileError::Structure("Failed to obtain parent directory of current file.".to_string())
+            FileError::Structure("Failed to obtain assets directory for ERC20.bin".to_string())
         })?
         .join("assets")
         .join("ERC20.bin");
