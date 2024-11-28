@@ -138,21 +138,6 @@ fn parse_solidity_error_message(data: &str) -> String {
     format!("Failed to decode: {}", data)
 }
 
-#[derive(Clone, Debug, PartialEq)]
-/// A struct representing ERC20 tokens storage slots.
-pub struct ERC20Slots {
-    // Base slot for the balance map
-    pub balance_map: SlotId,
-    // Base slot for the allowance map
-    pub allowance_map: SlotId,
-}
-
-impl ERC20Slots {
-    pub fn new(balance: SlotId, allowance: SlotId) -> Self {
-        Self { balance_map: balance, allowance_map: allowance }
-    }
-}
-
 /// Get storage slot index of a value stored at a certain key in a mapping
 ///
 /// # Arguments
@@ -336,8 +321,7 @@ pub fn load_swap_abi() -> Result<Abi, FileError> {
 
 pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
-        .ancestors()
-        .nth(3)
+        .parent()
         .ok_or_else(|| {
             FileError::Structure("Failed to obtain assets directory for ERC20.bin".to_string())
         })?

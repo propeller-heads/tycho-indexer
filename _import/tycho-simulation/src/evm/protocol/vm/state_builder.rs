@@ -22,17 +22,18 @@ use crate::{
             simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB,
         },
         simulation::{SimulationEngine, SimulationParameters},
-        token, ContractCompiler,
+        ContractCompiler,
     },
     protocol::errors::SimulationError,
 };
 
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_token::{brute_force_slots, ERC20Slots},
     models::Capability,
     state::EVMPoolState,
     tycho_simulation_contract::TychoSimulationContract,
-    utils::{get_code_for_contract, hexstring_to_vec, load_erc20_bytecode, ERC20Slots},
+    utils::{get_code_for_contract, hexstring_to_vec, load_erc20_bytecode},
 };
 
 #[derive(Debug)]
@@ -315,7 +316,7 @@ impl EVMPoolStateBuilder {
                     .get_or_insert(HashMap::new())
                     .insert(
                         *t,
-                        token::brute_force_slots(
+                        brute_force_slots(
                             t,
                             &self.block,
                             self.engine
