@@ -1,3 +1,10 @@
+## [0.48.0](https://github.com/propeller-heads/tycho-simulation/compare/0.47.3...0.48.0) (2024-11-28)
+
+
+### Features
+
+* make most VMPoolState attrs private ([4f16913](https://github.com/propeller-heads/tycho-simulation/commit/4f16913e131b6046d741dfc93bd50727f78c479c))
+
 ## [0.47.3](https://github.com/propeller-heads/tycho-simulation/compare/0.47.2...0.47.3) (2024-11-28)
 
 
