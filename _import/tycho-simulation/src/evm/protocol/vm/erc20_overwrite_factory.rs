@@ -3,12 +3,9 @@ use std::collections::HashMap;
 use ethers::{abi::Address, types::U256};
 use revm::primitives::Address as rAddress;
 
-use crate::{
-    evm::ContractCompiler,
-    protocol::vm::utils::{get_storage_slot_index_at_key, SlotId},
-};
+use crate::evm::{ContractCompiler, SlotId};
 
-use super::utils::ERC20Slots;
+use super::utils::{get_storage_slot_index_at_key, ERC20Slots};
 
 pub type Overwrites = HashMap<SlotId, U256>;
 
@@ -67,7 +64,6 @@ impl ERC20OverwriteFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::vm::utils::SlotId;
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address = rAddress::parse_checksummed(

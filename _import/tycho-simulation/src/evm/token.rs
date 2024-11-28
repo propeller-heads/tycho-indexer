@@ -1,13 +1,5 @@
-use crate::{
-    evm::engine_db::engine_db_interface::EngineDatabaseInterface,
-    protocol::{
-        errors::SimulationError,
-        vm::{
-            constants::EXTERNAL_ACCOUNT, erc20_overwrite_factory::ERC20OverwriteFactory,
-            tycho_simulation_contract::TychoSimulationContract, utils::ERC20Slots,
-        },
-    },
-};
+use std::str::FromStr;
+
 use ethers::{
     abi::{Abi, Token},
     types::{H160, U256},
@@ -15,17 +7,26 @@ use ethers::{
 use lazy_static::lazy_static;
 use revm::{primitives::Address, DatabaseRef};
 use serde_json::from_str;
-use std::str::FromStr;
+
+use crate::{
+    evm::engine_db::engine_db_interface::EngineDatabaseInterface, protocol::errors::SimulationError,
+};
 
 use super::{
-    engine_db::simulation_db::BlockHeader, simulation::SimulationEngine, ContractCompiler,
+    engine_db::simulation_db::BlockHeader,
+    protocol::vm::{
+        constants::EXTERNAL_ACCOUNT, erc20_overwrite_factory::ERC20OverwriteFactory,
+        tycho_simulation_contract::TychoSimulationContract, utils::ERC20Slots,
+    },
+    simulation::SimulationEngine,
+    ContractCompiler,
 };
 
 const MARKER_VALUE: u128 = 3141592653589793238462643383;
 const SPENDER: &str = "08d967bb0134F2d07f7cfb6E246680c53927DD30";
 lazy_static! {
     static ref ERC20_ABI: Abi = {
-        let abi_file_path = "src/protocol/vm/assets/ERC20.abi";
+        let abi_file_path = "src/evm/assets/ERC20.abi";
         let abi_json = std::fs::read_to_string(abi_file_path).expect("Failed to read ABI file");
         from_str(&abi_json).expect("Failed to parse ABI JSON")
     };
@@ -172,24 +173,18 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, sync::Arc};
+    use super::*;
+
+    use std::sync::Arc;
 
     use chrono::NaiveDateTime;
-    use ethers::{
-        providers::{Http, Provider},
-        types::H160,
-    };
+    use ethers::providers::{Http, Provider};
 
-    use crate::{
-        evm::{
-            engine_db::simulation_db::{BlockHeader, SimulationDB},
-            simulation::SimulationEngine,
-            ContractCompiler,
-        },
-        protocol::vm::utils::ERC20Slots,
+    use crate::evm::{
+        engine_db::simulation_db::{BlockHeader, SimulationDB},
+        simulation::SimulationEngine,
+        ContractCompiler,
     };
-
-    use super::brute_force_slots;
 
     #[test]
     fn test_brute_force_slot_solidity() {

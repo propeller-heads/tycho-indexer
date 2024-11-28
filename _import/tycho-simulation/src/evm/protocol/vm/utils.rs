@@ -12,14 +12,14 @@ use ethers::{
     abi::Abi,
     prelude::ProviderError,
     providers::{Http, Middleware, Provider},
-    types::{Address, H160, U256},
+    types::{Address, H160},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use revm::primitives::{Bytecode, Bytes};
 
 use crate::{
-    evm::{simulation::SimulationEngineError, ContractCompiler},
+    evm::{simulation::SimulationEngineError, ContractCompiler, SlotId},
     protocol::errors::{FileError, SimulationError},
 };
 
@@ -137,8 +137,6 @@ fn parse_solidity_error_message(data: &str) -> String {
     // Fallback if no decoding succeeded
     format!("Failed to decode: {}", data)
 }
-
-pub type SlotId = U256;
 
 #[derive(Clone, Debug, PartialEq)]
 /// A struct representing ERC20 tokens storage slots.
@@ -338,9 +336,10 @@ pub fn load_swap_abi() -> Result<Abi, FileError> {
 
 pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
-        .parent()
+        .ancestors()
+        .nth(3)
         .ok_or_else(|| {
-            FileError::Structure("Failed to obtain parent directory of current file.".to_string())
+            FileError::Structure("Failed to obtain assets directory for ERC20.bin".to_string())
         })?
         .join("assets")
         .join("ERC20.bin");

@@ -1,13 +1,16 @@
-use tycho_core::keccak256;
+use ethers::types::U256;
 
-use crate::protocol::vm::utils::SlotId;
+use tycho_core::keccak256;
 
 pub mod account_storage;
 pub mod engine_db;
+pub mod protocol;
 pub mod simulation;
 pub mod token;
 pub mod traces;
 pub mod tycho_models;
+
+pub type SlotId = U256;
 
 /// Enum representing the type of contract compiler.
 #[derive(Debug, PartialEq, Copy, Clone)]

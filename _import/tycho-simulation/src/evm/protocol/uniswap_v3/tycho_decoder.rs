@@ -8,12 +8,10 @@ use tycho_ethereum::BytesCodec;
 
 use crate::{
     models::ERC20Token,
-    protocol::{
-        errors::InvalidSnapshotError,
-        models::TryFromWithBlock,
-        uniswap_v3::{enums::FeeAmount, state::UniswapV3State, tick_list::TickInfo},
-    },
+    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
+
+use super::{enums::FeeAmount, state::UniswapV3State, tick_list::TickInfo};
 
 impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
     type Error = InvalidSnapshotError;

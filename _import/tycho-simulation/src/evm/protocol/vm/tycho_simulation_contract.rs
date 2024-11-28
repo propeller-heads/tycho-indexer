@@ -1,6 +1,6 @@
-use alloy_primitives::{keccak256, B256};
 use std::{collections::HashMap, fmt::Debug};
 
+use alloy_primitives::{keccak256, B256};
 use chrono::Utc;
 use ethers::{
     abi::{decode, encode, Abi, ParamType, Token},
@@ -19,14 +19,13 @@ use crate::{
         engine_db::engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     },
-    protocol::{
-        errors::SimulationError,
-        vm::{
-            constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-            erc20_overwrite_factory::Overwrites,
-            utils::{coerce_error, get_contract_bytecode, load_swap_abi},
-        },
-    },
+    protocol::errors::SimulationError,
+};
+
+use super::{
+    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_overwrite_factory::Overwrites,
+    utils::{coerce_error, get_contract_bytecode, load_swap_abi},
 };
 
 #[derive(Debug, Clone)]
@@ -234,12 +233,9 @@ where
 mod tests {
     use super::*;
 
-    use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
-    use revm::{
-        db::DatabaseRef,
-        primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},
-    };
     use std::str::FromStr;
+
+    use revm::primitives::{hex, Bytecode, B256, U256 as rU256};
 
     #[derive(Debug, Clone)]
     struct MockDatabase;
@@ -298,7 +294,7 @@ mod tests {
         let engine = create_mock_engine();
         TychoSimulationContract::new_swap_adapter(
             address,
-            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime",
+            "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime",
             engine,
         )
         .unwrap()

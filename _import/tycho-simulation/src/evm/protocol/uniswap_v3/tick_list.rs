@@ -254,12 +254,9 @@ fn div_floor(lhs: i32, rhs: i32) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     use rstest::rstest;
-
-    use crate::protocol::uniswap_v3::tick_math;
-
-    use super::*;
 
     fn create_tick_list() -> TickList {
         let tick_infos =

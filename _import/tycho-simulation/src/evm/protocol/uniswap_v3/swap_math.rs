@@ -139,11 +139,11 @@ pub fn compute_swap_step(
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Neg;
-
-    use crate::protocol::uniswap_v3::enums::FeeAmount;
-
     use super::*;
+
+    use super::super::enums::FeeAmount;
+
+    use std::ops::Neg;
 
     struct TestCase {
         price: U256,
