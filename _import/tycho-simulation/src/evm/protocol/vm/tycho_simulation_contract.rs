@@ -24,7 +24,7 @@ use crate::{
 
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_overwrite_factory::Overwrites,
+    erc20_token::Overwrites,
     utils::{coerce_error, get_contract_bytecode, load_swap_abi},
 };
 

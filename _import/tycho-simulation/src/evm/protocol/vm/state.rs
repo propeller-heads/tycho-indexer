@@ -30,10 +30,10 @@ use crate::{
 
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
+    erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
-    utils::{hexstring_to_vec, ERC20Slots},
+    utils::hexstring_to_vec,
 };
 
 #[derive(Clone, Debug)]

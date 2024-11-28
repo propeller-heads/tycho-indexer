@@ -12,8 +12,7 @@ use crate::{
 };
 
 use super::{
-    erc20_overwrite_factory::Overwrites, models::Capability,
-    tycho_simulation_contract::TychoSimulationContract,
+    erc20_token::Overwrites, models::Capability, tycho_simulation_contract::TychoSimulationContract,
 };
 
 #[derive(Debug)]
