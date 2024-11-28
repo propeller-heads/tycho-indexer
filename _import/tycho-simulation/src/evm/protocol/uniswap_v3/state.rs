@@ -432,6 +432,10 @@ impl ProtocolSim for UniswapV3State {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    use super::super::events::{BurnEvent, MintEvent, SwapEvent};
+
     use std::{
         collections::{HashMap, HashSet},
         str::FromStr,
@@ -439,11 +443,8 @@ mod tests {
 
     use ethers::types::{H160, H256};
     use rstest::rstest;
+
     use tycho_core::hex_bytes::Bytes;
-
-    use crate::protocol::uniswap_v3::events::{BurnEvent, MintEvent, SwapEvent};
-
-    use super::*;
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {

@@ -8,13 +8,11 @@ use revm::{primitives::Address as rAddress, DatabaseRef};
 
 use crate::{
     evm::{account_storage::StateUpdate, engine_db::engine_db_interface::EngineDatabaseInterface},
-    protocol::{
-        errors::SimulationError,
-        vm::{
-            erc20_overwrite_factory::Overwrites, models::Capability,
-            tycho_simulation_contract::TychoSimulationContract,
-        },
-    },
+    protocol::errors::SimulationError,
+};
+
+use super::{
+    erc20_token::Overwrites, models::Capability, tycho_simulation_contract::TychoSimulationContract,
 };
 
 #[derive(Debug)]

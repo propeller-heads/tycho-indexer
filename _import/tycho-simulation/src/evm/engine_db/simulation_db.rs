@@ -11,9 +11,10 @@ use revm::{
 };
 use tracing::{debug, info};
 
-use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
-
-use super::super::account_storage::{AccountStorage, StateUpdate};
+use super::{
+    super::account_storage::{AccountStorage, StateUpdate},
+    engine_db_interface::EngineDatabaseInterface,
+};
 
 /// A wrapper over an actual SimulationDB that allows overriding specific storage slots
 pub struct OverriddenSimulationDB<'a, DB: DatabaseRef> {
@@ -446,16 +447,16 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
 
 #[cfg(test)]
 mod tests {
-    use dotenv::dotenv;
-    use revm::primitives::U256 as rU256;
-    use rstest::{fixture, rstest};
-    use std::{env, error::Error, str::FromStr, sync::Arc};
-
     use super::*;
+
+    use std::{env, error::Error, str::FromStr};
+
+    use dotenv::dotenv;
     use ethers::{
         providers::{Http, MockProvider, Provider},
         types::U256,
     };
+    use rstest::{fixture, rstest};
     use tokio::runtime::Runtime;
 
     #[fixture]

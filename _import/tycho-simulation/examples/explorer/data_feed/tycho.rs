@@ -20,19 +20,19 @@ use tycho_core::{dto::Chain, Bytes};
 use tycho_ethereum::BytesCodec;
 use tycho_simulation::{
     evm::{
-        engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
+        engine_db::{
+            simulation_db::BlockHeader, tycho_db::PreCachedDB, update_engine, SHARED_TYCHO_DB,
+        },
+        protocol::{
+            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
+            vm::state::EVMPoolState,
+        },
         tycho_models::{AccountUpdate, ResponseAccount},
     },
     models::ERC20Token,
     protocol::{
         models::{ProtocolComponent, TryFromWithBlock},
         state::ProtocolSim,
-        uniswap_v2::state::UniswapV2State,
-        uniswap_v3::state::UniswapV3State,
-        vm::{
-            engine::{update_engine, SHARED_TYCHO_DB},
-            state::VMPoolState,
-        },
     },
 };
 
@@ -285,7 +285,7 @@ pub async fn process_messages(
                             }
                         },
                         "vm:balancer" => {
-                            match VMPoolState::try_from_with_block(
+                            match EVMPoolState::try_from_with_block(
                                 snapshot,
                                 header.clone(),
                                 all_tokens.clone(),
@@ -336,7 +336,7 @@ pub async fn process_messages(
                             let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
                             if let Some(vm_state) = state
                                 .as_any_mut()
-                                .downcast_mut::<VMPoolState<PreCachedDB>>()
+                                .downcast_mut::<EVMPoolState<PreCachedDB>>()
                             {
                                 let tokens: Vec<ERC20Token> = vm_state
                                     .tokens
@@ -360,7 +360,7 @@ pub async fn process_messages(
                                 Some(stored_state) => {
                                     let mut state = stored_state.clone();
                                     if let Some(vm_state) = state.as_any_mut()
-                                        .downcast_mut::<VMPoolState<PreCachedDB>>() {
+                                        .downcast_mut::<EVMPoolState<PreCachedDB>>() {
                                         let tokens: Vec<ERC20Token> = vm_state.tokens
                                             .iter()
                                             .filter_map(|token_address| all_tokens.get(token_address))
