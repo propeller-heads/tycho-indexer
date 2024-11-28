@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -120,13 +121,24 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     .protocol_system
                     .as_str()
             });
-        let adapter_file_path =
-            format!("src/evm/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
-        info!("Creating a new pool state for balancer pool with id {}", &id);
+        let mut adapter_file_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/evm/protocol/vm/assets");
+        adapter_file_path = adapter_file_path.join(to_adapter_file_name(protocol_name));
+        info!(
+            "Creating a new pool state for balancer pool with id {} and adapter path {}",
+            &id,
+            &adapter_file_path
+                .to_string_lossy()
+                .to_string()
+        );
 
         let mut pool_state_builder = EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
             .balances(balances)
-            .adapter_contract_path(adapter_file_path)
+            .adapter_contract_path(
+                adapter_file_path
+                    .to_string_lossy()
+                    .to_string(),
+            )
             .involved_contracts(involved_contracts)
             .stateless_contracts(stateless_contracts)
             .manual_updates(manual_updates);
