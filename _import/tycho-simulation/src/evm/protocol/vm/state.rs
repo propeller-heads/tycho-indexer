@@ -136,7 +136,6 @@ impl EVMPoolState<PreCachedDB> {
                 vec![(sell_token.address), (buy_token.address)],
                 overwrites.clone(),
             )?;
-            info!("Got sell amount limit for spot prices {:?}", &sell_amount_limit);
             let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
             let price_result = self.adapter_contract.price(
                 pool_id_vec,
@@ -502,6 +501,11 @@ mod tests {
     use ethers::{prelude::H256, types::Address as EthAddress};
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
+    use std::{
+        collections::{HashMap, HashSet},
+        path::PathBuf,
+        str::FromStr,
+    };
 
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
@@ -586,9 +590,9 @@ mod tests {
             .balance_owner(
                 EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
             )
-            .adapter_contract_path(
+            .adapter_contract_path(PathBuf::from(
                 "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
-            )
+            ))
             .stateless_contracts(stateless_contracts)
             .build()
             .await

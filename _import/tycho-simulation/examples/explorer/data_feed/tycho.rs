@@ -117,9 +117,9 @@ pub async fn process_messages(
 ) {
     // Connect to Tycho
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
-        .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        // .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -127,7 +127,7 @@ pub async fn process_messages(
 
     let mut all_tokens = load_all_tokens(tycho_url.as_str(), auth_key.as_deref()).await;
 
-    // maps protocols to the the last block we've seen a message for it
+    // maps protocols to the last block we've seen a message for it
     let mut active_protocols: HashMap<String, u64> = HashMap::new();
 
     // persist all protocol states between messages
@@ -225,7 +225,7 @@ pub async fn process_messages(
             {
                 info!("Processing snapshot");
                 let id = Bytes::from_str(&id)
-                    .unwrap_or_else(|_| panic!("Failed parsing H160 from id string {}", id));
+                    .unwrap_or_else(|_| panic!("Failed parsing Bytes from id string {}", id));
                 let mut pair_tokens = Vec::new();
                 let mut skip_pool = false;
 

@@ -5,7 +5,6 @@ use std::{
 };
 
 use ethers::types::{H160, H256, U256};
-use tracing::info;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_ethereum::BytesCodec;
@@ -124,21 +123,10 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         let mut adapter_file_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/evm/protocol/vm/assets");
         adapter_file_path = adapter_file_path.join(to_adapter_file_name(protocol_name));
-        info!(
-            "Creating a new pool state for balancer pool with id {} and adapter path {}",
-            &id,
-            &adapter_file_path
-                .to_string_lossy()
-                .to_string()
-        );
 
         let mut pool_state_builder = EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
             .balances(balances)
-            .adapter_contract_path(
-                adapter_file_path
-                    .to_string_lossy()
-                    .to_string(),
-            )
+            .adapter_contract_path(adapter_file_path)
             .involved_contracts(involved_contracts)
             .stateless_contracts(stateless_contracts)
             .manual_updates(manual_updates);
@@ -159,8 +147,6 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .collect();
 
         pool_state.set_spot_prices(erc20_tokens)?;
-        info!("Finished creating balancer pool with id {}", &id);
-
         Ok(pool_state)
     }
 }
