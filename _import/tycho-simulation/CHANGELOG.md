@@ -1,3 +1,5 @@
+## [0.47.2](https://github.com/propeller-heads/tycho-simulation/compare/0.47.1...0.47.2) (2024-11-28)
+
 ## [0.47.1](https://github.com/propeller-heads/tycho-simulation/compare/0.47.0...0.47.1) (2024-11-28)
 
 ## [0.47.0](https://github.com/propeller-heads/tycho-simulation/compare/0.46.0...0.47.0) (2024-11-28)
