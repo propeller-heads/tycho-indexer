@@ -12,15 +12,15 @@ use ethers::{
     abi::Abi,
     prelude::ProviderError,
     providers::{Http, Middleware, Provider},
-    types::{Address, H160, U256},
+    types::{Address, H160},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use revm::primitives::{Bytecode, Bytes};
 
 use crate::{
-    evm::{simulation::SimulationEngineError, ContractCompiler},
-    protocol::{errors::SimulationError, vm::errors::FileError},
+    evm::{simulation::SimulationEngineError, ContractCompiler, SlotId},
+    protocol::errors::{FileError, SimulationError},
 };
 
 pub fn coerce_error(
@@ -136,23 +136,6 @@ fn parse_solidity_error_message(data: &str) -> String {
 
     // Fallback if no decoding succeeded
     format!("Failed to decode: {}", data)
-}
-
-pub type SlotId = U256;
-
-#[derive(Clone, Debug, PartialEq)]
-/// A struct representing ERC20 tokens storage slots.
-pub struct ERC20Slots {
-    // Base slot for the balance map
-    pub balance_map: SlotId,
-    // Base slot for the allowance map
-    pub allowance_map: SlotId,
-}
-
-impl ERC20Slots {
-    pub fn new(balance: SlotId, allowance: SlotId) -> Self {
-        Self { balance_map: balance, allowance_map: allowance }
-    }
 }
 
 /// Get storage slot index of a value stored at a certain key in a mapping
@@ -340,7 +323,7 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
         .parent()
         .ok_or_else(|| {
-            FileError::Structure("Failed to obtain parent directory of current file.".to_string())
+            FileError::Structure("Failed to obtain assets directory for ERC20.bin".to_string())
         })?
         .join("assets")
         .join("ERC20.bin");
