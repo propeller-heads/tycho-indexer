@@ -36,14 +36,14 @@ use super::{
 };
 
 #[derive(Debug)]
-/// `VMPoolStateBuilder` is a builder pattern implementation for creating instances of
-/// `VMPoolState`.
+/// `EVMPoolStateBuilder` is a builder pattern implementation for creating instances of
+/// `EVMPoolState`.
 ///
-/// This struct provides a flexible way to construct `VMPoolState` objects with
+/// This struct provides a flexible way to construct `EVMPoolState` objects with
 /// multiple optional parameters. It handles the validation of required fields and applies default
 /// values for optional parameters where necessary.
 /// # Example
-/// Constructing a `VMPoolState` with only the required parameters:
+/// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
 /// use ethers::types::H160;
 /// use crate::evm::simulation_db::BlockHeader;
@@ -64,17 +64,17 @@ use super::{
 ///     let mut balances = HashMap::new();
 ///     balances.insert(H160::zero(), U256::from(1000));
 ///
-///     // Build the VMPoolState
-///     let pool_state = VMPoolStateBuilder::new(pool_id, tokens, block)
+///     // Build the EVMPoolState
+///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, block)
 ///         .balances(balances)
 ///         .build()
 ///         .await?;
 ///
-///     println!("Successfully created VMPoolState: {:?}", pool_state);
+///     println!("Successfully created EVMPoolState: {:?}", pool_state);
 ///     Ok(())
 /// }
 /// ```
-pub struct VMPoolStateBuilder {
+pub struct EVMPoolStateBuilder {
     id: String,
     tokens: Vec<H160>,
     block: BlockHeader,
@@ -91,7 +91,7 @@ pub struct VMPoolStateBuilder {
     adapter_contract_path: Option<String>,
 }
 
-impl VMPoolStateBuilder {
+impl EVMPoolStateBuilder {
     pub fn new(id: String, tokens: Vec<H160>, block: BlockHeader) -> Self {
         Self {
             id,
@@ -175,7 +175,7 @@ impl VMPoolStateBuilder {
         self
     }
 
-    /// Build the final VMPoolState object
+    /// Build the final EVMPoolState object
     pub async fn build(mut self) -> Result<EVMPoolState<PreCachedDB>, SimulationError> {
         let engine = if let Some(engine) = &self.engine {
             engine.clone()
@@ -478,7 +478,7 @@ mod tests {
         let tokens = vec![H160::zero()];
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
 
-        let result = tokio_test::block_on(VMPoolStateBuilder::new(id, tokens, block).build());
+        let result = tokio_test::block_on(EVMPoolStateBuilder::new(id, tokens, block).build());
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -497,7 +497,7 @@ mod tests {
         let tokens = vec![token2, token3];
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
 
-        let mut builder = VMPoolStateBuilder::new(id, tokens, block);
+        let mut builder = EVMPoolStateBuilder::new(id, tokens, block);
 
         let engine = tokio_test::block_on(builder.get_default_engine()).unwrap();
 

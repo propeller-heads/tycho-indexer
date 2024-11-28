@@ -480,7 +480,7 @@ impl ProtocolSim for EVMPoolState<PreCachedDB> {
 mod tests {
     use super::*;
 
-    use super::super::{models::Capability, state_builder::VMPoolStateBuilder};
+    use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
 
     use std::str::FromStr;
 
@@ -560,7 +560,7 @@ mod tests {
             Some(Vec::new()),
         )]);
 
-        VMPoolStateBuilder::new(pool_id, tokens, block)
+        EVMPoolStateBuilder::new(pool_id, tokens, block)
             .balances(HashMap::from([
                 (
                     EthAddress::from(dai_addr.0),
