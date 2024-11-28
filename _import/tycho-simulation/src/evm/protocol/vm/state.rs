@@ -480,11 +480,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
 mod tests {
     use super::*;
 
-    use super::super::{
-        engine::{create_engine, SHARED_TYCHO_DB},
-        models::Capability,
-        state_builder::VMPoolStateBuilder,
-    };
+    use super::super::{models::Capability, state_builder::VMPoolStateBuilder};
 
     use std::str::FromStr;
 
@@ -492,7 +488,11 @@ mod tests {
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
 
-    use crate::evm::{simulation::SimulationEngine, tycho_models::AccountUpdate};
+    use crate::evm::{
+        engine_db::{create_engine, SHARED_TYCHO_DB},
+        simulation::SimulationEngine,
+        tycho_models::AccountUpdate,
+    };
 
     fn dai() -> ERC20Token {
         ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))

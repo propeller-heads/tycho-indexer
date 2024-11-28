@@ -1,6 +1,5 @@
 mod adapter_contract;
 pub mod constants;
-pub mod engine;
 pub(crate) mod erc20_overwrite_factory;
 mod models;
 pub mod state;

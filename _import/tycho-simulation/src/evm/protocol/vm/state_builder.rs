@@ -18,8 +18,8 @@ use tracing::warn;
 use crate::{
     evm::{
         engine_db::{
-            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-            tycho_db::PreCachedDB,
+            create_engine, engine_db_interface::EngineDatabaseInterface,
+            simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB,
         },
         simulation::{SimulationEngine, SimulationParameters},
         token, ContractCompiler,
@@ -29,7 +29,6 @@ use crate::{
 
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-    engine::{create_engine, SHARED_TYCHO_DB},
     models::Capability,
     state::VMPoolState,
     tycho_simulation_contract::TychoSimulationContract,
@@ -467,10 +466,11 @@ impl VMPoolStateBuilder {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use std::str::FromStr;
 
-    use super::*;
-    use ethers::types::{H160, H256};
+    use ethers::types::H256;
 
     #[test]
     fn test_build_without_required_fields() {
