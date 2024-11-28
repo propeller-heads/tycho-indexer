@@ -20,19 +20,19 @@ use tycho_core::{dto::Chain, Bytes};
 use tycho_ethereum::BytesCodec;
 use tycho_simulation::{
     evm::{
-        engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
+        engine_db::{
+            simulation_db::BlockHeader, tycho_db::PreCachedDB, update_engine, SHARED_TYCHO_DB,
+        },
+        protocol::{
+            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
+            vm::state::VMPoolState,
+        },
         tycho_models::{AccountUpdate, ResponseAccount},
     },
     models::ERC20Token,
     protocol::{
         models::{ProtocolComponent, TryFromWithBlock},
         state::ProtocolSim,
-        uniswap_v2::state::UniswapV2State,
-        uniswap_v3::state::UniswapV3State,
-        vm::{
-            engine::{update_engine, SHARED_TYCHO_DB},
-            state::VMPoolState,
-        },
     },
 };
 
