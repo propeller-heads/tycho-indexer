@@ -46,19 +46,6 @@ For example: `vm:balancer_v2` will be `BalancerV2Adapter.evm.runtime`.
 Simply implement a struct that contains the state of the protocol. Only the attributes that are necessary to fulfill
 the `ProtocolSim` trait are required. Then, implement the `ProtocolSim` trait (see [here](src/protocol/state.rs)).
 
-### 2\. Adding Events
-
-_Note: The following section describes a legacy approach that is no longer required for implementing event_transition.
-This information is retained for historical context only and should not be used in new implementations._
-
-In previous versions, we need to implement the `event_transition` method.
-This method processed events based on metadata from logs, which were particularly tailored for EVM-based chains. If
-multiple events were supported by a protocol, they could be grouped into a protocol-specific enum, and converted into
-the more generic ProtocolEvent enum.
-
-**Important**: This process is no longer required. The system now handles event transitions more efficiently, so you can
-disregard this section for new implementations.
-
 ### Local development
 
 1. Please also make sure that the following commands pass if you have changed the code:

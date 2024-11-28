@@ -6,16 +6,16 @@ use crate::{
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
-        events::{check_log_idx, EVMLogMeta, LogIndex},
+        events::LogIndex,
         models::GetAmountOutResult,
-        state::{ProtocolEvent, ProtocolSim},
+        state::ProtocolSim,
     },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
 };
 use tycho_core::dto::ProtocolStateDelta;
 use tycho_ethereum::BytesCodec;
 
-use super::{events::UniswapV2Sync, reserve_price::spot_price_from_reserves};
+use super::reserve_price::spot_price_from_reserves;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
@@ -143,24 +143,6 @@ impl ProtocolSim for UniswapV2State {
         );
         Ok(())
     }
-    fn event_transition(
-        &mut self,
-        protocol_event: Box<dyn ProtocolEvent>,
-        log_meta: &EVMLogMeta,
-    ) -> Result<(), TransitionError<LogIndex>> {
-        if let Some(sync_event) = protocol_event
-            .as_any()
-            .downcast_ref::<UniswapV2Sync>()
-        {
-            check_log_idx(self.log_index, log_meta)?;
-            self.reserve0 = sync_event.reserve0;
-            self.reserve1 = sync_event.reserve1;
-            self.log_index = log_meta.index();
-            Ok(())
-        } else {
-            Err(TransitionError::InvalidEventType())
-        }
-    }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
         Box::new(self.clone())
@@ -189,13 +171,9 @@ impl ProtocolSim for UniswapV2State {
 mod tests {
     use super::*;
 
-    use std::{
-        collections::{HashMap, HashSet},
-        str::FromStr,
-    };
+    use std::collections::{HashMap, HashSet};
 
     use approx::assert_ulps_eq;
-    use ethers::types::{H160, H256};
     use rstest::rstest;
 
     use tycho_core::hex_bytes::Bytes;
@@ -321,30 +299,6 @@ mod tests {
         let res = state.fee();
 
         assert_ulps_eq!(res, 0.003);
-    }
-
-    #[test]
-    fn test_event_transition() {
-        let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
-        let event = Box::new(UniswapV2Sync::new(u256("1500"), u256("2000")));
-        let log_meta = EVMLogMeta::new(
-            H160::from_str("0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5").unwrap(),
-            1,
-            H256::from_str("0xe4ea49424508471a7f83633fe97dbbee641ddecb106e187896b27e09d0d05e1c")
-                .unwrap(),
-            1,
-            H256::from_str("0xe64a78e6e0fe611ecbf8e079ecb032985f5f08a5d9acba5910f27ec8be8095a9")
-                .unwrap(),
-            1,
-        );
-
-        state
-            .event_transition(event, &log_meta)
-            .unwrap();
-
-        assert_eq!(state.reserve0, u256("1500"));
-        assert_eq!(state.reserve1, u256("2000"));
-        assert_eq!(state.log_index, log_meta.index());
     }
 
     #[test]
