@@ -64,8 +64,7 @@ use super::{
 ///     balances.insert(H160::zero(), U256::from(1000));
 ///
 ///     // Build the EVMPoolState
-///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, block)
-///         .balances(balances)
+///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
 ///         .build()
 ///         .await?;
 ///
@@ -77,7 +76,7 @@ pub struct EVMPoolStateBuilder {
     id: String,
     tokens: Vec<H160>,
     block: BlockHeader,
-    balances: Option<HashMap<H160, U256>>,
+    balances: HashMap<H160, U256>,
     balance_owner: Option<H160>,
     capabilities: Option<HashSet<Capability>>,
     involved_contracts: Option<HashSet<H160>>,
@@ -91,12 +90,17 @@ pub struct EVMPoolStateBuilder {
 }
 
 impl EVMPoolStateBuilder {
-    pub fn new(id: String, tokens: Vec<H160>, block: BlockHeader) -> Self {
+    pub fn new(
+        id: String,
+        tokens: Vec<H160>,
+        balances: HashMap<H160, U256>,
+        block: BlockHeader,
+    ) -> Self {
         Self {
             id,
             tokens,
+            balances,
             block,
-            balances: None,
             balance_owner: None,
             capabilities: None,
             involved_contracts: None,
@@ -108,11 +112,6 @@ impl EVMPoolStateBuilder {
             adapter_contract: None,
             adapter_contract_path: None,
         }
-    }
-
-    pub fn balances(mut self, balances: HashMap<H160, U256>) -> Self {
-        self.balances = Some(balances);
-        self
     }
 
     pub fn balance_owner(mut self, balance_owner: H160) -> Self {
@@ -204,12 +203,7 @@ impl EVMPoolStateBuilder {
             self.id,
             self.tokens,
             self.block,
-            self.balances.ok_or_else(|| {
-                SimulationError::InvalidInput(
-                    "Failed to get build engine: Balances not initialized".to_string(),
-                    None,
-                )
-            })?,
+            self.balances,
             self.balance_owner,
             HashMap::new(),
             capabilities,
@@ -466,9 +460,11 @@ mod tests {
     fn test_build_without_required_fields() {
         let id = "pool_1".to_string();
         let tokens = vec![H160::zero()];
+        let balances = HashMap::new();
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
 
-        let result = tokio_test::block_on(EVMPoolStateBuilder::new(id, tokens, block).build());
+        let result =
+            tokio_test::block_on(EVMPoolStateBuilder::new(id, tokens, balances, block).build());
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -486,8 +482,9 @@ mod tests {
         let token3 = H160::from_str("0000000000000000000000000000000000000003").unwrap();
         let tokens = vec![token2, token3];
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
+        let balances = HashMap::new();
 
-        let mut builder = EVMPoolStateBuilder::new(id, tokens, block);
+        let mut builder = EVMPoolStateBuilder::new(id, tokens, balances, block);
 
         let engine = tokio_test::block_on(builder.get_default_engine()).unwrap();
 

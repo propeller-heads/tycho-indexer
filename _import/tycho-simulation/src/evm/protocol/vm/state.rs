@@ -583,14 +583,12 @@ mod tests {
             Some(Vec::new()),
         )]);
 
-        EVMPoolStateBuilder::new(pool_id, tokens, block)
-            .balances(HashMap::from([
-                (
-                    EthAddress::from(dai_addr.0),
-                    U256::from_dec_str("178754012737301807104").unwrap(),
-                ),
-                (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
-            ]))
+        let balances = HashMap::from([
+            (EthAddress::from(dai_addr.0), U256::from_dec_str("178754012737301807104").unwrap()),
+            (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
+        ]);
+
+        EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
             .balance_owner(
                 EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
             )
