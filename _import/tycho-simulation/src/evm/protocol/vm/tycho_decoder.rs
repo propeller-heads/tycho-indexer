@@ -124,12 +124,12 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .join("src/evm/protocol/vm/assets")
             .join(to_adapter_file_name(protocol_name));
 
-        let mut pool_state_builder = EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
-            .balances(balances)
-            .adapter_contract_path(adapter_file_path)
-            .involved_contracts(involved_contracts)
-            .stateless_contracts(stateless_contracts)
-            .manual_updates(manual_updates);
+        let mut pool_state_builder =
+            EVMPoolStateBuilder::new(id.clone(), tokens.clone(), balances, block)
+                .adapter_contract_path(adapter_file_path)
+                .involved_contracts(involved_contracts)
+                .stateless_contracts(stateless_contracts)
+                .manual_updates(manual_updates);
 
         if let Some(balance_owner) = balance_owner {
             pool_state_builder = pool_state_builder.balance_owner(balance_owner)
