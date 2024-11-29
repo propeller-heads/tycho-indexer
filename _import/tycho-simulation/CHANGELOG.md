@@ -1,3 +1,10 @@
+## [0.49.1](https://github.com/propeller-heads/tycho-simulation/compare/0.49.0...0.49.1) (2024-11-29)
+
+
+### Bug Fixes
+
+* Use u256_to_f64 when calculating prices ([49a8a31](https://github.com/propeller-heads/tycho-simulation/commit/49a8a3121b8d9a7bd57bf6732b4b2c1341a720e2))
+
 ## [0.49.0](https://github.com/propeller-heads/tycho-simulation/compare/0.48.0...0.49.0) (2024-11-29)
 
 
