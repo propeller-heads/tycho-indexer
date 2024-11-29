@@ -493,20 +493,17 @@ impl ProtocolSim for EVMPoolState<PreCachedDB> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
-
-    use std::str::FromStr;
-
-    use ethers::{prelude::H256, types::Address as EthAddress};
-    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
-    use serde_json::Value;
     use std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
         str::FromStr,
     };
 
+    use ethers::{prelude::H256, types::Address as EthAddress};
+    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+    use serde_json::Value;
+
+    use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
         simulation::SimulationEngine,

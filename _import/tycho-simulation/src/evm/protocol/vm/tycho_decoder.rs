@@ -120,9 +120,9 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     .protocol_system
                     .as_str()
             });
-        let mut adapter_file_path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/evm/protocol/vm/assets");
-        adapter_file_path = adapter_file_path.join(to_adapter_file_name(protocol_name));
+        let adapter_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/evm/protocol/vm/assets")
+            .join(to_adapter_file_name(protocol_name));
 
         let mut pool_state_builder = EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
             .balances(balances)
