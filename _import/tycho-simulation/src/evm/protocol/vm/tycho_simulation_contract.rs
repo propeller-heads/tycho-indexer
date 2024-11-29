@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 
 use alloy_primitives::{keccak256, B256};
 use chrono::Utc;
@@ -84,7 +84,7 @@ where
     // Creates a new instance with the ISwapAdapter ABI
     pub fn new_swap_adapter(
         address: Address,
-        adapter_contract_path: &str,
+        adapter_contract_path: &PathBuf,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
@@ -295,7 +295,7 @@ mod tests {
         let engine = create_mock_engine();
         TychoSimulationContract::new_swap_adapter(
             address,
-            "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime",
+            &PathBuf::from("src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime"),
             engine,
         )
         .unwrap()

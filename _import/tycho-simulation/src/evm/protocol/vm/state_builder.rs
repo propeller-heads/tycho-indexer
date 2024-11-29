@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use chrono::Utc;
 use ethers::{
@@ -86,7 +89,7 @@ pub struct EVMPoolStateBuilder {
     trace: Option<bool>,
     engine: Option<SimulationEngine<PreCachedDB>>,
     adapter_contract: Option<TychoSimulationContract<PreCachedDB>>,
-    adapter_contract_path: Option<String>,
+    adapter_contract_path: Option<PathBuf>,
 }
 
 impl EVMPoolStateBuilder {
@@ -168,7 +171,7 @@ impl EVMPoolStateBuilder {
         self
     }
 
-    pub fn adapter_contract_path(mut self, adapter_contract_path: String) -> Self {
+    pub fn adapter_contract_path(mut self, adapter_contract_path: PathBuf) -> Self {
         self.adapter_contract_path = Some(adapter_contract_path);
         self
     }

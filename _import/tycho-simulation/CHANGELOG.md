@@ -1,3 +1,25 @@
+## [0.49.1](https://github.com/propeller-heads/tycho-simulation/compare/0.49.0...0.49.1) (2024-11-29)
+
+
+### Bug Fixes
+
+* Use u256_to_f64 when calculating prices ([49a8a31](https://github.com/propeller-heads/tycho-simulation/commit/49a8a3121b8d9a7bd57bf6732b4b2c1341a720e2))
+
+## [0.49.0](https://github.com/propeller-heads/tycho-simulation/compare/0.48.0...0.49.0) (2024-11-29)
+
+
+### Features
+
+* Change type of adapter_contract_path to PathBuf ([d78a761](https://github.com/propeller-heads/tycho-simulation/commit/d78a761353a1827d0a259657acd9980cffed70be))
+* The adapter file path needs to be relative to this crate ([8fefefd](https://github.com/propeller-heads/tycho-simulation/commit/8fefefdcb35857b861b4b52e52e9791634ca3bbb))
+
+## [0.48.0](https://github.com/propeller-heads/tycho-simulation/compare/0.47.3...0.48.0) (2024-11-28)
+
+
+### Features
+
+* make most VMPoolState attrs private ([4f16913](https://github.com/propeller-heads/tycho-simulation/commit/4f16913e131b6046d741dfc93bd50727f78c479c))
+
 ## [0.47.3](https://github.com/propeller-heads/tycho-simulation/compare/0.47.2...0.47.3) (2024-11-28)
 
 
