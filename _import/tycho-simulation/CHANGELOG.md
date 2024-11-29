@@ -1,3 +1,11 @@
+## [0.49.0](https://github.com/propeller-heads/tycho-simulation/compare/0.48.0...0.49.0) (2024-11-29)
+
+
+### Features
+
+* Change type of adapter_contract_path to PathBuf ([d78a761](https://github.com/propeller-heads/tycho-simulation/commit/d78a761353a1827d0a259657acd9980cffed70be))
+* The adapter file path needs to be relative to this crate ([8fefefd](https://github.com/propeller-heads/tycho-simulation/commit/8fefefdcb35857b861b4b52e52e9791634ca3bbb))
+
 ## [0.48.0](https://github.com/propeller-heads/tycho-simulation/compare/0.47.3...0.48.0) (2024-11-28)
 
 
