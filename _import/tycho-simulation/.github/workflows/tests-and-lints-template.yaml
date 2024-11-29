@@ -111,6 +111,10 @@ jobs:
         env:
           RUSTFLAGS: -Dwarnings
 
+      - run: cargo check --no-default-features
+        env:
+          RUSTFLAGS: -Dwarnings
+
       - name: Setup rustfmt toolchain - nightly
         uses: dtolnay/rust-toolchain@nightly
         with:

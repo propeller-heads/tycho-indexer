@@ -1,54 +1,63 @@
 [package]
 name = "tycho-simulation"
-version = "0.46.0"
+version = "0.49.0"
 edition = "2021"
 
 [workspace]
 members = ["tycho_simulation_py"]
 
 [dependencies]
-ethabi = "13.0"
-ethers = "2.0.13"
-serde_json = "1.0.105"
+# Serialization/Deserialization
 serde = { version = "1.0", features = ["rc"] }
+serde_json = "1.0.105"
+uuid = { version = "1.4.1", features = ["serde", "v4", "fast-rng", "macro-diagnostics"] }
+hex = "0.4.3"
+chrono = { version = "0.4.26", features = ["serde"] }
+
+# Error handling
+thiserror = "1"
+
+# Async & concurrency
 tokio = { version = "1.38.0", features = ["full"] }
 futures = "0.3.31"
-revm = { version = "17.1.0", features = ["ethersdb", "serde"] }
-hex = "0.4.3"
-thiserror = "1"
-chrono = { version = "0.4.26", features = ["serde"] }
+
+# Logging & Tracing
 tracing = "0.1.37"
-strum = "0.25.0"
-strum_macros = "0.25.2"
-uuid = { version = "1.4.1", features = [
-    "serde",
-    "v4",
-    "fast-rng",
-    "macro-diagnostics",
-] }
+
+# Utility
 num-traits = "0.2.17"
 dotenv = "0.15.0"
+itertools = "0.10.5"
+
+# Enum utilities
+strum = "0.25.0"
+strum_macros = "0.25.2"
+
+# Caching
+mini-moka = "0.10"
+lazy_static = "1.4.0"
+
+# Tycho dependencies
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.42.0" }
 tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.42.0" }
 tycho-ethereum = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-ethereum", tag = "0.42.0" }
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e" }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e" }
+
+# EVM dependencies
+ethabi = { version = "13.0",  optional = true }
+# some core models still rely on ethers types instead of bytes, once this is addressed this will become optional.
+ethers = { version = "2.0.13" }
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e",  optional = true }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e",  optional = true }
 alloy-primitives = { version = "0.8.9", features = [
     "getrandom",
     "rand",
     "map-foldhash",
-] }
-revm-inspectors = { version = "0.10.0", features = ["serde"] }
-mini-moka = "0.10"
-lazy_static = "1.4.0"
-itertools = "0.10.5"
-unicode-width = "0.1.13"
-once_cell = "1.20.2"
+], optional = true }
+revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
+revm-inspectors = { version = "0.10", features = ["serde"],  optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4.4"
-mockito = "1.1.1"
-warp = "0.3.5"
 approx = "0.5.1"
 rstest = "0.18.2"
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
@@ -57,15 +66,19 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 ] }
 tempfile = "3.13.0"
 
-# price printer example
+# explorer example
 clap = { version = "4.5.3", features = ["derive"] }
 anyhow = "1.0.79"
 ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
+unicode-width = "0.1.13"
 
 [features]
-default = []
+default = ["evm"]
 network_tests = []
+evm = [
+    "dep:ethabi", "dep:foundry-config", "dep:foundry-evm", "dep:alloy-primitives", "dep:revm", "dep:revm-inspectors"
+]
 
 [profile.bench]
 debug = true

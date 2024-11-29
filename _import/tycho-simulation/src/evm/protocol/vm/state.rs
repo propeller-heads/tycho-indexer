@@ -11,14 +11,13 @@ use tracing::info;
 
 use tycho_core::dto::ProtocolStateDelta;
 
-use super::utils::{hexstring_to_vec, ERC20Slots};
 use crate::{
     evm::{
         engine_db::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
             tycho_db::PreCachedDB,
         },
-        ContractCompiler,
+        ContractCompiler, SlotId,
     },
     models::ERC20Token,
     protocol::{
@@ -26,58 +25,59 @@ use crate::{
         events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
         state::{ProtocolEvent, ProtocolSim},
-        vm::{
-            constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-            erc20_overwrite_factory::{ERC20OverwriteFactory, Overwrites},
-            models::Capability,
-            tycho_simulation_contract::TychoSimulationContract,
-            utils::SlotId,
-        },
     },
 };
 
+use super::{
+    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
+    models::Capability,
+    tycho_simulation_contract::TychoSimulationContract,
+    utils::hexstring_to_vec,
+};
+
 #[derive(Clone, Debug)]
-pub struct VMPoolState<D: EngineDatabaseInterface + Clone>
+pub struct EVMPoolState<D: EngineDatabaseInterface + Clone>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     /// The pool's identifier
-    pub id: String,
+    id: String,
     /// The pool's token's addresses
     pub tokens: Vec<H160>,
     /// The current block, will be used to set vm context
-    pub block: BlockHeader,
+    block: BlockHeader,
     /// The pools token balances
-    pub balances: HashMap<H160, U256>,
+    balances: HashMap<H160, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
     /// If given, balances will be overwritten here instead of on the pool contract during
     /// simulations
-    pub balance_owner: Option<H160>,
+    balance_owner: Option<H160>,
     /// Spot prices of the pool by token pair
-    pub spot_prices: HashMap<(H160, H160), f64>,
+    spot_prices: HashMap<(H160, H160), f64>,
     /// The supported capabilities of this pool
-    pub capabilities: HashSet<Capability>,
+    capabilities: HashSet<Capability>,
     /// Storage overwrites that will be applied to all simulations. They will be cleared
     /// when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
-    pub block_lasting_overwrites: HashMap<rAddress, Overwrites>,
+    block_lasting_overwrites: HashMap<rAddress, Overwrites>,
     /// A set of all contract addresses involved in the simulation of this pool."""
-    pub involved_contracts: HashSet<H160>,
+    involved_contracts: HashSet<H160>,
     /// Allows the specification of custom storage slots for token allowances and
     /// balances. This is particularly useful for token contracts involved in protocol
     /// logic that extends beyond simple transfer functionality.
     /// Each entry also specify the compiler with which the target contract was compiled. This is
     /// later used to compute storage slot for maps.
-    pub token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
+    token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
-    pub manual_updates: bool,
+    manual_updates: bool,
     /// The adapter contract. This is used to run simulations
     adapter_contract: TychoSimulationContract<D>,
 }
 
-impl VMPoolState<PreCachedDB> {
+impl EVMPoolState<PreCachedDB> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
@@ -136,7 +136,6 @@ impl VMPoolState<PreCachedDB> {
                 vec![(sell_token.address), (buy_token.address)],
                 overwrites.clone(),
             )?;
-            info!("Got sell amount limit for spot prices {:?}", &sell_amount_limit);
             let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
             let price_result = self.adapter_contract.price(
                 pool_id_vec,
@@ -316,9 +315,24 @@ impl VMPoolState<PreCachedDB> {
 
         merged
     }
+
+    #[cfg(test)]
+    pub fn get_involved_contracts(&self) -> HashSet<H160> {
+        self.involved_contracts.clone()
+    }
+
+    #[cfg(test)]
+    pub fn get_manual_updates(&self) -> bool {
+        self.manual_updates
+    }
+
+    #[cfg(test)]
+    pub fn get_balance_owner(&self) -> Option<H160> {
+        self.balance_owner
+    }
 }
 
-impl ProtocolSim for VMPoolState<PreCachedDB> {
+impl ProtocolSim for EVMPoolState<PreCachedDB> {
     fn fee(&self) -> f64 {
         todo!()
     }
@@ -467,7 +481,7 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         if let Some(other_state) = other
             .as_any()
-            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
         {
             self.id == other_state.id
         } else {
@@ -479,28 +493,21 @@ impl ProtocolSim for VMPoolState<PreCachedDB> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ethers::{
-        prelude::{H256, U256},
-        types::Address as EthAddress,
-        utils::to_checksum,
-    };
-    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
-    use serde_json::Value;
     use std::{
         collections::{HashMap, HashSet},
+        path::PathBuf,
         str::FromStr,
     };
 
-    use crate::{
-        evm::{
-            engine_db::simulation_db::BlockHeader, simulation::SimulationEngine,
-            tycho_models::AccountUpdate,
-        },
-        protocol::vm::{
-            engine::{create_engine, SHARED_TYCHO_DB},
-            models::Capability,
-            state_builder::VMPoolStateBuilder,
-        },
+    use ethers::{prelude::H256, types::Address as EthAddress};
+    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+    use serde_json::Value;
+
+    use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
+    use crate::evm::{
+        engine_db::{create_engine, SHARED_TYCHO_DB},
+        simulation::SimulationEngine,
+        tycho_models::AccountUpdate,
     };
 
     fn dai() -> ERC20Token {
@@ -511,7 +518,7 @@ mod tests {
         ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
     }
 
-    async fn setup_pool_state() -> VMPoolState<PreCachedDB> {
+    async fn setup_pool_state() -> EVMPoolState<PreCachedDB> {
         let data_str = include_str!("assets/balancer_contract_storage_block_20463609.json");
         let data: Value = serde_json::from_str(data_str).expect("Failed to parse JSON");
 
@@ -569,7 +576,7 @@ mod tests {
             Some(Vec::new()),
         )]);
 
-        VMPoolStateBuilder::new(pool_id, tokens, block)
+        EVMPoolStateBuilder::new(pool_id, tokens, block)
             .balances(HashMap::from([
                 (
                     EthAddress::from(dai_addr.0),
@@ -580,9 +587,9 @@ mod tests {
             .balance_owner(
                 EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
             )
-            .adapter_contract_path(
-                "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
-            )
+            .adapter_contract_path(PathBuf::from(
+                "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+            ))
             .stateless_contracts(stateless_contracts)
             .build()
             .await
@@ -635,8 +642,7 @@ mod tests {
             .clone()
             .get_account_storage();
         for token in pool_state.tokens.clone() {
-            let token_address = rAddress::parse_checksummed(to_checksum(&token, None), None)
-                .expect("valid checksum");
+            let token_address = rAddress::from_slice(&token.0);
             let account = engine_accounts
                 .get_account_info(&token_address)
                 .unwrap();
@@ -666,7 +672,7 @@ mod tests {
         let new_state = result
             .new_state
             .as_any()
-            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
         assert_eq!(result.gas, U256::from_dec_str("102770").unwrap());
@@ -688,7 +694,7 @@ mod tests {
         let new_state = result
             .new_state
             .as_any()
-            .downcast_ref::<VMPoolState<PreCachedDB>>()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, U256::from(0));
         assert_eq!(result.gas, U256::from(68656));

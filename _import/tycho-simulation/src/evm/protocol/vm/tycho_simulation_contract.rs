@@ -1,6 +1,6 @@
-use alloy_primitives::{keccak256, B256};
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 
+use alloy_primitives::{keccak256, B256};
 use chrono::Utc;
 use ethers::{
     abi::{decode, encode, Abi, ParamType, Token},
@@ -9,7 +9,6 @@ use ethers::{
 };
 use revm::{
     db::DatabaseRef,
-    precompile::Address as rAddress,
     primitives::{alloy_primitives::Keccak256, AccountInfo, Address},
 };
 use tracing::warn;
@@ -19,14 +18,13 @@ use crate::{
         engine_db::engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     },
-    protocol::{
-        errors::SimulationError,
-        vm::{
-            constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-            erc20_overwrite_factory::Overwrites,
-            utils::{coerce_error, get_contract_bytecode, load_swap_abi},
-        },
-    },
+    protocol::errors::SimulationError,
+};
+
+use super::{
+    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_token::Overwrites,
+    utils::{coerce_error, get_contract_bytecode, load_swap_abi},
 };
 
 #[derive(Debug, Clone)]
@@ -86,7 +84,7 @@ where
     // Creates a new instance with the ISwapAdapter ABI
     pub fn new_swap_adapter(
         address: Address,
-        adapter_contract_path: &str,
+        adapter_contract_path: &PathBuf,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
         let abi = load_swap_abi()?;
@@ -95,9 +93,7 @@ where
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         engine.state.init_account(
-            rAddress::parse_checksummed(ADAPTER_ADDRESS.to_string(), None).expect(
-                "Failed to create new swap adapter: Invalid checksum for external account address",
-            ),
+            *ADAPTER_ADDRESS,
             AccountInfo {
                 balance: *MAX_BALANCE,
                 nonce: 0,
@@ -234,12 +230,13 @@ where
 mod tests {
     use super::*;
 
-    use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
     use revm::{
         db::DatabaseRef,
         primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},
     };
     use std::str::FromStr;
+
+    use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
 
     #[derive(Debug, Clone)]
     struct MockDatabase;
@@ -298,7 +295,7 @@ mod tests {
         let engine = create_mock_engine();
         TychoSimulationContract::new_swap_adapter(
             address,
-            "src/protocol/vm/assets/BalancerSwapAdapter.evm.runtime",
+            &PathBuf::from("src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime"),
             engine,
         )
         .unwrap()

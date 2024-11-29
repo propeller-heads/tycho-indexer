@@ -1,10 +1,10 @@
 use std::{
     collections::HashMap,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use ethers::types::{H160, H256, U256};
-use tracing::info;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_ethereum::BytesCodec;
@@ -12,12 +12,10 @@ use tycho_ethereum::BytesCodec;
 use crate::{
     evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
     models::ERC20Token,
-    protocol::{
-        errors::InvalidSnapshotError,
-        models::TryFromWithBlock,
-        vm::{state::VMPoolState, state_builder::VMPoolStateBuilder},
-    },
+    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
+
+use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 
 impl From<Header> for BlockHeader {
     fn from(header: Header) -> Self {
@@ -29,10 +27,10 @@ impl From<Header> for BlockHeader {
     }
 }
 
-impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
+impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState` into a `VMPoolState`.
+    /// Decodes a `ComponentWithState` into a `EVMPoolState`.
     ///
     /// Errors with a `InvalidSnapshotError`.
     async fn try_from_with_block(
@@ -122,11 +120,11 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
                     .protocol_system
                     .as_str()
             });
-        let adapter_file_path =
-            format!("src/protocol/vm/assets/{}", to_adapter_file_name(protocol_name));
-        info!("Creating a new pool state for balancer pool with id {}", &id);
+        let adapter_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/evm/protocol/vm/assets")
+            .join(to_adapter_file_name(protocol_name));
 
-        let mut pool_state_builder = VMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
+        let mut pool_state_builder = EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block)
             .balances(balances)
             .adapter_contract_path(adapter_file_path)
             .involved_contracts(involved_contracts)
@@ -149,8 +147,6 @@ impl TryFromWithBlock<ComponentWithState> for VMPoolState<PreCachedDB> {
             .collect();
 
         pool_state.set_spot_prices(erc20_tokens)?;
-        info!("Finished creating balancer pool with id {}", &id);
-
         Ok(pool_state)
     }
 }
@@ -251,18 +247,18 @@ mod tests {
         };
 
         // TODO: fix test
-        let result = VMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = EVMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();
         assert_eq!(
-            res.balance_owner,
+            res.get_balance_owner(),
             Some(H160::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
         );
         let mut exp_involved_contracts = HashSet::new();
         exp_involved_contracts
             .insert(H160::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap());
-        assert_eq!(res.involved_contracts, exp_involved_contracts);
-        assert!(res.manual_updates);
+        assert_eq!(res.get_involved_contracts(), exp_involved_contracts);
+        assert!(res.get_manual_updates());
     }
 }

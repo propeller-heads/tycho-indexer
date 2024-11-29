@@ -3,7 +3,7 @@ use std::{
     env,
     fs::File,
     io::Read,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock},
 };
 
@@ -12,15 +12,15 @@ use ethers::{
     abi::Abi,
     prelude::ProviderError,
     providers::{Http, Middleware, Provider},
-    types::{Address, H160, U256},
+    types::{Address, H160},
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use revm::primitives::{Bytecode, Bytes};
 
 use crate::{
-    evm::{simulation::SimulationEngineError, ContractCompiler},
-    protocol::{errors::SimulationError, vm::errors::FileError},
+    evm::{simulation::SimulationEngineError, ContractCompiler, SlotId},
+    protocol::errors::{FileError, SimulationError},
 };
 
 pub fn coerce_error(
@@ -136,23 +136,6 @@ fn parse_solidity_error_message(data: &str) -> String {
 
     // Fallback if no decoding succeeded
     format!("Failed to decode: {}", data)
-}
-
-pub type SlotId = U256;
-
-#[derive(Clone, Debug, PartialEq)]
-/// A struct representing ERC20 tokens storage slots.
-pub struct ERC20Slots {
-    // Base slot for the balance map
-    pub balance_map: SlotId,
-    // Base slot for the allowance map
-    pub allowance_map: SlotId,
-}
-
-impl ERC20Slots {
-    pub fn new(balance: SlotId, allowance: SlotId) -> Self {
-        Self { balance_map: balance, allowance_map: allowance }
-    }
 }
 
 /// Get storage slot index of a value stored at a certain key in a mapping
@@ -306,18 +289,18 @@ pub async fn get_code_for_contract(
 
 static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Bytecode>> = LazyLock::new(|| Cache::new(1_000));
 
-pub fn get_contract_bytecode(path: &str) -> Result<Bytecode, FileError> {
-    if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string())) {
+pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
+    if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string_lossy().to_string())) {
         return Ok(bytecode);
     }
 
-    let mut file = File::open(Path::new(path)).map_err(FileError::Io)?;
+    let mut file = File::open(path).map_err(FileError::Io)?;
     let mut code = Vec::new();
     file.read_to_end(&mut code)
         .map_err(FileError::Io)?;
 
     let bytecode = Bytecode::new_raw(code.into()); // Construct `Bytecode` from `Vec<u8>`
-    BYTECODE_CACHE.insert(Arc::new(path.to_string()), bytecode.clone());
+    BYTECODE_CACHE.insert(Arc::new(path.to_string_lossy().to_string()), bytecode.clone());
 
     Ok(bytecode)
 }
@@ -340,7 +323,7 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
         .parent()
         .ok_or_else(|| {
-            FileError::Structure("Failed to obtain parent directory of current file.".to_string())
+            FileError::Structure("Failed to obtain assets directory for ERC20.bin".to_string())
         })?
         .join("assets")
         .join("ERC20.bin");
@@ -528,22 +511,22 @@ mod tests {
         let mut temp_file = NamedTempFile::new().unwrap();
         let test_data = b"Test contract bytecode";
         temp_file.write_all(test_data).unwrap();
-        let temp_path = temp_file.path().to_str().unwrap();
+        let temp_path = temp_file.path().to_path_buf();
 
         // First call to get_contract_bytecode
-        let result1 = get_contract_bytecode(temp_path).unwrap();
+        let result1 = get_contract_bytecode(&temp_path).unwrap();
         assert_eq!(result1, Bytecode::new_raw(test_data.into()));
 
         // Second call to get_contract_bytecode (should use cached data)
         // Verify that the cache was used (file is not read twice)
         remove_file(&temp_file).unwrap(); // This removes the temporary file
-        let result2 = get_contract_bytecode(temp_path).unwrap();
+        let result2 = get_contract_bytecode(&temp_path).unwrap();
         assert_eq!(result2, Bytecode::new_raw(test_data.into()));
     }
 
     #[test]
     fn test_get_contract_bytecode_error() {
-        let result = get_contract_bytecode("non_existent_file.txt");
+        let result = get_contract_bytecode(&PathBuf::from("non_existent_file.txt"));
         assert!(result.is_err());
     }
 
