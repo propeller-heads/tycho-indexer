@@ -135,7 +135,6 @@ impl EVMPoolState<PreCachedDB> {
                 vec![(sell_token.address), (buy_token.address)],
                 overwrites.clone(),
             )?;
-            info!("Got sell amount limit for spot prices {:?}", &sell_amount_limit);
             let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
             let price_result = self.adapter_contract.price(
                 pool_id_vec,
@@ -151,11 +150,11 @@ impl EVMPoolState<PreCachedDB> {
                 .contains(&Capability::ScaledPrice)
             {
                 *price_result.first().ok_or_else(|| {
-                    SimulationError::FatalError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Calculated price array is empty".to_string())
                 })?
             } else {
                 let unscaled_price = price_result.first().ok_or_else(|| {
-                    SimulationError::FatalError("Spot price is not a u64".to_string())
+                    SimulationError::FatalError("Calculated price array is empty".to_string())
                 })?;
                 *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
                     10f64.powi(buy_token.decimals as i32)
@@ -291,7 +290,15 @@ impl EVMPoolState<PreCachedDB> {
                 self.balances
                     .get(token)
                     .cloned()
-                    .unwrap_or_default(),
+                    .ok_or_else(|| {
+                        SimulationError::InvalidInput(
+                            format!(
+                                "Failed to get balance overwrites: Token balance not found for {}",
+                                token
+                            ),
+                            None,
+                        )
+                    })?,
                 address,
             );
             balance_overwrites.extend(overwrites.get_overwrites());
@@ -485,15 +492,17 @@ impl ProtocolSim for EVMPoolState<PreCachedDB> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
-
-    use std::str::FromStr;
+    use std::{
+        collections::{HashMap, HashSet},
+        path::PathBuf,
+        str::FromStr,
+    };
 
     use ethers::{prelude::H256, types::Address as EthAddress};
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
 
+    use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
         simulation::SimulationEngine,
@@ -566,20 +575,18 @@ mod tests {
             Some(Vec::new()),
         )]);
 
-        EVMPoolStateBuilder::new(pool_id, tokens, block)
-            .balances(HashMap::from([
-                (
-                    EthAddress::from(dai_addr.0),
-                    U256::from_dec_str("178754012737301807104").unwrap(),
-                ),
-                (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
-            ]))
+        let balances = HashMap::from([
+            (EthAddress::from(dai_addr.0), U256::from_dec_str("178754012737301807104").unwrap()),
+            (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
+        ]);
+
+        EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
             .balance_owner(
                 EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
             )
-            .adapter_contract_path(
+            .adapter_contract_path(PathBuf::from(
                 "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
-            )
+            ))
             .stateless_contracts(stateless_contracts)
             .build()
             .await
