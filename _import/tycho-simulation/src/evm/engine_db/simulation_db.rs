@@ -1,4 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use ethers::{
     providers::Middleware,
@@ -94,7 +97,7 @@ pub struct SimulationDB<M: Middleware> {
     /// Client to connect to the RPC
     client: Arc<M>,
     /// Cached data
-    account_storage: RefCell<AccountStorage>,
+    account_storage: Arc<RwLock<AccountStorage>>,
     /// Current block
     block: Option<BlockHeader>,
     /// Tokio runtime to execute async code
@@ -107,7 +110,12 @@ impl<M: Middleware> SimulationDB<M> {
         runtime: Option<Arc<tokio::runtime::Runtime>>,
         block: Option<BlockHeader>,
     ) -> Self {
-        Self { client, account_storage: RefCell::new(AccountStorage::new()), block, runtime }
+        Self {
+            client,
+            account_storage: Arc::new(RwLock::new(AccountStorage::new())),
+            block,
+            runtime,
+        }
     }
 
     /// Set the block that will be used when querying a node
@@ -138,7 +146,8 @@ impl<M: Middleware> SimulationDB<M> {
             let mut revert_entry = StateUpdate::default();
             if let Some(current_account) = self
                 .account_storage
-                .borrow()
+                .read()
+                .unwrap()
                 .get_account_info(address)
             {
                 revert_entry.balance = Some(current_account.balance);
@@ -153,7 +162,8 @@ impl<M: Middleware> SimulationDB<M> {
                 {
                     if let Some(s) = self
                         .account_storage
-                        .borrow()
+                        .read()
+                        .unwrap()
                         .get_permanent_storage(address, index)
                     {
                         revert_storage.insert(*index, s);
@@ -164,7 +174,8 @@ impl<M: Middleware> SimulationDB<M> {
             revert_updates.insert(*address, revert_entry);
 
             self.account_storage
-                .borrow_mut()
+                .write()
+                .unwrap()
                 .update_account(address, update_info);
         }
         revert_updates
@@ -287,9 +298,9 @@ impl<M: Middleware> EngineDatabaseInterface for SimulationDB<M> {
             account.code = Some(to_analysed(account.code.unwrap()));
         }
 
-        self.account_storage
-            .borrow_mut()
-            .init_account(address, account, permanent_storage, mocked);
+        let mut account_storage = self.account_storage.write().unwrap();
+
+        account_storage.init_account(address, account, permanent_storage, mocked);
     }
 
     /// Clears temp storage
@@ -298,7 +309,8 @@ impl<M: Middleware> EngineDatabaseInterface for SimulationDB<M> {
     /// to avoid stored state leading to wrong results.
     fn clear_temp_storage(&mut self) {
         self.account_storage
-            .borrow_mut()
+            .write()
+            .unwrap()
             .clear_temp_storage();
     }
 }
@@ -339,7 +351,8 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         if let Some(account) = self
             .account_storage
-            .borrow()
+            .read()
+            .unwrap()
             .get_account_info(&address)
         {
             return Ok(Some(account.clone()));
@@ -391,10 +404,10 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
         let is_mocked; // will be None if we don't have this account at all
         {
+            let account_storage = self.account_storage.read().unwrap();
             // This scope is to not make two simultaneous borrows
-            let borrowed_storage = self.account_storage.borrow();
-            is_mocked = borrowed_storage.is_mocked_account(&address);
-            if let Some(storage_value) = borrowed_storage.get_storage(&address, &index) {
+            is_mocked = account_storage.is_mocked_account(&address);
+            if let Some(storage_value) = account_storage.get_storage(&address, &index) {
                 debug!(
                     "Got value locally. This is a {} account. Value: {}",
                     (if is_mocked.unwrap_or(false) { "mocked" } else { "non-mocked" }),
@@ -411,9 +424,9 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
             }
             Some(false) => {
                 let storage_value = self.query_storage(address, index)?;
-                self.account_storage
-                    .borrow_mut()
-                    .set_temp_storage(address, index, storage_value);
+                let mut account_storage = self.account_storage.write().unwrap();
+
+                account_storage.set_temp_storage(address, index, storage_value);
                 debug!(
                     "This is non-mocked account for which we didn't have data. Fetched value: {}",
                     storage_value
@@ -424,9 +437,8 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
                 let account_info = self.query_account_info(address)?;
                 let storage_value = self.query_storage(address, index)?;
                 self.init_account(address, account_info, None, false);
-                self.account_storage
-                    .borrow_mut()
-                    .set_temp_storage(address, index, storage_value);
+                let mut account_storage = self.account_storage.write().unwrap();
+                account_storage.set_temp_storage(address, index, storage_value);
                 debug!("This is non-initialised account. Fetched value: {}", storage_value);
                 Ok(storage_value)
             }
@@ -581,7 +593,8 @@ mod tests {
         assert_eq!(
             mock_sim_db
                 .account_storage
-                .borrow()
+                .read()
+                .unwrap()
                 .get_account_info(&mock_acc_address)
                 .unwrap(),
             &acc_info
@@ -629,7 +642,8 @@ mod tests {
         assert_eq!(
             mock_sim_db
                 .account_storage
-                .borrow()
+                .read()
+                .unwrap()
                 .get_storage(&address, &new_storage_value_index)
                 .unwrap(),
             new_storage_value_index
@@ -637,7 +651,8 @@ mod tests {
         assert_eq!(
             mock_sim_db
                 .account_storage
-                .borrow()
+                .read()
+                .unwrap()
                 .get_account_info(&address)
                 .unwrap()
                 .balance,

@@ -1,6 +1,7 @@
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
+    fmt::Debug,
 };
 
 use alloy_primitives::Address;
@@ -37,10 +38,10 @@ use super::{
 };
 
 #[derive(Clone, Debug)]
-pub struct EVMPoolState<D: EngineDatabaseInterface + Clone>
+pub struct EVMPoolState<D: EngineDatabaseInterface + Clone + Send + Sync>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     /// The pool's identifier
     id: String,
@@ -77,7 +78,12 @@ where
     adapter_contract: TychoSimulationContract<D>,
 }
 
-impl EVMPoolState<PreCachedDB> {
+impl<D> EVMPoolState<D>
+where
+    D: EngineDatabaseInterface + Clone + 'static + Send + Sync,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
@@ -91,7 +97,7 @@ impl EVMPoolState<PreCachedDB> {
         involved_contracts: HashSet<H160>,
         token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
         manual_updates: bool,
-        adapter_contract: TychoSimulationContract<PreCachedDB>,
+        adapter_contract: TychoSimulationContract<D>,
     ) -> Self {
         Self {
             id,
@@ -340,7 +346,12 @@ impl EVMPoolState<PreCachedDB> {
     }
 }
 
-impl ProtocolSim for EVMPoolState<PreCachedDB> {
+impl<D> ProtocolSim for EVMPoolState<D>
+where
+    D: EngineDatabaseInterface + Clone + Debug + 'static + Send + Sync,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
     fn fee(&self) -> f64 {
         todo!()
     }
