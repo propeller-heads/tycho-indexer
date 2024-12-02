@@ -138,17 +138,3 @@ impl Clone for Box<dyn ProtocolSim> {
         self.clone_box()
     }
 }
-
-/// ProtocolEvent trait
-///
-/// Defines the interface for protocol-specific events that can be applied to the state.
-pub trait ProtocolEvent: std::fmt::Debug {
-    fn as_any(&self) -> &dyn Any;
-    fn clone_box(&self) -> Box<dyn ProtocolEvent>;
-}
-
-impl Clone for Box<dyn ProtocolEvent> {
-    fn clone(&self) -> Box<dyn ProtocolEvent> {
-        self.clone_box()
-    }
-}
