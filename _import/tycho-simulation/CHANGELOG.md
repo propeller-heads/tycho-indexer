@@ -1,3 +1,10 @@
+## [0.52.2](https://github.com/propeller-heads/tycho-simulation/compare/0.52.1...0.52.2) (2024-12-03)
+
+
+### Bug Fixes
+
+* Remove RUST_LOG flag reference from example README ([07ca8e4](https://github.com/propeller-heads/tycho-simulation/commit/07ca8e448848c7e09bc53c82107464e174b84bd5))
+
 ## [0.52.1](https://github.com/propeller-heads/tycho-simulation/compare/0.52.0...0.52.1) (2024-12-03)
 
 
