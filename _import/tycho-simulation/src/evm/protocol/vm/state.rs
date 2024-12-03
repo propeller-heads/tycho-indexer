@@ -38,7 +38,7 @@ use super::{
 };
 
 #[derive(Clone, Debug)]
-pub struct EVMPoolState<D: EngineDatabaseInterface + Clone + Send + Sync>
+pub struct EVMPoolState<D: EngineDatabaseInterface + Clone>
 where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
@@ -80,7 +80,7 @@ where
 
 impl<D> EVMPoolState<D>
 where
-    D: EngineDatabaseInterface + Clone + 'static + Send + Sync,
+    D: EngineDatabaseInterface + Clone + 'static,
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
@@ -348,7 +348,7 @@ where
 
 impl<D> ProtocolSim for EVMPoolState<D>
 where
-    D: EngineDatabaseInterface + Clone + Debug + 'static + Send + Sync,
+    D: EngineDatabaseInterface + Clone + Debug + 'static,
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
