@@ -1,3 +1,11 @@
+## [0.51.0](https://github.com/propeller-heads/tycho-simulation/compare/0.50.0...0.51.0) (2024-12-03)
+
+
+### Features
+
+* Discontinue support for event transitioning ([d4c8346](https://github.com/propeller-heads/tycho-simulation/commit/d4c8346bdb9e85cd2a2ae0484e26ba78ed5cd6e6))
+* Remove ProtocolEvent and all USV2/3 event files. ([5b4770f](https://github.com/propeller-heads/tycho-simulation/commit/5b4770f53984cd03709687989a94118077678d96))
+
 ## [0.50.0](https://github.com/propeller-heads/tycho-simulation/compare/0.49.1...0.50.0) (2024-11-29)
 
 
