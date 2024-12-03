@@ -1,3 +1,10 @@
+## [0.52.0](https://github.com/propeller-heads/tycho-simulation/compare/0.51.0...0.52.0) (2024-12-03)
+
+
+### Features
+
+* take generic constraints for EVMPoolState instead of PreCachedDB ([a95ed00](https://github.com/propeller-heads/tycho-simulation/commit/a95ed000717d3d3604b498347228d16de2e8f1b6))
+
 ## [0.51.0](https://github.com/propeller-heads/tycho-simulation/compare/0.50.0...0.51.0) (2024-12-03)
 
 
