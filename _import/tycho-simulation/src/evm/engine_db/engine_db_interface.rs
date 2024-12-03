@@ -6,7 +6,7 @@ use revm::{
     DatabaseRef,
 };
 
-pub trait EngineDatabaseInterface: DatabaseRef {
+pub trait EngineDatabaseInterface: DatabaseRef + Send + Sync {
     type Error;
 
     /// Sets up a single account
