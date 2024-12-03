@@ -7,6 +7,7 @@ use ethers::{
 use lazy_static::lazy_static;
 use revm::{primitives::Address as rAddress, DatabaseRef};
 use serde_json::from_str;
+use std::fmt::Debug;
 
 use crate::{
     evm::{
@@ -137,7 +138,7 @@ lazy_static! {
 ///   testing both compiler configurations.
 /// - Once the balance slot is found, it uses the detected compiler to search for the allowance
 ///   slot, which is dependent on the balance slot.
-pub fn brute_force_slots<D: EngineDatabaseInterface + Clone>(
+pub fn brute_force_slots<D: EngineDatabaseInterface + Clone + Debug>(
     token_addr: &H160,
     block: &BlockHeader,
     engine: &SimulationEngine<D>,

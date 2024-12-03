@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Debug,
     sync::{Arc, RwLock},
 };
 
@@ -93,7 +94,7 @@ impl From<BlockHeader> for BlockId {
 
 /// A wrapper over an ethers Middleware with local storage cache and overrides.
 #[derive(Clone, Debug)]
-pub struct SimulationDB<M: Middleware> {
+pub struct SimulationDB<M: Middleware + Debug> {
     /// Client to connect to the RPC
     client: Arc<M>,
     /// Cached data
@@ -104,7 +105,10 @@ pub struct SimulationDB<M: Middleware> {
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
-impl<M: Middleware> SimulationDB<M> {
+impl<M: Middleware + Debug> SimulationDB<M>
+where
+    M::Error: std::fmt::Debug,
+{
     pub fn new(
         client: Arc<M>,
         runtime: Option<Arc<tokio::runtime::Runtime>>,
@@ -271,7 +275,10 @@ impl<M: Middleware> SimulationDB<M> {
     }
 }
 
-impl<M: Middleware> EngineDatabaseInterface for SimulationDB<M> {
+impl<M: Middleware + Debug> EngineDatabaseInterface for SimulationDB<M>
+where
+    M::Error: std::fmt::Debug,
+{
     type Error = String;
 
     /// Sets up a single account
@@ -315,7 +322,10 @@ impl<M: Middleware> EngineDatabaseInterface for SimulationDB<M> {
     }
 }
 
-impl<M: Middleware> DatabaseRef for SimulationDB<M> {
+impl<M: Middleware + Debug> DatabaseRef for SimulationDB<M>
+where
+    M::Error: std::fmt::Debug,
+{
     type Error = M::Error;
 
     /// Retrieves basic information about an account.

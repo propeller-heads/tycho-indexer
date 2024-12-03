@@ -34,7 +34,7 @@ lazy_static! {
 ///
 /// - `trace`: Whether to trace calls. Only meant for debugging purposes, might print a lot of data
 ///   to stdout.
-pub fn create_engine<D: EngineDatabaseInterface + Clone>(
+pub fn create_engine<D: EngineDatabaseInterface + Clone + Debug>(
     db: D,
     trace: bool,
 ) -> Result<SimulationEngine<D>, SimulationError>
