@@ -1,3 +1,10 @@
+## [0.52.1](https://github.com/propeller-heads/tycho-simulation/compare/0.52.0...0.52.1) (2024-12-03)
+
+
+### Bug Fixes
+
+* Remove BalancerV2 from example ([aa8732f](https://github.com/propeller-heads/tycho-simulation/commit/aa8732f36b2358e0efda3cf06555c86473c19fcd))
+
 ## [0.52.0](https://github.com/propeller-heads/tycho-simulation/compare/0.51.0...0.52.0) (2024-12-03)
 
 
