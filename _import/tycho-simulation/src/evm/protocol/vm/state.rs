@@ -23,9 +23,8 @@ use crate::{
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
-        events::{EVMLogMeta, LogIndex},
         models::GetAmountOutResult,
-        state::{ProtocolEvent, ProtocolSim},
+        state::ProtocolSim,
     },
 };
 
@@ -475,14 +474,6 @@ where
         }
 
         Ok(())
-    }
-
-    fn event_transition(
-        &mut self,
-        _protocol_event: Box<dyn ProtocolEvent>,
-        _log: &EVMLogMeta,
-    ) -> Result<(), TransitionError<LogIndex>> {
-        todo!()
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
