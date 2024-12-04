@@ -7,6 +7,7 @@ use std::{
 use alloy_primitives::Address;
 use ethers::{prelude::U256, types::H160};
 use itertools::Itertools;
+use num_bigint::BigUint;
 use revm::{precompile::Address as rAddress, primitives::U256 as rU256, DatabaseRef};
 use tracing::info;
 
@@ -26,6 +27,7 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
+    u256_num::u256_to_biguint,
 };
 
 use super::{
@@ -367,13 +369,13 @@ where
 
     fn get_amount_out(
         &self,
-        amount_in: U256,
+        amount_in: BigUint,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let sell_token = token_in.address;
         let buy_token = token_out.address;
-        let sell_amount = amount_in;
+        let sell_amount = U256::from_big_endian(&amount_in.to_bytes_be());
         let overwrites = self.get_overwrites(
             vec![sell_token, buy_token],
             U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
@@ -444,13 +446,17 @@ where
             return Err(SimulationError::InvalidInput(
                 format!("Sell amount exceeds limit {}", sell_amount_limit),
                 Some(GetAmountOutResult::new(
-                    buy_amount,
-                    trade.gas_used,
+                    u256_to_biguint(buy_amount),
+                    u256_to_biguint(trade.gas_used),
                     Box::new(new_state.clone()),
                 )),
             ));
         }
-        Ok(GetAmountOutResult::new(buy_amount, trade.gas_used, Box::new(new_state.clone())))
+        Ok(GetAmountOutResult::new(
+            u256_to_biguint(buy_amount),
+            u256_to_biguint(trade.gas_used),
+            Box::new(new_state.clone()),
+        ))
     }
 
     fn delta_transition(
@@ -510,6 +516,8 @@ mod tests {
     };
 
     use ethers::{prelude::H256, types::Address as EthAddress};
+    use num_bigint::ToBigUint;
+    use num_traits::One;
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
 
@@ -521,11 +529,21 @@ mod tests {
     };
 
     fn dai() -> ERC20Token {
-        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
+        ERC20Token::new(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            18,
+            "DAI",
+            10_000.to_biguint().unwrap(),
+        )
     }
 
     fn bal() -> ERC20Token {
-        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
+        ERC20Token::new(
+            "0xba100000625a3754423978a60c9317c58a424e3d",
+            18,
+            "BAL",
+            10_000.to_biguint().unwrap(),
+        )
     }
 
     async fn setup_pool_state() -> EVMPoolState<PreCachedDB> {
@@ -675,15 +693,15 @@ mod tests {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
-            .get_amount_out(U256::from_dec_str("1000000000000000000").unwrap(), &dai(), &bal())
+            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
             .unwrap();
         let new_state = result
             .new_state
             .as_any()
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
-        assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, U256::from_dec_str("102770").unwrap());
+        assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
+        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
         assert!(pool_state
             .block_lasting_overwrites
@@ -696,7 +714,7 @@ mod tests {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
-            .get_amount_out(U256::from(1), &dai(), &bal())
+            .get_amount_out(BigUint::one(), &dai(), &bal())
             .unwrap();
 
         let new_state = result
@@ -704,8 +722,8 @@ mod tests {
             .as_any()
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
-        assert_eq!(result.amount, U256::from(0));
-        assert_eq!(result.gas, U256::from(68656));
+        assert_eq!(result.amount, BigUint::ZERO);
+        assert_eq!(result.gas, 68656.to_biguint().unwrap());
         assert_eq!(new_state.spot_prices, pool_state.spot_prices)
     }
 
@@ -715,7 +733,7 @@ mod tests {
 
         let result = pool_state.get_amount_out(
             // sell limit is 100279494253364362835
-            U256::from_dec_str("100379494253364362835").unwrap(),
+            BigUint::from_str("100379494253364362835").unwrap(),
             &dai(),
             &bal(),
         );

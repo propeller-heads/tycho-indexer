@@ -1,6 +1,7 @@
 use std::any::Any;
 
 use ethers::types::{Sign, I256, U256};
+use num_bigint::BigUint;
 use tracing::trace;
 
 use crate::{
@@ -12,6 +13,7 @@ use crate::{
         state::ProtocolSim,
     },
     safe_math::{safe_add_u256, safe_sub_u256},
+    u256_num::u256_to_biguint,
 };
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 use tycho_ethereum::BytesCodec;
@@ -139,8 +141,8 @@ impl UniswapV3State {
                         return Err(SimulationError::InvalidInput(
                             "Ticks exceeded".into(),
                             Some(GetAmountOutResult::new(
-                                state.amount_calculated.abs().into_raw(),
-                                gas_used,
+                                u256_to_biguint(state.amount_calculated.abs().into_raw()),
+                                u256_to_biguint(gas_used),
                                 Box::new(new_state),
                             )),
                         ));
@@ -248,12 +250,16 @@ impl ProtocolSim for UniswapV3State {
 
     fn get_amount_out(
         &self,
-        amount_in: U256,
+        amount_in: BigUint,
         token_a: &ERC20Token,
         token_b: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let zero_for_one = token_a < token_b;
-        let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, amount_in).unwrap();
+        let amount_specified = I256::checked_from_sign_and_abs(
+            Sign::Positive,
+            U256::from_big_endian(&amount_in.to_bytes_be()),
+        )
+        .unwrap();
 
         let result = self.swap(zero_for_one, amount_specified, None)?;
 
@@ -264,11 +270,13 @@ impl ProtocolSim for UniswapV3State {
         new_state.sqrt_price = result.sqrt_price;
 
         Ok(GetAmountOutResult::new(
-            result
-                .amount_calculated
-                .abs()
-                .into_raw(),
-            result.gas_used,
+            u256_to_biguint(
+                result
+                    .amount_calculated
+                    .abs()
+                    .into_raw(),
+            ),
+            u256_to_biguint(result.gas_used),
             Box::new(new_state),
         ))
     }
@@ -389,7 +397,11 @@ impl ProtocolSim for UniswapV3State {
 mod tests {
     use super::*;
 
-    use std::collections::{HashMap, HashSet};
+    use num_bigint::ToBigUint;
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
 
     use tycho_core::hex_bytes::Bytes;
 
@@ -399,13 +411,13 @@ mod tests {
             "0x6b175474e89094c44da98b954eedeac495271d0f",
             18,
             "X",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let token_y = ERC20Token::new(
             "0xf1ca9cb74685755965c7458528a36934df52a3ef",
             18,
             "Y",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
 
         let pool = UniswapV3State::new(
@@ -415,8 +427,8 @@ mod tests {
             17342,
             vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
         );
-        let sell_amount = U256::from(11000) * U256::exp10(18);
-        let expected = U256::from_dec_str("61927070842678722935941").unwrap();
+        let sell_amount = BigUint::from_str("11_000_000000000000000000").unwrap();
+        let expected = BigUint::from_str("61927070842678722935941").unwrap();
 
         let res = pool
             .get_amount_out(sell_amount, &token_x, &token_y)
@@ -427,8 +439,8 @@ mod tests {
 
     struct SwapTestCase {
         symbol: &'static str,
-        sell: U256,
-        exp: U256,
+        sell: BigUint,
+        exp: BigUint,
     }
 
     #[test]
@@ -437,13 +449,13 @@ mod tests {
             "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
             8,
             "WBTC",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let weth = ERC20Token::new(
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             18,
             "WETH",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let pool = UniswapV3State::new(
             377952820878029838,
@@ -467,53 +479,53 @@ mod tests {
         let cases = vec![
             SwapTestCase {
                 symbol: "WBTC",
-                sell: U256::from_dec_str("500000000").unwrap(),
-                exp: U256::from_dec_str("64352395915550406461").unwrap(),
+                sell: 500000000.to_biguint().unwrap(),
+                exp: BigUint::from_str("64352395915550406461").unwrap(),
             },
             SwapTestCase {
                 symbol: "WBTC",
-                sell: U256::from_dec_str("550000000").unwrap(),
-                exp: U256::from_dec_str("70784271504035662865").unwrap(),
+                sell: 550000000.to_biguint().unwrap(),
+                exp: BigUint::from_str("70784271504035662865").unwrap(),
             },
             SwapTestCase {
                 symbol: "WBTC",
-                sell: U256::from_dec_str("600000000").unwrap(),
-                exp: U256::from_dec_str("77215534856185613494").unwrap(),
+                sell: 600000000.to_biguint().unwrap(),
+                exp: BigUint::from_str("77215534856185613494").unwrap(),
             },
             SwapTestCase {
                 symbol: "WBTC",
-                sell: U256::from_dec_str("1000000000").unwrap(),
-                exp: U256::from_dec_str("128643569649663616249").unwrap(),
+                sell: BigUint::from_str("1000000000").unwrap(),
+                exp: BigUint::from_str("128643569649663616249").unwrap(),
             },
             SwapTestCase {
                 symbol: "WBTC",
-                sell: U256::from_dec_str("3000000000").unwrap(),
-                exp: U256::from_dec_str("385196519076234662939").unwrap(),
+                sell: BigUint::from_str("3000000000").unwrap(),
+                exp: BigUint::from_str("385196519076234662939").unwrap(),
             },
             SwapTestCase {
                 symbol: "WETH",
-                sell: U256::from_dec_str("64000000000000000000").unwrap(),
-                exp: U256::from_dec_str("496294784").unwrap(),
+                sell: BigUint::from_str("64000000000000000000").unwrap(),
+                exp: BigUint::from_str("496294784").unwrap(),
             },
             SwapTestCase {
                 symbol: "WETH",
-                sell: U256::from_dec_str("70000000000000000000").unwrap(),
-                exp: U256::from_dec_str("542798479").unwrap(),
+                sell: BigUint::from_str("70000000000000000000").unwrap(),
+                exp: BigUint::from_str("542798479").unwrap(),
             },
             SwapTestCase {
                 symbol: "WETH",
-                sell: U256::from_dec_str("77000000000000000000").unwrap(),
-                exp: U256::from_dec_str("597047757").unwrap(),
+                sell: BigUint::from_str("77000000000000000000").unwrap(),
+                exp: BigUint::from_str("597047757").unwrap(),
             },
             SwapTestCase {
                 symbol: "WETH",
-                sell: U256::from_dec_str("128000000000000000000").unwrap(),
-                exp: U256::from_dec_str("992129037").unwrap(),
+                sell: BigUint::from_str("128000000000000000000").unwrap(),
+                exp: BigUint::from_str("992129037").unwrap(),
             },
             SwapTestCase {
                 symbol: "WETH",
-                sell: U256::from_dec_str("385000000000000000000").unwrap(),
-                exp: U256::from_dec_str("2978713582").unwrap(),
+                sell: BigUint::from_str("385000000000000000000").unwrap(),
+                exp: BigUint::from_str("2978713582").unwrap(),
             },
         ];
 
@@ -534,13 +546,13 @@ mod tests {
             "0x6b175474e89094c44da98b954eedeac495271d0f",
             18,
             "DAI",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let usdc = ERC20Token::new(
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let pool = UniswapV3State::new(
             73015811375239994,
@@ -569,8 +581,8 @@ mod tests {
                 TickInfo::new(-258400, -400137022888262i128),
             ],
         );
-        let amount_in = U256::from_dec_str("50000000000").unwrap();
-        let exp = U256::from_dec_str("6820591625999718100883").unwrap();
+        let amount_in = BigUint::from_str("50000000000").unwrap();
+        let exp = BigUint::from_str("6820591625999718100883").unwrap();
 
         let err = pool
             .get_amount_out(amount_in, &usdc, &dai)

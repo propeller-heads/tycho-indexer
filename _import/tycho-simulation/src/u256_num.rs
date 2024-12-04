@@ -2,6 +2,7 @@
 use std::{cmp::max, panic};
 
 use ethers::types::U256;
+use num_bigint::BigUint;
 
 /// Converts a U256 integer into it's closest floating point representation
 ///
@@ -86,6 +87,13 @@ pub fn u256_to_f64(x: U256) -> f64 {
         f64::from_bits(merged)
     });
     res.unwrap_or_else(|_| panic!("Conversion f64 -> U256 panicked for {x}"))
+}
+
+/// Converts a U256 integer into a BigUint
+pub fn u256_to_biguint(value: U256) -> BigUint {
+    let mut bytes = [0u8; 32];
+    value.to_big_endian(&mut bytes);
+    BigUint::from_bytes_be(&bytes)
 }
 
 #[cfg(test)]

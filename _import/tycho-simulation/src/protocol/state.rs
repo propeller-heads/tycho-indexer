@@ -42,7 +42,7 @@
 //! ```
 use std::any::Any;
 
-use ethers::types::U256;
+use num_bigint::BigUint;
 
 use tycho_core::dto::ProtocolStateDelta;
 
@@ -94,7 +94,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     ///  `TradeSimulationError` on failure.
     fn get_amount_out(
         &self,
-        amount_in: U256,
+        amount_in: BigUint,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError>;

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ethers::types::{H160, U256};
+use ethers::types::U256;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
@@ -21,7 +21,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<H160, ERC20Token>,
+        _all_tokens: HashMap<Bytes, ERC20Token>,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state

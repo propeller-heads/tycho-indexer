@@ -12,6 +12,7 @@ use std::{
 };
 
 use ethers::types::{H160, U256};
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_core::Bytes;
 
@@ -27,7 +28,7 @@ pub struct ERC20Token {
     /// The symbol of the token
     pub symbol: String,
     /// The amount of gas it takes to transfer the token
-    pub gas: U256,
+    pub gas: BigUint,
 }
 
 impl ERC20Token {
@@ -46,7 +47,7 @@ impl ERC20Token {
     ///
     /// ## Panic
     /// - Panics if the token address string is not in valid format
-    pub fn new(address: &str, decimals: usize, symbol: &str, gas: U256) -> Self {
+    pub fn new(address: &str, decimals: usize, symbol: &str, gas: BigUint) -> Self {
         let addr = H160::from_str(address).expect("Failed to parse token address");
         let sym = symbol.to_string();
         ERC20Token { address: addr, decimals, symbol: sym, gas }
@@ -88,7 +89,7 @@ impl TryFrom<ResponseToken> for ERC20Token {
             address: H160::from_bytes(&value.address),
             decimals: value.decimals.try_into()?,
             symbol: value.symbol,
-            gas: U256::from(
+            gas: BigUint::from(
                 value
                     .gas
                     .into_iter()
@@ -196,6 +197,7 @@ impl SwapSequence {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_bigint::ToBigUint;
 
     #[test]
     fn test_constructor() {
@@ -203,7 +205,7 @@ mod tests {
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
 
         assert_eq!(token.symbol, "USDC");
@@ -217,19 +219,19 @@ mod tests {
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
         let usdc2 = ERC20Token::new(
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC2",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
         let weth = ERC20Token::new(
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             18,
             "WETH",
-            U256::from(15000),
+            15000.to_biguint().unwrap(),
         );
 
         assert!(usdc < weth);
@@ -242,7 +244,7 @@ mod tests {
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
 
         assert_eq!(usdc.one().as_u64(), 1000000);

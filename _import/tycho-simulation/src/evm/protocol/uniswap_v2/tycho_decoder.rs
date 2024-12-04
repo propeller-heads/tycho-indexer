@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use ethers::types::{H160, U256};
+use num_bigint::BigUint;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_ethereum::BytesCodec;
+use tycho_core::Bytes;
 
 use crate::{
     models::ERC20Token,
@@ -20,9 +20,9 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<H160, ERC20Token>,
+        _all_tokens: HashMap<Bytes, ERC20Token>,
     ) -> Result<Self, Self::Error> {
-        let reserve0 = U256::from_bytes(
+        let reserve0 = BigUint::from_bytes_be(
             snapshot
                 .state
                 .attributes
@@ -30,7 +30,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
                 .ok_or(InvalidSnapshotError::MissingAttribute("reserve0".to_string()))?,
         );
 
-        let reserve1 = U256::from_bytes(
+        let reserve1 = BigUint::from_bytes_be(
             snapshot
                 .state
                 .attributes
@@ -47,6 +47,7 @@ mod tests {
     use super::*;
 
     use chrono::DateTime;
+    use num_bigint::ToBigUint;
     use std::{collections::HashMap, str::FromStr};
 
     use tycho_core::{
@@ -103,8 +104,8 @@ mod tests {
 
         assert!(result.is_ok());
         let res = result.unwrap();
-        assert_eq!(res.reserve0, 100.into());
-        assert_eq!(res.reserve1, 200.into());
+        assert_eq!(res.reserve0, 100.to_biguint().unwrap());
+        assert_eq!(res.reserve1, 200.to_biguint().unwrap());
     }
 
     #[tokio::test]
