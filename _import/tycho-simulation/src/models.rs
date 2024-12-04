@@ -13,8 +13,6 @@ use std::{
 
 use ethers::types::{H160, U256};
 use num_bigint::BigUint;
-use serde::{Deserialize, Serialize};
-use tycho_core::Bytes;
 
 use tycho_core::dto::ResponseToken;
 use tycho_ethereum::BytesCodec;
@@ -101,96 +99,6 @@ impl TryFrom<ResponseToken> for ERC20Token {
                     .expect("Expected a value in gas"),
             ),
         })
-    }
-}
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Swap {
-    token_in: H160,
-    amount_in: U256,
-    token_out: H160,
-    amount_out: U256,
-    address: Bytes,
-}
-
-impl Swap {
-    /// Constructor for Swap struct
-    ///
-    /// This struct desribes a single swap transaction.
-    ///
-    /// This function creates a new instance of the Swap struct. It takes 5 arguments:
-    /// - `token_in`: The address of the token being exchanged.
-    /// - `amount_in`: The amount of the token being exchanged.
-    /// - `token_out`: The address of the token being received.
-    /// - `amount_out`: The amount of the token being received.
-    /// - `address`: The address of the pool supplying the liquidity for the swap.
-    pub fn new(
-        token_in: H160,
-        amount_in: U256,
-        token_out: H160,
-        amount_out: U256,
-        address: Bytes,
-    ) -> Self {
-        Swap { token_in, amount_in, token_out, amount_out, address }
-    }
-
-    /// Getter for token_out
-    ///
-    /// Returns the address of the token being received in the swap.
-    pub fn token_out(&self) -> H160 {
-        self.token_out
-    }
-
-    /// Getter for token_in
-    ///
-    /// Returns the address of the token being exchanged in the swap.
-    pub fn token_in(&self) -> H160 {
-        self.token_in
-    }
-
-    /// Getter for amount_out
-    ///
-    /// Returns the amount of the token being received in the swap.
-    pub fn amount_out(&self) -> U256 {
-        self.amount_out
-    }
-
-    /// Getter for amount_in
-    ///
-    /// Returns the amount of the token being exchanged in the swap.
-    pub fn amount_in(&self) -> U256 {
-        self.amount_in
-    }
-
-    /// Getter for address
-    ///
-    /// Returns the address of the user making the swap.
-    pub fn address(&self) -> Bytes {
-        self.address.clone()
-    }
-}
-#[derive(Debug)]
-pub struct SwapSequence {
-    actions: Vec<Swap>,
-    gas: U256,
-}
-
-impl SwapSequence {
-    /// SwapSequence
-    ///
-    /// A struct that represents a sequence of `Swap` transactions and the gas required to execute
-    /// them.
-    pub fn new(swaps: Vec<Swap>, gas: U256) -> Self {
-        SwapSequence { actions: swaps, gas }
-    }
-
-    /// Returns a vector of `Swap` actions.
-    pub fn swaps(self) -> Vec<Swap> {
-        self.actions
-    }
-
-    /// Returns the gas required to execute the sequence of `Swap` actions.
-    pub fn gas(&self) -> U256 {
-        self.gas
     }
 }
 

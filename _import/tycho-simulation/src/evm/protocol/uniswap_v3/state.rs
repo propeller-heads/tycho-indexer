@@ -8,8 +8,7 @@ use crate::{
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
-        events::LogIndex,
-        models::GetAmountOutResult,
+        models::{GetAmountOutResult, LogIndex},
         state::ProtocolSim,
     },
     safe_math::{safe_add_u256, safe_sub_u256},

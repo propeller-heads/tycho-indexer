@@ -6,8 +6,7 @@ use crate::{
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
-        events::LogIndex,
-        models::GetAmountOutResult,
+        models::{GetAmountOutResult, LogIndex},
         state::ProtocolSim,
     },
     safe_math::{safe_add_biguint, safe_div_biguint, safe_mul_biguint, safe_sub_biguint},

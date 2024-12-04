@@ -68,22 +68,6 @@ pub trait TryFromWithBlock<T> {
         Self: Sized;
 }
 
-/// Pair struct represents a trading pair with its properties and state
-#[derive(Debug, Clone)]
-pub struct Pair(pub ProtocolComponent, pub Box<dyn ProtocolSim>);
-
-impl PartialEq for Pair {
-    fn eq(&self, other: &Self) -> bool {
-        // Compare the ProtocolComponent part first
-        if self.0 != other.0 {
-            return false;
-        }
-
-        // Use the `eq` method to compare the Box<dyn ProtocolSim> objects
-        self.1.eq(other.1.as_ref())
-    }
-}
-
 /// GetAmountOutResult struct represents the result of getting the amount out of a trading pair
 ///
 /// # Fields
@@ -111,3 +95,5 @@ impl GetAmountOutResult {
         self.gas += &other.gas;
     }
 }
+
+pub type LogIndex = (u64, u32);
