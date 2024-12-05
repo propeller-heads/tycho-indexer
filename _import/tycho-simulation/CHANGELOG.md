@@ -1,3 +1,12 @@
+## [0.53.0](https://github.com/propeller-heads/tycho-simulation/compare/0.52.2...0.53.0) (2024-12-05)
+
+
+### Features
+
+* Bye bye ethers pt. 1 ([fadf85c](https://github.com/propeller-heads/tycho-simulation/commit/fadf85cce803d795a45c31f2394738c921d5907e))
+* Change uniswap v3 code to use alloy instead of ethers ([8775ef9](https://github.com/propeller-heads/tycho-simulation/commit/8775ef9c5fbc7ca461c14ae80b4cfbd5be91f9c7))
+* Make alloy-primitives not optional ([ee75622](https://github.com/propeller-heads/tycho-simulation/commit/ee75622cf14663db24a08cb23660e74b48e4f4b5))
+
 ## [0.52.2](https://github.com/propeller-heads/tycho-simulation/compare/0.52.1...0.52.2) (2024-12-03)
 
 
