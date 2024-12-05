@@ -6,12 +6,12 @@ use alloy_primitives::U256;
 /// To find the most accurate spot price possible:
 ///     1. The nominator and denominator are converted to float (this conversion is lossy)
 ///     2. The price is computed by using float division
-///     3. Finally the price is correct for difference in token decimals.
+///     3. Finally, the price is correct for difference in token decimals.
 ///
 /// # Example
 /// ```
-/// use ethers::types::U256;
-/// use tycho_simulation::protocol::uniswap_v2::reserve_price::spot_price_from_reserves;
+/// use alloy_primitives::U256;
+/// use tycho_simulation::evm::protocol::uniswap_v2::reserve_price::spot_price_from_reserves;
 ///
 /// let res = spot_price_from_reserves(U256::from(100), U256::from(200), 6, 6);
 ///
