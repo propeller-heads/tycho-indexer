@@ -8,7 +8,7 @@ use crate::{
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
-        models::{GetAmountOutResult, LogIndex},
+        models::GetAmountOutResult,
         state::ProtocolSim,
     },
     safe_math::{safe_add_u256, safe_sub_u256},
@@ -33,7 +33,6 @@ pub struct UniswapV3State {
     fee: FeeAmount,
     tick: i32,
     ticks: TickList,
-    log_index: LogIndex,
 }
 
 #[derive(Debug)]
@@ -76,7 +75,7 @@ impl UniswapV3State {
     ) -> Self {
         let spacing = UniswapV3State::get_spacing(fee);
         let tick_list = TickList::from(spacing, ticks);
-        UniswapV3State { liquidity, sqrt_price, fee, tick, ticks: tick_list, log_index: (0, 0) }
+        UniswapV3State { liquidity, sqrt_price, fee, tick, ticks: tick_list }
     }
 
     fn get_spacing(fee: FeeAmount) -> u16 {

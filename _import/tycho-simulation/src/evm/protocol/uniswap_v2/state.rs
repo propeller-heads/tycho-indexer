@@ -7,7 +7,7 @@ use crate::{
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
-        models::{GetAmountOutResult, LogIndex},
+        models::GetAmountOutResult,
         state::ProtocolSim,
     },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
@@ -21,7 +21,6 @@ use super::reserve_price::spot_price_from_reserves;
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
-    pub log_index: LogIndex,
 }
 
 impl UniswapV2State {
@@ -34,7 +33,7 @@ impl UniswapV2State {
     /// * `reserve0` - Reserve of token 0.
     /// * `reserve1` - Reserve of token 1.
     pub fn new(reserve0: U256, reserve1: U256) -> Self {
-        UniswapV2State { reserve0, reserve1, log_index: (0, 0) }
+        UniswapV2State { reserve0, reserve1 }
     }
 }
 

@@ -95,5 +95,3 @@ impl GetAmountOutResult {
         self.gas += &other.gas;
     }
 }
-
-pub type LogIndex = (u64, u32);
