@@ -19,10 +19,10 @@ use crate::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
             tycho_db::PreCachedDB,
         },
-        protocol::u256_num::u256_to_biguint,
+        protocol::{erc20::bytes_to_erc20_address, u256_num::u256_to_biguint},
         ContractCompiler, SlotId,
     },
-    models::ERC20Token,
+    models::Token,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -126,7 +126,7 @@ where
         Ok(())
     }
 
-    pub fn set_spot_prices(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
+    pub fn set_spot_prices(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
         info!("Setting spot prices for pool {}", self.id.clone());
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
@@ -134,18 +134,20 @@ where
             .permutations(2)
             .map(|p| [p[0], p[1]])
         {
+            let sell_token_address = bytes_to_erc20_address(&sell_token.address)?;
+            let buy_token_address = bytes_to_erc20_address(&buy_token.address)?;
             let overwrites = Some(self.get_overwrites(
-                vec![(*sell_token).clone().address, (*buy_token).clone().address],
+                vec![sell_token_address, buy_token_address],
                 *MAX_BALANCE / U256::from(100),
             )?);
             let sell_amount_limit = self.get_sell_amount_limit(
-                vec![(sell_token.address), (buy_token.address)],
+                vec![sell_token_address, buy_token_address],
                 overwrites.clone(),
             )?;
             let price_result = self.adapter_contract.price(
                 &self.id,
-                sell_token.address,
-                buy_token.address,
+                sell_token_address,
+                buy_token_address,
                 vec![sell_amount_limit / U256::from(100)],
                 self.block.number,
                 overwrites,
@@ -167,7 +169,7 @@ where
             };
 
             self.spot_prices
-                .insert((sell_token.address, buy_token.address), price);
+                .insert((sell_token_address, buy_token_address), price);
         }
         Ok(())
     }
@@ -191,7 +193,7 @@ where
         Ok(limits?.0)
     }
 
-    fn clear_all_cache(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
+    fn clear_all_cache(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
         self.adapter_contract
             .engine
             .clear_temp_storage();
@@ -350,31 +352,35 @@ where
         todo!()
     }
 
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        let base_address = bytes_to_erc20_address(&base.address)?;
+        let quote_address = bytes_to_erc20_address(&quote.address)?;
         self.spot_prices
-            .get(&(base.address, quote.address))
+            .get(&(base_address, quote_address))
             .cloned()
             .ok_or(SimulationError::FatalError(format!(
                 "Spot price not found for base token {} and quote token {}",
-                base.address, quote.address
+                base_address, quote_address
             )))
     }
 
     fn get_amount_out(
         &self,
         amount_in: BigUint,
-        token_in: &ERC20Token,
-        token_out: &ERC20Token,
+        token_in: &Token,
+        token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        let sell_token = token_in.address;
-        let buy_token = token_out.address;
+        let sell_token_address = bytes_to_erc20_address(&token_in.address)?;
+        let buy_token_address = bytes_to_erc20_address(&token_out.address)?;
         let sell_amount = U256::from_be_slice(&amount_in.to_bytes_be());
         let overwrites = self.get_overwrites(
-            vec![sell_token, buy_token],
+            vec![sell_token_address, buy_token_address],
             U256::from_be_slice(&(*MAX_BALANCE / U256::from(100)).to_be_bytes::<32>()),
         )?;
-        let sell_amount_limit =
-            self.get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))?;
+        let sell_amount_limit = self.get_sell_amount_limit(
+            vec![sell_token_address, buy_token_address],
+            Some(overwrites.clone()),
+        )?;
         let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
             .contains(&Capability::HardLimits) &&
@@ -386,13 +392,13 @@ where
         };
 
         let overwrites_with_sell_limit =
-            self.get_overwrites(vec![sell_token, buy_token], sell_amount_limit)?;
+            self.get_overwrites(vec![sell_token_address, buy_token_address], sell_amount_limit)?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
 
         let (trade, state_changes) = self.adapter_contract.swap(
             &self.id,
-            sell_token,
-            buy_token,
+            sell_token_address,
+            buy_token_address,
             false,
             sell_amount_respecting_limit,
             self.block.number,
@@ -425,10 +431,10 @@ where
         if new_price != 0.0f64 {
             new_state
                 .spot_prices
-                .insert((sell_token, buy_token), new_price);
+                .insert((sell_token_address, buy_token_address), new_price);
             new_state
                 .spot_prices
-                .insert((buy_token, sell_token), 1.0f64 / new_price);
+                .insert((buy_token_address, sell_token_address), 1.0f64 / new_price);
         }
 
         let buy_amount = trade.received_amount;
@@ -453,7 +459,7 @@ where
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<Token>,
     ) -> Result<(), TransitionError<String>> {
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
@@ -519,8 +525,8 @@ mod tests {
         tycho_models::AccountUpdate,
     };
 
-    fn dai() -> ERC20Token {
-        ERC20Token::new(
+    fn dai() -> Token {
+        Token::new(
             "0x6b175474e89094c44da98b954eedeac495271d0f",
             18,
             "DAI",
@@ -528,13 +534,21 @@ mod tests {
         )
     }
 
-    fn bal() -> ERC20Token {
-        ERC20Token::new(
+    fn bal() -> Token {
+        Token::new(
             "0xba100000625a3754423978a60c9317c58a424e3d",
             18,
             "BAL",
             10_000.to_biguint().unwrap(),
         )
+    }
+
+    fn dai_addr() -> Address {
+        bytes_to_erc20_address(&dai().address).unwrap()
+    }
+
+    fn bal_addr() -> Address {
+        bytes_to_erc20_address(&bal().address).unwrap()
     }
 
     async fn setup_pool_state() -> EVMPoolState<PreCachedDB> {
@@ -574,10 +588,7 @@ mod tests {
         }
         db.update(accounts, Some(block));
 
-        let dai_addr = dai().address;
-        let bal_addr = bal().address;
-
-        let tokens = vec![dai_addr, bal_addr];
+        let tokens = vec![dai_addr(), bal_addr()];
         let block = BlockHeader {
             number: 18485417,
             hash: B256::from_str(
@@ -596,8 +607,8 @@ mod tests {
         )]);
 
         let balances = HashMap::from([
-            (dai_addr, U256::from_str("178754012737301807104").unwrap()),
-            (bal_addr, U256::from_str("91082987763369885696").unwrap()),
+            (dai_addr(), U256::from_str("178754012737301807104").unwrap()),
+            (bal_addr(), U256::from_str("91082987763369885696").unwrap()),
         ]);
 
         EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
@@ -768,6 +779,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_sell_amount_limit() {
         let pool_state = setup_pool_state().await;
+
         let overwrites = pool_state
             .get_overwrites(
                 vec![pool_state.tokens[0], pool_state.tokens[1]],
@@ -775,7 +787,7 @@ mod tests {
             )
             .unwrap();
         let dai_limit = pool_state
-            .get_sell_amount_limit(vec![dai().address, bal().address], Some(overwrites.clone()))
+            .get_sell_amount_limit(vec![dai_addr(), bal_addr()], Some(overwrites.clone()))
             .unwrap();
         assert_eq!(dai_limit, U256::from_str("100279494253364362835").unwrap());
 

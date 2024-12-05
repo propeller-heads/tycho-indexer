@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 
 use crate::{
-    models::ERC20Token,
+    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
@@ -17,7 +17,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<Address, ERC20Token>,
+        _all_tokens: HashMap<Address, Token>,
     ) -> Result<Self, Self::Error> {
         let reserve0 = U256::from_be_slice(
             snapshot

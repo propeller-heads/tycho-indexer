@@ -5,7 +5,7 @@ use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
 use crate::{
-    models::ERC20Token,
+    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
@@ -19,7 +19,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<Address, ERC20Token>,
+        _all_tokens: HashMap<Address, Token>,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state

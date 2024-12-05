@@ -1,3 +1,4 @@
+pub mod erc20;
 pub mod safe_math;
 pub mod u256_num;
 pub mod uniswap_v2;
