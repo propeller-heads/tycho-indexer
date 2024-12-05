@@ -1,7 +1,5 @@
+use alloy_primitives::U256;
 use std::collections::HashMap;
-
-use num_bigint::BigUint;
-
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
@@ -22,7 +20,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
         _block: Header,
         _all_tokens: HashMap<Bytes, ERC20Token>,
     ) -> Result<Self, Self::Error> {
-        let reserve0 = BigUint::from_bytes_be(
+        let reserve0 = U256::from_be_slice(
             snapshot
                 .state
                 .attributes
@@ -30,7 +28,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
                 .ok_or(InvalidSnapshotError::MissingAttribute("reserve0".to_string()))?,
         );
 
-        let reserve1 = BigUint::from_bytes_be(
+        let reserve1 = U256::from_be_slice(
             snapshot
                 .state
                 .attributes
@@ -47,7 +45,6 @@ mod tests {
     use super::*;
 
     use chrono::DateTime;
-    use num_bigint::ToBigUint;
     use std::{collections::HashMap, str::FromStr};
 
     use tycho_core::{
@@ -104,8 +101,8 @@ mod tests {
 
         assert!(result.is_ok());
         let res = result.unwrap();
-        assert_eq!(res.reserve0, 100.to_biguint().unwrap());
-        assert_eq!(res.reserve1, 200.to_biguint().unwrap());
+        assert_eq!(res.reserve0, U256::from_str("100").unwrap());
+        assert_eq!(res.reserve1, U256::from_str("200").unwrap());
     }
 
     #[tokio::test]

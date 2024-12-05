@@ -5,11 +5,8 @@
 //! Should an operation cause an overflow a result containing TradeSimulationError
 //! will be returned.
 //! Functions for the types I256, U256, U512 are available.
-use alloy_primitives::{I256, U256, U512};
-use num_bigint::BigUint;
-use num_traits::{CheckedMul, Zero};
-
 use crate::protocol::errors::SimulationError;
+use alloy_primitives::{I256, U256, U512};
 
 pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, SimulationError> {
     let res = a.checked_mul(b);
@@ -106,41 +103,6 @@ pub fn safe_sub_i256(a: I256, b: I256) -> Result<I256, SimulationError> {
 pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, SimulationError> {
     match res {
         None => Err(SimulationError::FatalError("U256 arithmetic overflow".to_string())),
-        Some(value) => Ok(value),
-    }
-}
-
-pub fn safe_mul_biguint(a: &BigUint, b: &BigUint) -> Result<BigUint, SimulationError> {
-    let res = a.checked_mul(b);
-    _construct_result_biguint(res)
-}
-
-pub fn safe_div_biguint(a: &BigUint, b: &BigUint) -> Result<BigUint, SimulationError> {
-    if b.is_zero() {
-        return Err(SimulationError::FatalError("Division by zero".to_string()));
-    }
-    let res = Some(a / b);
-    _construct_result_biguint(res)
-}
-
-pub fn safe_add_biguint(a: &BigUint, b: &BigUint) -> Result<BigUint, SimulationError> {
-    let res = Some(a + b);
-    _construct_result_biguint(res)
-}
-
-pub fn safe_sub_biguint(a: &BigUint, b: &BigUint) -> Result<BigUint, SimulationError> {
-    if a < b {
-        return Err(SimulationError::FatalError(
-            "Subtraction resulted in a negative value".to_string(),
-        ));
-    }
-    let res = Some(a - b);
-    _construct_result_biguint(res)
-}
-
-pub fn _construct_result_biguint(res: Option<BigUint>) -> Result<BigUint, SimulationError> {
-    match res {
-        None => Err(SimulationError::FatalError("BigUint arithmetic error".to_string())),
         Some(value) => Ok(value),
     }
 }
@@ -411,84 +373,6 @@ mod safe_math_tests {
         #[case] expected: I256,
     ) {
         let res = safe_div_i256(a, b);
-        assert_eq!(res.is_err(), is_err);
-        assert_eq!(res.is_ok(), is_ok);
-
-        if is_ok {
-            assert_eq!(res.unwrap(), expected);
-        }
-    }
-
-    fn biguint(s: &str) -> BigUint {
-        BigUint::from_str(s).unwrap()
-    }
-
-    #[rstest]
-    #[case(biguint("3"), biguint("2"), false, true, biguint("6"))]
-    fn test_safe_mul_biguint(
-        #[case] a: BigUint,
-        #[case] b: BigUint,
-        #[case] is_err: bool,
-        #[case] is_ok: bool,
-        #[case] expected: BigUint,
-    ) {
-        let res = safe_mul_biguint(&a, &b);
-        assert_eq!(res.is_err(), is_err);
-        assert_eq!(res.is_ok(), is_ok);
-
-        if is_ok {
-            assert_eq!(res.unwrap(), expected);
-        }
-    }
-
-    #[rstest]
-    #[case(biguint("3"), biguint("2"), false, true, biguint("5"))]
-    fn test_safe_add_biguint(
-        #[case] a: BigUint,
-        #[case] b: BigUint,
-        #[case] is_err: bool,
-        #[case] is_ok: bool,
-        #[case] expected: BigUint,
-    ) {
-        let res = safe_add_biguint(&a, &b);
-        assert_eq!(res.is_err(), is_err);
-        assert_eq!(res.is_ok(), is_ok);
-
-        if is_ok {
-            assert_eq!(res.unwrap(), expected);
-        }
-    }
-
-    #[rstest]
-    #[case(biguint("0"), biguint("2"), true, false, biguint("0"))]
-    #[case(biguint("10"), biguint("2"), false, true, biguint("8"))]
-    fn test_safe_sub_biguint(
-        #[case] a: BigUint,
-        #[case] b: BigUint,
-        #[case] is_err: bool,
-        #[case] is_ok: bool,
-        #[case] expected: BigUint,
-    ) {
-        let res = safe_sub_biguint(&a, &b);
-        assert_eq!(res.is_err(), is_err);
-        assert_eq!(res.is_ok(), is_ok);
-
-        if is_ok {
-            assert_eq!(res.unwrap(), expected);
-        }
-    }
-
-    #[rstest]
-    #[case(biguint("1"), biguint("0"), true, false, biguint("0"))]
-    #[case(biguint("10"), biguint("2"), false, true, biguint("5"))]
-    fn test_safe_div_biguint(
-        #[case] a: BigUint,
-        #[case] b: BigUint,
-        #[case] is_err: bool,
-        #[case] is_ok: bool,
-        #[case] expected: BigUint,
-    ) {
-        let res = safe_div_biguint(&a, &b);
         assert_eq!(res.is_err(), is_err);
         assert_eq!(res.is_ok(), is_ok);
 

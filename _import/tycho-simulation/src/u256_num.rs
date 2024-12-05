@@ -95,12 +95,14 @@ pub fn u256_to_f64(x: U256) -> f64 {
     res.unwrap_or_else(|_| panic!("Conversion f64 -> U256 panicked for {x}"))
 }
 
-/// Converts a U256 integer into a BigUint
 pub fn u256_to_biguint(value: U256) -> BigUint {
-    let mut bytes = [0u8; 32];
-    let value_bytes: [u8; 32] = value.to_be_bytes();
-    bytes.copy_from_slice(&value_bytes);
+    let bytes: [u8; 32] = value.to_be_bytes();
     BigUint::from_bytes_be(&bytes)
+}
+
+pub fn biguint_to_u256(value: &BigUint) -> U256 {
+    let bytes = value.to_bytes_be();
+    U256::from_be_slice(&bytes)
 }
 
 pub fn convert_ethers_to_alloy(ethers_u256: EthersU256) -> U256 {
