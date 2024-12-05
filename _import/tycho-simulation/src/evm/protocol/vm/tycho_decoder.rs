@@ -1,10 +1,11 @@
+use alloy_primitives::Address;
 use std::{
     collections::HashMap,
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use ethers::types::{H160, H256, U256};
+use ethers::types::{H256, U256};
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
@@ -37,28 +38,28 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         block: Header,
-        all_tokens: HashMap<Bytes, ERC20Token>,
+        all_tokens: HashMap<Address, ERC20Token>,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
-        let tokens: Vec<H160> = snapshot
+        let tokens: Vec<Address> = snapshot
             .component
             .tokens
             .clone()
             .into_iter()
-            .map(|t| H160::from_bytes(&t))
+            .map(|t| Address::from_slice(&t))
             .collect();
         let block = BlockHeader::from(block);
         let balances = snapshot
             .state
             .balances
             .iter()
-            .map(|(k, v)| (H160::from_bytes(k), U256::from_bytes(v)))
+            .map(|(k, v)| (Address::from_slice(k), U256::from_bytes(v)))
             .collect();
         let balance_owner = snapshot
             .state
             .attributes
             .get("balance_owner")
-            .map(H160::from_bytes);
+            .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()));
 
         let manual_updates = snapshot
             .component
@@ -108,7 +109,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .component
             .contract_ids
             .iter()
-            .map(H160::from_bytes)
+            .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
             .collect();
 
         let protocol_name = snapshot
@@ -143,7 +144,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
 
         let erc20_tokens = tokens
             .iter()
-            .filter_map(|token_address| all_tokens.get(token_address.as_bytes()))
+            .filter_map(|token_address| all_tokens.get(token_address))
             .cloned()
             .collect();
 
@@ -254,11 +255,11 @@ mod tests {
         let res = result.unwrap();
         assert_eq!(
             res.get_balance_owner(),
-            Some(H160::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
+            Some(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
         );
         let mut exp_involved_contracts = HashSet::new();
         exp_involved_contracts
-            .insert(H160::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap());
+            .insert(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap());
         assert_eq!(res.get_involved_contracts(), exp_involved_contracts);
         assert!(res.get_manual_updates());
     }

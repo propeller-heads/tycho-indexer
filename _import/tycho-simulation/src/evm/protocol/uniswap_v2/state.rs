@@ -286,7 +286,7 @@ mod tests {
             10_000.to_biguint().unwrap(),
         );
         let weth = ERC20Token::new(
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ",
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             18,
             "WETH",
             10_000.to_biguint().unwrap(),

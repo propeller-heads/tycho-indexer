@@ -24,6 +24,7 @@
 //! It's worth emphasizin that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
+use alloy_primitives::Address;
 use std::collections::HashMap;
 
 use num_bigint::BigUint;
@@ -62,7 +63,7 @@ pub trait TryFromWithBlock<T> {
     async fn try_from_with_block(
         value: T,
         block: Header,
-        all_tokens: HashMap<Bytes, ERC20Token>,
+        all_tokens: HashMap<Address, ERC20Token>,
     ) -> Result<Self, Self::Error>
     where
         Self: Sized;

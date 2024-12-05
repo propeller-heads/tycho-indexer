@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use std::{
     collections::HashMap,
     env,
@@ -12,7 +13,7 @@ use ethers::{
     abi::Abi,
     prelude::ProviderError,
     providers::{Http, Middleware, Provider},
-    types::{Address, H160},
+    types::H160,
 };
 use hex::FromHex;
 use mini_moka::sync::Cache;
@@ -188,7 +189,7 @@ pub fn get_storage_slot_index_at_key(
     mapping_slot: SlotId,
     compiler: ContractCompiler,
 ) -> SlotId {
-    let mut key_bytes = key.as_bytes().to_vec();
+    let mut key_bytes = key.as_slice().to_vec();
     if key_bytes.len() < 32 {
         let padding = vec![0u8; 32 - key_bytes.len()];
         key_bytes.splice(0..0, padding); // Prepend zeros to the start
