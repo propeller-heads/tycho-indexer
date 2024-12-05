@@ -1,7 +1,6 @@
-use alloy_primitives::U256;
+use alloy_primitives::{Address, U256};
 use std::collections::HashMap;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_core::Bytes;
 
 use crate::{
     models::ERC20Token,
@@ -18,7 +17,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<Bytes, ERC20Token>,
+        _all_tokens: HashMap<Address, ERC20Token>,
     ) -> Result<Self, Self::Error> {
         let reserve0 = U256::from_be_slice(
             snapshot

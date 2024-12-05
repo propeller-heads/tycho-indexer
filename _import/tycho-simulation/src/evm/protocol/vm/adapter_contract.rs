@@ -1,10 +1,11 @@
+use alloy_primitives::Address;
 use std::collections::{HashMap, HashSet};
 
 use ethers::{
-    abi::{Address, Token},
-    types::U256,
+    abi::Token,
+    types::{H160, U256},
 };
-use revm::{primitives::Address as rAddress, DatabaseRef};
+use revm::DatabaseRef;
 
 use crate::{
     evm::{
@@ -51,12 +52,12 @@ where
         buy_token: Address,
         amounts: Vec<U256>,
         block: u64,
-        overwrites: Option<HashMap<rAddress, Overwrites>>,
+        overwrites: Option<HashMap<Address, Overwrites>>,
     ) -> Result<Vec<f64>, SimulationError> {
         let args = vec![
             Token::FixedBytes(pair_id),
-            Token::Address(sell_token),
-            Token::Address(buy_token),
+            Token::Address(H160(sell_token.0 .0)),
+            Token::Address(H160(buy_token.0 .0)),
             Token::Array(
                 amounts
                     .into_iter()
@@ -81,12 +82,12 @@ where
         is_buy: bool,
         amount: U256,
         block: u64,
-        overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
+        overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), SimulationError> {
         let args = vec![
             Token::FixedBytes(pair_id),
-            Token::Address(sell_token),
-            Token::Address(buy_token),
+            Token::Address(H160(sell_token.0 .0)),
+            Token::Address(H160(buy_token.0 .0)),
             Token::Bool(is_buy),
             Token::Uint(amount),
         ];
@@ -135,10 +136,13 @@ where
         sell_token: Address,
         buy_token: Address,
         block: u64,
-        overwrites: Option<HashMap<rAddress, HashMap<U256, U256>>>,
+        overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<(U256, U256), SimulationError> {
-        let args =
-            vec![Token::FixedBytes(pair_id), Token::Address(sell_token), Token::Address(buy_token)];
+        let args = vec![
+            Token::FixedBytes(pair_id),
+            Token::Address(H160(sell_token.0 .0)),
+            Token::Address(H160(buy_token.0 .0)),
+        ];
 
         let res = self
             .call("getLimits", args, block, None, overwrites, None, U256::zero())?
@@ -164,8 +168,11 @@ where
         sell_token: Address,
         buy_token: Address,
     ) -> Result<HashSet<Capability>, SimulationError> {
-        let args =
-            vec![Token::FixedBytes(pair_id), Token::Address(sell_token), Token::Address(buy_token)];
+        let args = vec![
+            Token::FixedBytes(pair_id),
+            Token::Address(H160(sell_token.0 .0)),
+            Token::Address(H160(buy_token.0 .0)),
+        ];
 
         let res = self
             .call("getCapabilities", args, 1, None, None, None, U256::zero())?

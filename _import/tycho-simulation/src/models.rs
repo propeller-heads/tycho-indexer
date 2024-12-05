@@ -5,22 +5,22 @@
 //!
 //! ERC20Tokens provide instructions on how to handle prices and amounts,
 //! while Swap and SwapSequence are usually used as results types.
+use alloy_primitives::Address;
 use std::{
     convert::TryFrom,
     hash::{Hash, Hasher},
     str::FromStr,
 };
 
-use ethers::types::{H160, U256};
+use ethers::types::U256;
 use num_bigint::BigUint;
 
 use tycho_core::dto::ResponseToken;
-use tycho_ethereum::BytesCodec;
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
     /// The address of the token on the blockchain network
-    pub address: H160,
+    pub address: Address,
     /// The number of decimal places that the token uses
     pub decimals: usize,
     /// The symbol of the token
@@ -46,7 +46,7 @@ impl ERC20Token {
     /// ## Panic
     /// - Panics if the token address string is not in valid format
     pub fn new(address: &str, decimals: usize, symbol: &str, gas: BigUint) -> Self {
-        let addr = H160::from_str(address).expect("Failed to parse token address");
+        let addr = Address::from_str(address).expect("Failed to parse token address");
         let sym = symbol.to_string();
         ERC20Token { address: addr, decimals, symbol: sym, gas }
     }
@@ -84,7 +84,7 @@ impl TryFrom<ResponseToken> for ERC20Token {
 
     fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: H160::from_bytes(&value.address),
+            address: Address::from_slice(&value.address),
             decimals: value.decimals.try_into()?,
             symbol: value.symbol,
             gas: BigUint::from(
