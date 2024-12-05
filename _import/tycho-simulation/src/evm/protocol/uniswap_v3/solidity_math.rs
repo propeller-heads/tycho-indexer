@@ -1,6 +1,6 @@
 use crate::{
+    evm::protocol::safe_math::{div_mod_u512, safe_div_u512, safe_mul_u512},
     protocol::errors::SimulationError,
-    safe_math::{div_mod_u512, safe_div_u512, safe_mul_u512},
 };
 use alloy_primitives::{U256, U512};
 

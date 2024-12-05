@@ -1,7 +1,9 @@
 use crate::{
+    evm::protocol::{
+        safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+        u256_num::u256_to_f64,
+    },
     protocol::errors::SimulationError,
-    safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
-    u256_num::u256_to_f64,
 };
 use alloy_primitives::U256;
 

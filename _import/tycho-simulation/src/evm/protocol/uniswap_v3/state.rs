@@ -5,14 +5,16 @@ use num_bigint::BigUint;
 use tracing::trace;
 
 use crate::{
+    evm::protocol::{
+        safe_math::{safe_add_u256, safe_sub_u256},
+        u256_num::u256_to_biguint,
+    },
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
-    safe_math::{safe_add_u256, safe_sub_u256},
-    u256_num::u256_to_biguint,
 };
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 

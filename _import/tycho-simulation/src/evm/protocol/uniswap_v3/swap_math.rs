@@ -1,4 +1,4 @@
-use crate::{protocol::errors::SimulationError, safe_math::safe_sub_u256};
+use crate::{evm::protocol::safe_math::safe_sub_u256, protocol::errors::SimulationError};
 use alloy_primitives::{I256, U256};
 
 use super::{

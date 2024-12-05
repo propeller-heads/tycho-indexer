@@ -19,6 +19,7 @@ use crate::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
             tycho_db::PreCachedDB,
         },
+        protocol::u256_num::{convert_ethers_to_alloy, u256_to_biguint},
         ContractCompiler, SlotId,
     },
     models::ERC20Token,
@@ -27,7 +28,6 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
-    u256_num::{convert_ethers_to_alloy, u256_to_biguint},
 };
 
 use super::{

@@ -2,8 +2,8 @@ use alloy_primitives::{Sign, I256, U256};
 use std::ops::BitOr;
 
 use crate::{
+    evm::protocol::safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256},
     protocol::errors::SimulationError,
-    safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256},
 };
 
 pub const MIN_TICK: i32 = -887272;

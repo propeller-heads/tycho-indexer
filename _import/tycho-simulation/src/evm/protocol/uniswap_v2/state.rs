@@ -4,14 +4,16 @@ use std::any::Any;
 use num_bigint::{BigUint, ToBigUint};
 
 use crate::{
+    evm::protocol::{
+        safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+        u256_num::{biguint_to_u256, u256_to_biguint},
+    },
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
-    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
-    u256_num::{biguint_to_u256, u256_to_biguint},
 };
 use tycho_core::dto::ProtocolStateDelta;
 
