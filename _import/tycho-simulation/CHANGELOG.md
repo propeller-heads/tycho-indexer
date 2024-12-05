@@ -1,3 +1,10 @@
+## [0.54.0](https://github.com/propeller-heads/tycho-simulation/compare/0.53.0...0.54.0) (2024-12-05)
+
+
+### Features
+
+* Change ERC20Token address to be alloy's Address instead of H160 ([b9f55db](https://github.com/propeller-heads/tycho-simulation/commit/b9f55dbc4a33da268461c4b82f2a4152a1343011))
+
 ## [0.53.0](https://github.com/propeller-heads/tycho-simulation/compare/0.52.2...0.53.0) (2024-12-05)
 
 
