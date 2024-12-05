@@ -33,7 +33,9 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 ] }
 clap = { workspace = true, features = ["derive", "env"] }
 tracing-appender = { workspace = true }
-# link openssl statically
+
+# link openssl statically - needed for building the linux binary
+[target.'cfg(target_os = "linux")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
 
