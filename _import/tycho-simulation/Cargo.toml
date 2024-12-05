@@ -52,7 +52,7 @@ alloy-primitives = { version = "0.8.9", features = [
     "getrandom",
     "rand",
     "map-foldhash",
-], optional = true }
+] }
 revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
 revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
 num-bigint = "0.4.6"
@@ -78,7 +78,7 @@ unicode-width = "0.1.13"
 default = ["evm"]
 network_tests = []
 evm = [
-    "dep:ethabi", "dep:foundry-config", "dep:foundry-evm", "dep:alloy-primitives", "dep:revm", "dep:revm-inspectors"
+    "dep:ethabi", "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors"
 ]
 
 [profile.bench]
