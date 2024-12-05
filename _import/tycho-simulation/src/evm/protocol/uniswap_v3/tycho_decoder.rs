@@ -1,10 +1,8 @@
+use alloy_primitives::U256;
 use std::collections::HashMap;
-
-use ethers::types::U256;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
-use tycho_ethereum::BytesCodec;
 
 use crate::{
     models::ERC20Token,
@@ -49,7 +47,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
 
         let liquidity = u128::from(liq_16_bytes);
 
-        let sqrt_price = U256::from_bytes(
+        let sqrt_price = U256::from_be_slice(
             snapshot
                 .state
                 .attributes

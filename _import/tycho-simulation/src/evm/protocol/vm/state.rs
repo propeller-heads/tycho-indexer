@@ -27,7 +27,7 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
-    u256_num::u256_to_biguint,
+    u256_num::{convert_ethers_to_alloy, u256_to_biguint},
 };
 
 use super::{
@@ -446,15 +446,15 @@ where
             return Err(SimulationError::InvalidInput(
                 format!("Sell amount exceeds limit {}", sell_amount_limit),
                 Some(GetAmountOutResult::new(
-                    u256_to_biguint(buy_amount),
-                    u256_to_biguint(trade.gas_used),
+                    u256_to_biguint(convert_ethers_to_alloy(buy_amount)),
+                    u256_to_biguint(convert_ethers_to_alloy(trade.gas_used)),
                     Box::new(new_state.clone()),
                 )),
             ));
         }
         Ok(GetAmountOutResult::new(
-            u256_to_biguint(buy_amount),
-            u256_to_biguint(trade.gas_used),
+            u256_to_biguint(convert_ethers_to_alloy(buy_amount)),
+            u256_to_biguint(convert_ethers_to_alloy(trade.gas_used)),
             Box::new(new_state.clone()),
         ))
     }

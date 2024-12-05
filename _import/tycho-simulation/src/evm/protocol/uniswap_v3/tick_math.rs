@@ -1,138 +1,194 @@
+use alloy_primitives::{Sign, I256, U256};
 use std::ops::BitOr;
-
-use ethers::types::{Sign, I256, U256};
 
 use crate::{
     protocol::errors::SimulationError,
-    safe_math::{safe_div_u256, safe_mul_u256},
+    safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256},
 };
 
 pub const MIN_TICK: i32 = -887272;
 pub const MAX_TICK: i32 = 887272;
 
-// 4295128739
-pub const MIN_SQRT_RATIO: U256 = U256([4295128739, 0, 0, 0]);
-// 1461446703485210103287273052203988822378723970342
-pub const MAX_SQRT_RATIO: U256 = U256([6743328256752651558, 17280870778742802505, 4294805859, 0]);
+// MIN_SQRT_RATIO: 4295128739
+pub const MIN_SQRT_RATIO: U256 = U256::from_limbs([4295128739u64, 0, 0, 0]);
+
+// MAX_SQRT_RATIO: 1461446703485210103287273052203988822378723970342
+pub const MAX_SQRT_RATIO: U256 =
+    U256::from_limbs([6743328256752651558u64, 17280870778742802505u64, 4294805859u64, 0]);
 
 pub fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError> {
     assert!(tick.abs() <= MAX_TICK);
     let abs_tick = U256::from(tick.unsigned_abs());
     let mut ratio = if abs_tick.bit(0) {
-        U256([12262481743371124737, 18445821805675392311, 0, 0])
+        U256::from_limbs([12262481743371124737u64, 18445821805675392311u64, 0, 0])
     } else {
-        U256([0, 0, 1, 0])
+        U256::from_limbs([0, 0, 1u64, 0])
     };
     // This section is generated with the code below
     if abs_tick.bit(1) {
-        ratio =
-            (safe_mul_u256(ratio, U256([6459403834229662010, 18444899583751176498, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([6459403834229662010u64, 18444899583751176498u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(2) {
-        ratio =
-            (safe_mul_u256(ratio, U256([17226890335427755468, 18443055278223354162, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([17226890335427755468u64, 18443055278223354162u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(3) {
-        ratio =
-            (safe_mul_u256(ratio, U256([2032852871939366096, 18439367220385604838, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([2032852871939366096u64, 18439367220385604838u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(4) {
-        ratio =
-            (safe_mul_u256(ratio, U256([14545316742740207172, 18431993317065449817, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([14545316742740207172u64, 18431993317065449817u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(5) {
-        ratio =
-            (safe_mul_u256(ratio, U256([5129152022828963008, 18417254355718160513, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([5129152022828963008u64, 18417254355718160513u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(6) {
-        ratio =
-            (safe_mul_u256(ratio, U256([4894419605888772193, 18387811781193591352, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([4894419605888772193u64, 18387811781193591352u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(7) {
-        ratio =
-            (safe_mul_u256(ratio, U256([1280255884321894483, 18329067761203520168, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([1280255884321894483u64, 18329067761203520168u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(8) {
-        ratio =
-            (safe_mul_u256(ratio, U256([15924666964335305636, 18212142134806087854, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([15924666964335305636u64, 18212142134806087854u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(9) {
-        ratio =
-            (safe_mul_u256(ratio, U256([8010504389359918676, 17980523815641551639, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([8010504389359918676u64, 17980523815641551639u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(10) {
-        ratio =
-            (safe_mul_u256(ratio, U256([10668036004952895731, 17526086738831147013, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([10668036004952895731u64, 17526086738831147013u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(11) {
-        ratio =
-            (safe_mul_u256(ratio, U256([4878133418470705625, 16651378430235024244, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([4878133418470705625u64, 16651378430235024244u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(12) {
-        ratio =
-            (safe_mul_u256(ratio, U256([9537173718739605541, 15030750278693429944, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([9537173718739605541u64, 15030750278693429944u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(13) {
-        ratio =
-            (safe_mul_u256(ratio, U256([9972618978014552549, 12247334978882834399, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([9972618978014552549u64, 12247334978882834399u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(14) {
-        ratio =
-            (safe_mul_u256(ratio, U256([10428997489610666743, 8131365268884726200, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([10428997489610666743u64, 8131365268884726200u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(15) {
-        ratio =
-            (safe_mul_u256(ratio, U256([9305304367709015974, 3584323654723342297, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([9305304367709015974u64, 3584323654723342297u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(16) {
-        ratio =
-            (safe_mul_u256(ratio, U256([14301143598189091785, 696457651847595233, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([14301143598189091785u64, 696457651847595233u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(17) {
-        ratio = (safe_mul_u256(ratio, U256([7393154844743099908, 26294789957452057, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([7393154844743099908u64, 26294789957452057u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(18) {
-        ratio = (safe_mul_u256(ratio, U256([2209338891292245656, 37481735321082, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([2209338891292245656u64, 37481735321082u64, 0, 0]),
+        )?) >> 128
     }
     if abs_tick.bit(19) {
-        ratio = (safe_mul_u256(ratio, U256([10518117631919034274, 76158723, 0, 0]))?) >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([10518117631919034274u64, 76158723u64, 0, 0]),
+        )?) >> 128
     }
 
     if tick > 0 {
         ratio = safe_div_u256(U256::MAX, ratio)?;
     }
 
-    let (_, rest) = ratio.div_mod(U256::one() << 32);
-    Ok((ratio >> 32) + if rest == U256::zero() { U256::zero() } else { U256::one() })
+    let (_, rest) = div_mod_u256(ratio, U256::from(1u64) << 32)?;
+    Ok((ratio >> 32) + if rest == U256::from(0u64) { U256::from(0u64) } else { U256::from(1u64) })
 }
 
 fn most_significant_bit(x: U256) -> usize {
-    assert!(x > U256::zero());
-    x.bits() - 1
+    assert!(x > U256::from(0u64));
+    x.bit_len() - 1
 }
 
 pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, SimulationError> {
     assert!(sqrt_price >= MIN_SQRT_RATIO && sqrt_price < MAX_SQRT_RATIO);
     let ratio_x128 = sqrt_price << 32;
     let msb = most_significant_bit(ratio_x128);
+    let msb_diff = (msb as i32) - 128;
+    // Convert msb_diff to I256
+    let mut log_2: I256 = if msb_diff >= 0 {
+        I256::from_raw(U256::from(msb_diff as u64)) << 64
+    } else {
+        -I256::from_raw(U256::from((-msb_diff) as u64)) << 64
+    };
+
     let mut r = if msb >= 128 { ratio_x128 >> (msb - 127) } else { ratio_x128 << (127 - msb) };
-    let mut log_2: I256 = I256::from((msb as i32) - 128) << 64;
 
     for i in 0..14 {
-        r = r.pow(U256([2, 0, 0, 0])) >> 127;
+        r = r.pow(U256::from_limbs([2u64, 0, 0, 0])) >> 127;
         let f = r >> 128;
         log_2 =
             log_2.bitor(I256::checked_from_sign_and_abs(Sign::Positive, f << (63 - i)).unwrap());
         r >>= f;
     }
 
-    let log_sqrt10001 = log_2 * I256::from_raw(U256([11745905768312294533, 13863, 0, 0]));
+    let log_sqrt10001 =
+        log_2 * I256::from_raw(U256::from_limbs([11745905768312294533u64, 13863u64, 0, 0]));
 
-    let tmp1 = I256::from_raw(U256([6552757943157144234, 184476617836266586, 0, 0]));
+    let tmp1 =
+        I256::from_raw(U256::from_limbs([6552757943157144234u64, 184476617836266586u64, 0, 0]));
 
     let tick_low: I256 = (log_sqrt10001 - tmp1).asr(128);
     let tick_high: I256 = (log_sqrt10001 +
-        I256::from_raw(U256([4998474450511881007, 15793544031827761793, 0, 0])))
+        I256::from_raw(U256::from_limbs([
+            4998474450511881007u64,
+            15793544031827761793u64,
+            0,
+            0,
+        ])))
     .asr(128);
 
     if tick_low == tick_high {
@@ -147,6 +203,7 @@ pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, SimulationError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     struct TestCase {
         tick: i32,
@@ -165,31 +222,15 @@ mod tests {
     #[test]
     fn test_get_sqrt_ratio_at_tick() {
         let cases = vec![
-            TestCase {
-                tick: 0,
-                ratio: U256::from_dec_str("79228162514264337593543950336").unwrap(),
-            },
-            TestCase {
-                tick: 1,
-                ratio: U256::from_dec_str("79232123823359799118286999568").unwrap(),
-            },
-            TestCase {
-                tick: -1,
-                ratio: U256::from_dec_str("79224201403219477170569942574").unwrap(),
-            },
-            TestCase {
-                tick: 42,
-                ratio: U256::from_dec_str("79394708140106462983274643745").unwrap(),
-            },
-            TestCase {
-                tick: -42,
-                ratio: U256::from_dec_str("79061966249810860392253787324").unwrap(),
-            },
-            TestCase { tick: MIN_TICK, ratio: U256::from_dec_str("4295128739").unwrap() },
+            TestCase { tick: 0, ratio: U256::from_str("79228162514264337593543950336").unwrap() },
+            TestCase { tick: 1, ratio: U256::from_str("79232123823359799118286999568").unwrap() },
+            TestCase { tick: -1, ratio: U256::from_str("79224201403219477170569942574").unwrap() },
+            TestCase { tick: 42, ratio: U256::from_str("79394708140106462983274643745").unwrap() },
+            TestCase { tick: -42, ratio: U256::from_str("79061966249810860392253787324").unwrap() },
+            TestCase { tick: MIN_TICK, ratio: U256::from_str("4295128739").unwrap() },
             TestCase {
                 tick: MAX_TICK,
-                ratio: U256::from_dec_str("1461446703485210103287273052203988822378723970342")
-                    .unwrap(),
+                ratio: U256::from_str("1461446703485210103287273052203988822378723970342").unwrap(),
             },
         ];
         for case in cases {
@@ -200,31 +241,15 @@ mod tests {
     #[test]
     fn test_get_tick_at_sqrt_ratio() {
         let cases = vec![
-            TestCase {
-                tick: 0,
-                ratio: U256::from_dec_str("79228162514264337593543950336").unwrap(),
-            },
-            TestCase {
-                tick: 1,
-                ratio: U256::from_dec_str("79232123823359799118286999568").unwrap(),
-            },
-            TestCase {
-                tick: -1,
-                ratio: U256::from_dec_str("79224201403219477170569942574").unwrap(),
-            },
-            TestCase {
-                tick: 42,
-                ratio: U256::from_dec_str("79394708140106462983274643745").unwrap(),
-            },
-            TestCase {
-                tick: -42,
-                ratio: U256::from_dec_str("79061966249810860392253787324").unwrap(),
-            },
-            TestCase { tick: MIN_TICK, ratio: U256::from_dec_str("4295128739").unwrap() },
+            TestCase { tick: 0, ratio: U256::from_str("79228162514264337593543950336").unwrap() },
+            TestCase { tick: 1, ratio: U256::from_str("79232123823359799118286999568").unwrap() },
+            TestCase { tick: -1, ratio: U256::from_str("79224201403219477170569942574").unwrap() },
+            TestCase { tick: 42, ratio: U256::from_str("79394708140106462983274643745").unwrap() },
+            TestCase { tick: -42, ratio: U256::from_str("79061966249810860392253787324").unwrap() },
+            TestCase { tick: MIN_TICK, ratio: U256::from_str("4295128739").unwrap() },
             TestCase {
                 tick: MAX_TICK - 1,
-                ratio: U256::from_dec_str("1461446703485210103287273052203988822378723970341")
-                    .unwrap(),
+                ratio: U256::from_str("1461446703485210103287273052203988822378723970341").unwrap(),
             },
         ];
         for case in cases {

@@ -1,6 +1,5 @@
-use ethers::types::{I256, U256};
-
 use crate::{protocol::errors::SimulationError, safe_math::safe_sub_u256};
+use alloy_primitives::{I256, U256};
 
 use super::{
     solidity_math::{mul_div, mul_div_rounding_up},
@@ -15,10 +14,10 @@ pub fn compute_swap_step(
     fee_pips: u32,
 ) -> Result<(U256, U256, U256, U256), SimulationError> {
     let zero_for_one = sqrt_ratio_current >= sqrt_ratio_target;
-    let exact_in = amount_remaining >= I256::zero();
+    let exact_in = amount_remaining >= I256::from_raw(U256::from(0u64));
     let sqrt_ratio_next: U256;
-    let mut amount_in = U256::zero();
-    let mut amount_out = U256::zero();
+    let mut amount_in = U256::from(0u64);
+    let mut amount_out = U256::from(0u64);
 
     if exact_in {
         let amount_remaining_less_fee = mul_div(
@@ -143,7 +142,7 @@ mod tests {
 
     use super::super::enums::FeeAmount;
 
-    use std::ops::Neg;
+    use std::{ops::Neg, str::FromStr};
 
     struct TestCase {
         price: U256,
@@ -158,68 +157,68 @@ mod tests {
     fn test_compute_swap_step() {
         let cases = vec![
             TestCase {
-                price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
-                target: U256::from_dec_str("1919023616462402511535565081385034").unwrap(),
+                price: U256::from_str("1917240610156820439288675683655550").unwrap(),
+                target: U256::from_str("1919023616462402511535565081385034").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18),
                 fee: FeeAmount::Low,
                 exp: (
-                    U256::from_dec_str("1917244033735642980420262835667387").unwrap(),
-                    U256::from_dec_str("999500000000000000").unwrap(),
-                    U256::from_dec_str("1706820897").unwrap(),
-                    U256::from_dec_str("500000000000000").unwrap(),
+                    U256::from_str("1917244033735642980420262835667387").unwrap(),
+                    U256::from_str("999500000000000000").unwrap(),
+                    U256::from_str("1706820897").unwrap(),
+                    U256::from_str("500000000000000").unwrap(),
                 ),
             },
             TestCase {
-                price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
-                target: U256::from_dec_str("1919023616462402511535565081385034").unwrap(),
+                price: U256::from_str("1917240610156820439288675683655550").unwrap(),
+                target: U256::from_str("1919023616462402511535565081385034").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18).neg(),
                 fee: FeeAmount::Low,
                 exp: (
-                    U256::from_dec_str("1919023616462402511535565081385034").unwrap(),
-                    U256::from_dec_str("520541484453545253034").unwrap(),
-                    U256::from_dec_str("888091216672").unwrap(),
-                    U256::from_dec_str("260400942698121688").unwrap(),
+                    U256::from_str("1919023616462402511535565081385034").unwrap(),
+                    U256::from_str("520541484453545253034").unwrap(),
+                    U256::from_str("888091216672").unwrap(),
+                    U256::from_str("260400942698121688").unwrap(),
                 ),
             },
             TestCase {
-                price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
-                target: U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
+                price: U256::from_str("1917240610156820439288675683655550").unwrap(),
+                target: U256::from_str("1908498483466244238266951834509291").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18).neg(),
                 fee: FeeAmount::Low,
                 exp: (
-                    U256::from_dec_str("1917237184865352164019453920762266").unwrap(),
-                    U256::from_dec_str("1707680836").unwrap(),
-                    U256::from_dec_str("1000000000000000000").unwrap(),
-                    U256::from_dec_str("854268").unwrap(),
+                    U256::from_str("1917237184865352164019453920762266").unwrap(),
+                    U256::from_str("1707680836").unwrap(),
+                    U256::from_str("1000000000000000000").unwrap(),
+                    U256::from_str("854268").unwrap(),
                 ),
             },
             TestCase {
-                price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
-                target: U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
+                price: U256::from_str("1917240610156820439288675683655550").unwrap(),
+                target: U256::from_str("1908498483466244238266951834509291").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18),
                 fee: FeeAmount::Low,
                 exp: (
-                    U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
-                    U256::from_dec_str("4378348149175").unwrap(),
-                    U256::from_dec_str("2552228553845698906796").unwrap(),
-                    U256::from_dec_str("2190269210").unwrap(),
+                    U256::from_str("1908498483466244238266951834509291").unwrap(),
+                    U256::from_str("4378348149175").unwrap(),
+                    U256::from_str("2552228553845698906796").unwrap(),
+                    U256::from_str("2190269210").unwrap(),
                 ),
             },
             TestCase {
-                price: U256::from_dec_str("1917240610156820439288675683655550").unwrap(),
-                target: U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
+                price: U256::from_str("1917240610156820439288675683655550").unwrap(),
+                target: U256::from_str("1908498483466244238266951834509291").unwrap(),
                 liquidity: 0u128,
                 remaining: I256::exp10(18),
                 fee: FeeAmount::Low,
                 exp: (
-                    U256::from_dec_str("1908498483466244238266951834509291").unwrap(),
-                    U256::from_dec_str("1").unwrap(),
-                    U256::from_dec_str("0").unwrap(),
-                    U256::from_dec_str("1").unwrap(),
+                    U256::from_str("1908498483466244238266951834509291").unwrap(),
+                    U256::from_str("1").unwrap(),
+                    U256::from_str("0").unwrap(),
+                    U256::from_str("1").unwrap(),
                 ),
             },
         ];

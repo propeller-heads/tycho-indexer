@@ -1,6 +1,6 @@
+use alloy_primitives::{Sign, I256, U256};
 use std::any::Any;
 
-use ethers::types::{Sign, I256, U256};
 use num_bigint::BigUint;
 use tracing::trace;
 
@@ -15,7 +15,6 @@ use crate::{
     u256_num::u256_to_biguint,
 };
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
-use tycho_ethereum::BytesCodec;
 
 use super::{
     enums::FeeAmount,
@@ -101,9 +100,9 @@ impl UniswapV3State {
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
         } else if zero_for_one {
-            safe_add_u256(tick_math::MIN_SQRT_RATIO, U256::one())?
+            safe_add_u256(tick_math::MIN_SQRT_RATIO, U256::from(1u64))?
         } else {
-            safe_sub_u256(tick_math::MAX_SQRT_RATIO, U256::one())?
+            safe_sub_u256(tick_math::MAX_SQRT_RATIO, U256::from(1u64))?
         };
 
         if zero_for_one {
@@ -114,18 +113,20 @@ impl UniswapV3State {
             assert!(price_limit > self.sqrt_price);
         }
 
-        let exact_input = amount_specified > I256::zero();
+        let exact_input = amount_specified > I256::from_raw(U256::from(0u64));
 
         let mut state = SwapState {
             amount_remaining: amount_specified,
-            amount_calculated: I256::zero(),
+            amount_calculated: I256::from_raw(U256::from(0u64)),
             sqrt_price: self.sqrt_price,
             tick: self.tick,
             liquidity: self.liquidity,
         };
         let mut gas_used = U256::from(130_000);
 
-        while state.amount_remaining != I256::zero() && state.sqrt_price != price_limit {
+        while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
+            state.sqrt_price != price_limit
+        {
             let (mut next_tick, initialized) = match self
                 .ticks
                 .next_initialized_tick_within_one_word(state.tick, zero_for_one)
@@ -256,7 +257,7 @@ impl ProtocolSim for UniswapV3State {
         let zero_for_one = token_a < token_b;
         let amount_specified = I256::checked_from_sign_and_abs(
             Sign::Positive,
-            U256::from_big_endian(&amount_in.to_bytes_be()),
+            U256::from_be_slice(&amount_in.to_bytes_be()),
         )
         .unwrap();
 
@@ -313,7 +314,7 @@ impl ProtocolSim for UniswapV3State {
             .updated_attributes
             .get("sqrt_price_x96")
         {
-            self.sqrt_price = U256::from_bytes(sqrt_price);
+            self.sqrt_price = U256::from_be_slice(sqrt_price);
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
             // This is a hotfix because if the tick has never been updated after creation, it's
@@ -421,7 +422,7 @@ mod tests {
 
         let pool = UniswapV3State::new(
             8330443394424070888454257,
-            U256::from_dec_str("188562464004052255423565206602").unwrap(),
+            U256::from_str("188562464004052255423565206602").unwrap(),
             FeeAmount::Medium,
             17342,
             vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
@@ -458,7 +459,7 @@ mod tests {
         );
         let pool = UniswapV3State::new(
             377952820878029838,
-            U256::from_dec_str("28437325270877025820973479874632004").unwrap(),
+            U256::from_str("28437325270877025820973479874632004").unwrap(),
             FeeAmount::Low,
             255830,
             vec![
@@ -555,7 +556,7 @@ mod tests {
         );
         let pool = UniswapV3State::new(
             73015811375239994,
-            U256::from_dec_str("148273042406850898575413").unwrap(),
+            U256::from_str("148273042406850898575413").unwrap(),
             FeeAmount::High,
             -263789,
             vec![
@@ -611,7 +612,7 @@ mod tests {
     fn test_delta_transition() {
         let mut pool = UniswapV3State::new(
             1000,
-            U256::from_dec_str("1000").unwrap(),
+            U256::from_str("1000").unwrap(),
             FeeAmount::Low,
             100,
             vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],

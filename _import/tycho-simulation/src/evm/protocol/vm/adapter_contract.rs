@@ -9,7 +9,7 @@ use revm::{primitives::Address as rAddress, DatabaseRef};
 use crate::{
     evm::{account_storage::StateUpdate, engine_db::engine_db_interface::EngineDatabaseInterface},
     protocol::errors::SimulationError,
-    u256_num::u256_to_f64,
+    u256_num::{convert_ethers_to_alloy, u256_to_f64},
 };
 
 use super::{
@@ -213,7 +213,8 @@ where
                                 "Adapter price calculation failed: Denominator is zero".to_string(),
                             ))
                         } else {
-                            Ok(u256_to_f64(numerator) / u256_to_f64(denominator))
+                            Ok(u256_to_f64(convert_ethers_to_alloy(numerator)) /
+                                u256_to_f64(convert_ethers_to_alloy(denominator)))
                         }
                     } else {
                         Err(SimulationError::FatalError(
