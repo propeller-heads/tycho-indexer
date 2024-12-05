@@ -240,7 +240,7 @@ impl App {
                 self.quote_amount += BigUint::from(10u64).pow(decimals as u32);
             } else {
                 self.quote_amount = max(
-                    self.quote_amount.clone() - BigUint::from(10u64).pow(decimals as u32),
+                    &self.quote_amount - BigUint::from(10u64).pow(decimals as u32),
                     BigUint::one(),
                 );
             }
