@@ -7,6 +7,7 @@ use std::{
 use ethers::types::{H160, H256, U256};
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_core::Bytes;
 use tycho_ethereum::BytesCodec;
 
 use crate::{
@@ -36,7 +37,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         block: Header,
-        all_tokens: HashMap<H160, ERC20Token>,
+        all_tokens: HashMap<Bytes, ERC20Token>,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens: Vec<H160> = snapshot
@@ -142,7 +143,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
 
         let erc20_tokens = tokens
             .iter()
-            .filter_map(|token_address| all_tokens.get(token_address))
+            .filter_map(|token_address| all_tokens.get(token_address.as_bytes()))
             .cloned()
             .collect();
 

@@ -16,33 +16,36 @@
 //!
 //! # Examples
 //! ```
-//! use ethers::types::U256;
+//! use std::str::FromStr;
+//! use alloy_primitives::U256;
+//! use num_bigint::ToBigUint;
+//! use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 //! use tycho_simulation::protocol::state::{ProtocolSim};
-//! use tycho_simulation::protocol::uniswap_v2::state::UniswapV2State;
 //! use tycho_simulation::models::ERC20Token;
+//! use tycho_simulation::u256_num::u256_to_biguint;
 //!
 //! // Initialize the UniswapV2 state with token reserves
 //! let state: Box<dyn ProtocolSim> = Box::new(UniswapV2State::new(
-//!     U256::from_dec_str("36925554990922").unwrap(),
-//!     U256::from_dec_str("30314846538607556521556").unwrap(),
+//!     U256::from_str("36925554990922").unwrap(),
+//!     U256::from_str("30314846538607556521556").unwrap(),
 //! ));
 //!
 //! // Define two ERC20 tokens: USDC and WETH
 //! let usdc = ERC20Token::new(
-//!     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", U256::from(10_000)
+//!     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", 10_000.to_biguint().unwrap()
 //! );
 //! let weth = ERC20Token::new(
-//!     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH", U256::from(10_000)
+//!     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH", 10_000.to_biguint().unwrap()
 //! );
 //!
 //! // Get the amount out for swapping WETH to USDC
-//! let out = state.get_amount_out(weth.one(), &weth, &usdc).unwrap().amount;
+//! let out = state.get_amount_out(u256_to_biguint(weth.one()), &weth, &usdc).unwrap().amount;
 //! assert_eq!(state.spot_price(&weth, &usdc).unwrap(), 1218.0683462769755f64);
-//! assert_eq!(out, U256::from(1214374202));
+//! assert_eq!(out, 1214374202.to_biguint().unwrap());
 //! ```
 use std::any::Any;
 
-use ethers::types::U256;
+use num_bigint::BigUint;
 
 use tycho_core::dto::ProtocolStateDelta;
 
@@ -94,7 +97,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     ///  `TradeSimulationError` on failure.
     fn get_amount_out(
         &self,
-        amount_in: U256,
+        amount_in: BigUint,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError>;

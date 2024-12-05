@@ -1,8 +1,9 @@
 use std::{cmp::max, time::Instant};
 
-use ethers::types::U256;
 use futures::StreamExt;
 use itertools::Itertools;
+use num_bigint::BigUint;
+use num_traits::One;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Flex, Layout, Margin, Rect},
@@ -74,7 +75,7 @@ impl Data {
 pub struct App {
     state: TableState,
     show_popup: bool,
-    quote_amount: U256,
+    quote_amount: BigUint,
     zero2one: bool,
     items: Vec<Data>,
     rx: Receiver<BlockState>,
@@ -88,7 +89,7 @@ impl App {
         Self {
             state: TableState::default().with_selected(0),
             show_popup: false,
-            quote_amount: U256::one(),
+            quote_amount: BigUint::one(),
             zero2one: true,
             rx,
             scroll_state: ScrollbarState::new(0),
@@ -213,7 +214,7 @@ impl App {
                                 },
                                 KeyCode::Char('z') => {
                                     self.zero2one = !self.zero2one;
-                                    self.quote_amount = U256::one();
+                                    self.quote_amount = BigUint::one();
                                 }
                                 KeyCode::Char('k') | KeyCode::Up => self.previous_row(),
                                 KeyCode::Enter => self.show_popup = !self.show_popup,
@@ -236,14 +237,11 @@ impl App {
             let decimals =
                 if self.zero2one { comp.tokens[0].decimals } else { comp.tokens[1].decimals };
             if increase {
-                self.quote_amount = self
-                    .quote_amount
-                    .saturating_add(U256::exp10(decimals));
+                self.quote_amount += BigUint::from(10u64).pow(decimals as u32);
             } else {
                 self.quote_amount = max(
-                    self.quote_amount
-                        .saturating_sub(U256::exp10(decimals)),
-                    U256::one(),
+                    &self.quote_amount - BigUint::from(10u64).pow(decimals as u32),
+                    BigUint::one(),
                 );
             }
         }
@@ -365,15 +363,23 @@ impl App {
         let area = frame.area();
 
         if let Some(idx) = self.state.selected() {
-            if self.quote_amount > U256::zero() {
+            if self.quote_amount > BigUint::ZERO {
                 let comp = &self.items[idx].component;
                 let state = &self.items[idx].state;
 
                 let start = Instant::now();
                 let res = if self.zero2one {
-                    state.get_amount_out(self.quote_amount, &comp.tokens[0], &comp.tokens[1])
+                    state.get_amount_out(
+                        self.quote_amount.clone(),
+                        &comp.tokens[0],
+                        &comp.tokens[1],
+                    )
                 } else {
-                    state.get_amount_out(self.quote_amount, &comp.tokens[1], &comp.tokens[0])
+                    state.get_amount_out(
+                        self.quote_amount.clone(),
+                        &comp.tokens[1],
+                        &comp.tokens[0],
+                    )
                 };
                 let duration = start.elapsed();
 

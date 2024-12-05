@@ -1,19 +1,21 @@
+use alloy_primitives::U256;
 use std::any::Any;
 
-use ethers::types::U256;
+use num_bigint::{BigUint, ToBigUint};
 
 use crate::{
+    evm::protocol::{
+        safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+        u256_num::{biguint_to_u256, u256_to_biguint},
+    },
     models::ERC20Token,
     protocol::{
         errors::{SimulationError, TransitionError},
-        events::LogIndex,
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
-    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
 };
 use tycho_core::dto::ProtocolStateDelta;
-use tycho_ethereum::BytesCodec;
 
 use super::reserve_price::spot_price_from_reserves;
 
@@ -21,7 +23,6 @@ use super::reserve_price::spot_price_from_reserves;
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
-    pub log_index: LogIndex,
 }
 
 impl UniswapV2State {
@@ -34,7 +35,7 @@ impl UniswapV2State {
     /// * `reserve0` - Reserve of token 0.
     /// * `reserve1` - Reserve of token 1.
     pub fn new(reserve0: U256, reserve1: U256) -> Self {
-        UniswapV2State { reserve0, reserve1, log_index: (0, 0) }
+        UniswapV2State { reserve0, reserve1 }
     }
 }
 
@@ -90,18 +91,19 @@ impl ProtocolSim for UniswapV2State {
     ///   output and the slippage of the trade, or an error.
     fn get_amount_out(
         &self,
-        amount_in: U256,
+        amount_in: BigUint,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        if amount_in == U256::zero() {
+        let amount_in = biguint_to_u256(&amount_in);
+        if amount_in == U256::from(0u64) {
             return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
         }
         let zero2one = token_in.address < token_out.address;
         let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
         let reserve_buy = if zero2one { self.reserve1 } else { self.reserve0 };
 
-        if reserve_sell == U256::zero() || reserve_buy == U256::zero() {
+        if reserve_sell == U256::from(0u64) || reserve_buy == U256::from(0u64) {
             return Err(SimulationError::RecoverableError("No liquidity".to_string()));
         }
 
@@ -119,7 +121,13 @@ impl ProtocolSim for UniswapV2State {
             new_state.reserve0 = safe_sub_u256(self.reserve0, amount_out)?;
             new_state.reserve1 = safe_add_u256(self.reserve1, amount_in)?;
         };
-        Ok(GetAmountOutResult::new(amount_out, U256::from(120_000), Box::new(new_state)))
+        Ok(GetAmountOutResult::new(
+            u256_to_biguint(amount_out),
+            120_000
+                .to_biguint()
+                .expect("Expected an unsigned integer as gas value"),
+            Box::new(new_state),
+        ))
     }
 
     fn delta_transition(
@@ -129,13 +137,13 @@ impl ProtocolSim for UniswapV2State {
     ) -> Result<(), TransitionError<String>> {
         // reserve0 and reserve1 are considered required attributes and are expected in every delta
         // we process
-        self.reserve0 = U256::from_bytes(
+        self.reserve0 = U256::from_be_slice(
             delta
                 .updated_attributes
                 .get("reserve0")
                 .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?,
         );
-        self.reserve1 = U256::from_bytes(
+        self.reserve1 = U256::from_be_slice(
             delta
                 .updated_attributes
                 .get("reserve1")
@@ -174,55 +182,53 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use approx::assert_ulps_eq;
+    use num_traits::One;
     use rstest::rstest;
+    use std::str::FromStr;
 
     use tycho_core::hex_bytes::Bytes;
 
-    fn u256(s: &str) -> U256 {
-        U256::from_dec_str(s).unwrap()
-    }
-
     #[rstest]
     #[case::same_dec(
-        u256("6770398782322527849696614"),
-        u256("5124813135806900540214"),
+        U256::from_str("6770398782322527849696614").unwrap(),
+        U256::from_str("5124813135806900540214").unwrap(),
         18,
         18,
-        u256("10000000000000000000000"),
-        u256("7535635391574243447")
+    BigUint::from_str("10000000000000000000000").unwrap(),
+    BigUint::from_str("7535635391574243447").unwrap()
     )]
     #[case::diff_dec(
-        u256("33372357002392258830279"),
-        u256("43356945776493"),
+        U256::from_str("33372357002392258830279").unwrap(),
+        U256::from_str("43356945776493").unwrap(),
         18,
         6,
-        u256("10000000000000000000"),
-        u256("12949029867")
+    BigUint::from_str("10000000000000000000").unwrap(),
+    BigUint::from_str("12949029867").unwrap()
     )]
     fn test_get_amount_out(
         #[case] r0: U256,
         #[case] r1: U256,
         #[case] token_0_decimals: usize,
         #[case] token_1_decimals: usize,
-        #[case] amount_in: U256,
-        #[case] exp: U256,
+        #[case] amount_in: BigUint,
+        #[case] exp: BigUint,
     ) {
         let t0 = ERC20Token::new(
             "0x0000000000000000000000000000000000000000",
             token_0_decimals,
             "T0",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let t1 = ERC20Token::new(
             "0x0000000000000000000000000000000000000001",
             token_1_decimals,
             "T0",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let state = UniswapV2State::new(r0, r1);
 
         let res = state
-            .get_amount_out(amount_in, &t0, &t1)
+            .get_amount_out(amount_in.clone(), &t0, &t1)
             .unwrap();
 
         assert_eq!(res.amount, exp);
@@ -231,8 +237,8 @@ mod tests {
             .as_any()
             .downcast_ref::<UniswapV2State>()
             .unwrap();
-        assert_eq!(new_state.reserve0, r0 + amount_in);
-        assert_eq!(new_state.reserve1, r1 - exp);
+        assert_eq!(new_state.reserve0, r0 + biguint_to_u256(&amount_in));
+        assert_eq!(new_state.reserve1, r1 - biguint_to_u256(&exp));
         // Assert that the old state is unchanged
         assert_eq!(state.reserve0, r0);
         assert_eq!(state.reserve1, r1);
@@ -240,22 +246,22 @@ mod tests {
 
     #[test]
     fn test_get_amount_out_overflow() {
-        let r0 = u256("33372357002392258830279");
-        let r1 = u256("43356945776493");
-        let amount_in = U256::max_value();
+        let r0 = U256::from_str("33372357002392258830279").unwrap();
+        let r1 = U256::from_str("43356945776493").unwrap();
+        let amount_in = (BigUint::one() << 256) - BigUint::one(); // U256 max value
         let t0d = 18;
         let t1d = 16;
         let t0 = ERC20Token::new(
             "0x0000000000000000000000000000000000000000",
             t0d,
             "T0",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let t1 = ERC20Token::new(
             "0x0000000000000000000000000000000000000001",
             t1d,
             "T0",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let state = UniswapV2State::new(r0, r1);
 
@@ -269,18 +275,21 @@ mod tests {
     #[case(true, 0.0008209719947624441f64)]
     #[case(false, 1218.0683462769755f64)]
     fn test_spot_price(#[case] zero_to_one: bool, #[case] exp: f64) {
-        let state = UniswapV2State::new(u256("36925554990922"), u256("30314846538607556521556"));
+        let state = UniswapV2State::new(
+            U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+        );
         let usdc = ERC20Token::new(
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             6,
             "USDC",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
         let weth = ERC20Token::new(
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 ",
             18,
             "WETH",
-            U256::from(10_000),
+            10_000.to_biguint().unwrap(),
         );
 
         let res = if zero_to_one {
@@ -294,7 +303,10 @@ mod tests {
 
     #[test]
     fn test_fee() {
-        let state = UniswapV2State::new(u256("36925554990922"), u256("30314846538607556521556"));
+        let state = UniswapV2State::new(
+            U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+        );
 
         let res = state.fee();
 
@@ -303,7 +315,8 @@ mod tests {
 
     #[test]
     fn test_delta_transition() {
-        let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
+        let mut state =
+            UniswapV2State::new(U256::from_str("1000").unwrap(), U256::from_str("1000").unwrap());
         let attributes: HashMap<String, Bytes> = vec![
             ("reserve0".to_string(), Bytes::from(1500_u64.to_be_bytes().to_vec())),
             ("reserve1".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
@@ -319,13 +332,14 @@ mod tests {
         let res = state.delta_transition(delta, vec![]);
 
         assert!(res.is_ok());
-        assert_eq!(state.reserve0, u256("1500"));
-        assert_eq!(state.reserve1, u256("2000"));
+        assert_eq!(state.reserve0, U256::from_str("1500").unwrap());
+        assert_eq!(state.reserve1, U256::from_str("2000").unwrap());
     }
 
     #[test]
     fn test_delta_transition_missing_attribute() {
-        let mut state = UniswapV2State::new(u256("1000"), u256("1000"));
+        let mut state =
+            UniswapV2State::new(U256::from_str("1000").unwrap(), U256::from_str("1000").unwrap());
         let attributes: HashMap<String, Bytes> =
             vec![("reserve0".to_string(), Bytes::from(1500_u64.to_be_bytes().to_vec()))]
                 .into_iter()
