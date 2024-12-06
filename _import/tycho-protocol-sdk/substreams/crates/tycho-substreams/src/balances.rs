@@ -172,10 +172,10 @@ pub fn aggregate_balances_changes(
 
 /// Extracts balance deltas from a transaction trace based on a given address predicate.
 ///
-/// This function processes the logs within a transaction trace to identify ERC-20 token transfer
-/// events. It applies the given predicate to determine which addresses are of interest and extracts
-/// the balance changes (deltas) for those addresses. The balance deltas are then returned as a
-/// vector.
+/// This function processes the logs within a transaction trace to identify ERC-20 token
+/// transfer and weth specific events (Deposit and Withdrawal). It applies the given predicate to
+/// determine which addresses are of interest and extracts the balance changes (deltas) for those
+/// addresses. The balance deltas are then returned as a vector.
 ///
 /// # Arguments
 ///
@@ -215,22 +215,29 @@ pub fn extract_balance_deltas_from_tx<F: Fn(&[u8], &[u8]) -> bool>(
 
     tx.logs_with_calls()
         .for_each(|(log, _)| {
+            let mut create_balance_delta = |transactor: &[u8], delta: BigInt| {
+                balance_deltas.push(BalanceDelta {
+                    ord: log.ordinal,
+                    tx: Some(tx.into()),
+                    token: log.address.clone(),
+                    delta: delta.to_signed_bytes_be(),
+                    component_id: hex::encode(transactor).into(),
+                });
+            };
             if let Some(transfer) = abi::erc20::events::Transfer::match_and_decode(log) {
-                let mut create_balance_delta = |transactor: &[u8], delta: BigInt| {
-                    balance_deltas.push(BalanceDelta {
-                        ord: log.ordinal,
-                        tx: Some(tx.into()),
-                        token: log.address.clone(),
-                        delta: delta.to_signed_bytes_be(),
-                        component_id: hex::encode(transactor).into(),
-                    });
-                };
-
                 if address_predicate(&log.address, &transfer.from) {
                     create_balance_delta(&transfer.from, transfer.value.neg());
                 }
                 if address_predicate(&log.address, &transfer.to) {
                     create_balance_delta(&transfer.to, transfer.value);
+                }
+            } else if let Some(deposit) = abi::weth::events::Deposit::match_and_decode(log) {
+                if address_predicate(&log.address, &deposit.dst) {
+                    create_balance_delta(&deposit.dst, deposit.wad);
+                }
+            } else if let Some(withdrawal) = abi::weth::events::Withdrawal::match_and_decode(log) {
+                if address_predicate(&log.address, &withdrawal.src) {
+                    create_balance_delta(&withdrawal.src, withdrawal.wad.neg());
                 }
             }
         });

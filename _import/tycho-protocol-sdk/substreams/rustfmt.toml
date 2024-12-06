@@ -10,6 +10,7 @@ use_field_init_shorthand = true
 chain_width = 40
 ignore = [
     "crates/tycho-substreams/src/pb",
+    "crates/tycho-substreams/src/abi",
     "ethereum-balancer-v2/src/abi",
     "ethereum-sfraxeth/src/abi",
     "ethereum-sfrax/src/abi",

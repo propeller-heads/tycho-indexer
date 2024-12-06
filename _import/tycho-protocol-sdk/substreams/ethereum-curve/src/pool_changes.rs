@@ -5,7 +5,7 @@ use substreams::{
 use substreams_ethereum::pb::eth::v2::TransactionTrace;
 use tycho_substreams::prelude::*;
 
-use crate::consts::{ETH_ADDRESS, WETH_ADDRESS};
+use crate::consts::ETH_ADDRESS;
 
 fn get_pool_tokens(pool_address: &Vec<u8>, tokens_store: &StoreGetString) -> Option<Vec<String>> {
     let pool_key = format!("pool:{}", hex::encode(pool_address));
@@ -27,6 +27,7 @@ fn get_pool_tokens(pool_address: &Vec<u8>, tokens_store: &StoreGetString) -> Opt
 ///  - If neither, it's likely an erroneous ETH transactions that many older pools don't reject.
 pub fn emit_eth_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> Vec<BalanceDelta> {
     tx.calls()
+        .filter(|call| !call.call.state_reverted)
         .flat_map(|call| {
             call.call
                 .balance_changes
@@ -35,13 +36,9 @@ pub fn emit_eth_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> 
                     if let Some(pool_tokens) =
                         get_pool_tokens(&balance_change.address, tokens_store)
                     {
-                        let token = if pool_tokens.contains(&hex::encode(ETH_ADDRESS)) {
-                            ETH_ADDRESS.to_vec()
-                        } else if pool_tokens.contains(&hex::encode(WETH_ADDRESS)) {
-                            WETH_ADDRESS.to_vec()
-                        } else {
-                            // The pool that was matched to the call doesn't contain either ETH
-                            //  or WETH so found eth balance changes are erroneous.
+                        if !pool_tokens.contains(&hex::encode(ETH_ADDRESS)) {
+                            // The pool that was matched to the call doesn't contain ETH so
+                            // found eth balance changes are not relevant.
                             return None;
                         };
 
@@ -68,7 +65,7 @@ pub fn emit_eth_deltas(tx: &TransactionTrace, tokens_store: &StoreGetString) -> 
                                 hash: tx.hash.clone(),
                                 index: tx.index.into(),
                             }),
-                            token,
+                            token: ETH_ADDRESS.to_vec(),
                             delta: delta.to_signed_bytes_be(),
                             component_id: hex::encode(balance_change.address.clone()).into(),
                         })
