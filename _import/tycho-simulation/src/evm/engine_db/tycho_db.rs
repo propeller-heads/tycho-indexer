@@ -336,7 +336,7 @@ impl DatabaseRef for PreCachedDB {
     /// If block header is set, returns the hash. Otherwise returns a zero hash.
     fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
         match self.inner.read().unwrap().block {
-            Some(header) => Ok(B256::from_slice(header.hash.as_bytes())),
+            Some(header) => Ok(header.hash),
             None => Ok(B256::default()),
         }
     }

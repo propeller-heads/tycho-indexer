@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use alloy_primitives::bytes::Bytes;
 use chrono::{NaiveDateTime, Utc};
-use ethers::types::H256;
 use revm::primitives::{Address, B256, U256, U256 as rU256};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -90,7 +89,7 @@ impl From<Block> for BlockHeader {
     fn from(value: Block) -> Self {
         Self {
             number: value.number,
-            hash: H256::from(value.hash.0),
+            hash: value.hash,
             timestamp: value.ts.and_utc().timestamp() as u64,
         }
     }

@@ -161,7 +161,6 @@ fn parse_solidity_error_message(data: &str) -> String {
 ///
 /// ```
 /// use tycho_simulation::protocol::vm::utils::get_storage_slot_index_at_key;
-/// use ethers::types::{Address, U256};
 /// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// get_storage_slot_index_at_key(address, U256::from(0));
 /// ```
@@ -174,7 +173,6 @@ fn parse_solidity_error_message(data: &str) -> String {
 ///
 /// ```
 /// use tycho_simulation::protocol::vm::utils::get_storage_slot_index_at_key;
-/// use ethers::types::{Address, U256};
 /// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
 /// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, U256::from(1)));

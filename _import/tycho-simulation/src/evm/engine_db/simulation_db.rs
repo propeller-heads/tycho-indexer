@@ -81,13 +81,13 @@ impl<DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'_, DB> {
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Default)]
 pub struct BlockHeader {
     pub number: u64,
-    pub hash: H256,
+    pub hash: B256,
     pub timestamp: u64,
 }
 
 impl From<BlockHeader> for BlockId {
     fn from(value: BlockHeader) -> Self {
-        Self::from(value.hash)
+        Self::from(H256::from_slice(&value.hash.0))
     }
 }
 
@@ -449,9 +449,7 @@ impl<M: Middleware> DatabaseRef for SimulationDB<M> {
     /// instead of querying a node.
     fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
         match &self.block {
-            Some(header) => Ok(B256::try_from(header.hash.as_bytes()).unwrap_or_else(|_| {
-                panic!("Failed to convert header hash {:?} to B256", header.hash)
-            })),
+            Some(header) => Ok(header.hash),
             None => Ok(B256::ZERO),
         }
     }
@@ -635,7 +633,7 @@ mod tests {
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
         let mut updates = HashMap::default();
         updates.insert(address, update);
-        let new_block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
+        let new_block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
 
         let reverse_update = mock_sim_db.update_state(&updates, new_block);
 

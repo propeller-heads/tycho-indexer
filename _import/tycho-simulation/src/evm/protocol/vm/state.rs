@@ -500,13 +500,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::B256;
     use std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
         str::FromStr,
     };
 
-    use ethers::prelude::H256;
     use num_bigint::ToBigUint;
     use num_traits::One;
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
@@ -549,7 +549,7 @@ mod tests {
 
         let block = BlockHeader {
             number: 20463609,
-            hash: H256::from_str(
+            hash: B256::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
             )
             .unwrap(),
@@ -580,7 +580,7 @@ mod tests {
         let tokens = vec![dai_addr, bal_addr];
         let block = BlockHeader {
             number: 18485417,
-            hash: H256::from_str(
+            hash: B256::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
             .expect("Invalid block hash"),

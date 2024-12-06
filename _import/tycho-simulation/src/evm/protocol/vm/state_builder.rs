@@ -44,7 +44,6 @@ use super::{
 /// # Example
 /// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
-/// use ethers::types::Address;
 /// use crate::evm::simulation_db::BlockHeader;
 /// use crate::protocol::errors::SimulationError;
 ///
@@ -434,16 +433,15 @@ impl EVMPoolStateBuilder {
 mod tests {
     use super::*;
 
+    use alloy_primitives::B256;
     use std::str::FromStr;
-
-    use ethers::types::H256;
 
     #[test]
     fn test_build_without_required_fields() {
         let id = "pool_1".to_string();
         let tokens = vec![Address::repeat_byte(0)];
         let balances = HashMap::new();
-        let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
+        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
 
         let result =
             tokio_test::block_on(EVMPoolStateBuilder::new(id, tokens, balances, block).build());
@@ -463,7 +461,7 @@ mod tests {
         let token2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
         let token3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
         let tokens = vec![token2, token3];
-        let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
+        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
         let balances = HashMap::new();
 
         let mut builder = EVMPoolStateBuilder::new(id, tokens, balances, block);
