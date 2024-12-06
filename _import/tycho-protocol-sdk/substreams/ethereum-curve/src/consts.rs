@@ -20,7 +20,8 @@ pub const NEW_SUSD: [u8; 20] = hex!("57ab1ec28d129707052df4df418d58a2d46d5f51");
 pub const TRICRYPTO_2_LP: [u8; 20] = hex!("c4ad29ba4b3c580e6d59105fff484999997675ff");
 pub const TRICRYPTO_2_MATH_CONTRACT: [u8; 20] = hex!("40745803c2faa8e8402e2ae935933d07ca8f355c");
 
-pub const CONTRACTS_TO_INDEX: [[u8; 20]; 5] = [
+pub const CONTRACTS_TO_INDEX: [[u8; 20]; 6] = [
+    CRYPTO_POOL_FACTORY,
     CRYPTO_SWAP_NG_FACTORY,
     TRICRYPTO_FACTORY,
     TRICRYPTO_2_LP,

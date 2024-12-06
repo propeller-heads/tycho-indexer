@@ -4,7 +4,7 @@ use substreams_ethereum::{
 };
 
 use crate::abi;
-use tycho_substreams::prelude::*;
+use tycho_substreams::{attributes::json_serialize_bigint_list, prelude::*};
 
 use crate::consts::*;
 use substreams::scalar::BigInt;
@@ -104,7 +104,11 @@ pub fn address_map(
                         index: tx.index.into(),
                     }),
                     tokens,
-                    contracts: vec![component_id.into(), pool_added.token.clone()],
+                    contracts: vec![
+                        component_id.into(),
+                        pool_added.token.clone(),
+                        CRYPTO_POOL_FACTORY.into(),
+                    ],
                     static_att: vec![
                         Attribute {
                             name: "pool_type".into(),
@@ -475,6 +479,11 @@ pub fn address_map(
                                 value: address_to_bytes_with_0x(&CRYPTO_SWAP_NG_FACTORY),
                                 change: ChangeType::Creation.into(),
                             },
+                            Attribute {
+                                name: "asset_types".into(),
+                                value: json_serialize_bigint_list(&add_pool.asset_types),
+                                change: ChangeType::Creation.into(),
+                            },
                         ],
                         change: ChangeType::Creation.into(),
                         protocol_type: Some(ProtocolType {
@@ -547,6 +556,11 @@ pub fn address_map(
                                 value: address_to_bytes_with_0x(
                                     &pool_added.base_pool.try_into().unwrap(),
                                 ),
+                                change: ChangeType::Creation.into(),
+                            },
+                            Attribute {
+                                name: "asset_type".into(),
+                                value: add_pool.asset_type.to_signed_bytes_be(),
                                 change: ChangeType::Creation.into(),
                             },
                         ],
@@ -850,6 +864,7 @@ pub fn address_map(
                 abi::twocrypto_factory::events::TwocryptoPoolDeployed::match_and_decode(log)
             {
                 let id = hex::encode(&pool_added.pool);
+
                 Some((
                     ProtocolComponent {
                         id: id.clone(),
@@ -906,12 +921,12 @@ pub fn address_map(
                             },
                             Attribute {
                                 name: "stateless_contract_addr_1".into(),
-                                // Call math_implementation() on TWOCRYPTO_FACTORY
-                                value: format!(
-                                    "call:0x{}:math_implementation()",
-                                    hex::encode(TWOCRYPTO_FACTORY)
-                                )
-                                .into(),
+                                value: address_to_bytes_with_0x(
+                                    &pool_added
+                                        .math
+                                        .try_into()
+                                        .unwrap_or([1u8; 20]), // Unexpected issue marker
+                                ),
                                 change: ChangeType::Creation.into(),
                             },
                         ],

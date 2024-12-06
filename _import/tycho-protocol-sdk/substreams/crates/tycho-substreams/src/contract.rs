@@ -93,21 +93,20 @@ fn extract_contract_changes_generic<
     }
     let mut changed_contracts: HashMap<Vec<u8>, InterimContractChange> = HashMap::new();
 
-    // Collect all accounts created in this block
-    let created_accounts: HashMap<_, _> = block
-        .transactions()
-        .flat_map(|tx| {
-            tx.calls.iter().flat_map(|call| {
-                call.account_creations
-                    .iter()
-                    .map(|ac| (&ac.account, ac.ordinal))
-            })
-        })
-        .collect();
-
     block
         .transactions()
         .for_each(|block_tx| {
+            // Collect all accounts created in this tx
+            let created_accounts: HashMap<_, _> = block_tx
+                .calls
+                .iter()
+                .flat_map(|call| {
+                    call.account_creations
+                        .iter()
+                        .map(|ac| (&ac.account, ac.ordinal))
+                })
+                .collect();
+
             let mut storage_changes = Vec::new();
             let mut balance_changes = Vec::new();
             let mut code_changes = Vec::new();
