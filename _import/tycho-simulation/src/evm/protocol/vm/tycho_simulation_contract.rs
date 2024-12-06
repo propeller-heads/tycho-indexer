@@ -162,7 +162,7 @@ mod tests {
 
     use revm::{
         db::DatabaseRef,
-        primitives::{AccountInfo, Bytecode, B256, U256 as rU256},
+        primitives::{AccountInfo, Bytecode, B256},
     };
 
     use crate::evm::{
@@ -190,9 +190,9 @@ mod tests {
         fn storage_ref(
             &self,
             _address: revm::precompile::Address,
-            _index: rU256,
-        ) -> Result<rU256, Self::Error> {
-            Ok(rU256::from(0))
+            _index: U256,
+        ) -> Result<U256, Self::Error> {
+            Ok(U256::from(0))
         }
 
         fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
@@ -207,7 +207,7 @@ mod tests {
             &self,
             _address: Address,
             _account: AccountInfo,
-            _permanent_storage: Option<HashMap<rU256, rU256>>,
+            _permanent_storage: Option<HashMap<U256, U256>>,
             _mocked: bool,
         ) {
             // Do nothing

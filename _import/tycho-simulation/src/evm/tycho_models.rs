@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use alloy_primitives::bytes::Bytes;
+use alloy_primitives::{bytes::Bytes, Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
-use revm::primitives::{Address, B256, U256, U256 as rU256};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use strum_macros::{Display, EnumString};
@@ -13,7 +12,7 @@ use crate::serde_helpers::{hex_bytes, hex_bytes_option};
 use super::engine_db::simulation_db::BlockHeader;
 
 // TODO move this to utils
-fn bytes_to_ru256(bytes: Bytes) -> rU256 {
+fn bytes_to_ru256(bytes: Bytes) -> U256 {
     // Ensure the input is exactly 32 bytes
     let mut padded_bytes = [0u8; 32];
 
@@ -21,13 +20,13 @@ fn bytes_to_ru256(bytes: Bytes) -> rU256 {
     let start = 32 - bytes.len().min(32);
     padded_bytes[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
 
-    // Convert the padded byte array into rU256
-    rU256::from_be_slice(&padded_bytes)
+    // Convert the padded byte array into U256
+    U256::from_be_slice(&padded_bytes)
 }
 
 fn map_slots_to_ru256(
     slots: HashMap<tycho_core::hex_bytes::Bytes, tycho_core::hex_bytes::Bytes>,
-) -> HashMap<rU256, rU256> {
+) -> HashMap<U256, U256> {
     slots
         .into_iter()
         .map(|(k, v)| (bytes_to_ru256(k.into()), bytes_to_ru256(v.into())))
@@ -265,8 +264,8 @@ pub struct ResponseAccount {
     pub chain: Chain,
     pub address: Address,
     pub title: String,
-    pub slots: HashMap<rU256, rU256>,
-    pub balance: rU256,
+    pub slots: HashMap<U256, U256>,
+    pub balance: U256,
     #[serde(with = "hex_bytes")]
     pub code: Vec<u8>,
     pub code_hash: B256,
@@ -281,8 +280,8 @@ impl ResponseAccount {
         chain: Chain,
         address: Address,
         title: String,
-        slots: HashMap<rU256, rU256>,
-        balance: rU256,
+        slots: HashMap<U256, U256>,
+        balance: U256,
         code: Vec<u8>,
         code_hash: B256,
         balance_modify_tx: B256,

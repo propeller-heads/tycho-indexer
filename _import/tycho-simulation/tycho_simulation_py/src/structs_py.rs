@@ -1,11 +1,8 @@
 #![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
-use ethers::{
-    providers::{Http, Provider},
-    types::H256,
-};
+use ethers::providers::{Http, Provider};
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Address as RevmAddress, Bytecode, U256};
+use revm::primitives::{Address as RevmAddress, Bytecode, B256, U256};
 use tokio::runtime::Runtime;
 use tracing::info;
 
@@ -411,7 +408,7 @@ impl From<BlockHeader> for tycho_simulation::evm::engine_db::simulation_db::Bloc
     fn from(py_header: BlockHeader) -> Self {
         tycho_simulation::evm::engine_db::simulation_db::BlockHeader {
             number: py_header.number,
-            hash: H256::from_str(&py_header.hash).unwrap(),
+            hash: B256::from_str(&py_header.hash).unwrap(),
             timestamp: py_header.timestamp,
         }
     }
