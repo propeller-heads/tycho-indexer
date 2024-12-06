@@ -6,9 +6,17 @@ use actix_web::{web, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
+use metrics::counter;
 use reqwest::StatusCode;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
+
+use tycho_core::{
+    dto::{self, PaginationResponse},
+    models::{blockchain::BlockAggregatedChanges, Address, Chain, PaginationParams},
+    storage::{BlockIdentifier, BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
+    Bytes,
+};
 
 use crate::{
     extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
@@ -16,13 +24,6 @@ use crate::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
     },
-};
-
-use tycho_core::{
-    dto::{self, PaginationResponse},
-    models::{blockchain::BlockAggregatedChanges, Address, Chain, PaginationParams},
-    storage::{BlockIdentifier, BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
-    Bytes,
 };
 
 #[derive(Error, Debug)]
@@ -696,11 +697,15 @@ pub async fn contract_state<G: Gateway>(
     // Note - filtering by protocol system is not supported on this endpoint. This is due to the
     // complexity of paginating this endpoint with the current design.
 
+    // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
     tracing::Span::current().record("protocol.system", &body.protocol_system);
+    counter!("rpc_requests_total", "endpoint" => "contract_state").increment(1);
 
     if body.pagination.page_size > 100 {
+        counter!("rpc_requests_failed_total", "endpoint" => "contract_state", "status" => "400")
+            .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
 
@@ -714,6 +719,8 @@ pub async fn contract_state<G: Gateway>(
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting contract state.");
+            let status = err.status_code().as_u16().to_string();
+            counter!("rpc_requests_failed_total", "endpoint" => "contract_state", "status" => status).increment(1);
             HttpResponse::from_error(err)
         }
     }
@@ -735,10 +742,14 @@ pub async fn tokens<G: Gateway>(
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
+    counter!("rpc_requests_total", "endpoint" => "tokens").increment(1);
 
     if body.pagination.page_size > 3000 {
+        counter!("rpc_requests_failed_total", "endpoint" => "tokens", "status" => "400")
+            .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 3000.");
     }
 
@@ -752,6 +763,9 @@ pub async fn tokens<G: Gateway>(
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
+            let status = err.status_code().as_u16().to_string();
+            counter!("rpc_requests_failed_total", "endpoint" => "tokens", "status" => status)
+                .increment(1);
             HttpResponse::from_error(err)
         }
     }
@@ -773,11 +787,15 @@ pub async fn protocol_components<G: Gateway>(
     body: web::Json<dto::ProtocolComponentsRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
     tracing::Span::current().record("protocol.system", &body.protocol_system);
+    counter!("rpc_requests_total", "endpoint" => "protocol_components").increment(1);
 
     if body.pagination.page_size > 500 {
+        counter!("rpc_requests_failed_total", "endpoint" => "protocol_components", "status" => "400")
+            .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 500.");
     }
 
@@ -791,6 +809,8 @@ pub async fn protocol_components<G: Gateway>(
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
+            let status = err.status_code().as_u16().to_string();
+            counter!("rpc_requests_failed_total", "endpoint" => "protocol_components", "status" => status).increment(1);
             HttpResponse::from_error(err)
         }
     }
@@ -811,11 +831,15 @@ pub async fn protocol_state<G: Gateway>(
     body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
+    // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
     tracing::Span::current().record("protocol.system", &body.protocol_system);
+    counter!("rpc_requests_total", "endpoint" => "protocol_state").increment(1);
 
     if body.pagination.page_size > 100 {
+        counter!("rpc_requests_failed_total", "endpoint" => "protocol_state", "status" => "400")
+            .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
 
@@ -829,6 +853,8 @@ pub async fn protocol_state<G: Gateway>(
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol states.");
+            let status = err.status_code().as_u16().to_string();
+            counter!("rpc_requests_failed_total", "endpoint" => "protocol_state", "status" => status).increment(1);
             HttpResponse::from_error(err)
         }
     }
@@ -845,6 +871,7 @@ pub async fn protocol_state<G: Gateway>(
     ),
 )]
 pub async fn health() -> HttpResponse {
+    counter!("rpc_requests_total", "endpoint" => "health").increment(1);
     HttpResponse::Ok().json(dto::Health::Ready)
 }
 

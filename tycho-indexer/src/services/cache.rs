@@ -1,6 +1,8 @@
-use futures03::Future;
-use mini_moka::sync::Cache;
 use std::{error::Error, fmt::Debug, hash::Hash, sync::Arc};
+
+use futures03::Future;
+use metrics::counter;
+use mini_moka::sync::Cache;
 use tracing::{instrument, trace, Level};
 
 pub struct RpcCache<R, V> {
@@ -48,6 +50,8 @@ where
             if let Some(res) = inflight_val.lock().await.clone() {
                 tracing::Span::current().record("miss", false);
                 trace!("CacheHit");
+                counter!("rpc_cache_hits", "cache" => self.name.clone()).increment(1);
+
                 return Ok(res);
             }
         }
@@ -55,6 +59,8 @@ where
         // the value has never been written
         tracing::Span::current().record("miss", true);
         trace!("CacheMiss");
+        counter!("rpc_cache_misses", "cache" => self.name.clone()).increment(1);
+
         let lock = Arc::new(tokio::sync::Mutex::new(None));
         let mut guard = lock.lock().await;
         // We insert a None value here to indicate that this request is in flight.

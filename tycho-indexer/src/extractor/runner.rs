@@ -4,6 +4,7 @@ use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::Client;
+use metrics::histogram;
 use prost::Message;
 use serde::Deserialize;
 use tokio::{
@@ -173,6 +174,10 @@ impl ExtractorRunner {
                             Some(Ok(BlockResponse::New(data))) => {
                                 let block_number = data.clock.as_ref().map(|v| v.number).unwrap_or(0);
                                 tracing::Span::current().record("block_number", block_number);
+
+                                // Start measuring block processing time
+                                let start_time = std::time::Instant::now();
+
                                 // TODO: change interface to take a reference to avoid this clone
                                 match self.extractor.handle_tick_scoped_data(data.clone()).await {
                                     Ok(Some(msg)) => {
@@ -188,6 +193,9 @@ impl ExtractorRunner {
                                         return Err(err);
                                     }
                                 }
+
+                                let duration = start_time.elapsed();
+                                histogram!("block_processing_time").record(duration.as_millis() as f64);
                             }
                             Some(Ok(BlockResponse::Undo(undo_signal))) => {
                                 info!(block=?&undo_signal.last_valid_block,  "Revert requested!");

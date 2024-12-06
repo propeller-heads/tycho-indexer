@@ -79,5 +79,5 @@ opentelemetry-otlp = { version = "0.14", default-features = false, features = [
     "trace",
     "grpc-tonic",
 ] }
-metrics = "0.24.1"
+metrics = "0.24"
 metrics-exporter-prometheus = "0.16"

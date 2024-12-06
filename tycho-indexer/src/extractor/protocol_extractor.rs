@@ -163,6 +163,7 @@ where
         let mut state = self.inner.lock().await;
         state.last_processed_block = Some(block);
     }
+
     /// Reports sync progress if a minute has passed since the last report.
     async fn maybe_report_progress(&self, block: &Block) {
         let mut state = self.inner.lock().await;

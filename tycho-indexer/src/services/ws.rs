@@ -1,23 +1,24 @@
 //! This module contains Tycho Websocket implementation
-
-use actix::{Actor, ActorContext, AsyncContext, SpawnHandle, StreamHandler};
-use actix_web::{web, Error, HttpRequest, HttpResponse};
-use actix_web_actors::ws;
-use futures03::executor::block_on;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fmt::Debug,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+
+use actix::{Actor, ActorContext, AsyncContext, SpawnHandle, StreamHandler};
+use actix_web::{web, Error, HttpRequest, HttpResponse};
+use actix_web_actors::ws;
+use futures03::executor::block_on;
+use metrics::{counter, gauge};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use crate::extractor::{runner::MessageSender, ExtractorMsg};
-
 use tycho_core::models::ExtractorIdentity;
+
+use crate::extractor::{runner::MessageSender, ExtractorMsg};
 
 /// How often heartbeat pings are sent
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -117,6 +118,7 @@ impl WsActor {
             // Check client heartbeats
             if Instant::now().duration_since(act.heartbeat) > CLIENT_TIMEOUT {
                 warn!("Websocket Client heartbeat failed, disconnecting!");
+                counter!("websocket_connections_dropped", "reason" => "timeout").increment(1);
                 ctx.stop();
                 return;
             }
@@ -228,6 +230,8 @@ impl Actor for WsActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Websocket connection established");
 
+        gauge!("websocket_connections_active").increment(1);
+
         // Start the heartbeat
         self.heartbeat(ctx);
     }
@@ -235,6 +239,8 @@ impl Actor for WsActor {
     #[instrument(skip_all, fields(WsActor.id = %self.id), name = "WsActor::stopped")]
     fn stopped(&mut self, ctx: &mut Self::Context) {
         info!("Websocket connection closed");
+
+        gauge!("websocket_connections_active").decrement(1);
 
         // Close all remaining subscriptions
         for (subscription_id, handle) in self.subscriptions.drain() {
@@ -339,6 +345,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
             }
             Err(err) => {
                 error!(error = %err, "Failed to receive message from websocket");
+                counter!("websocket_connections_dropped", "reason" => "network_error").increment(1);
                 ctx.stop()
             }
             _ => (),
