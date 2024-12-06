@@ -1,11 +1,11 @@
-use alloy_primitives::Address;
+use alloy_primitives::{Address, U256};
 use std::{
     collections::HashMap,
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use ethers::types::{H256, U256};
+use ethers::types::H256;
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
@@ -53,7 +53,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .state
             .balances
             .iter()
-            .map(|(k, v)| (Address::from_slice(k), U256::from_bytes(v)))
+            .map(|(k, v)| (Address::from_slice(k), U256::from_be_slice(v)))
             .collect();
         let balance_owner = snapshot
             .state

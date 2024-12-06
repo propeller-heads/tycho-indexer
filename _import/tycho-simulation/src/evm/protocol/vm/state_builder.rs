@@ -1,14 +1,11 @@
-use alloy_primitives::Address;
+use alloy_primitives::{Address, U256};
+use alloy_sol_types::SolValue;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
 };
 
 use chrono::Utc;
-use ethers::{
-    abi::{decode, ParamType},
-    prelude::U256,
-};
 use itertools::Itertools;
 use revm::{
     precompile::Bytes,
@@ -34,7 +31,7 @@ use super::{
     models::Capability,
     state::EVMPoolState,
     tycho_simulation_contract::TychoSimulationContract,
-    utils::{get_code_for_contract, hexstring_to_vec, load_erc20_bytecode},
+    utils::{get_code_for_contract, load_erc20_bytecode},
 };
 
 #[derive(Debug)]
@@ -331,7 +328,7 @@ impl EVMPoolStateBuilder {
                                 .to_string(),
                         )
                     })?
-                    .get_capabilities(hexstring_to_vec(&self.id)?, *t0, *t1)?;
+                    .get_capabilities(self.id.clone(), *t0, *t1)?;
                 capabilities.push(caps);
             }
         }
@@ -425,29 +422,11 @@ impl EVMPoolStateBuilder {
             .simulate(&sim_params)
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
-        let address = decode(&[ParamType::Address], &sim_result.result)
-            .map_err(|_| {
-                SimulationError::FatalError(
-                    "Failed to get address from call: Failed to decode address list from simulation result".into(),
-                )
-            })?
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                SimulationError::FatalError(
-                    "Failed to get address from call: Couldn't retrieve address from simulation for stateless contracts".into(),
-                )
-            })?;
+        let address: Address =Address::abi_decode(&sim_result.result, true).map_err(|e| {
+            SimulationError::FatalError(format!("Failed to get address from call: Failed to decode address list from simulation result {:?}", e))
+        })?;
 
-        address
-            .to_string()
-            .parse()
-            .map_err(|_| {
-                SimulationError::FatalError(format!(
-                    "Failed to get address from call: Couldn't parse address to string: {}",
-                    address
-                ))
-            })
+        Ok(address)
     }
 }
 

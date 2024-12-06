@@ -1,6 +1,6 @@
 //! Numeric methods for the U256 type
-use alloy_primitives::U256;
-use std::{cmp::max, panic};
+use alloy_primitives::{Address, U256};
+use std::{cmp::max, collections::HashMap, panic};
 
 use ethers::types::U256 as EthersU256;
 use num_bigint::BigUint;
@@ -109,6 +109,32 @@ pub fn convert_ethers_to_alloy(ethers_u256: EthersU256) -> U256 {
     let mut bytes = [0u8; 32]; // 32-byte buffer
     ethers_u256.to_big_endian(&mut bytes); // Fill the buffer with big-endian bytes
     U256::from_be_bytes(bytes) // Convert to Alloy U256
+}
+pub fn convert_alloy_to_ethers(alloy_value: U256) -> EthersU256 {
+    let bytes = alloy_value.to_be_bytes::<32>();
+    EthersU256::from_big_endian(&bytes)
+}
+
+pub fn convert_alloy_to_ethers_overwrites(
+    input: Option<HashMap<Address, HashMap<U256, U256>>>,
+) -> Option<HashMap<Address, HashMap<EthersU256, EthersU256>>> {
+    input.map(|outer_map| {
+        outer_map
+            .into_iter()
+            .map(|(address, inner_map)| {
+                let converted_inner_map = inner_map
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (
+                            EthersU256::from_big_endian(&key.to_be_bytes::<32>()),
+                            EthersU256::from_big_endian(&value.to_be_bytes::<32>()),
+                        )
+                    })
+                    .collect();
+                (address, converted_inner_map)
+            })
+            .collect()
+    })
 }
 
 #[cfg(test)]

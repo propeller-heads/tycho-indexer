@@ -10,7 +10,6 @@ use std::{
 
 use ethabi::{self, decode, ParamType};
 use ethers::{
-    abi::Abi,
     prelude::ProviderError,
     providers::{Http, Middleware, Provider},
     types::H160,
@@ -194,9 +193,8 @@ pub fn get_storage_slot_index_at_key(
         let padding = vec![0u8; 32 - key_bytes.len()];
         key_bytes.splice(0..0, padding); // Prepend zeros to the start
     }
-    let mut mapping_slot_bytes = [0u8; 32];
-    mapping_slot.to_big_endian(&mut mapping_slot_bytes);
 
+    let mapping_slot_bytes: [u8; 32] = mapping_slot.to_be_bytes();
     compiler.compute_map_slot(&mapping_slot_bytes, &key_bytes)
 }
 
@@ -305,20 +303,6 @@ pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
 
     Ok(bytecode)
 }
-pub fn load_swap_abi() -> Result<Abi, FileError> {
-    let swap_abi_path = Path::new(file!())
-        .parent()
-        .unwrap()
-        .join("assets")
-        .join("ISwapAdapter.abi");
-
-    let mut file = File::open(&swap_abi_path).map_err(FileError::Io)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .map_err(FileError::Io)?;
-    let abi: Abi = serde_json::from_str(&contents).map_err(FileError::Parse)?;
-    Ok(abi)
-}
 
 pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
@@ -366,6 +350,22 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
     let bytes = hex::decode(hexstring_no_prefix)
         .map_err(|_| SimulationError::FatalError(format!("Invalid hex string: {}", hexstring)))?;
     Ok(bytes)
+}
+
+pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
+    let pool_id_no_prefix =
+        if let Some(stripped) = pool_id.strip_prefix("0x") { stripped } else { pool_id };
+    let bytes = hex::decode(pool_id_no_prefix)
+        .map_err(|e| SimulationError::FatalError(format!("Invalid hex string: {}", e)))?;
+    if bytes.len() != 32 {
+        return Err(SimulationError::FatalError(format!(
+            "Hex string is not 32 bytes: length {}",
+            bytes.len()
+        )));
+    }
+    let mut array = [0u8; 32];
+    array.copy_from_slice(&bytes);
+    Ok(array)
 }
 
 #[cfg(test)]
@@ -529,15 +529,6 @@ mod tests {
     fn test_get_contract_bytecode_error() {
         let result = get_contract_bytecode(&PathBuf::from("non_existent_file.txt"));
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_load_swap_abi() {
-        let result = load_swap_abi();
-        assert!(result.is_ok());
-
-        let abi: Abi = result.expect("Failed to retrieve swap ABI result");
-        assert!(!abi.functions.is_empty(), "The swap ABI should contain functions.");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use ethers::abi::Uint;
+use alloy_primitives::U256;
 use strum_macros::Display;
 
 use crate::protocol::errors::SimulationError;
@@ -17,8 +17,9 @@ pub enum Capability {
 }
 
 impl Capability {
-    pub fn from_uint(value: Uint) -> Result<Self, SimulationError> {
-        match value.as_u32() {
+    pub fn from_u256(value: U256) -> Result<Self, SimulationError> {
+        let value_as_u8 = value.to_le_bytes::<32>()[0];
+        match value_as_u8 {
             1 => Ok(Capability::SellSide),
             2 => Ok(Capability::BuySide),
             3 => Ok(Capability::PriceFunction),

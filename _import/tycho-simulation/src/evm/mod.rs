@@ -1,5 +1,4 @@
-use ethers::types::U256;
-
+use alloy_primitives::U256;
 use tycho_core::keccak256;
 
 pub mod account_storage;
@@ -43,6 +42,6 @@ impl ContractCompiler {
 
         let slot_bytes = keccak256(&concatenated);
 
-        SlotId::from_big_endian(&slot_bytes)
+        SlotId::from_be_slice(&slot_bytes)
     }
 }
