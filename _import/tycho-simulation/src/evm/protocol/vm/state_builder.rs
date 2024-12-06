@@ -408,13 +408,13 @@ impl EVMPoolStateBuilder {
         })?;
 
         let sim_params = SimulationParameters {
-            data: selector.to_vec().into(),
+            data: selector.to_vec(),
             to: parsed_address,
             block_number: self.block.number,
             timestamp,
             overrides: Some(HashMap::new()),
             caller: *EXTERNAL_ACCOUNT,
-            value: 0.into(),
+            value: U256::from(0u64),
             gas_limit: None,
         };
 
@@ -422,7 +422,7 @@ impl EVMPoolStateBuilder {
             .simulate(&sim_params)
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
-        let address: Address =Address::abi_decode(&sim_result.result, true).map_err(|e| {
+        let address: Address = Address::abi_decode(&sim_result.result, true).map_err(|e| {
             SimulationError::FatalError(format!("Failed to get address from call: Failed to decode address list from simulation result {:?}", e))
         })?;
 

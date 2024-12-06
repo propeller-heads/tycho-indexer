@@ -8,12 +8,10 @@ use revm::{db::DatabaseRef, primitives::AccountInfo};
 use crate::{
     evm::{
         engine_db::engine_db_interface::EngineDatabaseInterface,
-        protocol::u256_num::{convert_alloy_to_ethers, convert_alloy_to_ethers_overwrites},
         simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     },
     protocol::errors::SimulationError,
 };
-use ethers::prelude::*;
 
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
@@ -126,7 +124,7 @@ where
     ) -> Result<TychoSimulationResponse, SimulationError> {
         let call_data = self.encode_input(selector, args);
         let params = SimulationParameters {
-            data: Bytes::from(call_data),
+            data: call_data,
             to: self.address,
             block_number,
             timestamp: timestamp.unwrap_or_else(|| {
@@ -135,9 +133,9 @@ where
                     .and_utc()
                     .timestamp() as u64
             }),
-            overrides: convert_alloy_to_ethers_overwrites(overrides),
+            overrides,
             caller: caller.unwrap_or(*EXTERNAL_ACCOUNT),
-            value: convert_alloy_to_ethers(value),
+            value,
             gas_limit: None,
         };
 

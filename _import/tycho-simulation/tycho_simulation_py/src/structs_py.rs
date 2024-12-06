@@ -1,11 +1,11 @@
 #![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
 use ethers::{
     providers::{Http, Provider},
-    types::{Bytes, H256, U256},
+    types::H256,
 };
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Address as RevmAddress, Bytecode, U256 as rU256};
+use revm::primitives::{Address as RevmAddress, Bytecode, U256};
 use tokio::runtime::Runtime;
 use tracing::info;
 
@@ -94,8 +94,8 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
                     let mut rust_slots: HashMap<U256, U256> = HashMap::new();
                     for (index, value) in py_slots {
                         rust_slots.insert(
-                            U256::from_big_endian(index.to_bytes_be().as_slice()),
-                            U256::from_big_endian(value.to_bytes_be().as_slice()),
+                            U256::from_be_slice(index.to_bytes_be().as_slice()),
+                            U256::from_be_slice(value.to_bytes_be().as_slice()),
                         );
                     }
                     rust_overrides.insert(
@@ -110,8 +110,8 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
         simulation::SimulationParameters {
             caller: RevmAddress::from_str(params.caller.as_str()).unwrap(),
             to: RevmAddress::from_str(params.to.as_str()).unwrap(),
-            data: Bytes::from(params.data),
-            value: U256::from_big_endian(params.value.to_bytes_be().as_slice()),
+            data: params.data,
+            value: U256::from_be_slice(params.value.to_bytes_be().as_slice()),
             overrides,
             gas_limit: params.gas_limit,
             block_number: params.block_number.unwrap_or(0),
@@ -173,15 +173,15 @@ impl From<StateUpdate> for account_storage::StateUpdate {
         if let Some(py_storage) = py_state_update.storage {
             for (key, val) in py_storage {
                 rust_storage.insert(
-                    rU256::from_str(&key.to_string()).unwrap(),
-                    rU256::from_str(&val.to_string()).unwrap(),
+                    U256::from_str(&key.to_string()).unwrap(),
+                    U256::from_str(&val.to_string()).unwrap(),
                 );
             }
         }
 
         let mut rust_balance = None;
         if let Some(py_balance) = py_state_update.balance {
-            rust_balance = Some(rU256::from_str(&py_balance.to_string()).unwrap());
+            rust_balance = Some(U256::from_str(&py_balance.to_string()).unwrap());
         }
 
         account_storage::StateUpdate { storage: Some(rust_storage), balance: rust_balance }
@@ -267,14 +267,14 @@ impl From<AccountUpdate> for tycho_models::AccountUpdate {
         let mut rust_slots = HashMap::new();
         for (key, val) in py_update.slots {
             rust_slots.insert(
-                rU256::from_str(&key.to_string()).unwrap(),
-                rU256::from_str(&val.to_string()).unwrap(),
+                U256::from_str(&key.to_string()).unwrap(),
+                U256::from_str(&val.to_string()).unwrap(),
             );
         }
 
         let rust_balance = py_update
             .balance
-            .map(|b| rU256::from_str(&b.to_string()).unwrap());
+            .map(|b| U256::from_str(&b.to_string()).unwrap());
 
         tycho_models::AccountUpdate {
             address: RevmAddress::from_str(py_update.address.as_str()).unwrap(),
@@ -372,7 +372,7 @@ impl From<AccountInfo> for revm::primitives::AccountInfo {
         }
 
         revm::primitives::AccountInfo::new(
-            rU256::from_str(&py_info.balance.to_string()).unwrap(),
+            U256::from_str(&py_info.balance.to_string()).unwrap(),
             py_info.nonce,
             code.hash_slow(),
             code,
