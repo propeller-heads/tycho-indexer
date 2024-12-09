@@ -1,13 +1,15 @@
-use anyhow::{anyhow, Error};
-use async_stream::try_stream;
-use futures03::{Stream, StreamExt};
-use once_cell::sync::Lazy;
 use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
+
+use anyhow::{anyhow, Error};
+use async_stream::try_stream;
+use futures03::{Stream, StreamExt};
+use metrics::counter;
+use once_cell::sync::Lazy;
 use tokio::time::sleep;
 use tokio_retry::strategy::ExponentialBackoff;
 use tracing::{error, info, trace, warn};
@@ -118,10 +120,12 @@ fn stream_blocks(
                                 // Unauthenticated errors are not retried, we forward the error back to the
                                 // stream consumer which handles it
                                 if status.code() == tonic::Code::Unauthenticated {
+                                    counter!("substreams_failure", "module" => output_module_name.clone(), "cause" => "unautenticated").increment(1);
                                     return Err(anyhow::Error::new(status.clone()))?;
                                 }
 
                                 error!("Received tonic error {:#}", status);
+                                counter!("substreams_failure", "module" => output_module_name.clone(), "cause" => "tonic_error").increment(1);
 
                                 // If we reach this point, we must wait a bit before retrying
                                 if let Some(duration) = backoff.next() {
@@ -129,6 +133,7 @@ fn stream_blocks(
                                     sleep(duration).await;
                                     retry_count += 1;
                                 } else {
+                                    counter!("substreams_failure", "module" => output_module_name.clone(), "cause" => "max_retries_exceeded").increment(1);
                                     return Err(anyhow!("Backoff requested to stop retrying, quitting"))?;
                                 }
 
@@ -144,7 +149,7 @@ fn stream_blocks(
                     // We failed to connect and will try again; this is another
                     // case where we actually _want_ to back off in case we keep
                     // having connection errors.
-
+                    counter!("substreams_failure", "module" => output_module_name.clone(), "cause" => "connection_error").increment(1);
                     error!("Unable to connect to endpoint: {:#}", e);
                 }
             }

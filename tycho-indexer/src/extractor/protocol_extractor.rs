@@ -6,6 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
+use metrics::gauge;
 use mockall::automock;
 use prost::Message;
 use tokio::sync::Mutex;
@@ -163,6 +164,7 @@ where
         let mut state = self.inner.lock().await;
         state.last_processed_block = Some(block);
     }
+
     /// Reports sync progress if a minute has passed since the last report.
     async fn maybe_report_progress(&self, block: &Block) {
         let mut state = self.inner.lock().await;
@@ -190,6 +192,11 @@ where
             );
             state.last_report_ts = now;
             state.last_report_block_number = block.number;
+            gauge!(
+                "extractor_sync_time_remaining",
+                "extractor" => self.get_id().to_string(),
+            )
+            .set(time_remaining.num_minutes() as f64);
         }
     }
 
@@ -579,7 +586,6 @@ where
         let is_syncing = inp.final_block_height >= msg.block.number;
         {
             // keep reorg buffer guard within a limited scope
-
             let mut reorg_buffer = self.reorg_buffer.lock().await;
             reorg_buffer
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
@@ -602,6 +608,7 @@ where
                     .await?;
             }
         }
+
         self.update_last_processed_block(msg.block.clone())
             .await;
 
@@ -686,8 +693,8 @@ where
                                     range of blocks, we only want to remove it (so undo its creation).
                                     As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
                                     */
-                                    if !reverted_deletions.contains_key(id) &&
-                                        !reverted_creations.contains_key(id)
+                                    if !reverted_deletions.contains_key(id)
+                                        && !reverted_creations.contains_key(id)
                                     {
                                         match new_component.change {
                                             ChangeType::Update => {}

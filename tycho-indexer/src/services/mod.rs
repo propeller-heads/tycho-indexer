@@ -11,10 +11,6 @@ use tracing::info;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{
-    extractor::{runner::ExtractorHandle, ExtractionError},
-    services::deltas_buffer::PendingDeltas,
-};
 use tycho_core::{
     dto::{
         AccountUpdate, BlockParam, Chain, ChangeType, ContractId, Health, PaginationParams,
@@ -25,6 +21,11 @@ use tycho_core::{
         VersionParam,
     },
     storage::Gateway,
+};
+
+use crate::{
+    extractor::{runner::ExtractorHandle, ExtractionError},
+    services::deltas_buffer::PendingDeltas,
 };
 
 mod cache;

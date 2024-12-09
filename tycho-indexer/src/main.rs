@@ -12,6 +12,7 @@ use actix_web::{dev::ServerHandle, web, App, HttpResponse, HttpServer, Responder
 use chrono::{NaiveDateTime, Utc};
 use clap::Parser;
 use futures03::future::select_all;
+use metrics::describe_gauge;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use serde::Deserialize;
 use tokio::{runtime::Handle, select, task::JoinHandle};
@@ -118,6 +119,11 @@ fn create_tracing_subscriber() {
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
 pub fn create_metrics_exporter() -> tokio::task::JoinHandle<()> {
+    describe_gauge!(
+        "extractor_sync_time_remaining",
+        "Time remaining for the extractor to sync, measured in minutes."
+    );
+
     let exporter_builder = PrometheusBuilder::new();
     let handle = exporter_builder
         .install_recorder()
