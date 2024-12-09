@@ -703,6 +703,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_sequential_get_amount_outs() {
+        let pool_state = setup_pool_state().await;
+
+        let result = pool_state
+            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
+            .unwrap();
+        let new_state = result
+            .new_state
+            .as_any()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
+            .unwrap();
+        assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
+        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
+        assert_ne!(new_state.spot_prices, pool_state.spot_prices);
+
+        let new_result = new_state
+            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
+            .unwrap();
+        let new_state_second_swap = new_result
+            .new_state
+            .as_any()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
+            .unwrap();
+
+        assert_eq!(new_result.amount, BigUint::from_str("136964651490065626").unwrap());
+        assert_eq!(new_result.gas, BigUint::from_str("70048").unwrap());
+        assert_ne!(new_state_second_swap.spot_prices, new_state.spot_prices);
+    }
+
+    #[tokio::test]
     async fn test_get_amount_out_dust() {
         let pool_state = setup_pool_state().await;
 
