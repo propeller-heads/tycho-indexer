@@ -505,19 +505,16 @@ mod tests {
         collections::{HashMap, HashSet},
         path::PathBuf,
         str::FromStr,
-        sync::Arc,
     };
 
-    use ethers::prelude::{Http, Provider};
     use num_bigint::ToBigUint;
     use num_traits::One;
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
-    use rstest::rstest;
     use serde_json::Value;
 
     use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
     use crate::evm::{
-        engine_db::{create_engine, simulation_db::SimulationDB, SHARED_TYCHO_DB},
+        engine_db::{create_engine, SHARED_TYCHO_DB},
         simulation::SimulationEngine,
         tycho_models::AccountUpdate,
     };
@@ -612,100 +609,6 @@ mod tests {
             .build(SHARED_TYCHO_DB.clone())
             .await
             .expect("Failed to build pool state")
-    }
-
-    #[ignore]
-    #[rstest]
-    fn test_get_amount_out_sim_db() {
-        // TODO remove this test after review - this is just to show what I've tried.
-        // TEST SETUP - fails due to
-        // "there is no reactor running, must be called from the context of a Tokio 1.x runtime"
-
-        let data_str = include_str!("assets/balancer_contract_storage_block_20463609.json");
-        let data: Value = serde_json::from_str(data_str).expect("Failed to parse JSON");
-
-        let accounts: Vec<AccountUpdate> = serde_json::from_value(data["accounts"].clone())
-            .expect("Expected accounts to match AccountUpdate structure");
-
-        let rpc_url = std::env::var("ETH_RPC_URL").unwrap();
-        let client = Provider::<Http>::try_from(rpc_url).unwrap();
-        let runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
-        let client = Arc::new(client);
-        let db = SimulationDB::new(client, None, None);
-        let engine: SimulationEngine<_> = create_engine(db.clone(), false).unwrap();
-
-        for account in accounts.clone() {
-            engine.state.init_account(
-                account.address,
-                AccountInfo {
-                    balance: account.balance.unwrap_or_default(),
-                    nonce: 0u64,
-                    code_hash: KECCAK_EMPTY,
-                    code: account
-                        .code
-                        .clone()
-                        .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
-                },
-                None,
-                false,
-            );
-        }
-
-        let dai_addr = dai().address;
-        let bal_addr = bal().address;
-
-        let tokens = vec![dai_addr, bal_addr];
-        let block = BlockHeader {
-            number: 18485417,
-            hash: B256::from_str(
-                "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
-            )
-            .expect("Invalid block hash"),
-            timestamp: 0,
-        };
-
-        let pool_id: String =
-            "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
-
-        let stateless_contracts = HashMap::from([(
-            String::from("0x3de27efa2f1aa663ae5d458857e731c129069f29"),
-            Some(Vec::new()),
-        )]);
-
-        let balances = HashMap::from([
-            (dai_addr, U256::from_str("178754012737301807104").unwrap()),
-            (bal_addr, U256::from_str("91082987763369885696").unwrap()),
-        ]);
-
-        let build_future = EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
-            .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
-            .adapter_contract_path(PathBuf::from(
-                "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
-            ))
-            .stateless_contracts(stateless_contracts)
-            .engine(engine)
-            .build(db);
-
-        let pool_state = runtime
-            .block_on(build_future)
-            .expect("Failed to build pool state");
-
-        // TEST START
-
-        let result = pool_state
-            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
-            .unwrap();
-        let new_state = result
-            .new_state
-            .as_any()
-            .downcast_ref::<EVMPoolState<PreCachedDB>>()
-            .unwrap();
-        assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
-        assert_ne!(new_state.spot_prices, pool_state.spot_prices);
-        assert!(pool_state
-            .block_lasting_overwrites
-            .is_empty());
     }
 
     #[tokio::test]
