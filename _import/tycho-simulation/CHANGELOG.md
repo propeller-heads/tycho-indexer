@@ -1,3 +1,10 @@
+## [0.56.0](https://github.com/propeller-heads/tycho-simulation/compare/0.55.0...0.56.0) (2024-12-09)
+
+
+### Features
+
+* Take generic DB trait in state builder ([f1bc2a3](https://github.com/propeller-heads/tycho-simulation/commit/f1bc2a376cf8e81415c2c0e0108e760675fd1013))
+
 ## [0.55.0](https://github.com/propeller-heads/tycho-simulation/compare/0.54.0...0.55.0) (2024-12-09)
 
 
