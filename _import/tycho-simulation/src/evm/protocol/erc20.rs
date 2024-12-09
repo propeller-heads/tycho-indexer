@@ -19,7 +19,7 @@ pub fn bytes_to_erc20_address(address: &Bytes) -> Result<Address, SimulationErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::evm::protocol::vm::utils::hexstring_to_vec;
+    use crate::utils::hexstring_to_vec;
     #[test]
     fn test_bytes_to_erc20_address_0x() {
         let address =

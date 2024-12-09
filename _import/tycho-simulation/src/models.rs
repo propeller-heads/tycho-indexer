@@ -13,7 +13,7 @@ use std::{
 
 use num_bigint::BigUint;
 
-use crate::evm::protocol::vm::utils::hexstring_to_vec;
+use crate::utils::hexstring_to_vec;
 use tycho_core::dto::ResponseToken;
 
 #[derive(Clone, Debug, Eq)]
