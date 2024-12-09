@@ -5,29 +5,28 @@
 //!
 //! ERC20Tokens provide instructions on how to handle prices and amounts,
 //! while Swap and SwapSequence are usually used as results types.
+use alloy_primitives::Address;
 use std::{
     convert::TryFrom,
     hash::{Hash, Hasher},
     str::FromStr,
 };
 
-use ethers::types::{H160, U256};
-use serde::{Deserialize, Serialize};
-use tycho_core::Bytes;
+use ethers::types::U256;
+use num_bigint::BigUint;
 
 use tycho_core::dto::ResponseToken;
-use tycho_ethereum::BytesCodec;
 
 #[derive(Clone, Debug, Eq)]
 pub struct ERC20Token {
     /// The address of the token on the blockchain network
-    pub address: H160,
+    pub address: Address,
     /// The number of decimal places that the token uses
     pub decimals: usize,
     /// The symbol of the token
     pub symbol: String,
     /// The amount of gas it takes to transfer the token
-    pub gas: U256,
+    pub gas: BigUint,
 }
 
 impl ERC20Token {
@@ -46,8 +45,8 @@ impl ERC20Token {
     ///
     /// ## Panic
     /// - Panics if the token address string is not in valid format
-    pub fn new(address: &str, decimals: usize, symbol: &str, gas: U256) -> Self {
-        let addr = H160::from_str(address).expect("Failed to parse token address");
+    pub fn new(address: &str, decimals: usize, symbol: &str, gas: BigUint) -> Self {
+        let addr = Address::from_str(address).expect("Failed to parse token address");
         let sym = symbol.to_string();
         ERC20Token { address: addr, decimals, symbol: sym, gas }
     }
@@ -85,10 +84,10 @@ impl TryFrom<ResponseToken> for ERC20Token {
 
     fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: H160::from_bytes(&value.address),
+            address: Address::from_slice(&value.address),
             decimals: value.decimals.try_into()?,
             symbol: value.symbol,
-            gas: U256::from(
+            gas: BigUint::from(
                 value
                     .gas
                     .into_iter()
@@ -102,100 +101,11 @@ impl TryFrom<ResponseToken> for ERC20Token {
         })
     }
 }
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Swap {
-    token_in: H160,
-    amount_in: U256,
-    token_out: H160,
-    amount_out: U256,
-    address: Bytes,
-}
-
-impl Swap {
-    /// Constructor for Swap struct
-    ///
-    /// This struct desribes a single swap transaction.
-    ///
-    /// This function creates a new instance of the Swap struct. It takes 5 arguments:
-    /// - `token_in`: The address of the token being exchanged.
-    /// - `amount_in`: The amount of the token being exchanged.
-    /// - `token_out`: The address of the token being received.
-    /// - `amount_out`: The amount of the token being received.
-    /// - `address`: The address of the pool supplying the liquidity for the swap.
-    pub fn new(
-        token_in: H160,
-        amount_in: U256,
-        token_out: H160,
-        amount_out: U256,
-        address: Bytes,
-    ) -> Self {
-        Swap { token_in, amount_in, token_out, amount_out, address }
-    }
-
-    /// Getter for token_out
-    ///
-    /// Returns the address of the token being received in the swap.
-    pub fn token_out(&self) -> H160 {
-        self.token_out
-    }
-
-    /// Getter for token_in
-    ///
-    /// Returns the address of the token being exchanged in the swap.
-    pub fn token_in(&self) -> H160 {
-        self.token_in
-    }
-
-    /// Getter for amount_out
-    ///
-    /// Returns the amount of the token being received in the swap.
-    pub fn amount_out(&self) -> U256 {
-        self.amount_out
-    }
-
-    /// Getter for amount_in
-    ///
-    /// Returns the amount of the token being exchanged in the swap.
-    pub fn amount_in(&self) -> U256 {
-        self.amount_in
-    }
-
-    /// Getter for address
-    ///
-    /// Returns the address of the user making the swap.
-    pub fn address(&self) -> Bytes {
-        self.address.clone()
-    }
-}
-#[derive(Debug)]
-pub struct SwapSequence {
-    actions: Vec<Swap>,
-    gas: U256,
-}
-
-impl SwapSequence {
-    /// SwapSequence
-    ///
-    /// A struct that represents a sequence of `Swap` transactions and the gas required to execute
-    /// them.
-    pub fn new(swaps: Vec<Swap>, gas: U256) -> Self {
-        SwapSequence { actions: swaps, gas }
-    }
-
-    /// Returns a vector of `Swap` actions.
-    pub fn swaps(self) -> Vec<Swap> {
-        self.actions
-    }
-
-    /// Returns the gas required to execute the sequence of `Swap` actions.
-    pub fn gas(&self) -> U256 {
-        self.gas
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_bigint::ToBigUint;
 
     #[test]
     fn test_constructor() {
@@ -203,7 +113,7 @@ mod tests {
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
 
         assert_eq!(token.symbol, "USDC");
@@ -217,19 +127,19 @@ mod tests {
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
         let usdc2 = ERC20Token::new(
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC2",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
         let weth = ERC20Token::new(
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             18,
             "WETH",
-            U256::from(15000),
+            15000.to_biguint().unwrap(),
         );
 
         assert!(usdc < weth);
@@ -242,7 +152,7 @@ mod tests {
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",
-            U256::from(10000),
+            10000.to_biguint().unwrap(),
         );
 
         assert_eq!(usdc.one().as_u64(), 1000000);

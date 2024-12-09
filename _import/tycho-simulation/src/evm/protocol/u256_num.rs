@@ -1,7 +1,9 @@
 //! Numeric methods for the U256 type
+use alloy_primitives::U256;
 use std::{cmp::max, panic};
 
-use ethers::types::U256;
+use ethers::types::U256 as EthersU256;
+use num_bigint::BigUint;
 
 /// Converts a U256 integer into it's closest floating point representation
 ///
@@ -28,17 +30,19 @@ use ethers::types::U256;
 /// - [Paper: "What Every Computer Scientist Should Know About Floating Point Arithmetic"](http://www.validlab.com/goldberg/paper.pdf)
 pub fn u256_to_f64(x: U256) -> f64 {
     let res = panic::catch_unwind(|| {
-        if x == U256::zero() {
+        if x == U256::from(0u64) {
             return 0.0;
         }
 
-        let x_bits = x.bits();
+        let x_bits = x.bit_len();
         let n_shifts = 53i32 - x_bits as i32;
         let mut exponent = (1023 + 52 - n_shifts) as u64;
 
         let mut significant = if n_shifts >= 0 {
             // shift left if pos, no rounding needed
-            (x << n_shifts).as_u64()
+            (x << n_shifts)
+                .try_into()
+                .expect("Value does not fit into u64")
         } else {
             /*
             shift right if neg, dropping LSBs, round to nearest even
@@ -52,17 +56,20 @@ pub fn u256_to_f64(x: U256) -> f64 {
             round to the number that has 0 at the n-th place.
             */
             // least significant bit is be used as tiebreaker
-            let lsb = (x >> n_shifts.abs()) & U256::one();
-            let round_bit = (x >> (n_shifts.abs() - 1)) & U256::one();
+            let lsb = (x >> n_shifts.abs()) & U256::from(1u64);
+            let round_bit = (x >> (n_shifts.abs() - 1)) & U256::from(1u64);
 
             // build mask for sticky bit, handle case when no data for sticky bit is available
-            let sticky_bit = x & ((U256::one() << max(n_shifts.abs() - 2, 0)) - U256::one());
+            let sticky_bit =
+                x & ((U256::from(1u64) << max(n_shifts.abs() - 2, 0)) - U256::from(1u64));
 
-            let rounded_torwards_zero = (x >> n_shifts.abs()).as_u64();
-            if round_bit == U256::one() {
-                if sticky_bit == U256::zero() {
+            let rounded_torwards_zero: u64 = (x >> n_shifts.abs())
+                .try_into()
+                .expect("Value does not fit into u64");
+            if round_bit == U256::from(1u64) {
+                if sticky_bit == U256::from(0u64) {
                     // tiebreaker: round up if lsb is 1 and down if lsb is 0
-                    if lsb == U256::zero() {
+                    if lsb == U256::from(0u64) {
                         rounded_torwards_zero
                     } else {
                         rounded_torwards_zero + 1
@@ -88,6 +95,22 @@ pub fn u256_to_f64(x: U256) -> f64 {
     res.unwrap_or_else(|_| panic!("Conversion f64 -> U256 panicked for {x}"))
 }
 
+pub fn u256_to_biguint(value: U256) -> BigUint {
+    let bytes: [u8; 32] = value.to_be_bytes();
+    BigUint::from_bytes_be(&bytes)
+}
+
+pub fn biguint_to_u256(value: &BigUint) -> U256 {
+    let bytes = value.to_bytes_be();
+    U256::from_be_slice(&bytes)
+}
+
+pub fn convert_ethers_to_alloy(ethers_u256: EthersU256) -> U256 {
+    let mut bytes = [0u8; 32]; // 32-byte buffer
+    ethers_u256.to_big_endian(&mut bytes); // Fill the buffer with big-endian bytes
+    U256::from_be_bytes(bytes) // Convert to Alloy U256
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -95,12 +118,12 @@ mod test {
     use rstest::rstest;
 
     #[rstest]
-    #[case::one(U256::one(), 1.0f64)]
+    #[case::one(U256::from(1u64), 1.0f64)]
     #[case::two(U256::from(2), 2.0f64)]
-    #[case::zero(U256::zero(), 0.0f64)]
+    #[case::zero(U256::from(0u64), 0.0f64)]
     #[case::two_pow1024(U256::from(2).pow(U256::from(190)), 2.0f64.powi(190))]
-    #[case::max32(U256([u32::MAX as u64, 0, 0, 0]), u32::MAX as f64)]
-    #[case::max64(U256([u64::MAX, 0, 0, 0]), u64::MAX as f64)]
+    #[case::max32(U256::from_limbs([u32::MAX as u64, 0, 0, 0]), u32::MAX as f64)]
+    #[case::max64(U256::from_limbs([u64::MAX, 0, 0, 0]), u64::MAX as f64)]
     #[case::edge_54bits_trailing_zeros(U256::from(2u64.pow(53)), 2u64.pow(53) as f64)]
     #[case::edge_54bits_trailing_ones(U256::from(2u64.pow(54) - 1), (2u64.pow(54) - 1) as f64)]
     #[case::edge_53bits_trailing_zeros(U256::from(2u64.pow(52)), 2u64.pow(52) as f64)]

@@ -5,9 +5,10 @@ use std::{
 };
 
 use alloy_primitives::Address;
-use ethers::{prelude::U256, types::H160};
+use ethers::prelude::U256;
 use itertools::Itertools;
-use revm::{precompile::Address as rAddress, primitives::U256 as rU256, DatabaseRef};
+use num_bigint::BigUint;
+use revm::{primitives::U256 as rU256, DatabaseRef};
 use tracing::info;
 
 use tycho_core::dto::ProtocolStateDelta;
@@ -18,6 +19,7 @@ use crate::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
             tycho_db::PreCachedDB,
         },
+        protocol::u256_num::{convert_ethers_to_alloy, u256_to_biguint},
         ContractCompiler, SlotId,
     },
     models::ERC20Token,
@@ -45,30 +47,30 @@ where
     /// The pool's identifier
     id: String,
     /// The pool's token's addresses
-    pub tokens: Vec<H160>,
+    pub tokens: Vec<Address>,
     /// The current block, will be used to set vm context
     block: BlockHeader,
     /// The pools token balances
-    balances: HashMap<H160, U256>,
+    balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
     /// If given, balances will be overwritten here instead of on the pool contract during
     /// simulations
-    balance_owner: Option<H160>,
+    balance_owner: Option<Address>,
     /// Spot prices of the pool by token pair
-    spot_prices: HashMap<(H160, H160), f64>,
+    spot_prices: HashMap<(Address, Address), f64>,
     /// The supported capabilities of this pool
     capabilities: HashSet<Capability>,
     /// Storage overwrites that will be applied to all simulations. They will be cleared
     /// when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
-    block_lasting_overwrites: HashMap<rAddress, Overwrites>,
+    block_lasting_overwrites: HashMap<Address, Overwrites>,
     /// A set of all contract addresses involved in the simulation of this pool."""
-    involved_contracts: HashSet<H160>,
+    involved_contracts: HashSet<Address>,
     /// Allows the specification of custom storage slots for token allowances and
     /// balances. This is particularly useful for token contracts involved in protocol
     /// logic that extends beyond simple transfer functionality.
     /// Each entry also specify the compiler with which the target contract was compiled. This is
     /// later used to compute storage slot for maps.
-    token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
+    token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
@@ -86,15 +88,15 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
-        tokens: Vec<H160>,
+        tokens: Vec<Address>,
         block: BlockHeader,
-        balances: HashMap<H160, U256>,
-        balance_owner: Option<H160>,
-        spot_prices: HashMap<(H160, H160), f64>,
+        balances: HashMap<Address, U256>,
+        balance_owner: Option<Address>,
+        spot_prices: HashMap<(Address, Address), f64>,
         capabilities: HashSet<Capability>,
-        block_lasting_overwrites: HashMap<rAddress, Overwrites>,
-        involved_contracts: HashSet<H160>,
-        token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
+        block_lasting_overwrites: HashMap<Address, Overwrites>,
+        involved_contracts: HashSet<Address>,
+        token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
         manual_updates: bool,
         adapter_contract: TychoSimulationContract<D>,
     ) -> Self {
@@ -177,7 +179,7 @@ where
     /// is significant and determines the direction of the price query.
     fn get_sell_amount_limit(
         &self,
-        tokens: Vec<H160>,
+        tokens: Vec<Address>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<U256, SimulationError> {
         let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
@@ -203,9 +205,9 @@ where
 
     fn get_overwrites(
         &self,
-        tokens: Vec<H160>,
+        tokens: Vec<Address>,
         max_amount: U256,
-    ) -> Result<HashMap<rAddress, Overwrites>, SimulationError> {
+    ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let token_overwrites = self.get_token_overwrites(tokens, max_amount)?;
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
@@ -217,11 +219,11 @@ where
 
     fn get_token_overwrites(
         &self,
-        tokens: Vec<H160>,
+        tokens: Vec<Address>,
         max_amount: U256,
-    ) -> Result<HashMap<rAddress, Overwrites>, SimulationError> {
+    ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let sell_token = &tokens[0].clone();
-        let mut res: Vec<HashMap<rAddress, Overwrites>> = Vec::new();
+        let mut res: Vec<HashMap<Address, Overwrites>> = Vec::new();
         if !self
             .capabilities
             .contains(&Capability::TokenBalanceIndependent)
@@ -238,19 +240,15 @@ where
                 ContractCompiler::Solidity,
             ));
 
-        let mut overwrites = ERC20OverwriteFactory::new(
-            rAddress::from_slice(&sell_token.0),
-            slots.clone(),
-            compiler,
-        );
+        let mut overwrites = ERC20OverwriteFactory::new(*sell_token, slots.clone(), compiler);
 
-        overwrites.set_balance(max_amount, H160::from_slice(&*EXTERNAL_ACCOUNT.0));
+        overwrites.set_balance(max_amount, Address::from_slice(&*EXTERNAL_ACCOUNT.0));
 
         // Set allowance for ADAPTER_ADDRESS to max_amount
         overwrites.set_allowance(
             max_amount,
-            H160::from_slice(&*ADAPTER_ADDRESS.0),
-            H160::from_slice(&*EXTERNAL_ACCOUNT.0),
+            Address::from_slice(&*ADAPTER_ADDRESS.0),
+            Address::from_slice(&*EXTERNAL_ACCOUNT.0),
         );
 
         res.push(overwrites.get_overwrites());
@@ -263,9 +261,9 @@ where
 
     fn get_balance_overwrites(
         &self,
-        tokens: Vec<H160>,
-    ) -> Result<HashMap<rAddress, Overwrites>, SimulationError> {
-        let mut balance_overwrites: HashMap<rAddress, Overwrites> = HashMap::new();
+        tokens: Vec<Address>,
+    ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
+        let mut balance_overwrites: HashMap<Address, Overwrites> = HashMap::new();
         let address = match self.balance_owner {
             Some(address) => Ok(address),
             None => self.id.parse().map_err(|_| {
@@ -291,7 +289,7 @@ where
             };
 
             let mut overwrites =
-                ERC20OverwriteFactory::new(rAddress::from(token.0), slots, compiler);
+                ERC20OverwriteFactory::new(Address::from(token.0), slots, compiler);
             overwrites.set_balance(
                 self.balances
                     .get(token)
@@ -314,9 +312,9 @@ where
 
     fn merge(
         &self,
-        target: &HashMap<rAddress, Overwrites>,
-        source: &HashMap<rAddress, Overwrites>,
-    ) -> HashMap<rAddress, Overwrites> {
+        target: &HashMap<Address, Overwrites>,
+        source: &HashMap<Address, Overwrites>,
+    ) -> HashMap<Address, Overwrites> {
         let mut merged = target.clone();
 
         for (key, source_inner) in source {
@@ -330,7 +328,7 @@ where
     }
 
     #[cfg(test)]
-    pub fn get_involved_contracts(&self) -> HashSet<H160> {
+    pub fn get_involved_contracts(&self) -> HashSet<Address> {
         self.involved_contracts.clone()
     }
 
@@ -340,7 +338,7 @@ where
     }
 
     #[cfg(test)]
-    pub fn get_balance_owner(&self) -> Option<H160> {
+    pub fn get_balance_owner(&self) -> Option<Address> {
         self.balance_owner
     }
 }
@@ -367,13 +365,13 @@ where
 
     fn get_amount_out(
         &self,
-        amount_in: U256,
+        amount_in: BigUint,
         token_in: &ERC20Token,
         token_out: &ERC20Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let sell_token = token_in.address;
         let buy_token = token_out.address;
-        let sell_amount = amount_in;
+        let sell_amount = U256::from_big_endian(&amount_in.to_bytes_be());
         let overwrites = self.get_overwrites(
             vec![sell_token, buy_token],
             U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
@@ -444,13 +442,17 @@ where
             return Err(SimulationError::InvalidInput(
                 format!("Sell amount exceeds limit {}", sell_amount_limit),
                 Some(GetAmountOutResult::new(
-                    buy_amount,
-                    trade.gas_used,
+                    u256_to_biguint(convert_ethers_to_alloy(buy_amount)),
+                    u256_to_biguint(convert_ethers_to_alloy(trade.gas_used)),
                     Box::new(new_state.clone()),
                 )),
             ));
         }
-        Ok(GetAmountOutResult::new(buy_amount, trade.gas_used, Box::new(new_state.clone())))
+        Ok(GetAmountOutResult::new(
+            u256_to_biguint(convert_ethers_to_alloy(buy_amount)),
+            u256_to_biguint(convert_ethers_to_alloy(trade.gas_used)),
+            Box::new(new_state.clone()),
+        ))
     }
 
     fn delta_transition(
@@ -510,10 +512,9 @@ mod tests {
         sync::Arc,
     };
 
-    use ethers::{
-        prelude::{Http, Provider, H256},
-        types::Address as EthAddress,
-    };
+    use ethers::prelude::{Http, Provider, H256};
+    use num_bigint::ToBigUint;
+    use num_traits::One;
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use rstest::rstest;
     use serde_json::Value;
@@ -526,11 +527,21 @@ mod tests {
     };
 
     fn dai() -> ERC20Token {
-        ERC20Token::new("0x6b175474e89094c44da98b954eedeac495271d0f", 18, "DAI", U256::from(10_000))
+        ERC20Token::new(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            18,
+            "DAI",
+            10_000.to_biguint().unwrap(),
+        )
     }
 
     fn bal() -> ERC20Token {
-        ERC20Token::new("0xba100000625a3754423978a60c9317c58a424e3d", 18, "BAL", U256::from(10_000))
+        ERC20Token::new(
+            "0xba100000625a3754423978a60c9317c58a424e3d",
+            18,
+            "BAL",
+            10_000.to_biguint().unwrap(),
+        )
     }
 
     async fn setup_pool_state() -> EVMPoolState<PreCachedDB> {
@@ -592,14 +603,12 @@ mod tests {
         )]);
 
         let balances = HashMap::from([
-            (EthAddress::from(dai_addr.0), U256::from_dec_str("178754012737301807104").unwrap()),
-            (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
+            (dai_addr, U256::from_dec_str("178754012737301807104").unwrap()),
+            (bal_addr, U256::from_dec_str("91082987763369885696").unwrap()),
         ]);
 
         EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
-            .balance_owner(
-                EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
-            )
+            .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_path(PathBuf::from(
                 "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
             ))
@@ -668,14 +677,12 @@ mod tests {
         )]);
 
         let balances = HashMap::from([
-            (EthAddress::from(dai_addr.0), U256::from_dec_str("178754012737301807104").unwrap()),
-            (EthAddress::from(bal_addr.0), U256::from_dec_str("91082987763369885696").unwrap()),
+            (dai_addr, U256::from_dec_str("178754012737301807104").unwrap()),
+            (bal_addr, U256::from_dec_str("91082987763369885696").unwrap()),
         ]);
 
         let build_future = EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
-            .balance_owner(
-                EthAddress::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap(),
-            )
+            .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_path(PathBuf::from(
                 "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
             ))
@@ -690,15 +697,15 @@ mod tests {
         // TEST START
 
         let result = pool_state
-            .get_amount_out(U256::from_dec_str("1000000000000000000").unwrap(), &dai(), &bal())
+            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
             .unwrap();
         let new_state = result
             .new_state
             .as_any()
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
-        assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, U256::from_dec_str("102770").unwrap());
+        assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
+        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
         assert!(pool_state
             .block_lasting_overwrites
@@ -751,9 +758,8 @@ mod tests {
             .clone()
             .get_account_storage();
         for token in pool_state.tokens.clone() {
-            let token_address = rAddress::from_slice(&token.0);
             let account = engine_accounts
-                .get_account_info(&token_address)
+                .get_account_info(&token)
                 .unwrap();
             assert_eq!(account.balance, rU256::from(0));
             assert_eq!(account.nonce, 0u64);
@@ -776,15 +782,15 @@ mod tests {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
-            .get_amount_out(U256::from_dec_str("1000000000000000000").unwrap(), &dai(), &bal())
+            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
             .unwrap();
         let new_state = result
             .new_state
             .as_any()
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
-        assert_eq!(result.amount, U256::from_dec_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, U256::from_dec_str("102770").unwrap());
+        assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
+        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
         assert!(pool_state
             .block_lasting_overwrites
@@ -793,11 +799,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_sequential_get_amount_outs() {
+        let pool_state = setup_pool_state().await;
+
+        let result = pool_state
+            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
+            .unwrap();
+        let new_state = result
+            .new_state
+            .as_any()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
+            .unwrap();
+        assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
+        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
+        assert_ne!(new_state.spot_prices, pool_state.spot_prices);
+
+        let new_result = new_state
+            .get_amount_out(BigUint::from_str("1000000000000000000").unwrap(), &dai(), &bal())
+            .unwrap();
+        let new_state_second_swap = new_result
+            .new_state
+            .as_any()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
+            .unwrap();
+
+        assert_eq!(new_result.amount, BigUint::from_str("136964651490065626").unwrap());
+        assert_eq!(new_result.gas, BigUint::from_str("70048").unwrap());
+        assert_ne!(new_state_second_swap.spot_prices, new_state.spot_prices);
+    }
+
+    #[tokio::test]
     async fn test_get_amount_out_dust() {
         let pool_state = setup_pool_state().await;
 
         let result = pool_state
-            .get_amount_out(U256::from(1), &dai(), &bal())
+            .get_amount_out(BigUint::one(), &dai(), &bal())
             .unwrap();
 
         let new_state = result
@@ -805,8 +841,8 @@ mod tests {
             .as_any()
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
-        assert_eq!(result.amount, U256::from(0));
-        assert_eq!(result.gas, U256::from(68656));
+        assert_eq!(result.amount, BigUint::ZERO);
+        assert_eq!(result.gas, 68656.to_biguint().unwrap());
         assert_eq!(new_state.spot_prices, pool_state.spot_prices)
     }
 
@@ -816,7 +852,7 @@ mod tests {
 
         let result = pool_state.get_amount_out(
             // sell limit is 100279494253364362835
-            U256::from_dec_str("100379494253364362835").unwrap(),
+            BigUint::from_str("100379494253364362835").unwrap(),
             &dai(),
             &bal(),
         );

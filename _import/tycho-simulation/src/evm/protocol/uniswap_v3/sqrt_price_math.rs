@@ -1,16 +1,17 @@
-use ethers::types::U256;
-
 use crate::{
+    evm::protocol::{
+        safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+        u256_num::u256_to_f64,
+    },
     protocol::errors::SimulationError,
-    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
-    u256_num::u256_to_f64,
 };
+use alloy_primitives::U256;
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
 
-const Q96: U256 = U256([0, 4294967296, 0, 0]);
-const RESOLUTION: U256 = U256([96, 0, 0, 0]);
-const U160_MAX: U256 = U256([u64::MAX, u64::MAX, 4294967295, 0]);
+const Q96: U256 = U256::from_limbs([0, 4294967296, 0, 0]);
+const RESOLUTION: U256 = U256::from_limbs([96, 0, 0, 0]);
+const U160_MAX: U256 = U256::from_limbs([u64::MAX, u64::MAX, 4294967295, 0]);
 
 fn maybe_flip_ratios(a: U256, b: U256) -> (U256, U256) {
     if a > b {
@@ -21,9 +22,9 @@ fn maybe_flip_ratios(a: U256, b: U256) -> (U256, U256) {
 }
 
 fn div_rounding_up(a: U256, b: U256) -> Result<U256, SimulationError> {
-    let (result, rest) = a.div_mod(b);
-    if rest > U256::zero() {
-        let res = safe_add_u256(result, U256::one())?;
+    let (result, rest) = div_mod_u256(a, b)?;
+    if rest > U256::from(0u64) {
+        let res = safe_add_u256(result, U256::from(1u64))?;
         Ok(res)
     } else {
         Ok(result)
@@ -41,7 +42,7 @@ pub fn get_amount0_delta(
     let numerator1 = U256::from(liquidity) << RESOLUTION;
     let numerator2 = sqrt_ratio_b - sqrt_ratio_a;
 
-    assert!(sqrt_ratio_a > U256::zero());
+    assert!(sqrt_ratio_a > U256::from(0u64));
 
     if round_up {
         div_rounding_up(mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?, sqrt_ratio_a)
@@ -73,7 +74,7 @@ pub fn get_next_sqrt_price_from_input(
     amount_in: U256,
     zero_for_one: bool,
 ) -> Result<U256, SimulationError> {
-    assert!(sqrt_price > U256::zero());
+    assert!(sqrt_price > U256::from(0u64));
 
     if zero_for_one {
         Ok(get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, true)?)
@@ -88,7 +89,7 @@ pub fn get_next_sqrt_price_from_output(
     amount_in: U256,
     zero_for_one: bool,
 ) -> Result<U256, SimulationError> {
-    assert!(sqrt_price > U256::zero());
+    assert!(sqrt_price > U256::from(0u64));
     assert!(liquidity > 0);
 
     if zero_for_one {
@@ -104,7 +105,7 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
     amount: U256,
     add: bool,
 ) -> Result<U256, SimulationError> {
-    if amount == U256::zero() {
+    if amount == U256::from(0u64) {
         return Ok(sqrt_price);
     }
     let numerator1 = U256::from(liquidity) << RESOLUTION;
@@ -172,15 +173,16 @@ mod tests {
     use super::*;
     use approx::assert_ulps_eq;
     use rstest::rstest;
+    use std::str::FromStr;
 
     fn u256(s: &str) -> U256 {
-        U256::from_dec_str(s).unwrap()
+        U256::from_str(s).unwrap()
     }
 
     #[test]
     fn test_maybe_flip() {
-        let a = U256::from_dec_str("646922711029656030980122427077").unwrap();
-        let b = U256::from_dec_str("78833030112140176575862854579").unwrap();
+        let a = U256::from_str("646922711029656030980122427077").unwrap();
+        let b = U256::from_str("78833030112140176575862854579").unwrap();
         let (a1, b1) = maybe_flip_ratios(a, b);
 
         assert_eq!(b, a1);

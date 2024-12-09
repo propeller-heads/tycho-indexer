@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
@@ -8,11 +9,10 @@ use chrono::Utc;
 use ethers::{
     abi::{decode, ParamType},
     prelude::U256,
-    types::H160,
 };
 use itertools::Itertools;
 use revm::{
-    precompile::{Address as rAddress, Bytes},
+    precompile::Bytes,
     primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode, KECCAK_EMPTY},
     DatabaseRef,
 };
@@ -48,7 +48,7 @@ use super::{
 /// # Example
 /// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
-/// use ethers::types::H160;
+/// use ethers::types::Address;
 /// use crate::evm::simulation_db::BlockHeader;
 /// use crate::protocol::errors::SimulationError;
 ///
@@ -56,16 +56,16 @@ use super::{
 /// async fn main() -> Result<(), SimulationError> {
 ///     // Required parameters
 ///     let pool_id = "0xabc123".to_string();
-///     let tokens = vec![H160::zero()];
+///     let tokens = vec![Address::zero()];
 ///     let block = BlockHeader {
 ///         number: 1,
 ///         hash: Default::default(),
 ///         timestamp: 1632456789,
 ///     };
-///     
+///
 ///     // Optional: Add token balances
 ///     let mut balances = HashMap::new();
-///     balances.insert(H160::zero(), U256::from(1000));
+///     balances.insert(Address::zero(), U256::from(1000));
 ///
 ///     // Build the EVMPoolState
 ///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
@@ -82,14 +82,14 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     id: String,
-    tokens: Vec<H160>,
+    tokens: Vec<Address>,
     block: BlockHeader,
-    balances: HashMap<H160, U256>,
-    balance_owner: Option<H160>,
+    balances: HashMap<Address, U256>,
+    balance_owner: Option<Address>,
     capabilities: Option<HashSet<Capability>>,
-    involved_contracts: Option<HashSet<H160>>,
+    involved_contracts: Option<HashSet<Address>>,
     stateless_contracts: Option<HashMap<String, Option<Vec<u8>>>>,
-    token_storage_slots: Option<HashMap<H160, (ERC20Slots, ContractCompiler)>>,
+    token_storage_slots: Option<HashMap<Address, (ERC20Slots, ContractCompiler)>>,
     manual_updates: Option<bool>,
     trace: Option<bool>,
     engine: Option<SimulationEngine<D>>,
@@ -105,8 +105,8 @@ where
 {
     pub fn new(
         id: String,
-        tokens: Vec<H160>,
-        balances: HashMap<H160, U256>,
+        tokens: Vec<Address>,
+        balances: HashMap<Address, U256>,
         block: BlockHeader,
     ) -> Self {
         Self {
@@ -127,7 +127,7 @@ where
         }
     }
 
-    pub fn balance_owner(mut self, balance_owner: H160) -> Self {
+    pub fn balance_owner(mut self, balance_owner: Address) -> Self {
         self.balance_owner = Some(balance_owner);
         self
     }
@@ -137,7 +137,7 @@ where
         self
     }
 
-    pub fn involved_contracts(mut self, involved_contracts: HashSet<H160>) -> Self {
+    pub fn involved_contracts(mut self, involved_contracts: HashSet<Address>) -> Self {
         self.involved_contracts = Some(involved_contracts);
         self
     }
@@ -152,7 +152,7 @@ where
 
     pub fn token_storage_slots(
         mut self,
-        token_storage_slots: HashMap<H160, (ERC20Slots, ContractCompiler)>,
+        token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
     ) -> Self {
         self.token_storage_slots = Some(token_storage_slots);
         self
@@ -245,7 +245,7 @@ where
             };
             engine
                 .state
-                .init_account(rAddress::from_slice(&token_address.0), info, None, false);
+                .init_account(*token_address, info, None, false);
         }
 
         engine.state.init_account(
@@ -275,14 +275,14 @@ where
                         })?));
                     (Some(code.clone()), code.hash_slow())
                 };
-                let account_address: H160 = address.parse().map_err(|_| {
+                let account_address: Address = address.parse().map_err(|_| {
                     SimulationError::FatalError(format!(
                         "Failed to get default engine: Couldn't parse address string {}",
                         address
                     ))
                 })?;
                 engine.state.init_account(
-                    rAddress::from_slice(&account_address.0),
+                    alloy_primitives::Address(*account_address),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
@@ -376,7 +376,7 @@ where
         &self,
         engine: &SimulationEngine<D>,
         decoded: &str,
-    ) -> Result<rAddress, SimulationError> {
+    ) -> Result<Address, SimulationError> {
         let method_name = decoded
             .split(':')
             .last()
@@ -408,7 +408,7 @@ where
             .and_utc()
             .timestamp() as u64;
 
-        let parsed_address: rAddress = to_address.parse().map_err(|_| {
+        let parsed_address: Address = to_address.parse().map_err(|_| {
             SimulationError::FatalError(format!(
                 "Failed to get address from call: Invalid address format: {}",
                 to_address
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn test_build_without_required_fields() {
         let id = "pool_1".to_string();
-        let tokens = vec![H160::zero()];
+        let tokens = vec![Address::repeat_byte(0)];
         let balances = HashMap::new();
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
 
@@ -490,8 +490,8 @@ mod tests {
     #[test]
     fn test_engine_setup() {
         let id = "pool_1".to_string();
-        let token2 = H160::from_str("0000000000000000000000000000000000000002").unwrap();
-        let token3 = H160::from_str("0000000000000000000000000000000000000003").unwrap();
+        let token2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
+        let token3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
         let tokens = vec![token2, token3];
         let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
         let balances = HashMap::new();
@@ -504,10 +504,10 @@ mod tests {
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&rAddress::from_slice(token2.as_bytes())));
+            .account_present(&token2));
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&rAddress::from_slice(token3.as_bytes())));
+            .account_present(&token3));
     }
 }

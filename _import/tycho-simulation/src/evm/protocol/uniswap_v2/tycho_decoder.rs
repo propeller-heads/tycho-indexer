@@ -1,9 +1,6 @@
+use alloy_primitives::{Address, U256};
 use std::collections::HashMap;
-
-use ethers::types::{H160, U256};
-
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_ethereum::BytesCodec;
 
 use crate::{
     models::ERC20Token,
@@ -20,9 +17,9 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<H160, ERC20Token>,
+        _all_tokens: HashMap<Address, ERC20Token>,
     ) -> Result<Self, Self::Error> {
-        let reserve0 = U256::from_bytes(
+        let reserve0 = U256::from_be_slice(
             snapshot
                 .state
                 .attributes
@@ -30,7 +27,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
                 .ok_or(InvalidSnapshotError::MissingAttribute("reserve0".to_string()))?,
         );
 
-        let reserve1 = U256::from_bytes(
+        let reserve1 = U256::from_be_slice(
             snapshot
                 .state
                 .attributes
@@ -103,8 +100,8 @@ mod tests {
 
         assert!(result.is_ok());
         let res = result.unwrap();
-        assert_eq!(res.reserve0, 100.into());
-        assert_eq!(res.reserve1, 200.into());
+        assert_eq!(res.reserve0, U256::from_str("100").unwrap());
+        assert_eq!(res.reserve1, U256::from_str("200").unwrap());
     }
 
     #[tokio::test]

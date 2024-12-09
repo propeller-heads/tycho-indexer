@@ -6,7 +6,7 @@ use std::{
 
 use alloy_primitives::Address;
 use chrono::Utc;
-use ethers::{prelude::H256, types::H160};
+use ethers::prelude::H256;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
@@ -17,7 +17,6 @@ use tycho_client::{
     HttpRPCClient,
 };
 use tycho_core::{dto::Chain, Bytes};
-use tycho_ethereum::BytesCodec;
 use tycho_simulation::{
     evm::{
         engine_db::{
@@ -119,7 +118,7 @@ pub async fn process_messages(
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
         .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -164,7 +163,7 @@ pub async fn process_messages(
                     .for_each(|(addr, token)| {
                         if token.quality >= 51 {
                             all_tokens
-                                .entry(H160::from_bytes(addr))
+                                .entry(Address::from_slice(addr))
                                 .or_insert_with(|| {
                                     token
                                         .clone()
@@ -187,7 +186,7 @@ pub async fn process_messages(
                             .iter()
                             .flat_map(|addr| {
                                 all_tokens
-                                    .get(&H160::from_bytes(addr))
+                                    .get(&Address::from_slice(addr))
                                     .cloned()
                             })
                             .collect::<Vec<_>>();
@@ -230,7 +229,7 @@ pub async fn process_messages(
                 let mut skip_pool = false;
 
                 for token in snapshot.component.tokens.clone() {
-                    match all_tokens.get(&H160::from_bytes(&token)) {
+                    match all_tokens.get(&Address::from_slice(&token)) {
                         Some(token) => pair_tokens.push(token.clone()),
                         None => {
                             debug!(
@@ -429,7 +428,10 @@ pub async fn process_messages(
     jh.await.unwrap();
 }
 
-pub async fn load_all_tokens(tycho_url: &str, auth_key: Option<&str>) -> HashMap<H160, ERC20Token> {
+pub async fn load_all_tokens(
+    tycho_url: &str,
+    auth_key: Option<&str>,
+) -> HashMap<Address, ERC20Token> {
     let rpc_url = format!("https://{tycho_url}");
     let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key).unwrap();
 
@@ -442,7 +444,7 @@ pub async fn load_all_tokens(tycho_url: &str, auth_key: Option<&str>) -> HashMap
         .map(|token| {
             let token_clone = token.clone();
             (
-                H160::from_bytes(&token.address),
+                Address::from_slice(&token.address),
                 token.try_into().unwrap_or_else(|_| {
                     panic!("Couldn't convert {:?} into ERC20 token.", token_clone)
                 }),

@@ -8,5 +8,5 @@ quotes from each pool.
 
 ```bash
 export TYCHO_API_TOKEN=sampletoken
-RUST_LOG=info cargo run --example explorer -- --tvl-threshold 1000
+cargo run --release --example explorer -- --tvl-threshold 1000
 ```

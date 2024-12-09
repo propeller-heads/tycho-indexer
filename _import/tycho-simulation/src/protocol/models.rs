@@ -24,9 +24,11 @@
 //! It's worth emphasizin that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
+use alloy_primitives::Address;
 use std::collections::HashMap;
 
-use ethers::types::{H160, U256};
+use num_bigint::BigUint;
+
 use tycho_core::Bytes;
 
 use tycho_client::feed::Header;
@@ -61,44 +63,28 @@ pub trait TryFromWithBlock<T> {
     async fn try_from_with_block(
         value: T,
         block: Header,
-        all_tokens: HashMap<H160, ERC20Token>,
+        all_tokens: HashMap<Address, ERC20Token>,
     ) -> Result<Self, Self::Error>
     where
         Self: Sized;
-}
-
-/// Pair struct represents a trading pair with its properties and state
-#[derive(Debug, Clone)]
-pub struct Pair(pub ProtocolComponent, pub Box<dyn ProtocolSim>);
-
-impl PartialEq for Pair {
-    fn eq(&self, other: &Self) -> bool {
-        // Compare the ProtocolComponent part first
-        if self.0 != other.0 {
-            return false;
-        }
-
-        // Use the `eq` method to compare the Box<dyn ProtocolSim> objects
-        self.1.eq(other.1.as_ref())
-    }
 }
 
 /// GetAmountOutResult struct represents the result of getting the amount out of a trading pair
 ///
 /// # Fields
 ///
-/// * `amount`: U256, the amount of the trading pair
-/// * `gas`: U256, the gas of the trading pair
+/// * `amount`: BigUint, the amount of the trading pair
+/// * `gas`: BigUint, the gas of the trading pair
 #[derive(Debug)]
 pub struct GetAmountOutResult {
-    pub amount: U256,
-    pub gas: U256,
+    pub amount: BigUint,
+    pub gas: BigUint,
     pub new_state: Box<dyn ProtocolSim>,
 }
 
 impl GetAmountOutResult {
     /// Constructs a new GetAmountOutResult struct with the given amount and gas
-    pub fn new(amount: U256, gas: U256, new_state: Box<dyn ProtocolSim>) -> Self {
+    pub fn new(amount: BigUint, gas: BigUint, new_state: Box<dyn ProtocolSim>) -> Self {
         GetAmountOutResult { amount, gas, new_state }
     }
 
@@ -106,7 +92,7 @@ impl GetAmountOutResult {
     /// It updates the amount with the other's amount and adds the other's gas to the current one's
     /// gas.
     pub fn aggregate(&mut self, other: &Self) {
-        self.amount = other.amount;
-        self.gas += other.gas;
+        self.amount = other.amount.clone();
+        self.gas += &other.gas;
     }
 }

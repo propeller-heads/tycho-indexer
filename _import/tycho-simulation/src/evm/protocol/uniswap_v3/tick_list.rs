@@ -1,6 +1,5 @@
+use alloy_primitives::U256;
 use std::cmp;
-
-use ethers::types::U256;
 
 use super::tick_math;
 
@@ -266,7 +265,7 @@ mod tests {
     }
 
     fn create_tick_info(idx: i32, liq: i128) -> TickInfo {
-        TickInfo { index: idx, net_liquidity: liq, sqrt_price: U256::zero() }
+        TickInfo { index: idx, net_liquidity: liq, sqrt_price: U256::from(0u64) }
     }
 
     #[test]

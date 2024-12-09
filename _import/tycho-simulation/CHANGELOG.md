@@ -1,3 +1,33 @@
+## [0.54.0](https://github.com/propeller-heads/tycho-simulation/compare/0.53.0...0.54.0) (2024-12-05)
+
+
+### Features
+
+* Change ERC20Token address to be alloy's Address instead of H160 ([b9f55db](https://github.com/propeller-heads/tycho-simulation/commit/b9f55dbc4a33da268461c4b82f2a4152a1343011))
+
+## [0.53.0](https://github.com/propeller-heads/tycho-simulation/compare/0.52.2...0.53.0) (2024-12-05)
+
+
+### Features
+
+* Bye bye ethers pt. 1 ([fadf85c](https://github.com/propeller-heads/tycho-simulation/commit/fadf85cce803d795a45c31f2394738c921d5907e))
+* Change uniswap v3 code to use alloy instead of ethers ([8775ef9](https://github.com/propeller-heads/tycho-simulation/commit/8775ef9c5fbc7ca461c14ae80b4cfbd5be91f9c7))
+* Make alloy-primitives not optional ([ee75622](https://github.com/propeller-heads/tycho-simulation/commit/ee75622cf14663db24a08cb23660e74b48e4f4b5))
+
+## [0.52.2](https://github.com/propeller-heads/tycho-simulation/compare/0.52.1...0.52.2) (2024-12-03)
+
+
+### Bug Fixes
+
+* Remove RUST_LOG flag reference from example README ([07ca8e4](https://github.com/propeller-heads/tycho-simulation/commit/07ca8e448848c7e09bc53c82107464e174b84bd5))
+
+## [0.52.1](https://github.com/propeller-heads/tycho-simulation/compare/0.52.0...0.52.1) (2024-12-03)
+
+
+### Bug Fixes
+
+* Remove BalancerV2 from example ([aa8732f](https://github.com/propeller-heads/tycho-simulation/commit/aa8732f36b2358e0efda3cf06555c86473c19fcd))
+
 ## [0.52.0](https://github.com/propeller-heads/tycho-simulation/compare/0.51.0...0.52.0) (2024-12-03)
 
 

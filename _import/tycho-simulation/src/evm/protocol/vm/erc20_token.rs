@@ -1,11 +1,12 @@
+use alloy_primitives::Address;
 use std::{collections::HashMap, str::FromStr};
 
 use ethers::{
-    abi::{Abi, Address, Token},
+    abi::{Abi, Token},
     types::{H160, U256},
 };
 use lazy_static::lazy_static;
-use revm::{primitives::Address as rAddress, DatabaseRef};
+use revm::DatabaseRef;
 use serde_json::from_str;
 use std::fmt::Debug;
 
@@ -41,7 +42,7 @@ impl ERC20Slots {
 pub type Overwrites = HashMap<SlotId, U256>;
 
 pub struct ERC20OverwriteFactory {
-    token_address: rAddress,
+    token_address: Address,
     overwrites: Overwrites,
     balance_slot: SlotId,
     allowance_slot: SlotId,
@@ -51,7 +52,7 @@ pub struct ERC20OverwriteFactory {
 
 impl ERC20OverwriteFactory {
     pub fn new(
-        token_address: rAddress,
+        token_address: Address,
         token_slots: ERC20Slots,
         compiler: ContractCompiler,
     ) -> Self {
@@ -85,7 +86,7 @@ impl ERC20OverwriteFactory {
             .insert(self.total_supply_slot, supply);
     }
 
-    pub fn get_overwrites(&self) -> HashMap<rAddress, Overwrites> {
+    pub fn get_overwrites(&self) -> HashMap<Address, Overwrites> {
         let mut result = HashMap::new();
         result.insert(self.token_address, self.overwrites.clone());
         result
@@ -139,7 +140,7 @@ lazy_static! {
 /// - Once the balance slot is found, it uses the detected compiler to search for the allowance
 ///   slot, which is dependent on the balance slot.
 pub fn brute_force_slots<D: EngineDatabaseInterface + Clone + Debug>(
-    token_addr: &H160,
+    token_addr: &Address,
     block: &BlockHeader,
     engine: &SimulationEngine<D>,
 ) -> Result<(ERC20Slots, ContractCompiler), SimulationError>
@@ -147,14 +148,8 @@ where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
-    let token_contract = TychoSimulationContract::new(
-        rAddress::from_slice(token_addr.as_bytes()),
-        engine.clone(),
-        ERC20_ABI.clone(),
-    )
-    .unwrap();
-
-    let external_account = H160::from_slice(&*EXTERNAL_ACCOUNT.0);
+    let token_contract =
+        TychoSimulationContract::new(*token_addr, engine.clone(), ERC20_ABI.clone()).unwrap();
 
     let mut compiler = ContractCompiler::Solidity;
 
@@ -162,16 +157,16 @@ where
     for i in 0..100 {
         for compiler_flag in [ContractCompiler::Solidity, ContractCompiler::Vyper] {
             let mut overwrite_factory = ERC20OverwriteFactory::new(
-                rAddress::from_slice(token_addr.as_bytes()),
+                *token_addr,
                 ERC20Slots::new(i.into(), 1.into()),
                 compiler_flag,
             );
-            overwrite_factory.set_balance(MARKER_VALUE.into(), external_account);
+            overwrite_factory.set_balance(MARKER_VALUE.into(), *EXTERNAL_ACCOUNT);
 
             let res = token_contract
                 .call(
                     "balanceOf",
-                    vec![Token::Address(external_account)],
+                    vec![Token::Address(H160::from_slice(&*EXTERNAL_ACCOUNT.0))],
                     block.number,
                     Some(block.timestamp),
                     Some(overwrite_factory.get_overwrites()),
@@ -198,7 +193,7 @@ where
     let mut allowance_slot = None;
     for i in 0..100 {
         let mut overwrite_factory = ERC20OverwriteFactory::new(
-            rAddress::from_slice(token_addr.as_bytes()),
+            *token_addr,
             ERC20Slots::new(0.into(), i.into()),
             compiler, /* At this point we know the compiler becase we managed to find the
                        * balance slot */
@@ -206,15 +201,15 @@ where
 
         overwrite_factory.set_allowance(
             MARKER_VALUE.into(),
-            H160::from_str(SPENDER).unwrap(),
-            external_account,
+            Address::from_str(SPENDER).unwrap(),
+            *EXTERNAL_ACCOUNT,
         );
 
         let res = token_contract
             .call(
                 "allowance",
                 vec![
-                    Token::Address(external_account),
+                    Token::Address(H160::from_slice(&*EXTERNAL_ACCOUNT.0)),
                     Token::Address(H160::from_str(SPENDER).unwrap()),
                 ],
                 block.number,
@@ -253,7 +248,7 @@ mod tests {
     use crate::evm::engine_db::simulation_db::SimulationDB;
 
     fn setup_factory() -> ERC20OverwriteFactory {
-        let token_address: rAddress = rAddress::from_slice(
+        let token_address: Address = Address::from_slice(
             &hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
                 .expect("Invalid token address"),
         );
@@ -337,7 +332,7 @@ mod tests {
         };
 
         let (slots, compiler) = brute_force_slots(
-            &H160::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            &Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
             &block,
             &eng,
         )
@@ -366,7 +361,7 @@ mod tests {
         };
 
         let (slots, compiler) = brute_force_slots(
-            &H160::from_str("0xa5588f7cdf560811710a2d82d3c9c99769db1dcb").unwrap(),
+            &Address::from_str("0xa5588f7cdf560811710a2d82d3c9c99769db1dcb").unwrap(),
             &block,
             &eng,
         )
