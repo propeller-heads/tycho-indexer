@@ -327,7 +327,7 @@ impl EVMPoolStateBuilder {
                                 .to_string(),
                         )
                     })?
-                    .get_capabilities(self.id.clone(), *t0, *t1)?;
+                    .get_capabilities(&self.id, *t0, *t1)?;
                 capabilities.push(caps);
             }
         }

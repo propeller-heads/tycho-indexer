@@ -55,14 +55,14 @@ where
 {
     pub fn price(
         &self,
-        pair_id: String,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
         amounts: Vec<U256>,
         block: u64,
         overwrites: Option<HashMap<Address, Overwrites>>,
     ) -> Result<Vec<f64>, SimulationError> {
-        let args = (string_to_bytes32(&pair_id)?, sell_token, buy_token, amounts);
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, amounts);
         let selector = "price(bytes32,address,address,uint256[])";
 
         let res = self
@@ -80,21 +80,24 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn swap(
         &self,
-        pair_id: String,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
         is_buy: bool,
         amount: U256,
         block: u64,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
-    ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), SimulationError> {
-        let args = (string_to_bytes32(&pair_id)?, sell_token, buy_token, is_buy, amount);
+    ) -> Result<(Trade, HashMap<Address, StateUpdate>), SimulationError> {
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, is_buy, amount);
         let selector = "swap(bytes32,address,address,uint8,uint256)";
 
         let res = self.call(selector, args, block, None, overwrites, None, U256::from(0u64))?;
 
-        let decoded: SwapReturn = SwapReturn::abi_decode(&res.return_value, true).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to decode swap return value: {:?}", e))
+        let decoded: SwapReturn = SwapReturn::abi_decode(&res.return_value, true).map_err(|_| {
+            SimulationError::FatalError(format!(
+                "Adapter swap call failed: Failed to decode return value. Expected amount, gas, and price elements in the format (U256, U256, (U256, U256)). Found {:?}",
+                        &res.return_value[..],
+            ))
         })?;
 
         let (received_amount, gas_used, price_elements) = decoded;
@@ -103,20 +106,24 @@ where
             .calculate_price(vec![price_elements])?
             .first()
             .cloned()
-            .ok_or_else(|| SimulationError::FatalError("Empty price list returned".into()))?;
+            .ok_or_else(|| {
+                SimulationError::FatalError(
+                    "Adapter swap call failed: An empty price list was returned".into(),
+                )
+            })?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
     }
 
     pub fn get_limits(
         &self,
-        pair_id: String,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
         block: u64,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<(U256, U256), SimulationError> {
-        let args = (string_to_bytes32(&pair_id)?, sell_token, buy_token);
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token);
         let selector = "getLimits(bytes32,address,address)";
         let res = self
             .call(selector, args, block, None, overwrites, None, U256::from(0u64))?
@@ -124,7 +131,7 @@ where
 
         let decoded: LimitsReturn = LimitsReturn::abi_decode(&res, true).map_err(|e| {
             SimulationError::FatalError(format!(
-                "Failed to decode get_limits return value: {:?}",
+                "Adapter get_limits call failed: Failed to decode return value: {:?}",
                 e
             ))
         })?;
@@ -134,11 +141,11 @@ where
 
     pub fn get_capabilities(
         &self,
-        pair_id: String,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
     ) -> Result<HashSet<Capability>, SimulationError> {
-        let args = (string_to_bytes32(&pair_id)?, sell_token, buy_token);
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token);
         let selector = "getCapabilities(bytes32,address,address)";
         let res = self
             .call(selector, args, 1, None, None, None, U256::from(0u64))?
@@ -146,7 +153,7 @@ where
         let decoded: CapabilitiesReturn =
             CapabilitiesReturn::abi_decode(&res, true).map_err(|e| {
                 SimulationError::FatalError(format!(
-                    "Failed to decode get_capabilities return value: {:?}",
+                    "Adapter get_capabilities call failed: Failed to decode return value: {:?}",
                     e
                 ))
             })?;
@@ -170,7 +177,7 @@ where
         let decoded: MinGasUsageReturn =
             MinGasUsageReturn::abi_decode(&res, true).map_err(|e| {
                 SimulationError::FatalError(format!(
-                    "Failed to decode ming gas usage return value: {:?}",
+                    "Adapter min gas usage call failed: Failed to decode return value: {:?}",
                     e
                 ))
             })?;

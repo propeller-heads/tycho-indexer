@@ -143,7 +143,7 @@ where
                 overwrites.clone(),
             )?;
             let price_result = self.adapter_contract.price(
-                self.id.clone(),
+                &self.id,
                 sell_token.address,
                 buy_token.address,
                 vec![sell_amount_limit / U256::from(100)],
@@ -181,7 +181,7 @@ where
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<U256, SimulationError> {
         let limits = self.adapter_contract.get_limits(
-            self.id.clone(),
+            &self.id,
             tokens[0],
             tokens[1],
             self.block.number,
@@ -390,7 +390,7 @@ where
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
 
         let (trade, state_changes) = self.adapter_contract.swap(
-            self.id.clone(),
+            &self.id,
             sell_token,
             buy_token,
             false,
@@ -626,7 +626,7 @@ mod tests {
 
         let capabilities_adapter_contract = pool_state
             .adapter_contract
-            .get_capabilities(pool_state.id.clone(), pool_state.tokens[0], pool_state.tokens[1])
+            .get_capabilities(&pool_state.id, pool_state.tokens[0], pool_state.tokens[1])
             .unwrap();
 
         assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());
@@ -749,13 +749,13 @@ mod tests {
             .unwrap();
         assert_eq!(dai_limit, U256::from_str("100279494253364362835").unwrap());
 
-        // let bal_limit = pool_state
-        //     .get_sell_amount_limit(
-        //         vec![pool_state.tokens[1], pool_state.tokens[0]],
-        //         Some(overwrites),
-        //     )
-        //     .unwrap();
-        // assert_eq!(bal_limit, U256::from_str("13997408640689987484").unwrap());
+        let bal_limit = pool_state
+            .get_sell_amount_limit(
+                vec![pool_state.tokens[1], pool_state.tokens[0]],
+                Some(overwrites),
+            )
+            .unwrap();
+        assert_eq!(bal_limit, U256::from_str("13997408640689987484").unwrap());
     }
 
     #[tokio::test]

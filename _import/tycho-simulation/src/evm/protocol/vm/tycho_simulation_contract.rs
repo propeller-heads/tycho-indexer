@@ -91,13 +91,15 @@ where
         Ok(Self { address, engine })
     }
 
-    fn encode_input(&self, selector: &str, args: impl SolValue + std::fmt::Debug) -> Vec<u8> {
+    fn encode_input(&self, selector: &str, args: impl SolValue) -> Vec<u8> {
         let mut hasher = Keccak256::new();
         hasher.update(selector.as_bytes());
         let selector_bytes = &hasher.finalize()[..4];
         let mut call_data = selector_bytes.to_vec();
         let mut encoded_args = args.abi_encode();
         // Remove extra prefix if present (32 bytes for dynamic data)
+        // Alloy encoding is including a prefix for dynamic data indicating the offset or length
+        // but at this point we don't want that
         if encoded_args.len() > 32 &&
             encoded_args[..32] ==
                 [0u8; 31]
@@ -115,7 +117,7 @@ where
     pub fn call(
         &self,
         selector: &str,
-        args: impl SolValue + std::fmt::Debug,
+        args: impl SolValue,
         block_number: u64,
         timestamp: Option<u64>,
         overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
