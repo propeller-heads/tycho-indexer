@@ -39,7 +39,7 @@ impl From<Header> for BlockHeader {
 impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState` into a `EVMPoolState`.
+    /// Decodes a `ComponentWithState` into an `EVMPoolState`.
     ///
     /// Errors with a `InvalidSnapshotError`.
     async fn try_from_with_block(
@@ -162,9 +162,6 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
 
 /// Converts a protocol system name to the name of the adapter file. For example, `balancer_v2`
 /// would be converted to `BalancerV2SwapAdapter.evm.runtime`.
-///
-/// TODO: document this requirement in a README somewhere under instructions to add support for a
-/// new protocol system.
 fn to_adapter_file_name(protocol_system: &str) -> String {
     protocol_system
         .split('_')

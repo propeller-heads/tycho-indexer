@@ -3,6 +3,45 @@ use strum_macros::Display;
 
 use crate::protocol::errors::SimulationError;
 
+/// Represents a distinct functionality or feature that an `EVMPoolState` can support.
+///
+/// Each `Capability` variant corresponds to a specific functionality that influences how the
+/// simulation interacts with the `EVMPoolState`.
+///
+/// # Variants
+///
+/// TODO I don't know what SellSide or BuySide mean (GPT-generated)
+/// - `SellSide`: Indicates the entity supports sell-side operations.
+/// - `BuySide`: Indicates the entity supports buy-side operations.
+/// - `PriceFunction`: Indicates the use of dynamic pricing based on a function.
+/// - `FeeOnTransfer`: Indicates fees are applied during token transfers.
+/// - `ConstantPrice`: Indicates the pricing mechanism is constant.
+/// - `TokenBalanceIndependent`: Indicates the entity's price determination is independent of token
+///   balances.
+/// - `ScaledPrice`: Indicates that the price retrieved from the adapter is already scaled for
+///   token decimals.
+/// - `HardLimits`: Indicates there is a limit as to how much of a token can be swapped on this
+///   protocol.
+///  TODO I don't know what the following two limits mean
+/// - `MarginalPrice`: Indicates the use of marginal pricing strategies.
+///
+/// # Usage
+///
+/// Capabilities can be used to determine which operations are valid for a given pool state.
+///
+/// ```
+/// 
+/// use crate::evm::protocol::vm::models::Capability;
+/// use crate::protocol::errors::SimulationError;
+///
+/// let capability = Capability::SellSide;
+///
+/// match capability {
+///     Ok(Capability::SellSide) => println!("Supports sell-side operations."),
+///     Ok(cap) => println!("Other capability: {:?}", cap),
+///     Err(err) => println!("Error: {}", err),
+/// }
+/// ```
 #[derive(Eq, PartialEq, Hash, Debug, Display, Clone)]
 pub enum Capability {
     SellSide = 1,

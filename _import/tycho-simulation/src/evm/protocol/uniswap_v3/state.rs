@@ -57,7 +57,6 @@ struct StepComputation {
     fee_amount: U256,
 }
 
-// TODO: these attributes allow updating the state after a swap
 #[derive(Debug)]
 struct SwapResults {
     amount_calculated: I256,
@@ -68,6 +67,14 @@ struct SwapResults {
 }
 
 impl UniswapV3State {
+    /// Creates a new instance of `UniswapV3State`.
+    ///
+    /// # Arguments
+    /// - `liquidity`: The initial liquidity of the pool.
+    /// - `sqrt_price`: The square root of the current price.
+    /// - `fee`: The fee tier for the pool.
+    /// - `tick`: The current tick of the pool.
+    /// - `ticks`: A vector of `TickInfo` representing the tick information for the pool.
     pub fn new(
         liquidity: u128,
         sqrt_price: U256,

@@ -8,10 +8,11 @@
 //!  - `fee`: Returns the protocol's fee as a ratio.
 //!  - `spot_price`: Returns the current spot price between two tokens.
 //!  - `get_amount_out`: Returns the amount of output tokens given an amount of input tokens.
-//!  - `delta_transition`: Applies a state delta to the protocol sim.
-//!  - `clone_box`: Clones the protocol sim as a trait object.
+//!  - `delta_transition`: Applies a state delta to the simulated protocol.
+//!  - `clone_box`: Clones the simulated protocol state as a trait object.
 //!  - `as_any`: Allows downcasting of the trait object.
-//!  - `eq`: Compares two protocol sims for equality.
+//!  - `as_any_mut`: Allows mutable downcasting of the trait object.
+//!  - `eq`: Compares two simulated protocol states for equality.
 //!
 //!
 //! # Examples
@@ -66,7 +67,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// E.g. if the fee is 1%, the value returned would be 0.01.
     fn fee(&self) -> f64;
 
-    /// Returns the protocols current spot price of two tokens
+    /// Returns the protocol's current spot price of two tokens
     ///
     /// Currency pairs are meant to be compared against one another in
     /// order to understand how much of the quote currency is required
@@ -94,7 +95,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// # Returns
     ///
     /// A `Result` containing a `GetAmountOutResult` struct on success or a
-    ///  `TradeSimulationError` on failure.
+    ///  `SimulationError` on failure.
     fn get_amount_out(
         &self,
         amount_in: BigUint,
@@ -128,6 +129,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// Allows downcasting of the trait object to its underlying type.
     fn as_any(&self) -> &dyn Any;
 
+    /// Allows downcasting of the trait object to its mutable underlying type.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
     /// Compares two protocol states for equality.

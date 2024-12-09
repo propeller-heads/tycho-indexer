@@ -132,7 +132,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
 ///
 /// # Returns
 /// * The 32-bit signed integer representation of the input bytes.
-pub fn i24_be_bytes_to_i32(val: &Bytes) -> i32 {
+pub(crate) fn i24_be_bytes_to_i32(val: &Bytes) -> i32 {
     let bytes_slice = val.as_ref();
     let bytes_len = bytes_slice.len();
     let mut result = 0i32;

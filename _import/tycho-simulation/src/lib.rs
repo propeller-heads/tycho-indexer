@@ -4,7 +4,7 @@
 //! of different protocols, including uniswap-v2 and uniswap-v3.
 //! It allows to simulate chained trades over different venues
 //! together to exploit price differences by using token prices
-//! calculated from the protocols state.
+//! calculated from the protocol's state.
 //!
 //! The main data structure is a graph which allows to search
 //! for a sequence of swaps that provide some desired outcome,

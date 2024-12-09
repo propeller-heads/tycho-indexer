@@ -26,9 +26,7 @@ pub struct UniswapV2State {
 }
 
 impl UniswapV2State {
-    /// New UniswapV2State
-    ///
-    /// Create a new instance of UniswapV2State with the given reserves.
+    /// Creates a new instance of `UniswapV2State` with the given reserves.
     ///
     /// # Arguments
     ///
@@ -40,25 +38,11 @@ impl UniswapV2State {
 }
 
 impl ProtocolSim for UniswapV2State {
-    /// Returns the fee for the protocol
-    ///
-    /// # Returns
-    ///
-    /// * `f64` - Protocol fee.
     fn fee(&self) -> f64 {
         0.003
     }
 
-    /// Returns the pools spot price
-    ///
-    /// # Arguments
-    ///
-    /// * `base` - Base token
-    /// * `quote` - Quote token
-    ///
-    /// # Returns
-    ///
-    /// * `f64` - Spot price of the tokens.
+
     fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
         if base < quote {
             Ok(spot_price_from_reserves(
@@ -77,18 +61,6 @@ impl ProtocolSim for UniswapV2State {
         }
     }
 
-    /// Returns the amount of output for a given amount of input
-    ///
-    /// # Arguments
-    ///
-    /// * `amount_in` - The amount of input for the trade.
-    /// * `token_in` - The input token ERC20 token.
-    /// * `token_out` - The output token ERC20 token.
-    ///
-    /// # Returns
-    ///
-    /// * `Result<GetAmountOutResult, TradeSimulationError>` - A `Result` containing the amount of
-    ///   output and the slippage of the trade, or an error.
     fn get_amount_out(
         &self,
         amount_in: BigUint,

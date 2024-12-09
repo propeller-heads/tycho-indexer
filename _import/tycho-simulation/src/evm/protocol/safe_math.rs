@@ -2,7 +2,7 @@
 //!
 //! This module contains basic functions to perform arithmetic operations on
 //! numerical types of the ethers crate and preventing them from overflowing.
-//! Should an operation cause an overflow a result containing TradeSimulationError
+//! Should an operation cause an overflow a result containing SimulationError
 //! will be returned.
 //! Functions for the types I256, U256, U512 are available.
 use crate::protocol::errors::SimulationError;
