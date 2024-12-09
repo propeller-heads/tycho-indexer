@@ -2,13 +2,13 @@ use std::{
     any::Any,
     collections::{HashMap, HashSet},
     fmt::Debug,
+    str::FromStr,
 };
 
-use alloy_primitives::Address;
-use ethers::prelude::U256;
+use alloy_primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
-use revm::{primitives::U256 as rU256, DatabaseRef};
+use revm::DatabaseRef;
 use tracing::info;
 
 use tycho_core::dto::ProtocolStateDelta;
@@ -19,7 +19,7 @@ use crate::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
             tycho_db::PreCachedDB,
         },
-        protocol::u256_num::{convert_ethers_to_alloy, u256_to_biguint},
+        protocol::u256_num::u256_to_biguint,
         ContractCompiler, SlotId,
     },
     models::ERC20Token,
@@ -35,7 +35,6 @@ use super::{
     erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
-    utils::hexstring_to_vec,
 };
 
 #[derive(Clone, Debug)]
@@ -137,15 +136,14 @@ where
         {
             let overwrites = Some(self.get_overwrites(
                 vec![(*sell_token).clone().address, (*buy_token).clone().address],
-                U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
+                *MAX_BALANCE / U256::from(100),
             )?);
             let sell_amount_limit = self.get_sell_amount_limit(
                 vec![(sell_token.address), (buy_token.address)],
                 overwrites.clone(),
             )?;
-            let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
             let price_result = self.adapter_contract.price(
-                pool_id_vec,
+                &self.id,
                 sell_token.address,
                 buy_token.address,
                 vec![sell_amount_limit / U256::from(100)],
@@ -182,9 +180,8 @@ where
         tokens: Vec<Address>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<U256, SimulationError> {
-        let pool_id_vec = hexstring_to_vec(&self.id.clone())?;
         let limits = self.adapter_contract.get_limits(
-            pool_id_vec,
+            &self.id,
             tokens[0],
             tokens[1],
             self.block.number,
@@ -371,10 +368,10 @@ where
     ) -> Result<GetAmountOutResult, SimulationError> {
         let sell_token = token_in.address;
         let buy_token = token_out.address;
-        let sell_amount = U256::from_big_endian(&amount_in.to_bytes_be());
+        let sell_amount = U256::from_be_slice(&amount_in.to_bytes_be());
         let overwrites = self.get_overwrites(
             vec![sell_token, buy_token],
-            U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
+            U256::from_be_slice(&(*MAX_BALANCE / U256::from(100)).to_be_bytes::<32>()),
         )?;
         let sell_amount_limit =
             self.get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))?;
@@ -391,11 +388,9 @@ where
         let overwrites_with_sell_limit =
             self.get_overwrites(vec![sell_token, buy_token], sell_amount_limit)?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
-        let pool_id = self.id.clone();
-        let pool_id_vec = hexstring_to_vec(&pool_id).unwrap();
 
         let (trade, state_changes) = self.adapter_contract.swap(
-            pool_id_vec,
+            &self.id,
             sell_token,
             buy_token,
             false,
@@ -414,10 +409,10 @@ where
                     .entry(address)
                     .or_default();
                 for (slot, value) in storage {
-                    let slot = U256::from_dec_str(&slot.to_string()).map_err(|_| {
+                    let slot = U256::from_str(&slot.to_string()).map_err(|_| {
                         SimulationError::FatalError("Failed to decode slot index".to_string())
                     })?;
-                    let value = U256::from_dec_str(&value.to_string()).map_err(|_| {
+                    let value = U256::from_str(&value.to_string()).map_err(|_| {
                         SimulationError::FatalError("Failed to decode slot overwrite".to_string())
                     })?;
                     block_overwrites.insert(slot, value);
@@ -442,15 +437,15 @@ where
             return Err(SimulationError::InvalidInput(
                 format!("Sell amount exceeds limit {}", sell_amount_limit),
                 Some(GetAmountOutResult::new(
-                    u256_to_biguint(convert_ethers_to_alloy(buy_amount)),
-                    u256_to_biguint(convert_ethers_to_alloy(trade.gas_used)),
+                    u256_to_biguint(buy_amount),
+                    u256_to_biguint(trade.gas_used),
                     Box::new(new_state.clone()),
                 )),
             ));
         }
         Ok(GetAmountOutResult::new(
-            u256_to_biguint(convert_ethers_to_alloy(buy_amount)),
-            u256_to_biguint(convert_ethers_to_alloy(trade.gas_used)),
+            u256_to_biguint(buy_amount),
+            u256_to_biguint(trade.gas_used),
             Box::new(new_state.clone()),
         ))
     }
@@ -505,13 +500,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::B256;
     use std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
         str::FromStr,
     };
 
-    use ethers::prelude::H256;
     use num_bigint::ToBigUint;
     use num_traits::One;
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
@@ -554,7 +549,7 @@ mod tests {
 
         let block = BlockHeader {
             number: 20463609,
-            hash: H256::from_str(
+            hash: B256::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
             )
             .unwrap(),
@@ -585,7 +580,7 @@ mod tests {
         let tokens = vec![dai_addr, bal_addr];
         let block = BlockHeader {
             number: 18485417,
-            hash: H256::from_str(
+            hash: B256::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
             .expect("Invalid block hash"),
@@ -601,8 +596,8 @@ mod tests {
         )]);
 
         let balances = HashMap::from([
-            (dai_addr, U256::from_dec_str("178754012737301807104").unwrap()),
-            (bal_addr, U256::from_dec_str("91082987763369885696").unwrap()),
+            (dai_addr, U256::from_str("178754012737301807104").unwrap()),
+            (bal_addr, U256::from_str("91082987763369885696").unwrap()),
         ]);
 
         EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
@@ -629,11 +624,9 @@ mod tests {
         .into_iter()
         .collect::<HashSet<_>>();
 
-        let pool_id_vec = hexstring_to_vec(&pool_state.id).unwrap();
-
         let capabilities_adapter_contract = pool_state
             .adapter_contract
-            .get_capabilities(pool_id_vec, pool_state.tokens[0], pool_state.tokens[1])
+            .get_capabilities(&pool_state.id, pool_state.tokens[0], pool_state.tokens[1])
             .unwrap();
 
         assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());
@@ -665,7 +658,7 @@ mod tests {
             let account = engine_accounts
                 .get_account_info(&token)
                 .unwrap();
-            assert_eq!(account.balance, rU256::from(0));
+            assert_eq!(account.balance, U256::from(0));
             assert_eq!(account.nonce, 0u64);
             assert_eq!(account.code_hash, KECCAK_EMPTY);
             assert!(account.code.is_some());
@@ -675,7 +668,7 @@ mod tests {
         let external_account = engine_accounts
             .get_account_info(&EXTERNAL_ACCOUNT)
             .unwrap();
-        assert_eq!(external_account.balance, rU256::from(*MAX_BALANCE));
+        assert_eq!(external_account.balance, U256::from(*MAX_BALANCE));
         assert_eq!(external_account.nonce, 0u64);
         assert_eq!(external_account.code_hash, KECCAK_EMPTY);
         assert!(external_account.code.is_none());
@@ -778,21 +771,21 @@ mod tests {
         let overwrites = pool_state
             .get_overwrites(
                 vec![pool_state.tokens[0], pool_state.tokens[1]],
-                U256::from_big_endian(&(*MAX_BALANCE / rU256::from(100)).to_be_bytes::<32>()),
+                *MAX_BALANCE / U256::from(100),
             )
             .unwrap();
         let dai_limit = pool_state
             .get_sell_amount_limit(vec![dai().address, bal().address], Some(overwrites.clone()))
             .unwrap();
-        assert_eq!(dai_limit, U256::from_dec_str("100279494253364362835").unwrap());
+        assert_eq!(dai_limit, U256::from_str("100279494253364362835").unwrap());
 
-        // let bal_limit = pool_state
-        //     .get_sell_amount_limit(
-        //         vec![pool_state.tokens[1], pool_state.tokens[0]],
-        //         Some(overwrites),
-        //     )
-        //     .unwrap();
-        // assert_eq!(bal_limit, U256::from_dec_str("13997408640689987484").unwrap());
+        let bal_limit = pool_state
+            .get_sell_amount_limit(
+                vec![pool_state.tokens[1], pool_state.tokens[0]],
+                Some(overwrites),
+            )
+            .unwrap();
+        assert_eq!(bal_limit, U256::from_str("13997408640689987484").unwrap());
     }
 
     #[tokio::test]

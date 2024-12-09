@@ -1,13 +1,8 @@
-use alloy_primitives::Address;
-use std::{collections::HashMap, str::FromStr};
-
-use ethers::{
-    abi::{Abi, Token},
-    types::{H160, U256},
-};
+use alloy_primitives::{Address, U256};
+use alloy_sol_types::SolValue;
 use lazy_static::lazy_static;
 use revm::DatabaseRef;
-use serde_json::from_str;
+use std::collections::HashMap;
 
 use crate::{
     evm::{
@@ -92,15 +87,14 @@ impl ERC20OverwriteFactory {
     }
 }
 
-const MARKER_VALUE: u128 = 3141592653589793238462643383;
-const SPENDER: &str = "08d967bb0134F2d07f7cfb6E246680c53927DD30";
 lazy_static! {
-    static ref ERC20_ABI: Abi = {
-        let abi_file_path = "src/evm/protocol/vm/assets/ERC20.abi";
-        let abi_json = std::fs::read_to_string(abi_file_path).expect("Failed to read ABI file");
-        from_str(&abi_json).expect("Failed to parse ABI JSON")
-    };
+    static ref MARKER_VALUE: U256 = U256::from(3141592653589793238462643383u128);
+    static ref SPENDER: Address = Address::from_slice(
+        &hex::decode("08d967bb0134F2d07f7cfb6E246680c53927DD30")
+            .expect("Invalid string for spender"),
+    );
 }
+type U256Return = U256;
 
 /// Brute-force detection of storage slots for token balances and allowances.
 ///
@@ -147,8 +141,7 @@ where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
-    let token_contract =
-        TychoSimulationContract::new(*token_addr, engine.clone(), ERC20_ABI.clone()).unwrap();
+    let token_contract = TychoSimulationContract::new(*token_addr, engine.clone()).unwrap();
 
     let mut compiler = ContractCompiler::Solidity;
 
@@ -157,24 +150,26 @@ where
         for compiler_flag in [ContractCompiler::Solidity, ContractCompiler::Vyper] {
             let mut overwrite_factory = ERC20OverwriteFactory::new(
                 *token_addr,
-                ERC20Slots::new(i.into(), 1.into()),
+                ERC20Slots::new(U256::from(i), U256::from(1)),
                 compiler_flag,
             );
-            overwrite_factory.set_balance(MARKER_VALUE.into(), *EXTERNAL_ACCOUNT);
+            overwrite_factory.set_balance(*MARKER_VALUE, *EXTERNAL_ACCOUNT);
 
             let res = token_contract
                 .call(
-                    "balanceOf",
-                    vec![Token::Address(H160::from_slice(&*EXTERNAL_ACCOUNT.0))],
+                    "balanceOf(address)",
+                    *EXTERNAL_ACCOUNT,
                     block.number,
                     Some(block.timestamp),
                     Some(overwrite_factory.get_overwrites()),
                     Some(*EXTERNAL_ACCOUNT),
-                    U256::zero(),
-                )
-                .unwrap();
-
-            if res.return_value[0] == Token::Uint(MARKER_VALUE.into()) {
+                    U256::from(0u64),
+                )?
+                .return_value;
+            let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
+                SimulationError::FatalError(format!("Failed to decode swap return value: {:?}", e))
+            })?;
+            if decoded == *MARKER_VALUE {
                 balance_slot = Some(i);
                 compiler = compiler_flag;
                 break;
@@ -193,33 +188,28 @@ where
     for i in 0..100 {
         let mut overwrite_factory = ERC20OverwriteFactory::new(
             *token_addr,
-            ERC20Slots::new(0.into(), i.into()),
+            ERC20Slots::new(U256::from(0), U256::from(i)),
             compiler, /* At this point we know the compiler becase we managed to find the
                        * balance slot */
         );
 
-        overwrite_factory.set_allowance(
-            MARKER_VALUE.into(),
-            Address::from_str(SPENDER).unwrap(),
-            *EXTERNAL_ACCOUNT,
-        );
+        overwrite_factory.set_allowance(*MARKER_VALUE, *SPENDER, *EXTERNAL_ACCOUNT);
 
         let res = token_contract
             .call(
-                "allowance",
-                vec![
-                    Token::Address(H160::from_slice(&*EXTERNAL_ACCOUNT.0)),
-                    Token::Address(H160::from_str(SPENDER).unwrap()),
-                ],
+                "allowance(address,address)",
+                (*EXTERNAL_ACCOUNT, *SPENDER),
                 block.number,
                 Some(block.timestamp),
                 Some(overwrite_factory.get_overwrites()),
                 Some(*EXTERNAL_ACCOUNT),
-                U256::zero(),
-            )
-            .unwrap();
-
-        if res.return_value[0] == Token::Uint(MARKER_VALUE.into()) {
+                U256::from(0u64),
+            )?
+            .return_value;
+        let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
+            SimulationError::FatalError(format!("Failed to decode swap return value: {:?}", e))
+        })?;
+        if decoded == *MARKER_VALUE {
             allowance_slot = Some(i);
             break;
         }
@@ -232,14 +222,17 @@ where
         )));
     }
 
-    Ok((ERC20Slots::new(balance_slot.unwrap().into(), allowance_slot.unwrap().into()), compiler))
+    Ok((
+        ERC20Slots::new(U256::from(balance_slot.unwrap()), U256::from(allowance_slot.unwrap())),
+        compiler,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use std::sync::Arc;
+    use std::{str::FromStr, sync::Arc};
 
     use chrono::NaiveDateTime;
     use ethers::providers::{Http, Provider};
@@ -337,7 +330,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(ERC20Slots::new(9.into(), 10.into()), slots);
+        assert_eq!(ERC20Slots::new(U256::from(9), U256::from(10)), slots);
         assert_eq!(ContractCompiler::Solidity, compiler);
     }
 
@@ -366,7 +359,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(ERC20Slots::new(38.into(), 39.into()), slots);
+        assert_eq!(ERC20Slots::new(U256::from(38), U256::from(39)), slots);
         assert_eq!(ContractCompiler::Vyper, compiler);
     }
 }

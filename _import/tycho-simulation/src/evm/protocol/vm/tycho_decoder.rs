@@ -1,15 +1,12 @@
-use alloy_primitives::Address;
+use alloy_primitives::{Address, B256, U256};
 use std::{
     collections::HashMap,
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use ethers::types::{H256, U256};
-
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
-use tycho_ethereum::BytesCodec;
 
 use crate::{
     evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
@@ -25,7 +22,17 @@ impl From<Header> for BlockHeader {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        BlockHeader { number: header.number, hash: H256::from_bytes(&header.hash), timestamp: now }
+        BlockHeader {
+            number: header.number,
+            hash: B256::new(
+                header
+                    .hash
+                    .as_ref()
+                    .try_into()
+                    .expect("Hash must be 32 bytes"),
+            ),
+            timestamp: now,
+        }
     }
 }
 
@@ -53,7 +60,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .state
             .balances
             .iter()
-            .map(|(k, v)| (Address::from_slice(k), U256::from_bytes(v)))
+            .map(|(k, v)| (Address::from_slice(k), U256::from_be_slice(v)))
             .collect();
         let balance_owner = snapshot
             .state

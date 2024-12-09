@@ -5,14 +5,13 @@
 //!
 //! ERC20Tokens provide instructions on how to handle prices and amounts,
 //! while Swap and SwapSequence are usually used as results types.
-use alloy_primitives::Address;
+use alloy_primitives::{Address, U256};
 use std::{
     convert::TryFrom,
     hash::{Hash, Hasher},
     str::FromStr,
 };
 
-use ethers::types::U256;
 use num_bigint::BigUint;
 
 use tycho_core::dto::ResponseToken;
@@ -57,7 +56,7 @@ impl ERC20Token {
     /// ## Return
     /// Return one token as U256
     pub fn one(&self) -> U256 {
-        U256::exp10(self.decimals)
+        U256::from(10).pow(U256::from(self.decimals))
     }
 }
 
@@ -155,6 +154,6 @@ mod tests {
             10000.to_biguint().unwrap(),
         );
 
-        assert_eq!(usdc.one().as_u64(), 1000000);
+        assert_eq!(usdc.one(), U256::from(1000000));
     }
 }

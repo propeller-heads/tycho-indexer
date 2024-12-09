@@ -1,17 +1,15 @@
-use alloy_primitives::Address;
+use alloy_primitives::{Address, U256};
+
+use alloy_sol_types::SolValue;
 use std::collections::{HashMap, HashSet};
 
-use ethers::{
-    abi::Token,
-    types::{H160, U256},
-};
 use revm::DatabaseRef;
 
 use crate::{
     evm::{
         account_storage::StateUpdate,
         engine_db::engine_db_interface::EngineDatabaseInterface,
-        protocol::u256_num::{convert_ethers_to_alloy, u256_to_f64},
+        protocol::{u256_num::u256_to_f64, vm::utils::string_to_bytes32},
     },
     protocol::errors::SimulationError,
 };
@@ -26,6 +24,16 @@ pub struct Trade {
     pub gas_used: U256,
     pub price: f64,
 }
+
+/// Type aliases are defined to ensure compatibility with `alloy_sol_types::abi_decode`,
+/// which requires explicit types matching the Solidity ABI. These aliases correspond
+/// directly to the outputs of the contract's functions.
+/// These types ensure correct decoding and alignment with the ABI.
+type PriceReturn = Vec<(U256, U256)>;
+type SwapReturn = (U256, U256, (U256, U256));
+type LimitsReturn = Vec<U256>;
+type CapabilitiesReturn = Vec<U256>;
+type MinGasUsageReturn = U256;
 
 /// An implementation of `TychoSimulationContract` specific to the `AdapterContract` ABI interface,
 /// providing methods for price calculations, token swaps, capability checks, and more.
@@ -47,197 +55,151 @@ where
 {
     pub fn price(
         &self,
-        pair_id: Vec<u8>,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
         amounts: Vec<U256>,
         block: u64,
         overwrites: Option<HashMap<Address, Overwrites>>,
     ) -> Result<Vec<f64>, SimulationError> {
-        let args = vec![
-            Token::FixedBytes(pair_id),
-            Token::Address(H160(sell_token.0 .0)),
-            Token::Address(H160(buy_token.0 .0)),
-            Token::Array(
-                amounts
-                    .into_iter()
-                    .map(Token::Uint)
-                    .collect(),
-            ),
-        ];
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, amounts);
+        let selector = "price(bytes32,address,address,uint256[])";
 
         let res = self
-            .call("price", args, block, None, overwrites, None, U256::zero())?
+            .call(selector, args, block, None, overwrites, None, U256::from(0u64))?
             .return_value;
-        let price = self.calculate_price(res[0].clone())?;
+
+        let decoded: PriceReturn = PriceReturn::abi_decode(&res, true).map_err(|e| {
+            SimulationError::FatalError(format!("Failed to decode price return value: {:?}", e))
+        })?;
+
+        let price = self.calculate_price(decoded)?;
         Ok(price)
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn swap(
         &self,
-        pair_id: Vec<u8>,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
         is_buy: bool,
         amount: U256,
         block: u64,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
-    ) -> Result<(Trade, HashMap<revm::precompile::Address, StateUpdate>), SimulationError> {
-        let args = vec![
-            Token::FixedBytes(pair_id),
-            Token::Address(H160(sell_token.0 .0)),
-            Token::Address(H160(buy_token.0 .0)),
-            Token::Bool(is_buy),
-            Token::Uint(amount),
-        ];
+    ) -> Result<(Trade, HashMap<Address, StateUpdate>), SimulationError> {
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, is_buy, amount);
+        let selector = "swap(bytes32,address,address,uint8,uint256)";
 
-        let res = self.call("swap", args, block, None, overwrites, None, U256::zero())?;
+        let res = self.call(selector, args, block, None, overwrites, None, U256::from(0u64))?;
 
-        let (received_amount, gas_used, price) =
-            if let Token::Tuple(ref return_value) = res.return_value[0] {
-                match &return_value[..] {
-                    [Token::Uint(amount), Token::Uint(gas), Token::Tuple(price_elements)] => {
-                        let received_amount = *amount;
-                        let gas_used = *gas;
+        let decoded: SwapReturn = SwapReturn::abi_decode(&res.return_value, true).map_err(|_| {
+            SimulationError::FatalError(format!(
+                "Adapter swap call failed: Failed to decode return value. Expected amount, gas, and price elements in the format (U256, U256, (U256, U256)). Found {:?}",
+                        &res.return_value[..],
+            ))
+        })?;
 
-                        let price_token = Token::Array(vec![Token::Tuple(price_elements.clone())]);
-                        let price =
-                            self.calculate_price(price_token)?
-                                .first()
-                                .cloned()
-                                .ok_or_else(|| {
-                                    SimulationError::FatalError(
-                                "Adapter swap call failed: An empty price list was returned".into(),
-                            )
-                                })?;
+        let (received_amount, gas_used, price_elements) = decoded;
 
-                        Ok((received_amount, gas_used, price))
-                    }
-                    _ => Err(SimulationError::FatalError(format!(
-                        "Adapter swap call failed: Expected amount, gas, and price elements in \
-                    the format (Uint, Uint, Tuple). Found {:?}",
-                        &return_value[..]
-                    ))),
-                }
-            } else {
-                Err(SimulationError::FatalError(format!(
-                "Adapter swap call failed: Expected return_value to be a Token::Tuple. Found {}",
-                res.return_value[0]
-            )))
-            }?;
+        let price = self
+            .calculate_price(vec![price_elements])?
+            .first()
+            .cloned()
+            .ok_or_else(|| {
+                SimulationError::FatalError(
+                    "Adapter swap call failed: An empty price list was returned".into(),
+                )
+            })?;
 
         Ok((Trade { received_amount, gas_used, price }, res.simulation_result.state_updates))
     }
 
     pub fn get_limits(
         &self,
-        pair_id: Vec<u8>,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
         block: u64,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<(U256, U256), SimulationError> {
-        let args = vec![
-            Token::FixedBytes(pair_id),
-            Token::Address(H160(sell_token.0 .0)),
-            Token::Address(H160(buy_token.0 .0)),
-        ];
-
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token);
+        let selector = "getLimits(bytes32,address,address)";
         let res = self
-            .call("getLimits", args, block, None, overwrites, None, U256::zero())?
+            .call(selector, args, block, None, overwrites, None, U256::from(0u64))?
             .return_value;
 
-        if let Some(Token::Array(inner)) = res.first() {
-            if let (Some(Token::Uint(value1)), Some(Token::Uint(value2))) =
-                (inner.first(), inner.get(1))
-            {
-                return Ok((*value1, *value2));
-            }
-        }
+        let decoded: LimitsReturn = LimitsReturn::abi_decode(&res, true).map_err(|e| {
+            SimulationError::FatalError(format!(
+                "Adapter get_limits call failed: Failed to decode return value: {:?}",
+                e
+            ))
+        })?;
 
-        Err(SimulationError::FatalError(format!(
-            "Adapter call to get limits failed: Unexpected response format: {:?}",
-            res
-        )))
+        Ok((decoded[0], decoded[1]))
     }
 
     pub fn get_capabilities(
         &self,
-        pair_id: Vec<u8>,
+        pair_id: &str,
         sell_token: Address,
         buy_token: Address,
     ) -> Result<HashSet<Capability>, SimulationError> {
-        let args = vec![
-            Token::FixedBytes(pair_id),
-            Token::Address(H160(sell_token.0 .0)),
-            Token::Address(H160(buy_token.0 .0)),
-        ];
-
+        let args = (string_to_bytes32(pair_id)?, sell_token, buy_token);
+        let selector = "getCapabilities(bytes32,address,address)";
         let res = self
-            .call("getCapabilities", args, 1, None, None, None, U256::zero())?
+            .call(selector, args, 1, None, None, None, U256::from(0u64))?
             .return_value;
-        let capabilities: HashSet<Capability> = match res.first() {
-            Some(Token::Array(inner_tokens)) => inner_tokens
-                .iter()
-                .filter_map(|token| match token {
-                    Token::Uint(value) => Capability::from_uint(*value).ok(),
-                    _ => None,
-                })
-                .collect(),
-            _ => HashSet::new(),
-        };
+        let decoded: CapabilitiesReturn =
+            CapabilitiesReturn::abi_decode(&res, true).map_err(|e| {
+                SimulationError::FatalError(format!(
+                    "Adapter get_capabilities call failed: Failed to decode return value: {:?}",
+                    e
+                ))
+            })?;
+
+        let capabilities: HashSet<Capability> = decoded
+            .into_iter()
+            .filter_map(|value| Capability::from_u256(value).ok())
+            .collect();
 
         Ok(capabilities)
     }
 
     #[allow(dead_code)]
     pub fn min_gas_usage(&self) -> Result<u64, SimulationError> {
+        let args = ();
+        let selector = "minGasUsage()";
         let res = self
-            .call("minGasUsage", vec![], 1, None, None, None, U256::zero())?
+            .call(selector, args, 1, None, None, None, U256::from(0u64))?
             .return_value;
-        Ok(res[0]
-            .clone()
-            .into_uint()
-            .unwrap()
-            .as_u64())
+
+        let decoded: MinGasUsageReturn =
+            MinGasUsageReturn::abi_decode(&res, true).map_err(|e| {
+                SimulationError::FatalError(format!(
+                    "Adapter min gas usage call failed: Failed to decode return value: {:?}",
+                    e
+                ))
+            })?;
+        decoded
+            .try_into()
+            .map_err(|_| SimulationError::FatalError("Decoded value exceeds u64 range".to_string()))
     }
 
-    fn calculate_price(&self, value: Token) -> Result<Vec<f64>, SimulationError> {
-        if let Token::Array(fractions) = value {
-            // Map over each `Token::Tuple` in the array
-            fractions
-                .into_iter()
-                .map(|fraction_token| {
-                    if let Token::Tuple(ref components) = fraction_token {
-                        let numerator = components[0]
-                            .clone()
-                            .into_uint()
-                            .unwrap();
-                        let denominator = components[1]
-                            .clone()
-                            .into_uint()
-                            .unwrap();
-                        if denominator.is_zero() {
-                            Err(SimulationError::FatalError(
-                                "Adapter price calculation failed: Denominator is zero".to_string(),
-                            ))
-                        } else {
-                            Ok(u256_to_f64(convert_ethers_to_alloy(numerator)) /
-                                u256_to_f64(convert_ethers_to_alloy(denominator)))
-                        }
-                    } else {
-                        Err(SimulationError::FatalError(
-                            "Adapter price calculation failed: Invalid fraction tuple".to_string(),
-                        ))
-                    }
-                })
-                .collect()
-        } else {
-            Err(SimulationError::FatalError(format!(
-                "Adapter price calculation failed: Price is not a Token::Array: {}",
-                value
-            )))
-        }
+    fn calculate_price(&self, fractions: Vec<(U256, U256)>) -> Result<Vec<f64>, SimulationError> {
+        fractions
+            .into_iter()
+            .map(|(numerator, denominator)| {
+                if denominator.is_zero() {
+                    Err(SimulationError::FatalError(
+                        "Adapter price calculation failed: Denominator is zero".to_string(),
+                    ))
+                } else {
+                    let num_f64 = u256_to_f64(numerator);
+                    let den_f64 = u256_to_f64(denominator);
+                    Ok(num_f64 / den_f64)
+                }
+            })
+            .collect()
     }
 }

@@ -1,17 +1,9 @@
 use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 
-use alloy_primitives::{keccak256, B256};
+use alloy_primitives::{keccak256, Address, Keccak256, B256, U256};
+use alloy_sol_types::SolValue;
 use chrono::Utc;
-use ethers::{
-    abi::{decode, encode, Abi, ParamType, Token},
-    core::types::U256,
-    prelude::*,
-};
-use revm::{
-    db::DatabaseRef,
-    primitives::{alloy_primitives::Keccak256, AccountInfo, Address},
-};
-use tracing::warn;
+use revm::{db::DatabaseRef, primitives::AccountInfo};
 
 use crate::{
     evm::{
@@ -23,13 +15,12 @@ use crate::{
 
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_token::Overwrites,
-    utils::{coerce_error, get_contract_bytecode, load_swap_abi},
+    utils::{coerce_error, get_contract_bytecode},
 };
 
 #[derive(Debug, Clone)]
 pub struct TychoSimulationResponse {
-    pub return_value: Vec<Token>,
+    pub return_value: Vec<u8>,
     pub simulation_result: SimulationResult,
 }
 
@@ -62,7 +53,6 @@ where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
-    abi: Abi,
     address: Address,
     pub(crate) engine: SimulationEngine<D>, /* TODO: Should we expose it directly or make some
                                              * getter functions? */
@@ -73,12 +63,8 @@ where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
-    pub fn new(
-        address: Address,
-        engine: SimulationEngine<D>,
-        abi: Abi,
-    ) -> Result<Self, SimulationError> {
-        Ok(Self { address, abi, engine })
+    pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
+        Ok(Self { address, engine })
     }
 
     // Creates a new instance with the ISwapAdapter ABI
@@ -87,8 +73,6 @@ where
         adapter_contract_path: &PathBuf,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
-        let abi = load_swap_abi()?;
-
         let adapter_contract_code = get_contract_bytecode(adapter_contract_path)
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
@@ -104,95 +88,45 @@ where
             false,
         );
 
-        Ok(Self { address, abi, engine })
+        Ok(Self { address, engine })
     }
 
-    fn encode_input(&self, fname: &str, args: Vec<Token>) -> Result<Vec<u8>, SimulationError> {
-        let function = self
-            .abi
-            .functions
-            .get(fname)
-            .and_then(|funcs| funcs.first())
-            .ok_or_else(|| {
-                SimulationError::FatalError(format!(
-                    "Tycho simulation contract failed to encode input: \
-                Function name {} not found in the ABI",
-                    fname
-                ))
-            })?;
-
-        if function.inputs.len() != args.len() {
-            return Err(SimulationError::FatalError(
-                "Tycho simulation contract failed to encode input: Invalid argument count"
-                    .to_string(),
-            ));
+    fn encode_input(&self, selector: &str, args: impl SolValue) -> Vec<u8> {
+        let mut hasher = Keccak256::new();
+        hasher.update(selector.as_bytes());
+        let selector_bytes = &hasher.finalize()[..4];
+        let mut call_data = selector_bytes.to_vec();
+        let mut encoded_args = args.abi_encode();
+        // Remove extra prefix if present (32 bytes for dynamic data)
+        // Alloy encoding is including a prefix for dynamic data indicating the offset or length
+        // but at this point we don't want that
+        if encoded_args.len() > 32 &&
+            encoded_args[..32] ==
+                [0u8; 31]
+                    .into_iter()
+                    .chain([32].to_vec())
+                    .collect::<Vec<u8>>()
+        {
+            encoded_args = encoded_args[32..].to_vec();
         }
-
-        let input_types: String = function
-            .inputs
-            .iter()
-            .map(|input| input.kind.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
-
-        let selector = {
-            let mut hasher = Keccak256::new();
-            hasher.update(format!("{}({})", fname, input_types));
-            let result = hasher.finalize();
-            result[..4].to_vec()
-        };
-
-        let encoded = encode(&args);
-        let mut result = Vec::with_capacity(4 + encoded.len());
-        result.extend_from_slice(&selector);
-        result.extend(encoded);
-
-        Ok(result)
-    }
-
-    pub fn decode_output(
-        &self,
-        fname: &str,
-        encoded: Vec<u8>,
-    ) -> Result<Vec<Token>, SimulationError> {
-        let function = self
-            .abi
-            .functions
-            .get(fname)
-            .and_then(|funcs| funcs.first())
-            .ok_or_else(|| {
-                SimulationError::FatalError(format!("Tycho simulation contract failed to decode output: Function name {} not found in the ABI", fname))
-            })?;
-
-        let output_types: Vec<ParamType> = function
-            .outputs
-            .iter()
-            .map(|output| output.kind.clone())
-            .collect();
-        let decoded_tokens = decode(&output_types, &encoded).map_err(|e| {
-            SimulationError::FatalError(format!(
-                "Tycho simulation contract failed to decode output: {:?}",
-                e
-            ))
-        })?;
-
-        Ok(decoded_tokens)
+        call_data.extend(encoded_args);
+        call_data
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn call(
         &self,
-        fname: &str,
-        args: Vec<Token>,
+        selector: &str,
+        args: impl SolValue,
         block_number: u64,
         timestamp: Option<u64>,
-        overrides: Option<HashMap<Address, Overwrites>>,
+        overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
         caller: Option<Address>,
         value: U256,
     ) -> Result<TychoSimulationResponse, SimulationError> {
-        let call_data = self.encode_input(fname, args)?;
+        let call_data = self.encode_input(selector, args);
         let params = SimulationParameters {
-            data: Bytes::from(call_data),
+            data: call_data,
             to: self.address,
             block_number,
             timestamp: timestamp.unwrap_or_else(|| {
@@ -209,14 +143,10 @@ where
 
         let sim_result = self.simulate(params)?;
 
-        let output = self
-            .decode_output(fname, sim_result.result.to_vec())
-            .unwrap_or_else(|err| {
-                warn!("Failed to decode output: {:?}", err);
-                Vec::new() // Set to empty if decoding fails
-            });
-
-        Ok(TychoSimulationResponse { return_value: output, simulation_result: sim_result })
+        Ok(TychoSimulationResponse {
+            return_value: sim_result.result.to_vec(),
+            simulation_result: sim_result,
+        })
     }
 
     fn simulate(&self, params: SimulationParameters) -> Result<SimulationResult, SimulationError> {
@@ -229,14 +159,18 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::hex;
+    use std::str::FromStr;
 
     use revm::{
         db::DatabaseRef,
-        primitives::{hex, AccountInfo, Address, Bytecode, B256, U256 as rU256},
+        primitives::{AccountInfo, Bytecode, B256},
     };
-    use std::str::FromStr;
 
-    use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
+    use crate::evm::{
+        engine_db::engine_db_interface::EngineDatabaseInterface,
+        protocol::vm::utils::string_to_bytes32,
+    };
 
     #[derive(Debug, Clone)]
     struct MockDatabase;
@@ -258,9 +192,9 @@ mod tests {
         fn storage_ref(
             &self,
             _address: revm::precompile::Address,
-            _index: rU256,
-        ) -> Result<rU256, Self::Error> {
-            Ok(rU256::from(0))
+            _index: U256,
+        ) -> Result<U256, Self::Error> {
+            Ok(U256::from(0))
         }
 
         fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
@@ -275,7 +209,7 @@ mod tests {
             &self,
             _address: Address,
             _account: AccountInfo,
-            _permanent_storage: Option<HashMap<rU256, rU256>>,
+            _permanent_storage: Option<HashMap<U256, U256>>,
             _mocked: bool,
         ) {
             // Do nothing
@@ -308,24 +242,17 @@ mod tests {
         // Arguments for the 'getCapabilities' function
         let pool_id =
             "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string();
-        let sell_token = "0000000000000000000000000000000000000002".to_string();
-        let buy_token = "0000000000000000000000000000000000000003".to_string();
+        let sell_token = Address::from_str("0000000000000000000000000000000000000002").unwrap();
+        let buy_token = Address::from_str("0000000000000000000000000000000000000003").unwrap();
 
-        let encoded_input = contract.encode_input(
-            "getCapabilities",
-            vec![
-                Token::FixedBytes(hex::decode(pool_id.clone()).unwrap()),
-                Token::Address(H160::from_str(&sell_token).unwrap()),
-                Token::Address(H160::from_str(&buy_token).unwrap()),
-            ],
+        let encoded = contract.encode_input(
+            "getCapabilities(bytes32,address,address)",
+            (string_to_bytes32(&pool_id).unwrap(), sell_token, buy_token),
         );
-
-        assert!(encoded_input.is_ok());
-        let encoded_result = encoded_input.unwrap();
 
         // The expected selector for "getCapabilities(bytes32,address,address)"
         let expected_selector = hex!("48bd7dfd");
-        assert_eq!(&encoded_result[..4], &expected_selector[..]);
+        assert_eq!(&encoded[..4], &expected_selector[..]);
 
         let expected_pool_id =
             hex!("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
@@ -334,31 +261,8 @@ mod tests {
         let expected_buy_token =
             hex!("0000000000000000000000000000000000000000000000000000000000000003"); // padded to 32 bytes
 
-        assert_eq!(&encoded_result[4..36], &expected_pool_id); // 32 bytes for poolId
-        assert_eq!(&encoded_result[36..68], &expected_sell_token); // 32 bytes for address (padded)
-        assert_eq!(&encoded_result[68..100], &expected_buy_token); // 32 bytes for address (padded)
-    }
-
-    #[test]
-    fn test_decode_output_get_tokens() {
-        let contract = create_contract();
-
-        let token_1 = H160::from_str("0000000000000000000000000000000000000002").unwrap();
-        let token_2 = H160::from_str("0000000000000000000000000000000000000003").unwrap();
-
-        let encoded_output = hex!("
-        0000000000000000000000000000000000000000000000000000000000000020" // Offset to the start of the array
-        "0000000000000000000000000000000000000000000000000000000000000002" // Array length: 2
-        "0000000000000000000000000000000000000000000000000000000000000002" // Token 1
-        "0000000000000000000000000000000000000000000000000000000000000003" // Token 2
-        );
-
-        let decoded = contract
-            .decode_output("getTokens", encoded_output.to_vec())
-            .unwrap();
-
-        let expected_tokens =
-            vec![Token::Array(vec![Token::Address(token_1), Token::Address(token_2)])];
-        assert_eq!(decoded, expected_tokens);
+        assert_eq!(&encoded[4..36], &expected_pool_id); // 32 bytes for poolId
+        assert_eq!(&encoded[36..68], &expected_sell_token); // 32 bytes for address (padded)
+        assert_eq!(&encoded[68..100], &expected_buy_token); // 32 bytes for address (padded)
     }
 }

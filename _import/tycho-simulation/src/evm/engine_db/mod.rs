@@ -1,9 +1,9 @@
 use std::{collections::HashMap, fmt::Debug};
 
+use alloy_primitives::Address;
 use lazy_static::lazy_static;
 use revm::{
-    precompile::Address as rAddress,
-    primitives::{AccountInfo, Address, KECCAK_EMPTY},
+    primitives::{AccountInfo, KECCAK_EMPTY},
     DatabaseRef,
 };
 
@@ -49,7 +49,7 @@ where
 
     // Accounts necessary for enabling pre-compilation are initialized by default.
     engine.state.init_account(
-        rAddress::from_slice(
+        Address::from_slice(
             &hex::decode("0000000000000000000000000000000000000000")
                 .expect("Invalid string for precompile-enabling address"),
         ),
@@ -59,7 +59,7 @@ where
     );
 
     engine.state.init_account(
-        rAddress::from_slice(
+        Address::from_slice(
             &hex::decode("0000000000000000000000000000000000000004")
                 .expect("Invalid string for precompile-enabling address"),
         ),

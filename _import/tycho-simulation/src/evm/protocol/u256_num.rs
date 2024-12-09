@@ -2,8 +2,9 @@
 use alloy_primitives::U256;
 use std::{cmp::max, panic};
 
-use ethers::types::U256 as EthersU256;
+use alloy_primitives::bytes::Bytes;
 use num_bigint::BigUint;
+use std::collections::HashMap;
 
 /// Converts a U256 integer into it's closest floating point representation
 ///
@@ -105,10 +106,25 @@ pub fn biguint_to_u256(value: &BigUint) -> U256 {
     U256::from_be_slice(&bytes)
 }
 
-pub fn convert_ethers_to_alloy(ethers_u256: EthersU256) -> U256 {
-    let mut bytes = [0u8; 32]; // 32-byte buffer
-    ethers_u256.to_big_endian(&mut bytes); // Fill the buffer with big-endian bytes
-    U256::from_be_bytes(bytes) // Convert to Alloy U256
+pub fn bytes_to_u256(bytes: Bytes) -> U256 {
+    // Ensure the input is exactly 32 bytes
+    let mut padded_bytes = [0u8; 32];
+
+    // Copy the input bytes into the padded array from the right
+    let start = 32 - bytes.len().min(32);
+    padded_bytes[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
+
+    // Convert the padded byte array into U256
+    U256::from_be_slice(&padded_bytes)
+}
+
+pub fn map_slots_to_u256(
+    slots: HashMap<tycho_core::hex_bytes::Bytes, tycho_core::hex_bytes::Bytes>,
+) -> HashMap<U256, U256> {
+    slots
+        .into_iter()
+        .map(|(k, v)| (bytes_to_u256(k.into()), bytes_to_u256(v.into())))
+        .collect()
 }
 
 #[cfg(test)]
