@@ -1,4 +1,5 @@
-use alloy_primitives::Address;
+use alloy_primitives::{Address, U256};
+use alloy_sol_types::SolValue;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
@@ -6,10 +7,6 @@ use std::{
 };
 
 use chrono::Utc;
-use ethers::{
-    abi::{decode, ParamType},
-    prelude::U256,
-};
 use itertools::Itertools;
 use revm::{
     precompile::Bytes,
@@ -35,7 +32,7 @@ use super::{
     models::Capability,
     state::EVMPoolState,
     tycho_simulation_contract::TychoSimulationContract,
-    utils::{get_code_for_contract, hexstring_to_vec, load_erc20_bytecode},
+    utils::{get_code_for_contract, load_erc20_bytecode},
 };
 
 #[derive(Debug)]
@@ -48,7 +45,6 @@ use super::{
 /// # Example
 /// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
-/// use ethers::types::Address;
 /// use crate::evm::simulation_db::BlockHeader;
 /// use crate::protocol::errors::SimulationError;
 ///
@@ -336,7 +332,7 @@ where
                                 .to_string(),
                         )
                     })?
-                    .get_capabilities(hexstring_to_vec(&self.id)?, *t0, *t1)?;
+                    .get_capabilities(&self.id, *t0, *t1)?;
                 capabilities.push(caps);
             }
         }
@@ -416,13 +412,13 @@ where
         })?;
 
         let sim_params = SimulationParameters {
-            data: selector.to_vec().into(),
+            data: selector.to_vec(),
             to: parsed_address,
             block_number: self.block.number,
             timestamp,
             overrides: Some(HashMap::new()),
             caller: *EXTERNAL_ACCOUNT,
-            value: 0.into(),
+            value: U256::from(0u64),
             gas_limit: None,
         };
 
@@ -430,29 +426,11 @@ where
             .simulate(&sim_params)
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
-        let address = decode(&[ParamType::Address], &sim_result.result)
-            .map_err(|_| {
-                SimulationError::FatalError(
-                    "Failed to get address from call: Failed to decode address list from simulation result".into(),
-                )
-            })?
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                SimulationError::FatalError(
-                    "Failed to get address from call: Couldn't retrieve address from simulation for stateless contracts".into(),
-                )
-            })?;
+        let address: Address = Address::abi_decode(&sim_result.result, true).map_err(|e| {
+            SimulationError::FatalError(format!("Failed to get address from call: Failed to decode address list from simulation result {:?}", e))
+        })?;
 
-        address
-            .to_string()
-            .parse()
-            .map_err(|_| {
-                SimulationError::FatalError(format!(
-                    "Failed to get address from call: Couldn't parse address to string: {}",
-                    address
-                ))
-            })
+        Ok(address)
     }
 }
 
@@ -460,18 +438,16 @@ where
 mod tests {
     use super::*;
 
-    use std::str::FromStr;
-
-    use ethers::types::H256;
-
     use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};
+    use alloy_primitives::B256;
+    use std::str::FromStr;
 
     #[test]
     fn test_build_without_required_fields() {
         let id = "pool_1".to_string();
         let tokens = vec![Address::repeat_byte(0)];
         let balances = HashMap::new();
-        let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
+        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
 
         let result = tokio_test::block_on(
             EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block)
@@ -493,7 +469,7 @@ mod tests {
         let token2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
         let token3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
         let tokens = vec![token2, token3];
-        let block = BlockHeader { number: 1, hash: H256::default(), timestamp: 234 };
+        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
         let balances = HashMap::new();
 
         let builder = EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block);

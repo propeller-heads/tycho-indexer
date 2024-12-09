@@ -1,7 +1,6 @@
-use std::{collections::HashMap, default::Default};
+use std::{clone::Clone, collections::HashMap, default::Default, fmt::Debug};
 
-use crate::evm::engine_db::engine_db_interface::EngineDatabaseInterface;
-use ethers::types::{Bytes, U256};
+use alloy_primitives::U256;
 use foundry_config::{Chain, Config};
 use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
@@ -9,17 +8,18 @@ use revm::{
     interpreter::{return_ok, InstructionResult},
     primitives::{
         alloy_primitives, bytes, Address, BlockEnv, EVMError, EVMResult, EvmState, ExecutionResult,
-        Output, ResultAndState, SpecId, TransactTo, TxEnv, U256 as rU256,
+        Output, ResultAndState, SpecId, TransactTo, TxEnv,
     },
     DatabaseRef, Evm,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
-use std::{clone::Clone, fmt::Debug};
 use strum_macros::Display;
 use tokio::runtime::{Handle, Runtime};
 use tracing::{debug, info};
 
-use crate::evm::engine_db::simulation_db::OverriddenSimulationDB;
+use crate::evm::engine_db::{
+    engine_db_interface::EngineDatabaseInterface, simulation_db::OverriddenSimulationDB,
+};
 
 use super::{
     account_storage::StateUpdate,
@@ -94,7 +94,8 @@ where
         let db_ref = OverriddenSimulationDB {
             inner_db: &self.state,
             overrides: &params
-                .revm_overrides()
+                .overrides
+                .clone()
                 .unwrap_or_default(),
         };
 
@@ -104,7 +105,7 @@ where
                 .revm_gas_limit()
                 .unwrap_or(8_000_000),
             transact_to: params.revm_to(),
-            value: params.revm_value(),
+            value: params.value,
             data: params.revm_data(),
             ..Default::default()
         };
@@ -289,7 +290,7 @@ fn interpret_evm_success(
                             if account.storage.is_empty() {
                                 None
                             } else {
-                                let mut slot_updates: HashMap<rU256, rU256> = HashMap::new();
+                                let mut slot_updates: HashMap<U256, U256> = HashMap::new();
                                 for (index, slot) in account.storage {
                                     if slot.is_changed() {
                                         slot_updates.insert(index, slot.present_value);
@@ -319,7 +320,7 @@ pub struct SimulationParameters {
     /// Address of the receiving account/contract
     pub to: Address,
     /// Calldata
-    pub data: Bytes,
+    pub data: Vec<u8>,
     /// Amount of native token sent
     pub value: U256,
     /// EVM state overrides.
@@ -348,25 +349,7 @@ impl SimulationParameters {
     }
 
     fn revm_data(&self) -> revm::primitives::Bytes {
-        revm::primitives::Bytes::copy_from_slice(&self.data.0)
-    }
-
-    fn revm_value(&self) -> rU256 {
-        rU256::from_limbs(self.value.0)
-    }
-
-    fn revm_overrides(&self) -> Option<HashMap<Address, HashMap<rU256, rU256>>> {
-        self.overrides.clone().map(|original| {
-            let mut result = HashMap::new();
-            for (address, storage) in original {
-                let mut account_storage = HashMap::new();
-                for (key, value) in storage {
-                    account_storage.insert(rU256::from_limbs(key.0), rU256::from_limbs(value.0));
-                }
-                result.insert(address, account_storage);
-            }
-            result
-        })
+        revm::primitives::Bytes::copy_from_slice(&self.data)
     }
 
     fn revm_gas_limit(&self) -> Option<u64> {
@@ -374,12 +357,12 @@ impl SimulationParameters {
         self.gas_limit
     }
 
-    fn revm_block_number(&self) -> rU256 {
-        rU256::from_limbs([self.block_number, 0, 0, 0])
+    fn revm_block_number(&self) -> U256 {
+        U256::from_limbs([self.block_number, 0, 0, 0])
     }
 
-    fn revm_timestamp(&self) -> rU256 {
-        rU256::from_limbs([self.timestamp, 0, 0, 0])
+    fn revm_timestamp(&self) -> U256 {
+        U256::from_limbs([self.timestamp, 0, 0, 0])
     }
 }
 
@@ -387,22 +370,22 @@ impl SimulationParameters {
 mod tests {
     use super::*;
 
+    use alloy_primitives::Keccak256;
+    use alloy_sol_types::SolValue;
     use std::{error::Error, str::FromStr, sync::Arc, time::Instant};
 
-    use ethers::{
-        abi::parse_abi,
-        prelude::BaseContract,
-        providers::{Http, Provider, ProviderError},
-        types::U256,
-    };
+    use ethers::providers::{Http, Provider, ProviderError};
     use revm::primitives::{
         bytes, hex, Account, AccountInfo, AccountStatus, Address, Bytecode, Bytes,
         EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, InvalidTransaction,
         OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
 
-    use crate::evm::engine_db::{
-        engine_db_interface::EngineDatabaseInterface, simulation_db::SimulationDB,
+    use crate::{
+        evm::engine_db::{
+            engine_db_interface::EngineDatabaseInterface, simulation_db::SimulationDB,
+        },
+        protocol::errors::SimulationError,
     };
 
     #[test]
@@ -411,7 +394,7 @@ mod tests {
         let params = SimulationParameters {
             caller: Address::from_str(address_string).unwrap(),
             to: Address::from_str(address_string).unwrap(),
-            data: ethers::types::Bytes::from_static(b"Hello"),
+            data: b"Hello".to_vec(),
             value: U256::from(123),
             overrides: Some(
                 [(
@@ -436,14 +419,14 @@ mod tests {
             Address::from_str(address_string).unwrap()
         );
         assert_eq!(params.revm_data(), revm::primitives::Bytes::from_static(b"Hello"));
-        assert_eq!(params.revm_value(), rU256::from_str("123").unwrap());
+        assert_eq!(params.value, U256::from_str("123").unwrap());
         // Below I am using `from_str` instead of `from`, because `from` for this type gives
         // an ugly false positive error in Pycharm.
         let expected_overrides = [(
             Address::ZERO,
             [
-                (rU256::from_str("1").unwrap(), rU256::from_str("11").unwrap()),
-                (rU256::from_str("2").unwrap(), rU256::from_str("22").unwrap()),
+                (U256::from_str("1").unwrap(), U256::from_str("11").unwrap()),
+                (U256::from_str("2").unwrap(), U256::from_str("22").unwrap()),
             ]
             .iter()
             .cloned()
@@ -452,10 +435,10 @@ mod tests {
         .iter()
         .cloned()
         .collect();
-        assert_eq!(params.revm_overrides().unwrap(), expected_overrides);
+        assert_eq!(params.overrides.clone().unwrap(), expected_overrides);
         assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
-        assert_eq!(params.revm_block_number(), rU256::ZERO);
-        assert_eq!(params.revm_timestamp(), rU256::ZERO);
+        assert_eq!(params.revm_block_number(), U256::ZERO);
+        assert_eq!(params.revm_timestamp(), U256::ZERO);
     }
 
     #[test]
@@ -463,15 +446,15 @@ mod tests {
         let params = SimulationParameters {
             caller: Address::ZERO,
             to: Address::ZERO,
-            data: ethers::types::Bytes::new(),
-            value: U256::zero(),
+            data: Vec::new(),
+            value: U256::from(0u64),
             overrides: None,
             gas_limit: None,
             block_number: 0,
             timestamp: 0,
         };
 
-        assert_eq!(params.revm_overrides(), None);
+        assert_eq!(params.overrides, None);
         assert_eq!(params.revm_gas_limit(), None);
     }
 
@@ -490,7 +473,7 @@ mod tests {
                 Address::ZERO,
                 Account {
                     info: AccountInfo {
-                        balance: rU256::from_limbs([1, 0, 0, 0]),
+                        balance: U256::from_limbs([1, 0, 0, 0]),
                         nonce: 2,
                         code_hash: B256::ZERO,
                         code: None,
@@ -498,19 +481,19 @@ mod tests {
                     storage: [
                         // this slot has changed
                         (
-                            rU256::from_limbs([3, 1, 0, 0]),
+                            U256::from_limbs([3, 1, 0, 0]),
                             EvmStorageSlot {
-                                original_value: rU256::from_limbs([4, 0, 0, 0]),
-                                present_value: rU256::from_limbs([5, 0, 0, 0]),
+                                original_value: U256::from_limbs([4, 0, 0, 0]),
+                                present_value: U256::from_limbs([5, 0, 0, 0]),
                                 is_cold: true,
                             },
                         ),
                         // this slot hasn't changed
                         (
-                            rU256::from_limbs([3, 2, 0, 0]),
+                            U256::from_limbs([3, 2, 0, 0]),
                             EvmStorageSlot {
-                                original_value: rU256::from_limbs([4, 0, 0, 0]),
-                                present_value: rU256::from_limbs([4, 0, 0, 0]),
+                                original_value: U256::from_limbs([4, 0, 0, 0]),
+                                present_value: U256::from_limbs([4, 0, 0, 0]),
                                 is_cold: true,
                             },
                         ),
@@ -534,12 +517,12 @@ mod tests {
             Address::ZERO,
             StateUpdate {
                 storage: Some(
-                    [(rU256::from_limbs([3, 1, 0, 0]), rU256::from_limbs([5, 0, 0, 0]))]
+                    [(U256::from_limbs([3, 1, 0, 0]), U256::from_limbs([5, 0, 0, 0]))]
                         .iter()
                         .cloned()
                         .collect(),
                 ),
-                balance: Some(rU256::from_limbs([1, 0, 0, 0])),
+                balance: Some(U256::from_limbs([1, 0, 0, 0])),
             },
         )]
         .iter()
@@ -646,31 +629,41 @@ mod tests {
         // any random address will work
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
         let router_addr = Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")?;
-        let router_abi = BaseContract::from(
-            parse_abi(&[
-                "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory amounts)",
-            ])?
-        );
         let weth_addr = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")?;
         let usdc_addr = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")?;
-        let encoded = router_abi
-            .encode(
-                "getAmountsOut",
-                (
-                    U256::from(100_000_000),
-                    vec![
-                        ethers::types::Address::from(**usdc_addr),
-                        ethers::types::Address::from(**weth_addr),
-                    ],
-                ),
-            )
-            .unwrap();
 
+        // Define the function selector and input arguments
+        let selector = "getAmountsOut(uint256,address[])";
+        let amount_in = U256::from(100_000_000);
+        let path = vec![usdc_addr, weth_addr];
+
+        let encoded = {
+            let args = (amount_in, path);
+            let mut hasher = Keccak256::new();
+            hasher.update(selector.as_bytes());
+            let selector_bytes = &hasher.finalize()[..4];
+            let mut data = selector_bytes.to_vec();
+            let mut encoded_args = args.abi_encode();
+            // Remove extra prefix if present (32 bytes for dynamic data)
+            if encoded_args.len() > 32 &&
+                encoded_args[..32] ==
+                    [0u8; 31]
+                        .into_iter()
+                        .chain([32].to_vec())
+                        .collect::<Vec<u8>>()
+            {
+                encoded_args = encoded_args[32..].to_vec();
+            }
+            data.extend(encoded_args);
+            data
+        };
+
+        // Simulation parameters
         let sim_params = SimulationParameters {
             caller,
             to: router_addr,
             data: encoded,
-            value: U256::zero(),
+            value: U256::from(0u64),
             overrides: None,
             gas_limit: None,
             block_number: 0,
@@ -679,11 +672,12 @@ mod tests {
         let eng = SimulationEngine::new(state, true);
 
         let result = eng.simulate(&sim_params);
-
-        let amounts_out = match result {
-            Ok(SimulationResult { result, .. }) => {
-                router_abi.decode_output::<Vec<U256>, _>("getAmountsOut", result)?
-            }
+        type BalanceReturn = Vec<U256>;
+        let amounts_out: Vec<U256> = match result {
+            Ok(SimulationResult { result, .. }) => BalanceReturn::abi_decode(&result, true)
+                .map_err(|e| {
+                    SimulationError::FatalError(format!("Failed to decode result: {:?}", e))
+                })?,
             _ => panic!("Execution reverted!"),
         };
 
@@ -723,15 +717,23 @@ mod tests {
         let readonly_state = new_state();
         let state = new_state();
 
-        let erc20_abi = BaseContract::from(parse_abi(&[
-            "function balanceOf(address account) public view virtual returns (uint256)",
-        ])?);
+        let selector = "balanceOf(address)";
+        let eoa_address = Address::from_str("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d")?;
+        let calldata = {
+            let args = eoa_address;
+            let mut hasher = Keccak256::new();
+            hasher.update(selector.as_bytes());
+            let selector_bytes = &hasher.finalize()[..4];
+            let mut data = selector_bytes.to_vec();
+            data.extend(args.abi_encode());
+            data
+        };
+
         let usdt_address = Address::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
         let _ = readonly_state
             .basic_ref(usdt_address)
             .unwrap()
             .unwrap();
-        let eoa_address = Address::from_str("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d")?;
 
         // let deploy_bytecode = std::fs::read(
         //     "/home/mdank/repos/datarevenue/DEFI/defibot-solver/defibot/swaps/pool_state/dodo/
@@ -742,7 +744,7 @@ mod tests {
         let onchain_bytecode = revm::precompile::Bytes::from(hex::decode("608060405234801561000f575f80fd5b50600436106100a6575f3560e01c8063395093511161006e578063395093511461011f57806370a082311461013257806395d89b411461015a578063a457c2d714610162578063a9059cbb14610175578063dd62ed3e14610188575f80fd5b806306fdde03146100aa578063095ea7b3146100c857806318160ddd146100eb57806323b872dd146100fd578063313ce56714610110575b5f80fd5b6100b261019b565b6040516100bf91906105b9565b60405180910390f35b6100db6100d636600461061f565b61022b565b60405190151581526020016100bf565b6002545b6040519081526020016100bf565b6100db61010b366004610647565b610244565b604051601281526020016100bf565b6100db61012d36600461061f565b610267565b6100ef610140366004610680565b6001600160a01b03165f9081526020819052604090205490565b6100b2610288565b6100db61017036600461061f565b610297565b6100db61018336600461061f565b6102f2565b6100ef6101963660046106a0565b6102ff565b6060600380546101aa906106d1565b80601f01602080910402602001604051908101604052809291908181526020018280546101d6906106d1565b80156102215780601f106101f857610100808354040283529160200191610221565b820191905f5260205f20905b81548152906001019060200180831161020457829003601f168201915b5050505050905090565b5f33610238818585610329565b60019150505b92915050565b5f336102518582856103dc565b61025c85858561043e565b506001949350505050565b5f3361023881858561027983836102ff565b6102839190610709565b610329565b6060600480546101aa906106d1565b5f33816102a482866102ff565b9050838110156102e557604051632983c0c360e21b81526001600160a01b038616600482015260248101829052604481018590526064015b60405180910390fd5b61025c8286868403610329565b5f3361023881858561043e565b6001600160a01b039182165f90815260016020908152604080832093909416825291909152205490565b6001600160a01b0383166103525760405163e602df0560e01b81525f60048201526024016102dc565b6001600160a01b03821661037b57604051634a1406b160e11b81525f60048201526024016102dc565b6001600160a01b038381165f8181526001602090815260408083209487168084529482529182902085905590518481527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a3505050565b5f6103e784846102ff565b90505f198114610438578181101561042b57604051637dc7a0d960e11b81526001600160a01b038416600482015260248101829052604481018390526064016102dc565b6104388484848403610329565b50505050565b6001600160a01b03831661046757604051634b637e8f60e11b81525f60048201526024016102dc565b6001600160a01b0382166104905760405163ec442f0560e01b81525f60048201526024016102dc565b61049b8383836104a0565b505050565b6001600160a01b0383166104ca578060025f8282546104bf9190610709565b9091555061053a9050565b6001600160a01b0383165f908152602081905260409020548181101561051c5760405163391434e360e21b81526001600160a01b038516600482015260248101829052604481018390526064016102dc565b6001600160a01b0384165f9081526020819052604090209082900390555b6001600160a01b03821661055657600280548290039055610574565b6001600160a01b0382165f9081526020819052604090208054820190555b816001600160a01b0316836001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516103cf91815260200190565b5f6020808352835180828501525f5b818110156105e4578581018301518582016040015282016105c8565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b038116811461061a575f80fd5b919050565b5f8060408385031215610630575f80fd5b61063983610604565b946020939093013593505050565b5f805f60608486031215610659575f80fd5b61066284610604565b925061067060208501610604565b9150604084013590509250925092565b5f60208284031215610690575f80fd5b61069982610604565b9392505050565b5f80604083850312156106b1575f80fd5b6106ba83610604565b91506106c860208401610604565b90509250929050565b600181811c908216806106e557607f821691505b60208210810361070357634e487b7160e01b5f52602260045260245ffd5b50919050565b8082018082111561023e57634e487b7160e01b5f52601160045260245ffdfea2646970667358221220dfc123d5852c9246ea16b645b377b4436e2f778438195cc6d6c435e8c73a20e764736f6c63430008140033000000000000000000000000000000000000000000000000000000000000000000")?);
         let code = Bytecode::new_raw(onchain_bytecode);
         let contract_acc_info = AccountInfo::new(
-            rU256::from(0),
+            U256::from(0),
             0,
             code.hash_slow(),
             code,
@@ -751,11 +753,11 @@ mod tests {
         // Adding permanent storage for balance
         let mut storage = HashMap::default();
         storage.insert(
-            rU256::from_str(
+            U256::from_str(
                 "25842306973167774731510882590667189188844731550465818811072464953030320818263",
             )
             .unwrap(),
-            rU256::from_str("25").unwrap(),
+            U256::from_str("25").unwrap(),
         );
         // TODO: mock a balance (and approval)
         // let mut permanent_storage = HashMap::new();
@@ -766,7 +768,7 @@ mod tests {
         // let deployment_account = B160::from_str("0x0000000000000000000000000000000000000123")?;
         // state.init_account(
         //     deployment_account,
-        //     AccountInfo::new(rU256::MAX, 0, Bytecode::default()),
+        //     AccountInfo::new(U256::MAX, 0, Bytecode::default()),
         //     None,
         //     true,
         // );
@@ -774,7 +776,7 @@ mod tests {
         //     caller: Address::from(deployment_account),
         //     to: Address::zero(),
         //     data: Bytes::from(deploy_bytecode),
-        //     value: U256::zero(),
+        //     value: U256::from(0u64),
         //     overrides: None,
         //     gas_limit: None,
         // };
@@ -786,23 +788,20 @@ mod tests {
         let mut overrides = HashMap::default();
         let mut storage_overwrite = HashMap::default();
         storage_overwrite.insert(
-            U256::from_dec_str(
+            U256::from_str(
                 "25842306973167774731510882590667189188844731550465818811072464953030320818263",
             )
             .unwrap(),
-            U256::from_dec_str("80").unwrap(),
+            U256::from_str("80").unwrap(),
         );
         overrides.insert(usdt_address, storage_overwrite);
 
-        let calldata = erc20_abi
-            .encode("balanceOf", ethers::types::Address::from(**eoa_address))
-            .unwrap();
         let sim_params = SimulationParameters {
             caller: Address::from_str("0x0000000000000000000000000000000000000000")?,
             to: usdt_address,
             // to: Address::from(deployed_contract_address),
             data: calldata,
-            value: U256::zero(),
+            value: U256::from(0u64),
             overrides: Some(overrides),
             gas_limit: None,
             block_number: 0,
@@ -825,9 +824,7 @@ mod tests {
         println!("Executing balanceOf");
         let result = eng.simulate(&sim_params);
         let balance = match result {
-            Ok(SimulationResult { result, .. }) => {
-                erc20_abi.decode_output::<U256, _>("balanceOf", result)?
-            }
+            Ok(SimulationResult { result, .. }) => U256::abi_decode(&result, true)?,
             Err(error) => panic!("{:?}", error),
         };
         println!("Balance: {}", balance);

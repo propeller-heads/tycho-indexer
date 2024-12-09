@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use alloy_primitives::bytes::Bytes;
+use crate::evm::protocol::u256_num;
+use alloy_primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
-use ethers::types::H256;
-use revm::primitives::{Address, B256, U256, U256 as rU256};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use strum_macros::{Display, EnumString};
@@ -12,28 +11,6 @@ use uuid::Uuid;
 use crate::serde_helpers::{hex_bytes, hex_bytes_option};
 
 use super::engine_db::simulation_db::BlockHeader;
-
-// TODO move this to utils
-fn bytes_to_ru256(bytes: Bytes) -> rU256 {
-    // Ensure the input is exactly 32 bytes
-    let mut padded_bytes = [0u8; 32];
-
-    // Copy the input bytes into the padded array from the right
-    let start = 32 - bytes.len().min(32);
-    padded_bytes[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
-
-    // Convert the padded byte array into rU256
-    rU256::from_be_slice(&padded_bytes)
-}
-
-fn map_slots_to_ru256(
-    slots: HashMap<tycho_core::hex_bytes::Bytes, tycho_core::hex_bytes::Bytes>,
-) -> HashMap<rU256, rU256> {
-    slots
-        .into_iter()
-        .map(|(k, v)| (bytes_to_ru256(k.into()), bytes_to_ru256(v.into())))
-        .collect()
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct ExtractorIdentity {
@@ -90,7 +67,7 @@ impl From<Block> for BlockHeader {
     fn from(value: Block) -> Self {
         Self {
             number: value.number,
-            hash: H256::from(value.hash.0),
+            hash: value.hash,
             timestamp: value.ts.and_utc().timestamp() as u64,
         }
     }
@@ -206,10 +183,10 @@ impl From<tycho_core::dto::AccountUpdate> for AccountUpdate {
         Self {
             chain: value.chain.into(),
             address: Address::from_slice(&value.address[..20]), // Convert address field to Address
-            slots: map_slots_to_ru256(value.slots),
+            slots: u256_num::map_slots_to_u256(value.slots),
             balance: value
                 .balance
-                .map(|balance| bytes_to_ru256(balance.into())),
+                .map(|balance| u256_num::bytes_to_u256(balance.into())),
             code: value.code.map(|code| code.to_vec()),
             change: value.change.into(),
         }
@@ -266,8 +243,8 @@ pub struct ResponseAccount {
     pub chain: Chain,
     pub address: Address,
     pub title: String,
-    pub slots: HashMap<rU256, rU256>,
-    pub balance: rU256,
+    pub slots: HashMap<U256, U256>,
+    pub balance: U256,
     #[serde(with = "hex_bytes")]
     pub code: Vec<u8>,
     pub code_hash: B256,
@@ -282,8 +259,8 @@ impl ResponseAccount {
         chain: Chain,
         address: Address,
         title: String,
-        slots: HashMap<rU256, rU256>,
-        balance: rU256,
+        slots: HashMap<U256, U256>,
+        balance: U256,
         code: Vec<u8>,
         code_hash: B256,
         balance_modify_tx: B256,
@@ -329,8 +306,8 @@ impl From<tycho_core::dto::ResponseAccount> for ResponseAccount {
             chain: value.chain.into(),
             address: Address::from_slice(&value.address[..20]), // Convert address field to Address
             title: value.title.clone(),
-            slots: map_slots_to_ru256(value.slots),
-            balance: bytes_to_ru256(value.native_balance.into()),
+            slots: u256_num::map_slots_to_u256(value.slots),
+            balance: u256_num::bytes_to_u256(value.native_balance.into()),
             code: value.code.to_vec(),
             code_hash: B256::from_slice(&value.code_hash[..]),
             balance_modify_tx: B256::from_slice(&value.balance_modify_tx[..]),

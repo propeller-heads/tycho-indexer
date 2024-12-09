@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
-use revm::{
-    precompile::Address,
-    primitives::{AccountInfo, U256 as rU256},
-    DatabaseRef,
-};
+use alloy_primitives::U256;
+use revm::{precompile::Address, primitives::AccountInfo, DatabaseRef};
 
 pub trait EngineDatabaseInterface: DatabaseRef + Send + Sync {
     type Error;
@@ -26,7 +23,7 @@ pub trait EngineDatabaseInterface: DatabaseRef + Send + Sync {
         &self,
         address: Address,
         account: AccountInfo,
-        permanent_storage: Option<HashMap<rU256, rU256>>,
+        permanent_storage: Option<HashMap<U256, U256>>,
         mocked: bool,
     );
 

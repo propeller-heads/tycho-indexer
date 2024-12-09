@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.54.0"
+version = "0.55.0"
 edition = "2021"
 
 [workspace]
@@ -53,6 +53,7 @@ alloy-primitives = { version = "0.8.9", features = [
     "rand",
     "map-foldhash",
 ] }
+alloy-sol-types = "0.8.14"
 revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
 revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
 num-bigint = "0.4.6"

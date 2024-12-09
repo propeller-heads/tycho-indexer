@@ -4,9 +4,8 @@ use std::{
     str::FromStr,
 };
 
-use alloy_primitives::Address;
+use alloy_primitives::{Address, B256};
 use chrono::Utc;
-use ethers::prelude::H256;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
@@ -151,7 +150,7 @@ pub async fn process_messages(
         let block_hash = header.clone().hash;
         let block = BlockHeader {
             number: block_id,
-            hash: H256::from_slice(&block_hash[..]),
+            hash: B256::from_slice(&block_hash[..]),
             timestamp: Utc::now().timestamp() as u64,
         };
 

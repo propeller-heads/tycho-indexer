@@ -3,9 +3,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use alloy_primitives::{Address, B256, U256};
 use revm::{
     db::DatabaseRef,
-    primitives::{AccountInfo, Address, Bytecode, Bytes, B256, U256 as rU256},
+    primitives::{AccountInfo, Bytecode, Bytes},
 };
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
@@ -146,7 +147,7 @@ impl PreCachedDB {
     ///
     /// Returns an `Option` containing a reference to the storage value if it exists, otherwise
     /// returns `None`.
-    pub fn get_storage(&self, address: &Address, index: &rU256) -> Option<rU256> {
+    pub fn get_storage(&self, address: &Address, index: &U256) -> Option<U256> {
         self.inner
             .read()
             .unwrap()
@@ -248,7 +249,7 @@ impl EngineDatabaseInterface for PreCachedDB {
         &self,
         address: Address,
         account: AccountInfo,
-        permanent_storage: Option<HashMap<rU256, rU256>>,
+        permanent_storage: Option<HashMap<U256, U256>>,
         _mocked: bool,
     ) {
         self.inner
@@ -306,7 +307,7 @@ impl DatabaseRef for PreCachedDB {
     /// # Errors
     ///
     /// Returns an error if the storage value is not found.
-    fn storage_ref(&self, address: Address, index: rU256) -> Result<rU256, Self::Error> {
+    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         debug!(%address, %index, "Requested storage of account");
         let read_guard = self.inner.read().unwrap();
         if let Some(storage_value) = read_guard
@@ -324,7 +325,7 @@ impl DatabaseRef for PreCachedDB {
                 // As we only store non-zero values, if the account is present it means this
                 // slot is zero.
                 debug!(%address, %index, "Account found, but slot is zero");
-                Ok(rU256::ZERO)
+                Ok(U256::ZERO)
             } else {
                 // At this point we know we don't have data for this address.
                 debug!(%address, %index, "Account not found");
@@ -336,7 +337,7 @@ impl DatabaseRef for PreCachedDB {
     /// If block header is set, returns the hash. Otherwise returns a zero hash.
     fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
         match self.inner.read().unwrap().block {
-            Some(header) => Ok(B256::from_slice(header.hash.as_bytes())),
+            Some(header) => Ok(header.hash),
             None => Ok(B256::default()),
         }
     }
@@ -347,7 +348,7 @@ mod tests {
     use super::*;
 
     use chrono::DateTime;
-    use revm::primitives::U256 as rU256;
+    use revm::primitives::U256;
     use rstest::{fixture, rstest};
     use std::{error::Error, str::FromStr};
 
@@ -389,9 +390,9 @@ mod tests {
     #[rstest]
     fn test_account_storage(mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let storage_address = rU256::from(1);
-        let mut permanent_storage: HashMap<rU256, rU256> = HashMap::new();
-        permanent_storage.insert(storage_address, rU256::from(10));
+        let storage_address = U256::from(1);
+        let mut permanent_storage: HashMap<U256, U256> = HashMap::new();
+        permanent_storage.insert(storage_address, U256::from(10));
         mock_db.init_account(
             mock_acc_address,
             AccountInfo::default(),
@@ -403,21 +404,21 @@ mod tests {
             .storage_ref(mock_acc_address, storage_address)
             .unwrap();
 
-        assert_eq!(storage, rU256::from(10));
+        assert_eq!(storage, U256::from(10));
         Ok(())
     }
 
     #[rstest]
     fn test_account_storage_zero(mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let storage_address = rU256::from(1);
+        let storage_address = U256::from(1);
         mock_db.init_account(mock_acc_address, AccountInfo::default(), None, false);
 
         let storage = mock_db
             .storage_ref(mock_acc_address, storage_address)
             .unwrap();
 
-        assert_eq!(storage, rU256::ZERO);
+        assert_eq!(storage, U256::ZERO);
         Ok(())
     }
 
@@ -428,7 +429,7 @@ mod tests {
     fn test_account_storage_missing(mock_db: PreCachedDB) {
         let mock_acc_address =
             Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
-        let storage_address = rU256::from(1);
+        let storage_address = U256::from(1);
 
         // This will panic because this account isn't initialized
         mock_db
@@ -443,9 +444,9 @@ mod tests {
         mock_db.init_account(address, AccountInfo::default(), None, false);
 
         let mut new_storage = HashMap::default();
-        let new_storage_value_index = rU256::from_limbs_slice(&[123]);
+        let new_storage_value_index = U256::from_limbs_slice(&[123]);
         new_storage.insert(new_storage_value_index, new_storage_value_index);
-        let new_balance = rU256::from_limbs_slice(&[500]);
+        let new_balance = U256::from_limbs_slice(&[500]);
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
         let new_block = Block {
             number: 1,
@@ -522,7 +523,7 @@ mod tests {
             Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap(),
             Chain::Ethereum,
             HashMap::new(),
-            Some(rU256::from(500)),
+            Some(U256::from(500)),
             Some(Vec::<u8>::new()),
             ChangeType::Creation,
         );
@@ -548,7 +549,7 @@ mod tests {
             account_info,
             AccountInfo {
                 nonce: 0,
-                balance: rU256::from(500),
+                balance: U256::from(500),
                 code_hash: B256::from_str(
                     "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
                 )

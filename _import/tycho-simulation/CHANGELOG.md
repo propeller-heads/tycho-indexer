@@ -1,3 +1,12 @@
+## [0.55.0](https://github.com/propeller-heads/tycho-simulation/compare/0.54.0...0.55.0) (2024-12-09)
+
+
+### Features
+
+* Replace ethers types in block hash ([62a9a3d](https://github.com/propeller-heads/tycho-simulation/commit/62a9a3d7c45b9d5137255ee3698cdd994fb0f737))
+* Replace ethers types with alloy in simulation interfaces ([803d1f9](https://github.com/propeller-heads/tycho-simulation/commit/803d1f9f9a11b72a2f42def125015655f0eb4ecb))
+* Update encoding and decoding to use alloy instead of ethers ([3cd1787](https://github.com/propeller-heads/tycho-simulation/commit/3cd1787de49b67425d5b9b6b0bacc09014614287))
+
 ## [0.54.0](https://github.com/propeller-heads/tycho-simulation/compare/0.53.0...0.54.0) (2024-12-05)
 
 
