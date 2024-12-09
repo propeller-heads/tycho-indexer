@@ -2,6 +2,7 @@ use alloy_primitives::{Address, U256};
 use alloy_sol_types::SolValue;
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Debug,
     path::PathBuf,
 };
 
@@ -10,14 +11,14 @@ use itertools::Itertools;
 use revm::{
     precompile::Bytes,
     primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode, KECCAK_EMPTY},
+    DatabaseRef,
 };
 use tracing::warn;
 
 use crate::{
     evm::{
         engine_db::{
-            create_engine, engine_db_interface::EngineDatabaseInterface,
-            simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB,
+            create_engine, engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
         },
         simulation::{SimulationEngine, SimulationParameters},
         ContractCompiler,
@@ -71,7 +72,11 @@ use super::{
 ///     Ok(())
 /// }
 /// ```
-pub struct EVMPoolStateBuilder {
+pub struct EVMPoolStateBuilder<D: EngineDatabaseInterface + Clone + Debug>
+where
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
     id: String,
     tokens: Vec<Address>,
     block: BlockHeader,
@@ -83,12 +88,17 @@ pub struct EVMPoolStateBuilder {
     token_storage_slots: Option<HashMap<Address, (ERC20Slots, ContractCompiler)>>,
     manual_updates: Option<bool>,
     trace: Option<bool>,
-    engine: Option<SimulationEngine<PreCachedDB>>,
-    adapter_contract: Option<TychoSimulationContract<PreCachedDB>>,
+    engine: Option<SimulationEngine<D>>,
+    adapter_contract: Option<TychoSimulationContract<D>>,
     adapter_contract_path: Option<PathBuf>,
 }
 
-impl EVMPoolStateBuilder {
+impl<D> EVMPoolStateBuilder<D>
+where
+    D: EngineDatabaseInterface + Clone + Debug + 'static,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
     pub fn new(
         id: String,
         tokens: Vec<Address>,
@@ -154,15 +164,12 @@ impl EVMPoolStateBuilder {
         self
     }
 
-    pub fn engine(mut self, engine: SimulationEngine<PreCachedDB>) -> Self {
+    pub fn engine(mut self, engine: SimulationEngine<D>) -> Self {
         self.engine = Some(engine);
         self
     }
 
-    pub fn adapter_contract(
-        mut self,
-        adapter_contract: TychoSimulationContract<PreCachedDB>,
-    ) -> Self {
+    pub fn adapter_contract(mut self, adapter_contract: TychoSimulationContract<D>) -> Self {
         self.adapter_contract = Some(adapter_contract);
         self
     }
@@ -173,11 +180,11 @@ impl EVMPoolStateBuilder {
     }
 
     /// Build the final EVMPoolState object
-    pub async fn build(mut self) -> Result<EVMPoolState<PreCachedDB>, SimulationError> {
+    pub async fn build(mut self, db: D) -> Result<EVMPoolState<D>, SimulationError> {
         let engine = if let Some(engine) = &self.engine {
             engine.clone()
         } else {
-            self.get_default_engine().await?
+            self.get_default_engine(db).await?
         };
 
         if self.adapter_contract.is_none() {
@@ -220,10 +227,8 @@ impl EVMPoolStateBuilder {
         ))
     }
 
-    async fn get_default_engine(
-        &mut self,
-    ) -> Result<SimulationEngine<PreCachedDB>, SimulationError> {
-        let engine = create_engine(SHARED_TYCHO_DB.clone(), self.trace.unwrap_or(false))?;
+    async fn get_default_engine(&self, db: D) -> Result<SimulationEngine<D>, SimulationError> {
+        let engine = create_engine(db, self.trace.unwrap_or(false))?;
 
         // Mock the ERC20 contract at the given token addresses.
         let mocked_contract_bytecode: Bytecode = load_erc20_bytecode()?;
@@ -365,7 +370,7 @@ impl EVMPoolStateBuilder {
     /// [Dynamic Address Resolution Example](https://github.com/propeller-heads/propeller-protocol-lib/blob/main/docs/indexing/reserved-attributes.md#description-2)
     fn get_address_from_call(
         &self,
-        engine: &SimulationEngine<PreCachedDB>,
+        engine: &SimulationEngine<D>,
         decoded: &str,
     ) -> Result<Address, SimulationError> {
         let method_name = decoded
@@ -433,6 +438,7 @@ impl EVMPoolStateBuilder {
 mod tests {
     use super::*;
 
+    use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};
     use alloy_primitives::B256;
     use std::str::FromStr;
 
@@ -443,8 +449,10 @@ mod tests {
         let balances = HashMap::new();
         let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
 
-        let result =
-            tokio_test::block_on(EVMPoolStateBuilder::new(id, tokens, balances, block).build());
+        let result = tokio_test::block_on(
+            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block)
+                .build(SHARED_TYCHO_DB.clone()),
+        );
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -464,9 +472,10 @@ mod tests {
         let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
         let balances = HashMap::new();
 
-        let mut builder = EVMPoolStateBuilder::new(id, tokens, balances, block);
+        let builder = EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block);
 
-        let engine = tokio_test::block_on(builder.get_default_engine()).unwrap();
+        let engine =
+            tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone())).unwrap();
 
         assert!(engine
             .state

@@ -1,4 +1,4 @@
-use std::{clone::Clone, collections::HashMap, default::Default};
+use std::{clone::Clone, collections::HashMap, default::Default, fmt::Debug};
 
 use alloy_primitives::U256;
 use foundry_config::{Chain, Config};
@@ -52,7 +52,7 @@ pub struct SimulationResult {
 
 /// Simulation engine
 #[derive(Debug, Clone)]
-pub struct SimulationEngine<D: EngineDatabaseInterface + Clone>
+pub struct SimulationEngine<D: EngineDatabaseInterface + Clone + Debug>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
@@ -61,7 +61,7 @@ where
     pub trace: bool,
 }
 
-impl<D: EngineDatabaseInterface + Clone> SimulationEngine<D>
+impl<D: EngineDatabaseInterface + Clone + Debug> SimulationEngine<D>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,

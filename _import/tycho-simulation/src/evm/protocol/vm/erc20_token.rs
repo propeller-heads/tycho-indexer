@@ -2,7 +2,7 @@ use alloy_primitives::{Address, U256};
 use alloy_sol_types::SolValue;
 use lazy_static::lazy_static;
 use revm::DatabaseRef;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     evm::{
@@ -132,7 +132,7 @@ type U256Return = U256;
 ///   testing both compiler configurations.
 /// - Once the balance slot is found, it uses the detected compiler to search for the allowance
 ///   slot, which is dependent on the balance slot.
-pub fn brute_force_slots<D: EngineDatabaseInterface + Clone>(
+pub fn brute_force_slots<D: EngineDatabaseInterface + Clone + Debug>(
     token_addr: &Address,
     block: &BlockHeader,
     engine: &SimulationEngine<D>,

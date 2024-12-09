@@ -38,7 +38,7 @@ use super::{
 };
 
 #[derive(Clone, Debug)]
-pub struct EVMPoolState<D: EngineDatabaseInterface + Clone>
+pub struct EVMPoolState<D: EngineDatabaseInterface + Clone + Debug>
 where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
@@ -80,7 +80,7 @@ where
 
 impl<D> EVMPoolState<D>
 where
-    D: EngineDatabaseInterface + Clone + 'static,
+    D: EngineDatabaseInterface + Clone + Debug + 'static,
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
@@ -606,7 +606,7 @@ mod tests {
                 "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
             ))
             .stateless_contracts(stateless_contracts)
-            .build()
+            .build(SHARED_TYCHO_DB.clone())
             .await
             .expect("Failed to build pool state")
     }

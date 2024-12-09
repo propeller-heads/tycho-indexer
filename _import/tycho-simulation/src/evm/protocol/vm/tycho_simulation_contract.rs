@@ -48,7 +48,7 @@ pub struct TychoSimulationResponse {
 /// Returns errors of type `SimulationError` when encoding, decoding, or simulation operations
 /// fail. These errors provide detailed feedback on potential issues.
 #[derive(Clone, Debug)]
-pub struct TychoSimulationContract<D: EngineDatabaseInterface + Clone>
+pub struct TychoSimulationContract<D: EngineDatabaseInterface + Clone + Debug>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
@@ -58,7 +58,7 @@ where
                                              * getter functions? */
 }
 
-impl<D: EngineDatabaseInterface + Clone> TychoSimulationContract<D>
+impl<D: EngineDatabaseInterface + Clone + Debug> TychoSimulationContract<D>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,

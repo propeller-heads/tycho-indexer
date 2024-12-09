@@ -1,7 +1,10 @@
 use alloy_primitives::{Address, U256};
 
 use alloy_sol_types::SolValue;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+};
 
 use revm::DatabaseRef;
 
@@ -48,7 +51,7 @@ type MinGasUsageReturn = U256;
 /// - `get_limits`: Retrieves the trade limits for a given token pair.
 /// - `get_capabilities`: Checks the capabilities of the adapter for a specific token pair.
 /// - `min_gas_usage`: Queries the minimum gas usage required for operations within the adapter.
-impl<D: EngineDatabaseInterface + std::clone::Clone> TychoSimulationContract<D>
+impl<D: EngineDatabaseInterface + std::clone::Clone + Debug> TychoSimulationContract<D>
 where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,

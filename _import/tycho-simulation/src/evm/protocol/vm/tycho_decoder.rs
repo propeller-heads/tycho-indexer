@@ -9,7 +9,7 @@ use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
 use crate::{
-    evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB},
+    evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
     models::ERC20Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
@@ -145,7 +145,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         };
 
         let mut pool_state = pool_state_builder
-            .build()
+            .build(SHARED_TYCHO_DB.clone())
             .await
             .map_err(InvalidSnapshotError::VMError)?;
 
