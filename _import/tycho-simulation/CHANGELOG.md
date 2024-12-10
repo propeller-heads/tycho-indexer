@@ -1,3 +1,16 @@
+## [0.57.0](https://github.com/propeller-heads/tycho-simulation/compare/0.56.1...0.57.0) (2024-12-10)
+
+
+### Features
+
+* **example:** add Curve to `explorer` example ([4840265](https://github.com/propeller-heads/tycho-simulation/commit/48402655ebb0b0e073220cfaff699635c85da493))
+
+
+### Bug Fixes
+
+* correctly initialize stateless contracts ([28d3ad3](https://github.com/propeller-heads/tycho-simulation/commit/28d3ad304f79d527717b361c7d3e952bfe062006))
+* correctly overwrites balances ([b5b7f2d](https://github.com/propeller-heads/tycho-simulation/commit/b5b7f2d0065658d08678517d44c2e962b47e20e2))
+
 ## [0.56.1](https://github.com/propeller-heads/tycho-simulation/compare/0.56.0...0.56.1) (2024-12-10)
 
 
