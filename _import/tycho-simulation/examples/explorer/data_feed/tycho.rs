@@ -162,7 +162,7 @@ pub async fn process_messages(
                     .for_each(|(addr, token)| {
                         if token.quality >= 51 {
                             all_tokens
-                                .entry(Address::from_slice(addr))
+                                .entry(addr.clone())
                                 .or_insert_with(|| {
                                     token
                                         .clone()
@@ -183,11 +183,7 @@ pub async fn process_messages(
                         let tokens = comp
                             .tokens
                             .iter()
-                            .flat_map(|addr| {
-                                all_tokens
-                                    .get(&Address::from_slice(addr))
-                                    .cloned()
-                            })
+                            .flat_map(|addr| all_tokens.get(addr).cloned())
                             .collect::<Vec<_>>();
                         let id = Bytes::from_str(id).unwrap_or_else(|_| {
                             panic!("Failed parsing H160 from id string {}", id)
@@ -228,7 +224,7 @@ pub async fn process_messages(
                 let mut skip_pool = false;
 
                 for token in snapshot.component.tokens.clone() {
-                    match all_tokens.get(&Address::from_slice(&token)) {
+                    match all_tokens.get(&token) {
                         Some(token) => pair_tokens.push(token.clone()),
                         None => {
                             debug!(
@@ -427,7 +423,7 @@ pub async fn process_messages(
     jh.await.unwrap();
 }
 
-pub async fn load_all_tokens(tycho_url: &str, auth_key: Option<&str>) -> HashMap<Address, Token> {
+pub async fn load_all_tokens(tycho_url: &str, auth_key: Option<&str>) -> HashMap<Bytes, Token> {
     let rpc_url = format!("https://{tycho_url}");
     let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key).unwrap();
 
@@ -438,12 +434,14 @@ pub async fn load_all_tokens(tycho_url: &str, auth_key: Option<&str>) -> HashMap
         .expect("Unable to load tokens")
         .into_iter()
         .map(|token| {
-            let token_clone = token.clone();
             (
-                Address::from_slice(&token.address),
-                token.try_into().unwrap_or_else(|_| {
-                    panic!("Couldn't convert {:?} into ERC20 token.", token_clone)
-                }),
+                token.address.clone(),
+                token
+                    .clone()
+                    .try_into()
+                    .unwrap_or_else(|_| {
+                        panic!("Couldn't convert {:?} into ERC20 token.", token.clone())
+                    }),
             )
         })
         .collect::<HashMap<_, Token>>()

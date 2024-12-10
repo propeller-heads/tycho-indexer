@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use revm::DatabaseRef;
 use tracing::info;
 
-use tycho_core::dto::ProtocolStateDelta;
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     evm::{
@@ -46,7 +46,7 @@ where
     /// The pool's identifier
     id: String,
     /// The pool's token's addresses
-    pub tokens: Vec<Address>,
+    pub tokens: Vec<Bytes>,
     /// The current block, will be used to set vm context
     block: BlockHeader,
     /// The pools token balances
@@ -87,7 +87,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
-        tokens: Vec<Address>,
+        tokens: Vec<Bytes>,
         block: BlockHeader,
         balances: HashMap<Address, U256>,
         balance_owner: Option<Address>,
@@ -588,7 +588,7 @@ mod tests {
         }
         db.update(accounts, Some(block));
 
-        let tokens = vec![dai_addr(), bal_addr()];
+        let tokens = vec![dai().address, bal().address];
         let block = BlockHeader {
             number: 18485417,
             hash: B256::from_str(
@@ -637,7 +637,11 @@ mod tests {
 
         let capabilities_adapter_contract = pool_state
             .adapter_contract
-            .get_capabilities(&pool_state.id, pool_state.tokens[0], pool_state.tokens[1])
+            .get_capabilities(
+                &pool_state.id,
+                bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+            )
             .unwrap();
 
         assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());
@@ -667,7 +671,7 @@ mod tests {
             .get_account_storage();
         for token in pool_state.tokens.clone() {
             let account = engine_accounts
-                .get_account_info(&token)
+                .get_account_info(&bytes_to_erc20_address(&token).unwrap())
                 .unwrap();
             assert_eq!(account.balance, U256::from(0));
             assert_eq!(account.nonce, 0u64);
@@ -782,7 +786,10 @@ mod tests {
 
         let overwrites = pool_state
             .get_overwrites(
-                vec![pool_state.tokens[0], pool_state.tokens[1]],
+                vec![
+                    bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                    bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+                ],
                 *MAX_BALANCE / U256::from(100),
             )
             .unwrap();
@@ -793,7 +800,10 @@ mod tests {
 
         let bal_limit = pool_state
             .get_sell_amount_limit(
-                vec![pool_state.tokens[1], pool_state.tokens[0]],
+                vec![
+                    bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+                    bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                ],
                 Some(overwrites),
             )
             .unwrap();
@@ -810,11 +820,17 @@ mod tests {
 
         let dai_bal_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[0], pool_state.tokens[1]))
+            .get(&(
+                bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+            ))
             .unwrap();
         let bal_dai_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[1], pool_state.tokens[0]))
+            .get(&(
+                bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+                bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+            ))
             .unwrap();
         assert_eq!(dai_bal_spot_price, &0.137_778_914_319_047_9);
         assert_eq!(bal_dai_spot_price, &7.071_503_245_428_246);

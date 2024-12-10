@@ -20,11 +20,13 @@ use crate::{
         engine_db::{
             create_engine, engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
         },
+        protocol::erc20::bytes_to_erc20_address,
         simulation::{SimulationEngine, SimulationParameters},
         ContractCompiler,
     },
     protocol::errors::SimulationError,
 };
+use tycho_core::Bytes as TychoBytes;
 
 use super::{
     constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
@@ -78,7 +80,7 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     id: String,
-    tokens: Vec<Address>,
+    tokens: Vec<TychoBytes>,
     block: BlockHeader,
     balances: HashMap<Address, U256>,
     balance_owner: Option<Address>,
@@ -101,7 +103,7 @@ where
 {
     pub fn new(
         id: String,
-        tokens: Vec<Address>,
+        tokens: Vec<TychoBytes>,
         balances: HashMap<Address, U256>,
         block: BlockHeader,
     ) -> Self {
@@ -241,7 +243,7 @@ where
             };
             engine
                 .state
-                .init_account(*token_address, info, None, false);
+                .init_account(bytes_to_erc20_address(token_address)?, info, None, false);
         }
 
         engine.state.init_account(
@@ -290,21 +292,22 @@ where
 
     fn init_token_storage_slots(&mut self) -> Result<(), SimulationError> {
         for t in self.tokens.iter() {
+            let t_erc20_address = bytes_to_erc20_address(t)?;
             if self
                 .involved_contracts
                 .as_ref()
-                .is_some_and(|contracts| contracts.contains(t)) &&
+                .is_some_and(|contracts| contracts.contains(&t_erc20_address)) &&
                 !self
                     .token_storage_slots
                     .as_ref()
-                    .is_some_and(|token_storage| token_storage.contains_key(t))
+                    .is_some_and(|token_storage| token_storage.contains_key(&t_erc20_address))
             {
                 self.token_storage_slots
                     .get_or_insert(HashMap::new())
                     .insert(
-                        *t,
+                        t_erc20_address,
                         brute_force_slots(
-                            t,
+                            &t_erc20_address,
                             &self.block,
                             self.engine
                                 .as_ref()
@@ -332,7 +335,11 @@ where
                                 .to_string(),
                         )
                     })?
-                    .get_capabilities(&self.id, *t0, *t1)?;
+                    .get_capabilities(
+                        &self.id,
+                        bytes_to_erc20_address(t0)?,
+                        bytes_to_erc20_address(t1)?,
+                    )?;
                 capabilities.push(caps);
             }
         }
@@ -438,14 +445,18 @@ where
 mod tests {
     use super::*;
 
-    use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};
+    use crate::evm::{
+        engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
+        protocol::erc20::bytes_to_erc20_address,
+    };
     use alloy_primitives::B256;
     use std::str::FromStr;
 
     #[test]
     fn test_build_without_required_fields() {
         let id = "pool_1".to_string();
-        let tokens = vec![Address::repeat_byte(0)];
+        let tokens =
+            vec![TychoBytes::from_str("0000000000000000000000000000000000000000").unwrap()];
         let balances = HashMap::new();
         let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
 
@@ -466,9 +477,9 @@ mod tests {
     #[test]
     fn test_engine_setup() {
         let id = "pool_1".to_string();
-        let token2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
-        let token3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
-        let tokens = vec![token2, token3];
+        let token2 = TychoBytes::from_str("0000000000000000000000000000000000000002").unwrap();
+        let token3 = TychoBytes::from_str("0000000000000000000000000000000000000003").unwrap();
+        let tokens = vec![token2.clone(), token3.clone()];
         let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
         let balances = HashMap::new();
 
@@ -480,10 +491,10 @@ mod tests {
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&token2));
+            .account_present(&bytes_to_erc20_address(&token2).unwrap()));
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&token3));
+            .account_present(&bytes_to_erc20_address(&token3).unwrap()));
     }
 }

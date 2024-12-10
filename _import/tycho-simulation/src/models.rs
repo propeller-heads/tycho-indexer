@@ -5,13 +5,14 @@
 //!
 //! Tokens provide instructions on how to handle prices and amounts,
 //! while Swap and SwapSequence are usually used as results types.
-use alloy_primitives::{bytes::Bytes, U256};
+use alloy_primitives::U256;
 use std::{
     convert::TryFrom,
     hash::{Hash, Hasher},
 };
 
 use num_bigint::BigUint;
+use tycho_core::Bytes;
 
 use crate::utils::hexstring_to_vec;
 use tycho_core::dto::ResponseToken;
@@ -86,7 +87,7 @@ impl TryFrom<ResponseToken> for Token {
 
     fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: Bytes::from(value.address),
+            address: value.address,
             decimals: value.decimals.try_into()?,
             symbol: value.symbol,
             gas: BigUint::from(

@@ -22,4 +22,4 @@ pub mod evm;
 pub mod models;
 pub mod protocol;
 pub mod serde_helpers;
-mod utils;
+pub mod utils;
