@@ -138,13 +138,10 @@ ALTER TABLE transaction_new
     ALTER COLUMN modified_ts SET DEFAULT CURRENT_TIMESTAMP;
 
 -- Step 4: Add the UNIQUE constraints
-ALTER TABLE transaction_old RENAME CONSTRAINT transaction_hash_block_id_key TO
-    transaction_old_hash_block_id_key;
 ALTER TABLE transaction_old RENAME CONSTRAINT transaction_hash_key TO transaction_old_hash_key;
 ALTER TABLE transaction_old RENAME CONSTRAINT transaction_index_block_id_key TO
     transaction_old_index_block_id_key;
 ALTER TABLE transaction_new
-    ADD CONSTRAINT transaction_hash_block_id_key UNIQUE (hash, block_id),
     ADD CONSTRAINT transaction_hash_key UNIQUE (hash),
     ADD CONSTRAINT transaction_index_block_id_key UNIQUE ("index", block_id);
 
