@@ -97,9 +97,3 @@ impl From<SerdeError> for FileError {
         FileError::Parse(err)
     }
 }
-
-impl From<ethers::abi::Error> for SimulationError {
-    fn from(err: ethers::abi::Error) -> Self {
-        SimulationError::FatalError(err.to_string())
-    }
-}

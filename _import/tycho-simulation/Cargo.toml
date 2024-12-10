@@ -43,9 +43,6 @@ tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", p
 tycho-ethereum = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-ethereum", tag = "0.44.0" }
 
 # EVM dependencies
-ethabi = { version = "13.0", optional = true }
-# some core models still rely on ethers types instead of bytes, once this is addressed this will become optional.
-ethers = { version = "2.0.13" }
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }
 foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }
 alloy-primitives = { version = "0.8.9", features = [
@@ -80,7 +77,7 @@ unicode-width = "0.1.13"
 default = ["evm"]
 network_tests = []
 evm = [
-    "dep:ethabi", "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors"
+    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors"
 ]
 
 [profile.bench]
