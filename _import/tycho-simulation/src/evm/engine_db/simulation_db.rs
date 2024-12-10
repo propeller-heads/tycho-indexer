@@ -478,9 +478,87 @@ mod tests {
     use rstest::{fixture, rstest};
     use tokio::runtime::Runtime;
 
+    #[derive(Clone)]
+    pub struct MockProvider {
+        balance: HashMap<Address, rU256>,
+        nonce: HashMap<Address, u64>,
+        code: HashMap<Address, Bytes>,
+        storage: HashMap<Address, HashMap<rU256, rU256>>,
+    }
+
+    impl MockProvider {
+        pub fn new() -> Self {
+            MockProvider {
+                balance: HashMap::new(),
+                nonce: HashMap::new(),
+                code: HashMap::new(),
+                storage: HashMap::new(),
+            }
+        }
+
+        pub fn push_balance(&mut self, address: Address, balance: rU256) {
+            self.balance.insert(address, balance);
+        }
+
+        pub fn push_nonce(&mut self, address: Address, nonce: u64) {
+            self.nonce.insert(address, nonce);
+        }
+
+        pub fn push_code(&mut self, address: Address, code: Bytes) {
+            self.code.insert(address, code);
+        }
+
+        pub fn push_storage(&mut self, address: Address, storage: HashMap<rU256, rU256>) {
+            self.storage.insert(address, storage);
+        }
+    }
+    impl Provider for MockProvider {
+        fn get_balance(&self, address: Address) -> RpcWithBlock<BoxTransport, Address, rU256> {
+            let balance = self
+                .balance
+                .get(&address)
+                .cloned()
+                .unwrap_or(rU256::ZERO);
+            RpcWithBlock::new_rpc(Box::new(move |address: Address| {
+                Box::pin(async move { Ok(Uint::from(balance)) })
+            }))
+        }
+
+        fn get_transaction_count(
+            &self,
+            address: Address,
+        ) -> RpcWithBlock<BoxTransport, Address, Uint<64, 1>, u64> {
+            let nonce = self
+                .nonce
+                .get(&address)
+                .cloned()
+                .unwrap_or(0);
+
+            RpcWithBlock::new_rpc(Box::new(move |block_id: BlockId| {
+                Box::pin(async move { Ok(Uint::from(nonce)) })
+            }))
+        }
+
+        fn get_code_at(&self, address: Address) -> RpcWithBlock<BoxTransport, Address, Bytes> {
+            let code = self
+                .code
+                .get(&address)
+                .cloned()
+                .unwrap_or(Bytes::new());
+            RpcWithBlock::new_rpc(Box::new(move |block_id: BlockId| {
+                Box::pin(async move {
+                    Ok(code) // Return the mocked code as a byte vector
+                })
+            }))
+        }
+        fn root(&self) -> &RootProvider<BoxTransport> {
+            todo!()
+        }
+    }
+
     #[fixture]
-    pub fn mock_sim_db() -> SimulationDB<Provider<MockProvider>> {
-        let (client, _) = Provider::mocked();
+    pub fn mock_sim_db() -> SimulationDB<MockProvider> {
+        let client = MockProvider::new();
         SimulationDB::new(Arc::new(client), get_runtime(), None)
     }
 
@@ -507,7 +585,35 @@ mod tests {
 
         Arc::new(client)
     }
-    // endregion helpers
+
+    #[rstest]
+    fn test_query_account_info_mocked(mock_sim_db: SimulationDB<MockProvider>) {
+        let address = Address::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
+        let response_code = Bytes::from(128_u64.to_be_bytes());
+        let response_nonce = 50_u64;
+        let response_balance = rU256::from(500_i64);
+        // Set up mocked responses
+        mock_sim_db
+            .client
+            .push_balance(address, response_balance);
+        mock_sim_db
+            .client
+            .push_nonce(address, response_nonce);
+        mock_sim_db
+            .client
+            .push_code(address, response_code);
+
+        let acc_info = mock_sim_db
+            .query_account_info(address)
+            .unwrap();
+
+        assert_eq!(acc_info.balance, response_balance);
+        assert_eq!(acc_info.nonce, response_nonce);
+        assert_eq!(
+            acc_info.code,
+            Some(to_analysed(Bytecode::new_raw(revm::primitives::Bytes::from([128; 1]))))
+        );
+    }
 
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
