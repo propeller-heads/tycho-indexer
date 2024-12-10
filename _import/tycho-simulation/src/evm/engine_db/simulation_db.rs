@@ -98,10 +98,7 @@ pub struct SimulationDB<P: Provider + Debug> {
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
-impl<P: Provider + Debug + 'static> SimulationDB<P>
-where
-   P::Error: std::fmt::Debug,
-{
+impl<P: Provider + Debug + 'static> SimulationDB<P> {
     pub fn new(
         client: Arc<P>,
         runtime: Option<Arc<tokio::runtime::Runtime>>,
@@ -273,7 +270,6 @@ where
 impl<P: Provider + Debug> EngineDatabaseInterface for SimulationDB<P>
 where
     P: Provider + Send + Sync + 'static,
-    P::Error: std::fmt::Debug,
 {
     type Error = String;
 
@@ -321,7 +317,6 @@ where
 impl<P: Provider + Debug> DatabaseRef for SimulationDB<P>
 where
     P: Provider + Send + Sync + 'static,
-    P::Error: std::fmt::Debug,
 {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
