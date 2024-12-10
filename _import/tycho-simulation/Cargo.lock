@@ -16,6 +16,7 @@ dependencies = [
 name = "_tycho_simulation_py"
 version = "0.58.0"
 dependencies = [
+ "alloy",
  "ethers",
  "num-bigint",
  "pyo3",
@@ -94,7 +95,6 @@ dependencies = [
  "alloy-network",
  "alloy-provider",
  "alloy-rpc-client",
- "alloy-rpc-types",
  "alloy-serde",
  "alloy-transport",
  "alloy-transport-http",
