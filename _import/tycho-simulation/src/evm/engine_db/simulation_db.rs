@@ -85,7 +85,7 @@ pub struct BlockHeader {
     pub timestamp: u64,
 }
 
-/// A wrapper over an ethers Middleware with local storage cache and overrides.
+/// A wrapper over an Alloy Provider with local storage cache and overrides.
 #[derive(Clone, Debug)]
 pub struct SimulationDB<P: Provider + Debug> {
     /// Client to connect to the RPC
@@ -468,99 +468,13 @@ mod tests {
     use std::{env, error::Error, str::FromStr};
 
     use alloy::{
-        eips::BlockId,
-        providers::{Provider, ProviderBuilder, RootProvider, RpcWithBlock},
+        providers::{ProviderBuilder, RootProvider},
         transports::BoxTransport,
     };
 
-    use alloy_primitives::{Bytes, Uint};
     use dotenv::dotenv;
-    use rstest::{fixture, rstest};
+    use rstest::rstest;
     use tokio::runtime::Runtime;
-
-    #[derive(Clone)]
-    pub struct MockProvider {
-        balance: HashMap<Address, rU256>,
-        nonce: HashMap<Address, u64>,
-        code: HashMap<Address, Bytes>,
-        storage: HashMap<Address, HashMap<rU256, rU256>>,
-    }
-
-    impl MockProvider {
-        pub fn new() -> Self {
-            MockProvider {
-                balance: HashMap::new(),
-                nonce: HashMap::new(),
-                code: HashMap::new(),
-                storage: HashMap::new(),
-            }
-        }
-
-        pub fn push_balance(&mut self, address: Address, balance: rU256) {
-            self.balance.insert(address, balance);
-        }
-
-        pub fn push_nonce(&mut self, address: Address, nonce: u64) {
-            self.nonce.insert(address, nonce);
-        }
-
-        pub fn push_code(&mut self, address: Address, code: Bytes) {
-            self.code.insert(address, code);
-        }
-
-        pub fn push_storage(&mut self, address: Address, storage: HashMap<rU256, rU256>) {
-            self.storage.insert(address, storage);
-        }
-    }
-    impl Provider for MockProvider {
-        fn get_balance(&self, address: Address) -> RpcWithBlock<BoxTransport, Address, rU256> {
-            let balance = self
-                .balance
-                .get(&address)
-                .cloned()
-                .unwrap_or(rU256::ZERO);
-            RpcWithBlock::new_rpc(Box::new(move |address: Address| {
-                Box::pin(async move { Ok(Uint::from(balance)) })
-            }))
-        }
-
-        fn get_transaction_count(
-            &self,
-            address: Address,
-        ) -> RpcWithBlock<BoxTransport, Address, Uint<64, 1>, u64> {
-            let nonce = self
-                .nonce
-                .get(&address)
-                .cloned()
-                .unwrap_or(0);
-
-            RpcWithBlock::new_rpc(Box::new(move |block_id: BlockId| {
-                Box::pin(async move { Ok(Uint::from(nonce)) })
-            }))
-        }
-
-        fn get_code_at(&self, address: Address) -> RpcWithBlock<BoxTransport, Address, Bytes> {
-            let code = self
-                .code
-                .get(&address)
-                .cloned()
-                .unwrap_or(Bytes::new());
-            RpcWithBlock::new_rpc(Box::new(move |block_id: BlockId| {
-                Box::pin(async move {
-                    Ok(code) // Return the mocked code as a byte vector
-                })
-            }))
-        }
-        fn root(&self) -> &RootProvider<BoxTransport> {
-            todo!()
-        }
-    }
-
-    #[fixture]
-    pub fn mock_sim_db() -> SimulationDB<MockProvider> {
-        let client = MockProvider::new();
-        SimulationDB::new(Arc::new(client), get_runtime(), None)
-    }
 
     fn get_runtime() -> Option<Arc<Runtime>> {
         let runtime = tokio::runtime::Handle::try_current()
@@ -582,41 +496,10 @@ mod tests {
                 .await
                 .unwrap()
         });
-
         Arc::new(client)
     }
 
     #[rstest]
-    fn test_query_account_info_mocked(mock_sim_db: SimulationDB<MockProvider>) {
-        let address = Address::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
-        let response_code = Bytes::from(128_u64.to_be_bytes());
-        let response_nonce = 50_u64;
-        let response_balance = rU256::from(500_i64);
-        // Set up mocked responses
-        mock_sim_db
-            .client
-            .push_balance(address, response_balance);
-        mock_sim_db
-            .client
-            .push_nonce(address, response_nonce);
-        mock_sim_db
-            .client
-            .push_code(address, response_code);
-
-        let acc_info = mock_sim_db
-            .query_account_info(address)
-            .unwrap();
-
-        assert_eq!(acc_info.balance, response_balance);
-        assert_eq!(acc_info.nonce, response_nonce);
-        assert_eq!(
-            acc_info.code,
-            Some(to_analysed(Bytecode::new_raw(revm::primitives::Bytes::from([128; 1]))))
-        );
-    }
-
-    #[rstest]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
         let db = SimulationDB::new(get_client(), get_runtime(), None);
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
@@ -633,7 +516,6 @@ mod tests {
     }
 
     #[rstest]
-    #[cfg_attr(not(feature = "network_tests"), ignore)]
     fn test_query_account_info() {
         let mut db = SimulationDB::new(get_client(), get_runtime(), None);
         let block = BlockHeader {
@@ -655,10 +537,98 @@ mod tests {
     }
 
     #[rstest]
-    fn test_overridden_db(
-        mock_sim_db: SimulationDB<Provider<MockProvider>>,
-    ) -> Result<(), Box<dyn Error>> {
-        // GIVEN...
+    fn test_mock_account_get_acc_info() {
+        let db = SimulationDB::new(get_client(), get_runtime(), None);
+        let mock_acc_address =
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        db.init_account(mock_acc_address, AccountInfo::default(), None, true);
+
+        let acc_info = db
+            .basic_ref(mock_acc_address)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            db.account_storage
+                .read()
+                .unwrap()
+                .get_account_info(&mock_acc_address)
+                .unwrap(),
+            &acc_info
+        );
+    }
+
+    #[rstest]
+    fn test_mock_account_get_storage() {
+        let db = SimulationDB::new(get_client(), get_runtime(), None);
+        let mock_acc_address =
+            Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let storage_address = rU256::ZERO;
+        db.init_account(mock_acc_address, AccountInfo::default(), None, true);
+
+        let storage = db
+            .storage_ref(mock_acc_address, storage_address)
+            .unwrap();
+
+        assert_eq!(storage, rU256::ZERO);
+    }
+
+    #[rstest]
+    fn test_update_state() {
+        let mut db = SimulationDB::new(get_client(), get_runtime(), None);
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        db.init_account(address, AccountInfo::default(), None, false);
+
+        let mut new_storage = HashMap::default();
+        let new_storage_value_index = rU256::from_limbs_slice(&[123]);
+        new_storage.insert(new_storage_value_index, new_storage_value_index);
+        let new_balance = rU256::from_limbs_slice(&[500]);
+        let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
+        let mut updates = HashMap::default();
+        updates.insert(address, update);
+        let new_block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
+
+        let reverse_update = db.update_state(&updates, new_block);
+
+        assert_eq!(
+            db.account_storage
+                .read()
+                .unwrap()
+                .get_storage(&address, &new_storage_value_index)
+                .unwrap(),
+            new_storage_value_index
+        );
+        assert_eq!(
+            db.account_storage
+                .read()
+                .unwrap()
+                .get_account_info(&address)
+                .unwrap()
+                .balance,
+            new_balance
+        );
+        assert_eq!(db.block.unwrap().number, 1);
+
+        assert_eq!(
+            reverse_update
+                .get(&address)
+                .unwrap()
+                .balance
+                .unwrap(),
+            AccountInfo::default().balance
+        );
+        assert_eq!(
+            reverse_update
+                .get(&address)
+                .unwrap()
+                .storage,
+            Some(HashMap::default())
+        );
+    }
+
+    #[rstest]
+    fn test_overridden_db() {
+        let db = SimulationDB::new(get_client(), get_runtime(), None);
         let slot1 = rU256::from_limbs_slice(&[1]);
         let slot2 = rU256::from_limbs_slice(&[2]);
         let orig_value1 = rU256::from_limbs_slice(&[100]);
@@ -669,14 +639,9 @@ mod tests {
             .collect();
 
         let address1 = Address::from_str("0000000000000000000000000000000000000001").unwrap();
-        mock_sim_db.init_account(
-            address1,
-            AccountInfo::default(),
-            Some(original_storage.clone()),
-            false,
-        );
+        db.init_account(address1, AccountInfo::default(), Some(original_storage.clone()), false);
         let address2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
-        mock_sim_db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
+        db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
 
         // override slot 1 of address 2
         // and slot 1 of address 3 which doesn't exist in the original DB
@@ -701,10 +666,8 @@ mod tests {
                 .collect(),
         );
 
-        // WHEN...
-        let overriden_db = OverriddenSimulationDB::new(&mock_sim_db, &overrides);
+        let overriden_db = OverriddenSimulationDB::new(&db, &overrides);
 
-        // THEN...
         assert_eq!(
             overriden_db
                 .storage_ref(address1, slot1)
@@ -745,40 +708,5 @@ mod tests {
             overridden_value1,
             "Overridden slot of an overridden non-existent account should hold an overriden value."
         );
-
-        // storage
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(H256::from_low_u64_be(123))
-            .unwrap();
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(U256::from(128))
-            .unwrap(); // code
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(U256::zero())
-            .unwrap(); // nonce
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(U256::zero())
-            .unwrap(); // balance
-        assert_eq!(
-            overriden_db
-                .storage_ref(address3, slot2)
-                .expect("Value should be available"),
-            rU256::from_limbs_slice(&[123]),
-            "Non-overridden slot of a non-existent account should query a node."
-        );
-
-        Ok(())
     }
 }
