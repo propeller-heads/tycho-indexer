@@ -34,7 +34,7 @@ async fn main() {
     let cli = Cli::parse();
 
     let tycho_url =
-        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-dev.propellerheads.xyz".to_string());
+        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-beta.propellerheads.xyz".to_string());
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
