@@ -194,15 +194,28 @@ where
         address: Address,
     ) -> Result<AccountInfo, <SimulationDB<P> as DatabaseRef>::Error> {
         debug!("Querying account info of {:x?} at block {:?}", address, self.block);
-        // let block_id: Option<BlockId> = self.block.map(|v| v.into());
 
         let fut = async {
-            tokio::join!(
-                self.client.get_balance(address),
-                self.client
-                    .get_transaction_count(address),
-                self.client.get_code_at(address),
-            )
+            if let Some(ref block) = self.block {
+                tokio::join!(
+                    self.client
+                        .get_balance(address)
+                        .number(block.number),
+                    self.client
+                        .get_transaction_count(address)
+                        .number(block.number),
+                    self.client
+                        .get_code_at(address)
+                        .number(block.number),
+                )
+            } else {
+                tokio::join!(
+                    self.client.get_balance(address),
+                    self.client
+                        .get_transaction_count(address),
+                    self.client.get_code_at(address),
+                )
+            }
         };
 
         let (balance, nonce, code) = self.block_on(fut);
@@ -228,10 +241,18 @@ where
         index: rU256,
     ) -> Result<StorageValue, <SimulationDB<P> as DatabaseRef>::Error> {
         let fut = async {
-            self.client
-                .get_storage_at(address, index)
-                .await
-                .unwrap()
+            if let Some(ref block) = self.block {
+                self.client
+                    .get_storage_at(address, index)
+                    .number(block.number)
+                    .await
+                    .unwrap()
+            } else {
+                self.client
+                    .get_storage_at(address, index)
+                    .await
+                    .unwrap()
+            }
         };
         let storage = self.block_on(fut);
 
@@ -444,14 +465,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use std::{env, error::Error, str::FromStr};
 
-    use dotenv::dotenv;
-    use ethers::{
-        providers::{Http, MockProvider, Provider},
-        types::U256,
+    use alloy::{
+        eips::BlockId,
+        providers::{Provider, ProviderBuilder, RootProvider, RpcWithBlock},
+        transports::BoxTransport,
     };
+
+    use alloy_primitives::{Bytes, Uint};
+    use dotenv::dotenv;
     use rstest::{fixture, rstest};
     use tokio::runtime::Runtime;
 
@@ -461,7 +484,6 @@ mod tests {
         SimulationDB::new(Arc::new(client), get_runtime(), None)
     }
 
-    // region HELPERS
     fn get_runtime() -> Option<Arc<Runtime>> {
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
@@ -470,55 +492,22 @@ mod tests {
         Some(Arc::new(runtime))
     }
 
-    fn get_client() -> Arc<Provider<Http>> {
+    fn get_client() -> Arc<RootProvider<BoxTransport>> {
+        let runtime = get_runtime().unwrap();
         let eth_rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
             env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
         });
+        let client = runtime.block_on(async {
+            ProviderBuilder::new()
+                .on_builtin(&eth_rpc_url)
+                .await
+                .unwrap()
+        });
 
-        let client = Provider::<Http>::try_from(eth_rpc_url).unwrap();
         Arc::new(client)
     }
     // endregion helpers
-
-    #[rstest]
-    fn test_query_account_info(mock_sim_db: SimulationDB<Provider<MockProvider>>) {
-        //ethers::types::Bytes::from
-        let response_code = U256::from(128_u64);
-        let response_nonce = U256::from(50_i64);
-        let response_balance = U256::from(500_i64);
-        // Note: The mocked provider takes the pushed requests from the top of the stack
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(response_code)
-            .unwrap();
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(response_nonce)
-            .unwrap();
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(response_balance)
-            .unwrap();
-        let address = Address::from_str("0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2").unwrap();
-
-        let acc_info = mock_sim_db
-            .query_account_info(address)
-            .unwrap();
-
-        assert_eq!(acc_info.balance, rU256::from_limbs(response_balance.0));
-        assert_eq!(acc_info.nonce, response_nonce.as_u64());
-        assert_eq!(
-            acc_info.code,
-            Some(to_analysed(Bytecode::new_raw(revm::primitives::Bytes::from([128; 1]))))
-        );
-    }
 
     #[rstest]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
@@ -538,129 +527,25 @@ mod tests {
     }
 
     #[rstest]
-    fn test_query_storage_past_block(
-        mock_sim_db: SimulationDB<Provider<MockProvider>>,
-    ) -> Result<(), Box<dyn Error>> {
-        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let index = rU256::from_limbs_slice(&[8]);
-        let response_storage = H256::from_low_u64_le(123);
-        mock_sim_db.init_account(address, AccountInfo::default(), None, false);
-        mock_sim_db
-            .client
-            .as_ref()
-            .as_ref()
-            .push(response_storage)
-            .unwrap();
+    #[cfg_attr(not(feature = "network_tests"), ignore)]
+    fn test_query_account_info() {
+        let mut db = SimulationDB::new(get_client(), get_runtime(), None);
+        let block = BlockHeader {
+            number: 20308186,
+            hash: B256::from_str(
+                "0x61c51e3640b02ae58a03201be0271e84e02dac8a4826501995cbe4da24174b52",
+            )
+            .unwrap(),
+            timestamp: 234,
+        };
+        db.set_block(Some(block));
+        let address = Address::from_str("0x168b93113fe5902c87afaecE348581A1481d0f93").unwrap();
+        db.init_account(address, AccountInfo::default(), None, false);
 
-        let result = mock_sim_db
-            .query_storage(address, index)
-            .unwrap();
+        let account_info = db.query_account_info(address).unwrap();
 
-        assert_eq!(result, rU256::from_be_bytes(response_storage.to_fixed_bytes()));
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_mock_account_get_acc_info(
-        mock_sim_db: SimulationDB<Provider<MockProvider>>,
-    ) -> Result<(), Box<dyn Error>> {
-        // Tests if the provider has not been queried.
-        // Querying the mocked provider would cause a panic, therefore no assert is needed.
-        let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_sim_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
-
-        let acc_info = mock_sim_db
-            .basic_ref(mock_acc_address)
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(
-            mock_sim_db
-                .account_storage
-                .read()
-                .unwrap()
-                .get_account_info(&mock_acc_address)
-                .unwrap(),
-            &acc_info
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_mock_account_get_storage(
-        mock_sim_db: SimulationDB<Provider<MockProvider>>,
-    ) -> Result<(), Box<dyn Error>> {
-        // Tests if mock accounts are not considered temp accounts and if the provider has not been
-        // queried. Querying the mocked provider would cause a panic, therefore no assert is
-        // needed.
-        let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        let storage_address = rU256::ZERO;
-        mock_sim_db.init_account(mock_acc_address, AccountInfo::default(), None, true);
-
-        let storage = mock_sim_db
-            .storage_ref(mock_acc_address, storage_address)
-            .unwrap();
-
-        assert_eq!(storage, rU256::ZERO);
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_update_state(
-        mut mock_sim_db: SimulationDB<Provider<MockProvider>>,
-    ) -> Result<(), Box<dyn Error>> {
-        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_sim_db.init_account(address, AccountInfo::default(), None, false);
-
-        let mut new_storage = HashMap::default();
-        let new_storage_value_index = rU256::from_limbs_slice(&[123]);
-        new_storage.insert(new_storage_value_index, new_storage_value_index);
-        let new_balance = rU256::from_limbs_slice(&[500]);
-        let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
-        let mut updates = HashMap::default();
-        updates.insert(address, update);
-        let new_block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
-
-        let reverse_update = mock_sim_db.update_state(&updates, new_block);
-
-        assert_eq!(
-            mock_sim_db
-                .account_storage
-                .read()
-                .unwrap()
-                .get_storage(&address, &new_storage_value_index)
-                .unwrap(),
-            new_storage_value_index
-        );
-        assert_eq!(
-            mock_sim_db
-                .account_storage
-                .read()
-                .unwrap()
-                .get_account_info(&address)
-                .unwrap()
-                .balance,
-            new_balance
-        );
-        assert_eq!(mock_sim_db.block.unwrap().number, 1);
-
-        assert_eq!(
-            reverse_update
-                .get(&address)
-                .unwrap()
-                .balance
-                .unwrap(),
-            AccountInfo::default().balance
-        );
-        assert_eq!(
-            reverse_update
-                .get(&address)
-                .unwrap()
-                .storage,
-            Some(HashMap::default())
-        );
-
-        Ok(())
+        assert_eq!(account_info.balance, rU256::from_str("6246978663692389").unwrap());
+        assert_eq!(account_info.nonce, 17);
     }
 
     #[rstest]

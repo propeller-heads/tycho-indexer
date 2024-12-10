@@ -54,7 +54,7 @@ alloy-primitives = { version = "0.8.9", features = [
     "map-foldhash",
 ] }
 alloy-sol-types = { version = "0.8.14" }
-alloy = { version = "0.7.3", features = ["providers", "rpc-types-eth"] }
+alloy = { version = "0.5.4", features = ["providers", "rpc-types-eth"] }
 revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
 revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
 num-bigint = "0.4.6"
