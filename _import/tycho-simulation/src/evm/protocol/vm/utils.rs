@@ -355,19 +355,49 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
     Ok(bytes)
 }
 
+/// Converts a hexadecimal string into a fixed-size 32-byte array.
+///
+/// This function takes a string slice (e.g., a pool ID) that may or may not have
+/// a `0x` prefix. It decodes the hex string into bytes, ensuring it does not exceed
+/// 32 bytes in length. If the string is valid and fits within 32 bytes, the bytes
+/// are copied into a `[u8; 32]` array, with right zero-padding for unused bytes.
+///
+/// # Arguments
+///
+/// * `pool_id` - A string slice representing a hexadecimal pool ID. It can optionally start with
+///   the `0x` prefix.
+///
+/// # Returns
+///
+/// * `Ok([u8; 32])` - On success, returns a 32-byte array with the decoded bytes. If the input is
+///   shorter than 32 bytes, the rest of the array is right padded with zeros.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input string is not a valid hexadecimal string.
+///     - The decoded bytes exceed 32 bytes in length.
+///
+/// # Example
+/// ```
+/// use string_to_bytes32;
+///
+/// let pool_id = "0x1234abcd";
+/// match string_to_bytes32(pool_id) {
+///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
 pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
     let pool_id_no_prefix =
         if let Some(stripped) = pool_id.strip_prefix("0x") { stripped } else { pool_id };
     let bytes = hex::decode(pool_id_no_prefix)
         .map_err(|e| SimulationError::FatalError(format!("Invalid hex string: {}", e)))?;
-    if bytes.len() != 32 {
+    if bytes.len() > 32 {
         return Err(SimulationError::FatalError(format!(
-            "Hex string is not 32 bytes: length {}",
+            "Hex string exceeds 32 bytes: length {}",
             bytes.len()
         )));
     }
     let mut array = [0u8; 32];
-    array.copy_from_slice(&bytes);
+    array[..bytes.len()].copy_from_slice(&bytes);
     Ok(array)
 }
 
