@@ -59,6 +59,7 @@ where
     spot_prices: HashMap<(Address, Address), f64>,
     /// The supported capabilities of this pool
     capabilities: HashSet<Capability>,
+    /// A set of all contract addresses involved in the simulation of this pool."""
     /// A set of all contract addresses involved in the simulation of this pool.
     involved_contracts: HashSet<Address>,
     /// Allows the specification of custom storage slots for token allowances and

@@ -213,7 +213,6 @@ where
             self.balance_owner,
             HashMap::new(),
             capabilities,
-            HashMap::new(),
             self.involved_contracts
                 .unwrap_or_default(),
             self.token_storage_slots
