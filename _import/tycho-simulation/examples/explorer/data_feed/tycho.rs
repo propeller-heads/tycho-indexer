@@ -276,7 +276,7 @@ pub async fn process_messages(
                 .get_states()
                 .clone()
             {
-                info!("Processing snapshot");
+                info!("Processing snapshot for id {}", &id);
                 let id = Bytes::from_str(&id)
                     .unwrap_or_else(|_| panic!("Failed parsing Bytes from id string {}", id));
                 let mut pair_tokens = Vec::new();

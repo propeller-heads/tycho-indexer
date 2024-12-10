@@ -95,44 +95,47 @@ pub fn coerce_error(
 }
 
 fn parse_solidity_error_message(data: &str) -> String {
-    let data_bytes = match Vec::from_hex(&data[2..]) {
-        Ok(bytes) => bytes,
-        Err(_) => return format!("Failed to decode: {}", data),
-    };
+    // 10 for "0x" + 8 hex chars error signature
+    if data.len() >= 10 {
+        let data_bytes = match Vec::from_hex(&data[2..]) {
+            Ok(bytes) => bytes,
+            Err(_) => return format!("Failed to decode: {}", data),
+        };
 
-    // Check for specific error selectors:
-    // Solidity Error(string) signature: 0x08c379a0
-    if data_bytes.starts_with(&[0x08, 0xc3, 0x79, 0xa0]) {
-        if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
+        // Check for specific error selectors:
+        // Solidity Error(string) signature: 0x08c379a0
+        if data_bytes.starts_with(&[0x08, 0xc3, 0x79, 0xa0]) {
+            if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
+                if let Some(ethabi::Token::String(error_string)) = decoded.first() {
+                    return error_string.clone();
+                }
+            }
+
+            // Solidity Panic(uint256) signature: 0x4e487b71
+        } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
+            if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
+                if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
+                    let panic_codes = get_solidity_panic_codes();
+                    return panic_codes
+                        .get(&error_code.as_u64())
+                        .cloned()
+                        .unwrap_or_else(|| format!("Panic({})", error_code));
+                }
+            }
+        }
+
+        // Try decoding as a string (old Solidity revert case)
+        if let Ok(decoded) = decode(&[ParamType::String], &data_bytes) {
             if let Some(ethabi::Token::String(error_string)) = decoded.first() {
                 return error_string.clone();
             }
         }
 
-        // Solidity Panic(uint256) signature: 0x4e487b71
-    } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
-        if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
-            if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
-                let panic_codes = get_solidity_panic_codes();
-                return panic_codes
-                    .get(&error_code.as_u64())
-                    .cloned()
-                    .unwrap_or_else(|| format!("Panic({})", error_code));
+        // Custom error, try to decode string again with offset
+        if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
+            if let Some(ethabi::Token::String(error_string)) = decoded.first() {
+                return error_string.clone();
             }
-        }
-    }
-
-    // Try decoding as a string (old Solidity revert case)
-    if let Ok(decoded) = decode(&[ParamType::String], &data_bytes) {
-        if let Some(ethabi::Token::String(error_string)) = decoded.first() {
-            return error_string.clone();
-        }
-    }
-
-    // Custom error, try to decode string again with offset
-    if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
-        if let Some(ethabi::Token::String(error_string)) = decoded.first() {
-            return error_string.clone();
         }
     }
 
