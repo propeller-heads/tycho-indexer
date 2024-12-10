@@ -219,13 +219,13 @@ where
         tokens: Vec<Address>,
         max_amount: U256,
     ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
-        let sell_token = &tokens[0].clone();
+        let sell_token = &tokens[0].clone(); //TODO: need to make it clearer from the interface
         let mut res: Vec<HashMap<Address, Overwrites>> = Vec::new();
         if !self
             .capabilities
             .contains(&Capability::TokenBalanceIndependent)
         {
-            res.push(self.get_balance_overwrites(tokens)?);
+            res.push(self.get_balance_overwrites(self.tokens.clone())?);
         }
 
         let (slots, compiler) = self
