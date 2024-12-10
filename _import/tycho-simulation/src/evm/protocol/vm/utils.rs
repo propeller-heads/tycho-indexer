@@ -1,4 +1,6 @@
 use alloy_primitives::Address;
+use num_bigint::BigInt;
+use serde_json::Value;
 use std::{
     collections::HashMap,
     env,
@@ -366,6 +368,115 @@ pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
     Ok(array)
 }
 
+/// Decodes a JSON-encoded list of hexadecimal strings into a `Vec<Vec<u8>>`.
+///
+/// This function parses a JSON array where each element is a string representing a hexadecimal
+/// value. It converts each hex string into a vector of bytes (`Vec<u8>`), and aggregates them into
+/// a `Vec<Vec<u8>>`.
+///
+/// # Arguments
+///
+/// * `input` - A byte slice (`&[u8]`) containing JSON-encoded data. The JSON must be a valid array
+///   of hex strings.
+///
+/// # Returns
+///
+/// * `Ok(Vec<Vec<u8>>)` - On success, returns a vector of byte vectors.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input is not valid JSON.
+///     - The JSON is not an array.
+///     - Any array element is not a string.
+///     - Any string is not a valid hexadecimal string.
+///
+/// # Example
+/// ```
+/// use json_deserialize_address_list;
+///
+/// let json_input = br#"["0x1234", "0xc0ffee"]"#;
+/// match json_deserialize_address_list(json_input) {
+///     Ok(result) => println!("Decoded: {:?}", result),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+pub fn json_deserialize_address_list(input: &[u8]) -> Result<Vec<Vec<u8>>, SimulationError> {
+    let json_value: Value = serde_json::from_slice(input)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+
+    if let Value::Array(hex_strings) = json_value {
+        let mut result = Vec::new();
+
+        for val in hex_strings {
+            if let Value::String(hexstring) = val {
+                let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
+                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                })?;
+                result.push(bytes);
+            } else {
+                return Err(SimulationError::FatalError("Array contains a non-string value".into()));
+            }
+        }
+
+        Ok(result)
+    } else {
+        Err(SimulationError::FatalError("Input is not a JSON array".into()))
+    }
+}
+
+/// Decodes a JSON-encoded list of hexadecimal strings into a `Vec<BigInt>`.
+///
+/// This function parses a JSON array where each element is a string representing a hexadecimal
+/// value. It converts each hex string into a `BigInt` using big-endian byte interpretation, and
+/// aggregates them into a `Vec<BigInt>`.
+///
+/// # Arguments
+///
+/// * `input` - A byte slice (`&[u8]`) containing JSON-encoded data. The JSON must be a valid array
+///   of hex strings.
+///
+/// # Returns
+///
+/// * `Ok(Vec<BigInt>)` - On success, returns a vector of `BigInt` values.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input is not valid JSON.
+///     - The JSON is not an array.
+///     - Any array element is not a string.
+///     - Any string is not a valid hexadecimal string.
+///
+/// # Example
+/// ```
+/// use json_deserialize_be_bigint_list;
+/// use num_bigint::BigInt;
+/// let json_input = br#"["0x1234", "0xdeadbeef"]"#;
+/// match json_deserialize_bigint_list(json_input) {
+///     Ok(result) => println!("Decoded BigInts: {:?}", result),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, SimulationError> {
+    let json_value: Value = serde_json::from_slice(input)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+
+    if let Value::Array(hex_strings) = json_value {
+        let mut result = Vec::new();
+
+        for val in hex_strings {
+            if let Value::String(hexstring) = val {
+                let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
+                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                })?;
+                let bigint = BigInt::from_signed_bytes_be(&bytes);
+                result.push(bigint);
+            } else {
+                return Err(SimulationError::FatalError("Array contains a non-string value".into()));
+            }
+        }
+
+        Ok(result)
+    } else {
+        Err(SimulationError::FatalError("Input is not a JSON array".into()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -567,5 +678,36 @@ mod tests {
         } else {
             panic!("Expected EncodingError");
         }
+    }
+
+    #[test]
+    fn test_json_deserialize_address_list() {
+        let json_input = r#"["0x1234","0xabcd"]"#.as_bytes();
+        let result = json_deserialize_address_list(json_input).unwrap();
+        assert_eq!(result, vec![vec![0x12, 0x34], vec![0xab, 0xcd]]);
+    }
+
+    #[test]
+    fn test_json_deserialize_bigint_list() {
+        let json_input = r#"["0x0b1a2bc2ec500000","0x02c68af0bb140000"]"#.as_bytes();
+        let result = json_deserialize_be_bigint_list(json_input).unwrap();
+        assert_eq!(
+            result,
+            vec![BigInt::from(800000000000000000u64), BigInt::from(200000000000000000u64)]
+        );
+    }
+
+    #[test]
+    fn test_invalid_deserialize_address_list() {
+        let json_input = r#"["invalid_hex"]"#.as_bytes();
+        let result = json_deserialize_address_list(json_input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_deserialize_bigint_list() {
+        let json_input = r#"["invalid_hex"]"#.as_bytes();
+        let result = json_deserialize_be_bigint_list(json_input);
+        assert!(result.is_err());
     }
 }

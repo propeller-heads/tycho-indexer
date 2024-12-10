@@ -6,6 +6,7 @@ use std::{
 
 use alloy_primitives::{Address, B256};
 use chrono::Utc;
+use num_bigint::BigInt;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
@@ -22,8 +23,9 @@ use tycho_simulation::{
             simulation_db::BlockHeader, tycho_db::PreCachedDB, update_engine, SHARED_TYCHO_DB,
         },
         protocol::{
-            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
-            vm::state::EVMPoolState,
+            uniswap_v2::state::UniswapV2State,
+            uniswap_v3::state::UniswapV3State,
+            vm::{state::EVMPoolState, utils::json_deserialize_be_bigint_list},
         },
         tycho_models::{AccountUpdate, ResponseAccount},
     },
@@ -106,6 +108,58 @@ fn balancer_pool_filter(component: &ComponentWithState) -> bool {
     true
 }
 
+fn curve_pool_filter(component: &ComponentWithState) -> bool {
+    if let Some(asset_types) = component
+        .component
+        .static_attributes
+        .get("asset_types")
+    {
+        if json_deserialize_be_bigint_list(asset_types)
+            .unwrap()
+            .iter()
+            .any(|t| t != &BigInt::ZERO)
+        {
+            info!(
+                "Filtering out Curve pool {} because it has unsupported token type",
+                component.component.id
+            );
+            return false;
+        }
+    }
+
+    if let Some(asset_type) = component
+        .component
+        .static_attributes
+        .get("asset_type")
+    {
+        let types_str = str::from_utf8(asset_type).expect("Invalid UTF-8 data");
+        if types_str != "0x00" {
+            info!(
+                "Filtering out Curve pool {} because it has unsupported token type",
+                component.component.id
+            );
+            return false;
+        }
+    }
+
+    if let Some(stateless_addrs) = component
+        .state
+        .attributes
+        .get("stateless_contract_addr_0")
+    {
+        let impl_str = str::from_utf8(stateless_addrs).expect("Invalid UTF-8 data");
+        // Uses oracles
+        if impl_str == "0x847ee1227a9900b73aeeb3a47fac92c52fd54ed9" {
+            info!(
+                "Filtering out Curve pool {} because it has proxy implementation {}",
+                component.component.id, impl_str
+            );
+            return false;
+        }
+    }
+    true
+}
+
 // TODO: Make extractors configurable
 pub async fn process_messages(
     tycho_url: String,
@@ -118,6 +172,7 @@ pub async fn process_messages(
         .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         // .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        // .exchange("vm:curve", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -242,7 +297,8 @@ pub async fn process_messages(
                 }
 
                 // Skip balancer pool if it doesn't pass the filter
-                if !skip_pool && !balancer_pool_filter(&snapshot) {
+                if !skip_pool && (!balancer_pool_filter(&snapshot) || !curve_pool_filter(&snapshot))
+                {
                     skip_pool = true;
                 }
 
@@ -300,7 +356,25 @@ pub async fn process_messages(
                                 }
                             }
                         }
-                        _ => panic!("VM snapshot not supported!"),
+                        "vm:curve" => {
+                            match EVMPoolState::try_from_with_block(
+                                snapshot.clone(),
+                                header.clone(),
+                                all_tokens.clone(),
+                            )
+                            .await
+                            {
+                                Ok(state) => Box::new(state),
+                                Err(e) => {
+                                    warn!(
+                                        "Failed parsing Curve snapshot for pool {:x?}: {}",
+                                        id, e
+                                    );
+                                    continue;
+                                }
+                            }
+                        }
+                        _ => panic!("VM snapshot not supported for {}!", protocol.as_str()),
                     };
                     new_components.insert(id, state);
                 }
