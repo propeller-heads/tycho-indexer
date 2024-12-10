@@ -1,3 +1,10 @@
+## [0.56.1](https://github.com/propeller-heads/tycho-simulation/compare/0.56.0...0.56.1) (2024-12-10)
+
+
+### Bug Fixes
+
+* update default TYCHO_URL to point to beta environment ([e5406c8](https://github.com/propeller-heads/tycho-simulation/commit/e5406c8e4a26694959e7dbbb9ee37e1c53fef3f1))
+
 ## [0.56.0](https://github.com/propeller-heads/tycho-simulation/compare/0.55.0...0.56.0) (2024-12-09)
 
 
