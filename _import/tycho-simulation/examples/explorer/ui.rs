@@ -150,7 +150,7 @@ impl App {
                 state: update
                     .states
                     .get(&comp.address)
-                    .unwrap()
+                    .unwrap_or_else(|| panic!("Received update for unknown pool {}", comp.address))
                     .clone(),
                 name,
                 tokens,

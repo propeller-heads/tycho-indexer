@@ -1,3 +1,30 @@
+## [0.57.1](https://github.com/propeller-heads/tycho-simulation/compare/0.57.0...0.57.1) (2024-12-11)
+
+
+### Bug Fixes
+
+* Rename BalancerSwapAdapter.evm.runtime to BalancerV2SwapAdapter.evm.runtime ([d091e60](https://github.com/propeller-heads/tycho-simulation/commit/d091e60169097d135a0b6d37735d6009b2e17ff6))
+
+## [0.57.0](https://github.com/propeller-heads/tycho-simulation/compare/0.56.1...0.57.0) (2024-12-10)
+
+
+### Features
+
+* **example:** add Curve to `explorer` example ([4840265](https://github.com/propeller-heads/tycho-simulation/commit/48402655ebb0b0e073220cfaff699635c85da493))
+
+
+### Bug Fixes
+
+* correctly initialize stateless contracts ([28d3ad3](https://github.com/propeller-heads/tycho-simulation/commit/28d3ad304f79d527717b361c7d3e952bfe062006))
+* correctly overwrites balances ([b5b7f2d](https://github.com/propeller-heads/tycho-simulation/commit/b5b7f2d0065658d08678517d44c2e962b47e20e2))
+
+## [0.56.1](https://github.com/propeller-heads/tycho-simulation/compare/0.56.0...0.56.1) (2024-12-10)
+
+
+### Bug Fixes
+
+* update default TYCHO_URL to point to beta environment ([e5406c8](https://github.com/propeller-heads/tycho-simulation/commit/e5406c8e4a26694959e7dbbb9ee37e1c53fef3f1))
+
 ## [0.56.0](https://github.com/propeller-heads/tycho-simulation/compare/0.55.0...0.56.0) (2024-12-09)
 
 

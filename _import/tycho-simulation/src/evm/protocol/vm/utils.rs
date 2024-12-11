@@ -1,4 +1,6 @@
 use alloy_primitives::Address;
+use num_bigint::BigInt;
+use serde_json::Value;
 use std::{
     collections::HashMap,
     env,
@@ -23,7 +25,7 @@ use crate::{
     protocol::errors::{FileError, SimulationError},
 };
 
-pub fn coerce_error(
+pub(crate) fn coerce_error(
     err: &SimulationEngineError,
     pool_state: &str,
     gas_limit: Option<u64>,
@@ -93,44 +95,47 @@ pub fn coerce_error(
 }
 
 fn parse_solidity_error_message(data: &str) -> String {
-    let data_bytes = match Vec::from_hex(&data[2..]) {
-        Ok(bytes) => bytes,
-        Err(_) => return format!("Failed to decode: {}", data),
-    };
+    // 10 for "0x" + 8 hex chars error signature
+    if data.len() >= 10 {
+        let data_bytes = match Vec::from_hex(&data[2..]) {
+            Ok(bytes) => bytes,
+            Err(_) => return format!("Failed to decode: {}", data),
+        };
 
-    // Check for specific error selectors:
-    // Solidity Error(string) signature: 0x08c379a0
-    if data_bytes.starts_with(&[0x08, 0xc3, 0x79, 0xa0]) {
-        if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
+        // Check for specific error selectors:
+        // Solidity Error(string) signature: 0x08c379a0
+        if data_bytes.starts_with(&[0x08, 0xc3, 0x79, 0xa0]) {
+            if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
+                if let Some(ethabi::Token::String(error_string)) = decoded.first() {
+                    return error_string.clone();
+                }
+            }
+
+            // Solidity Panic(uint256) signature: 0x4e487b71
+        } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
+            if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
+                if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
+                    let panic_codes = get_solidity_panic_codes();
+                    return panic_codes
+                        .get(&error_code.as_u64())
+                        .cloned()
+                        .unwrap_or_else(|| format!("Panic({})", error_code));
+                }
+            }
+        }
+
+        // Try decoding as a string (old Solidity revert case)
+        if let Ok(decoded) = decode(&[ParamType::String], &data_bytes) {
             if let Some(ethabi::Token::String(error_string)) = decoded.first() {
                 return error_string.clone();
             }
         }
 
-        // Solidity Panic(uint256) signature: 0x4e487b71
-    } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
-        if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
-            if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
-                let panic_codes = get_solidity_panic_codes();
-                return panic_codes
-                    .get(&error_code.as_u64())
-                    .cloned()
-                    .unwrap_or_else(|| format!("Panic({})", error_code));
+        // Custom error, try to decode string again with offset
+        if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
+            if let Some(ethabi::Token::String(error_string)) = decoded.first() {
+                return error_string.clone();
             }
-        }
-    }
-
-    // Try decoding as a string (old Solidity revert case)
-    if let Ok(decoded) = decode(&[ParamType::String], &data_bytes) {
-        if let Some(ethabi::Token::String(error_string)) = decoded.first() {
-            return error_string.clone();
-        }
-    }
-
-    // Custom error, try to decode string again with offset
-    if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
-        if let Some(ethabi::Token::String(error_string)) = decoded.first() {
-            return error_string.clone();
         }
     }
 
@@ -181,7 +186,7 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(
+pub(crate) fn get_storage_slot_index_at_key(
     key: Address,
     mapping_slot: SlotId,
     compiler: ContractCompiler,
@@ -232,7 +237,7 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
 /// - Returns `RpcError::InvalidRequest` if `address` is not parsable or if no RPC URL is set.
 /// - Returns `RpcError::EmptyResponse` if the address has no associated bytecode (e.g., EOA).
 /// - Returns `RpcError::InvalidResponse` for issues with the RPC provider response.
-pub async fn get_code_for_contract(
+pub(crate) async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
 ) -> Result<Bytecode, SimulationError> {
@@ -286,7 +291,7 @@ pub async fn get_code_for_contract(
 
 static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Bytecode>> = LazyLock::new(|| Cache::new(1_000));
 
-pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
+pub(crate) fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
     if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string_lossy().to_string())) {
         return Ok(bytecode);
     }
@@ -302,7 +307,7 @@ pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
     Ok(bytecode)
 }
 
-pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
+pub(crate) fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
         .parent()
         .ok_or_else(|| {
@@ -320,20 +325,159 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     Ok(erc_20_bytecode)
 }
 
+/// Converts a hexadecimal string into a fixed-size 32-byte array.
+///
+/// This function takes a string slice (e.g., a pool ID) that may or may not have
+/// a `0x` prefix. It decodes the hex string into bytes, ensuring it does not exceed
+/// 32 bytes in length. If the string is valid and fits within 32 bytes, the bytes
+/// are copied into a `[u8; 32]` array, with right zero-padding for unused bytes.
+///
+/// # Arguments
+///
+/// * `pool_id` - A string slice representing a hexadecimal pool ID. It can optionally start with
+///   the `0x` prefix.
+///
+/// # Returns
+///
+/// * `Ok([u8; 32])` - On success, returns a 32-byte array with the decoded bytes. If the input is
+///   shorter than 32 bytes, the rest of the array is right padded with zeros.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input string is not a valid hexadecimal string.
+///     - The decoded bytes exceed 32 bytes in length.
+///
+/// # Example
+/// ```
+/// use string_to_bytes32;
+///
+/// let pool_id = "0x1234abcd";
+/// match string_to_bytes32(pool_id) {
+///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
 pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
     let pool_id_no_prefix =
         if let Some(stripped) = pool_id.strip_prefix("0x") { stripped } else { pool_id };
     let bytes = hex::decode(pool_id_no_prefix)
         .map_err(|e| SimulationError::FatalError(format!("Invalid hex string: {}", e)))?;
-    if bytes.len() != 32 {
+    if bytes.len() > 32 {
         return Err(SimulationError::FatalError(format!(
-            "Hex string is not 32 bytes: length {}",
+            "Hex string exceeds 32 bytes: length {}",
             bytes.len()
         )));
     }
     let mut array = [0u8; 32];
-    array.copy_from_slice(&bytes);
+    array[..bytes.len()].copy_from_slice(&bytes);
     Ok(array)
+}
+
+/// Decodes a JSON-encoded list of hexadecimal strings into a `Vec<Vec<u8>>`.
+///
+/// This function parses a JSON array where each element is a string representing a hexadecimal
+/// value. It converts each hex string into a vector of bytes (`Vec<u8>`), and aggregates them into
+/// a `Vec<Vec<u8>>`.
+///
+/// # Arguments
+///
+/// * `input` - A byte slice (`&[u8]`) containing JSON-encoded data. The JSON must be a valid array
+///   of hex strings.
+///
+/// # Returns
+///
+/// * `Ok(Vec<Vec<u8>>)` - On success, returns a vector of byte vectors.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input is not valid JSON.
+///     - The JSON is not an array.
+///     - Any array element is not a string.
+///     - Any string is not a valid hexadecimal string.
+///
+/// # Example
+/// ```
+/// use json_deserialize_address_list;
+///
+/// let json_input = br#"["0x1234", "0xc0ffee"]"#;
+/// match json_deserialize_address_list(json_input) {
+///     Ok(result) => println!("Decoded: {:?}", result),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+pub fn json_deserialize_address_list(input: &[u8]) -> Result<Vec<Vec<u8>>, SimulationError> {
+    let json_value: Value = serde_json::from_slice(input)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+
+    if let Value::Array(hex_strings) = json_value {
+        let mut result = Vec::new();
+
+        for val in hex_strings {
+            if let Value::String(hexstring) = val {
+                let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
+                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                })?;
+                result.push(bytes);
+            } else {
+                return Err(SimulationError::FatalError("Array contains a non-string value".into()));
+            }
+        }
+
+        Ok(result)
+    } else {
+        Err(SimulationError::FatalError("Input is not a JSON array".into()))
+    }
+}
+
+/// Decodes a JSON-encoded list of hexadecimal strings into a `Vec<BigInt>`.
+///
+/// This function parses a JSON array where each element is a string representing a hexadecimal
+/// value. It converts each hex string into a `BigInt` using big-endian byte interpretation, and
+/// aggregates them into a `Vec<BigInt>`.
+///
+/// # Arguments
+///
+/// * `input` - A byte slice (`&[u8]`) containing JSON-encoded data. The JSON must be a valid array
+///   of hex strings.
+///
+/// # Returns
+///
+/// * `Ok(Vec<BigInt>)` - On success, returns a vector of `BigInt` values.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input is not valid JSON.
+///     - The JSON is not an array.
+///     - Any array element is not a string.
+///     - Any string is not a valid hexadecimal string.
+///
+/// # Example
+/// ```
+/// use json_deserialize_be_bigint_list;
+/// use num_bigint::BigInt;
+/// let json_input = br#"["0x1234", "0xdeadbeef"]"#;
+/// match json_deserialize_bigint_list(json_input) {
+///     Ok(result) => println!("Decoded BigInts: {:?}", result),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, SimulationError> {
+    let json_value: Value = serde_json::from_slice(input)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+
+    if let Value::Array(hex_strings) = json_value {
+        let mut result = Vec::new();
+
+        for val in hex_strings {
+            if let Value::String(hexstring) = val {
+                let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
+                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                })?;
+                let bigint = BigInt::from_signed_bytes_be(&bytes);
+                result.push(bigint);
+            } else {
+                return Err(SimulationError::FatalError("Array contains a non-string value".into()));
+            }
+        }
+
+        Ok(result)
+    } else {
+        Err(SimulationError::FatalError("Input is not a JSON array".into()))
+    }
 }
 
 #[cfg(test)]
@@ -538,5 +682,36 @@ mod tests {
         } else {
             panic!("Expected EncodingError");
         }
+    }
+
+    #[test]
+    fn test_json_deserialize_address_list() {
+        let json_input = r#"["0x1234","0xabcd"]"#.as_bytes();
+        let result = json_deserialize_address_list(json_input).unwrap();
+        assert_eq!(result, vec![vec![0x12, 0x34], vec![0xab, 0xcd]]);
+    }
+
+    #[test]
+    fn test_json_deserialize_bigint_list() {
+        let json_input = r#"["0x0b1a2bc2ec500000","0x02c68af0bb140000"]"#.as_bytes();
+        let result = json_deserialize_be_bigint_list(json_input).unwrap();
+        assert_eq!(
+            result,
+            vec![BigInt::from(800000000000000000u64), BigInt::from(200000000000000000u64)]
+        );
+    }
+
+    #[test]
+    fn test_invalid_deserialize_address_list() {
+        let json_input = r#"["invalid_hex"]"#.as_bytes();
+        let result = json_deserialize_address_list(json_input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_deserialize_bigint_list() {
+        let json_input = r#"["invalid_hex"]"#.as_bytes();
+        let result = json_deserialize_be_bigint_list(json_input);
+        assert!(result.is_err());
     }
 }

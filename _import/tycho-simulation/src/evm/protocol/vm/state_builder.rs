@@ -255,8 +255,8 @@ where
 
         if let Some(stateless_contracts) = &self.stateless_contracts {
             for (address, bytecode) in stateless_contracts.iter() {
+                let mut addr_str = address.clone();
                 let (code, code_hash) = if bytecode.is_none() {
-                    let mut addr_str = format!("{:?}", address);
                     if addr_str.starts_with("call") {
                         addr_str = self
                             .get_address_from_call(&engine, &addr_str)?
@@ -273,7 +273,7 @@ where
                         })?));
                     (Some(code.clone()), code.hash_slow())
                 };
-                let account_address: Address = address.parse().map_err(|_| {
+                let account_address: Address = addr_str.parse().map_err(|_| {
                     SimulationError::FatalError(format!(
                         "Failed to get default engine: Couldn't parse address string {}",
                         address

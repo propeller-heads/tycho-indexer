@@ -229,7 +229,7 @@ mod tests {
         let engine = create_mock_engine();
         TychoSimulationContract::new_swap_adapter(
             address,
-            &PathBuf::from("src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime"),
+            &PathBuf::from("src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime"),
             engine,
         )
         .unwrap()

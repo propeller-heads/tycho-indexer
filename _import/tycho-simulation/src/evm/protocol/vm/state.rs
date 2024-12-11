@@ -221,13 +221,13 @@ where
         tokens: Vec<Address>,
         max_amount: U256,
     ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
-        let sell_token = &tokens[0].clone();
+        let sell_token = &tokens[0].clone(); //TODO: need to make it clearer from the interface
         let mut res: Vec<HashMap<Address, Overwrites>> = Vec::new();
         if !self
             .capabilities
             .contains(&Capability::TokenBalanceIndependent)
         {
-            res.push(self.get_balance_overwrites(tokens)?);
+            res.push(self.get_balance_overwrites(self.tokens.clone())?);
         }
 
         let (slots, compiler) = self
@@ -260,7 +260,7 @@ where
 
     fn get_balance_overwrites(
         &self,
-        tokens: Vec<Address>,
+        tokens: Vec<Bytes>,
     ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let mut balance_overwrites: HashMap<Address, Overwrites> = HashMap::new();
         let address = match self.balance_owner {
@@ -273,9 +273,13 @@ where
         }?;
 
         for token in &tokens {
-            let (slots, compiler) = if self.involved_contracts.contains(token) {
+            let token_address = bytes_to_erc20_address(token)?;
+            let (slots, compiler) = if self
+                .involved_contracts
+                .contains(&token_address)
+            {
                 self.token_storage_slots
-                    .get(token)
+                    .get(&token_address)
                     .cloned()
                     .ok_or_else(|| {
                         SimulationError::FatalError(
@@ -287,11 +291,10 @@ where
                 (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
             };
 
-            let mut overwrites =
-                ERC20OverwriteFactory::new(Address::from(token.0), slots, compiler);
+            let mut overwrites = ERC20OverwriteFactory::new(token_address, slots, compiler);
             overwrites.set_balance(
                 self.balances
-                    .get(token)
+                    .get(&token_address)
                     .cloned()
                     .ok_or_else(|| {
                         SimulationError::InvalidInput(
@@ -614,7 +617,7 @@ mod tests {
         EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
             .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_path(PathBuf::from(
-                "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+                "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             ))
             .stateless_contracts(stateless_contracts)
             .build(SHARED_TYCHO_DB.clone())
