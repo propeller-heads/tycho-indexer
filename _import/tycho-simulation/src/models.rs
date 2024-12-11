@@ -121,7 +121,7 @@ mod tests {
 
         assert_eq!(token.symbol, "USDC");
         assert_eq!(token.decimals, 6);
-        assert_eq!(format!("{:#x}", token.address), "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+        assert_eq!(format!("{:#x}", token.address), "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
     }
 
     #[test]
