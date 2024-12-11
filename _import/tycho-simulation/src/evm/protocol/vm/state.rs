@@ -603,7 +603,7 @@ mod tests {
         EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
             .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_path(PathBuf::from(
-                "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+                "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             ))
             .stateless_contracts(stateless_contracts)
             .build(SHARED_TYCHO_DB.clone())

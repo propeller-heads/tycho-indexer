@@ -40,7 +40,7 @@ def Token(name: str) -> EthereumToken:
 
 @pytest.fixture()
 def adapter_contract_path(asset_dir) -> str:
-    return str(asset_dir / "BalancerSwapAdapter.evm.runtime")
+    return str(asset_dir / "BalancerV2SwapAdapter.evm.runtime")
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -190,7 +190,7 @@ def test_get_amount_out_sell_limit(pool_state):
 
 def test_stateless_contract_pool(asset_dir):
     with patch(
-        "tycho_simulation_py.evm.pool_state.get_code_for_address"
+            "tycho_simulation_py.evm.pool_state.get_code_for_address"
     ) as mock_get_code:
         mock_get_code.return_value = bytes.fromhex("363d")
 
