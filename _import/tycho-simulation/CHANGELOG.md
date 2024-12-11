@@ -1,3 +1,17 @@
+## [0.58.0](https://github.com/propeller-heads/tycho-simulation/compare/0.57.1...0.58.0) (2024-12-11)
+
+
+### Features
+
+* Generalize ERC20Token class ([b023b7b](https://github.com/propeller-heads/tycho-simulation/commit/b023b7b815227bbe026141f86d44d4f9b42629aa))
+
+
+### Bug Fixes
+
+* Expect Bytes for token address in decoders... ([c5b945d](https://github.com/propeller-heads/tycho-simulation/commit/c5b945d62494c8d5b7820604f6d39a994028fc6f))
+* Restrict scope of most utils to pub(crate)... ([e1fda7f](https://github.com/propeller-heads/tycho-simulation/commit/e1fda7f99b330ccd82a609762a1753f43b2f1c89))
+* revert main.rs ([e1451c1](https://github.com/propeller-heads/tycho-simulation/commit/e1451c1df52f9433491969f6f2c2d69d2caf6008))
+
 ## [0.57.1](https://github.com/propeller-heads/tycho-simulation/compare/0.57.0...0.57.1) (2024-12-11)
 
 
