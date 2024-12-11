@@ -6,7 +6,7 @@ use tycho_core::Bytes;
 ///
 /// Checks the length of the `Bytes` before attempting to convert, and returns a `SimulationError`
 /// if not 20 bytes long.
-pub fn bytes_to_erc20_address(address: &Bytes) -> Result<Address, SimulationError> {
+pub(crate) fn bytes_to_erc20_address(address: &Bytes) -> Result<Address, SimulationError> {
     if address.len() == 20 {
         Ok(Address::from_slice(address))
     } else {
