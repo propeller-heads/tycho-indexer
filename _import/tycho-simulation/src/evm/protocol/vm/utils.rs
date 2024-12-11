@@ -25,7 +25,7 @@ use crate::{
     protocol::errors::{FileError, SimulationError},
 };
 
-pub fn coerce_error(
+pub(crate) fn coerce_error(
     err: &SimulationEngineError,
     pool_state: &str,
     gas_limit: Option<u64>,
@@ -186,7 +186,7 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(
+pub(crate) fn get_storage_slot_index_at_key(
     key: Address,
     mapping_slot: SlotId,
     compiler: ContractCompiler,
@@ -237,7 +237,7 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
 /// - Returns `RpcError::InvalidRequest` if `address` is not parsable or if no RPC URL is set.
 /// - Returns `RpcError::EmptyResponse` if the address has no associated bytecode (e.g., EOA).
 /// - Returns `RpcError::InvalidResponse` for issues with the RPC provider response.
-pub async fn get_code_for_contract(
+pub(crate) async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
 ) -> Result<Bytecode, SimulationError> {
@@ -291,7 +291,7 @@ pub async fn get_code_for_contract(
 
 static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Bytecode>> = LazyLock::new(|| Cache::new(1_000));
 
-pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
+pub(crate) fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
     if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string_lossy().to_string())) {
         return Ok(bytecode);
     }
@@ -307,7 +307,7 @@ pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
     Ok(bytecode)
 }
 
-pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
+pub(crate) fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
         .parent()
         .ok_or_else(|| {
@@ -325,24 +325,29 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     Ok(erc_20_bytecode)
 }
 
-/// Converts a hexadecimal string into a `Vec<u8>`.
+/// Converts a hexadecimal string into a fixed-size 32-byte array.
 ///
-/// This function accepts a hexadecimal string with or without the `0x` prefix. If the prefix
-/// is present, it is removed before decoding. The remaining string is expected to be a valid
-/// hexadecimal representation, otherwise an error is returned.
+/// This function takes a string slice (e.g., a pool ID) that may or may not have
+/// a `0x` prefix. It decodes the hex string into bytes, ensuring it does not exceed
+/// 32 bytes in length. If the string is valid and fits within 32 bytes, the bytes
+/// are copied into a `[u8; 32]` array, with right zero-padding for unused bytes.
 ///
 /// # Arguments
 ///
-/// * `hexstring` - A string slice containing the hexadecimal string. It may optionally start with
-///   `0x`.
+/// * `pool_id` - A string slice representing a hexadecimal pool ID. It can optionally start with
+///   the `0x` prefix.
 ///
 /// # Returns
 ///
-/// * `Ok(Vec<u8>)` - A vector of bytes decoded from the hexadecimal string.
-/// * `Err(SimulationError)` - An error if the input string is not a valid hexadecimal
-///   representation.
+/// * `Ok([u8; 32])` - On success, returns a 32-byte array with the decoded bytes. If the input is
+///   shorter than 32 bytes, the rest of the array is right padded with zeros.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input string is not a valid hexadecimal string.
+///     - The decoded bytes exceed 32 bytes in length.
 ///
-/// # Errors
+/// # Example
+/// ```
+/// use string_to_bytes32;
 ///
 /// This function returns a `SimulationError::EncodingError` if:
 /// - The string contains invalid hexadecimal characters.
@@ -379,6 +384,12 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
 /// ```
 /// use string_to_bytes32;
 ///
+/// let pool_id = "0x1234abcd";
+/// match string_to_bytes32(pool_id) {
+///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
 /// let pool_id = "0x1234abcd";
 /// match string_to_bytes32(pool_id) {
 ///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
@@ -514,6 +525,7 @@ pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, Simu
 mod tests {
     use super::*;
 
+    use crate::utils::hexstring_to_vec;
     use dotenv::dotenv;
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;

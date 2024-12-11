@@ -24,7 +24,6 @@
 //! It's worth emphasizin that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
-use alloy_primitives::Address;
 use std::collections::HashMap;
 
 use num_bigint::BigUint;
@@ -33,7 +32,7 @@ use tycho_core::Bytes;
 
 use tycho_client::feed::Header;
 
-use crate::models::ERC20Token;
+use crate::models::Token;
 
 use super::state::ProtocolSim;
 
@@ -46,12 +45,12 @@ use super::state::ProtocolSim;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProtocolComponent {
     pub address: Bytes,
-    pub tokens: Vec<ERC20Token>,
+    pub tokens: Vec<Token>,
 }
 
 impl ProtocolComponent {
-    pub fn new(address: Bytes, mut tokens: Vec<ERC20Token>) -> Self {
-        tokens.sort_unstable_by_key(|t| t.address);
+    pub fn new(address: Bytes, mut tokens: Vec<Token>) -> Self {
+        tokens.sort_unstable_by_key(|t| t.address.clone());
         ProtocolComponent { address, tokens }
     }
 }
@@ -63,7 +62,7 @@ pub trait TryFromWithBlock<T> {
     async fn try_from_with_block(
         value: T,
         block: Header,
-        all_tokens: HashMap<Address, ERC20Token>,
+        all_tokens: HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error>
     where
         Self: Sized;
