@@ -211,7 +211,7 @@ mod tests {
 
         ProtocolComponent {
             id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string(),
-            protocol_system: "vm:balancer".to_string(),
+            protocol_system: "vm:balancer_v2".to_string(),
             protocol_type_name: "balancer_v2_pool".to_string(),
             chain: Chain::Ethereum,
             tokens,
