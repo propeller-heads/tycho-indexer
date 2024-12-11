@@ -1,3 +1,10 @@
+## [0.57.1](https://github.com/propeller-heads/tycho-simulation/compare/0.57.0...0.57.1) (2024-12-11)
+
+
+### Bug Fixes
+
+* Rename BalancerSwapAdapter.evm.runtime to BalancerV2SwapAdapter.evm.runtime ([d091e60](https://github.com/propeller-heads/tycho-simulation/commit/d091e60169097d135a0b6d37735d6009b2e17ff6))
+
 ## [0.57.0](https://github.com/propeller-heads/tycho-simulation/compare/0.56.1...0.57.0) (2024-12-10)
 
 
