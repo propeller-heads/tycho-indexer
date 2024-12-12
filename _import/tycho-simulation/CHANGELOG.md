@@ -1,3 +1,19 @@
+## [0.59.0](https://github.com/propeller-heads/tycho-simulation/compare/0.58.0...0.59.0) (2024-12-12)
+
+
+### Features
+
+* Downgrade alloy because foundry depends on alloy and we don't want to update that now ([b44c6d4](https://github.com/propeller-heads/tycho-simulation/commit/b44c6d4d9252d24e59da7e310930aaf04126206c))
+* Remove ethers from utils and Cargo.toml ([0753dbd](https://github.com/propeller-heads/tycho-simulation/commit/0753dbd2f3c61e646424db52d0359dd8f1dd0eda))
+* Replace ethers Middleware with Provider from alloy ([a83925d](https://github.com/propeller-heads/tycho-simulation/commit/a83925d726dd6e867b6a9e21a94bccb9e43d1ed4))
+* Support setting the block and add/fix real tests ([b3725e6](https://github.com/propeller-heads/tycho-simulation/commit/b3725e6bbcf50b6fa9e69d871c85424234c1a1f7))
+* Update python package to use Provider from alloy ([2851d90](https://github.com/propeller-heads/tycho-simulation/commit/2851d900dc7c3d833f4d83ddc95ce571f29a1902))
+
+
+### Bug Fixes
+
+* After rebase fixes ([b8b6112](https://github.com/propeller-heads/tycho-simulation/commit/b8b61121be917565acfdfa114cc802a29baa21e3))
+
 ## [0.58.0](https://github.com/propeller-heads/tycho-simulation/compare/0.57.1...0.58.0) (2024-12-11)
 
 

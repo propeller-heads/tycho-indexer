@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "tycho-simulation-py"
-version = "0.58.0"
+version = "0.59.0"
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
