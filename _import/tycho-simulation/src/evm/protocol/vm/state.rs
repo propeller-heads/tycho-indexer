@@ -123,8 +123,8 @@ where
     ///
     /// # Returns
     ///
-    /// * `Result<(), SimulationError>` - Returns `Ok(())` if the capability is supported,
-    ///   or a `SimulationError` otherwise.
+    /// * `Result<(), SimulationError>` - Returns `Ok(())` if the capability is supported, or a
+    ///   `SimulationError` otherwise.
     fn ensure_capability(&self, capability: Capability) -> Result<(), SimulationError> {
         if !self.capabilities.contains(&capability) {
             return Err(SimulationError::FatalError(format!(
@@ -151,18 +151,25 @@ where
     ///
     /// This function performs the following steps:
     /// 1. Ensures the pool has the required capability to perform price calculations.
-    /// 2. Iterates over all permutations of token pairs (sell token and buy token).
-    ///    For each pair:
+    /// 2. Iterates over all permutations of token pairs (sell token and buy token). For each pair:
     ///    - Retrieves all possible overwrites, considering the maximum balance limit.
     ///    - Calculates the sell amount limit, considering the overwrites.
     ///    - Invokes the adapter contract's `price` function to retrieve the calculated price for
-    ///   the token pair, considering the sell amount limit.
+    ///      the token pair, considering the sell amount limit.
     ///    - Processes the price based on whether the `ScaledPrice` capability is present:
     ///       - If `ScaledPrice` is present, uses the price directly from the adapter contract.
     ///       - If `ScaledPrice` is absent, scales the price by adjusting for token decimals.
     ///    - Stores the calculated price in the `spot_prices` map with the token addresses as the
-    ///   key.
+    ///      key.
     /// 3. Returns `Ok(())` upon successful completion or a `SimulationError` upon failure.
+    ///
+    /// # Usage
+    ///
+    /// Spot prices need to be set before attempting to retrieve prices using `spot_price`.
+    ///
+    /// Tip: Setting spot prices on the pool every time the pool actually changes will result in
+    /// faster price fetching than if prices are only set immediately before attempting to retrieve
+    /// prices.
     pub fn set_spot_prices(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
         info!("Setting spot prices for pool {}", self.id.clone());
         self.ensure_capability(Capability::PriceFunction)?;
@@ -210,6 +217,9 @@ where
     }
 
     /// Retrieves the sell amount limit for a given pair of tokens and the given overwrites.
+    ///
+    /// Attempting to swap an amount of the sell token that exceeds the sell amount limit will
+    /// result in a revert.
     ///
     /// # Arguments
     ///

@@ -42,7 +42,6 @@ impl ProtocolSim for UniswapV2State {
         0.003
     }
 
-
     fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
         if base < quote {
             Ok(spot_price_from_reserves(

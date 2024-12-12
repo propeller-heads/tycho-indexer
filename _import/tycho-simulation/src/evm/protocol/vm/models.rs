@@ -10,38 +10,19 @@ use crate::protocol::errors::SimulationError;
 ///
 /// # Variants
 ///
-/// TODO I don't know what SellSide or BuySide mean (GPT-generated)
-/// - `SellSide`: Indicates the entity supports sell-side operations.
-/// - `BuySide`: Indicates the entity supports buy-side operations.
-/// - `PriceFunction`: Indicates the use of dynamic pricing based on a function.
-/// - `FeeOnTransfer`: Indicates fees are applied during token transfers.
-/// - `ConstantPrice`: Indicates the pricing mechanism is constant.
-/// - `TokenBalanceIndependent`: Indicates the entity's price determination is independent of token
-///   balances.
-/// - `ScaledPrice`: Indicates that the price retrieved from the adapter is already scaled for
-///   token decimals.
-/// - `HardLimits`: Indicates there is a limit as to how much of a token can be swapped on this
-///   protocol.
-///  TODO I don't know what the following two limits mean
-/// - `MarginalPrice`: Indicates the use of marginal pricing strategies.
-///
-/// # Usage
-///
-/// Capabilities can be used to determine which operations are valid for a given pool state.
-///
-/// ```
-/// 
-/// use crate::evm::protocol::vm::models::Capability;
-/// use crate::protocol::errors::SimulationError;
-///
-/// let capability = Capability::SellSide;
-///
-/// match capability {
-///     Ok(Capability::SellSide) => println!("Supports sell-side operations."),
-///     Ok(cap) => println!("Other capability: {:?}", cap),
-///     Err(err) => println!("Error: {}", err),
-/// }
-/// ```
+/// - `SellSide`: Supports swapping with a fixed sell amount.
+/// - `BuySide`: Supports swapping with a fixed buy amount.
+/// - `PriceFunction`: Supports evaluating dynamic pricing based on a function.
+/// - `FeeOnTransfer`: Support tokens that charge a fee on transfer.
+/// - `ConstantPrice`: The pool does not suffer from price impact and maintains a constant price for
+///   increasingly larger specified amounts.
+/// - `TokenBalanceIndependent`:Indicates that the pool does not read its own token balances from
+///   token contracts while swapping.
+/// - `ScaledPrice`: Indicates that prices are returned scaled, else it is assumed prices still
+///   require scaling by token decimals.
+/// - `HardLimits`: Indicates that if we try to go over the sell limits, the pool will revert.
+/// - `MarginalPrice`: Indicates whether the pool's price function can be called with amountIn=0 to
+///   return the current price
 #[derive(Eq, PartialEq, Hash, Debug, Display, Clone)]
 pub enum Capability {
     SellSide = 1,
