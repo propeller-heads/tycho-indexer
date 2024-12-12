@@ -42,8 +42,8 @@ const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 
 fn balancer_pool_filter(component: &ComponentWithState) -> bool {
     // Check for rate_providers in static_attributes
-    info!("Checking Balancer pool {}", component.component.id);
-    if component.component.protocol_system != "vm:balancer" {
+    debug!("Checking Balancer pool {}", component.component.id);
+    if component.component.protocol_system != "vm:balancer_v2" {
         return true;
     }
     if let Some(rate_providers_data) = component
@@ -55,21 +55,21 @@ fn balancer_pool_filter(component: &ComponentWithState) -> bool {
         let parsed_rate_providers =
             serde_json::from_str::<Vec<String>>(rate_providers_str).expect("Invalid JSON format");
 
-        info!("Parsed rate providers: {:?}", parsed_rate_providers);
+        debug!("Parsed rate providers: {:?}", parsed_rate_providers);
         let has_dynamic_rate_provider = parsed_rate_providers
             .iter()
             .any(|provider| provider != ZERO_ADDRESS);
 
-        info!("Has dynamic rate provider: {:?}", has_dynamic_rate_provider);
+        debug!("Has dynamic rate provider: {:?}", has_dynamic_rate_provider);
         if has_dynamic_rate_provider {
-            info!(
+            debug!(
                 "Filtering out Balancer pool {} because it has dynamic rate_providers",
                 component.component.id
             );
             return false;
         }
     } else {
-        info!("Balancer pool does not have `rate_providers` attribute");
+        debug!("Balancer pool does not have `rate_providers` attribute");
     }
     let unsupported_pool_types: HashSet<&str> = [
         "ERC4626LinearPoolFactory",
@@ -91,20 +91,20 @@ fn balancer_pool_filter(component: &ComponentWithState) -> bool {
         // Convert the decoded bytes to a UTF-8 string
         let pool_type = str::from_utf8(pool_type_data).expect("Invalid UTF-8 data");
         if unsupported_pool_types.contains(pool_type) {
-            info!(
+            debug!(
                 "Filtering out Balancer pool {} because it has type {}",
                 component.component.id, pool_type
             );
             return false;
         } else {
-            info!("Balancer pool with type {} will not be filtered out.", pool_type);
+            debug!("Balancer pool with type {} will not be filtered out.", pool_type);
         }
     }
-    info!(
+    debug!(
         "Balancer pool with static attributes {:?} will not be filtered out.",
         component.component.static_attributes
     );
-    info!("Balancer pool will not be filtered out.");
+    debug!("Balancer pool will not be filtered out.");
     true
 }
 
@@ -171,8 +171,8 @@ pub async fn process_messages(
     let (jh, mut tycho_stream) = TychoStreamBuilder::new(&tycho_url, Chain::Ethereum)
         .exchange("uniswap_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .exchange("uniswap_v3", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        // .exchange("vm:balancer", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
-        // .exchange("vm:curve", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .exchange("vm:balancer_v2", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
+        .exchange("vm:curve", ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold))
         .auth_key(auth_key.clone())
         .build()
         .await
@@ -334,7 +334,7 @@ pub async fn process_messages(
                                 continue;
                             }
                         },
-                        "vm:balancer" => {
+                        "vm:balancer_v2" => {
                             match EVMPoolState::try_from_with_block(
                                 snapshot,
                                 header.clone(),

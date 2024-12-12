@@ -9,7 +9,6 @@ use alloy_primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tracing::info;
 
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
@@ -127,7 +126,6 @@ where
     }
 
     pub fn set_spot_prices(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
-        info!("Setting spot prices for pool {}", self.id.clone());
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
             .iter()
