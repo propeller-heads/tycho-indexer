@@ -370,11 +370,15 @@ impl SimulationParameters {
 mod tests {
     use super::*;
 
+    use alloy::{
+        providers::{ProviderBuilder, RootProvider},
+        transports::{BoxTransport, RpcError, TransportError, TransportErrorKind},
+    };
     use alloy_primitives::Keccak256;
     use alloy_sol_types::SolValue;
-    use std::{error::Error, str::FromStr, sync::Arc, time::Instant};
+    use dotenv::dotenv;
+    use std::{env, error::Error, str::FromStr, sync::Arc, time::Instant};
 
-    use ethers::providers::{Http, Provider, ProviderError};
     use revm::primitives::{
         bytes, hex, Account, AccountInfo, AccountStatus, Address, Bytecode, Bytes,
         EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, InvalidTransaction,
@@ -460,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_ok_success() {
-        let evm_result: EVMResult<ProviderError> = Ok(ResultAndState {
+        let evm_result: EVMResult<TransportError> = Ok(ResultAndState {
             result: ExecutionResult::Success {
                 reason: SuccessReason::Return,
                 gas_used: 100_u64,
@@ -534,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_ok_revert() {
-        let evm_result: EVMResult<ProviderError> = Ok(ResultAndState {
+        let evm_result: EVMResult<TransportError> = Ok(ResultAndState {
             result: ExecutionResult::Revert {
                 gas_used: 100_u64,
                 output: revm::primitives::Bytes::from_static(b"output"),
@@ -560,7 +564,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_ok_halt() {
-        let evm_result: EVMResult<ProviderError> = Ok(ResultAndState {
+        let evm_result: EVMResult<TransportError> = Ok(ResultAndState {
             result: ExecutionResult::Halt {
                 reason: HaltReason::OutOfGas(OutOfGasError::Basic),
                 gas_used: 100_u64,
@@ -583,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_interpret_result_err_invalid_transaction() {
-        let evm_result: EVMResult<ProviderError> =
+        let evm_result: EVMResult<TransportError> =
             Err(EVMError::Transaction(InvalidTransaction::PriorityFeeGreaterThanMaxFee));
 
         let result = interpret_evm_result(evm_result);
@@ -601,8 +605,9 @@ mod tests {
 
     #[test]
     fn test_interpret_result_err_db_error() {
-        let evm_result: EVMResult<ProviderError> =
-            Err(EVMError::Database(ProviderError::CustomError("boo".to_string())));
+        let evm_result: EVMResult<TransportError> = Err(EVMError::Database(RpcError::Transport(
+            TransportErrorKind::Custom(Box::from("boo".to_string())),
+        )));
 
         let result = interpret_evm_result(evm_result);
 
@@ -610,21 +615,31 @@ mod tests {
         let err = result.err().unwrap();
         match err {
             SimulationEngineError::StorageError(msg) => {
-                assert_eq!(msg, "Storage error: CustomError(\"boo\")")
+                assert_eq!(msg, "Storage error: Transport(Custom(\"boo\"))")
             }
             _ => panic!("Wrong type of SimulationError!"),
         }
     }
-
-    #[test]
-    fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
-        let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
-        let client = Arc::new(client);
+    fn new_state() -> SimulationDB<RootProvider<BoxTransport>> {
+        dotenv().ok();
+        let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
-        let state = SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let client = runtime.block_on(async {
+            ProviderBuilder::new()
+                .on_builtin(&eth_rpc_url)
+                .await
+                .unwrap()
+        });
+        let client = Arc::new(client);
+        SimulationDB::new(client, Some(Arc::new(runtime)), None)
+    }
+
+    #[test]
+    fn test_integration_revm_v2_swap() -> Result<(), Box<dyn Error>> {
+        let state = new_state();
 
         // any random address will work
         let caller = Address::from_str("0x0000000000000000000000000000000000000000")?;
@@ -704,16 +719,6 @@ mod tests {
 
     #[test]
     fn test_contract_deployment() -> Result<(), Box<dyn Error>> {
-        fn new_state() -> SimulationDB<Provider<Http>> {
-            let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
-            let client = Arc::new(client);
-            let runtime = tokio::runtime::Handle::try_current()
-                .is_err()
-                .then(|| tokio::runtime::Runtime::new().unwrap())
-                .unwrap();
-            SimulationDB::new(client, Some(Arc::new(runtime)), None)
-        }
-
         let readonly_state = new_state();
         let state = new_state();
 

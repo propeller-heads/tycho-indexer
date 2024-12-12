@@ -232,10 +232,14 @@ where
 mod tests {
     use super::*;
 
-    use std::{str::FromStr, sync::Arc};
+    use alloy::{
+        providers::{ProviderBuilder, RootProvider},
+        transports::BoxTransport,
+    };
+    use std::{env, str::FromStr, sync::Arc};
 
     use chrono::NaiveDateTime;
-    use ethers::providers::{Http, Provider};
+    use dotenv::dotenv;
 
     use crate::evm::engine_db::simulation_db::SimulationDB;
 
@@ -305,13 +309,25 @@ mod tests {
         assert_eq!(overwrites[&factory.token_address][&factory.total_supply_slot], supply);
     }
 
+    fn new_state() -> SimulationDB<RootProvider<BoxTransport>> {
+        dotenv().ok();
+        let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| tokio::runtime::Runtime::new().unwrap())
+            .unwrap();
+        let client = runtime.block_on(async {
+            ProviderBuilder::new()
+                .on_builtin(&eth_rpc_url)
+                .await
+                .unwrap()
+        });
+        SimulationDB::new(Arc::new(client), Some(Arc::new(runtime)), None)
+    }
+
     #[test]
     fn test_brute_force_slot_solidity() {
-        let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
-
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let client = Arc::new(client);
-        let state = SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = new_state();
 
         let eng = SimulationEngine::new(state, false);
         let block = BlockHeader {
@@ -336,11 +352,7 @@ mod tests {
 
     #[test]
     fn test_brute_force_slot_vyper() {
-        let client = Provider::<Http>::try_from(std::env::var("ETH_RPC_URL").unwrap()).unwrap();
-
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let client = Arc::new(client);
-        let state = SimulationDB::new(client, Some(Arc::new(runtime)), None);
+        let state = new_state();
 
         let eng = SimulationEngine::new(state, false);
         let block = BlockHeader {
