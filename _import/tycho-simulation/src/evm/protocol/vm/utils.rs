@@ -18,8 +18,8 @@ use alloy_sol_types::SolValue;
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use num_bigint::BigInt;
-use serde_json::Value;
 use revm::primitives::{Bytecode, Bytes};
+use serde_json::Value;
 
 use crate::{
     evm::{simulation::SimulationEngineError, ContractCompiler, SlotId},
@@ -113,11 +113,11 @@ fn parse_solidity_error_message(data: &str) -> String {
             // Solidity Panic(uint256) signature: 0x4e487b71
         } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
             if let Ok(decoded) = U256::abi_decode(&data_bytes[4..], true) {
-            let panic_codes = get_solidity_panic_codes();
-            return panic_codes
-                .get(&decoded.as_limbs()[0])
-                .cloned()
-                .unwrap_or_else(|| format!("Panic({})", decoded));
+                let panic_codes = get_solidity_panic_codes();
+                return panic_codes
+                    .get(&decoded.as_limbs()[0])
+                    .cloned()
+                    .unwrap_or_else(|| format!("Panic({})", decoded));
             }
         }
 
@@ -126,11 +126,11 @@ fn parse_solidity_error_message(data: &str) -> String {
             return decoded;
         }
 
-    // Custom error, try to decode string again with offset
-    if let Ok(decoded) = String::abi_decode(&data_bytes[4..], true) {
-        return decoded;
+        // Custom error, try to decode string again with offset
+        if let Ok(decoded) = String::abi_decode(&data_bytes[4..], true) {
+            return decoded;
+        }
     }
-
     // Fallback if no decoding succeeded
     format!("Failed to decode: {}", data)
 }
