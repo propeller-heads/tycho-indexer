@@ -1,6 +1,6 @@
 [package]
 name = "_tycho_simulation_py"
-version = "0.56.0"
+version = "0.59.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -13,7 +13,7 @@ num-bigint = "0.4.3"
 pyo3 = { version = "0.19", features = ["num-bigint", "extension-module"] }
 tycho-simulation = { path = "../" }
 tokio = { version = "1.38.0", features = ["full"] }
-ethers = "2.0.13"
+alloy = { version = "0.5.4", features = ["providers"] }
 revm = { version = "17.1.0", features = [
     "ethersdb",
 ] }

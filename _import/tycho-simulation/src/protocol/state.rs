@@ -22,7 +22,7 @@
 //! use num_bigint::ToBigUint;
 //! use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 //! use tycho_simulation::protocol::state::{ProtocolSim};
-//! use tycho_simulation::models::ERC20Token;
+//! use tycho_simulation::models::Token;
 //! use tycho_simulation::u256_num::u256_to_biguint;
 //!
 //! // Initialize the UniswapV2 state with token reserves
@@ -32,10 +32,10 @@
 //! ));
 //!
 //! // Define two ERC20 tokens: USDC and WETH
-//! let usdc = ERC20Token::new(
+//! let usdc = Token::new(
 //!     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", 10_000.to_biguint().unwrap()
 //! );
-//! let weth = ERC20Token::new(
+//! let weth = Token::new(
 //!     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH", 10_000.to_biguint().unwrap()
 //! );
 //!
@@ -51,7 +51,7 @@ use num_bigint::BigUint;
 use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
-    models::ERC20Token,
+    models::Token,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -82,7 +82,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     ///   BTC/USDT, BTC would be the base asset.
     /// * `b` - Quote Token: refers to the token that is the price of a pair. For the symbol
     ///   BTC/USDT, USDT would be the quote asset.
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError>;
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
     ///
@@ -99,8 +99,8 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     fn get_amount_out(
         &self,
         amount_in: BigUint,
-        token_in: &ERC20Token,
-        token_out: &ERC20Token,
+        token_in: &Token,
+        token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError>;
 
     /// Decodes and applies a protocol state delta to the state
@@ -119,7 +119,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<Token>,
     ) -> Result<(), TransitionError<String>>;
 
     /// Clones the protocol state as a trait object.

@@ -1,5 +1,4 @@
 #![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
-use ethers::providers::{Http, Provider};
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use revm::primitives::{Address as RevmAddress, Bytecode, B256, U256};
@@ -8,6 +7,10 @@ use tracing::info;
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+use alloy::{
+    providers::{ProviderBuilder, RootProvider},
+    transports::BoxTransport,
+};
 use std::fmt::Debug;
 use tycho_simulation::evm::{
     account_storage,
@@ -468,8 +471,17 @@ fn get_runtime() -> Option<Arc<Runtime>> {
     Some(Arc::new(runtime))
 }
 
-fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
-    let client = Provider::<Http>::try_from(rpc_url).unwrap();
+fn get_client(rpc_url: &str) -> Arc<RootProvider<BoxTransport>> {
+    let runtime = tokio::runtime::Handle::try_current()
+        .is_err()
+        .then(|| tokio::runtime::Runtime::new().unwrap())
+        .unwrap();
+    let client = runtime.block_on(async {
+        ProviderBuilder::new()
+            .on_builtin(rpc_url)
+            .await
+            .unwrap()
+    });
     Arc::new(client)
 }
 
@@ -479,7 +491,7 @@ fn get_client(rpc_url: &str) -> Arc<Provider<Http>> {
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct SimulationDB {
-    pub inner: simulation_db::SimulationDB<Provider<Http>>,
+    pub inner: simulation_db::SimulationDB<RootProvider<BoxTransport>>,
 }
 
 #[pymethods]

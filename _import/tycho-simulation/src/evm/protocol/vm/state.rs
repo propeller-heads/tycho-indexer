@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use revm::DatabaseRef;
 use tracing::info;
 
-use tycho_core::dto::ProtocolStateDelta;
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     evm::{
@@ -19,10 +19,10 @@ use crate::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
             tycho_db::PreCachedDB,
         },
-        protocol::u256_num::u256_to_biguint,
+        protocol::{erc20::bytes_to_erc20_address, u256_num::u256_to_biguint},
         ContractCompiler, SlotId,
     },
-    models::ERC20Token,
+    models::Token,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -46,7 +46,7 @@ where
     /// The pool's identifier
     id: String,
     /// The pool's token's addresses
-    pub tokens: Vec<Address>,
+    pub tokens: Vec<Bytes>,
     /// The current block, will be used to set vm context
     block: BlockHeader,
     /// The pool's token balances
@@ -89,7 +89,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
-        tokens: Vec<Address>,
+        tokens: Vec<Bytes>,
         block: BlockHeader,
         balances: HashMap<Address, U256>,
         balance_owner: Option<Address>,
@@ -170,7 +170,7 @@ where
     /// Tip: Setting spot prices on the pool every time the pool actually changes will result in
     /// faster price fetching than if prices are only set immediately before attempting to retrieve
     /// prices.
-    pub fn set_spot_prices(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
+    pub fn set_spot_prices(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
         info!("Setting spot prices for pool {}", self.id.clone());
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
@@ -178,18 +178,20 @@ where
             .permutations(2)
             .map(|p| [p[0], p[1]])
         {
+            let sell_token_address = bytes_to_erc20_address(&sell_token.address)?;
+            let buy_token_address = bytes_to_erc20_address(&buy_token.address)?;
             let overwrites = Some(self.get_overwrites(
-                vec![(*sell_token).clone().address, (*buy_token).clone().address],
+                vec![sell_token_address, buy_token_address],
                 *MAX_BALANCE / U256::from(100),
             )?);
             let sell_amount_limit = self.get_sell_amount_limit(
-                vec![sell_token.address, buy_token.address],
+                vec![sell_token_address, buy_token_address],
                 overwrites.clone(),
             )?;
             let price_result = self.adapter_contract.price(
                 &self.id,
-                sell_token.address,
-                buy_token.address,
+                sell_token_address,
+                buy_token_address,
                 vec![sell_amount_limit / U256::from(100)],
                 self.block.number,
                 overwrites,
@@ -211,7 +213,7 @@ where
             };
 
             self.spot_prices
-                .insert((sell_token.address, buy_token.address), price);
+                .insert((sell_token_address, buy_token_address), price);
         }
         Ok(())
     }
@@ -248,7 +250,7 @@ where
         Ok(limits?.0)
     }
 
-    fn clear_all_cache(&mut self, tokens: Vec<ERC20Token>) -> Result<(), SimulationError> {
+    fn clear_all_cache(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
         self.adapter_contract
             .engine
             .clear_temp_storage();
@@ -261,13 +263,13 @@ where
         tokens: Vec<Address>,
         max_amount: U256,
     ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
-        let sell_token = &tokens[0].clone();
+        let sell_token = &tokens[0].clone(); //TODO: need to make it clearer from the interface
         let mut res: Vec<HashMap<Address, Overwrites>> = Vec::new();
         if !self
             .capabilities
             .contains(&Capability::TokenBalanceIndependent)
         {
-            res.push(self.get_balance_overwrites(tokens)?);
+            res.push(self.get_balance_overwrites(self.tokens.clone())?);
         }
 
         let (slots, compiler) = self
@@ -300,7 +302,7 @@ where
 
     fn get_balance_overwrites(
         &self,
-        tokens: Vec<Address>,
+        tokens: Vec<Bytes>,
     ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let mut balance_overwrites: HashMap<Address, Overwrites> = HashMap::new();
         let address = match self.balance_owner {
@@ -313,9 +315,13 @@ where
         }?;
 
         for token in &tokens {
-            let (slots, compiler) = if self.involved_contracts.contains(token) {
+            let token_address = bytes_to_erc20_address(token)?;
+            let (slots, compiler) = if self
+                .involved_contracts
+                .contains(&token_address)
+            {
                 self.token_storage_slots
-                    .get(token)
+                    .get(&token_address)
                     .cloned()
                     .ok_or_else(|| {
                         SimulationError::FatalError(
@@ -327,11 +333,10 @@ where
                 (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
             };
 
-            let mut overwrites =
-                ERC20OverwriteFactory::new(Address::from(token.0), slots, compiler);
+            let mut overwrites = ERC20OverwriteFactory::new(token_address, slots, compiler);
             overwrites.set_balance(
                 self.balances
-                    .get(token)
+                    .get(&token_address)
                     .cloned()
                     .ok_or_else(|| {
                         SimulationError::InvalidInput(
@@ -392,31 +397,35 @@ where
         todo!()
     }
 
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        let base_address = bytes_to_erc20_address(&base.address)?;
+        let quote_address = bytes_to_erc20_address(&quote.address)?;
         self.spot_prices
-            .get(&(base.address, quote.address))
+            .get(&(base_address, quote_address))
             .cloned()
             .ok_or(SimulationError::FatalError(format!(
                 "Spot price not found for base token {} and quote token {}",
-                base.address, quote.address
+                base_address, quote_address
             )))
     }
 
     fn get_amount_out(
         &self,
         amount_in: BigUint,
-        token_in: &ERC20Token,
-        token_out: &ERC20Token,
+        token_in: &Token,
+        token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        let sell_token = token_in.address;
-        let buy_token = token_out.address;
+        let sell_token_address = bytes_to_erc20_address(&token_in.address)?;
+        let buy_token_address = bytes_to_erc20_address(&token_out.address)?;
         let sell_amount = U256::from_be_slice(&amount_in.to_bytes_be());
         let overwrites = self.get_overwrites(
-            vec![sell_token, buy_token],
+            vec![sell_token_address, buy_token_address],
             U256::from_be_slice(&(*MAX_BALANCE / U256::from(100)).to_be_bytes::<32>()),
         )?;
-        let sell_amount_limit =
-            self.get_sell_amount_limit(vec![sell_token, buy_token], Some(overwrites.clone()))?;
+        let sell_amount_limit = self.get_sell_amount_limit(
+            vec![sell_token_address, buy_token_address],
+            Some(overwrites.clone()),
+        )?;
         let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
             .contains(&Capability::HardLimits) &&
@@ -428,13 +437,13 @@ where
         };
 
         let overwrites_with_sell_limit =
-            self.get_overwrites(vec![sell_token, buy_token], sell_amount_limit)?;
+            self.get_overwrites(vec![sell_token_address, buy_token_address], sell_amount_limit)?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
 
         let (trade, state_changes) = self.adapter_contract.swap(
             &self.id,
-            sell_token,
-            buy_token,
+            sell_token_address,
+            buy_token_address,
             false,
             sell_amount_respecting_limit,
             self.block.number,
@@ -464,10 +473,10 @@ where
         if new_price != 0.0f64 {
             new_state
                 .spot_prices
-                .insert((sell_token, buy_token), new_price);
+                .insert((sell_token_address, buy_token_address), new_price);
             new_state
                 .spot_prices
-                .insert((buy_token, sell_token), 1.0f64 / new_price);
+                .insert((buy_token_address, sell_token_address), 1.0f64 / new_price);
         }
 
         let buy_amount = trade.received_amount;
@@ -492,7 +501,7 @@ where
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: Vec<ERC20Token>,
+        tokens: Vec<Token>,
     ) -> Result<(), TransitionError<String>> {
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
@@ -558,8 +567,8 @@ mod tests {
         tycho_models::AccountUpdate,
     };
 
-    fn dai() -> ERC20Token {
-        ERC20Token::new(
+    fn dai() -> Token {
+        Token::new(
             "0x6b175474e89094c44da98b954eedeac495271d0f",
             18,
             "DAI",
@@ -567,13 +576,21 @@ mod tests {
         )
     }
 
-    fn bal() -> ERC20Token {
-        ERC20Token::new(
+    fn bal() -> Token {
+        Token::new(
             "0xba100000625a3754423978a60c9317c58a424e3d",
             18,
             "BAL",
             10_000.to_biguint().unwrap(),
         )
+    }
+
+    fn dai_addr() -> Address {
+        bytes_to_erc20_address(&dai().address).unwrap()
+    }
+
+    fn bal_addr() -> Address {
+        bytes_to_erc20_address(&bal().address).unwrap()
     }
 
     async fn setup_pool_state() -> EVMPoolState<PreCachedDB> {
@@ -613,10 +630,7 @@ mod tests {
         }
         db.update(accounts, Some(block));
 
-        let dai_addr = dai().address;
-        let bal_addr = bal().address;
-
-        let tokens = vec![dai_addr, bal_addr];
+        let tokens = vec![dai().address, bal().address];
         let block = BlockHeader {
             number: 18485417,
             hash: B256::from_str(
@@ -635,14 +649,14 @@ mod tests {
         )]);
 
         let balances = HashMap::from([
-            (dai_addr, U256::from_str("178754012737301807104").unwrap()),
-            (bal_addr, U256::from_str("91082987763369885696").unwrap()),
+            (dai_addr(), U256::from_str("178754012737301807104").unwrap()),
+            (bal_addr(), U256::from_str("91082987763369885696").unwrap()),
         ]);
 
         EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
             .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_path(PathBuf::from(
-                "src/evm/protocol/vm/assets/BalancerSwapAdapter.evm.runtime".to_string(),
+                "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
             ))
             .stateless_contracts(stateless_contracts)
             .build(SHARED_TYCHO_DB.clone())
@@ -665,7 +679,11 @@ mod tests {
 
         let capabilities_adapter_contract = pool_state
             .adapter_contract
-            .get_capabilities(&pool_state.id, pool_state.tokens[0], pool_state.tokens[1])
+            .get_capabilities(
+                &pool_state.id,
+                bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+            )
             .unwrap();
 
         assert_eq!(capabilities_adapter_contract, expected_capabilities.clone());
@@ -695,7 +713,7 @@ mod tests {
             .get_account_storage();
         for token in pool_state.tokens.clone() {
             let account = engine_accounts
-                .get_account_info(&token)
+                .get_account_info(&bytes_to_erc20_address(&token).unwrap())
                 .unwrap();
             assert_eq!(account.balance, U256::from(0));
             assert_eq!(account.nonce, 0u64);
@@ -804,20 +822,27 @@ mod tests {
     #[tokio::test]
     async fn test_get_sell_amount_limit() {
         let pool_state = setup_pool_state().await;
+
         let overwrites = pool_state
             .get_overwrites(
-                vec![pool_state.tokens[0], pool_state.tokens[1]],
+                vec![
+                    bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                    bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+                ],
                 *MAX_BALANCE / U256::from(100),
             )
             .unwrap();
         let dai_limit = pool_state
-            .get_sell_amount_limit(vec![dai().address, bal().address], Some(overwrites.clone()))
+            .get_sell_amount_limit(vec![dai_addr(), bal_addr()], Some(overwrites.clone()))
             .unwrap();
         assert_eq!(dai_limit, U256::from_str("100279494253364362835").unwrap());
 
         let bal_limit = pool_state
             .get_sell_amount_limit(
-                vec![pool_state.tokens[1], pool_state.tokens[0]],
+                vec![
+                    bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+                    bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                ],
                 Some(overwrites),
             )
             .unwrap();
@@ -834,11 +859,17 @@ mod tests {
 
         let dai_bal_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[0], pool_state.tokens[1]))
+            .get(&(
+                bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+                bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+            ))
             .unwrap();
         let bal_dai_spot_price = pool_state
             .spot_prices
-            .get(&(pool_state.tokens[1], pool_state.tokens[0]))
+            .get(&(
+                bytes_to_erc20_address(&pool_state.tokens[1]).unwrap(),
+                bytes_to_erc20_address(&pool_state.tokens[0]).unwrap(),
+            ))
             .unwrap();
         assert_eq!(dai_bal_spot_price, &0.137_778_914_319_047_9);
         assert_eq!(bal_dai_spot_price, &7.071_503_245_428_246);

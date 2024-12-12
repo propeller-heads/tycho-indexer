@@ -8,7 +8,7 @@ use crate::{
         safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
         u256_num::{biguint_to_u256, u256_to_biguint},
     },
-    models::ERC20Token,
+    models::Token,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -42,7 +42,7 @@ impl ProtocolSim for UniswapV2State {
         0.003
     }
 
-    fn spot_price(&self, base: &ERC20Token, quote: &ERC20Token) -> Result<f64, SimulationError> {
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         if base < quote {
             Ok(spot_price_from_reserves(
                 self.reserve0,
@@ -63,8 +63,8 @@ impl ProtocolSim for UniswapV2State {
     fn get_amount_out(
         &self,
         amount_in: BigUint,
-        token_in: &ERC20Token,
-        token_out: &ERC20Token,
+        token_in: &Token,
+        token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let amount_in = biguint_to_u256(&amount_in);
         if amount_in == U256::from(0u64) {
@@ -104,7 +104,7 @@ impl ProtocolSim for UniswapV2State {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        _tokens: Vec<ERC20Token>,
+        _tokens: Vec<Token>,
     ) -> Result<(), TransitionError<String>> {
         // reserve0 and reserve1 are considered required attributes and are expected in every delta
         // we process
@@ -184,13 +184,13 @@ mod tests {
         #[case] amount_in: BigUint,
         #[case] exp: BigUint,
     ) {
-        let t0 = ERC20Token::new(
+        let t0 = Token::new(
             "0x0000000000000000000000000000000000000000",
             token_0_decimals,
             "T0",
             10_000.to_biguint().unwrap(),
         );
-        let t1 = ERC20Token::new(
+        let t1 = Token::new(
             "0x0000000000000000000000000000000000000001",
             token_1_decimals,
             "T0",
@@ -222,13 +222,13 @@ mod tests {
         let amount_in = (BigUint::one() << 256) - BigUint::one(); // U256 max value
         let t0d = 18;
         let t1d = 16;
-        let t0 = ERC20Token::new(
+        let t0 = Token::new(
             "0x0000000000000000000000000000000000000000",
             t0d,
             "T0",
             10_000.to_biguint().unwrap(),
         );
-        let t1 = ERC20Token::new(
+        let t1 = Token::new(
             "0x0000000000000000000000000000000000000001",
             t1d,
             "T0",
@@ -250,13 +250,13 @@ mod tests {
             U256::from_str("36925554990922").unwrap(),
             U256::from_str("30314846538607556521556").unwrap(),
         );
-        let usdc = ERC20Token::new(
+        let usdc = Token::new(
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             6,
             "USDC",
             10_000.to_biguint().unwrap(),
         );
-        let weth = ERC20Token::new(
+        let weth = Token::new(
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             18,
             "WETH",

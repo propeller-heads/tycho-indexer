@@ -10,7 +10,7 @@ use tycho_core::Bytes;
 
 use crate::{
     evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
-    models::ERC20Token,
+    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
@@ -45,16 +45,16 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         block: Header,
-        all_tokens: HashMap<Address, ERC20Token>,
+        all_tokens: HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
-        let tokens: Vec<Address> = snapshot
+        let tokens: Vec<Bytes> = snapshot
             .component
             .tokens
             .clone()
             .into_iter()
-            .map(|t| Address::from_slice(&t))
             .collect();
+
         let block = BlockHeader::from(block);
         let balances = snapshot
             .state
@@ -208,7 +208,7 @@ mod tests {
 
         ProtocolComponent {
             id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string(),
-            protocol_system: "vm:balancer".to_string(),
+            protocol_system: "vm:balancer_v2".to_string(),
             protocol_type_name: "balancer_v2_pool".to_string(),
             chain: Chain::Ethereum,
             tokens,

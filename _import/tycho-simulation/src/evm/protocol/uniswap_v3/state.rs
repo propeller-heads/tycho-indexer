@@ -9,7 +9,7 @@ use crate::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
     },
-    models::ERC20Token,
+    models::Token,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -247,7 +247,7 @@ impl ProtocolSim for UniswapV3State {
         (self.fee as u32) as f64 / 1_000_000.0
     }
 
-    fn spot_price(&self, a: &ERC20Token, b: &ERC20Token) -> Result<f64, SimulationError> {
+    fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
         if a < b {
             Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32))
         } else {
@@ -259,8 +259,8 @@ impl ProtocolSim for UniswapV3State {
     fn get_amount_out(
         &self,
         amount_in: BigUint,
-        token_a: &ERC20Token,
-        token_b: &ERC20Token,
+        token_a: &Token,
+        token_b: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let zero_for_one = token_a < token_b;
         let amount_specified = I256::checked_from_sign_and_abs(
@@ -292,7 +292,7 @@ impl ProtocolSim for UniswapV3State {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        _tokens: Vec<ERC20Token>,
+        _tokens: Vec<Token>,
     ) -> Result<(), TransitionError<String>> {
         // apply attribute changes
         if let Some(liquidity) = delta
@@ -415,13 +415,13 @@ mod tests {
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {
-        let token_x = ERC20Token::new(
+        let token_x = Token::new(
             "0x6b175474e89094c44da98b954eedeac495271d0f",
             18,
             "X",
             10_000.to_biguint().unwrap(),
         );
-        let token_y = ERC20Token::new(
+        let token_y = Token::new(
             "0xf1ca9cb74685755965c7458528a36934df52a3ef",
             18,
             "Y",
@@ -453,13 +453,13 @@ mod tests {
 
     #[test]
     fn test_get_amount_out() {
-        let wbtc = ERC20Token::new(
+        let wbtc = Token::new(
             "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
             8,
             "WBTC",
             10_000.to_biguint().unwrap(),
         );
-        let weth = ERC20Token::new(
+        let weth = Token::new(
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             18,
             "WETH",
@@ -550,13 +550,13 @@ mod tests {
 
     #[test]
     fn test_err_with_partial_trade() {
-        let dai = ERC20Token::new(
+        let dai = Token::new(
             "0x6b175474e89094c44da98b954eedeac495271d0f",
             18,
             "DAI",
             10_000.to_biguint().unwrap(),
         );
-        let usdc = ERC20Token::new(
+        let usdc = Token::new(
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             6,
             "USDC",

@@ -1,3 +1,60 @@
+## [0.59.0](https://github.com/propeller-heads/tycho-simulation/compare/0.58.0...0.59.0) (2024-12-12)
+
+
+### Features
+
+* Downgrade alloy because foundry depends on alloy and we don't want to update that now ([b44c6d4](https://github.com/propeller-heads/tycho-simulation/commit/b44c6d4d9252d24e59da7e310930aaf04126206c))
+* Remove ethers from utils and Cargo.toml ([0753dbd](https://github.com/propeller-heads/tycho-simulation/commit/0753dbd2f3c61e646424db52d0359dd8f1dd0eda))
+* Replace ethers Middleware with Provider from alloy ([a83925d](https://github.com/propeller-heads/tycho-simulation/commit/a83925d726dd6e867b6a9e21a94bccb9e43d1ed4))
+* Support setting the block and add/fix real tests ([b3725e6](https://github.com/propeller-heads/tycho-simulation/commit/b3725e6bbcf50b6fa9e69d871c85424234c1a1f7))
+* Update python package to use Provider from alloy ([2851d90](https://github.com/propeller-heads/tycho-simulation/commit/2851d900dc7c3d833f4d83ddc95ce571f29a1902))
+
+
+### Bug Fixes
+
+* After rebase fixes ([b8b6112](https://github.com/propeller-heads/tycho-simulation/commit/b8b61121be917565acfdfa114cc802a29baa21e3))
+
+## [0.58.0](https://github.com/propeller-heads/tycho-simulation/compare/0.57.1...0.58.0) (2024-12-11)
+
+
+### Features
+
+* Generalize ERC20Token class ([b023b7b](https://github.com/propeller-heads/tycho-simulation/commit/b023b7b815227bbe026141f86d44d4f9b42629aa))
+
+
+### Bug Fixes
+
+* Expect Bytes for token address in decoders... ([c5b945d](https://github.com/propeller-heads/tycho-simulation/commit/c5b945d62494c8d5b7820604f6d39a994028fc6f))
+* Restrict scope of most utils to pub(crate)... ([e1fda7f](https://github.com/propeller-heads/tycho-simulation/commit/e1fda7f99b330ccd82a609762a1753f43b2f1c89))
+* revert main.rs ([e1451c1](https://github.com/propeller-heads/tycho-simulation/commit/e1451c1df52f9433491969f6f2c2d69d2caf6008))
+
+## [0.57.1](https://github.com/propeller-heads/tycho-simulation/compare/0.57.0...0.57.1) (2024-12-11)
+
+
+### Bug Fixes
+
+* Rename BalancerSwapAdapter.evm.runtime to BalancerV2SwapAdapter.evm.runtime ([d091e60](https://github.com/propeller-heads/tycho-simulation/commit/d091e60169097d135a0b6d37735d6009b2e17ff6))
+
+## [0.57.0](https://github.com/propeller-heads/tycho-simulation/compare/0.56.1...0.57.0) (2024-12-10)
+
+
+### Features
+
+* **example:** add Curve to `explorer` example ([4840265](https://github.com/propeller-heads/tycho-simulation/commit/48402655ebb0b0e073220cfaff699635c85da493))
+
+
+### Bug Fixes
+
+* correctly initialize stateless contracts ([28d3ad3](https://github.com/propeller-heads/tycho-simulation/commit/28d3ad304f79d527717b361c7d3e952bfe062006))
+* correctly overwrites balances ([b5b7f2d](https://github.com/propeller-heads/tycho-simulation/commit/b5b7f2d0065658d08678517d44c2e962b47e20e2))
+
+## [0.56.1](https://github.com/propeller-heads/tycho-simulation/compare/0.56.0...0.56.1) (2024-12-10)
+
+
+### Bug Fixes
+
+* update default TYCHO_URL to point to beta environment ([e5406c8](https://github.com/propeller-heads/tycho-simulation/commit/e5406c8e4a26694959e7dbbb9ee37e1c53fef3f1))
+
 ## [0.56.0](https://github.com/propeller-heads/tycho-simulation/compare/0.55.0...0.56.0) (2024-12-09)
 
 

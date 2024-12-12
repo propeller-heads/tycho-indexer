@@ -1,29 +1,32 @@
-use alloy_primitives::Address;
 use std::{
     collections::HashMap,
     env,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::{Arc, LazyLock},
 };
 
-use ethabi::{self, decode, ParamType};
-use ethers::{
-    prelude::ProviderError,
-    providers::{Http, Middleware, Provider},
-    types::H160,
+use alloy::{
+    providers::{Provider, ProviderBuilder},
+    transports::RpcError,
 };
+use alloy_primitives::{Address, U256};
+use alloy_sol_types::SolValue;
+
 use hex::FromHex;
 use mini_moka::sync::Cache;
+use num_bigint::BigInt;
 use revm::primitives::{Bytecode, Bytes};
+use serde_json::Value;
 
 use crate::{
     evm::{simulation::SimulationEngineError, ContractCompiler, SlotId},
     protocol::errors::{FileError, SimulationError},
 };
 
-pub fn coerce_error(
+pub(crate) fn coerce_error(
     err: &SimulationEngineError,
     pool_state: &str,
     gas_limit: Option<u64>,
@@ -93,47 +96,41 @@ pub fn coerce_error(
 }
 
 fn parse_solidity_error_message(data: &str) -> String {
-    let data_bytes = match Vec::from_hex(&data[2..]) {
-        Ok(bytes) => bytes,
-        Err(_) => return format!("Failed to decode: {}", data),
-    };
+    // 10 for "0x" + 8 hex chars error signature
+    if data.len() >= 10 {
+        let data_bytes = match Vec::from_hex(&data[2..]) {
+            Ok(bytes) => bytes,
+            Err(_) => return format!("Failed to decode: {}", data),
+        };
 
-    // Check for specific error selectors:
-    // Solidity Error(string) signature: 0x08c379a0
-    if data_bytes.starts_with(&[0x08, 0xc3, 0x79, 0xa0]) {
-        if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
-            if let Some(ethabi::Token::String(error_string)) = decoded.first() {
-                return error_string.clone();
+        // Check for specific error selectors:
+        // Solidity Error(string) signature: 0x08c379a0
+        if data_bytes.starts_with(&[0x08, 0xc3, 0x79, 0xa0]) {
+            if let Ok(decoded) = String::abi_decode(&data_bytes[4..], true) {
+                return decoded;
             }
-        }
 
-        // Solidity Panic(uint256) signature: 0x4e487b71
-    } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
-        if let Ok(decoded) = decode(&[ParamType::Uint(256)], &data_bytes[4..]) {
-            if let Some(ethabi::Token::Uint(error_code)) = decoded.first() {
+            // Solidity Panic(uint256) signature: 0x4e487b71
+        } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
+            if let Ok(decoded) = U256::abi_decode(&data_bytes[4..], true) {
                 let panic_codes = get_solidity_panic_codes();
                 return panic_codes
-                    .get(&error_code.as_u64())
+                    .get(&decoded.as_limbs()[0])
                     .cloned()
-                    .unwrap_or_else(|| format!("Panic({})", error_code));
+                    .unwrap_or_else(|| format!("Panic({})", decoded));
             }
         }
-    }
 
-    // Try decoding as a string (old Solidity revert case)
-    if let Ok(decoded) = decode(&[ParamType::String], &data_bytes) {
-        if let Some(ethabi::Token::String(error_string)) = decoded.first() {
-            return error_string.clone();
+        // Try decoding as a string (old Solidity revert case)
+        if let Ok(decoded) = String::abi_decode(&data_bytes, true) {
+            return decoded;
+        }
+
+        // Custom error, try to decode string again with offset
+        if let Ok(decoded) = String::abi_decode(&data_bytes[4..], true) {
+            return decoded;
         }
     }
-
-    // Custom error, try to decode string again with offset
-    if let Ok(decoded) = decode(&[ParamType::String], &data_bytes[4..]) {
-        if let Some(ethabi::Token::String(error_string)) = decoded.first() {
-            return error_string.clone();
-        }
-    }
-
     // Fallback if no decoding succeeded
     format!("Failed to decode: {}", data)
 }
@@ -181,7 +178,7 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub fn get_storage_slot_index_at_key(
+pub(crate) fn get_storage_slot_index_at_key(
     key: Address,
     mapping_slot: SlotId,
     compiler: ContractCompiler,
@@ -232,7 +229,7 @@ fn get_solidity_panic_codes() -> HashMap<u64, String> {
 /// - Returns `RpcError::InvalidRequest` if `address` is not parsable or if no RPC URL is set.
 /// - Returns `RpcError::EmptyResponse` if the address has no associated bytecode (e.g., EOA).
 /// - Returns `RpcError::InvalidResponse` for issues with the RPC provider response.
-pub async fn get_code_for_contract(
+pub(crate) async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
 ) -> Result<Bytecode, SimulationError> {
@@ -249,19 +246,15 @@ pub async fn get_code_for_contract(
     };
 
     // Create a provider with the URL
-    let provider =
-        Provider::<Http>::try_from(connection_string).expect("could not instantiate HTTP Provider");
+    let provider = ProviderBuilder::new()
+        .on_builtin(&connection_string)
+        .await
+        .unwrap();
 
-    // Parse the address
-    let addr: H160 = address.parse().map_err(|_| {
-        SimulationError::FatalError(format!(
-            "Failed to get code for contract. Could not parse address: {}",
-            address
-        ))
-    })?;
+    let addr = Address::from_str(address).expect("Failed to parse address to get code for");
 
     // Call eth_getCode to get the bytecode of the contract
-    match provider.get_code(addr, None).await {
+    match provider.get_code_at(addr).await {
         Ok(code) if code.is_empty() => {
             Err(SimulationError::FatalError("Empty code response from RPC".to_string()))
         }
@@ -272,12 +265,13 @@ pub async fn get_code_for_contract(
         Err(e) => {
             println!("Error fetching code for address {}: {:?}", address, e);
             match e {
-                ProviderError::JsonRpcClientError(err) => Err(SimulationError::RecoverableError(
-                    format!("Failed to get code for contract due to internal RPC error: {:?}", err),
-                )),
+                RpcError::Transport(err) => Err(SimulationError::RecoverableError(format!(
+                    "Failed to get code for contract due to internal RPC error: {:?}",
+                    err
+                ))),
                 _ => Err(SimulationError::FatalError(format!(
                     "Failed to get code for contract. Invalid response from RPC: {:?}",
-                    e.to_string()
+                    e
                 ))),
             }
         }
@@ -286,7 +280,7 @@ pub async fn get_code_for_contract(
 
 static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Bytecode>> = LazyLock::new(|| Cache::new(1_000));
 
-pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
+pub(crate) fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
     if let Some(bytecode) = BYTECODE_CACHE.get(&Arc::new(path.to_string_lossy().to_string())) {
         return Ok(bytecode);
     }
@@ -302,7 +296,7 @@ pub fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileError> {
     Ok(bytecode)
 }
 
-pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
+pub(crate) fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     let erc20_bin_path = Path::new(file!())
         .parent()
         .ok_or_else(|| {
@@ -320,24 +314,29 @@ pub fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
     Ok(erc_20_bytecode)
 }
 
-/// Converts a hexadecimal string into a `Vec<u8>`.
+/// Converts a hexadecimal string into a fixed-size 32-byte array.
 ///
-/// This function accepts a hexadecimal string with or without the `0x` prefix. If the prefix
-/// is present, it is removed before decoding. The remaining string is expected to be a valid
-/// hexadecimal representation, otherwise an error is returned.
+/// This function takes a string slice (e.g., a pool ID) that may or may not have
+/// a `0x` prefix. It decodes the hex string into bytes, ensuring it does not exceed
+/// 32 bytes in length. If the string is valid and fits within 32 bytes, the bytes
+/// are copied into a `[u8; 32]` array, with right zero-padding for unused bytes.
 ///
 /// # Arguments
 ///
-/// * `hexstring` - A string slice containing the hexadecimal string. It may optionally start with
-///   `0x`.
+/// * `pool_id` - A string slice representing a hexadecimal pool ID. It can optionally start with
+///   the `0x` prefix.
 ///
 /// # Returns
 ///
-/// * `Ok(Vec<u8>)` - A vector of bytes decoded from the hexadecimal string.
-/// * `Err(SimulationError)` - An error if the input string is not a valid hexadecimal
-///   representation.
+/// * `Ok([u8; 32])` - On success, returns a 32-byte array with the decoded bytes. If the input is
+///   shorter than 32 bytes, the rest of the array is right padded with zeros.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input string is not a valid hexadecimal string.
+///     - The decoded bytes exceed 32 bytes in length.
 ///
-/// # Errors
+/// # Example
+/// ```
+/// use string_to_bytes32;
 ///
 /// This function returns a `SimulationError::EncodingError` if:
 /// - The string contains invalid hexadecimal characters.
@@ -350,27 +349,174 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
     Ok(bytes)
 }
 
+/// Converts a hexadecimal string into a fixed-size 32-byte array.
+///
+/// This function takes a string slice (e.g., a pool ID) that may or may not have
+/// a `0x` prefix. It decodes the hex string into bytes, ensuring it does not exceed
+/// 32 bytes in length. If the string is valid and fits within 32 bytes, the bytes
+/// are copied into a `[u8; 32]` array, with right zero-padding for unused bytes.
+///
+/// # Arguments
+///
+/// * `pool_id` - A string slice representing a hexadecimal pool ID. It can optionally start with
+///   the `0x` prefix.
+///
+/// # Returns
+///
+/// * `Ok([u8; 32])` - On success, returns a 32-byte array with the decoded bytes. If the input is
+///   shorter than 32 bytes, the rest of the array is right padded with zeros.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input string is not a valid hexadecimal string.
+///     - The decoded bytes exceed 32 bytes in length.
+///
+/// # Example
+/// ```
+/// use string_to_bytes32;
+///
+/// let pool_id = "0x1234abcd";
+/// match string_to_bytes32(pool_id) {
+///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+/// let pool_id = "0x1234abcd";
+/// match string_to_bytes32(pool_id) {
+///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
 pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
     let pool_id_no_prefix =
         if let Some(stripped) = pool_id.strip_prefix("0x") { stripped } else { pool_id };
     let bytes = hex::decode(pool_id_no_prefix)
         .map_err(|e| SimulationError::FatalError(format!("Invalid hex string: {}", e)))?;
-    if bytes.len() != 32 {
+    if bytes.len() > 32 {
         return Err(SimulationError::FatalError(format!(
-            "Hex string is not 32 bytes: length {}",
+            "Hex string exceeds 32 bytes: length {}",
             bytes.len()
         )));
     }
     let mut array = [0u8; 32];
-    array.copy_from_slice(&bytes);
+    array[..bytes.len()].copy_from_slice(&bytes);
     Ok(array)
+}
+
+/// Decodes a JSON-encoded list of hexadecimal strings into a `Vec<Vec<u8>>`.
+///
+/// This function parses a JSON array where each element is a string representing a hexadecimal
+/// value. It converts each hex string into a vector of bytes (`Vec<u8>`), and aggregates them into
+/// a `Vec<Vec<u8>>`.
+///
+/// # Arguments
+///
+/// * `input` - A byte slice (`&[u8]`) containing JSON-encoded data. The JSON must be a valid array
+///   of hex strings.
+///
+/// # Returns
+///
+/// * `Ok(Vec<Vec<u8>>)` - On success, returns a vector of byte vectors.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input is not valid JSON.
+///     - The JSON is not an array.
+///     - Any array element is not a string.
+///     - Any string is not a valid hexadecimal string.
+///
+/// # Example
+/// ```
+/// use json_deserialize_address_list;
+///
+/// let json_input = br#"["0x1234", "0xc0ffee"]"#;
+/// match json_deserialize_address_list(json_input) {
+///     Ok(result) => println!("Decoded: {:?}", result),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+pub fn json_deserialize_address_list(input: &[u8]) -> Result<Vec<Vec<u8>>, SimulationError> {
+    let json_value: Value = serde_json::from_slice(input)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+
+    if let Value::Array(hex_strings) = json_value {
+        let mut result = Vec::new();
+
+        for val in hex_strings {
+            if let Value::String(hexstring) = val {
+                let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
+                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                })?;
+                result.push(bytes);
+            } else {
+                return Err(SimulationError::FatalError("Array contains a non-string value".into()));
+            }
+        }
+
+        Ok(result)
+    } else {
+        Err(SimulationError::FatalError("Input is not a JSON array".into()))
+    }
+}
+
+/// Decodes a JSON-encoded list of hexadecimal strings into a `Vec<BigInt>`.
+///
+/// This function parses a JSON array where each element is a string representing a hexadecimal
+/// value. It converts each hex string into a `BigInt` using big-endian byte interpretation, and
+/// aggregates them into a `Vec<BigInt>`.
+///
+/// # Arguments
+///
+/// * `input` - A byte slice (`&[u8]`) containing JSON-encoded data. The JSON must be a valid array
+///   of hex strings.
+///
+/// # Returns
+///
+/// * `Ok(Vec<BigInt>)` - On success, returns a vector of `BigInt` values.
+/// * `Err(SimulationError)` - Returns an error if:
+///     - The input is not valid JSON.
+///     - The JSON is not an array.
+///     - Any array element is not a string.
+///     - Any string is not a valid hexadecimal string.
+///
+/// # Example
+/// ```
+/// use json_deserialize_be_bigint_list;
+/// use num_bigint::BigInt;
+/// let json_input = br#"["0x1234", "0xdeadbeef"]"#;
+/// match json_deserialize_bigint_list(json_input) {
+///     Ok(result) => println!("Decoded BigInts: {:?}", result),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, SimulationError> {
+    let json_value: Value = serde_json::from_slice(input)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+
+    if let Value::Array(hex_strings) = json_value {
+        let mut result = Vec::new();
+
+        for val in hex_strings {
+            if let Value::String(hexstring) = val {
+                let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
+                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                })?;
+                let bigint = BigInt::from_signed_bytes_be(&bytes);
+                result.push(bigint);
+            } else {
+                return Err(SimulationError::FatalError("Array contains a non-string value".into()));
+            }
+        }
+
+        Ok(result)
+    } else {
+        Err(SimulationError::FatalError("Input is not a JSON array".into()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use crate::utils::hexstring_to_vec;
     use dotenv::dotenv;
+    use hex::decode;
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
 
@@ -536,7 +682,7 @@ mod tests {
 
         let bytecode: Bytecode = result.expect("Failed to retrieve ERC20 ABI result");
 
-        let expected_bytes = revm::precompile::Bytes::from(ethers::utils::hex::decode("0x608060405234801561000f575f80fd5b50600436106100a6575f3560e01c8063395093511161006e578063395093511461011f57806370a082311461013257806395d89b411461015a578063a457c2d714610162578063a9059cbb14610175578063dd62ed3e14610188575f80fd5b806306fdde03146100aa578063095ea7b3146100c857806318160ddd146100eb57806323b872dd146100fd578063313ce56714610110575b5f80fd5b6100b261019b565b6040516100bf91906105b9565b60405180910390f35b6100db6100d636600461061f565b61022b565b60405190151581526020016100bf565b6002545b6040519081526020016100bf565b6100db61010b366004610647565b610244565b604051601281526020016100bf565b6100db61012d36600461061f565b610267565b6100ef610140366004610680565b6001600160a01b03165f9081526020819052604090205490565b6100b2610288565b6100db61017036600461061f565b610297565b6100db61018336600461061f565b6102f2565b6100ef6101963660046106a0565b6102ff565b6060600380546101aa906106d1565b80601f01602080910402602001604051908101604052809291908181526020018280546101d6906106d1565b80156102215780601f106101f857610100808354040283529160200191610221565b820191905f5260205f20905b81548152906001019060200180831161020457829003601f168201915b5050505050905090565b5f33610238818585610329565b60019150505b92915050565b5f336102518582856103dc565b61025c85858561043e565b506001949350505050565b5f3361023881858561027983836102ff565b6102839190610709565b610329565b6060600480546101aa906106d1565b5f33816102a482866102ff565b9050838110156102e557604051632983c0c360e21b81526001600160a01b038616600482015260248101829052604481018590526064015b60405180910390fd5b61025c8286868403610329565b5f3361023881858561043e565b6001600160a01b039182165f90815260016020908152604080832093909416825291909152205490565b6001600160a01b0383166103525760405163e602df0560e01b81525f60048201526024016102dc565b6001600160a01b03821661037b57604051634a1406b160e11b81525f60048201526024016102dc565b6001600160a01b038381165f8181526001602090815260408083209487168084529482529182902085905590518481527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a3505050565b5f6103e784846102ff565b90505f198114610438578181101561042b57604051637dc7a0d960e11b81526001600160a01b038416600482015260248101829052604481018390526064016102dc565b6104388484848403610329565b50505050565b6001600160a01b03831661046757604051634b637e8f60e11b81525f60048201526024016102dc565b6001600160a01b0382166104905760405163ec442f0560e01b81525f60048201526024016102dc565b61049b8383836104a0565b505050565b6001600160a01b0383166104ca578060025f8282546104bf9190610709565b9091555061053a9050565b6001600160a01b0383165f908152602081905260409020548181101561051c5760405163391434e360e21b81526001600160a01b038516600482015260248101829052604481018390526064016102dc565b6001600160a01b0384165f9081526020819052604090209082900390555b6001600160a01b03821661055657600280548290039055610574565b6001600160a01b0382165f9081526020819052604090208054820190555b816001600160a01b0316836001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516103cf91815260200190565b5f6020808352835180828501525f5b818110156105e4578581018301518582016040015282016105c8565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b038116811461061a575f80fd5b919050565b5f8060408385031215610630575f80fd5b61063983610604565b946020939093013593505050565b5f805f60608486031215610659575f80fd5b61066284610604565b925061067060208501610604565b9150604084013590509250925092565b5f60208284031215610690575f80fd5b61069982610604565b9392505050565b5f80604083850312156106b1575f80fd5b6106ba83610604565b91506106c860208401610604565b90509250929050565b600181811c908216806106e557607f821691505b60208210810361070357634e487b7160e01b5f52602260045260245ffd5b50919050565b8082018082111561023e57634e487b7160e01b5f52601160045260245ffdfea2646970667358221220dfc123d5852c9246ea16b645b377b4436e2f778438195cc6d6c435e8c73a20e764736f6c634300081403000000000000000000000000000000000000000000000000000000000000000000").unwrap());
+        let expected_bytes = revm::precompile::Bytes::from(decode("608060405234801561000f575f80fd5b50600436106100a6575f3560e01c8063395093511161006e578063395093511461011f57806370a082311461013257806395d89b411461015a578063a457c2d714610162578063a9059cbb14610175578063dd62ed3e14610188575f80fd5b806306fdde03146100aa578063095ea7b3146100c857806318160ddd146100eb57806323b872dd146100fd578063313ce56714610110575b5f80fd5b6100b261019b565b6040516100bf91906105b9565b60405180910390f35b6100db6100d636600461061f565b61022b565b60405190151581526020016100bf565b6002545b6040519081526020016100bf565b6100db61010b366004610647565b610244565b604051601281526020016100bf565b6100db61012d36600461061f565b610267565b6100ef610140366004610680565b6001600160a01b03165f9081526020819052604090205490565b6100b2610288565b6100db61017036600461061f565b610297565b6100db61018336600461061f565b6102f2565b6100ef6101963660046106a0565b6102ff565b6060600380546101aa906106d1565b80601f01602080910402602001604051908101604052809291908181526020018280546101d6906106d1565b80156102215780601f106101f857610100808354040283529160200191610221565b820191905f5260205f20905b81548152906001019060200180831161020457829003601f168201915b5050505050905090565b5f33610238818585610329565b60019150505b92915050565b5f336102518582856103dc565b61025c85858561043e565b506001949350505050565b5f3361023881858561027983836102ff565b6102839190610709565b610329565b6060600480546101aa906106d1565b5f33816102a482866102ff565b9050838110156102e557604051632983c0c360e21b81526001600160a01b038616600482015260248101829052604481018590526064015b60405180910390fd5b61025c8286868403610329565b5f3361023881858561043e565b6001600160a01b039182165f90815260016020908152604080832093909416825291909152205490565b6001600160a01b0383166103525760405163e602df0560e01b81525f60048201526024016102dc565b6001600160a01b03821661037b57604051634a1406b160e11b81525f60048201526024016102dc565b6001600160a01b038381165f8181526001602090815260408083209487168084529482529182902085905590518481527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a3505050565b5f6103e784846102ff565b90505f198114610438578181101561042b57604051637dc7a0d960e11b81526001600160a01b038416600482015260248101829052604481018390526064016102dc565b6104388484848403610329565b50505050565b6001600160a01b03831661046757604051634b637e8f60e11b81525f60048201526024016102dc565b6001600160a01b0382166104905760405163ec442f0560e01b81525f60048201526024016102dc565b61049b8383836104a0565b505050565b6001600160a01b0383166104ca578060025f8282546104bf9190610709565b9091555061053a9050565b6001600160a01b0383165f908152602081905260409020548181101561051c5760405163391434e360e21b81526001600160a01b038516600482015260248101829052604481018390526064016102dc565b6001600160a01b0384165f9081526020819052604090209082900390555b6001600160a01b03821661055657600280548290039055610574565b6001600160a01b0382165f9081526020819052604090208054820190555b816001600160a01b0316836001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516103cf91815260200190565b5f6020808352835180828501525f5b818110156105e4578581018301518582016040015282016105c8565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b038116811461061a575f80fd5b919050565b5f8060408385031215610630575f80fd5b61063983610604565b946020939093013593505050565b5f805f60608486031215610659575f80fd5b61066284610604565b925061067060208501610604565b9150604084013590509250925092565b5f60208284031215610690575f80fd5b61069982610604565b9392505050565b5f80604083850312156106b1575f80fd5b6106ba83610604565b91506106c860208401610604565b90509250929050565b600181811c908216806106e557607f821691505b60208210810361070357634e487b7160e01b5f52602260045260245ffd5b50919050565b8082018082111561023e57634e487b7160e01b5f52601160045260245ffdfea2646970667358221220dfc123d5852c9246ea16b645b377b4436e2f778438195cc6d6c435e8c73a20e764736f6c634300081403000000000000000000000000000000000000000000000000000000000000000000").unwrap());
         let expected_bytecode = Bytecode::new_raw(expected_bytes);
         assert_eq!(bytecode, expected_bytecode);
     }
@@ -567,5 +713,36 @@ mod tests {
         } else {
             panic!("Expected EncodingError");
         }
+    }
+
+    #[test]
+    fn test_json_deserialize_address_list() {
+        let json_input = r#"["0x1234","0xabcd"]"#.as_bytes();
+        let result = json_deserialize_address_list(json_input).unwrap();
+        assert_eq!(result, vec![vec![0x12, 0x34], vec![0xab, 0xcd]]);
+    }
+
+    #[test]
+    fn test_json_deserialize_bigint_list() {
+        let json_input = r#"["0x0b1a2bc2ec500000","0x02c68af0bb140000"]"#.as_bytes();
+        let result = json_deserialize_be_bigint_list(json_input).unwrap();
+        assert_eq!(
+            result,
+            vec![BigInt::from(800000000000000000u64), BigInt::from(200000000000000000u64)]
+        );
+    }
+
+    #[test]
+    fn test_invalid_deserialize_address_list() {
+        let json_input = r#"["invalid_hex"]"#.as_bytes();
+        let result = json_deserialize_address_list(json_input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_deserialize_bigint_list() {
+        let json_input = r#"["invalid_hex"]"#.as_bytes();
+        let result = json_deserialize_be_bigint_list(json_input);
+        assert!(result.is_err());
     }
 }

@@ -1,4 +1,4 @@
-use ethers::providers::{Http, Provider};
+use alloy::{providers::RootProvider, transports::BoxTransport};
 use num_bigint::BigUint;
 use revm::primitives::{Address, U256 as rU256};
 
@@ -24,7 +24,9 @@ enum DatabaseType {
 /// Instead we use an enum to store the all possible simulation engines.
 /// and we keep them invisible to the Python user.
 enum SimulationEngineInner {
-    SimulationDB(simulation::SimulationEngine<simulation_db::SimulationDB<Provider<Http>>>),
+    SimulationDB(
+        simulation::SimulationEngine<simulation_db::SimulationDB<RootProvider<BoxTransport>>>,
+    ),
     TychoDB(simulation::SimulationEngine<tycho_db::PreCachedDB>),
 }
 
