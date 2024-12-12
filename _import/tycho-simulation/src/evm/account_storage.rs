@@ -69,8 +69,6 @@ impl AccountStorage {
                 if mocked { "mocked" } else { "non-mocked" },
                 address
             );
-        } else {
-            warn!("Tried to init account that was already initialized");
         }
     }
 
