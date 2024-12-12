@@ -192,30 +192,21 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
     ) -> Result<AccountInfo, <SimulationDB<P> as DatabaseRef>::Error> {
         debug!("Querying account info of {:x?} at block {:?}", address, self.block);
 
-        let fut = async {
-            if let Some(ref block) = self.block {
-                tokio::join!(
-                    self.client
-                        .get_balance(address)
-                        .number(block.number),
-                    self.client
-                        .get_transaction_count(address)
-                        .number(block.number),
-                    self.client
-                        .get_code_at(address)
-                        .number(block.number),
-                )
-            } else {
-                tokio::join!(
-                    self.client.get_balance(address),
-                    self.client
-                        .get_transaction_count(address),
-                    self.client.get_code_at(address),
-                )
-            }
-        };
+        let (balance, nonce, code) = self.block_on(async {
+            let mut balance_request = self.client.get_balance(address);
+            let mut nonce_request = self
+                .client
+                .get_transaction_count(address);
+            let mut code_request = self.client.get_code_at(address);
 
-        let (balance, nonce, code) = self.block_on(fut);
+            if let Some(block) = &self.block {
+                balance_request = balance_request.number(block.number);
+                nonce_request = nonce_request.number(block.number);
+                code_request = code_request.number(block.number);
+            }
+
+            tokio::join!(balance_request, nonce_request, code_request,)
+        });
         let code = to_analysed(Bytecode::new_raw(revm::primitives::Bytes::copy_from_slice(&code?)));
 
         Ok(AccountInfo::new(balance?, nonce?, code.hash_slow(), code))
@@ -237,21 +228,15 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
         address: Address,
         index: U256,
     ) -> Result<StorageValue, <SimulationDB<P> as DatabaseRef>::Error> {
-        let fut = async {
-            if let Some(ref block) = self.block {
-                self.client
-                    .get_storage_at(address, index)
-                    .number(block.number)
-                    .await
-                    .unwrap()
-            } else {
-                self.client
-                    .get_storage_at(address, index)
-                    .await
-                    .unwrap()
+        let storage = self.block_on(async {
+            let mut request = self
+                .client
+                .get_storage_at(address, index);
+            if let Some(block) = &self.block {
+                request = request.number(block.number);
             }
-        };
-        let storage = self.block_on(fut);
+            request.await.unwrap()
+        });
 
         Ok(storage)
     }
@@ -314,9 +299,9 @@ where
     }
 }
 
-impl<P: Provider + Debug> DatabaseRef for SimulationDB<P>
+impl<P: Provider> DatabaseRef for SimulationDB<P>
 where
-    P: Provider + Send + Sync + 'static,
+    P: Provider + Debug + Send + Sync + 'static,
 {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -634,13 +619,14 @@ mod tests {
             .collect();
 
         let address1 = Address::from_str("0000000000000000000000000000000000000001").unwrap();
-        db.init_account(address1, AccountInfo::default(), Some(original_storage.clone()), false);
         let address2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
-        db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
+        let address3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
 
         // override slot 1 of address 2
         // and slot 1 of address 3 which doesn't exist in the original DB
-        let address3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
+        db.init_account(address1, AccountInfo::default(), Some(original_storage.clone()), false);
+        db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
+
         let overridden_value1 = U256::from_limbs_slice(&[101]);
         let mut overrides: HashMap<
             Address,

@@ -310,10 +310,8 @@ mod tests {
     }
 
     fn new_state() -> SimulationDB<RootProvider<BoxTransport>> {
-        let eth_rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
-            dotenv().expect("Missing .env file");
-            env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
-        });
+        dotenv().ok();
+        let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
@@ -324,8 +322,7 @@ mod tests {
                 .await
                 .unwrap()
         });
-        let client = Arc::new(client);
-        SimulationDB::new(client, Some(Arc::new(runtime)), None)
+        SimulationDB::new(Arc::new(client), Some(Arc::new(runtime)), None)
     }
 
     #[test]
