@@ -40,7 +40,6 @@ pub struct ERC20OverwriteFactory {
     overwrites: Overwrites,
     balance_slot: SlotId,
     allowance_slot: SlotId,
-    total_supply_slot: SlotId,
     compiler: ContractCompiler,
 }
 
@@ -55,7 +54,6 @@ impl ERC20OverwriteFactory {
             overwrites: HashMap::new(),
             balance_slot: token_slots.balance_map,
             allowance_slot: token_slots.allowance_map,
-            total_supply_slot: SlotId::from(2),
             compiler,
         }
     }
@@ -73,11 +71,11 @@ impl ERC20OverwriteFactory {
             .insert(storage_index, allowance);
     }
 
-    // TODO: remove skip when we check if this is needed
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn set_total_supply(&mut self, supply: U256) {
+        let total_supply_slot = SlotId::from(2);
         self.overwrites
-            .insert(self.total_supply_slot, supply);
+            .insert(total_supply_slot, supply);
     }
 
     pub fn get_overwrites(&self) -> HashMap<Address, Overwrites> {
@@ -288,7 +286,8 @@ mod tests {
         factory.set_total_supply(supply);
 
         assert_eq!(factory.overwrites.len(), 1);
-        assert_eq!(factory.overwrites[&factory.total_supply_slot], supply);
+        let total_supply_slot = SlotId::from(2);
+        assert_eq!(factory.overwrites[&total_supply_slot], supply);
     }
 
     #[test]
@@ -302,7 +301,8 @@ mod tests {
         assert_eq!(overwrites.len(), 1);
         assert!(overwrites.contains_key(&factory.token_address));
         assert_eq!(overwrites[&factory.token_address].len(), 1);
-        assert_eq!(overwrites[&factory.token_address][&factory.total_supply_slot], supply);
+        let total_supply_slot = SlotId::from(2);
+        assert_eq!(overwrites[&factory.token_address][&total_supply_slot], supply);
     }
 
     #[test]

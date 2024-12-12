@@ -759,7 +759,7 @@ mod tests {
             .unwrap(),
             U256::from_str("25").unwrap(),
         );
-        // TODO: mock a balance (and approval)
+        // MOCK A BALANCE AND APPROVAL
         // let mut permanent_storage = HashMap::new();
         // permanent_storage.insert(s)
         state.init_account(usdt_address, contract_acc_info, Some(storage), true);

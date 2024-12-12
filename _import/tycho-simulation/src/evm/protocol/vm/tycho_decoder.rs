@@ -252,7 +252,6 @@ mod tests {
             component: vm_component(),
         };
 
-        // TODO: fix test
         let result = EVMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
 
         assert!(result.is_ok());
