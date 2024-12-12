@@ -47,14 +47,24 @@ use super::{
 /// # Example
 /// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
-/// use crate::evm::simulation_db::BlockHeader;
-/// use crate::protocol::errors::SimulationError;
+/// use alloy_primitives::Address;
+/// use alloy_primitives::U256;
+/// use std::collections::HashMap;
+/// use std::path::PathBuf;
+/// use tycho_core::Bytes;
+/// use tycho_simulation::evm::engine_db::simulation_db::BlockHeader;
+/// use tycho_simulation::evm::engine_db::SHARED_TYCHO_DB;
+/// use tycho_simulation::protocol::errors::SimulationError;
+/// use tycho_simulation::evm::protocol::vm::state_builder::EVMPoolStateBuilder;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), SimulationError> {
-///     // Required parameters
-///     let pool_id = "0xabc123".to_string();
-///     let tokens = vec![Address::zero()];
+///     let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
+///
+///     let tokens = vec![
+///         Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"),
+///         Bytes::from("0xba100000625a3754423978a60c9317c58a424e3d"),
+///     ];
 ///     let block = BlockHeader {
 ///         number: 1,
 ///         hash: Default::default(),
@@ -63,14 +73,16 @@ use super::{
 ///
 ///     // Optional: Add token balances
 ///     let mut balances = HashMap::new();
-///     balances.insert(Address::zero(), U256::from(1000));
+///     balances.insert(Address::random(), U256::from(1000));
 ///
 ///     // Build the EVMPoolState
 ///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
-///         .build()
+///         .balance_owner(Address::random())
+///         .adapter_contract_path(PathBuf::from(
+///                 "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
+///          ))
+///         .build(SHARED_TYCHO_DB.clone())
 ///         .await?;
-///
-///     println!("Successfully created EVMPoolState: {:?}", pool_state);
 ///     Ok(())
 /// }
 /// ```

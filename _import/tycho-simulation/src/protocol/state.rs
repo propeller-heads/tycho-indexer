@@ -23,7 +23,7 @@
 //! use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 //! use tycho_simulation::protocol::state::{ProtocolSim};
 //! use tycho_simulation::models::Token;
-//! use tycho_simulation::u256_num::u256_to_biguint;
+//! use tycho_simulation::evm::protocol::u256_num::u256_to_biguint;
 //!
 //! // Initialize the UniswapV2 state with token reserves
 //! let state: Box<dyn ProtocolSim> = Box::new(UniswapV2State::new(

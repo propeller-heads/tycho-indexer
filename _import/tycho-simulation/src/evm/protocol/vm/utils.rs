@@ -157,9 +157,11 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// a storage slot where balance of a given account is stored:
 ///
 /// ```
-/// use tycho_simulation::protocol::vm::utils::get_storage_slot_index_at_key;
+/// use alloy_primitives::{U256, Address};
+/// use tycho_simulation::evm::ContractCompiler;
+/// use tycho_simulation::evm::protocol::vm::utils::get_storage_slot_index_at_key;
 /// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address, U256::from(0));
+/// get_storage_slot_index_at_key(address, U256::from(0), ContractCompiler::Solidity);
 /// ```
 ///
 /// For nested mappings, we need to apply the function twice. An example of this is
@@ -169,16 +171,18 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// where an allowance of `address_spender` to spend `address_owner`'s money is stored:
 ///
 /// ```
-/// use tycho_simulation::protocol::vm::utils::get_storage_slot_index_at_key;
+/// use alloy_primitives::{U256, Address};
+/// use tycho_simulation::evm::ContractCompiler;
+/// use tycho_simulation::evm::protocol::vm::utils::get_storage_slot_index_at_key;
 /// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
 /// let address_owner: Address = "0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05".parse().expect("Invalid address");
-/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, U256::from(1)));
+/// get_storage_slot_index_at_key(address_spender, get_storage_slot_index_at_key(address_owner, U256::from(1), ContractCompiler::Solidity), ContractCompiler::Solidity);
 /// ```
 ///
 /// # See Also
 ///
 /// [Solidity Storage Layout documentation](https://docs.soliditylang.org/en/v0.8.13/internals/layout_in_storage.html#mappings-and-dynamic-arrays)
-pub(crate) fn get_storage_slot_index_at_key(
+pub fn get_storage_slot_index_at_key(
     key: Address,
     mapping_slot: SlotId,
     compiler: ContractCompiler,
@@ -336,55 +340,13 @@ pub(crate) fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
 ///
 /// # Example
 /// ```
-/// use string_to_bytes32;
-///
-/// This function returns a `SimulationError::EncodingError` if:
-/// - The string contains invalid hexadecimal characters.
-/// - The string is empty or malformed.
-pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
-    let hexstring_no_prefix =
-        if let Some(stripped) = hexstring.strip_prefix("0x") { stripped } else { hexstring };
-    let bytes = hex::decode(hexstring_no_prefix)
-        .map_err(|_| SimulationError::FatalError(format!("Invalid hex string: {}", hexstring)))?;
-    Ok(bytes)
-}
-
-/// Converts a hexadecimal string into a fixed-size 32-byte array.
-///
-/// This function takes a string slice (e.g., a pool ID) that may or may not have
-/// a `0x` prefix. It decodes the hex string into bytes, ensuring it does not exceed
-/// 32 bytes in length. If the string is valid and fits within 32 bytes, the bytes
-/// are copied into a `[u8; 32]` array, with right zero-padding for unused bytes.
-///
-/// # Arguments
-///
-/// * `pool_id` - A string slice representing a hexadecimal pool ID. It can optionally start with
-///   the `0x` prefix.
-///
-/// # Returns
-///
-/// * `Ok([u8; 32])` - On success, returns a 32-byte array with the decoded bytes. If the input is
-///   shorter than 32 bytes, the rest of the array is right padded with zeros.
-/// * `Err(SimulationError)` - Returns an error if:
-///     - The input string is not a valid hexadecimal string.
-///     - The decoded bytes exceed 32 bytes in length.
-///
-/// # Example
-/// ```
-/// use string_to_bytes32;
+/// use tycho_simulation::evm::protocol::vm::utils::string_to_bytes32;
 ///
 /// let pool_id = "0x1234abcd";
 /// match string_to_bytes32(pool_id) {
 ///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
 ///     Err(e) => eprintln!("Error: {}", e),
 /// }
-/// ```
-/// let pool_id = "0x1234abcd";
-/// match string_to_bytes32(pool_id) {
-///     Ok(bytes32) => println!("Bytes32: {:?}", bytes32),
-///     Err(e) => eprintln!("Error: {}", e),
-/// }
-/// ```
 pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
     let pool_id_no_prefix =
         if let Some(stripped) = pool_id.strip_prefix("0x") { stripped } else { pool_id };
@@ -423,7 +385,7 @@ pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
 ///
 /// # Example
 /// ```
-/// use json_deserialize_address_list;
+/// use tycho_simulation::evm::protocol::vm::utils::json_deserialize_address_list;
 ///
 /// let json_input = br#"["0x1234", "0xc0ffee"]"#;
 /// match json_deserialize_address_list(json_input) {
@@ -477,10 +439,11 @@ pub fn json_deserialize_address_list(input: &[u8]) -> Result<Vec<Vec<u8>>, Simul
 ///
 /// # Example
 /// ```
-/// use json_deserialize_be_bigint_list;
+/// use tycho_simulation::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 /// use num_bigint::BigInt;
+/// use tycho_simulation::evm;
 /// let json_input = br#"["0x1234", "0xdeadbeef"]"#;
-/// match json_deserialize_bigint_list(json_input) {
+/// match json_deserialize_be_bigint_list(json_input) {
 ///     Ok(result) => println!("Decoded BigInts: {:?}", result),
 ///     Err(e) => eprintln!("Error: {}", e),
 /// }
