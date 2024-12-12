@@ -1,9 +1,11 @@
-use alloy_primitives::{Address, B256, U256};
 use std::{
     collections::HashMap,
     path::PathBuf,
+    str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use alloy_primitives::{Address, B256, U256};
 
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
@@ -132,13 +134,21 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         let adapter_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("src/evm/protocol/vm/assets")
             .join(to_adapter_file_name(protocol_name));
+        let adapter_contract_address =
+            Address::from_str(&format!("{:0>40}", hex::encode(protocol_name)))
+                .expect("Can't convert protocol name to address");
 
-        let mut pool_state_builder =
-            EVMPoolStateBuilder::new(id.clone(), tokens.clone(), balances, block)
-                .adapter_contract_path(adapter_file_path)
-                .involved_contracts(involved_contracts)
-                .stateless_contracts(stateless_contracts)
-                .manual_updates(manual_updates);
+        let mut pool_state_builder = EVMPoolStateBuilder::new(
+            id.clone(),
+            tokens.clone(),
+            balances,
+            block,
+            adapter_contract_address,
+        )
+        .adapter_contract_path(adapter_file_path)
+        .involved_contracts(involved_contracts)
+        .stateless_contracts(stateless_contracts)
+        .manual_updates(manual_updates);
 
         if let Some(balance_owner) = balance_owner {
             pool_state_builder = pool_state_builder.balance_owner(balance_owner)

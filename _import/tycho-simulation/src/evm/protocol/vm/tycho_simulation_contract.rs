@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
     utils::{coerce_error, get_contract_bytecode},
 };
 
@@ -53,7 +53,7 @@ where
     <D as DatabaseRef>::Error: std::fmt::Debug,
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
-    address: Address,
+    pub(crate) address: Address,
     pub(crate) engine: SimulationEngine<D>, /* TODO: Should we expose it directly or make some
                                              * getter functions? */
 }
@@ -77,7 +77,7 @@ where
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         engine.state.init_account(
-            *ADAPTER_ADDRESS,
+            address,
             AccountInfo {
                 balance: *MAX_BALANCE,
                 nonce: 0,
