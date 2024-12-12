@@ -1,3 +1,10 @@
+## [0.59.1](https://github.com/propeller-heads/tycho-simulation/compare/0.59.0...0.59.1) (2024-12-12)
+
+
+### Bug Fixes
+
+* Don't hardcode ADAPTER_ADDRESS, make it depend on the protocol ([58f6294](https://github.com/propeller-heads/tycho-simulation/commit/58f62940f9e70cb2223de2f778635b860b404ffe))
+
 ## [0.59.0](https://github.com/propeller-heads/tycho-simulation/compare/0.58.0...0.59.0) (2024-12-12)
 
 
