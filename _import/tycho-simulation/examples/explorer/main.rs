@@ -3,7 +3,6 @@ pub mod utils;
 
 extern crate tycho_simulation;
 
-use crate::utils::load_all_tokens;
 use clap::Parser;
 use futures::{future::select_all, StreamExt};
 use std::env;
@@ -22,6 +21,7 @@ use tycho_simulation::{
         stream::ProtocolStreamBuilder,
     },
     protocol::models::BlockUpdate,
+    utils::load_all_tokens,
 };
 
 #[derive(Parser)]
