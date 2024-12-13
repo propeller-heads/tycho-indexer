@@ -1,3 +1,10 @@
+## [0.60.2](https://github.com/propeller-heads/tycho-simulation/compare/0.60.1...0.60.2) (2024-12-13)
+
+
+### Bug Fixes
+
+* Add tokens which are not already included in state guard ([86bbb3e](https://github.com/propeller-heads/tycho-simulation/commit/86bbb3e1acde9f6a095789d54954599916acd201))
+
 ## [0.60.1](https://github.com/propeller-heads/tycho-simulation/compare/0.60.0...0.60.1) (2024-12-13)
 
 
