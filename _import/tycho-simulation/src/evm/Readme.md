@@ -3,7 +3,7 @@
 Simulate any on-chain transaction, overriding the world state if needed.
 
 The `SimulationEngine` leverages `revm` to simulate on-chain transactions, returning both transaction output and state
-changes caused by the transaction. I also supports overriding account balances and storage slots.
+changes caused by the transaction. It also supports overriding account balances and storage slots.
 
 To perform simulations, the engine requires access to the EVM state, provided by the `EngineDatabaseInterface` trait.
 Two
