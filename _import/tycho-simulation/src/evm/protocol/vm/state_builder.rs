@@ -29,7 +29,7 @@ use crate::{
 use tycho_core::Bytes as TychoBytes;
 
 use super::{
-    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
     erc20_token::{brute_force_slots, ERC20Slots},
     models::Capability,
     state::EVMPoolState,
@@ -76,7 +76,7 @@ use super::{
 ///     balances.insert(Address::random(), U256::from(1000));
 ///
 ///     // Build the EVMPoolState
-///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
+///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, balances, block, Address::random())
 ///         .balance_owner(Address::random())
 ///         .adapter_contract_path(PathBuf::from(
 ///                 "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
@@ -95,6 +95,7 @@ where
     tokens: Vec<TychoBytes>,
     block: BlockHeader,
     balances: HashMap<Address, U256>,
+    adapter_address: Address,
     balance_owner: Option<Address>,
     capabilities: Option<HashSet<Capability>>,
     involved_contracts: Option<HashSet<Address>>,
@@ -118,12 +119,14 @@ where
         tokens: Vec<TychoBytes>,
         balances: HashMap<Address, U256>,
         block: BlockHeader,
+        adapter_address: Address,
     ) -> Self {
         Self {
             id,
             tokens,
             balances,
             block,
+            adapter_address,
             balance_owner: None,
             capabilities: None,
             involved_contracts: None,
@@ -203,7 +206,7 @@ where
 
         if self.adapter_contract.is_none() {
             self.adapter_contract = Some(TychoSimulationContract::new_swap_adapter(
-                *ADAPTER_ADDRESS,
+                self.adapter_address,
                 self.adapter_contract_path
                     .as_ref()
                     .ok_or_else(|| {
@@ -471,9 +474,10 @@ mod tests {
             vec![TychoBytes::from_str("0000000000000000000000000000000000000000").unwrap()];
         let balances = HashMap::new();
         let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
-
+        let adapter_address =
+            Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
         let result = tokio_test::block_on(
-            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block)
+            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block, adapter_address)
                 .build(SHARED_TYCHO_DB.clone()),
         );
 
@@ -494,8 +498,10 @@ mod tests {
         let tokens = vec![token2.clone(), token3.clone()];
         let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
         let balances = HashMap::new();
-
-        let builder = EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block);
+        let adapter_address =
+            Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
+        let builder =
+            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block, adapter_address);
 
         let engine =
             tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone())).unwrap();

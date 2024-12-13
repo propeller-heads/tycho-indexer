@@ -1,3 +1,17 @@
+## [0.59.2](https://github.com/propeller-heads/tycho-simulation/compare/0.59.1...0.59.2) (2024-12-12)
+
+
+### Bug Fixes
+
+* Change tycho url to point to dev db ([b3ed2c5](https://github.com/propeller-heads/tycho-simulation/commit/b3ed2c56b041fe2c0cc0458ef9030c243211f217))
+
+## [0.59.1](https://github.com/propeller-heads/tycho-simulation/compare/0.59.0...0.59.1) (2024-12-12)
+
+
+### Bug Fixes
+
+* Don't hardcode ADAPTER_ADDRESS, make it depend on the protocol ([58f6294](https://github.com/propeller-heads/tycho-simulation/commit/58f62940f9e70cb2223de2f778635b860b404ffe))
+
 ## [0.59.0](https://github.com/propeller-heads/tycho-simulation/compare/0.58.0...0.59.0) (2024-12-12)
 
 

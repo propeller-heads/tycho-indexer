@@ -7,8 +7,4 @@ lazy_static! {
             .expect("Invalid string for external account address"),
     );
     pub static ref MAX_BALANCE: U256 = U256::MAX / U256::from(2);
-    pub static ref ADAPTER_ADDRESS: Address = Address::from_slice(
-        &hex::decode("A2C5C98A892fD6656a7F39A2f63228C0Bc846270")
-            .expect("Invalid string for adapter address"),
-    );
 }

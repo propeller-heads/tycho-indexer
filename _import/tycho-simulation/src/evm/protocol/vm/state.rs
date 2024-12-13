@@ -9,7 +9,6 @@ use alloy_primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tracing::info;
 
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
@@ -31,7 +30,7 @@ use crate::{
 };
 
 use super::{
-    constants::{ADAPTER_ADDRESS, EXTERNAL_ACCOUNT, MAX_BALANCE},
+    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
     erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
@@ -175,7 +174,6 @@ where
     /// faster price fetching than if prices are only set immediately before attempting to retrieve
     /// prices.
     pub fn set_spot_prices(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
-        info!("Setting spot prices for pool {}", self.id.clone());
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
             .iter()
@@ -304,12 +302,8 @@ where
 
         overwrites.set_balance(max_amount, Address::from_slice(&*EXTERNAL_ACCOUNT.0));
 
-        // Set allowance for ADAPTER_ADDRESS to max_amount
-        overwrites.set_allowance(
-            max_amount,
-            Address::from_slice(&*ADAPTER_ADDRESS.0),
-            Address::from_slice(&*EXTERNAL_ACCOUNT.0),
-        );
+        // Set allowance for adapter_address to max_amount
+        overwrites.set_allowance(max_amount, self.adapter_contract.address, *EXTERNAL_ACCOUNT);
 
         res.push(overwrites.get_overwrites());
 
@@ -674,8 +668,10 @@ mod tests {
             (dai_addr(), U256::from_str("178754012737301807104").unwrap()),
             (bal_addr(), U256::from_str("91082987763369885696").unwrap()),
         ]);
+        let adapter_address =
+            Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
 
-        EVMPoolStateBuilder::new(pool_id, tokens, balances, block)
+        EVMPoolStateBuilder::new(pool_id, tokens, balances, block, adapter_address)
             .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_path(PathBuf::from(
                 "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
