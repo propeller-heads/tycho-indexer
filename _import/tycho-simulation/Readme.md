@@ -15,7 +15,7 @@ protocols, but it is not necessarily limited to this.
 
 - Uniswap V2 and Forks
 - Uniswap V3
-- VM enabled protocols: Balancer v2 and Curve
+- VM enabled protocols: Balancer V2 and Curve
 
 ## Adding a new Protocol
 
