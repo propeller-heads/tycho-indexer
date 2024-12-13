@@ -1,3 +1,10 @@
+## [0.60.0](https://github.com/propeller-heads/tycho-simulation/compare/0.59.3...0.60.0) (2024-12-13)
+
+
+### Features
+
+* Provide ProtocolStreamBuilder to simplify decoding ([#53](https://github.com/propeller-heads/tycho-simulation/issues/53)) ([bc82193](https://github.com/propeller-heads/tycho-simulation/commit/bc821935685abf645050c3f06422057f8e787461))
+
 ## [0.59.3](https://github.com/propeller-heads/tycho-simulation/compare/0.59.2...0.59.3) (2024-12-13)
 
 
