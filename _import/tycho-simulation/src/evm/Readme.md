@@ -32,7 +32,7 @@ In the default setup, simulations execute as if they were performed on the curre
 
 ### Overriding an account
 
-Instead of relying on live queries for account data, you can manually configure account information using
+Instead of relying on the database data, you can manually configure account information using
 the `state.init_account()` method. This method accepts the following parameters:
 
 ```
@@ -43,14 +43,14 @@ mocked: bool,
 ```
 
 - `AccountInfo`: Contains core account details like balance, nonce, and code (for smart contract accounts).
-- `permanent_storage`: Allows setting predefined storage slots. When the simulation requires a specific storage slot,
-  the engine first checks this storage.
+- `permanent_storage`: Allows setting predefined storage slots. During simulation, the engine will prioritise the slots
+  listed here above those provided by the database.
 - `mocked`: Determines whether the account is mocked (see below).
 
 ### Simulation-time overrides
 
-You can override the chain state only for the duration of a single simulation. This is done by
-setting `SimulationParameters.overrides` to a mapping of form `HashMap<Address, HashMap<U256, U256>>`.
+You can override the chain state for the duration of a single simulation. This is done by
+setting `SimulationParameters.overrides` to a mapping of form `[Address -> [slot -> value]]`.
 
 Overrides set here take precedence over an account's permanent storage.
 
@@ -64,8 +64,8 @@ Overrides set here take precedence over an account's permanent storage.
     - No data is queried from the node.
     - Missing storage slots default to 0 if they are not set in either permanent storage or simulation-time overrides.
 
-Mocking is especially useful when overriding contract code, as the overridden code might rely on different storage slots
-than the on-chain version. Querying a node for such storage would not yield meaningful results.
+This is particularly useful if you are overriding the contract code to be different from on chain code, because the
+storage slots might be different.
 
 #### See also
 
