@@ -6,8 +6,7 @@ The `SimulationEngine` leverages `revm` to simulate on-chain transactions, retur
 changes caused by the transaction. It also supports overriding account balances and storage slots.
 
 To perform simulations, the engine requires access to the EVM state, provided by the `EngineDatabaseInterface` trait.
-Two
-implementations of this trait are available:
+Two implementations of this trait are available:
 
 `PreCachedDB`: Preloads necessary data such as contract code, storage slots, and balances. This implementation uses
 Tycho
