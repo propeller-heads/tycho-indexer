@@ -68,7 +68,6 @@ impl TychoStreamDecoder {
         guard.tokens = tokens;
     }
 
-    // Method to register a decoder
     pub fn register_decoder<T>(&mut self, exchange: &str)
     where
         T: ProtocolSim
