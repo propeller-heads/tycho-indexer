@@ -20,7 +20,7 @@ use crate::{
         engine_db::{
             create_engine, engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
         },
-        protocol::erc20::bytes_to_erc20_address,
+        protocol::utils::bytes_to_address,
         simulation::{SimulationEngine, SimulationParameters},
         ContractCompiler,
     },
@@ -259,7 +259,7 @@ where
             };
             engine
                 .state
-                .init_account(bytes_to_erc20_address(token_address)?, info, None, false);
+                .init_account(bytes_to_address(token_address)?, info, None, false);
         }
 
         engine.state.init_account(
@@ -308,7 +308,7 @@ where
 
     fn init_token_storage_slots(&mut self) -> Result<(), SimulationError> {
         for t in self.tokens.iter() {
-            let t_erc20_address = bytes_to_erc20_address(t)?;
+            let t_erc20_address = bytes_to_address(t)?;
             if self
                 .involved_contracts
                 .as_ref()
@@ -351,11 +351,7 @@ where
                                 .to_string(),
                         )
                     })?
-                    .get_capabilities(
-                        &self.id,
-                        bytes_to_erc20_address(t0)?,
-                        bytes_to_erc20_address(t1)?,
-                    )?;
+                    .get_capabilities(&self.id, bytes_to_address(t0)?, bytes_to_address(t1)?)?;
                 capabilities.push(caps);
             }
         }
@@ -463,7 +459,7 @@ mod tests {
 
     use crate::evm::{
         engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
-        protocol::erc20::bytes_to_erc20_address,
+        protocol::utils::bytes_to_address,
     };
     use alloy_primitives::B256;
     use std::str::FromStr;
@@ -510,10 +506,10 @@ mod tests {
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&bytes_to_erc20_address(&token2).unwrap()));
+            .account_present(&bytes_to_address(&token2).unwrap()));
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&bytes_to_erc20_address(&token3).unwrap()));
+            .account_present(&bytes_to_address(&token3).unwrap()));
     }
 }
