@@ -1,3 +1,10 @@
+## [0.59.3](https://github.com/propeller-heads/tycho-simulation/compare/0.59.2...0.59.3) (2024-12-13)
+
+
+### Bug Fixes
+
+* Put back block lasting overwrites ([8a6743e](https://github.com/propeller-heads/tycho-simulation/commit/8a6743e09b87c9cae10bcc0ae7e63cdc3c58b717))
+
 ## [0.59.2](https://github.com/propeller-heads/tycho-simulation/compare/0.59.1...0.59.2) (2024-12-12)
 
 
