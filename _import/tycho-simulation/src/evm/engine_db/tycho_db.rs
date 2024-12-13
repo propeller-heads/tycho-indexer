@@ -104,7 +104,6 @@ impl PreCachedDB {
                 ChangeType::Deletion => {
                     info!(%update.address, "Deleting account");
 
-                    // TODO: Implement deletion.
                     warn!(%update.address, "Deletion not implemented");
                 }
                 ChangeType::Creation => {
@@ -127,6 +126,9 @@ impl PreCachedDB {
                         true, /* Flag all accounts in TychoDB mocked to sign that we cannot
                                * call an RPC provider for an update */
                     );
+                }
+                ChangeType::Unspecified => {
+                    warn!(%update.address, "Unspecified change type");
                 }
             }
         }

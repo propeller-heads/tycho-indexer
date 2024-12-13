@@ -160,7 +160,6 @@ fn curve_pool_filter(component: &ComponentWithState) -> bool {
     true
 }
 
-// TODO: Make extractors configurable
 pub async fn process_messages(
     tycho_url: String,
     auth_key: Option<String>,

@@ -119,6 +119,8 @@ pub enum Chain {
     #[default]
     Ethereum,
     ZkSync,
+    Starknet,
+    Arbitrum,
 }
 
 impl From<tycho_core::dto::Chain> for Chain {
@@ -126,9 +128,8 @@ impl From<tycho_core::dto::Chain> for Chain {
         match value {
             tycho_core::dto::Chain::Ethereum => Chain::Ethereum,
             tycho_core::dto::Chain::ZkSync => Chain::ZkSync,
-            // TODO remove Starknet and Arbitrum from dto?
-            tycho_core::dto::Chain::Starknet => Chain::Ethereum,
-            tycho_core::dto::Chain::Arbitrum => Chain::Ethereum,
+            tycho_core::dto::Chain::Starknet => Chain::Starknet,
+            tycho_core::dto::Chain::Arbitrum => Chain::Arbitrum,
         }
     }
 }
@@ -139,6 +140,7 @@ pub enum ChangeType {
     Update,
     Deletion,
     Creation,
+    Unspecified,
 }
 
 impl From<tycho_core::dto::ChangeType> for ChangeType {
@@ -147,8 +149,7 @@ impl From<tycho_core::dto::ChangeType> for ChangeType {
             tycho_core::dto::ChangeType::Update => ChangeType::Update,
             tycho_core::dto::ChangeType::Deletion => ChangeType::Deletion,
             tycho_core::dto::ChangeType::Creation => ChangeType::Creation,
-            // TODO double check this default
-            tycho_core::dto::ChangeType::Unspecified => ChangeType::Update,
+            tycho_core::dto::ChangeType::Unspecified => ChangeType::Unspecified,
         }
     }
 }

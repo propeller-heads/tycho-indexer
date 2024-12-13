@@ -48,7 +48,7 @@ where
     pub tokens: Vec<Bytes>,
     /// The current block, will be used to set vm context
     block: BlockHeader,
-    /// The pools token balances
+    /// The pool's token balances
     balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
     /// If given, balances will be overwritten here instead of on the pool contract during
@@ -61,7 +61,7 @@ where
     /// Storage overwrites that will be applied to all simulations. They will be cleared
     /// when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
     block_lasting_overwrites: HashMap<Address, Overwrites>,
-    /// A set of all contract addresses involved in the simulation of this pool."""
+    /// A set of all contract addresses involved in the simulation of this pool.
     involved_contracts: HashSet<Address>,
     /// Allows the specification of custom storage slots for token allowances and
     /// balances. This is particularly useful for token contracts involved in protocol
@@ -73,7 +73,7 @@ where
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
     manual_updates: bool,
-    /// The adapter contract. This is used to run simulations
+    /// The adapter contract. This is used to interact with the protocol when running simulations
     adapter_contract: TychoSimulationContract<D>,
 }
 
@@ -83,6 +83,10 @@ where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
+    /// Creates a new instance of `EVMPoolState` with the given attributes, with the ability to
+    /// simulate a protocol-agnostic transaction.
+    ///
+    /// See struct definition of `EVMPoolState` for attribute explanations.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
@@ -115,6 +119,15 @@ where
     }
 
     /// Ensures the pool supports the given capability
+    ///
+    /// # Arguments
+    ///
+    /// * `capability` - The capability that we would like to check for.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), SimulationError>` - Returns `Ok(())` if the capability is supported, or a
+    ///   `SimulationError` otherwise.
     fn ensure_capability(&self, capability: Capability) -> Result<(), SimulationError> {
         if !self.capabilities.contains(&capability) {
             return Err(SimulationError::FatalError(format!(
@@ -125,6 +138,41 @@ where
         Ok(())
     }
 
+    /// Sets the spot prices for a pool for all possible pairs of the given tokens.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokens` - A vector of `Token` instances representing the tokens to calculate spot prices
+    ///   for.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), SimulationError>` - Returns `Ok(())` if the spot prices are successfully set,
+    ///   or a `SimulationError` if an error occurs during the calculation or processing.
+    ///
+    /// # Behavior
+    ///
+    /// This function performs the following steps:
+    /// 1. Ensures the pool has the required capability to perform price calculations.
+    /// 2. Iterates over all permutations of token pairs (sell token and buy token). For each pair:
+    ///    - Retrieves all possible overwrites, considering the maximum balance limit.
+    ///    - Calculates the sell amount limit, considering the overwrites.
+    ///    - Invokes the adapter contract's `price` function to retrieve the calculated price for
+    ///      the token pair, considering the sell amount limit.
+    ///    - Processes the price based on whether the `ScaledPrice` capability is present:
+    ///       - If `ScaledPrice` is present, uses the price directly from the adapter contract.
+    ///       - If `ScaledPrice` is absent, scales the price by adjusting for token decimals.
+    ///    - Stores the calculated price in the `spot_prices` map with the token addresses as the
+    ///      key.
+    /// 3. Returns `Ok(())` upon successful completion or a `SimulationError` upon failure.
+    ///
+    /// # Usage
+    ///
+    /// Spot prices need to be set before attempting to retrieve prices using `spot_price`.
+    ///
+    /// Tip: Setting spot prices on the pool every time the pool actually changes will result in
+    /// faster price fetching than if prices are only set immediately before attempting to retrieve
+    /// prices.
     pub fn set_spot_prices(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
         self.ensure_capability(Capability::PriceFunction)?;
         for [sell_token, buy_token] in tokens
@@ -172,9 +220,22 @@ where
         Ok(())
     }
 
-    /// Retrieves the sell amount limit for a given pair of tokens, where the first token is treated
-    /// as the sell token and the second as the buy token. The order of tokens in the input vector
-    /// is significant and determines the direction of the price query.
+    /// Retrieves the sell amount limit for a given pair of tokens and the given overwrites.
+    ///
+    /// Attempting to swap an amount of the sell token that exceeds the sell amount limit will
+    /// result in a revert.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokens` - A vec of tokens, where the first token is the sell token and the second is the
+    ///   buy token. The order of tokens in the input vector is significant and determines the
+    ///   direction of the price query.
+    /// * `overwrites` - A hashmap of overwrites to apply to the simulation.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), SimulationError>` - A `Result` containing the sell amount limit on success or
+    ///   a `SimulationError` on failure.
     fn get_sell_amount_limit(
         &self,
         tokens: Vec<Address>,

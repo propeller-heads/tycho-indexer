@@ -54,8 +54,7 @@ where
     <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
 {
     pub(crate) address: Address,
-    pub(crate) engine: SimulationEngine<D>, /* TODO: Should we expose it directly or make some
-                                             * getter functions? */
+    pub(crate) engine: SimulationEngine<D>,
 }
 
 impl<D: EngineDatabaseInterface + Clone + Debug> TychoSimulationContract<D>

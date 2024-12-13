@@ -29,7 +29,7 @@ To add a new protocol, you will need to complete the following high-level steps:
 
 #### Native protocol:
 
-1. Create a protocol state struct that implements the `ProtocolSim` struct.
+1. Create a protocol state struct that implements the `ProtocolSim` trait.
 2. Create a tycho decoder for the protocol state: i.e. implement `TryFrom` for `ComponentWithState` to your new 
 protocol state.
 
