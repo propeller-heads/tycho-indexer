@@ -118,7 +118,8 @@ impl TychoStreamDecoder {
                     .iter()
                     .filter_map(|(addr, t)| {
                         if t.quality < self.min_token_quality ||
-                            !state_guard.tokens.contains_key(addr)
+                            // Do not add the token if it's already included in the state_guard
+                            state_guard.tokens.contains_key(addr)
                         {
                             return None;
                         }
