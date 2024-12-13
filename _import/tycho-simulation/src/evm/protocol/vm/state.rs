@@ -653,7 +653,6 @@ mod tests {
         db.update(accounts, Some(block));
 
         let tokens = vec![dai().address, bal().address];
-        println!("{:?}", tokens);
         let block = BlockHeader {
             number: 18485417,
             hash: B256::from_str(
