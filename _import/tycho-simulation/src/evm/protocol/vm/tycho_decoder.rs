@@ -6,7 +6,7 @@ use std::{
 };
 
 use alloy_primitives::{Address, B256, U256};
-
+use tracing::info;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
@@ -47,15 +47,10 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         block: Header,
-        all_tokens: HashMap<Bytes, Token>,
+        all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
-        let tokens: Vec<Bytes> = snapshot
-            .component
-            .tokens
-            .clone()
-            .into_iter()
-            .collect();
+        let tokens = snapshot.component.tokens.clone();
 
         let block = BlockHeader::from(block);
         let balances = snapshot
@@ -159,13 +154,9 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .await
             .map_err(InvalidSnapshotError::VMError)?;
 
-        let erc20_tokens = tokens
-            .iter()
-            .filter_map(|token_address| all_tokens.get(token_address))
-            .cloned()
-            .collect();
+        pool_state.set_spot_prices(all_tokens)?;
+        info!("Finished creating balancer pool with id {}", &id);
 
-        pool_state.set_spot_prices(erc20_tokens)?;
         Ok(pool_state)
     }
 }
@@ -190,9 +181,18 @@ fn to_adapter_file_name(protocol_system: &str) -> String {
 mod tests {
     use super::*;
 
+    use crate::{
+        evm::{
+            engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface},
+            tycho_models::AccountUpdate,
+        },
+        protocol::models::TryFromWithBlock,
+    };
     use chrono::DateTime;
-    use std::{collections::HashSet, str::FromStr};
-
+    use num_bigint::ToBigUint;
+    use revm::primitives::{AccountInfo, Address, Bytecode, KECCAK_EMPTY};
+    use serde_json::Value;
+    use std::{collections::HashSet, fs, path::Path, str::FromStr};
     use tycho_core::{
         dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
         Bytes,
@@ -241,6 +241,18 @@ mod tests {
         }
     }
 
+    fn load_balancer_account_data() -> Vec<AccountUpdate> {
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/balancer_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+
+        let accounts: Vec<AccountUpdate> = serde_json::from_value(data["accounts"].clone())
+            .expect("Expected accounts to match AccountUpdate structure");
+        accounts
+    }
+
     #[tokio::test]
     async fn test_try_from_with_block() {
         let attributes: HashMap<String, Bytes> = vec![
@@ -252,20 +264,70 @@ mod tests {
         ]
         .into_iter()
         .collect();
+        let tokens = [
+            Token::new(
+                "0x6b175474e89094c44da98b954eedeac495271d0f",
+                18,
+                "DAI",
+                10_000.to_biguint().unwrap(),
+            ),
+            Token::new(
+                "0xba100000625a3754423978a60c9317c58a424e3d",
+                18,
+                "BAL",
+                10_000.to_biguint().unwrap(),
+            ),
+        ]
+        .into_iter()
+        .map(|t| (t.address.clone(), t))
+        .collect::<HashMap<_, _>>();
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011"
                     .to_owned(),
                 attributes,
-                balances: HashMap::new(),
+                balances: [
+                    (
+                        Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"),
+                        Bytes::from("0x01"),
+                    ),
+                    (
+                        Bytes::from("0xba100000625a3754423978a60c9317c58a424e3d"),
+                        Bytes::from("0x01"),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
             },
             component: vm_component(),
         };
+        // Initialize engine with balancer storage
+        let block = header();
+        let accounts = load_balancer_account_data();
+        let db = SHARED_TYCHO_DB.clone();
+        let engine = create_engine(db.clone(), false).unwrap();
+        for account in accounts.clone() {
+            engine.state.init_account(
+                account.address,
+                AccountInfo {
+                    balance: account.balance.unwrap_or_default(),
+                    nonce: 0u64,
+                    code_hash: KECCAK_EMPTY,
+                    code: account
+                        .code
+                        .clone()
+                        .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
+                },
+                None,
+                false,
+            );
+        }
+        db.update(accounts, Some(block.into()));
 
-        let result = EVMPoolState::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let res = EVMPoolState::try_from_with_block(snapshot, header(), &tokens)
+            .await
+            .unwrap();
 
-        assert!(result.is_ok());
-        let res = result.unwrap();
         assert_eq!(
             res.get_balance_owner(),
             Some(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())

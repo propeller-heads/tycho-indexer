@@ -24,7 +24,7 @@
 //! It's worth emphasizin that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future};
 
 use num_bigint::BigUint;
 
@@ -58,12 +58,11 @@ impl ProtocolComponent {
 pub trait TryFromWithBlock<T> {
     type Error;
 
-    #[allow(async_fn_in_trait)]
-    async fn try_from_with_block(
+    fn try_from_with_block(
         value: T,
         block: Header,
-        all_tokens: HashMap<Bytes, Token>,
-    ) -> Result<Self, Self::Error>
+        all_tokens: &HashMap<Bytes, Token>,
+    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
     where
         Self: Sized;
 }
@@ -93,5 +92,31 @@ impl GetAmountOutResult {
     pub fn aggregate(&mut self, other: &Self) {
         self.amount = other.amount.clone();
         self.gas += &other.gas;
+    }
+}
+
+#[derive(Debug)]
+pub struct BlockUpdate {
+    pub block_number: u64,
+    /// The current state of all pools
+    pub states: HashMap<String, Box<dyn ProtocolSim>>,
+    /// The new pairs that were added in this block
+    pub new_pairs: HashMap<String, ProtocolComponent>,
+    /// The pairs that were removed in this block
+    pub removed_pairs: HashMap<String, ProtocolComponent>,
+}
+
+impl BlockUpdate {
+    pub fn new(
+        block_number: u64,
+        states: HashMap<String, Box<dyn ProtocolSim>>,
+        new_pairs: HashMap<String, ProtocolComponent>,
+    ) -> Self {
+        BlockUpdate { block_number, states, new_pairs, removed_pairs: HashMap::new() }
+    }
+
+    pub fn set_removed_pairs(mut self, pairs: HashMap<String, ProtocolComponent>) -> Self {
+        self.removed_pairs = pairs;
+        self
     }
 }

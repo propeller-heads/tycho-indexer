@@ -1,5 +1,3 @@
-use std::{cmp::max, time::Instant};
-
 use futures::StreamExt;
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -15,11 +13,13 @@ use ratatui::{
     },
     DefaultTerminal, Frame,
 };
+use std::{cmp::max, str::FromStr, time::Instant};
 use tokio::{select, sync::mpsc::Receiver};
-
-use tycho_simulation::protocol::{models::ProtocolComponent, state::ProtocolSim};
-
-use crate::data_feed::state::BlockState;
+use tycho_core::Bytes;
+use tycho_simulation::protocol::{
+    models::{BlockUpdate, ProtocolComponent},
+    state::ProtocolSim,
+};
 
 const INFO_TEXT: [&str; 2] = [
     "(Esc) quit | (↑) move up | (↓) move down | (↵) Toggle Quote | (+) Increase Quote Amount",
@@ -78,13 +78,13 @@ pub struct App {
     quote_amount: BigUint,
     zero2one: bool,
     items: Vec<Data>,
-    rx: Receiver<BlockState>,
+    rx: Receiver<BlockUpdate>,
     scroll_state: ScrollbarState,
     colors: TableColors,
 }
 
 impl App {
-    pub fn new(rx: Receiver<BlockState>) -> Self {
+    pub fn new(rx: Receiver<BlockUpdate>) -> Self {
         let data_vec = Vec::new();
         Self {
             state: TableState::default().with_selected(0),
@@ -131,8 +131,8 @@ impl App {
             .position(i * ITEM_HEIGHT);
     }
 
-    pub fn update_data(&mut self, update: BlockState) {
-        for comp in update.new_pairs.values() {
+    pub fn update_data(&mut self, update: BlockUpdate) {
+        for (id, comp) in update.new_pairs.iter() {
             let name = format!("{:#042x}", comp.address);
             let tokens = comp
                 .tokens
@@ -141,7 +141,7 @@ impl App {
                 .join("/");
             let price = update
                 .states
-                .get(&comp.address)
+                .get(id)
                 .map(|el| el.spot_price(&comp.tokens[0], &comp.tokens[1]))
                 .unwrap_or(Ok(0.0));
 
@@ -149,7 +149,7 @@ impl App {
                 component: comp.clone(),
                 state: update
                     .states
-                    .get(&comp.address)
+                    .get(id)
                     .unwrap_or_else(|| panic!("Received update for unknown pool {}", comp.address))
                     .clone(),
                 name,
@@ -159,10 +159,11 @@ impl App {
         }
 
         for (address, state) in update.states.iter() {
+            let eth_address = Bytes::from_str(address).expect("Bad address");
             let entry = self
                 .items
                 .iter()
-                .find_position(|e| e.component.address == *address);
+                .find_position(|e| e.component.address == eth_address);
             if let Some((index, _)) = entry {
                 let row = self.items.get_mut(index).unwrap();
                 let price = state.spot_price(&row.component.tokens[0], &row.component.tokens[1]);
@@ -187,7 +188,6 @@ impl App {
         let mut reader = event::EventStream::new();
         loop {
             terminal.draw(|frame| self.draw(frame))?;
-
             select! {
                 maybe_data = self.rx.recv() => {
                     if let Some(data) = maybe_data {

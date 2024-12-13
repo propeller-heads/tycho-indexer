@@ -44,11 +44,9 @@
 //! assert_eq!(state.spot_price(&weth, &usdc).unwrap(), 1218.0683462769755f64);
 //! assert_eq!(out, 1214374202.to_biguint().unwrap());
 //! ```
-use std::any::Any;
+use std::{any::Any, collections::HashMap};
 
 use num_bigint::BigUint;
-
-use tycho_core::dto::ProtocolStateDelta;
 
 use crate::{
     models::Token,
@@ -57,6 +55,7 @@ use crate::{
         models::GetAmountOutResult,
     },
 };
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
@@ -119,7 +118,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: Vec<Token>,
+        tokens: &HashMap<Bytes, Token>,
     ) -> Result<(), TransitionError<String>>;
 
     /// Clones the protocol state as a trait object.

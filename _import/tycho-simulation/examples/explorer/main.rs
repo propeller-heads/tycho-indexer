@@ -1,16 +1,28 @@
-pub mod data_feed;
 mod ui;
+pub mod utils;
 
 extern crate tycho_simulation;
 
-use std::env;
-
+use crate::utils::load_all_tokens;
 use clap::Parser;
-use futures::future::select_all;
+use futures::{future::select_all, StreamExt};
+use std::env;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tracing_subscriber::{fmt, EnvFilter};
-
-use data_feed::{state::BlockState, tycho};
+use tycho_client::feed::component_tracker::ComponentFilter;
+use tycho_core::dto::Chain;
+use tycho_simulation::{
+    evm::{
+        engine_db::tycho_db::PreCachedDB,
+        protocol::{
+            filters::{balancer_pool_filter, curve_pool_filter},
+            uniswap_v2::state::UniswapV2State,
+            uniswap_v3::state::UniswapV3State,
+            vm::state::EVMPoolState,
+        },
+        stream::ProtocolStreamBuilder,
+    },
+    protocol::models::BlockUpdate,
+};
 
 #[derive(Parser)]
 struct Cli {
@@ -21,16 +33,8 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+    utils::setup_tracing();
     // Parse command-line arguments into a Cli struct
-    let format = fmt::format()
-        .with_level(true) // Show log levels
-        .with_target(false) // Hide module paths
-        .compact(); // Use a compact format
-
-    fmt()
-        .event_format(format)
-        .with_env_filter(EnvFilter::from_default_env()) // Use RUST_LOG for log levels
-        .init();
     let cli = Cli::parse();
 
     let tycho_url =
@@ -39,10 +43,38 @@ async fn main() {
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
     // Create communication channels for inter-thread communication
-    let (tick_tx, tick_rx) = mpsc::channel::<BlockState>(12);
+    let (tick_tx, tick_rx) = mpsc::channel::<BlockUpdate>(12);
 
     let tycho_message_processor: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
-        tycho::process_messages(tycho_url, Some(tycho_api_key), tick_tx, cli.tvl_threshold).await;
+        let all_tokens = load_all_tokens(tycho_url.as_str(), Some(tycho_api_key.as_str())).await;
+        let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
+        let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, Chain::Ethereum)
+            .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+            .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+            .exchange::<EVMPoolState<PreCachedDB>>(
+                "vm:balancer_v2",
+                tvl_filter.clone(),
+                Some(balancer_pool_filter),
+            )
+            .exchange::<EVMPoolState<PreCachedDB>>(
+                "vm:curve",
+                tvl_filter.clone(),
+                Some(curve_pool_filter),
+            )
+            .auth_key(Some(tycho_api_key.clone()))
+            .set_tokens(all_tokens)
+            .await
+            .build()
+            .await
+            .expect("Failed building protocol stream");
+
+        // Loop through block updates
+        while let Some(msg) = protocol_stream.next().await {
+            tick_tx
+                .send(msg.unwrap())
+                .await
+                .expect("Sending tick failed!")
+        }
         anyhow::Result::Ok(())
     });
 

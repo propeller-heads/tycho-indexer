@@ -2,9 +2,11 @@ use alloy_primitives::U256;
 use tycho_core::keccak256;
 
 pub mod account_storage;
+pub mod decoder;
 pub mod engine_db;
 pub mod protocol;
 pub mod simulation;
+pub mod stream;
 pub mod traces;
 pub mod tycho_models;
 

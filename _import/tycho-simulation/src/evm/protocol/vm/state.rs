@@ -9,7 +9,7 @@ use alloy_primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-
+use tracing::info;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
@@ -137,12 +137,11 @@ where
         }
         Ok(())
     }
-
     /// Sets the spot prices for a pool for all possible pairs of the given tokens.
     ///
     /// # Arguments
     ///
-    /// * `tokens` - A vector of `Token` instances representing the tokens to calculate spot prices
+    /// * `tokens` - A hashmap of `Token` instances representing the tokens to calculate spot prices
     ///   for.
     ///
     /// # Returns
@@ -173,15 +172,20 @@ where
     /// Tip: Setting spot prices on the pool every time the pool actually changes will result in
     /// faster price fetching than if prices are only set immediately before attempting to retrieve
     /// prices.
-    pub fn set_spot_prices(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
+    pub fn set_spot_prices(
+        &mut self,
+        tokens: &HashMap<Bytes, Token>,
+    ) -> Result<(), SimulationError> {
+        info!("Setting spot prices for pool {}", self.id.clone());
         self.ensure_capability(Capability::PriceFunction)?;
-        for [sell_token, buy_token] in tokens
+        for [sell_token_address, buy_token_address] in self
+            .tokens
             .iter()
             .permutations(2)
             .map(|p| [p[0], p[1]])
         {
-            let sell_token_address = bytes_to_erc20_address(&sell_token.address)?;
-            let buy_token_address = bytes_to_erc20_address(&buy_token.address)?;
+            let sell_token_address = bytes_to_erc20_address(sell_token_address)?;
+            let buy_token_address = bytes_to_erc20_address(buy_token_address)?;
             let overwrites = Some(self.get_overwrites(
                 vec![sell_token_address, buy_token_address],
                 *MAX_BALANCE / U256::from(100),
@@ -210,14 +214,32 @@ where
                 let unscaled_price = price_result.first().ok_or_else(|| {
                     SimulationError::FatalError("Calculated price array is empty".to_string())
                 })?;
-                *unscaled_price * 10f64.powi(sell_token.decimals as i32) /
-                    10f64.powi(buy_token.decimals as i32)
+                let sell_token_decimals = self.get_decimals(tokens, &sell_token_address)?;
+                let buy_token_decimals = self.get_decimals(tokens, &buy_token_address)?;
+                *unscaled_price * 10f64.powi(sell_token_decimals as i32) /
+                    10f64.powi(buy_token_decimals as i32)
             };
 
             self.spot_prices
                 .insert((sell_token_address, buy_token_address), price);
         }
         Ok(())
+    }
+
+    fn get_decimals(
+        &self,
+        tokens: &HashMap<Bytes, Token>,
+        sell_token_address: &Address,
+    ) -> Result<usize, SimulationError> {
+        tokens
+            .get(&Bytes::from(sell_token_address.as_slice()))
+            .map(|t| t.decimals)
+            .ok_or_else(|| {
+                SimulationError::FatalError(format!(
+                    "Failed to scale spot prices! Pool: {} Token 0x{:x} is not available!",
+                    self.id, sell_token_address
+                ))
+            })
     }
 
     /// Retrieves the sell amount limit for a given pair of tokens and the given overwrites.
@@ -252,7 +274,7 @@ where
         Ok(limits?.0)
     }
 
-    fn clear_all_cache(&mut self, tokens: Vec<Token>) -> Result<(), SimulationError> {
+    fn clear_all_cache(&mut self, tokens: &HashMap<Bytes, Token>) -> Result<(), SimulationError> {
         self.adapter_contract
             .engine
             .clear_temp_storage();
@@ -517,7 +539,7 @@ where
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: Vec<Token>,
+        tokens: &HashMap<Bytes, Token>,
     ) -> Result<(), TransitionError<String>> {
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
@@ -875,7 +897,12 @@ mod tests {
         let mut pool_state = setup_pool_state().await;
 
         pool_state
-            .set_spot_prices(vec![bal(), dai()])
+            .set_spot_prices(
+                &vec![bal(), dai()]
+                    .into_iter()
+                    .map(|t| (t.address.clone(), t))
+                    .collect(),
+            )
             .unwrap();
 
         let dai_bal_spot_price = pool_state

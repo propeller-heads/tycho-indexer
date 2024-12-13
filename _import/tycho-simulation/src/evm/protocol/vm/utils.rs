@@ -10,7 +10,7 @@ use std::{
 
 use alloy::{
     providers::{Provider, ProviderBuilder},
-    transports::RpcError,
+    transports::{RpcError, TransportErrorKind},
 };
 use alloy_primitives::{Address, U256};
 use alloy_sol_types::SolValue;
@@ -249,16 +249,9 @@ pub(crate) async fn get_code_for_contract(
         }
     };
 
-    // Create a provider with the URL
-    let provider = ProviderBuilder::new()
-        .on_builtin(&connection_string)
-        .await
-        .unwrap();
-
     let addr = Address::from_str(address).expect("Failed to parse address to get code for");
-
     // Call eth_getCode to get the bytecode of the contract
-    match provider.get_code_at(addr).await {
+    match sync_get_code(&connection_string, addr) {
         Ok(code) if code.is_empty() => {
             Err(SimulationError::FatalError("Empty code response from RPC".to_string()))
         }
@@ -266,20 +259,34 @@ pub(crate) async fn get_code_for_contract(
             let bytecode = Bytecode::new_raw(Bytes::from(code.to_vec()));
             Ok(bytecode)
         }
-        Err(e) => {
-            println!("Error fetching code for address {}: {:?}", address, e);
-            match e {
-                RpcError::Transport(err) => Err(SimulationError::RecoverableError(format!(
-                    "Failed to get code for contract due to internal RPC error: {:?}",
-                    err
-                ))),
-                _ => Err(SimulationError::FatalError(format!(
-                    "Failed to get code for contract. Invalid response from RPC: {:?}",
-                    e
-                ))),
-            }
-        }
+        Err(e) => match e {
+            RpcError::Transport(err) => Err(SimulationError::RecoverableError(format!(
+                "Failed to get code for contract due to internal RPC error: {:?}",
+                err
+            ))),
+            _ => Err(SimulationError::FatalError(format!(
+                "Failed to get code for contract. Invalid response from RPC: {:?}",
+                e
+            ))),
+        },
     }
+}
+
+fn sync_get_code(
+    connection_string: &str,
+    addr: Address,
+) -> Result<Bytes, RpcError<TransportErrorKind>> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            // Create a provider with the URL
+            let provider = ProviderBuilder::new()
+                .on_builtin(connection_string)
+                .await
+                .unwrap();
+
+            provider.get_code_at(addr).await
+        })
+    })
 }
 
 static BYTECODE_CACHE: LazyLock<Cache<Arc<String>, Bytecode>> = LazyLock::new(|| Cache::new(1_000));
@@ -483,7 +490,7 @@ mod tests {
     use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     async fn test_get_code_for_address() {
         let rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {

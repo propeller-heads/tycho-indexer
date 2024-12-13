@@ -201,7 +201,8 @@ where
         let engine = if let Some(engine) = &self.engine {
             engine.clone()
         } else {
-            self.get_default_engine(db).await?
+            self.engine = Some(self.get_default_engine(db).await?);
+            self.engine.clone().unwrap()
         };
 
         if self.adapter_contract.is_none() {

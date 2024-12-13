@@ -19,7 +19,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<Bytes, Token>,
+        _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -216,7 +216,7 @@ mod tests {
             component: usv3_component(),
         };
 
-        let result = UniswapV3State::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = UniswapV3State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
 
         assert!(result.is_ok());
         let expected = UniswapV3State::new(
@@ -265,7 +265,7 @@ mod tests {
             component,
         };
 
-        let result = UniswapV3State::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = UniswapV3State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
 
         assert!(result.is_err());
         assert!(matches!(
@@ -291,7 +291,7 @@ mod tests {
             component,
         };
 
-        let result = UniswapV3State::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = UniswapV3State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
 
         assert!(result.is_err());
         assert!(matches!(

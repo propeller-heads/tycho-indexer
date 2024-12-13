@@ -1,4 +1,5 @@
 pub(crate) mod erc20;
+pub mod filters;
 pub mod safe_math;
 pub mod u256_num;
 pub mod uniswap_v2;

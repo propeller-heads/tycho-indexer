@@ -15,6 +15,8 @@
 //! The crate also provides optimization methods, such as golden
 //! section search, to find optimal amounts for a specific sequence.
 
+extern crate core;
+
 // Reexports
 pub use num_traits;
 #[cfg(feature = "evm")]

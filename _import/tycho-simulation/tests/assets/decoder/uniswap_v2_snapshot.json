@@ -1,0 +1,97 @@
+{
+  "state_msgs": {
+    "uniswap_v2": {
+      "header": {
+        "hash": "0x86b3c5476c5cab842368b3dc27b3be70909955977ed56ef61690ba824c48ba70",
+        "number": 21284145,
+        "parent_hash": "0xee92f8e2c301c52cbfb602a1d7f1a626a65eb1c88ad1fd6ee340e41ceff778a1",
+        "revert": false
+      },
+      "snapshots": {
+        "states": {
+          "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852": {
+            "state": {
+              "component_id": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+              "attributes": {
+                "reserve1": "0x288e76c7e587",
+                "reserve0": "0x02a15edc6893fcfad4ca"
+              },
+              "balances": {
+                "0xdac17f958d2ee523a2206206994597c13d831ec7": "0x288e76c7e587",
+                "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": "0x02a15edc6893fcfad4ca"
+              }
+            },
+            "component": {
+              "id": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+              "protocol_system": "uniswap_v2",
+              "protocol_type_name": "uniswap_v2_pool",
+              "chain": "ethereum",
+              "tokens": [
+                "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "0xdac17f958d2ee523a2206206994597c13d831ec7"
+              ],
+              "contract_ids": [],
+              "static_attributes": {
+                "fee": "0x1e",
+                "pool_address": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852"
+              },
+              "change": "Creation",
+              "creation_tx": "0xe64069acd123ec94b8a3316378183ba8bf42b40979df3b0bb57b0e7b9e47ef38",
+              "created_at": "2020-05-19T01:07:09"
+            }
+          }
+        },
+        "vm_storage": {}
+      },
+      "deltas": {
+        "extractor": "uniswap_v2",
+        "chain": "ethereum",
+        "block": {
+          "number": 21284145,
+          "hash": "0x86b3c5476c5cab842368b3dc27b3be70909955977ed56ef61690ba824c48ba70",
+          "parent_hash": "0xee92f8e2c301c52cbfb602a1d7f1a626a65eb1c88ad1fd6ee340e41ceff778a1",
+          "chain": "ethereum",
+          "ts": "2024-11-28T05:29:59"
+        },
+        "finalized_block_height": 21284059,
+        "revert": false,
+        "new_tokens": {},
+        "account_updates": {},
+        "state_updates": {},
+        "new_protocol_components": {},
+        "deleted_protocol_components": {},
+        "component_balances": {},
+        "component_tvl": {}
+      },
+      "removed_components": {
+        "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852": {
+          "id": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+          "protocol_system": "uniswap_v2",
+          "protocol_type_name": "uniswap_v2_pool",
+          "chain": "ethereum",
+          "tokens": [
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "0xdac17f958d2ee523a2206206994597c13d831ec7"
+          ],
+          "contract_ids": [],
+          "static_attributes": {
+            "fee": "0x1e",
+            "pool_address": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852"
+          },
+          "change": "Creation",
+          "creation_tx": "0xe64069acd123ec94b8a3316378183ba8bf42b40979df3b0bb57b0e7b9e47ef38",
+          "created_at": "2020-05-19T01:07:09"
+        }
+      }
+    }
+  },
+  "sync_states": {
+    "uniswap_v2": {
+      "status": "ready",
+      "hash": "0x86b3c5476c5cab842368b3dc27b3be70909955977ed56ef61690ba824c48ba70",
+      "number": 21284145,
+      "parent_hash": "0xee92f8e2c301c52cbfb602a1d7f1a626a65eb1c88ad1fd6ee340e41ceff778a1",
+      "revert": false
+    }
+  }
+}

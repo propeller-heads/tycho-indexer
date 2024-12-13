@@ -55,11 +55,12 @@ alloy = { version = "0.5.4", features = ["providers"] }
 revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
 revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
 num-bigint = "0.4.6"
+tokio-stream = "0.1.16"
 
 [dev-dependencies]
 tokio-test = "0.4.4"
 approx = "0.5.1"
-rstest = "0.18.2"
+rstest = "0.23.0"
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
     "env-filter",
     "fmt",
@@ -72,6 +73,8 @@ anyhow = "1.0.79"
 ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
+tracing-appender = "0.2.3"
+
 
 [features]
 default = ["evm"]

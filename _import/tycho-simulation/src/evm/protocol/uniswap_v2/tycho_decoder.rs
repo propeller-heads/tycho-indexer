@@ -18,7 +18,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
-        _all_tokens: HashMap<Bytes, Token>,
+        _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let reserve0 = U256::from_be_slice(
             snapshot
@@ -97,7 +97,7 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = UniswapV2State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
 
         assert!(result.is_ok());
         let res = result.unwrap();
@@ -120,7 +120,7 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from_with_block(snapshot, header(), HashMap::new()).await;
+        let result = UniswapV2State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
 
         assert!(result.is_err());
 
