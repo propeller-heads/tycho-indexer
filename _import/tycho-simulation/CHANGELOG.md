@@ -1,3 +1,10 @@
+## [0.60.1](https://github.com/propeller-heads/tycho-simulation/compare/0.60.0...0.60.1) (2024-12-13)
+
+
+### Bug Fixes
+
+* Move load_all_tokens to simulation's utils ([cce65a7](https://github.com/propeller-heads/tycho-simulation/commit/cce65a7cbc5669c53bad08d6e550de4580853fdb))
+
 ## [0.60.0](https://github.com/propeller-heads/tycho-simulation/compare/0.59.3...0.60.0) (2024-12-13)
 
 
