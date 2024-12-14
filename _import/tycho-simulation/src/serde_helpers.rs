@@ -70,10 +70,10 @@ pub mod hex_bytes_option {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use serde::{Deserialize, Serialize};
     use serde_json;
+
+    use super::*;
 
     #[derive(Debug, Serialize, Deserialize)]
     struct TestStruct {

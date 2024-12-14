@@ -1,7 +1,9 @@
-use crate::{models::Token, protocol::errors::SimulationError};
 use std::collections::HashMap;
+
 use tycho_client::{rpc::RPCClient, HttpRPCClient};
 use tycho_core::{dto::Chain, Bytes};
+
+use crate::{models::Token, protocol::errors::SimulationError};
 
 /// Converts a hexadecimal string into a `Vec<u8>`.
 ///

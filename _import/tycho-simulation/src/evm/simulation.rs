@@ -17,13 +17,12 @@ use strum_macros::Display;
 use tokio::runtime::{Handle, Runtime};
 use tracing::{debug, info};
 
-use crate::evm::engine_db::{
-    engine_db_interface::EngineDatabaseInterface, simulation_db::OverriddenSimulationDB,
-};
-
 use super::{
     account_storage::StateUpdate,
     traces::{handle_traces, TraceResult},
+};
+use crate::evm::engine_db::{
+    engine_db_interface::EngineDatabaseInterface, simulation_db::OverriddenSimulationDB,
 };
 
 /// An error representing any transaction simulation result other than successful execution
@@ -368,7 +367,7 @@ impl SimulationParameters {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{env, error::Error, str::FromStr, sync::Arc, time::Instant};
 
     use alloy::{
         providers::{ProviderBuilder, RootProvider},
@@ -377,14 +376,13 @@ mod tests {
     use alloy_primitives::Keccak256;
     use alloy_sol_types::SolValue;
     use dotenv::dotenv;
-    use std::{env, error::Error, str::FromStr, sync::Arc, time::Instant};
-
     use revm::primitives::{
         bytes, hex, Account, AccountInfo, AccountStatus, Address, Bytecode, Bytes,
         EvmState as rState, EvmStorageSlot, ExecutionResult, HaltReason, InvalidTransaction,
         OutOfGasError, Output, ResultAndState, SuccessReason, B256,
     };
 
+    use super::*;
     use crate::{
         evm::engine_db::{
             engine_db_interface::EngineDatabaseInterface, simulation_db::SimulationDB,

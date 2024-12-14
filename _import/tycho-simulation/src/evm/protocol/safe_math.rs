@@ -5,8 +5,9 @@
 //! Should an operation cause an overflow a result containing TradeSimulationError
 //! will be returned.
 //! Functions for the types I256, U256, U512 are available.
-use crate::protocol::errors::SimulationError;
 use alloy_primitives::{I256, U256, U512};
+
+use crate::protocol::errors::SimulationError;
 
 pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, SimulationError> {
     let res = a.checked_mul(b);
@@ -109,10 +110,11 @@ pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, SimulationError>
 
 #[cfg(test)]
 mod safe_math_tests {
-    use super::*;
     use std::str::FromStr;
 
     use rstest::rstest;
+
+    use super::*;
 
     const U256_MAX: U256 = U256::from_limbs([u64::MAX, u64::MAX, u64::MAX, u64::MAX]);
     const U512_MAX: U512 = U512::from_limbs([

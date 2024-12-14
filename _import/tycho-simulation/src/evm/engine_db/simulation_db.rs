@@ -5,7 +5,6 @@ use std::{
 };
 
 use alloy::providers::Provider;
-
 use alloy_primitives::StorageValue;
 use revm::{
     db::DatabaseRef,
@@ -444,17 +443,17 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{env, error::Error, str::FromStr};
 
     use alloy::{
         providers::{ProviderBuilder, RootProvider},
         transports::BoxTransport,
     };
-
     use dotenv::dotenv;
     use rstest::rstest;
     use tokio::runtime::Runtime;
+
+    use super::*;
 
     fn get_runtime() -> Option<Arc<Runtime>> {
         let runtime = tokio::runtime::Handle::try_current()

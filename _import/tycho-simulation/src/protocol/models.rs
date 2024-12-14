@@ -27,14 +27,11 @@
 use std::{collections::HashMap, future::Future};
 
 use num_bigint::BigUint;
-
+use tycho_client::feed::Header;
 use tycho_core::Bytes;
 
-use tycho_client::feed::Header;
-
-use crate::models::Token;
-
 use super::state::ProtocolSim;
+use crate::models::Token;
 
 /// ProtocolComponent struct represents the properties of a trading pair
 ///

@@ -10,13 +10,12 @@ use tracing::info;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
+use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
     evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
-
-use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 
 impl From<Header> for BlockHeader {
     fn from(header: Header) -> Self {
@@ -179,23 +178,24 @@ fn to_adapter_file_name(protocol_system: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{collections::HashSet, fs, path::Path, str::FromStr};
 
+    use chrono::DateTime;
+    use num_bigint::ToBigUint;
+    use revm::primitives::{AccountInfo, Address, Bytecode, KECCAK_EMPTY};
+    use serde_json::Value;
+    use tycho_core::{
+        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
+        Bytes,
+    };
+
+    use super::*;
     use crate::{
         evm::{
             engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface},
             tycho_models::AccountUpdate,
         },
         protocol::models::TryFromWithBlock,
-    };
-    use chrono::DateTime;
-    use num_bigint::ToBigUint;
-    use revm::primitives::{AccountInfo, Address, Bytecode, KECCAK_EMPTY};
-    use serde_json::Value;
-    use std::{collections::HashSet, fs, path::Path, str::FromStr};
-    use tycho_core::{
-        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
-        Bytes,
     };
 
     #[test]

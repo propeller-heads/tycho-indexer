@@ -1,14 +1,14 @@
-use alloy_primitives::U256;
 use std::collections::HashMap;
+
+use alloy_primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
+use super::state::UniswapV2State;
 use crate::{
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
-
-use super::state::UniswapV2State;
 
 impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     type Error = InvalidSnapshotError;
@@ -42,15 +42,15 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use chrono::DateTime;
     use std::{collections::HashMap, str::FromStr};
 
+    use chrono::DateTime;
     use tycho_core::{
         dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
         hex_bytes::Bytes,
     };
+
+    use super::*;
 
     fn usv2_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)

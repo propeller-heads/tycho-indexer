@@ -1,3 +1,6 @@
+use alloy_primitives::U256;
+
+use super::solidity_math::{mul_div, mul_div_rounding_up};
 use crate::{
     evm::protocol::{
         safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
@@ -5,9 +8,6 @@ use crate::{
     },
     protocol::errors::SimulationError,
 };
-use alloy_primitives::U256;
-
-use super::solidity_math::{mul_div, mul_div_rounding_up};
 
 const Q96: U256 = U256::from_limbs([0, 4294967296, 0, 0]);
 const RESOLUTION: U256 = U256::from_limbs([96, 0, 0, 0]);
@@ -170,10 +170,12 @@ pub fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use approx::assert_ulps_eq;
     use rstest::rstest;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn u256(s: &str) -> U256 {
         U256::from_str(s).unwrap()

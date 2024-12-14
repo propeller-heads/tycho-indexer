@@ -1,3 +1,13 @@
+use std::{collections::HashMap, sync::Arc};
+
+use futures::{Stream, StreamExt};
+use tokio_stream::wrappers::ReceiverStream;
+use tycho_client::{
+    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
+    stream::{StreamError, TychoStreamBuilder},
+};
+use tycho_core::{dto::Chain, Bytes};
+
 use crate::{
     evm::decoder::{StreamDecodeError, TychoStreamDecoder},
     models::Token,
@@ -7,14 +17,6 @@ use crate::{
         state::ProtocolSim,
     },
 };
-use futures::{Stream, StreamExt};
-use std::{collections::HashMap, sync::Arc};
-use tokio_stream::wrappers::ReceiverStream;
-use tycho_client::{
-    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
-    stream::{StreamError, TychoStreamBuilder},
-};
-use tycho_core::{dto::Chain, Bytes};
 
 pub struct ProtocolStreamBuilder {
     decoder: TychoStreamDecoder,

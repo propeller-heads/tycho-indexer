@@ -47,6 +47,7 @@
 use std::{any::Any, collections::HashMap};
 
 use num_bigint::BigUint;
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     models::Token,
@@ -55,7 +56,6 @@ use crate::{
         models::GetAmountOutResult,
     },
 };
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used

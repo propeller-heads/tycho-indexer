@@ -3,9 +3,10 @@ pub mod utils;
 
 extern crate tycho_simulation;
 
+use std::env;
+
 use clap::Parser;
 use futures::{future::select_all, StreamExt};
-use std::env;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tycho_client::feed::component_tracker::ComponentFilter;
 use tycho_core::dto::Chain;

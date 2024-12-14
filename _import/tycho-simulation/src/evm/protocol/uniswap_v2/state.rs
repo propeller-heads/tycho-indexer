@@ -1,6 +1,10 @@
+use std::{any::Any, collections::HashMap};
+
 use alloy_primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
+use super::reserve_price::spot_price_from_reserves;
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
@@ -13,10 +17,6 @@ use crate::{
         state::ProtocolSim,
     },
 };
-use std::{any::Any, collections::HashMap};
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
-
-use super::reserve_price::spot_price_from_reserves;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
@@ -147,16 +147,17 @@ impl ProtocolSim for UniswapV2State {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use std::collections::{HashMap, HashSet};
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
 
     use approx::assert_ulps_eq;
     use num_traits::One;
     use rstest::rstest;
-    use std::str::FromStr;
-
     use tycho_core::hex_bytes::Bytes;
+
+    use super::*;
 
     #[rstest]
     #[case::same_dec(

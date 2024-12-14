@@ -5,17 +5,16 @@ use alloy_sol_types::SolValue;
 use chrono::Utc;
 use revm::{db::DatabaseRef, primitives::AccountInfo};
 
+use super::{
+    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
+    utils::{coerce_error, get_contract_bytecode},
+};
 use crate::{
     evm::{
         engine_db::engine_db_interface::EngineDatabaseInterface,
         simulation::{SimulationEngine, SimulationParameters, SimulationResult},
     },
     protocol::errors::SimulationError,
-};
-
-use super::{
-    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    utils::{coerce_error, get_contract_bytecode},
 };
 
 #[derive(Debug, Clone)]
@@ -157,15 +156,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use alloy_primitives::hex;
     use std::str::FromStr;
 
+    use alloy_primitives::hex;
     use revm::{
         db::DatabaseRef,
         primitives::{AccountInfo, Bytecode, B256},
     };
 
+    use super::*;
     use crate::evm::{
         engine_db::engine_db_interface::EngineDatabaseInterface,
         protocol::vm::utils::string_to_bytes32,

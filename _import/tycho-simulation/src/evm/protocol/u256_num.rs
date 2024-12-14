@@ -1,10 +1,8 @@
 //! Numeric methods for the U256 type
-use alloy_primitives::U256;
-use std::{cmp::max, panic};
+use std::{cmp::max, collections::HashMap, panic};
 
-use alloy_primitives::bytes::Bytes;
+use alloy_primitives::{bytes::Bytes, U256};
 use num_bigint::BigUint;
-use std::collections::HashMap;
 
 /// Converts a U256 integer into it's closest floating point representation
 ///
@@ -129,9 +127,9 @@ pub fn map_slots_to_u256(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case::one(U256::from(1u64), 1.0f64)]

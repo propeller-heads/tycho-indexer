@@ -1,17 +1,18 @@
+use std::{collections::HashMap, str::FromStr};
+
 use alloy::{providers::RootProvider, transports::BoxTransport};
 use num_bigint::BigUint;
-use revm::primitives::{Address, U256 as rU256};
-
-use crate::structs_py::{
-    AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
-    SimulationResult, StateUpdate, TychoDB,
-};
 use pyo3::{prelude::*, types::PyType};
-use std::{collections::HashMap, str::FromStr};
+use revm::primitives::{Address, U256 as rU256};
 use tycho_simulation::evm::{
     account_storage,
     engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db, tycho_db},
     simulation,
+};
+
+use crate::structs_py::{
+    AccountInfo, BlockHeader, SimulationDB, SimulationErrorDetails, SimulationParameters,
+    SimulationResult, StateUpdate, TychoDB,
 };
 
 #[derive(Clone, Copy)]

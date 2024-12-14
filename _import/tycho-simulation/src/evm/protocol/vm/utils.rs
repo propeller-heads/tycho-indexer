@@ -14,7 +14,6 @@ use alloy::{
 };
 use alloy_primitives::{Address, U256};
 use alloy_sol_types::SolValue;
-
 use hex::FromHex;
 use mini_moka::sync::Cache;
 use num_bigint::BigInt;
@@ -482,13 +481,14 @@ pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, Simu
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{fs::remove_file, io::Write};
 
-    use crate::utils::hexstring_to_vec;
     use dotenv::dotenv;
     use hex::decode;
-    use std::{fs::remove_file, io::Write};
     use tempfile::NamedTempFile;
+
+    use super::*;
+    use crate::utils::hexstring_to_vec;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[cfg_attr(not(feature = "network_tests"), ignore)]

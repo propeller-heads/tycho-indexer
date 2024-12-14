@@ -8,3 +8,4 @@ trailing_comma = "Vertical"
 trailing_semicolon = false
 use_field_init_shorthand = true
 chain_width=40
+group_imports = "StdExternalCrate"

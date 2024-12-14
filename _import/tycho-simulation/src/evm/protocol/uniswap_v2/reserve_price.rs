@@ -1,5 +1,6 @@
-use crate::evm::protocol::u256_num::u256_to_f64;
 use alloy_primitives::U256;
+
+use crate::evm::protocol::u256_num::u256_to_f64;
 
 /// Computes a spot price given two token reserves
 ///
@@ -29,11 +30,12 @@ pub fn spot_price_from_reserves(
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::str::FromStr;
 
     use approx::assert_ulps_eq;
     use rstest::rstest;
-    use std::str::FromStr;
+
+    use super::*;
 
     #[rstest]
     #[case::dai_weth(

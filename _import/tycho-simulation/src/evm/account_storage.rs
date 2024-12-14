@@ -229,11 +229,11 @@ impl AccountStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY, U256};
     use std::{collections::HashMap, error::Error, str::FromStr};
 
+    use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY, U256};
+
+    use super::*;
     use crate::evm::account_storage::{Account, AccountStorage};
 
     #[test]
