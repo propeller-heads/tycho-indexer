@@ -40,7 +40,6 @@ lazy_static = "1.4.0"
 # Tycho dependencies
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.46.0" }
 tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.46.0" }
-tycho-ethereum = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-ethereum", tag = "0.46.0" }
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }

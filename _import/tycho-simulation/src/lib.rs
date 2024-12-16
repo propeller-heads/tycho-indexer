@@ -11,7 +11,6 @@ extern crate core;
 // Reexports
 pub use tycho_client;
 pub use tycho_core;
-pub use tycho_ethereum;
 
 #[cfg(feature = "evm")]
 pub mod evm;
