@@ -1,3 +1,10 @@
+## [0.61.1](https://github.com/propeller-heads/tycho-simulation/compare/0.61.0...0.61.1) (2024-12-16)
+
+
+### Bug Fixes
+
+* Include path in I/O error message ([3dc672a](https://github.com/propeller-heads/tycho-simulation/commit/3dc672a5a84261c1e42e06f27b1395dfd08834af))
+
 ## [0.61.0](https://github.com/propeller-heads/tycho-simulation/compare/0.60.2...0.61.0) (2024-12-16)
 
 
