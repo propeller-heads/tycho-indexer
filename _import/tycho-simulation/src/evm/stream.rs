@@ -25,7 +25,7 @@ use crate::{
 /// to obtain spot price information for a desired component and token pair.
 ///
 /// # Important
-/// Decoding is performed using the [`TychoStreamDecoder`](crate::evm::decoder::TychoStreamDecoder).
+/// Decoding is performed using the `TychoStreamDecoder`.
 /// The decoding process involves several key aspects:
 /// - **Token Registry:** Protocol components are decoded only if their associated tokens are
 ///   present in the registry. Missing tokens will cause the corresponding pools or components to be
