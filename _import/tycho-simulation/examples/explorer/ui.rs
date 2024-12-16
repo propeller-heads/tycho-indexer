@@ -1,3 +1,5 @@
+use std::{cmp::max, str::FromStr, time::Instant};
+
 use futures::StreamExt;
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -13,7 +15,6 @@ use ratatui::{
     },
     DefaultTerminal, Frame,
 };
-use std::{cmp::max, str::FromStr, time::Instant};
 use tokio::{select, sync::mpsc::Receiver};
 use tycho_core::Bytes;
 use tycho_simulation::protocol::{

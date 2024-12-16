@@ -1,9 +1,19 @@
-use alloy_primitives::{Sign, I256, U256};
 use std::{any::Any, collections::HashMap};
 
+use alloy_primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use tracing::trace;
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
+use super::{
+    enums::FeeAmount,
+    liquidity_math,
+    sqrt_price_math::sqrt_price_q96_to_f64,
+    swap_math,
+    tick_list::{TickInfo, TickList},
+    tick_math,
+    tycho_decoder::i24_be_bytes_to_i32,
+};
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_sub_u256},
@@ -15,17 +25,6 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
-};
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
-
-use super::{
-    enums::FeeAmount,
-    liquidity_math,
-    sqrt_price_math::sqrt_price_q96_to_f64,
-    swap_math,
-    tick_list::{TickInfo, TickList},
-    tick_math,
-    tycho_decoder::i24_be_bytes_to_i32,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -403,15 +402,15 @@ impl ProtocolSim for UniswapV3State {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use num_bigint::ToBigUint;
     use std::{
         collections::{HashMap, HashSet},
         str::FromStr,
     };
 
+    use num_bigint::ToBigUint;
     use tycho_core::hex_bytes::Bytes;
+
+    use super::*;
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {

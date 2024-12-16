@@ -347,13 +347,13 @@ impl DatabaseRef for PreCachedDB {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{error::Error, str::FromStr};
 
     use chrono::DateTime;
     use revm::primitives::U256;
     use rstest::{fixture, rstest};
-    use std::{error::Error, str::FromStr};
 
+    use super::*;
     use crate::evm::tycho_models::{AccountUpdate, Block, Chain, ChangeType};
 
     #[fixture]

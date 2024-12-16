@@ -1,8 +1,10 @@
-use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
-use num_bigint::BigInt;
 use std::collections::HashSet;
+
+use num_bigint::BigInt;
 use tracing::info;
 use tycho_client::feed::synchronizer::ComponentWithState;
+
+use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 pub fn balancer_pool_filter(component: &ComponentWithState) -> bool {

@@ -1,6 +1,7 @@
-use crate::protocol::errors::SimulationError;
 use alloy_primitives::Address;
 use tycho_core::Bytes;
+
+use crate::protocol::errors::SimulationError;
 
 /// Safely converts a `Bytes` object to an `Address` object.
 ///

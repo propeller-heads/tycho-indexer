@@ -1,9 +1,14 @@
+use std::{collections::HashMap, fmt::Debug};
+
 use alloy_primitives::{Address, U256};
 use alloy_sol_types::SolValue;
 use lazy_static::lazy_static;
 use revm::DatabaseRef;
-use std::{collections::HashMap, fmt::Debug};
 
+use super::{
+    constants::EXTERNAL_ACCOUNT, tycho_simulation_contract::TychoSimulationContract,
+    utils::get_storage_slot_index_at_key,
+};
 use crate::{
     evm::{
         engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
@@ -11,11 +16,6 @@ use crate::{
         ContractCompiler, SlotId,
     },
     protocol::errors::SimulationError,
-};
-
-use super::{
-    constants::EXTERNAL_ACCOUNT, tycho_simulation_contract::TychoSimulationContract,
-    utils::get_storage_slot_index_at_key,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -228,17 +228,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{env, str::FromStr, sync::Arc};
 
     use alloy::{
         providers::{ProviderBuilder, RootProvider},
         transports::BoxTransport,
     };
-    use std::{env, str::FromStr, sync::Arc};
-
     use chrono::NaiveDateTime;
     use dotenv::dotenv;
 
+    use super::*;
     use crate::evm::engine_db::simulation_db::SimulationDB;
 
     fn setup_factory() -> ERC20OverwriteFactory {

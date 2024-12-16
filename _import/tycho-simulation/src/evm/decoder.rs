@@ -1,3 +1,18 @@
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    future::Future,
+    pin::Pin,
+    str::FromStr,
+    sync::Arc,
+};
+
+use alloy_primitives::Address;
+use thiserror::Error;
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
+use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
+use tycho_core::Bytes;
+
 use crate::{
     evm::{
         engine_db::{update_engine, SHARED_TYCHO_DB},
@@ -10,19 +25,6 @@ use crate::{
         state::ProtocolSim,
     },
 };
-use alloy_primitives::Address;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    future::Future,
-    pin::Pin,
-    str::FromStr,
-    sync::Arc,
-};
-use thiserror::Error;
-use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
-use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
-use tycho_core::Bytes;
 
 #[derive(Error, Debug)]
 pub enum StreamDecodeError {
@@ -328,6 +330,13 @@ impl TychoStreamDecoder {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::Path};
+
+    use num_bigint::ToBigUint;
+    use rstest::*;
+    use tycho_client::feed::FeedMessage;
+    use tycho_core::Bytes;
+
     use crate::{
         evm::{
             decoder::{StreamDecodeError, TychoStreamDecoder},
@@ -335,11 +344,6 @@ mod tests {
         },
         models::Token,
     };
-    use num_bigint::ToBigUint;
-    use rstest::*;
-    use std::{fs, path::Path};
-    use tycho_client::feed::FeedMessage;
-    use tycho_core::Bytes;
 
     async fn setup_decoder(set_tokens: bool) -> TychoStreamDecoder {
         let mut decoder = TychoStreamDecoder::new();

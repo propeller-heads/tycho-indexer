@@ -1,10 +1,10 @@
-use crate::{evm::protocol::safe_math::safe_sub_u256, protocol::errors::SimulationError};
 use alloy_primitives::{I256, U256};
 
 use super::{
     solidity_math::{mul_div, mul_div_rounding_up},
     sqrt_price_math,
 };
+use crate::{evm::protocol::safe_math::safe_sub_u256, protocol::errors::SimulationError};
 
 pub fn compute_swap_step(
     sqrt_ratio_current: U256,
@@ -138,11 +138,9 @@ pub fn compute_swap_step(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use super::super::enums::FeeAmount;
-
     use std::{ops::Neg, str::FromStr};
+
+    use super::{super::enums::FeeAmount, *};
 
     struct TestCase {
         price: U256,

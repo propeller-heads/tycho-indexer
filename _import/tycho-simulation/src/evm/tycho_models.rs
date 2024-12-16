@@ -1,16 +1,16 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
-use crate::evm::protocol::u256_num;
 use alloy_primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-use crate::serde_helpers::{hex_bytes, hex_bytes_option};
-
 use super::engine_db::simulation_db::BlockHeader;
+use crate::{
+    evm::protocol::u256_num,
+    serde_helpers::{hex_bytes, hex_bytes_option},
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct ExtractorIdentity {

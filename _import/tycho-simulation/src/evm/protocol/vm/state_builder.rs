@@ -1,11 +1,11 @@
-use alloy_primitives::{Address, U256};
-use alloy_sol_types::SolValue;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     path::PathBuf,
 };
 
+use alloy_primitives::{Address, U256};
+use alloy_sol_types::SolValue;
 use chrono::Utc;
 use itertools::Itertools;
 use revm::{
@@ -14,7 +14,16 @@ use revm::{
     DatabaseRef,
 };
 use tracing::warn;
+use tycho_core::Bytes as TychoBytes;
 
+use super::{
+    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_token::{brute_force_slots, ERC20Slots},
+    models::Capability,
+    state::EVMPoolState,
+    tycho_simulation_contract::TychoSimulationContract,
+    utils::{get_code_for_contract, load_erc20_bytecode},
+};
 use crate::{
     evm::{
         engine_db::{
@@ -25,16 +34,6 @@ use crate::{
         ContractCompiler,
     },
     protocol::errors::SimulationError,
-};
-use tycho_core::Bytes as TychoBytes;
-
-use super::{
-    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_token::{brute_force_slots, ERC20Slots},
-    models::Capability,
-    state::EVMPoolState,
-    tycho_simulation_contract::TychoSimulationContract,
-    utils::{get_code_for_contract, load_erc20_bytecode},
 };
 
 #[derive(Debug)]
@@ -455,14 +454,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
 
+    use alloy_primitives::B256;
+
+    use super::*;
     use crate::evm::{
         engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
         protocol::utils::bytes_to_address,
     };
-    use alloy_primitives::B256;
-    use std::str::FromStr;
 
     #[test]
     fn test_build_without_required_fields() {

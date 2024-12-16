@@ -12,6 +12,12 @@ use revm::DatabaseRef;
 use tracing::info;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
+use super::{
+    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
+    erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
+    models::Capability,
+    tycho_simulation_contract::TychoSimulationContract,
+};
 use crate::{
     evm::{
         engine_db::{
@@ -27,13 +33,6 @@ use crate::{
         models::GetAmountOutResult,
         state::ProtocolSim,
     },
-};
-
-use super::{
-    constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
-    models::Capability,
-    tycho_simulation_contract::TychoSimulationContract,
 };
 
 #[derive(Clone, Debug)]
@@ -585,20 +584,22 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use alloy_primitives::B256;
     use std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
         str::FromStr,
     };
 
+    use alloy_primitives::B256;
     use num_bigint::ToBigUint;
     use num_traits::One;
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
 
-    use super::super::{models::Capability, state_builder::EVMPoolStateBuilder};
+    use super::{
+        super::{models::Capability, state_builder::EVMPoolStateBuilder},
+        *,
+    };
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
         simulation::SimulationEngine,

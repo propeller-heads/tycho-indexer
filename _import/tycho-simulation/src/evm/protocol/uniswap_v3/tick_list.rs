@@ -1,5 +1,6 @@
-use alloy_primitives::U256;
 use std::cmp;
+
+use alloy_primitives::U256;
 
 use super::tick_math;
 
@@ -253,9 +254,9 @@ fn div_floor(lhs: i32, rhs: i32) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use rstest::rstest;
+
+    use super::*;
 
     fn create_tick_list() -> TickList {
         let tick_infos =

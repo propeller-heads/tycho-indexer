@@ -1,13 +1,15 @@
-use alloy_primitives::{Address, U256};
-
-use alloy_sol_types::SolValue;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
 };
 
+use alloy_primitives::{Address, U256};
+use alloy_sol_types::SolValue;
 use revm::DatabaseRef;
 
+use super::{
+    erc20_token::Overwrites, models::Capability, tycho_simulation_contract::TychoSimulationContract,
+};
 use crate::{
     evm::{
         account_storage::StateUpdate,
@@ -15,10 +17,6 @@ use crate::{
         protocol::{u256_num::u256_to_f64, vm::utils::string_to_bytes32},
     },
     protocol::errors::SimulationError,
-};
-
-use super::{
-    erc20_token::Overwrites, models::Capability, tycho_simulation_contract::TychoSimulationContract,
 };
 
 #[derive(Debug)]

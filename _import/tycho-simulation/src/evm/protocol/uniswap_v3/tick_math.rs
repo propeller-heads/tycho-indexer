@@ -1,5 +1,6 @@
-use alloy_primitives::{Sign, I256, U256};
 use std::ops::BitOr;
+
+use alloy_primitives::{Sign, I256, U256};
 
 use crate::{
     evm::protocol::safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256},
@@ -202,8 +203,9 @@ pub fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, SimulationError> 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     struct TestCase {
         tick: i32,

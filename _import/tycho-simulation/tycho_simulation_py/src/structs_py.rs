@@ -1,17 +1,15 @@
 #![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
-use num_bigint::BigUint;
-use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Address as RevmAddress, Bytecode, B256, U256};
-use tokio::runtime::Runtime;
-use tracing::info;
-
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, str::FromStr, sync::Arc};
 
 use alloy::{
     providers::{ProviderBuilder, RootProvider},
     transports::BoxTransport,
 };
-use std::fmt::Debug;
+use num_bigint::BigUint;
+use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use revm::primitives::{Address as RevmAddress, Bytecode, B256, U256};
+use tokio::runtime::Runtime;
+use tracing::info;
 use tycho_simulation::evm::{
     account_storage,
     engine_db::{simulation_db, tycho_db},
