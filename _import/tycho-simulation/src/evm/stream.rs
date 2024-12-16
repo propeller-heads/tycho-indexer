@@ -36,8 +36,9 @@ use crate::{
 ///   based on custom conditions. These filters are registered via `register_filter` and are
 ///   evaluated during decoding.
 ///
-/// For more details on decoding and its behavior, see the documentation for
-/// [`decode`](crate::evm::decoder::TychoStreamDecoder::decode).
+/// **Note:** The tokens provided during configuration will be used for decoding, ensuring
+/// efficient handling of protocol components. Protocol components containing tokens which are not
+/// included in this initial list, or added when applying deltas, will not be decoded.
 ///
 /// # Returns
 /// A result containing a stream of decoded block updates, where each item is either:

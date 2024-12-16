@@ -44,19 +44,16 @@ type RegistryFn =
     dyn Fn(ComponentWithState, Header, Arc<RwLock<DecoderState>>) -> DecodeFut + Send + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
 
-/// A builder for creating protocol streams, decoding blocks, and managing protocol state updates.
+/// A decoder to process raw messages.
 ///
-/// The `ProtocolStreamBuilder` constructs a stream that decodes incoming blocks into `BlockUpdate`
-/// objects. The `BlockUpdate` will only contain updated protocol states for protocols components
-/// whose protocols are registered, which pass the added inclusion filters, and whose token
-/// qualities are above the minimum specified token quality.
+/// This struct decodes incoming messages of type `FeedMessage` and converts it into the
+/// `BlockUpdate`struct.
 ///
-/// ### Key Features:
+/// # Important:
 /// - Supports registering exchanges and their associated filters for specific protocol components.
 /// - Allows the addition of client-side filters for custom conditions.
 ///
-/// **Note:** The builder uses the `TychoStreamBuilder` to fetch blocks and the `TychoStreamDecoder`
-/// to decode them. The tokens provided during configuration will be used for decoding, ensuring
+/// **Note:** The tokens provided during configuration will be used for decoding, ensuring
 /// efficient handling of protocol components. Protocol components containing tokens which are not
 /// included in this initial list, or added when applying deltas, will not be decoded.
 pub(super) struct TychoStreamDecoder {
@@ -67,10 +64,6 @@ pub(super) struct TychoStreamDecoder {
     inclusion_filters: HashMap<String, FilterFn>,
 }
 
-/// Decodes incoming raw messages.
-///
-/// This struct decodes incoming messages of type `FeedMessage` and converts it into the
-/// `BlockUpdate`struct
 impl TychoStreamDecoder {
     pub fn new() -> Self {
         Self {
