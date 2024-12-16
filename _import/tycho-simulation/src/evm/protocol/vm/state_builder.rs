@@ -248,7 +248,12 @@ where
         let engine = create_engine(db, self.trace.unwrap_or(false))?;
 
         // Mock the ERC20 contract at the given token addresses.
-        let mocked_contract_bytecode: Bytecode = load_erc20_bytecode()?;
+        let mocked_contract_bytecode: Bytecode = load_erc20_bytecode().map_err(|err| {
+            SimulationError::FatalError(format!(
+                "{:?} when loading ERC20 bytecode",
+                err.to_string()
+            ))
+        })?;
         for token_address in &self.tokens {
             let info = AccountInfo {
                 balance: Default::default(),
