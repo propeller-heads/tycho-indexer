@@ -18,16 +18,26 @@ use crate::{
     },
 };
 
-pub struct ProtocolStreamBuilder {
-    decoder: TychoStreamDecoder,
-    stream_builder: TychoStreamBuilder,
-}
-
 /// Builds the protocol stream, providing a `BlockUpdate` for each block received.
 ///
 /// Each `BlockUpdate` can then be used at a higher level to retrieve important information from
 /// the block, such as the updated states of protocol components, which can in turn be used
 /// to obtain spot price information for a desired component and token pair.
+///
+/// # Important
+/// Decoding is performed using the [`TychoStreamDecoder`](crate::evm::decoder::TychoStreamDecoder).
+/// The decoding process involves several key aspects:
+/// - **Token Registry:** Protocol components are decoded only if their associated tokens are
+///   present in the registry. Missing tokens will cause the corresponding pools or components to be
+///   skipped.
+/// - **State Updates:** Decoded state updates are constructed using the registered decoders for the
+///   protocol. If a decoder is not registered for a protocol, its components cannot be decoded.
+/// - **Custom Filters:** Client-side filters can be applied to exclude specific components or pools
+///   based on custom conditions. These filters are registered via `register_filter` and are
+///   evaluated during decoding.
+///
+/// For more details on decoding and its behavior, see the documentation for
+/// [`decode`](crate::evm::decoder::TychoStreamDecoder::decode).
 ///
 /// # Returns
 /// A result containing a stream of decoded block updates, where each item is either:
@@ -36,6 +46,11 @@ pub struct ProtocolStreamBuilder {
 ///
 /// # Errors
 /// Returns a `StreamError` if the underlying stream builder fails to initialize.
+pub struct ProtocolStreamBuilder {
+    decoder: TychoStreamDecoder,
+    stream_builder: TychoStreamBuilder,
+}
+
 impl ProtocolStreamBuilder {
     pub fn new(tycho_url: &str, chain: Chain) -> Self {
         Self {
