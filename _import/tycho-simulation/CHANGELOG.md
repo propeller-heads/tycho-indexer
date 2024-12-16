@@ -1,3 +1,15 @@
+## [0.61.0](https://github.com/propeller-heads/tycho-simulation/compare/0.60.2...0.61.0) (2024-12-16)
+
+
+### Features
+
+* Update tycho dependencies tag and re export them ([5ffb440](https://github.com/propeller-heads/tycho-simulation/commit/5ffb440670fd310769c51cc3b5ebdcc2d81f3d81))
+
+
+### Bug Fixes
+
+* Remove tycho_ethereum - it isn't used anywhere ([5b92c47](https://github.com/propeller-heads/tycho-simulation/commit/5b92c4732821184212911278be40e124e2e157c4))
+
 ## [0.60.2](https://github.com/propeller-heads/tycho-simulation/compare/0.60.1...0.60.2) (2024-12-13)
 
 
