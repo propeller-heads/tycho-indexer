@@ -31,7 +31,7 @@ fn div_rounding_up(a: U256, b: U256) -> Result<U256, SimulationError> {
     }
 }
 
-pub fn get_amount0_delta(
+pub(super) fn get_amount0_delta(
     a: U256,
     b: U256,
     liquidity: u128,
@@ -51,7 +51,7 @@ pub fn get_amount0_delta(
     }
 }
 
-pub fn get_amount1_delta(
+pub(super) fn get_amount1_delta(
     a: U256,
     b: U256,
     liquidity: u128,
@@ -68,7 +68,7 @@ pub fn get_amount1_delta(
     }
 }
 
-pub fn get_next_sqrt_price_from_input(
+pub(super) fn get_next_sqrt_price_from_input(
     sqrt_price: U256,
     liquidity: u128,
     amount_in: U256,
@@ -83,7 +83,7 @@ pub fn get_next_sqrt_price_from_input(
     }
 }
 
-pub fn get_next_sqrt_price_from_output(
+pub(super) fn get_next_sqrt_price_from_output(
     sqrt_price: U256,
     liquidity: u128,
     amount_in: U256,

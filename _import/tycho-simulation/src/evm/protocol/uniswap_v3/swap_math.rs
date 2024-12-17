@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{evm::protocol::safe_math::safe_sub_u256, protocol::errors::SimulationError};
 
-pub fn compute_swap_step(
+pub(super) fn compute_swap_step(
     sqrt_ratio_current: U256,
     sqrt_ratio_target: U256,
     liquidity: u128,
