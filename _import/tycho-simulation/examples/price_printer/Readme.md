@@ -7,5 +7,5 @@ quotes from each pool in Ethereum.
 
 ```bash
 export RPC_URL=<your-eth-rpc-url>
-cargo run --release --example explorer -- --tvl-threshold 1000
+cargo run --release --example price_printer -- --tvl-threshold 1000
 ```
