@@ -6,6 +6,7 @@ Moves slow on-chain computations off-chain to solve optimization problems.
 
 This crate allows simulating a set of supported protocols off-chain. Currently, it has a focus on token exchange
 protocols, but it is not necessarily limited to this.
+To get started, see our Quickstart guide [here](./examples/quickstart/Readme.md).
 
 > **See also:**
 > The `evm` module allows for simulating _any_ transaction; it is agnostic to protocol. See module's
