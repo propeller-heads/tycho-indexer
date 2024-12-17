@@ -2,11 +2,17 @@
   "name": "tycho-client-ts",
   "version": "1.0.0",
   "description": "TypeScript client for Tycho indexer",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "author": "i@gt.email",
   "license": "MIT",
   "private": false,
   "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
     "stream-example": "ts-node examples/stream-example.ts",
     "rpc-example": "ts-node examples/rpc-example.ts",
     "format": "prettier -wu src/*"
