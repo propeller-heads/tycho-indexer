@@ -35,6 +35,7 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
     Ok(bytes)
 }
 
+/// Loads all tokens from Tycho and returns them as a Hashmap of address->Token.
 pub async fn load_all_tokens(tycho_url: &str, auth_key: Option<&str>) -> HashMap<Bytes, Token> {
     let rpc_url = format!("https://{tycho_url}");
     let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key).unwrap();

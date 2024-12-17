@@ -1,10 +1,9 @@
 //! Basic data structures
 //!
 //! This module contains basic models that are shared across many
-//! components of the crate, including Token, Swap and SwapSequence.
+//! components of the crate.
 //!
-//! Tokens provide instructions on how to handle prices and amounts,
-//! while Swap and SwapSequence are usually used as results types.
+//! Tokens provide instructions on how to handle prices and amounts.
 use std::{
     convert::TryFrom,
     hash::{Hash, Hasher},
@@ -29,9 +28,9 @@ pub struct Token {
 }
 
 impl Token {
-    /// Constructor for ERC20Token
+    /// Constructor for Token
     ///
-    /// Creates a new ERC20 token struct
+    /// Creates a new Token struct
     ///
     /// ## Parameters
     /// - `address`: token address as string
@@ -40,7 +39,7 @@ impl Token {
     /// - `gas`: token gas as U256
     ///
     /// ## Return
-    /// Return a new ERC20 token struct
+    /// Return a new Token struct
     ///
     /// ## Panic
     /// - Panics if the token address string is not in valid format
