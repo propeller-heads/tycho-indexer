@@ -1,7 +1,7 @@
 {
   "name": "tycho-client-ts",
   "version": "1.0.0",
-  "description": "Typescript client for Tycho indexer",
+  "description": "TypeScript client for Tycho indexer",
   "main": "index.js",
   "author": "i@gt.email",
   "license": "MIT",
