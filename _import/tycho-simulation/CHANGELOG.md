@@ -1,3 +1,15 @@
+## [0.62.0](https://github.com/propeller-heads/tycho-simulation/compare/0.61.2...0.62.0) (2024-12-17)
+
+
+### Features
+
+* Add Quickstart ([0d8abe8](https://github.com/propeller-heads/tycho-simulation/commit/0d8abe89b3b45fcdbf052c9e791c7f143272ebf9))
+
+
+### Bug Fixes
+
+* Simplify quickstart (no more tasks) ([8a09054](https://github.com/propeller-heads/tycho-simulation/commit/8a0905487205c72b85690aedc182d9178e102a64))
+
 ## [0.61.2](https://github.com/propeller-heads/tycho-simulation/compare/0.61.1...0.61.2) (2024-12-17)
 
 ## [0.61.1](https://github.com/propeller-heads/tycho-simulation/compare/0.61.0...0.61.1) (2024-12-16)
