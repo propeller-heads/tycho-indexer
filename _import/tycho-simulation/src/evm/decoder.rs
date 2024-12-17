@@ -44,6 +44,18 @@ type RegistryFn =
     dyn Fn(ComponentWithState, Header, Arc<RwLock<DecoderState>>) -> DecodeFut + Send + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
 
+/// A decoder to process raw messages.
+///
+/// This struct decodes incoming messages of type `FeedMessage` and converts it into the
+/// `BlockUpdate`struct.
+///
+/// # Important:
+/// - Supports registering exchanges and their associated filters for specific protocol components.
+/// - Allows the addition of client-side filters for custom conditions.
+///
+/// **Note:** The tokens provided during configuration will be used for decoding, ensuring
+/// efficient handling of protocol components. Protocol components containing tokens which are not
+/// included in this initial list, or added when applying deltas, will not be decoded.
 pub(super) struct TychoStreamDecoder {
     state: Arc<RwLock<DecoderState>>,
     skip_state_decode_failures: bool,
@@ -63,12 +75,26 @@ impl TychoStreamDecoder {
         }
     }
 
+    /// Sets the currently known tokens which will be considered during decoding.
+    ///
+    /// Protocol components containing tokens which are not included in this initial list, or
+    /// added when applying deltas, will not be decoded.
     pub async fn set_tokens(&self, tokens: HashMap<Bytes, Token>) {
         let mut guard = self.state.write().await;
         guard.tokens = tokens;
     }
 
-    // Method to register a decoder
+    /// Registers a decoder for a given exchange.
+    ///
+    /// This method maps an exchange identifier to a specific protocol simulation type.
+    /// The associated type must implement the `TryFromWithBlock` trait to enable decoding
+    /// of state updates from `ComponentWithState` objects. This allows the decoder to transform
+    /// the component data into the appropriate protocol simulation type based on the current
+    /// blockchain state and the provided block header.
+    /// For example, to register a decoder for the `uniswap_v2` exchange, you must call
+    /// this function with `register_decoder::<UniswapV2State>("uniswap_v2")`.
+    /// This ensures that the exchange ID `uniswap_v2` is properly associated with the
+    /// `UniswapV2State` decoder for use in the protocol stream.
     pub fn register_decoder<T>(&mut self, exchange: &str)
     where
         T: ProtocolSim
@@ -92,11 +118,28 @@ impl TychoStreamDecoder {
             .insert(exchange.to_string(), decoder);
     }
 
+    /// Registers a client-side filter function for a given exchange.
+    ///
+    /// Associates a filter function with an exchange ID, enabling custom filtering of protocol
+    /// components. The filter function is applied client-side to refine the data received from the
+    /// stream. It can be used to exclude certain components based on attributes or conditions that
+    /// are not supported by the server-side filtering logic. This is particularly useful for
+    /// implementing custom behaviors, such as:
+    /// - Filtering out pools with specific attributes (e.g., unsupported features).
+    /// - Blacklisting pools based on custom criteria.
+    /// - Excluding pools that do not meet certain requirements (e.g., token pairs or liquidity
+    ///   constraints).
+    ///
+    /// For example, you might use a filter to exclude pools that are not fully supported in the
+    /// protocol, or to ignore pools with certain attributes that are irrelevant to your
+    /// application.
     pub fn register_filter(&mut self, exchange: &str, predicate: FilterFn) {
         self.inclusion_filters
             .insert(exchange.to_string(), predicate);
     }
 
+    /// Decodes a `FeedMessage` into a `BlockUpdate` containing the updated states of protocol
+    /// components
     pub async fn decode(&self, msg: FeedMessage) -> Result<BlockUpdate, StreamDecodeError> {
         // stores all states updated in this tick/msg
         let mut updated_states = HashMap::new();
@@ -172,7 +215,7 @@ impl TychoStreamDecoder {
                         } else {
                             // We may reach this point if the removed component
                             //  contained low quality tokens, in this case the component
-                            //  was never added so we can skip emitting it.
+                            //  was never added, so we can skip emitting it.
                             None
                         }
                     }),

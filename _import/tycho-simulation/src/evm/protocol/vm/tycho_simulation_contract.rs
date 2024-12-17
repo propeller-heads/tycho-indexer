@@ -71,9 +71,14 @@ where
         adapter_contract_path: &PathBuf,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
-        let adapter_contract_code = get_contract_bytecode(adapter_contract_path)
-            .map_err(|err| SimulationError::FatalError(err.to_string()))?;
-
+        let adapter_contract_code =
+            get_contract_bytecode(adapter_contract_path).map_err(|err| {
+                SimulationError::FatalError(format!(
+                    "{:?} for path: {:?}",
+                    err.to_string(),
+                    adapter_contract_path
+                ))
+            })?;
         engine.state.init_account(
             address,
             AccountInfo {

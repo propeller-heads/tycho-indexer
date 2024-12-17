@@ -79,17 +79,6 @@ async fn main() {
         anyhow::Result::Ok(())
     });
 
-    // If testing without the UI - spawn a consumer task to consume the messages (uncomment below)
-    // let (tick_tx, mut tick_rx) = mpsc::channel::<BlockState>(12);
-
-    // let consumer_handle = task::spawn(async move {
-    //     while let Some(message) = tick_rx.recv().await {
-    //         println!("got message: {:?}", message);
-    //     }
-    //     Ok(())
-    // });
-    // let tasks = [tycho_message_processor, consumer_handle];
-
     let terminal = ratatui::init();
     let terminal_app = tokio::spawn(async move {
         ui::App::new(tick_rx)
