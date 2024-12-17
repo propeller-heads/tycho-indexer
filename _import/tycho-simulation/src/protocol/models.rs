@@ -21,7 +21,7 @@
 //! `ProtocolState` into a single struct.
 //!
 //! # Note:
-//! It's worth emphasizin that although the term "pair" used in this
+//! It's worth emphasizing that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
 use std::{collections::HashMap, future::Future};
@@ -95,7 +95,7 @@ impl GetAmountOutResult {
 #[derive(Debug)]
 pub struct BlockUpdate {
     pub block_number: u64,
-    /// The current state of all pools
+    /// The new and updated states of this block
     pub states: HashMap<String, Box<dyn ProtocolSim>>,
     /// The new pairs that were added in this block
     pub new_pairs: HashMap<String, ProtocolComponent>,
