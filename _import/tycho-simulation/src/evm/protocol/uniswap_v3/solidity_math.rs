@@ -5,7 +5,7 @@ use crate::{
     protocol::errors::SimulationError,
 };
 
-pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> Result<U256, SimulationError> {
+pub(super) fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> Result<U256, SimulationError> {
     let a_big = U512::from(a);
     let b_big = U512::from(b);
     let product = safe_mul_u512(a_big, b_big)?;
@@ -16,7 +16,7 @@ pub fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> Result<U256, Simula
     truncate_to_u256(result)
 }
 
-pub fn mul_div(a: U256, b: U256, denom: U256) -> Result<U256, SimulationError> {
+pub(super) fn mul_div(a: U256, b: U256, denom: U256) -> Result<U256, SimulationError> {
     let a_big = U512::from(a);
     let b_big = U512::from(b);
     let product = safe_mul_u512(a_big, b_big)?;

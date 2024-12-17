@@ -6,9 +6,9 @@ use super::tick_math;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
-    pub index: i32,
-    pub net_liquidity: i128,
-    pub sqrt_price: U256,
+    pub(super) index: i32,
+    pub(super) net_liquidity: i128,
+    pub(super) sqrt_price: U256,
 }
 
 impl TickInfo {
@@ -27,12 +27,12 @@ impl PartialOrd for TickInfo {
 }
 
 #[derive(Debug)]
-pub struct TickListError {
-    pub kind: TickListErrorKind,
+pub(super) struct TickListError {
+    pub(super) kind: TickListErrorKind,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum TickListErrorKind {
+pub(super) enum TickListErrorKind {
     NotFound,
     BelowSmallest,
     AtOrAboveLargest,
@@ -40,13 +40,13 @@ pub enum TickListErrorKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TickList {
+pub(super) struct TickList {
     tick_spacing: u16,
     ticks: Vec<TickInfo>,
 }
 
 impl TickList {
-    pub fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
+    pub(super) fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList { tick_spacing: spacing, ticks };
         let valid = tick_list.valid_ticks();
         if valid.is_ok() {
@@ -87,11 +87,13 @@ impl TickList {
         Ok(true)
     }
 
-    pub fn apply_liquidity_change(&mut self, lower: i32, upper: i32, delta: i128) {
+    #[allow(dead_code)]
+    fn apply_liquidity_change(&mut self, lower: i32, upper: i32, delta: i128) {
         self.upsert_tick(lower, delta);
         self.upsert_tick(upper, -delta);
     }
 
+    #[allow(dead_code)]
     fn upsert_tick(&mut self, tick: i32, delta: i128) {
         match self
             .ticks
@@ -111,7 +113,7 @@ impl TickList {
         }
     }
 
-    pub fn set_tick_liquidity(&mut self, tick: i32, liquidity: i128) {
+    pub(super) fn set_tick_liquidity(&mut self, tick: i32, liquidity: i128) {
         match self
             .ticks
             .binary_search_by(|t| t.index.cmp(&tick))
@@ -130,27 +132,27 @@ impl TickList {
         }
     }
 
-    pub fn is_below_smallest(&self, tick: i32) -> bool {
+    fn is_below_smallest(&self, tick: i32) -> bool {
         tick < self.ticks[0].index
     }
 
-    pub fn is_below_safe_tick(&self, tick: i32) -> bool {
+    fn is_below_safe_tick(&self, tick: i32) -> bool {
         let smallest = self.ticks[0].index;
         let minimum = smallest - self.tick_spacing as i32;
         tick < minimum
     }
 
-    pub fn is_at_or_above_largest(&self, tick: i32) -> bool {
+    fn is_at_or_above_largest(&self, tick: i32) -> bool {
         tick >= self.ticks[self.ticks.len() - 1].index
     }
 
-    pub fn is_at_or_above_safe_tick(&self, tick: i32) -> bool {
+    fn is_at_or_above_safe_tick(&self, tick: i32) -> bool {
         let largest = self.ticks[self.ticks.len() - 1].index;
         let maximum = largest + self.tick_spacing as i32;
         tick >= maximum
     }
 
-    pub fn get_tick(&self, index: i32) -> Result<&TickInfo, TickListError> {
+    pub(super) fn get_tick(&self, index: i32) -> Result<&TickInfo, TickListError> {
         match self
             .ticks
             .binary_search_by(|el| el.index.cmp(&index))
@@ -160,7 +162,7 @@ impl TickList {
         }
     }
 
-    pub fn next_initialized_tick(&self, index: i32, lte: bool) -> Result<&TickInfo, TickListError> {
+    fn next_initialized_tick(&self, index: i32, lte: bool) -> Result<&TickInfo, TickListError> {
         if lte {
             if self.is_below_smallest(index) {
                 return Err(TickListError { kind: TickListErrorKind::BelowSmallest });
@@ -194,7 +196,7 @@ impl TickList {
         }
     }
 
-    pub fn next_initialized_tick_within_one_word(
+    pub(super) fn next_initialized_tick_within_one_word(
         &self,
         tick: i32,
         lte: bool,
