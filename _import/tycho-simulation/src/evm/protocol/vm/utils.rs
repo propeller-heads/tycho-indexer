@@ -3,7 +3,7 @@ use std::{
     env,
     fs::File,
     io::Read,
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
     sync::{Arc, LazyLock},
 };
@@ -307,13 +307,8 @@ pub(crate) fn get_contract_bytecode(path: &PathBuf) -> Result<Bytecode, FileErro
 }
 
 pub(crate) fn load_erc20_bytecode() -> Result<Bytecode, FileError> {
-    let erc20_bin_path = Path::new(file!())
-        .parent()
-        .ok_or_else(|| {
-            FileError::Structure("Failed to obtain assets directory for ERC20.bin".to_string())
-        })?
-        .join("assets")
-        .join("ERC20.bin");
+    let erc20_bin_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/evm/protocol/vm/assets/ERC20.bin");
 
     let mut erc_20_file = File::open(&erc20_bin_path).map_err(FileError::Io)?;
     let mut erc_20_contents = Vec::new();
