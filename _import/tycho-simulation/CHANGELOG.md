@@ -1,3 +1,10 @@
+## [0.62.2](https://github.com/propeller-heads/tycho-simulation/compare/0.62.1...0.62.2) (2024-12-19)
+
+
+### Bug Fixes
+
+* Make the ERC20.bin filepath dependent on CARGO_MANIFEST_DIR ([2d20d30](https://github.com/propeller-heads/tycho-simulation/commit/2d20d3076d4b3ff074dc7999dd62ec26c311ede0))
+
 ## [0.62.1](https://github.com/propeller-heads/tycho-simulation/compare/0.62.0...0.62.1) (2024-12-19)
 
 
