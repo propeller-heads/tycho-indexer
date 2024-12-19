@@ -1,13 +1,18 @@
-#![allow(dead_code)] //TODO: remove when used
+use std::{any::Any, collections::HashMap};
 
 use alloy_primitives::{Sign, I256, U256};
+use num_bigint::BigUint;
+use tracing::trace;
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
         utils::uniswap::{
-            liquidity_math, swap_math,
+            liquidity_math,
+            sqrt_price_math::sqrt_price_q96_to_f64,
+            swap_math,
             tick_list::{TickInfo, TickList, TickListErrorKind},
             tick_math::{
                 get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
@@ -16,7 +21,12 @@ use crate::{
             StepComputation, SwapResults, SwapState,
         },
     },
-    protocol::{errors::SimulationError, models::GetAmountOutResult, state::ProtocolSim},
+    models::Token,
+    protocol::{
+        errors::{SimulationError, TransitionError},
+        models::GetAmountOutResult,
+        state::ProtocolSim,
+    },
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,50 +227,92 @@ impl UniswapV4State {
     }
 }
 
-#[allow(unused_variables)] //TODO: remove when implemented
 impl ProtocolSim for UniswapV4State {
+    // Not possible to implement correctly with the current interface because we need to know the
+    // swap direction.
     fn fee(&self) -> f64 {
         todo!()
     }
 
-    fn spot_price(
-        &self,
-        base: &crate::models::Token,
-        quote: &crate::models::Token,
-    ) -> Result<f64, SimulationError> {
-        todo!()
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        if base < quote {
+            Ok(sqrt_price_q96_to_f64(self.sqrt_price, base.decimals as u32, quote.decimals as u32))
+        } else {
+            Ok(1.0f64 /
+                sqrt_price_q96_to_f64(
+                    self.sqrt_price,
+                    quote.decimals as u32,
+                    base.decimals as u32,
+                ))
+        }
     }
 
     fn get_amount_out(
         &self,
-        amount_in: num_bigint::BigUint,
-        token_in: &crate::models::Token,
-        token_out: &crate::models::Token,
+        amount_in: BigUint,
+        token_in: &Token,
+        token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        todo!()
+        let zero_for_one = token_in < token_out;
+        let amount_specified = I256::checked_from_sign_and_abs(
+            Sign::Positive,
+            U256::from_be_slice(&amount_in.to_bytes_be()),
+        )
+        .expect("UniswapV4 I256 overflow");
+
+        let result = self.swap(zero_for_one, amount_specified, None)?;
+
+        trace!(?amount_in, ?token_in, ?token_out, ?zero_for_one, ?result, "V4 SWAP");
+        let mut new_state = self.clone();
+        new_state.liquidity = result.liquidity;
+        new_state.tick = result.tick;
+        new_state.sqrt_price = result.sqrt_price;
+
+        Ok(GetAmountOutResult::new(
+            u256_to_biguint(
+                result
+                    .amount_calculated
+                    .abs()
+                    .into_raw(),
+            ),
+            u256_to_biguint(result.gas_used),
+            Box::new(new_state),
+        ))
     }
 
+    #[allow(unused_variables)] //TODO: remove when implemented
     fn delta_transition(
         &mut self,
-        delta: tycho_core::dto::ProtocolStateDelta,
-        tokens: &std::collections::HashMap<tycho_core::Bytes, crate::models::Token>,
-    ) -> Result<(), crate::protocol::errors::TransitionError<String>> {
+        delta: ProtocolStateDelta,
+        tokens: &HashMap<Bytes, Token>,
+    ) -> Result<(), TransitionError<String>> {
         todo!()
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
-        todo!()
+        Box::new(self.clone())
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        todo!()
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        todo!()
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
-        todo!()
+        if let Some(other_state) = other
+            .as_any()
+            .downcast_ref::<UniswapV4State>()
+        {
+            self.liquidity == other_state.liquidity &&
+                self.sqrt_price == other_state.sqrt_price &&
+                self.fees == other_state.fees &&
+                self.tick == other_state.tick &&
+                self.ticks == other_state.ticks
+        } else {
+            false
+        }
     }
 }
