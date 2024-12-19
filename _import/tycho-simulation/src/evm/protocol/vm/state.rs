@@ -586,7 +586,6 @@ where
 mod tests {
     use std::{
         collections::{HashMap, HashSet},
-        path::PathBuf,
         str::FromStr,
     };
 
@@ -602,6 +601,7 @@ mod tests {
     };
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
+        protocol::vm::constants::BALANCER_V2,
         simulation::SimulationEngine,
         tycho_models::AccountUpdate,
     };
@@ -696,9 +696,7 @@ mod tests {
 
         EVMPoolStateBuilder::new(pool_id, tokens, balances, block, adapter_address)
             .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
-            .adapter_contract_path(PathBuf::from(
-                "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
-            ))
+            .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
             .stateless_contracts(stateless_contracts)
             .build(SHARED_TYCHO_DB.clone())
             .await
