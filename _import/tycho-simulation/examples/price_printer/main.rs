@@ -47,7 +47,8 @@ async fn main() {
     let (tick_tx, tick_rx) = mpsc::channel::<BlockUpdate>(12);
 
     let tycho_message_processor: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
-        let all_tokens = load_all_tokens(tycho_url.as_str(), Some(tycho_api_key.as_str())).await;
+        let all_tokens =
+            load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str())).await;
         let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
         let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, Chain::Ethereum)
             .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
