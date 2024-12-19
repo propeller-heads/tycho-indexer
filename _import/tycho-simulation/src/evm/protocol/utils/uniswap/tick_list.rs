@@ -6,9 +6,9 @@ use super::tick_math;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
-    pub(super) index: i32,
-    pub(super) net_liquidity: i128,
-    pub(super) sqrt_price: U256,
+    pub(crate) index: i32,
+    pub(crate) net_liquidity: i128,
+    pub(crate) sqrt_price: U256,
 }
 
 impl TickInfo {
@@ -27,12 +27,12 @@ impl PartialOrd for TickInfo {
 }
 
 #[derive(Debug)]
-pub(super) struct TickListError {
-    pub(super) kind: TickListErrorKind,
+pub(crate) struct TickListError {
+    pub(crate) kind: TickListErrorKind,
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) enum TickListErrorKind {
+pub(crate) enum TickListErrorKind {
     NotFound,
     BelowSmallest,
     AtOrAboveLargest,
@@ -40,13 +40,13 @@ pub(super) enum TickListErrorKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct TickList {
+pub(crate) struct TickList {
     tick_spacing: u16,
     ticks: Vec<TickInfo>,
 }
 
 impl TickList {
-    pub(super) fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
+    pub(crate) fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList { tick_spacing: spacing, ticks };
         let valid = tick_list.valid_ticks();
         if valid.is_ok() {
@@ -113,7 +113,7 @@ impl TickList {
         }
     }
 
-    pub(super) fn set_tick_liquidity(&mut self, tick: i32, liquidity: i128) {
+    pub(crate) fn set_tick_liquidity(&mut self, tick: i32, liquidity: i128) {
         match self
             .ticks
             .binary_search_by(|t| t.index.cmp(&tick))
@@ -152,7 +152,7 @@ impl TickList {
         tick >= maximum
     }
 
-    pub(super) fn get_tick(&self, index: i32) -> Result<&TickInfo, TickListError> {
+    pub(crate) fn get_tick(&self, index: i32) -> Result<&TickInfo, TickListError> {
         match self
             .ticks
             .binary_search_by(|el| el.index.cmp(&index))
@@ -196,7 +196,7 @@ impl TickList {
         }
     }
 
-    pub(super) fn next_initialized_tick_within_one_word(
+    pub(crate) fn next_initialized_tick_within_one_word(
         &self,
         tick: i32,
         lte: bool,

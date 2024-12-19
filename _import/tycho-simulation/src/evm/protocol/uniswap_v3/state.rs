@@ -6,18 +6,20 @@ use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
-    enums::FeeAmount,
-    liquidity_math,
-    sqrt_price_math::sqrt_price_q96_to_f64,
-    swap_math,
-    tick_list::{TickInfo, TickList},
-    tick_math,
+    enums::FeeAmount, liquidity_math, sqrt_price_math::sqrt_price_q96_to_f64, swap_math,
     tycho_decoder::i24_be_bytes_to_i32,
 };
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
+        utils::uniswap::{
+            tick_list::{TickInfo, TickList, TickListErrorKind},
+            tick_math::{
+                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+                MIN_SQRT_RATIO, MIN_TICK,
+            },
+        },
     },
     models::Token,
     protocol::{
@@ -107,16 +109,16 @@ impl UniswapV3State {
         let price_limit = if let Some(limit) = sqrt_price_limit {
             limit
         } else if zero_for_one {
-            safe_add_u256(tick_math::MIN_SQRT_RATIO, U256::from(1u64))?
+            safe_add_u256(MIN_SQRT_RATIO, U256::from(1u64))?
         } else {
-            safe_sub_u256(tick_math::MAX_SQRT_RATIO, U256::from(1u64))?
+            safe_sub_u256(MAX_SQRT_RATIO, U256::from(1u64))?
         };
 
         if zero_for_one {
-            assert!(price_limit > tick_math::MIN_SQRT_RATIO);
+            assert!(price_limit > MIN_SQRT_RATIO);
             assert!(price_limit < self.sqrt_price);
         } else {
-            assert!(price_limit < tick_math::MAX_SQRT_RATIO);
+            assert!(price_limit < MAX_SQRT_RATIO);
             assert!(price_limit > self.sqrt_price);
         }
 
@@ -140,7 +142,7 @@ impl UniswapV3State {
             {
                 Ok((tick, init)) => (tick, init),
                 Err(tick_err) => match tick_err.kind {
-                    super::tick_list::TickListErrorKind::TicksExeeded => {
+                    TickListErrorKind::TicksExeeded => {
                         let mut new_state = self.clone();
                         new_state.liquidity = state.liquidity;
                         new_state.tick = state.tick;
@@ -158,9 +160,9 @@ impl UniswapV3State {
                 },
             };
 
-            next_tick = next_tick.clamp(tick_math::MIN_TICK, tick_math::MAX_TICK);
+            next_tick = next_tick.clamp(MIN_TICK, MAX_TICK);
 
-            let sqrt_price_next = tick_math::get_sqrt_ratio_at_tick(next_tick)?;
+            let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
@@ -209,7 +211,7 @@ impl UniswapV3State {
                 }
                 state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
-                state.tick = tick_math::get_tick_at_sqrt_ratio(state.sqrt_price)?;
+                state.tick = get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
             gas_used = safe_add_u256(gas_used, U256::from(2000))?;
         }

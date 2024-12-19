@@ -7,17 +7,17 @@ use crate::{
     protocol::errors::SimulationError,
 };
 
-pub(super) const MIN_TICK: i32 = -887272;
-pub(super) const MAX_TICK: i32 = 887272;
+pub(crate) const MIN_TICK: i32 = -887272;
+pub(crate) const MAX_TICK: i32 = 887272;
 
 // MIN_SQRT_RATIO: 4295128739
-pub(super) const MIN_SQRT_RATIO: U256 = U256::from_limbs([4295128739u64, 0, 0, 0]);
+pub(crate) const MIN_SQRT_RATIO: U256 = U256::from_limbs([4295128739u64, 0, 0, 0]);
 
 // MAX_SQRT_RATIO: 1461446703485210103287273052203988822378723970342
-pub(super) const MAX_SQRT_RATIO: U256 =
+pub(crate) const MAX_SQRT_RATIO: U256 =
     U256::from_limbs([6743328256752651558u64, 17280870778742802505u64, 4294805859u64, 0]);
 
-pub(super) fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError> {
+pub(crate) fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError> {
     assert!(tick.abs() <= MAX_TICK);
     let abs_tick = U256::from(tick.unsigned_abs());
     let mut ratio = if abs_tick.bit(0) {
@@ -154,7 +154,7 @@ fn most_significant_bit(x: U256) -> usize {
     x.bit_len() - 1
 }
 
-pub(super) fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, SimulationError> {
+pub(crate) fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, SimulationError> {
     assert!(sqrt_price >= MIN_SQRT_RATIO && sqrt_price < MAX_SQRT_RATIO);
     let ratio_x128 = sqrt_price << 32;
     let msb = most_significant_bit(ratio_x128);

@@ -1,3 +1,5 @@
+pub(crate) mod uniswap;
+
 use alloy_primitives::Address;
 use tycho_core::Bytes;
 
