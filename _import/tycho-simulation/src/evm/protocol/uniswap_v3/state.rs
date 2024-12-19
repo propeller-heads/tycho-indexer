@@ -5,20 +5,21 @@ use num_bigint::BigUint;
 use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
-use super::{
-    enums::FeeAmount, liquidity_math, sqrt_price_math::sqrt_price_q96_to_f64, swap_math,
-    tycho_decoder::i24_be_bytes_to_i32,
-};
+use super::{enums::FeeAmount, tycho_decoder::i24_be_bytes_to_i32};
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
         utils::uniswap::{
+            liquidity_math,
+            sqrt_price_math::sqrt_price_q96_to_f64,
+            swap_math,
             tick_list::{TickInfo, TickList, TickListErrorKind},
             tick_math::{
                 get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
                 MIN_SQRT_RATIO, MIN_TICK,
             },
+            StepComputation, SwapResults, SwapState,
         },
     },
     models::Token,
@@ -36,35 +37,6 @@ pub struct UniswapV3State {
     fee: FeeAmount,
     tick: i32,
     ticks: TickList,
-}
-
-#[derive(Debug)]
-struct SwapState {
-    amount_remaining: I256,
-    amount_calculated: I256,
-    sqrt_price: U256,
-    tick: i32,
-    liquidity: u128,
-}
-
-#[derive(Debug)]
-struct StepComputation {
-    sqrt_price_start: U256,
-    tick_next: i32,
-    initialized: bool,
-    sqrt_price_next: U256,
-    amount_in: U256,
-    amount_out: U256,
-    fee_amount: U256,
-}
-
-#[derive(Debug)]
-struct SwapResults {
-    amount_calculated: I256,
-    sqrt_price: U256,
-    liquidity: u128,
-    tick: i32,
-    gas_used: U256,
 }
 
 impl UniswapV3State {
