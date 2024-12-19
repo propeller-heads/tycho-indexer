@@ -8,16 +8,6 @@ use crate::evm::protocol::u256_num::u256_to_f64;
 ///     1. The nominator and denominator are converted to float (this conversion is lossy)
 ///     2. The price is computed by using float division
 ///     3. Finally, the price is correct for difference in token decimals.
-///
-/// # Example
-/// ```
-/// use alloy_primitives::U256;
-/// use tycho_simulation::evm::protocol::uniswap_v2::reserve_price::spot_price_from_reserves;
-///
-/// let res = spot_price_from_reserves(U256::from(100), U256::from(200), 6, 6);
-///
-/// assert_eq!(res, 2.0f64);
-/// ```
 pub(super) fn spot_price_from_reserves(
     r0: U256,
     r1: U256,

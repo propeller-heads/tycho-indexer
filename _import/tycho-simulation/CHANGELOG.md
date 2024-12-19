@@ -1,3 +1,10 @@
+## [0.62.1](https://github.com/propeller-heads/tycho-simulation/compare/0.62.0...0.62.1) (2024-12-19)
+
+
+### Bug Fixes
+
+* Allow for no tls connections when getting tokens from Tycho ([7981153](https://github.com/propeller-heads/tycho-simulation/commit/79811539a59da162c51ac09ef2c9becbc05d5797))
+
 ## [0.62.0](https://github.com/propeller-heads/tycho-simulation/compare/0.61.2...0.62.0) (2024-12-17)
 
 
