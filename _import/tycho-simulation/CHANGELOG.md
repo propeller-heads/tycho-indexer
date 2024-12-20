@@ -1,3 +1,24 @@
+## [0.63.0](https://github.com/propeller-heads/tycho-simulation/compare/0.62.3...0.63.0) (2024-12-20)
+
+
+### Features
+
+* Allow for skip_state_decode_failures in TychoStreamDecoder to be set ([6364959](https://github.com/propeller-heads/tycho-simulation/commit/6364959f89351eba89edba98903cf2d28742c6c6))
+
+## [0.62.3](https://github.com/propeller-heads/tycho-simulation/compare/0.62.2...0.62.3) (2024-12-20)
+
+
+### Bug Fixes
+
+* Load bytecode from files with include_bytes! ([97a260d](https://github.com/propeller-heads/tycho-simulation/commit/97a260dc0a360d60bfa00078d4ca429957c2cd73))
+
+## [0.62.2](https://github.com/propeller-heads/tycho-simulation/compare/0.62.1...0.62.2) (2024-12-19)
+
+
+### Bug Fixes
+
+* Make the ERC20.bin filepath dependent on CARGO_MANIFEST_DIR ([2d20d30](https://github.com/propeller-heads/tycho-simulation/commit/2d20d3076d4b3ff074dc7999dd62ec26c311ede0))
+
 ## [0.62.1](https://github.com/propeller-heads/tycho-simulation/compare/0.62.0...0.62.1) (2024-12-19)
 
 
