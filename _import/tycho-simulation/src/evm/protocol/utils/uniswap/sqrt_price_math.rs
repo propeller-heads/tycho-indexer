@@ -160,7 +160,7 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
 ///
 /// # Panics
 /// Will panic if the `x` is bigger than U160.
-pub fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u32) -> f64 {
+pub(crate) fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u32) -> f64 {
     assert!(x < U160_MAX);
     let token_correction = 10f64.powi(token_0_decimals as i32 - token_1_decimals as i32);
 

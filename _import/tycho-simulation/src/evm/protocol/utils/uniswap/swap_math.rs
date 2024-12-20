@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{evm::protocol::safe_math::safe_sub_u256, protocol::errors::SimulationError};
 
-pub(super) fn compute_swap_step(
+pub(crate) fn compute_swap_step(
     sqrt_ratio_current: U256,
     sqrt_ratio_target: U256,
     liquidity: u128,
@@ -140,14 +140,14 @@ pub(super) fn compute_swap_step(
 mod tests {
     use std::{ops::Neg, str::FromStr};
 
-    use super::{super::enums::FeeAmount, *};
+    use super::*;
 
     struct TestCase {
         price: U256,
         target: U256,
         liquidity: u128,
         remaining: I256,
-        fee: FeeAmount,
+        fee: u32,
         exp: (U256, U256, U256, U256),
     }
 
@@ -159,7 +159,7 @@ mod tests {
                 target: U256::from_str("1919023616462402511535565081385034").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18),
-                fee: FeeAmount::Low,
+                fee: 500,
                 exp: (
                     U256::from_str("1917244033735642980420262835667387").unwrap(),
                     U256::from_str("999500000000000000").unwrap(),
@@ -172,7 +172,7 @@ mod tests {
                 target: U256::from_str("1919023616462402511535565081385034").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18).neg(),
-                fee: FeeAmount::Low,
+                fee: 500,
                 exp: (
                     U256::from_str("1919023616462402511535565081385034").unwrap(),
                     U256::from_str("520541484453545253034").unwrap(),
@@ -185,7 +185,7 @@ mod tests {
                 target: U256::from_str("1908498483466244238266951834509291").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18).neg(),
-                fee: FeeAmount::Low,
+                fee: 500,
                 exp: (
                     U256::from_str("1917237184865352164019453920762266").unwrap(),
                     U256::from_str("1707680836").unwrap(),
@@ -198,7 +198,7 @@ mod tests {
                 target: U256::from_str("1908498483466244238266951834509291").unwrap(),
                 liquidity: 23130341825817804069u128,
                 remaining: I256::exp10(18),
-                fee: FeeAmount::Low,
+                fee: 500,
                 exp: (
                     U256::from_str("1908498483466244238266951834509291").unwrap(),
                     U256::from_str("4378348149175").unwrap(),
@@ -211,7 +211,7 @@ mod tests {
                 target: U256::from_str("1908498483466244238266951834509291").unwrap(),
                 liquidity: 0u128,
                 remaining: I256::exp10(18),
-                fee: FeeAmount::Low,
+                fee: 500,
                 exp: (
                     U256::from_str("1908498483466244238266951834509291").unwrap(),
                     U256::from_str("1").unwrap(),
@@ -227,7 +227,7 @@ mod tests {
                 case.target,
                 case.liquidity,
                 case.remaining,
-                case.fee as u32,
+                case.fee,
             )
             .unwrap();
 
