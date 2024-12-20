@@ -10,7 +10,7 @@ use crate::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
         utils::uniswap::{
-            liquidity_math,
+            i24_be_bytes_to_i32, liquidity_math,
             sqrt_price_math::sqrt_price_q96_to_f64,
             swap_math,
             tick_list::{TickInfo, TickList, TickListErrorKind},
@@ -280,13 +280,101 @@ impl ProtocolSim for UniswapV4State {
         ))
     }
 
-    #[allow(unused_variables)] //TODO: remove when implemented
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: &HashMap<Bytes, Token>,
+        _tokens: &HashMap<Bytes, Token>,
     ) -> Result<(), TransitionError<String>> {
-        todo!()
+        // Apply attribute changes
+        if let Some(liquidity) = delta
+            .updated_attributes
+            .get("liquidity")
+        {
+            // This is a hotfix because if the liquidity has never been updated after creation, it's
+            // currently encoded as H256::zero(), therefore, we can't decode this as u128.
+            // We can remove this once it has been fixed on the tycho side.
+            let liq_16_bytes = if liquidity.len() == 32 {
+                // Make sure it only happens for 0 values, otherwise error.
+                if liquidity == &Bytes::zero(32) {
+                    Bytes::from([0; 16])
+                } else {
+                    return Err(TransitionError::DecodeError(format!(
+                        "Liquidity bytes too long for {}, expected 16",
+                        liquidity
+                    )));
+                }
+            } else {
+                liquidity.clone()
+            };
+
+            self.liquidity = u128::from(liq_16_bytes);
+        }
+        if let Some(sqrt_price) = delta
+            .updated_attributes
+            .get("sqrt_price_x96")
+        {
+            self.sqrt_price = U256::from_be_slice(sqrt_price);
+        }
+        if let Some(tick) = delta.updated_attributes.get("tick") {
+            // This is a hotfix because if the tick has never been updated after creation, it's
+            // currently encoded as H256::zero(), therefore, we can't decode this as i32.
+            // We can remove this once it has been fixed on the tycho side.
+            let ticks_4_bytes = if tick.len() == 32 {
+                // Make sure it only happens for 0 values, otherwise error.
+                if tick == &Bytes::zero(32) {
+                    Bytes::from([0; 4])
+                } else {
+                    return Err(TransitionError::DecodeError(format!(
+                        "Tick bytes too long for {}, expected 4",
+                        tick
+                    )));
+                }
+            } else {
+                tick.clone()
+            };
+            self.tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+        }
+        if let Some(zero2one_protocol_fee) = delta
+            .updated_attributes
+            .get("protocol_fees/zero2one")
+        {
+            self.fees.zero_for_one = u32::from(zero2one_protocol_fee.clone());
+        }
+        if let Some(one2zero_protocol_fee) = delta
+            .updated_attributes
+            .get("protocol_fees/one2zero")
+        {
+            self.fees.one_for_zero = u32::from(one2zero_protocol_fee.clone());
+        }
+
+        // apply tick changes
+        for (key, value) in delta.updated_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            if key.starts_with("ticks/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.ticks.set_tick_liquidity(
+                    parts[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    i128::from(value.clone()),
+                )
+            }
+        }
+        // delete ticks - ignores deletes for attributes other than tick liquidity
+        for key in delta.deleted_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            if key.starts_with("tick/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.ticks.set_tick_liquidity(
+                    parts[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    0,
+                )
+            }
+        }
+
+        Ok(())
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
