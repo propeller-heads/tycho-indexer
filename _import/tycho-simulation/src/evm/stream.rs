@@ -127,6 +127,14 @@ impl ProtocolStreamBuilder {
         self
     }
 
+    /// Skips state decode failures, allowing the stream to continue processing. It raises a warning
+    /// instead of panic.
+    pub fn skip_state_decode_failures(mut self, skip: bool) -> Self {
+        self.decoder
+            .skip_state_decode_failures(skip);
+        self
+    }
+
     pub async fn build(
         self,
     ) -> Result<impl Stream<Item = Result<BlockUpdate, StreamDecodeError>>, StreamError> {

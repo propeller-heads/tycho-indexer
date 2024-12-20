@@ -1,13 +1,16 @@
-use std::{collections::HashMap, fmt::Debug, path::PathBuf};
+use std::{collections::HashMap, fmt::Debug};
 
 use alloy_primitives::{keccak256, Address, Keccak256, B256, U256};
 use alloy_sol_types::SolValue;
 use chrono::Utc;
-use revm::{db::DatabaseRef, primitives::AccountInfo};
+use revm::{
+    db::DatabaseRef,
+    primitives::{AccountInfo, Bytecode},
+};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    utils::{coerce_error, get_contract_bytecode},
+    utils::coerce_error,
 };
 use crate::{
     evm::{
@@ -68,24 +71,20 @@ where
     // Creates a new instance with the ISwapAdapter ABI
     pub fn new_swap_adapter(
         address: Address,
-        adapter_contract_path: &PathBuf,
+        adapter_contract_bytecode: Bytecode,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
-        let adapter_contract_code =
-            get_contract_bytecode(adapter_contract_path).map_err(|err| {
-                SimulationError::FatalError(format!(
-                    "{:?} for path: {:?}",
-                    err.to_string(),
-                    adapter_contract_path
-                ))
-            })?;
         engine.state.init_account(
             address,
             AccountInfo {
                 balance: *MAX_BALANCE,
                 nonce: 0,
-                code_hash: B256::from(keccak256(adapter_contract_code.clone().bytes())),
-                code: Some(adapter_contract_code),
+                code_hash: B256::from(keccak256(
+                    adapter_contract_bytecode
+                        .clone()
+                        .bytes(),
+                )),
+                code: Some(adapter_contract_bytecode),
             },
             None,
             false,
@@ -172,7 +171,7 @@ mod tests {
     use super::*;
     use crate::evm::{
         engine_db::engine_db_interface::EngineDatabaseInterface,
-        protocol::vm::utils::string_to_bytes32,
+        protocol::vm::{constants::BALANCER_V2, utils::string_to_bytes32},
     };
 
     #[derive(Debug, Clone)]
@@ -232,7 +231,7 @@ mod tests {
         let engine = create_mock_engine();
         TychoSimulationContract::new_swap_adapter(
             address,
-            &PathBuf::from("src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime"),
+            Bytecode::new_raw(BALANCER_V2.into()),
             engine,
         )
         .unwrap()
