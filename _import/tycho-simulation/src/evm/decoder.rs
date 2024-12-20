@@ -84,6 +84,10 @@ impl TychoStreamDecoder {
         guard.tokens = tokens;
     }
 
+    pub fn skip_state_decode_failures(&mut self, skip: bool) {
+        self.skip_state_decode_failures = skip;
+    }
+
     /// Registers a decoder for a given exchange.
     ///
     /// This method maps an exchange identifier to a specific protocol simulation type.
