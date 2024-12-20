@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 
 use num_bigint::BigInt;
-use tracing::info;
+use tracing::{debug, info};
 use tycho_client::feed::synchronizer::ComponentWithState;
 
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
+
 pub fn balancer_pool_filter(component: &ComponentWithState) -> bool {
     // Check for rate_providers in static_attributes
     info!("Checking Balancer pool {}", component.component.id);
@@ -118,6 +120,21 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
                 "Filtering out Curve pool {} because it has proxy implementation {}",
                 component.component.id, impl_str
             );
+            return false;
+        }
+    }
+    true
+}
+
+/// Filters out pool that have hooks in Uniswap V4
+pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool {
+    if let Some(hooks) = component
+        .component
+        .static_attributes
+        .get("hooks")
+    {
+        if hooks.to_vec() != ZERO_ADDRESS_ARR {
+            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
             return false;
         }
     }
