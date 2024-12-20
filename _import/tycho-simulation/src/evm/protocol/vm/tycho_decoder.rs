@@ -1,18 +1,20 @@
 use std::{
     collections::HashMap,
-    path::PathBuf,
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use alloy_primitives::{Address, B256, U256};
-use tracing::info;
+use revm::primitives::Bytecode;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
 use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
-    evm::engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
+    evm::{
+        engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
+        protocol::vm::constants::get_adapter_file,
+    },
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
@@ -125,9 +127,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     .protocol_system
                     .as_str()
             });
-        let adapter_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("src/evm/protocol/vm/assets")
-            .join(to_adapter_file_name(protocol_name));
+        let adapter_bytecode = Bytecode::new_raw(get_adapter_file(protocol_name)?.into());
         let adapter_contract_address =
             Address::from_str(&format!("{:0>40}", hex::encode(protocol_name)))
                 .expect("Can't convert protocol name to address");
@@ -139,7 +139,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             block,
             adapter_contract_address,
         )
-        .adapter_contract_path(adapter_file_path)
+        .adapter_contract_bytecode(adapter_bytecode)
         .involved_contracts(involved_contracts)
         .stateless_contracts(stateless_contracts)
         .manual_updates(manual_updates);
@@ -154,26 +154,9 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .map_err(InvalidSnapshotError::VMError)?;
 
         pool_state.set_spot_prices(all_tokens)?;
-        info!("Finished creating balancer pool with id {}", &id);
 
         Ok(pool_state)
     }
-}
-
-/// Converts a protocol system name to the name of the adapter file. For example, `balancer_v2`
-/// would be converted to `BalancerV2SwapAdapter.evm.runtime`.
-fn to_adapter_file_name(protocol_system: &str) -> String {
-    protocol_system
-        .split('_')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect::<String>() +
-        "SwapAdapter.evm.runtime"
 }
 
 #[cfg(test)]
@@ -193,6 +176,7 @@ mod tests {
     use crate::{
         evm::{
             engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface},
+            protocol::vm::constants::{get_adapter_file, BALANCER_V2, CURVE},
             tycho_models::AccountUpdate,
         },
         protocol::models::TryFromWithBlock,
@@ -200,8 +184,8 @@ mod tests {
 
     #[test]
     fn test_to_adapter_file_name() {
-        assert_eq!(to_adapter_file_name("balancer_v2"), "BalancerV2SwapAdapter.evm.runtime");
-        assert_eq!(to_adapter_file_name("uniswap_v3"), "UniswapV3SwapAdapter.evm.runtime");
+        assert_eq!(get_adapter_file("balancer_v2").unwrap(), BALANCER_V2);
+        assert_eq!(get_adapter_file("curve").unwrap(), CURVE);
     }
 
     fn vm_component() -> ProtocolComponent {
