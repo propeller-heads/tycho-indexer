@@ -6,7 +6,6 @@ use std::{
 
 use alloy_primitives::{Address, B256, U256};
 use revm::primitives::Bytecode;
-use tracing::info;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
@@ -155,7 +154,6 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .map_err(InvalidSnapshotError::VMError)?;
 
         pool_state.set_spot_prices(all_tokens)?;
-        info!("Finished creating balancer pool with id {}", &id);
 
         Ok(pool_state)
     }
