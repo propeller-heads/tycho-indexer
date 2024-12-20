@@ -1,3 +1,11 @@
+## [0.65.0](https://github.com/propeller-heads/tycho-simulation/compare/0.64.0...0.65.0) (2024-12-20)
+
+
+### Features
+
+* **uniswap_v4:** implement `ProtocolSim` except `delta_transition` ([6155b4a](https://github.com/propeller-heads/tycho-simulation/commit/6155b4ad64f0ad1a371af33c08d3890694d48ad1))
+* **uniswap_v4:** implement `swap()` for `UniswapV4State` ([584347c](https://github.com/propeller-heads/tycho-simulation/commit/584347cd4b40fe5a26c0395935884b10fd40f071))
+
 ## [0.64.0](https://github.com/propeller-heads/tycho-simulation/compare/0.63.0...0.64.0) (2024-12-20)
 
 
