@@ -1,3 +1,10 @@
+## [0.66.0](https://github.com/propeller-heads/tycho-simulation/compare/0.65.0...0.66.0) (2024-12-20)
+
+
+### Features
+
+* **uniswap_v4:** add filter for pools with hooks ([dd668e2](https://github.com/propeller-heads/tycho-simulation/commit/dd668e2c84248982d77770a2cb42413f27f6dab9))
+
 ## [0.65.0](https://github.com/propeller-heads/tycho-simulation/compare/0.64.0...0.65.0) (2024-12-20)
 
 
