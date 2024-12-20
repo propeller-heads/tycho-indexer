@@ -404,3 +404,68 @@ impl ProtocolSim for UniswapV4State {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
+
+    use tycho_core::hex_bytes::Bytes;
+
+    use super::*;
+
+    #[test]
+    fn test_delta_transition() {
+        let mut pool = UniswapV4State::new(
+            1000,
+            U256::from_str("1000").unwrap(),
+            UniswapV4Fees { zero_for_one: 100, one_for_zero: 90, lp_fee: 700 },
+            100,
+            60,
+            vec![TickInfo::new(120, 10000), TickInfo::new(180, -10000)],
+        );
+
+        let attributes: HashMap<String, Bytes> = [
+            ("liquidity".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
+            ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_be_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(120_i32.to_be_bytes().to_vec())),
+            ("protocol_fees/zero2one".to_string(), Bytes::from(50_u32.to_be_bytes().to_vec())),
+            ("protocol_fees/one2zero".to_string(), Bytes::from(75_u32.to_be_bytes().to_vec())),
+            ("ticks/-120/net_liquidity".to_string(), Bytes::from(10200_u64.to_be_bytes().to_vec())),
+            ("ticks/120/net_liquidity".to_string(), Bytes::from(9800_u64.to_be_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect();
+
+        let delta = ProtocolStateDelta {
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        pool.delta_transition(delta, &HashMap::new())
+            .unwrap();
+
+        assert_eq!(pool.liquidity, 2000);
+        assert_eq!(pool.sqrt_price, U256::from(1001));
+        assert_eq!(pool.tick, 120);
+        assert_eq!(pool.fees.zero_for_one, 50);
+        assert_eq!(pool.fees.one_for_zero, 75);
+        assert_eq!(
+            pool.ticks
+                .get_tick(-120)
+                .unwrap()
+                .net_liquidity,
+            10200
+        );
+        assert_eq!(
+            pool.ticks
+                .get_tick(120)
+                .unwrap()
+                .net_liquidity,
+            9800
+        );
+    }
+}
