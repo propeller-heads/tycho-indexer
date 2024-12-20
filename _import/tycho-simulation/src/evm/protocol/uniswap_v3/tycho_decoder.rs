@@ -6,7 +6,7 @@ use tycho_core::Bytes;
 
 use super::{enums::FeeAmount, state::UniswapV3State};
 use crate::{
-    evm::protocol::utils::uniswap::tick_list::TickInfo,
+    evm::protocol::utils::{uniswap, uniswap::tick_list::TickInfo},
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
@@ -89,7 +89,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
         } else {
             tick
         };
-        let tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+        let tick = uniswap::i24_be_bytes_to_i32(&ticks_4_bytes);
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
@@ -124,31 +124,6 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
     }
 }
 
-/// Converts a slice of bytes representing a big-endian 24-bit signed integer
-/// to a 32-bit signed integer.
-///
-/// # Arguments
-/// * `val` - A reference to a `Bytes` type, which should contain at most three bytes.
-///
-/// # Returns
-/// * The 32-bit signed integer representation of the input bytes.
-pub(crate) fn i24_be_bytes_to_i32(val: &Bytes) -> i32 {
-    let bytes_slice = val.as_ref();
-    let bytes_len = bytes_slice.len();
-    let mut result = 0i32;
-
-    for (i, &byte) in bytes_slice.iter().enumerate() {
-        result |= (byte as i32) << (8 * (bytes_len - 1 - i));
-    }
-
-    // If the first byte (most significant byte) has its most significant bit set (0x80),
-    // perform sign extension for negative numbers.
-    if bytes_len > 0 && bytes_slice[0] & 0x80 != 0 {
-        result |= -1i32 << (8 * bytes_len);
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, str::FromStr};
@@ -161,6 +136,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::evm::protocol::utils::uniswap::i24_be_bytes_to_i32;
 
     fn usv3_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
