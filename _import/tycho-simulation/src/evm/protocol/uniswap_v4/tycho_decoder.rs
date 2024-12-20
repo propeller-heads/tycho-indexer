@@ -19,7 +19,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
 
     /// Decodes a `ComponentWithState` into a `UniswapV4State`. Errors with a `InvalidSnapshotError`
     /// if the snapshot is missing any required attributes.
-    fn try_from_with_block(
+    async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
         _all_tokens: &HashMap<Bytes, Token>,
@@ -58,7 +58,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?,
         );
 
-        let lp_fee = i32::from(
+        let lp_fee = u32::from(
             snapshot
                 .component
                 .static_attributes
@@ -74,7 +74,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
                 .get("protocol_fees/zero2one")
                 .ok_or_else(|| {
                     InvalidSnapshotError::MissingAttribute("protocol_fees/zero2one".to_string())
-                })??
+                })?
                 .clone(),
         );
         let one2zero_protocol_fee = u32::from(
@@ -84,7 +84,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
                 .get("protocol_fees/one2zero")
                 .ok_or_else(|| {
                     InvalidSnapshotError::MissingAttribute("protocol_fees/one2zero".to_string())
-                })??
+                })?
                 .clone(),
         );
 
@@ -155,5 +155,92 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
         ticks.sort_by_key(|tick| tick.index);
 
         Ok(UniswapV4State::new(liquidity, sqrt_price, fees, tick, tick_spacing, ticks))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, str::FromStr};
+
+    use chrono::DateTime;
+    use tycho_core::{
+        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
+        hex_bytes::Bytes,
+    };
+
+    use super::*;
+
+    fn usv4_component() -> ProtocolComponent {
+        let creation_time = DateTime::from_timestamp(1622526000, 0)
+            .unwrap()
+            .naive_utc();
+
+        // Add a static attribute "tick_spacing"
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes
+            .insert("tick_spacing".to_string(), Bytes::from(60_i32.to_be_bytes().to_vec()));
+
+        ProtocolComponent {
+            id: "State1".to_string(),
+            protocol_system: "system1".to_string(),
+            protocol_type_name: "typename1".to_string(),
+            chain: Chain::Ethereum,
+            tokens: Vec::new(),
+            contract_ids: Vec::new(),
+            static_attributes,
+            change: ChangeType::Creation,
+            creation_tx: Bytes::from_str("0x0000").unwrap(),
+            created_at: creation_time,
+        }
+    }
+
+    fn usv4_attributes() -> HashMap<String, Bytes> {
+        vec![
+            ("fee".to_string(), Bytes::from(500_i32.to_be_bytes().to_vec())),
+            ("liquidity".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(300_i32.to_be_bytes().to_vec())),
+            (
+                "sqrt_price_x96".to_string(),
+                Bytes::from(
+                    79228162514264337593543950336_u128
+                        .to_be_bytes()
+                        .to_vec(),
+                ),
+            ),
+            ("protocol_fees/zero2one".to_string(), Bytes::from(0_u32.to_be_bytes().to_vec())),
+            ("protocol_fees/one2zero".to_string(), Bytes::from(0_u32.to_be_bytes().to_vec())),
+            ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_be_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect::<HashMap<String, Bytes>>()
+    }
+    fn header() -> Header {
+        Header {
+            number: 1,
+            hash: Bytes::from(vec![0; 32]),
+            parent_hash: Bytes::from(vec![0; 32]),
+            revert: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_usv4_try_from() {
+        let snapshot = ComponentWithState {
+            state: ResponseProtocolState {
+                component_id: "State1".to_owned(),
+                attributes: usv4_attributes(),
+                balances: HashMap::new(),
+            },
+            component: usv4_component(),
+        };
+
+        let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
+
+        assert!(result.is_ok());
+
+        let fees = UniswapV4Fees::new(0, 0, 500);
+        let expected =
+            UniswapV4State::new(100, U256::from(200), fees, 300, 60, vec![TickInfo::new(60, 400)]);
+        assert_eq!(result.unwrap(), expected);
     }
 }

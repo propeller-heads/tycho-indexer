@@ -6,7 +6,7 @@ use tycho_core::Bytes;
 
 use super::{enums::FeeAmount, state::UniswapV3State};
 use crate::{
-    evm::protocol::utils::{uniswap, uniswap::tick_list::TickInfo},
+    evm::protocol::utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
@@ -89,7 +89,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
         } else {
             tick
         };
-        let tick = uniswap::i24_be_bytes_to_i32(&ticks_4_bytes);
+        let tick = i24_be_bytes_to_i32(&ticks_4_bytes);
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
