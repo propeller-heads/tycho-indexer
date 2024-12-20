@@ -1,3 +1,10 @@
+## [0.62.3](https://github.com/propeller-heads/tycho-simulation/compare/0.62.2...0.62.3) (2024-12-20)
+
+
+### Bug Fixes
+
+* Load bytecode from files with include_bytes! ([97a260d](https://github.com/propeller-heads/tycho-simulation/commit/97a260dc0a360d60bfa00078d4ca429957c2cd73))
+
 ## [0.62.2](https://github.com/propeller-heads/tycho-simulation/compare/0.62.1...0.62.2) (2024-12-19)
 
 
