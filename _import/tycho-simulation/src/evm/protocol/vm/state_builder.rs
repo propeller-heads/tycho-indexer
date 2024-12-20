@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
-    path::PathBuf,
 };
 
 use alloy_primitives::{Address, U256};
@@ -22,14 +21,14 @@ use super::{
     models::Capability,
     state::EVMPoolState,
     tycho_simulation_contract::TychoSimulationContract,
-    utils::{get_code_for_contract, load_erc20_bytecode},
+    utils::get_code_for_contract,
 };
 use crate::{
     evm::{
         engine_db::{
             create_engine, engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
         },
-        protocol::utils::bytes_to_address,
+        protocol::{utils::bytes_to_address, vm::constants::ERC20_BYTECODE},
         simulation::{SimulationEngine, SimulationParameters},
         ContractCompiler,
     },
@@ -55,10 +54,12 @@ use crate::{
 /// use tycho_simulation::evm::engine_db::SHARED_TYCHO_DB;
 /// use tycho_simulation::protocol::errors::SimulationError;
 /// use tycho_simulation::evm::protocol::vm::state_builder::EVMPoolStateBuilder;
+/// use tycho_simulation::evm::protocol::vm::constants::BALANCER_V2;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), SimulationError> {
-///     let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
+///     use revm::primitives::Bytecode;
+/// let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
 ///
 ///     let tokens = vec![
 ///         Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"),
@@ -77,9 +78,7 @@ use crate::{
 ///     // Build the EVMPoolState
 ///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, balances, block, Address::random())
 ///         .balance_owner(Address::random())
-///         .adapter_contract_path(PathBuf::from(
-///                 "src/evm/protocol/vm/assets/BalancerV2SwapAdapter.evm.runtime".to_string(),
-///          ))
+///         .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
 ///         .build(SHARED_TYCHO_DB.clone())
 ///         .await?;
 ///     Ok(())
@@ -104,7 +103,7 @@ where
     trace: Option<bool>,
     engine: Option<SimulationEngine<D>>,
     adapter_contract: Option<TychoSimulationContract<D>>,
-    adapter_contract_path: Option<PathBuf>,
+    adapter_contract_bytecode: Option<Bytecode>,
 }
 
 impl<D> EVMPoolStateBuilder<D>
@@ -135,7 +134,7 @@ where
             trace: None,
             engine: None,
             adapter_contract: None,
-            adapter_contract_path: None,
+            adapter_contract_bytecode: None,
         }
     }
 
@@ -190,8 +189,8 @@ where
         self
     }
 
-    pub fn adapter_contract_path(mut self, adapter_contract_path: PathBuf) -> Self {
-        self.adapter_contract_path = Some(adapter_contract_path);
+    pub fn adapter_contract_bytecode(mut self, adapter_contract_bytecode: Bytecode) -> Self {
+        self.adapter_contract_bytecode = Some(adapter_contract_bytecode);
         self
     }
 
@@ -207,10 +206,10 @@ where
         if self.adapter_contract.is_none() {
             self.adapter_contract = Some(TychoSimulationContract::new_swap_adapter(
                 self.adapter_address,
-                self.adapter_contract_path
-                    .as_ref()
+                self.adapter_contract_bytecode
+                    .clone()
                     .ok_or_else(|| {
-                        SimulationError::FatalError("Adapter contract path not set".to_string())
+                        SimulationError::FatalError("Adapter contract bytecode not set".to_string())
                     })?,
                 engine.clone(),
             )?)
@@ -246,20 +245,12 @@ where
 
     async fn get_default_engine(&self, db: D) -> Result<SimulationEngine<D>, SimulationError> {
         let engine = create_engine(db, self.trace.unwrap_or(false))?;
-
-        // Mock the ERC20 contract at the given token addresses.
-        let mocked_contract_bytecode: Bytecode = load_erc20_bytecode().map_err(|err| {
-            SimulationError::FatalError(format!(
-                "{:?} when loading ERC20 bytecode",
-                err.to_string()
-            ))
-        })?;
         for token_address in &self.tokens {
             let info = AccountInfo {
                 balance: Default::default(),
                 nonce: 0,
                 code_hash: KECCAK_EMPTY,
-                code: Some(mocked_contract_bytecode.clone()),
+                code: Some(Bytecode::new_raw(ERC20_BYTECODE.into())),
             };
             engine
                 .state
@@ -486,7 +477,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             SimulationError::FatalError(field) => {
-                assert_eq!(field, "Adapter contract path not set")
+                assert_eq!(field, "Adapter contract bytecode not set")
             }
             _ => panic!("Unexpected error type"),
         }

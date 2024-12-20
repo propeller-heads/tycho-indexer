@@ -32,9 +32,9 @@ Each native protocol should have its own module under `tycho-simulation/src/prot
 
 #### VM protocol:
 
-1. Add the associated adapter runtime file to `tycho-simulations/src/protocol/assets`. Make sure to name the file
-   according to the protocol name used by tycho in the following format: `<Protocol><Version>Adapter.evm.runtime`.
-   For example: `vm:balancer_v2` will be `BalancerV2Adapter.evm.runtime`.
+1. Add the associated adapter runtime file to `tycho-simulations/src/protocol/assets`. In
+   `evm/protocol/vm/constants.rs`, load the file as a bytes constant and add a corresponding entry
+   to `get_adapter_file()`.
 
 ### 1\. Adding state & behaviour
 
