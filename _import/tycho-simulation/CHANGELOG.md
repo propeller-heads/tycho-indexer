@@ -1,3 +1,10 @@
+## [0.64.0](https://github.com/propeller-heads/tycho-simulation/compare/0.63.0...0.64.0) (2024-12-20)
+
+
+### Features
+
+* **uniswap_v4:** implement `UniswapV4State` struct ([d1a52a0](https://github.com/propeller-heads/tycho-simulation/commit/d1a52a01d90e1789821aff1fdb44041d59305057))
+
 ## [0.63.0](https://github.com/propeller-heads/tycho-simulation/compare/0.62.3...0.63.0) (2024-12-20)
 
 
