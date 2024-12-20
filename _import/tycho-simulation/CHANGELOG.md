@@ -1,3 +1,10 @@
+## [0.63.0](https://github.com/propeller-heads/tycho-simulation/compare/0.62.3...0.63.0) (2024-12-20)
+
+
+### Features
+
+* Allow for skip_state_decode_failures in TychoStreamDecoder to be set ([6364959](https://github.com/propeller-heads/tycho-simulation/commit/6364959f89351eba89edba98903cf2d28742c6c6))
+
 ## [0.62.3](https://github.com/propeller-heads/tycho-simulation/compare/0.62.2...0.62.3) (2024-12-20)
 
 
