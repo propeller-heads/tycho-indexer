@@ -31,24 +31,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
             .clone();
 
-        // This is a hotfix because if the liquidity has never been updated after creation, it's
-        // currently encoded as H256::zero(), therefore, we can't decode this as u128.
-        // We can remove this once it has been fixed on the tycho side.
-        let liq_16_bytes = if liq.len() == 32 {
-            // Make sure it only happens for 0 values, otherwise error.
-            if liq == Bytes::zero(32) {
-                Bytes::from([0; 16])
-            } else {
-                return Err(InvalidSnapshotError::ValueError(format!(
-                    "Liquidity bytes too long for {}, expected 16",
-                    liq
-                )));
-            }
-        } else {
-            liq
-        };
-
-        let liquidity = u128::from(liq_16_bytes);
+        let liquidity = u128::from(liq);
 
         let sqrt_price = U256::from_be_slice(
             snapshot
@@ -100,30 +83,13 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
                 .clone(),
         );
 
-        let tick = snapshot
-            .state
-            .attributes
-            .get("tick")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
-            .clone();
-
-        // This is a hotfix because if the tick has never been updated after creation, it's
-        // currently encoded as H256::zero(), therefore, we can't decode this as i32. We can
-        // remove this will be fixed on the tycho side.
-        let ticks_4_bytes = if tick.len() == 32 {
-            // Make sure it only happens for 0 values, otherwise error.
-            if tick == Bytes::zero(32) {
-                Bytes::from([0; 4])
-            } else {
-                return Err(InvalidSnapshotError::ValueError(format!(
-                    "Tick bytes too long for {}, expected 4",
-                    tick
-                )));
-            }
-        } else {
-            tick
-        };
-        let tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+        let tick = i24_be_bytes_to_i32(
+            snapshot
+                .state
+                .attributes
+                .get("tick")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?,
+        );
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
