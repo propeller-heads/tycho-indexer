@@ -1,3 +1,10 @@
+## [0.68.0](https://github.com/propeller-heads/tycho-simulation/compare/0.67.0...0.68.0) (2024-12-23)
+
+
+### Features
+
+* **uniswap_v4:** implement delta transition ([9a0f795](https://github.com/propeller-heads/tycho-simulation/commit/9a0f79569b854236829a8cf5d1ac96e5b94dd1e5))
+
 ## [0.67.0](https://github.com/propeller-heads/tycho-simulation/compare/0.66.0...0.67.0) (2024-12-23)
 
 
