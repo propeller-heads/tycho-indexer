@@ -10,7 +10,7 @@ use crate::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
         utils::uniswap::{
-            liquidity_math,
+            i24_be_bytes_to_i32, liquidity_math,
             sqrt_price_math::sqrt_price_q96_to_f64,
             swap_math,
             tick_list::{TickInfo, TickList, TickListErrorKind},
@@ -280,13 +280,71 @@ impl ProtocolSim for UniswapV4State {
         ))
     }
 
-    #[allow(unused_variables)] //TODO: remove when implemented
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: &HashMap<Bytes, Token>,
+        _tokens: &HashMap<Bytes, Token>,
     ) -> Result<(), TransitionError<String>> {
-        todo!()
+        // Apply attribute changes
+        if let Some(liquidity) = delta
+            .updated_attributes
+            .get("liquidity")
+        {
+            self.liquidity = u128::from(liquidity.clone());
+        }
+        if let Some(sqrt_price) = delta
+            .updated_attributes
+            .get("sqrt_price_x96")
+        {
+            self.sqrt_price = U256::from_be_slice(sqrt_price);
+        }
+        if let Some(tick) = delta.updated_attributes.get("tick") {
+            self.tick = i24_be_bytes_to_i32(tick);
+        }
+        if let Some(lp_fee) = delta.updated_attributes.get("fee") {
+            self.fees.lp_fee = u32::from(lp_fee.clone());
+        }
+        if let Some(zero2one_protocol_fee) = delta
+            .updated_attributes
+            .get("protocol_fees/zero2one")
+        {
+            self.fees.zero_for_one = u32::from(zero2one_protocol_fee.clone());
+        }
+        if let Some(one2zero_protocol_fee) = delta
+            .updated_attributes
+            .get("protocol_fees/one2zero")
+        {
+            self.fees.one_for_zero = u32::from(one2zero_protocol_fee.clone());
+        }
+
+        // apply tick changes
+        for (key, value) in delta.updated_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            if key.starts_with("ticks/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.ticks.set_tick_liquidity(
+                    parts[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    i128::from(value.clone()),
+                )
+            }
+        }
+        // delete ticks - ignores deletes for attributes other than tick liquidity
+        for key in delta.deleted_attributes.iter() {
+            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            if key.starts_with("tick/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.ticks.set_tick_liquidity(
+                    parts[1]
+                        .parse::<i32>()
+                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                    0,
+                )
+            }
+        }
+
+        Ok(())
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
@@ -314,5 +372,72 @@ impl ProtocolSim for UniswapV4State {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
+
+    use tycho_core::hex_bytes::Bytes;
+
+    use super::*;
+
+    #[test]
+    fn test_delta_transition() {
+        let mut pool = UniswapV4State::new(
+            1000,
+            U256::from_str("1000").unwrap(),
+            UniswapV4Fees { zero_for_one: 100, one_for_zero: 90, lp_fee: 700 },
+            100,
+            60,
+            vec![TickInfo::new(120, 10000), TickInfo::new(180, -10000)],
+        );
+
+        let attributes: HashMap<String, Bytes> = [
+            ("liquidity".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
+            ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_be_bytes().to_vec())),
+            ("tick".to_string(), Bytes::from(120_i32.to_be_bytes().to_vec())),
+            ("protocol_fees/zero2one".to_string(), Bytes::from(50_u32.to_be_bytes().to_vec())),
+            ("protocol_fees/one2zero".to_string(), Bytes::from(75_u32.to_be_bytes().to_vec())),
+            ("fee".to_string(), Bytes::from(100_u32.to_be_bytes().to_vec())),
+            ("ticks/-120/net_liquidity".to_string(), Bytes::from(10200_u64.to_be_bytes().to_vec())),
+            ("ticks/120/net_liquidity".to_string(), Bytes::from(9800_u64.to_be_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect();
+
+        let delta = ProtocolStateDelta {
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        pool.delta_transition(delta, &HashMap::new())
+            .unwrap();
+
+        assert_eq!(pool.liquidity, 2000);
+        assert_eq!(pool.sqrt_price, U256::from(1001));
+        assert_eq!(pool.tick, 120);
+        assert_eq!(pool.fees.zero_for_one, 50);
+        assert_eq!(pool.fees.one_for_zero, 75);
+        assert_eq!(pool.fees.lp_fee, 100);
+        assert_eq!(
+            pool.ticks
+                .get_tick(-120)
+                .unwrap()
+                .net_liquidity,
+            10200
+        );
+        assert_eq!(
+            pool.ticks
+                .get_tick(120)
+                .unwrap()
+                .net_liquidity,
+            9800
+        );
     }
 }
