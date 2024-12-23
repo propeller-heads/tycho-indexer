@@ -43,8 +43,8 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
 
         let lp_fee = u32::from(
             snapshot
-                .component
-                .static_attributes
+                .state
+                .attributes
                 .get("fee")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
                 .clone(),
@@ -200,13 +200,19 @@ mod tests {
             component: usv4_component(),
         };
 
-        let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
-
-        assert!(result.is_ok());
+        let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new())
+            .await
+            .unwrap();
 
         let fees = UniswapV4Fees::new(0, 0, 500);
-        let expected =
-            UniswapV4State::new(100, U256::from(200), fees, 300, 60, vec![TickInfo::new(60, 400)]);
-        assert_eq!(result.unwrap(), expected);
+        let expected = UniswapV4State::new(
+            100,
+            U256::from(79228162514264337593543950336_u128),
+            fees,
+            300,
+            60,
+            vec![TickInfo::new(60, 400)],
+        );
+        assert_eq!(result, expected);
     }
 }
