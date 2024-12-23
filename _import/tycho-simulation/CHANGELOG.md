@@ -1,3 +1,10 @@
+## [0.67.0](https://github.com/propeller-heads/tycho-simulation/compare/0.66.0...0.67.0) (2024-12-23)
+
+
+### Features
+
+* initial TryFromWithBlock impl for UniV4State ([b15aae2](https://github.com/propeller-heads/tycho-simulation/commit/b15aae27d497046e298329381f7a225d75b11288))
+
 ## [0.66.0](https://github.com/propeller-heads/tycho-simulation/compare/0.65.0...0.66.0) (2024-12-20)
 
 
