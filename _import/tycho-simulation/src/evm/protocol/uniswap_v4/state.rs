@@ -290,24 +290,7 @@ impl ProtocolSim for UniswapV4State {
             .updated_attributes
             .get("liquidity")
         {
-            // This is a hotfix because if the liquidity has never been updated after creation, it's
-            // currently encoded as H256::zero(), therefore, we can't decode this as u128.
-            // We can remove this once it has been fixed on the tycho side.
-            let liq_16_bytes = if liquidity.len() == 32 {
-                // Make sure it only happens for 0 values, otherwise error.
-                if liquidity == &Bytes::zero(32) {
-                    Bytes::from([0; 16])
-                } else {
-                    return Err(TransitionError::DecodeError(format!(
-                        "Liquidity bytes too long for {}, expected 16",
-                        liquidity
-                    )));
-                }
-            } else {
-                liquidity.clone()
-            };
-
-            self.liquidity = u128::from(liq_16_bytes);
+            self.liquidity = u128::from(liquidity.clone());
         }
         if let Some(sqrt_price) = delta
             .updated_attributes
@@ -316,23 +299,10 @@ impl ProtocolSim for UniswapV4State {
             self.sqrt_price = U256::from_be_slice(sqrt_price);
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
-            // This is a hotfix because if the tick has never been updated after creation, it's
-            // currently encoded as H256::zero(), therefore, we can't decode this as i32.
-            // We can remove this once it has been fixed on the tycho side.
-            let ticks_4_bytes = if tick.len() == 32 {
-                // Make sure it only happens for 0 values, otherwise error.
-                if tick == &Bytes::zero(32) {
-                    Bytes::from([0; 4])
-                } else {
-                    return Err(TransitionError::DecodeError(format!(
-                        "Tick bytes too long for {}, expected 4",
-                        tick
-                    )));
-                }
-            } else {
-                tick.clone()
-            };
-            self.tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+            self.tick = i24_be_bytes_to_i32(tick);
+        }
+        if let Some(lp_fee) = delta.updated_attributes.get("fee") {
+            self.fees.lp_fee = u32::from(lp_fee.clone());
         }
         if let Some(zero2one_protocol_fee) = delta
             .updated_attributes
@@ -433,6 +403,7 @@ mod tests {
             ("tick".to_string(), Bytes::from(120_i32.to_be_bytes().to_vec())),
             ("protocol_fees/zero2one".to_string(), Bytes::from(50_u32.to_be_bytes().to_vec())),
             ("protocol_fees/one2zero".to_string(), Bytes::from(75_u32.to_be_bytes().to_vec())),
+            ("fee".to_string(), Bytes::from(100_u32.to_be_bytes().to_vec())),
             ("ticks/-120/net_liquidity".to_string(), Bytes::from(10200_u64.to_be_bytes().to_vec())),
             ("ticks/120/net_liquidity".to_string(), Bytes::from(9800_u64.to_be_bytes().to_vec())),
         ]
@@ -453,6 +424,7 @@ mod tests {
         assert_eq!(pool.tick, 120);
         assert_eq!(pool.fees.zero_for_one, 50);
         assert_eq!(pool.fees.one_for_zero, 75);
+        assert_eq!(pool.fees.lp_fee, 100);
         assert_eq!(
             pool.ticks
                 .get_tick(-120)
