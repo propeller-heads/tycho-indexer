@@ -4,18 +4,21 @@ use alloy_primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
-use super::{enums::FeeAmount, state::UniswapV3State};
+use super::state::UniswapV4State;
 use crate::{
-    evm::protocol::utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
+    evm::protocol::{
+        uniswap_v4::state::UniswapV4Fees,
+        utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
+    },
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
-impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
+impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState` into a `UniswapV3State`. Errors with a `InvalidSnapshotError`
-    /// if the snapshot is missing any required attributes or if the fee amount is not supported.
+    /// Decodes a `ComponentWithState` into a `UniswapV4State`. Errors with a `InvalidSnapshotError`
+    /// if the snapshot is missing any required attributes.
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
@@ -28,24 +31,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
             .clone();
 
-        // This is a hotfix because if the liquidity has never been updated after creation, it's
-        // currently encoded as H256::zero(), therefore, we can't decode this as u128.
-        // We can remove this once it has been fixed on the tycho side.
-        let liq_16_bytes = if liq.len() == 32 {
-            // Make sure it only happens for 0 values, otherwise error.
-            if liq == Bytes::zero(32) {
-                Bytes::from([0; 16])
-            } else {
-                return Err(InvalidSnapshotError::ValueError(format!(
-                    "Liquidity bytes too long for {}, expected 16",
-                    liq
-                )));
-            }
-        } else {
-            liq
-        };
-
-        let liquidity = u128::from(liq_16_bytes);
+        let liquidity = u128::from(liq);
 
         let sqrt_price = U256::from_be_slice(
             snapshot
@@ -55,41 +41,55 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?,
         );
 
-        let fee_value = i32::from(
+        let lp_fee = u32::from(
             snapshot
-                .component
-                .static_attributes
+                .state
+                .attributes
                 .get("fee")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
                 .clone(),
         );
-        let fee = FeeAmount::try_from(fee_value)
-            .map_err(|_| InvalidSnapshotError::ValueError("Unsupported fee amount".to_string()))?;
 
-        let tick = snapshot
-            .state
-            .attributes
-            .get("tick")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
-            .clone();
+        let zero2one_protocol_fee = u32::from(
+            snapshot
+                .state
+                .attributes
+                .get("protocol_fees/zero2one")
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("protocol_fees/zero2one".to_string())
+                })?
+                .clone(),
+        );
+        let one2zero_protocol_fee = u32::from(
+            snapshot
+                .state
+                .attributes
+                .get("protocol_fees/one2zero")
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("protocol_fees/one2zero".to_string())
+                })?
+                .clone(),
+        );
 
-        // This is a hotfix because if the tick has never been updated after creation, it's
-        // currently encoded as H256::zero(), therefore, we can't decode this as i32. We can
-        // remove this this will be fixed on the tycho side.
-        let ticks_4_bytes = if tick.len() == 32 {
-            // Make sure it only happens for 0 values, otherwise error.
-            if tick == Bytes::zero(32) {
-                Bytes::from([0; 4])
-            } else {
-                return Err(InvalidSnapshotError::ValueError(format!(
-                    "Tick bytes too long for {}, expected 4",
-                    tick
-                )));
-            }
-        } else {
-            tick
-        };
-        let tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+        let fees: UniswapV4Fees =
+            UniswapV4Fees::new(zero2one_protocol_fee, one2zero_protocol_fee, lp_fee);
+
+        let tick_spacing: i32 = i32::from(
+            snapshot
+                .component
+                .static_attributes
+                .get("tick_spacing")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick_spacing".to_string()))?
+                .clone(),
+        );
+
+        let tick = i24_be_bytes_to_i32(
+            snapshot
+                .state
+                .attributes
+                .get("tick")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?,
+        );
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
@@ -120,7 +120,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
 
         ticks.sort_by_key(|tick| tick.index);
 
-        Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
+        Ok(UniswapV4State::new(liquidity, sqrt_price, fees, tick, tick_spacing, ticks))
     }
 }
 
@@ -137,14 +137,15 @@ mod tests {
 
     use super::*;
 
-    fn usv3_component() -> ProtocolComponent {
+    fn usv4_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
             .unwrap()
-            .naive_utc(); //Sample timestamp
+            .naive_utc();
 
-        // Add a static attribute "fee"
+        // Add a static attribute "tick_spacing"
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".to_string(), Bytes::from(3000_i32.to_be_bytes().to_vec()));
+        static_attributes
+            .insert("tick_spacing".to_string(), Bytes::from(60_i32.to_be_bytes().to_vec()));
 
         ProtocolComponent {
             id: "State1".to_string(),
@@ -160,17 +161,26 @@ mod tests {
         }
     }
 
-    fn usv3_attributes() -> HashMap<String, Bytes> {
+    fn usv4_attributes() -> HashMap<String, Bytes> {
         vec![
+            ("fee".to_string(), Bytes::from(500_i32.to_be_bytes().to_vec())),
             ("liquidity".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec())),
-            ("sqrt_price_x96".to_string(), Bytes::from(200_u64.to_be_bytes().to_vec())),
             ("tick".to_string(), Bytes::from(300_i32.to_be_bytes().to_vec())),
+            (
+                "sqrt_price_x96".to_string(),
+                Bytes::from(
+                    79228162514264337593543950336_u128
+                        .to_be_bytes()
+                        .to_vec(),
+                ),
+            ),
+            ("protocol_fees/zero2one".to_string(), Bytes::from(0_u32.to_be_bytes().to_vec())),
+            ("protocol_fees/one2zero".to_string(), Bytes::from(0_u32.to_be_bytes().to_vec())),
             ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_be_bytes().to_vec())),
         ]
         .into_iter()
         .collect::<HashMap<String, Bytes>>()
     }
-
     fn header() -> Header {
         Header {
             number: 1,
@@ -181,27 +191,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_usv3_try_from() {
+    async fn test_usv4_try_from() {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
-                attributes: usv3_attributes(),
+                attributes: usv4_attributes(),
                 balances: HashMap::new(),
             },
-            component: usv3_component(),
+            component: usv4_component(),
         };
 
-        let result = UniswapV3State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
+        let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new())
+            .await
+            .unwrap();
 
-        assert!(result.is_ok());
-        let expected = UniswapV3State::new(
+        let fees = UniswapV4Fees::new(0, 0, 500);
+        let expected = UniswapV4State::new(
             100,
-            U256::from(200),
-            FeeAmount::Medium,
+            U256::from(79228162514264337593543950336_u128),
+            fees,
             300,
+            60,
             vec![TickInfo::new(60, 400)],
         );
-        assert_eq!(result.unwrap(), expected);
+        assert_eq!(result, expected);
     }
 
     #[tokio::test]
@@ -211,9 +224,11 @@ mod tests {
     #[case::missing_tick("tick")]
     #[case::missing_tick_liquidity("tick_liquidities")]
     #[case::missing_fee("fee")]
-    async fn test_usv3_try_from_invalid(#[case] missing_attribute: String) {
+    #[case::missing_fee("protocol_fees/one2zero")]
+    #[case::missing_fee("protocol_fees/zero2one")]
+    async fn test_usv4_try_from_invalid(#[case] missing_attribute: String) {
         // remove missing attribute
-        let mut attributes = usv3_attributes();
+        let mut attributes = usv4_attributes();
         attributes.remove(&missing_attribute);
 
         if missing_attribute == "tick_liquidities" {
@@ -224,11 +239,8 @@ mod tests {
             attributes.remove("sqrt_price_x96");
         }
 
-        let mut component = usv3_component();
         if missing_attribute == "fee" {
-            component
-                .static_attributes
-                .remove("fee");
+            attributes.remove("fee");
         }
 
         let snapshot = ComponentWithState {
@@ -237,41 +249,15 @@ mod tests {
                 attributes,
                 balances: HashMap::new(),
             },
-            component,
+            component: usv4_component(),
         };
 
-        let result = UniswapV3State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
+        let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
 
         assert!(result.is_err());
         assert!(matches!(
             result.err().unwrap(),
             InvalidSnapshotError::MissingAttribute(attr) if attr == missing_attribute
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_usv3_try_from_invalid_fee() {
-        // set an invalid fee amount (100, 500, 3_000 and 10_000 are the only valid fee amounts)
-        let mut component = usv3_component();
-        component
-            .static_attributes
-            .insert("fee".to_string(), Bytes::from(4000_i32.to_be_bytes().to_vec()));
-
-        let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
-                component_id: "State1".to_owned(),
-                attributes: usv3_attributes(),
-                balances: HashMap::new(),
-            },
-            component,
-        };
-
-        let result = UniswapV3State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
-
-        assert!(result.is_err());
-        assert!(matches!(
-            result.err().unwrap(),
-            InvalidSnapshotError::ValueError(err) if err == *"Unsupported fee amount"
         ));
     }
 }

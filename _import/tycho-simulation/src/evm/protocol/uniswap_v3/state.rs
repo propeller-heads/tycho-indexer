@@ -5,13 +5,13 @@ use num_bigint::BigUint;
 use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
-use super::{enums::FeeAmount, tycho_decoder::i24_be_bytes_to_i32};
+use super::enums::FeeAmount;
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
         utils::uniswap::{
-            liquidity_math,
+            i24_be_bytes_to_i32, liquidity_math,
             sqrt_price_math::sqrt_price_q96_to_f64,
             swap_math,
             tick_list::{TickInfo, TickList, TickListErrorKind},
