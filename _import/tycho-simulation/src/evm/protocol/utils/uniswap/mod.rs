@@ -61,3 +61,25 @@ pub(crate) fn i24_be_bytes_to_i32(val: &Bytes) -> i32 {
     }
     result
 }
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use tycho_core::Bytes;
+
+    use crate::evm::protocol::utils::uniswap::i24_be_bytes_to_i32;
+
+    #[test]
+    fn test_i24_be_bytes_to_i32() {
+        let val = Bytes::from_str("0xfeafc6").unwrap();
+        let converted = i24_be_bytes_to_i32(&val);
+        assert_eq!(converted, -86074);
+        let val = Bytes::from_str("0x02dd").unwrap();
+        let converted = i24_be_bytes_to_i32(&val);
+        assert_eq!(converted, 733);
+        let val = Bytes::from_str("0xe2bb").unwrap();
+        let converted = i24_be_bytes_to_i32(&val);
+        assert_eq!(converted, -7493);
+    }
+}

@@ -136,7 +136,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::evm::protocol::utils::uniswap::i24_be_bytes_to_i32;
 
     fn usv3_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
@@ -274,18 +273,5 @@ mod tests {
             result.err().unwrap(),
             InvalidSnapshotError::ValueError(err) if err == *"Unsupported fee amount"
         ));
-    }
-
-    #[test]
-    fn test_i24_be_bytes_to_i32() {
-        let val = Bytes::from_str("0xfeafc6").unwrap();
-        let converted = i24_be_bytes_to_i32(&val);
-        assert_eq!(converted, -86074);
-        let val = Bytes::from_str("0x02dd").unwrap();
-        let converted = i24_be_bytes_to_i32(&val);
-        assert_eq!(converted, 733);
-        let val = Bytes::from_str("0xe2bb").unwrap();
-        let converted = i24_be_bytes_to_i32(&val);
-        assert_eq!(converted, -7493);
     }
 }
