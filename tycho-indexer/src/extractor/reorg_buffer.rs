@@ -58,6 +58,7 @@ impl TryFrom<BlockOrTimestamp> for BlockNumberOrTimestamp {
 pub(crate) struct ReorgBuffer<B: BlockScoped> {
     block_messages: VecDeque<B>,
     strict: bool,
+    last_finalized_block: Option<u64>,
 }
 
 /// The finality status of a block or block-scoped data.
@@ -76,7 +77,7 @@ where
     B: BlockScoped + std::fmt::Debug,
 {
     pub(crate) fn new() -> Self {
-        Self { block_messages: VecDeque::new(), strict: false }
+        Self { block_messages: VecDeque::new(), strict: false, last_finalized_block: None }
     }
 
     /// Inserts a new block into the buffer. Ensures the new block is the expected next block,
@@ -105,7 +106,12 @@ where
         &mut self,
         final_block_height: u64,
     ) -> Result<Vec<B>, StorageError> {
-        let target_index = self.find_index(|b| b.block().number == final_block_height);
+        let target_index = if self.last_finalized_block.replace(final_block_height) != Some(final_block_height) {
+            self.find_index(|b| b.block().number == final_block_height).map(|idx| idx + 1)
+        } else {
+            Some(0)
+        };
+
         let first = self
             .get_block_range(None, None)?
             .next()
