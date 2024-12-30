@@ -19,6 +19,9 @@ We warmly welcome open-source contributions!
 
 **No contribution is too small and all contributions are valued.**
 
+The [tycho.build Telegram](https://t.me/+B4CNQwv7dgIyYTJl) is available for any concerns you may have that are not
+covered in this guide.
+
 ### Ways to contribute
 
 There are fundamentally three ways an individual can contribute:
