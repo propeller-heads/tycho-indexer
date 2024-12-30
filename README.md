@@ -35,6 +35,20 @@ There are fundamentally three ways an individual can contribute:
 **Anybody can participate in any stage of contribution**. We urge you to participate in the discussion around bugs and
 participate in reviewing PRs.
 
+### Opening a Pull Request
+
+Please submit pull requests (PRs) targeting the main branch. Ensure all PR titles follow
+the [Conventional Commit format](https://www.conventionalcommits.org/en/v1.0.0/). using
+a prefix like `fix: bug XXX`. This prefix is essential for automatically incrementing the
+version number.
+
+Please ensure the following commands pass if you have changed the code:
+
+```
+cargo clippy --workspace --lib --all-targets --all-features
+cargo +nightly fmt --check
+```
+
 ### Join tycho.build
 
 If you're interested in contributing, join us on Telegram at [tycho.build](https://t.me/+B4CNQwv7dgIyYTJl).
