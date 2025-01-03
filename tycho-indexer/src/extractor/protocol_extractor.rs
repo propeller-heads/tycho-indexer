@@ -1,15 +1,16 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     str::FromStr,
     sync::Arc,
 };
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
+use futures03::FutureExt;
 use metrics::gauge;
 use mockall::automock;
 use prost::Message;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use tycho_core::{
@@ -46,6 +47,10 @@ use crate::{
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 
+// Todo: Change in PR evaluation
+const MAX_PENDING_COMMITS: usize = 100;
+const TARGET_PENDING_COMMITS: usize = 50;
+
 pub struct Inner {
     cursor: Vec<u8>,
     last_processed_block: Option<Block>,
@@ -56,7 +61,7 @@ pub struct Inner {
 }
 
 pub struct ProtocolExtractor<G, T> {
-    gateway: G,
+    gateway: Arc<G>,
     name: String,
     chain: Chain,
     chain_state: ChainState,
@@ -68,11 +73,12 @@ pub struct ProtocolExtractor<G, T> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
+    db_futures: Mutex<VecDeque<JoinHandle<Result<(), StorageError>>>>,
 }
 
 impl<G, T> ProtocolExtractor<G, T>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + Send + Sync + 'static,
     T: TokenPreProcessor,
 {
     #[allow(clippy::too_many_arguments)]
@@ -92,7 +98,7 @@ where
             Err(StorageError::NotFound(_, _)) => {
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
                 ProtocolExtractor {
-                    gateway,
+                    gateway: Arc::new(gateway),
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -109,6 +115,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    db_futures: Mutex::new(VecDeque::new()),
                 }
             }
             Ok(cursor) => {
@@ -120,7 +127,7 @@ where
                     "Found existing cursor! Resuming extractor.."
                 );
                 ProtocolExtractor {
-                    gateway,
+                    gateway: Arc::new(gateway),
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -137,6 +144,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    db_futures: Mutex::new(VecDeque::new()),
                 }
             }
             Err(err) => return Err(ExtractionError::Setup(err.to_string())),
@@ -459,12 +467,85 @@ where
             .collect();
         Ok(new_tokens)
     }
+
+    /// Removes completed futures and checks for any errors
+    #[instrument(skip(self), level = "trace")]
+    async fn cleanup_db_futures(&self) -> Result<(), ExtractionError> {
+        let mut futures = self.db_futures.lock().await;
+
+        // Track indices of completed futures for removal
+        let mut completed_futures = Vec::new();
+
+        // Check all futures and collect completed ones
+        for (idx, future) in futures.iter_mut().enumerate() {
+            if future.is_finished() {
+                trace!("Found completed future at index {}", idx);
+
+                if let Some(result) = future.now_or_never() {
+                    match result {
+                        Ok(Ok(())) => {
+                            completed_futures.push(idx);
+                        }
+                        Ok(Err(storage_err)) => {
+                            error!(?storage_err, "Database operation failed");
+                            return Err(ExtractionError::Storage(storage_err));
+                        }
+                        Err(join_err) => {
+                            error!(?join_err, "Database task panicked");
+                            return Err(ExtractionError::Setup(join_err.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove completed futures in reverse order to maintain correct indices
+        if !completed_futures.is_empty() {
+            trace!("Removing {} completed futures", completed_futures.len());
+            for idx in completed_futures.into_iter().rev() {
+                futures.remove(idx);
+            }
+        }
+
+        // Handle oversized queue
+        if futures.len() > MAX_PENDING_COMMITS {
+            debug!(
+                "Queue size {} exceeds maximum {}. Reducing to target size {}",
+                futures.len(),
+                MAX_PENDING_COMMITS,
+                TARGET_PENDING_COMMITS
+            );
+
+            while futures.len() > TARGET_PENDING_COMMITS {
+                if let Some(fut) = futures.pop_front() {
+                    match fut.await {
+                        Ok(Ok(())) => {
+                            trace!("Successfully processed queued commit");
+                        }
+                        Ok(Err(storage_err)) => {
+                            error!(?storage_err, "Database commit failed while reducing queue");
+                            return Err(ExtractionError::Storage(storage_err));
+                        }
+                        Err(join_err) => {
+                            error!(?join_err, "Database task failed while reducing queue");
+                            return Err(ExtractionError::Setup(join_err.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Log queue statistics
+        trace!(remaining_futures = futures.len(), "Cleanup complete");
+
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl<G, T> Extractor for ProtocolExtractor<G, T>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + Send + Sync + 'static,
     T: TokenPreProcessor,
 {
     fn get_id(&self) -> ExtractorIdentity {
@@ -586,6 +667,8 @@ where
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
         {
+            // Clean up completed database tasks and handle any errors
+            self.cleanup_db_futures().await?;
             // keep reorg buffer guard within a limited scope
             let mut reorg_buffer = self.reorg_buffer.lock().await;
             reorg_buffer
@@ -604,9 +687,17 @@ where
                 // committing.
                 let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
 
-                self.gateway
-                    .advance(msg.block_update(), msg.cursor(), force_db_commit)
-                    .await?;
+                let gateway = Arc::clone(&self.gateway);
+                let fut = tokio::spawn(async move {
+                    gateway
+                        .advance(msg.block_update(), msg.cursor(), force_db_commit)
+                        .await
+                });
+
+                self.db_futures
+                    .lock()
+                    .await
+                    .push_back(fut);
             }
         }
 
@@ -643,6 +734,8 @@ where
         &self,
         inp: BlockUndoSignal,
     ) -> Result<Option<ExtractorMsg>, ExtractionError> {
+        self.cleanup_db_futures().await?;
+
         let block_ref = inp
             .last_valid_block
             .ok_or_else(|| ExtractionError::DecodeError("Revert without block ref".into()))?;
@@ -693,8 +786,8 @@ where
                                     range of blocks, we only want to remove it (so undo its creation).
                                     As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
                                     */
-                                    if !reverted_deletions.contains_key(id) &&
-                                        !reverted_creations.contains_key(id)
+                                    if !reverted_deletions.contains_key(id)
+                                        && !reverted_creations.contains_key(id)
                                     {
                                         match new_component.change {
                                             ChangeType::Update => {}
