@@ -8,17 +8,17 @@ name = "ethereum_curve"
 crate-type = ["cdylib"]
 
 [dependencies]
-substreams.workspace = true
-substreams-ethereum.workspace = true
-prost.workspace = true
-prost-types.workspace = true
-hex-literal.workspace = true
-ethabi.workspace = true
-hex.workspace = true
+substreams = "0.5.22"
+substreams-ethereum = "0.9.9"
+prost = "0.11"
+prost-types = "0.12.3"
+hex-literal = "0.4.1"
+ethabi = "18.0.0"
+hex = "0.4.3"
 bytes = "1.5.0"
 anyhow = "1.0.75"
 num-bigint = "0.4.4"
-tycho-substreams.workspace = true
+tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "b8aeaa3" }
 serde = { version = "1.0", features = ["derive"] }
 serde_qs = "0.13.0"
 itertools = "0.13.0"

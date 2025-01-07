@@ -9,15 +9,15 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ethabi = "17"
-hex-literal.workspace = true
+hex-literal = "0.4.1"
 num-bigint = "0.4"
 num-traits = "0.2.15"
-prost.workspace = true
+prost = "0.11"
 prost-types = "0.11"
-substreams.workspace = true
-substreams-ethereum.workspace = true
-hex.workspace = true
-tycho-substreams.workspace = true
+substreams = "0.5.22"
+substreams-ethereum = "0.9.9"
+hex = "0.4.3"
+tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "b8aeaa3" }
 itertools = "0.12.0"
 anyhow = "1.0.75"
 

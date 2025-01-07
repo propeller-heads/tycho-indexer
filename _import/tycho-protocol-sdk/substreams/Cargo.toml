@@ -13,21 +13,6 @@ members = [
 ]
 resolver = "2"
 
-
-[workspace.dependencies]
-substreams-ethereum = "0.9.9"
-substreams = "0.5.22"
-prost = "0.11"
-prost-types = "0.12.3"
-hex-literal = "0.4.1"
-anyhow = "1.0.75"
-hex = "0.4.3"
-ethabi = "18.0.0"
-tycho-substreams = { path = "crates/tycho-substreams" }
-substreams-helper = { path = "crates/substreams-helper" }
-serde = "1.0.204"
-serde_json = "1.0.120"
-
 [profile.release]
 lto = true
 opt-level = 's'

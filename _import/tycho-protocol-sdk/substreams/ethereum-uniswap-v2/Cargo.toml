@@ -8,22 +8,22 @@ name = "ethereum_uniswap_v2"
 crate-type = ["cdylib"]
 
 [dependencies]
-substreams.workspace = true
-substreams-ethereum.workspace = true
-prost.workspace = true
-ethabi.workspace = true
-anyhow = { workspace = true, features = [] }
-hex-literal.workspace = true
-substreams-helper.workspace = true
-tycho-substreams.workspace = true
+substreams = "0.5.22"
+substreams-ethereum = "0.9.9"
+prost = "0.11"
+ethabi = "18.0.0"
+anyhow = "1.0.75"
+hex-literal = "0.4.1"
+substreams-helper = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "b8aeaa3" }
+tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "b8aeaa3" }
 num-bigint = "0.4.4"
 itertools = "0.12.1"
 serde_qs = "0.13.0"
-serde.workspace = true
+serde = "1.0.204"
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.2", features = ["custom"] }
 
 [build-dependencies]
-anyhow.workspace = true
-substreams-ethereum.workspace = true
+anyhow = "1.0.75"
+substreams-ethereum = "0.9.9"
