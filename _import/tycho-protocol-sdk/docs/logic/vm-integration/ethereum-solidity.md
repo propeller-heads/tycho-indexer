@@ -6,7 +6,7 @@ description: Provide protocol logic using the ethereum virtual machine
 
 ## Swap/exchange protocol
 
-To integrate an EVM exchange protocol the [ISwapAdapter.sol ](https://github.com/propeller-heads/propeller-protocol-lib/blob/main/evm/interfaces/ISwapAdapter.sol)should be implemented. Additionally, a manifest file is required that summarises some metadata about the protocol.
+To integrate an EVM exchange protocol the [ISwapAdapter.sol ](https://github.com/propeller-heads/tycho-protocol-sdk/blob/main/evm/interfaces/ISwapAdapter.sol)should be implemented. Additionally, a manifest file is required that summarises some metadata about the protocol.
 
 {% hint style="info" %}
 Although the interface is specified for Solidity, you are not limited to writing the adapter contract in Solidity. We can use any compiled evm bytecode. So if you prefer e.g. Vyper, you are welcome to implement the interface using Vyper. Unfortunately we do not provide all the tooling for Vyper contracts yet, but you can certainly submit compiled Vyper byte code.

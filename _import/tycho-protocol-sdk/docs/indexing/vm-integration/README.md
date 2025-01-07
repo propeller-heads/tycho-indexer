@@ -34,7 +34,7 @@ We have integrated the **Balancer** protocol as a reference, see `/substreams/et
 
 1. Start by making a local copy of the Propeller Protocol Lib repository:
     ```bash
-    git clone https://github.com/propeller-heads/propeller-protocol-lib
+    git clone https://github.com/propeller-heads/tycho-protocol-sdk
     ```
 
 ## Understanding the Substreams VM integration

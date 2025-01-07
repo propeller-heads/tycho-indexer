@@ -37,7 +37,7 @@ In the following section, we outline the typical procedure for structuring an in
 Commonly, protocols employ factory contracts to deploy a contract for each swap component (also known as a pool or pair). We will explain how to efficiently index this system of contracts. It's important to note, however, that the techniques described below are broadly applicable, even if a protocol deviates from this specific pattern it should be possible to index it and emit the required messages.
 
 {% hint style="info" %}
-The following examples and code snippets have been taken from the ethereum-balancer substream. The complete code is available [here](https://github.com/propeller-heads/propeller-protocol-lib/tree/main/substreams/ethereum-balancer).
+The following examples and code snippets have been taken from the ethereum-balancer substream. The complete code is available [here](https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-balancer-v2).
 {% endhint %}
 
 Usually an integration consists of the following modules:

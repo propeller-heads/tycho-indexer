@@ -16,7 +16,7 @@ Next, for each emitted transactions that carries state changes, the correspondin
 
 So basically when processing a block we need to emit the block itself, all transactions that introduced protocol state changes and last but not least the state changes themselves, associated to their corresponding transaction.
 
-**The data model that encodes changes, transaction and blocks in messages, can be found** [**here**](https://github.com/propeller-heads/propeller-protocol-lib/tree/main/proto/tycho/evm/v1)**.**&#x20;
+**The data model that encodes changes, transaction and blocks in messages, can be found** [**here**](https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/proto/tycho/evm/v1)**.**&#x20;
 
 #### Models
 
@@ -24,7 +24,7 @@ The models below are used for communication between Substreams and Tycho indexer
 
 Our indexer expects to receive a `BlockChanges` output from your Substreams package.
 
-{% @github-files/github-code-block url="https://github.com/propeller-heads/propeller-protocol-lib/blob/main/proto/tycho/evm/v1/common.proto" %}
+{% @github-files/github-code-block url="https://github.com/propeller-heads/tycho-protocol-sdk/blob/main/proto/tycho/evm/v1/common.proto" %}
 
 Please be aware that changes need to be aggregated on the transaction level, it is considered an error to emit `BlockChanges` with duplicated transactions present in the `changes` attributes.
 

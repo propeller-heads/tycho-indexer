@@ -47,7 +47,7 @@ The script to generate this file manually is available under `evm/scripts/buildR
 ### Step 2: Create python virtual environment for testing
 
 Run setup env script. It will create a conda virtual env and install all dependencies.
-This script must be run from within the `propeller-protocol-lib/testing` directory.
+This script must be run from within the `tycho-protocol-sdk/testing` directory.
 
 Please note that some dependencies require access to our private PyPI repository.
 
@@ -100,7 +100,7 @@ python ./testing/src/runner/cli.py --package "your-package-name"
 If you want to run tests for `ethereum-balancer-v2`, use:
 
 ```bash
-conda activate propeller-protocol-lib-testing
+conda activate tycho-protocol-sdk-testing
 export RPC_URL="https://ethereum-mainnet.core.chainstack.com/123123123123"
 export SUBSTREAMS_API_TOKEN=eyJhbGci...
 docker compose up -d db

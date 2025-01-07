@@ -29,12 +29,12 @@ Following exchanges have been integrated using VM approach:
 2.  Start by making a local copy of the Propeller Protocol Lib repository:
 
     ```bash
-    git clone https://github.com/propeller-heads/propeller-protocol-lib
+    git clone https://github.com/propeller-heads/tycho-protocol-sdk
     ```
 3.  Install forge dependencies:
 
     ```bash
-    cd ./propeller-protocol-lib/evm/
+    cd ./tycho-protocol-sdk/evm/
     forge install
     ```
 

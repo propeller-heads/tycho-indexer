@@ -31,5 +31,5 @@ testing = [
 ]
 
 [project.urls]
-homepage = "https://github.com/propeller-heads/propeller-protocol-lib"
+homepage = "https://github.com/propeller-heads/tycho-protocol-sdk"
 

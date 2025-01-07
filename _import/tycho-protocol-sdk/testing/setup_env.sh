@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables
-ENV_NAME="propeller-protocol-lib-testing"
+ENV_NAME="tycho-protocol-sdk-testing"
 PYTHON_VERSION="3.9"
 REQUIREMENTS_FILE="requirements.txt"
 
