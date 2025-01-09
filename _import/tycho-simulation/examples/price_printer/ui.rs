@@ -99,6 +99,16 @@ impl App {
         }
     }
     pub fn next_row(&mut self) {
+        let mut current_decimals = None;
+        if let Some(idx) = self.state.selected() {
+            let comp = &self.items[idx].component;
+            current_decimals = if self.zero2one {
+                Some(comp.tokens[0].decimals)
+            } else {
+                Some(comp.tokens[1].decimals)
+            };
+        }
+
         let i = match self.state.selected() {
             Some(i) => {
                 if i >= self.items.len() - 1 {
@@ -113,9 +123,28 @@ impl App {
         self.scroll_state = self
             .scroll_state
             .position(i * ITEM_HEIGHT);
+
+        if let (Some(prev_decimals), Some(idx)) = (current_decimals, self.state.selected()) {
+            let comp = &self.items[idx].component;
+            let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
+            if decimals >= prev_decimals {
+                self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
+            } else {
+                self.quote_amount /= BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
+            }
+        }
     }
 
     pub fn previous_row(&mut self) {
+        let mut current_decimals = None;
+        if let Some(idx) = self.state.selected() {
+            let comp = &self.items[idx].component;
+            current_decimals = if self.zero2one {
+                Some(comp.tokens[0].decimals)
+            } else {
+                Some(comp.tokens[1].decimals)
+            };
+        }
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -130,6 +159,16 @@ impl App {
         self.scroll_state = self
             .scroll_state
             .position(i * ITEM_HEIGHT);
+
+        if let (Some(prev_decimals), Some(idx)) = (current_decimals, self.state.selected()) {
+            let comp = &self.items[idx].component;
+            let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
+            if decimals >= prev_decimals {
+                self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
+            } else {
+                self.quote_amount /= BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
+            }
+        }
     }
 
     pub fn update_data(&mut self, update: BlockUpdate) {
@@ -367,21 +406,14 @@ impl App {
             if self.quote_amount > BigUint::ZERO {
                 let comp = &self.items[idx].component;
                 let state = &self.items[idx].state;
+                let (token_in, token_out) = if self.zero2one {
+                    (&comp.tokens[0], &comp.tokens[1])
+                } else {
+                    (&comp.tokens[1], &comp.tokens[0])
+                };
 
                 let start = Instant::now();
-                let res = if self.zero2one {
-                    state.get_amount_out(
-                        self.quote_amount.clone(),
-                        &comp.tokens[0],
-                        &comp.tokens[1],
-                    )
-                } else {
-                    state.get_amount_out(
-                        self.quote_amount.clone(),
-                        &comp.tokens[1],
-                        &comp.tokens[0],
-                    )
-                };
+                let res = state.get_amount_out(self.quote_amount.clone(), token_in, token_out);
                 let duration = start.elapsed();
 
                 let text = res
