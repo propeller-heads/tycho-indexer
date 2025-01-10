@@ -13,3 +13,6 @@ This quickstart guide enables you to:
 export RPC_URL=<your-eth-rpc-url>
 cargo run --release --example quickstart
 ```
+
+See [here](https://docs.propellerheads.xyz/tycho/for-solvers/tycho-quickstart) a complete guide on how to run the
+Quickstart example.
