@@ -382,9 +382,14 @@ mod tests {
         str::FromStr,
     };
 
+    use num_bigint::ToBigUint;
+    use num_traits::FromPrimitive;
+    use serde_json::Value;
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_core::hex_bytes::Bytes;
 
     use super::*;
+    use crate::protocol::models::TryFromWithBlock;
 
     #[test]
     fn test_delta_transition() {
@@ -439,5 +444,64 @@ mod tests {
                 .net_liquidity,
             9800
         );
+    }
+
+    #[tokio::test]
+    /// Compares a quote that we got from the UniswapV4 Quoter contract on Sepolia with a simulation
+    /// using Tycho-simulation and a state extracted with Tycho-indexer
+    async fn test_swap_sim() {
+        let data_str = include_str!("assets/sepolia_state_block_7239119.json");
+        let data: Value = serde_json::from_str(data_str).expect("Failed to parse JSON");
+
+        let state: ComponentWithState = serde_json::from_value(data)
+            .expect("Expected json to match ComponentWithState structure");
+
+        let usv4_state =
+            UniswapV4State::try_from_with_block(state, Default::default(), &Default::default())
+                .await
+                .unwrap();
+
+        let t0 = Token::new(
+            "0x647e32181a64f4ffd4f0b0b4b052ec05b277729c",
+            18,
+            "T0",
+            10_000.to_biguint().unwrap(),
+        );
+        let t1 = Token::new(
+            "0xe390a1c311b26f14ed0d55d3b0261c2320d15ca5",
+            18,
+            "T0",
+            10_000.to_biguint().unwrap(),
+        );
+
+        let res = usv4_state
+            .get_amount_out(BigUint::from_u64(1000000000000000000).unwrap(), &t0, &t1)
+            .unwrap();
+
+        // This amount comes from a call to the `quoteExactInputSingle` on the quoter contract on a
+        // sepolia node with these arguments
+        // ```
+        // {"poolKey":{"currency0":"0x647e32181a64f4ffd4f0b0b4b052ec05b277729c","currency1":"0xe390a1c311b26f14ed0d55d3b0261c2320d15ca5","fee":"3000","tickSpacing":"60","hooks":"0x0000000000000000000000000000000000000000"},"zeroForOne":true,"exactAmount":"1000000000000000000","hookData":"0x"}
+        // ```
+        // Here is the curl for it:
+        //
+        // ```
+        // curl -X POST https://eth-sepolia.api.onfinality.io/public \
+        // -H "Content-Type: application/json" \
+        // -d '{
+        //   "jsonrpc": "2.0",
+        //   "method": "eth_call",
+        //   "params": [
+        //     {
+        //       "to": "0xCd8716395D55aD17496448a4b2C42557001e9743",
+        //       "data": "0xaa9d21cb0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000647e32181a64f4ffd4f0b0b4b052ec05b277729c000000000000000000000000e390a1c311b26f14ed0d55d3b0261c2320d15ca50000000000000000000000000000000000000000000000000000000000000bb8000000000000000000000000000000000000000000000000000000000000003c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000de0b6b3a764000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000"
+        //     },
+        //     "0x6e75cf"
+        //   ],
+        //   "id": 1
+        //   }'
+        // ```
+        let expected_amount = BigUint::from(9999909699895_u64);
+        assert_eq!(res.amount, expected_amount);
     }
 }

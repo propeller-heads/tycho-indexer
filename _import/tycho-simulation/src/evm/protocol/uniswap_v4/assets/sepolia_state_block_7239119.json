@@ -1,0 +1,39 @@
+{
+  "state": {
+    "component_id": "0x12e4510bc312b3e459340cbee3e281d81671083f56161c0c6673dee018cab4d0",
+    "attributes": {
+      "tick": "0x00",
+      "balance_owner": "0x8c4bcbe6b9ef47855f97e675296fa3f6fafa5f1a",
+      "sqrt_price_x96": "0x01000000000000000000000000",
+      "protocol_fees/one2zero": "0x00",
+      "fee": "0x0bb8",
+      "liquidity": "0x09184f0b3680",
+      "ticks/887220/net-liquidity": "0xf6e7b0f4c980",
+      "ticks/-887220/net-liquidity": "0x09184f0b3680",
+      "protocol_fees/zero2one": "0x00"
+    },
+    "balances": {
+      "0x647e32181a64f4ffd4f0b0b4b052ec05b277729c": "0x09184f0b3680",
+      "0xe390a1c311b26f14ed0d55d3b0261c2320d15ca5": "0x09184f0b3680"
+    }
+  },
+  "component": {
+    "id": "0x12e4510bc312b3e459340cbee3e281d81671083f56161c0c6673dee018cab4d0",
+    "protocol_system": "uniswap_v4",
+    "protocol_type_name": "uniswap_v4_pool",
+    "chain": "ethereum",
+    "tokens": [
+      "0x647e32181a64f4ffd4f0b0b4b052ec05b277729c",
+      "0xe390a1c311b26f14ed0d55d3b0261c2320d15ca5"
+    ],
+    "contract_ids": [],
+    "static_attributes": {
+      "hooks": "0x0000000000000000000000000000000000000000",
+      "pool_id": "0x12e4510bc312b3e459340cbee3e281d81671083f56161c0c6673dee018cab4d0",
+      "tick_spacing": "0x3c"
+    },
+    "change": "Creation",
+    "creation_tx": "0x3d458bfd841ee29b03958b19f737255286c9ce9b4026220c47f8a015b8ed6d1a",
+    "created_at": "2024-10-31T14:23:12"
+  }
+}
