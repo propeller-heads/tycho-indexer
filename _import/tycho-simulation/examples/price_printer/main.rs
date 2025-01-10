@@ -45,7 +45,7 @@ async fn main() {
 
     // Perform an early check to ensure `RPC_URL` is set.
     // This prevents errors from occurring later during UI interactions.
-    // Can be commented out if only using the example with uniswap_v2 and uniswap_v3.
+    // Can be commented out if only using the example with uniswap_v2, uniswap_v3 and balancer_v2.
     env::var("RPC_URL").expect("RPC_URL env variable should be set");
 
     // Create communication channels for inter-thread communication
