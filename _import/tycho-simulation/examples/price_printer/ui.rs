@@ -98,70 +98,36 @@ impl App {
             items: data_vec,
         }
     }
-    pub fn next_row(&mut self) {
-        let mut current_decimals = None;
-        if let Some(idx) = self.state.selected() {
-            let comp = &self.items[idx].component;
-            current_decimals = if self.zero2one {
-                Some(comp.tokens[0].decimals)
-            } else {
-                Some(comp.tokens[1].decimals)
-            };
-        }
 
-        let i = match self.state.selected() {
+    pub fn move_row(&mut self, direction: isize) {
+        // Get current decimals, if any
+        let current_decimals = self.state.selected().map(|idx| {
+            let comp = &self.items[idx].component;
+            if self.zero2one {
+                comp.tokens[0].decimals
+            } else {
+                comp.tokens[1].decimals
+            }
+        });
+
+        // Calculate the new index based on direction
+        let new_index = match self.state.selected() {
             Some(i) => {
-                if i >= self.items.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
+                ((i as isize + direction + self.items.len() as isize) % self.items.len() as isize)
+                    as usize
             }
             None => 0,
         };
-        self.state.select(Some(i));
+
+        // Update state and scroll position
+        self.state.select(Some(new_index));
         self.scroll_state = self
             .scroll_state
-            .position(i * ITEM_HEIGHT);
+            .position(new_index * ITEM_HEIGHT);
 
-        if let (Some(prev_decimals), Some(idx)) = (current_decimals, self.state.selected()) {
-            let comp = &self.items[idx].component;
-            let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
-            if decimals >= prev_decimals {
-                self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
-            } else {
-                self.quote_amount /= BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
-            }
-        }
-    }
-
-    pub fn previous_row(&mut self) {
-        let mut current_decimals = None;
-        if let Some(idx) = self.state.selected() {
-            let comp = &self.items[idx].component;
-            current_decimals = if self.zero2one {
-                Some(comp.tokens[0].decimals)
-            } else {
-                Some(comp.tokens[1].decimals)
-            };
-        }
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.items.len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-        self.scroll_state = self
-            .scroll_state
-            .position(i * ITEM_HEIGHT);
-
-        if let (Some(prev_decimals), Some(idx)) = (current_decimals, self.state.selected()) {
-            let comp = &self.items[idx].component;
+        // Adjust quote amount if decimals have changed
+        if let Some(prev_decimals) = current_decimals {
+            let comp = &self.items[new_index].component;
             let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
             if decimals >= prev_decimals {
                 self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
@@ -245,7 +211,7 @@ impl App {
                                         self.show_popup = !self.show_popup
                                     }
                                 },
-                                KeyCode::Char('j') | KeyCode::Down => self.next_row(),
+                                KeyCode::Char('j') | KeyCode::Down => self.move_row(1),
                                 KeyCode::Char('+') => {
                                     self.modify_quote(true)
                                 },
@@ -256,7 +222,7 @@ impl App {
                                     self.zero2one = !self.zero2one;
                                     self.quote_amount = BigUint::one();
                                 }
-                                KeyCode::Char('k') | KeyCode::Up => self.previous_row(),
+                                KeyCode::Char('k') | KeyCode::Up => self.move_row(-1),
                                 KeyCode::Enter => self.show_popup = !self.show_popup,
                                 _ => {}
                             }
