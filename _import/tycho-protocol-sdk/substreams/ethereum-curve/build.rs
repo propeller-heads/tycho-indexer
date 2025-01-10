@@ -6,12 +6,17 @@ fn main() -> Result<()> {
     let abi_folder = "abi";
     let output_folder = "src/abi";
 
-    let files = fs::read_dir(abi_folder)?;
+    let abis = fs::read_dir(abi_folder)?;
+
+    let mut files = abis.collect::<Result<Vec<_>, _>>()?;
+
+    // Sort the files by their name
+    files.sort_by_key(|a| a.file_name());
     let mut mod_rs_content = String::new();
     mod_rs_content.push_str("#![allow(clippy::all)]\n");
 
     for file in files {
-        let file = file?;
+        let file = file;
         let file_name = file.file_name();
         let file_name = file_name.to_string_lossy();
 
