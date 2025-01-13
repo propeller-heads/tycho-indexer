@@ -18,7 +18,7 @@ pub struct Order {
     /// True if the order is an exact output order.
     pub exact_out: bool,
     /// The token being sold (exact in) or bought (exact out).
-    given_token: Bytes,
+    pub given_token: Bytes,
     /// Amount of the given token.
     pub given_amount: BigUint,
     /// The token being bought (exact in) or sold (exact out).
@@ -26,7 +26,7 @@ pub struct Order {
     /// Amount of the checked token.
     checked_amount: BigUint,
     /// Address of the sender.
-    sender: Bytes,
+    pub sender: Bytes,
     /// Address of the receiver.
     pub receiver: Bytes,
     /// List of swaps to fulfill the order.

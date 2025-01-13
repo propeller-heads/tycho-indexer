@@ -1,4 +1,5 @@
 use crate::encoding::models::{Order, Solution};
+use crate::encoding::permit2::{Permit2, PermitRequest};
 use crate::encoding::strategy_encoder::{
     SequentialExactInStrategyEncoder, SingleSwapStrategyEncoder, SlipSwapStrategyEncoder,
     StrategyEncoder,
@@ -24,6 +25,7 @@ impl RouterEncoder {
     }
 
     pub fn encode_router_calldata(&self, solution: Solution) -> Result<Vec<u8>, Error> {
+        let permit_calldata = self.handle_approvals(&solution)?; // TODO: where should we append this?
         let mut calldata_list: Vec<Vec<u8>> = Vec::new();
         let encode_for_batch_execute = solution.orders.len() > 1;
         for order in solution.orders {
@@ -45,6 +47,19 @@ impl RouterEncoder {
         } else {
             Ok(calldata_list[0].clone())
         }
+    }
+
+    fn handle_approvals(&self, solution: &Solution) -> Result<Vec<u8>, Error> {
+        let mut permits = Vec::new();
+        for order in solution.orders.iter() {
+            permits.push(PermitRequest {
+                token: order.given_token.clone(),
+                spender: order.sender.clone(),
+                amount: order.given_amount.clone(),
+                router_address: solution.router_address.unwrap_or(self.router_address),
+            });
+        }
+        Ok(Permit2::new().encode_permit(permits))
     }
 
     fn get_strategy(&self, order: &Order) -> &dyn StrategyEncoder {
