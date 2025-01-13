@@ -8,6 +8,12 @@ pub struct Solution {
     pub router_address: Option<Address>,
 }
 
+#[derive(Clone)]
+pub enum NativeAction {
+    Wrap,
+    Unwrap,
+}
+
 pub struct Order {
     /// True if the order is an exact output order.
     pub exact_out: bool,
@@ -30,6 +36,7 @@ pub struct Order {
 
     pub slippage: f64,
     pub min_checked_amount: Option<BigUint>,
+    pub native_action: Option<NativeAction>,
 }
 
 #[derive(Clone)]

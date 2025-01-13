@@ -4,7 +4,7 @@ use anyhow::Error;
 use num_bigint::BigUint;
 use std::cmp::min;
 
-use crate::encoding::models::{ActionType, EncodingContext, Order};
+use crate::encoding::models::{ActionType, EncodingContext, NativeAction, Order};
 use crate::encoding::swap_encoder::{get_swap_encoder, get_swap_executor_address};
 use crate::encoding::utils::{biguint_to_u256, bytes_to_address, encode_input, ple_encode};
 
@@ -94,24 +94,27 @@ impl StrategyEncoder for SequentialExactInStrategyEncoder {
             )
         };
         let encoded_swaps = ple_encode(swaps);
+
+        let (mut unwrap, mut wrap) = (false, false);
+        if order.native_action.is_some() {
+            match order.native_action.unwrap() {
+                NativeAction::Wrap => wrap = true,
+                NativeAction::Unwrap => unwrap = true,
+            }
+        }
+        let method_calldata = (
+            wrap,
+            unwrap,
+            biguint_to_u256(&order.given_amount),
+            biguint_to_u256(&min_checked_amount),
+            encoded_swaps,
+        )
+            .abi_encode();
         if encode_for_batch_execute {
-            let args = (
-                action_type as u16,
-                biguint_to_u256(&order.given_amount),
-                biguint_to_u256(&min_checked_amount),
-                encoded_swaps,
-            );
+            let args = (action_type as u16, method_calldata);
             Ok(args.abi_encode())
         } else {
-            Ok(encode_input(
-                selector,
-                (
-                    biguint_to_u256(&order.given_amount),
-                    biguint_to_u256(&min_checked_amount),
-                    encoded_swaps,
-                )
-                    .abi_encode(),
-            ))
+            Ok(encode_input(selector, method_calldata))
         }
     }
 }

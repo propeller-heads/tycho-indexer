@@ -28,8 +28,6 @@ impl RouterEncoder {
         let encode_for_batch_execute = solution.orders.len() > 1;
         for order in solution.orders {
             let strategy = self.get_strategy(&order);
-            // TODO: handle native action??
-
             let contract_interaction = strategy.encode_strategy(
                 order,
                 if solution.router_address.is_some() {
