@@ -1,14 +1,15 @@
-use alloy_primitives::Address;
+use crate::encoding::approvals::approvals_manager::TokenApprovalsManager;
+use crate::encoding::approvals::interface::Approval;
+use crate::encoding::approvals::interface::ApprovalsManager;
+use crate::encoding::models::{EncodingContext, Swap};
+use crate::encoding::utils::bytes_to_address;
+use alloy_primitives::{Address, U256};
 use alloy_sol_types::SolValue;
 use anyhow::Error;
+use num_bigint::BigUint;
+use num_traits::identities::One;
 use std::str::FromStr;
 use tycho_core::Bytes;
-
-use crate::encoding::utils::bytes_to_address;
-use crate::encoding::{
-    approvals_manager::{get_client, TokenApprovalsManager},
-    models::{EncodingContext, Swap},
-};
 
 pub trait SwapEncoder: Sync + Send {
     fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error>;
@@ -37,19 +38,19 @@ impl BalancerV2SwapEncoder {
 
 impl SwapEncoder for BalancerV2SwapEncoder {
     fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error> {
-        let client = get_client();
-        let token_approvals_manager = TokenApprovalsManager::new(client);
+        let token_approvals_manager = TokenApprovalsManager::new();
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
         let approval_needed = runtime.block_on(async {
             token_approvals_manager
-                .approval_needed(
-                    swap.token_in.clone(),
-                    encoding_context.router_address,
-                    self.vault_address.clone(),
-                )
+                .approval_needed(Approval {
+                    spender: self.vault_address.clone(),
+                    owner: encoding_context.router_address,
+                    token: swap.token_in.clone(),
+                    amount: (BigUint::one() << 256) - BigUint::one(), // max U256
+                })
                 .await
         });
         // should we return gas estimation here too?? if there is an approval needed, gas will be

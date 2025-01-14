@@ -1,28 +1,29 @@
 use std::{env, sync::Arc};
 
+use crate::encoding::approvals::interface::{Approval, ApprovalsManager};
 use alloy::{
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::BoxTransport,
 };
-use alloy_primitives::{Address, U256};
 use dotenv::dotenv;
-use tycho_core::Bytes;
 
 pub struct TokenApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
 }
-
 impl TokenApprovalsManager {
-    pub fn new(client: Arc<RootProvider<BoxTransport>>) -> Self {
-        Self { client }
+    pub fn new() -> Self {
+        Self {
+            client: get_client(),
+        }
     }
+    pub async fn approval_needed(&self, approval: Approval) -> bool {
+        todo!()
+    }
+}
 
-    pub async fn approval_needed(
-        &self,
-        token: Bytes,
-        spender_address: Bytes,
-        router_address: Bytes,
-    ) -> bool {
+impl ApprovalsManager for TokenApprovalsManager {
+    fn encode_approvals(&self, approvals: Vec<Approval>) -> Vec<u8> {
+        todo!()
         // should be something like
         // let allowance = self
         //     .client
@@ -30,7 +31,6 @@ impl TokenApprovalsManager {
         //     .await;
         //
         // allowance == U256::ZERO // If allowance is 0, approval is needed
-        todo!()
     }
 }
 

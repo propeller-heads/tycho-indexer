@@ -1,6 +1,5 @@
-mod approvals_manager;
+mod approvals;
 mod models;
-mod permit2;
 mod router_encoder;
 mod strategy_encoder;
 mod strategy_selector;
