@@ -1,4 +1,4 @@
-use crate::encoding::approvals::interface::{Approval, ApprovalsManager};
+use crate::encoding::approvals::interface::{Approval, UserApprovalsManager};
 use alloy_primitives::U256;
 use std::str::FromStr;
 use tycho_core::Bytes;
@@ -25,7 +25,7 @@ impl Permit2 {
         todo!()
     }
 }
-impl ApprovalsManager for Permit2 {
+impl UserApprovalsManager for Permit2 {
     fn encode_approvals(&self, approvals: Vec<Approval>) -> Vec<u8> {
         // calls get_allowance_data to get nonce
         // checks if we are not permitted already

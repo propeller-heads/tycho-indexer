@@ -1,14 +1,10 @@
-use crate::encoding::approvals::approvals_manager::TokenApprovalsManager;
-use crate::encoding::approvals::interface::Approval;
+use crate::encoding::approvals::approvals_manager::ProtocolApprovalsManager;
 use crate::encoding::models::{EncodingContext, Swap};
 use crate::encoding::utils::bytes_to_address;
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
 use anyhow::Error;
-use num_bigint::BigUint;
-use num_traits::identities::One;
 use std::str::FromStr;
-use tycho_core::Bytes;
 
 pub trait SwapEncoder: Sync + Send {
     fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error>;
@@ -23,13 +19,13 @@ impl SwapEncoder for UniswapV2SwapEncoder {
 }
 
 struct BalancerV2SwapEncoder {
-    vault_address: Bytes,
+    vault_address: Address,
 }
 
 impl BalancerV2SwapEncoder {
     pub fn new() -> Self {
         Self {
-            vault_address: Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
+            vault_address: Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
                 .expect("Invalid string for balancer vault address"),
         }
     }
@@ -37,19 +33,16 @@ impl BalancerV2SwapEncoder {
 
 impl SwapEncoder for BalancerV2SwapEncoder {
     fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error> {
-        let token_approvals_manager = TokenApprovalsManager::new();
+        let token_approvals_manager = ProtocolApprovalsManager::new();
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())
             .unwrap();
+        let token = bytes_to_address(&swap.token_in)?;
+        let router_address = bytes_to_address(&encoding_context.address_for_approvals)?;
         let approval_needed = runtime.block_on(async {
             token_approvals_manager
-                .approval_needed(Approval {
-                    spender: self.vault_address.clone(),
-                    owner: encoding_context.address_for_approvals,
-                    token: swap.token_in.clone(),
-                    amount: (BigUint::one() << 256) - BigUint::one(), // max U256
-                })
+                .approval_needed(token, self.vault_address.clone(), router_address)
                 .await
         });
         // should we return gas estimation here too?? if there is an approval needed, gas will be

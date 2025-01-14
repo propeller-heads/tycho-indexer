@@ -1,4 +1,4 @@
-use crate::encoding::approvals::interface::{Approval, ApprovalsManager};
+use crate::encoding::approvals::interface::{Approval, UserApprovalsManager};
 use crate::encoding::models::{Solution, PROPELLER_ROUTER_ADDRESS};
 use crate::encoding::strategy_encoder::StrategyEncoder;
 use crate::encoding::strategy_selector::StrategySelector;
@@ -6,11 +6,11 @@ use crate::encoding::utils::{encode_input, ple_encode};
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 
-struct RouterEncoder<S: StrategySelector, A: ApprovalsManager> {
+struct RouterEncoder<S: StrategySelector, A: UserApprovalsManager> {
     strategy_selector: S,
     approvals_manager: A,
 }
-impl<S: StrategySelector, A: ApprovalsManager> RouterEncoder<S, A> {
+impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> {
     pub fn new(strategy_selector: S, approvals_manager: A) -> Self {
         RouterEncoder {
             strategy_selector,

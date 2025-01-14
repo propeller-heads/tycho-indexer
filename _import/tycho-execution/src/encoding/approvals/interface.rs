@@ -8,6 +8,6 @@ pub struct Approval {
     pub amount: BigUint,
 }
 
-pub trait ApprovalsManager {
+pub trait UserApprovalsManager {
     fn encode_approvals(&self, approvals: Vec<Approval>) -> Vec<u8>;
 }

@@ -1,28 +1,27 @@
 use std::{env, sync::Arc};
 
-use crate::encoding::approvals::interface::{Approval, ApprovalsManager};
 use alloy::{
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::BoxTransport,
 };
+use alloy_primitives::Address;
 use dotenv::dotenv;
 
-pub struct TokenApprovalsManager {
+pub struct ProtocolApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
 }
-impl TokenApprovalsManager {
+impl ProtocolApprovalsManager {
     pub fn new() -> Self {
         Self {
             client: get_client(),
         }
     }
-    pub async fn approval_needed(&self, approval: Approval) -> bool {
-        todo!()
-    }
-}
-
-impl ApprovalsManager for TokenApprovalsManager {
-    fn encode_approvals(&self, approvals: Vec<Approval>) -> Vec<u8> {
+    pub async fn approval_needed(
+        &self,
+        token: Address,
+        spender_address: Address,
+        router_address: Address,
+    ) -> bool {
         todo!()
         // should be something like
         // let allowance = self
