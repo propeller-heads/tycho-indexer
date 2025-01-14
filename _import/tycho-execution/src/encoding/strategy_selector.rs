@@ -1,6 +1,6 @@
 use crate::encoding::models::Solution;
 use crate::encoding::strategy_encoder::{
-    SequentialStrategyEncoder, SingleSwapStrategyEncoder, SlipSwapStrategyEncoder,
+    SequentialStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
     StraightToPoolStrategyEncoder, StrategyEncoder,
 };
 
@@ -19,7 +19,7 @@ impl StrategySelector for DefaultStrategySelector {
         } else if solution.swaps.iter().all(|s| s.split == 0.0) {
             Box::new(SequentialStrategyEncoder {})
         } else {
-            Box::new(SlipSwapStrategyEncoder {})
+            Box::new(SplitSwapStrategyEncoder {})
         }
     }
 }

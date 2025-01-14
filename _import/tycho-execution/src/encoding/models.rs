@@ -21,7 +21,9 @@ pub struct Solution {
     pub given_amount: BigUint,
     /// The token being bought (exact in) or sold (exact out).
     checked_token: Bytes,
-    /// Amount of the checked token.
+    /// Expected amount of the bought token (exact in) or sold token (exact out).
+    pub expected_amount: BigUint,
+    /// Minimum amount to be checked for the solution to be valid.
     pub check_amount: BigUint,
     /// Address of the sender.
     pub sender: Bytes,

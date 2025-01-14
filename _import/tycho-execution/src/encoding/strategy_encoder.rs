@@ -1,6 +1,7 @@
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
+use std::cmp::min;
 
 use crate::encoding::models::{
     ActionType, EncodingContext, NativeAction, Solution, PROPELLER_ROUTER_ADDRESS,
@@ -62,7 +63,9 @@ impl StrategyEncoder for SequentialStrategyEncoder {
             let one_hundred = BigUint::from(100u32);
             let slippage_percent = BigUint::from((solution.slippage.unwrap() * 100.0) as u32);
             let multiplier = &one_hundred - slippage_percent;
-            check_amount = (&solution.check_amount * multiplier) / one_hundred;
+            let expected_amount_with_slippage =
+                (&solution.expected_amount * multiplier) / one_hundred;
+            check_amount = min(check_amount, expected_amount_with_slippage);
         }
         let mut swaps = vec![];
         for (index, swap) in solution.swaps.iter().enumerate() {
@@ -127,9 +130,9 @@ impl StrategyEncoder for SequentialStrategyEncoder {
     }
 }
 
-pub struct SlipSwapStrategyEncoder {}
+pub struct SplitSwapStrategyEncoder {}
 
-impl StrategyEncoder for SlipSwapStrategyEncoder {
+impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
         todo!()
     }
