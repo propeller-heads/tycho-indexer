@@ -6,14 +6,13 @@ use crate::encoding::models::{
     ActionType, EncodingContext, NativeAction, Order, PROPELLER_ROUTER_ADDRESS,
 };
 use crate::encoding::swap_encoder::{get_swap_encoder, get_swap_executor_address};
-use crate::encoding::utils::{biguint_to_u256, encode_input, ple_encode};
+use crate::encoding::utils::{biguint_to_u256, ple_encode};
 
 pub trait StrategyEncoder {
-    fn encode_strategy(
-        &self,
-        to_encode: Order,
-        encode_for_batch_execute: bool,
-    ) -> Result<Vec<u8>, Error>;
+    fn encode_strategy(&self, to_encode: Order) -> Result<Vec<u8>, Error>;
+
+    fn action_type(&self, exact_out: bool) -> ActionType;
+    fn selector(&self, exact_out: bool) -> &str;
 
     fn encode_protocol_header(
         &self,
@@ -33,23 +32,31 @@ pub trait StrategyEncoder {
 pub struct SingleSwapStrategyEncoder {}
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        order: Order,
-        encode_for_batch_execute: bool,
-    ) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
         todo!()
+    }
+
+    fn action_type(&self, exact_out: bool) -> ActionType {
+        if exact_out {
+            ActionType::SingleExactOut
+        } else {
+            ActionType::SingleExactIn
+        }
+    }
+
+    fn selector(&self, exact_out: bool) -> &str {
+        if exact_out {
+            "singleExactOut(uint256, bytes)"
+        } else {
+            "singleExactIn(uint256, bytes)"
+        }
     }
 }
 
-pub struct SequentialExactInStrategyEncoder {}
+pub struct SequentialStrategyEncoder {}
 
-impl StrategyEncoder for SequentialExactInStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        order: Order,
-        encode_for_batch_execute: bool,
-    ) -> Result<Vec<u8>, Error> {
+impl StrategyEncoder for SequentialStrategyEncoder {
+    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
         let mut check_amount = order.check_amount.clone();
         if order.slippage.is_some() {
             let one_hundred = BigUint::from(100u32);
@@ -83,9 +90,6 @@ impl StrategyEncoder for SequentialExactInStrategyEncoder {
             swaps.push(swap_data);
         }
 
-        let selector = "sequentialExactIn(uint256, uint256, bytes[])";
-        let action_type = ActionType::SequentialExactIn;
-
         let encoded_swaps = ple_encode(swaps);
 
         let (mut unwrap, mut wrap) = (false, false);
@@ -103,11 +107,22 @@ impl StrategyEncoder for SequentialExactInStrategyEncoder {
             encoded_swaps,
         )
             .abi_encode();
-        if encode_for_batch_execute {
-            let args = (action_type as u16, method_calldata);
-            Ok(args.abi_encode())
+        Ok(method_calldata)
+    }
+
+    fn action_type(&self, exact_out: bool) -> ActionType {
+        if exact_out {
+            ActionType::SequentialExactOut
         } else {
-            Ok(encode_input(selector, method_calldata))
+            ActionType::SequentialExactIn
+        }
+    }
+
+    fn selector(&self, exact_out: bool) -> &str {
+        if exact_out {
+            "sequentialExactOut(uint256, uint256, bytes[])"
+        } else {
+            "sequentialExactIn(uint256, uint256, bytes[])"
         }
     }
 }
@@ -115,12 +130,15 @@ impl StrategyEncoder for SequentialExactInStrategyEncoder {
 pub struct SlipSwapStrategyEncoder {}
 
 impl StrategyEncoder for SlipSwapStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        order: Order,
-        encode_for_batch_execute: bool,
-    ) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
         todo!()
+    }
+    fn action_type(&self, _exact_out: bool) -> ActionType {
+        ActionType::SplitIn
+    }
+
+    fn selector(&self, _exact_out: bool) -> &str {
+        "splitExactIn(uint256, address, uint256, bytes[])"
     }
 }
 
@@ -129,11 +147,7 @@ impl StrategyEncoder for SlipSwapStrategyEncoder {
 pub struct StraightToPoolStrategyEncoder {}
 
 impl StrategyEncoder for StraightToPoolStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        order: Order,
-        encode_for_batch_execute: bool,
-    ) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
         if order.router_address.is_none() {
             return Err(anyhow::anyhow!(
                 "Router address is required for straight to pool orders"
@@ -151,5 +165,13 @@ impl StrategyEncoder for StraightToPoolStrategyEncoder {
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
         Ok(protocol_data)
+    }
+
+    fn action_type(&self, _exact_out: bool) -> ActionType {
+        unimplemented!();
+    }
+
+    fn selector(&self, _exact_out: bool) -> &str {
+        unimplemented!();
     }
 }

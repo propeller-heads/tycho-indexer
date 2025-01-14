@@ -22,8 +22,22 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> {
         let mut calldata_list: Vec<Vec<u8>> = Vec::new();
         let encode_for_batch_execute = solution.orders.len() > 1;
         for order in solution.orders {
+            let exact_out = order.exact_out.clone();
+            let straight_to_pool = order.straight_to_pool.clone();
+
             let strategy = self.strategy_selector.select_strategy(&order);
-            let contract_interaction = strategy.encode_strategy(order, encode_for_batch_execute)?;
+            let method_calldata = strategy.encode_strategy(order)?;
+
+            let contract_interaction = if encode_for_batch_execute {
+                let args = (strategy.action_type(exact_out) as u16, method_calldata);
+                args.abi_encode()
+            } else {
+                if straight_to_pool {
+                    method_calldata
+                } else {
+                    encode_input(strategy.selector(exact_out), method_calldata)
+                }
+            };
             calldata_list.push(contract_interaction);
         }
         if encode_for_batch_execute {

@@ -1,6 +1,6 @@
 use crate::encoding::models::Order;
 use crate::encoding::strategy_encoder::{
-    SequentialExactInStrategyEncoder, SingleSwapStrategyEncoder, SlipSwapStrategyEncoder,
+    SequentialStrategyEncoder, SingleSwapStrategyEncoder, SlipSwapStrategyEncoder,
     StraightToPoolStrategyEncoder, StrategyEncoder,
 };
 
@@ -17,7 +17,7 @@ impl StrategySelector for DefaultStrategySelector {
         } else if order.swaps.len() == 1 {
             Box::new(SingleSwapStrategyEncoder {})
         } else if order.swaps.iter().all(|s| s.split == 0.0) {
-            Box::new(SequentialExactInStrategyEncoder {})
+            Box::new(SequentialStrategyEncoder {})
         } else {
             Box::new(SlipSwapStrategyEncoder {})
         }
