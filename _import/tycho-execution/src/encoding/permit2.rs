@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, U256};
+use alloy_primitives::U256;
 use num_bigint::BigUint;
 use std::str::FromStr;
 use tycho_core::Bytes;

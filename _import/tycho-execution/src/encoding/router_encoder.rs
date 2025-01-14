@@ -1,23 +1,24 @@
-use crate::encoding::models::{Order, Solution, PROPELLER_ROUTER_ADDRESS};
+use crate::encoding::models::{Solution, PROPELLER_ROUTER_ADDRESS};
 use crate::encoding::permit2::{Permit2, PermitRequest};
-use crate::encoding::strategy_encoder::{
-    SequentialExactInStrategyEncoder, SingleSwapStrategyEncoder, SlipSwapStrategyEncoder,
-    StrategyEncoder,
-};
+use crate::encoding::strategy_encoder::StrategyEncoder;
+use crate::encoding::strategy_selector::StrategySelector;
 use crate::encoding::utils::{encode_input, ple_encode};
 use alloy_sol_types::SolValue;
 use anyhow::Error;
-use std::str::FromStr;
 
-struct RouterEncoder {}
-
-impl RouterEncoder {
+struct RouterEncoder<S: StrategySelector> {
+    strategy_selector: S,
+}
+impl<S: StrategySelector> RouterEncoder<S> {
+    pub fn new(strategy_selector: S) -> Self {
+        RouterEncoder { strategy_selector }
+    }
     pub fn encode_router_calldata(&self, solution: Solution) -> Result<Vec<u8>, Error> {
         let permit_calldata = self.handle_approvals(&solution)?; // TODO: where should we append this?
         let mut calldata_list: Vec<Vec<u8>> = Vec::new();
         let encode_for_batch_execute = solution.orders.len() > 1;
         for order in solution.orders {
-            let strategy = self.get_strategy(&order);
+            let strategy = self.strategy_selector.select_strategy(&order);
             let contract_interaction = strategy.encode_strategy(order, encode_for_batch_execute)?;
             calldata_list.push(contract_interaction);
         }
@@ -43,15 +44,5 @@ impl RouterEncoder {
             });
         }
         Ok(Permit2::new().encode_permit(permits))
-    }
-
-    fn get_strategy(&self, order: &Order) -> &dyn StrategyEncoder {
-        if order.swaps.len() == 1 {
-            &SingleSwapStrategyEncoder {}
-        } else if order.swaps.iter().all(|s| s.split == 0.0) {
-            &SequentialExactInStrategyEncoder {}
-        } else {
-            &SlipSwapStrategyEncoder {}
-        }
     }
 }

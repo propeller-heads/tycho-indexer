@@ -1,8 +1,6 @@
-use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
-use std::cmp::min;
 
 use crate::encoding::models::{
     ActionType, EncodingContext, NativeAction, Order, PROPELLER_ROUTER_ADDRESS,
