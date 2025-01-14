@@ -42,7 +42,7 @@ pub struct Solution {
     pub native_action: Option<NativeAction>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum NativeAction {
     Wrap,
     Unwrap,
@@ -58,6 +58,12 @@ pub struct Swap {
     pub token_out: Bytes,
     /// Fraction of the amount to be swapped in this operation.
     pub split: f64,
+}
+
+pub struct Transaction {
+    pub data: Vec<u8>,
+    // ETH value to be sent with the transaction.
+    pub value: BigUint,
 }
 
 pub struct EncodingContext {

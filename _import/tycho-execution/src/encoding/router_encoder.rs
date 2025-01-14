@@ -1,14 +1,17 @@
 use crate::encoding::approvals::interface::{Approval, UserApprovalsManager};
-use crate::encoding::models::{Solution, PROPELLER_ROUTER_ADDRESS};
+use crate::encoding::models::{NativeAction, Solution, Transaction, PROPELLER_ROUTER_ADDRESS};
 use crate::encoding::strategy_selector::StrategySelector;
 use crate::encoding::utils::{encode_input, ple_encode};
 use alloy_sol_types::SolValue;
 use anyhow::Error;
+use num_bigint::BigUint;
+use std::cmp::PartialEq;
 
 struct RouterEncoder<S: StrategySelector, A: UserApprovalsManager> {
     strategy_selector: S,
     approvals_manager: A,
 }
+
 impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> {
     pub fn new(strategy_selector: S, approvals_manager: A) -> Self {
         RouterEncoder {
@@ -16,10 +19,11 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> {
             approvals_manager,
         }
     }
-    pub fn encode_router_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<u8>, Error> {
+    pub fn encode_router_calldata(&self, solutions: Vec<Solution>) -> Result<Transaction, Error> {
         let approvals_calldata = self.handle_approvals(&solutions)?; // TODO: where should we append this?
         let mut calldata_list: Vec<Vec<u8>> = Vec::new();
         let encode_for_batch_execute = solutions.len() > 1;
+        let mut value = BigUint::ZERO;
         for solution in solutions.iter() {
             let exact_out = solution.exact_out.clone();
             let straight_to_pool = solution.straight_to_pool.clone();
@@ -38,13 +42,19 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> {
                 }
             };
             calldata_list.push(contract_interaction);
+
+            if solution.native_action.clone().unwrap() == NativeAction::Wrap {
+                value += solution.given_amount.clone();
+            }
         }
-        if encode_for_batch_execute {
+        let data = if encode_for_batch_execute {
             let args = (false, ple_encode(calldata_list));
-            Ok(encode_input("batchExecute(bytes)", args.abi_encode()))
+            encode_input("batchExecute(bytes)", args.abi_encode())
         } else {
-            Ok(calldata_list[0].clone())
-        }
+            calldata_list[0].clone()
+        };
+
+        Ok(Transaction { data, value })
     }
 
     fn handle_approvals(&self, solutions: &Vec<Solution>) -> Result<Vec<u8>, Error> {
