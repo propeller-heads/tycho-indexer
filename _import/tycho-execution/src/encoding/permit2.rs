@@ -7,17 +7,17 @@ pub struct PermitRequest {
     pub token: Bytes,
     pub amount: BigUint,
     pub spender: Bytes,
-    pub router_address: Address,
+    pub router_address: Bytes,
 }
 
 pub struct Permit2 {
-    pub address: Address,
+    pub address: Bytes,
 }
 
 impl Permit2 {
     pub fn new() -> Self {
         Self {
-            address: Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+            address: Bytes::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
                 .expect("Permit2 address not valid"),
         }
     }
@@ -33,9 +33,9 @@ impl Permit2 {
 
     fn get_allowance_data(
         &self,
-        user: Address,
-        router_address: Address,
-        token: Address,
+        user: Bytes,
+        router_address: Bytes,
+        token: Bytes,
     ) -> (U256, u64, U256) {
         // get allowance data (if it exists) and the nonce
         //  returns permitAmount, expiration, nonce

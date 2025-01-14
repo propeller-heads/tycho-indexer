@@ -20,8 +20,8 @@ impl TokenApprovalsManager {
     pub async fn approval_needed(
         &self,
         token: Bytes,
-        spender_address: Address,
-        router_address: Address,
+        spender_address: Bytes,
+        router_address: Bytes,
     ) -> bool {
         // should be something like
         // let allowance = self

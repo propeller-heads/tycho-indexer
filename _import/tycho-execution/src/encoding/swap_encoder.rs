@@ -2,6 +2,7 @@ use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use std::str::FromStr;
+use tycho_core::Bytes;
 
 use crate::encoding::utils::bytes_to_address;
 use crate::encoding::{
@@ -22,16 +23,14 @@ impl SwapEncoder for UniswapV2SwapEncoder {
 }
 
 struct BalancerV2SwapEncoder {
-    vault_address: Option<Address>,
+    vault_address: Bytes,
 }
 
 impl BalancerV2SwapEncoder {
     pub fn new() -> Self {
         Self {
-            vault_address: Some(
-                Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
-                    .expect("Invalid string for balancer vault address"),
-            ),
+            vault_address: Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
+                .expect("Invalid string for balancer vault address"),
         }
     }
 }
@@ -49,7 +48,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
                 .approval_needed(
                     swap.token_in.clone(),
                     encoding_context.router_address,
-                    self.vault_address.unwrap(),
+                    self.vault_address.clone(),
                 )
                 .await
         });
@@ -59,7 +58,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             bytes_to_address(&swap.token_in)?,
             bytes_to_address(&swap.token_out)?,
             swap.component.id,
-            encoding_context.receiver,
+            bytes_to_address(&encoding_context.receiver)?,
             encoding_context.exact_out,
             approval_needed,
         );

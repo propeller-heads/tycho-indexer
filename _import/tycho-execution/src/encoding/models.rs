@@ -1,17 +1,18 @@
-use alloy_primitives::Address;
+use lazy_static::lazy_static;
 use num_bigint::BigUint;
+use std::env;
+use std::str::FromStr;
 use tycho_core::{dto::ProtocolComponent, Bytes};
+
+lazy_static! {
+    pub static ref PROPELLER_ROUTER_ADDRESS: Bytes = Bytes::from_str(
+        &env::var("ROUTER_ADDRESS").expect("Missing ROUTER_ADDRESS in environment"),
+    )
+    .expect("Invalid ROUTER_ADDRESS");
+}
 
 pub struct Solution {
     pub orders: Vec<Order>,
-    // if not set, then the Propeller Router will be used
-    pub router_address: Option<Address>,
-}
-
-#[derive(Clone)]
-pub enum NativeAction {
-    Wrap,
-    Unwrap,
 }
 
 pub struct Order {
@@ -24,7 +25,7 @@ pub struct Order {
     /// The token being bought (exact in) or sold (exact out).
     checked_token: Bytes,
     /// Amount of the checked token.
-    checked_amount: BigUint,
+    pub check_amount: BigUint,
     /// Address of the sender.
     pub sender: Bytes,
     /// Address of the receiver.
@@ -33,10 +34,18 @@ pub struct Order {
     pub swaps: Vec<Swap>,
     /// Whether to include router calldata (true) or just swap data (false).
     add_router_calldata: bool,
-
-    pub slippage: f64,
-    pub min_checked_amount: Option<BigUint>,
+    // if not set, then the Propeller Router will be used
+    pub router_address: Option<Bytes>,
+    // if set, it will be applied to check_amount
+    pub slippage: Option<f64>,
+    // if set, the corresponding native action will be executed
     pub native_action: Option<NativeAction>,
+}
+
+#[derive(Clone)]
+pub enum NativeAction {
+    Wrap,
+    Unwrap,
 }
 
 #[derive(Clone)]
@@ -51,12 +60,10 @@ pub struct Swap {
     pub split: f64,
 }
 
-// maybe this struct is useful - keeping it here for now (maybe we could collapse this with another
-// struct)
 pub struct EncodingContext {
-    pub receiver: Address,
+    pub receiver: Bytes,
     pub exact_out: bool,
-    pub router_address: Address,
+    pub router_address: Bytes,
 }
 
 pub enum ActionType {
