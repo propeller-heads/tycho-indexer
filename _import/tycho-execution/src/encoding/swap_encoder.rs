@@ -1,9 +1,8 @@
 use crate::encoding::approvals::approvals_manager::TokenApprovalsManager;
 use crate::encoding::approvals::interface::Approval;
-use crate::encoding::approvals::interface::ApprovalsManager;
 use crate::encoding::models::{EncodingContext, Swap};
 use crate::encoding::utils::bytes_to_address;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
@@ -47,7 +46,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             token_approvals_manager
                 .approval_needed(Approval {
                     spender: self.vault_address.clone(),
-                    owner: encoding_context.router_address,
+                    owner: encoding_context.address_for_approvals,
                     token: swap.token_in.clone(),
                     amount: (BigUint::one() << 256) - BigUint::one(), // max U256
                 })

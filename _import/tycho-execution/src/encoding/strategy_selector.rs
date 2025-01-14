@@ -1,7 +1,7 @@
 use crate::encoding::models::Order;
 use crate::encoding::strategy_encoder::{
     SequentialExactInStrategyEncoder, SingleSwapStrategyEncoder, SlipSwapStrategyEncoder,
-    StrategyEncoder,
+    StraightToPoolStrategyEncoder, StrategyEncoder,
 };
 
 pub trait StrategySelector {
@@ -12,7 +12,9 @@ pub struct DefaultStrategySelector;
 
 impl StrategySelector for DefaultStrategySelector {
     fn select_strategy(&self, order: &Order) -> Box<dyn StrategyEncoder> {
-        if order.swaps.len() == 1 {
+        if order.straight_to_pool {
+            Box::new(StraightToPoolStrategyEncoder {})
+        } else if order.swaps.len() == 1 {
             Box::new(SingleSwapStrategyEncoder {})
         } else if order.swaps.iter().all(|s| s.split == 0.0) {
             Box::new(SequentialExactInStrategyEncoder {})

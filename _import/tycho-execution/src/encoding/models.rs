@@ -32,8 +32,9 @@ pub struct Order {
     pub receiver: Bytes,
     /// List of swaps to fulfill the order.
     pub swaps: Vec<Swap>,
-    /// Whether to include router calldata (true) or just swap data (false).
-    add_router_calldata: bool,
+    /// If set to true, the order will be encoded to be sent directly to the SwapExecutor and skip the router.
+    /// The user is responsible for managing necessary approvals and token transfers.
+    pub straight_to_pool: bool,
     // if not set, then the Propeller Router will be used
     pub router_address: Option<Bytes>,
     // if set, it will be applied to check_amount
@@ -63,7 +64,7 @@ pub struct Swap {
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
-    pub router_address: Bytes,
+    pub address_for_approvals: Bytes,
 }
 
 pub enum ActionType {

@@ -6,7 +6,7 @@ use crate::encoding::models::{
     ActionType, EncodingContext, NativeAction, Order, PROPELLER_ROUTER_ADDRESS,
 };
 use crate::encoding::swap_encoder::{get_swap_encoder, get_swap_executor_address};
-use crate::encoding::utils::{biguint_to_u256, bytes_to_address, encode_input, ple_encode};
+use crate::encoding::utils::{biguint_to_u256, encode_input, ple_encode};
 
 pub trait StrategyEncoder {
     fn encode_strategy(
@@ -76,7 +76,7 @@ impl StrategyEncoder for SequentialExactInStrategyEncoder {
             let encoding_context = EncodingContext {
                 receiver,
                 exact_out: order.exact_out,
-                router_address,
+                address_for_approvals: router_address,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
             let swap_data = self.encode_protocol_header(protocol_data, protocol_system, 0, 0, 0);
@@ -121,5 +121,35 @@ impl StrategyEncoder for SlipSwapStrategyEncoder {
         encode_for_batch_execute: bool,
     ) -> Result<Vec<u8>, Error> {
         todo!()
+    }
+}
+
+/// This strategy encoder is used for orders that are sent directly to the pool.
+/// Only 1 order with 1 swap is supported.
+pub struct StraightToPoolStrategyEncoder {}
+
+impl StrategyEncoder for StraightToPoolStrategyEncoder {
+    fn encode_strategy(
+        &self,
+        order: Order,
+        encode_for_batch_execute: bool,
+    ) -> Result<Vec<u8>, Error> {
+        if order.router_address.is_none() {
+            return Err(anyhow::anyhow!(
+                "Router address is required for straight to pool orders"
+            ));
+        }
+        let swap = order.swaps.first().unwrap();
+        let protocol_system = swap.component.protocol_system.clone();
+        let swap_encoder = get_swap_encoder(&protocol_system);
+        let router_address = order.router_address.unwrap();
+
+        let encoding_context = EncodingContext {
+            receiver: order.receiver,
+            exact_out: order.exact_out,
+            address_for_approvals: router_address,
+        };
+        let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
+        Ok(protocol_data)
     }
 }
