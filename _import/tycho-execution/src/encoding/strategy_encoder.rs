@@ -3,13 +3,13 @@ use anyhow::Error;
 use num_bigint::BigUint;
 
 use crate::encoding::models::{
-    ActionType, EncodingContext, NativeAction, Order, PROPELLER_ROUTER_ADDRESS,
+    ActionType, EncodingContext, NativeAction, Solution, PROPELLER_ROUTER_ADDRESS,
 };
 use crate::encoding::swap_encoder::{get_swap_encoder, get_swap_executor_address};
 use crate::encoding::utils::{biguint_to_u256, ple_encode};
 
 pub trait StrategyEncoder {
-    fn encode_strategy(&self, to_encode: Order) -> Result<Vec<u8>, Error>;
+    fn encode_strategy(&self, to_encode: Solution) -> Result<Vec<u8>, Error>;
 
     fn action_type(&self, exact_out: bool) -> ActionType;
     fn selector(&self, exact_out: bool) -> &str;
@@ -32,7 +32,7 @@ pub trait StrategyEncoder {
 pub struct SingleSwapStrategyEncoder {}
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
-    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
         todo!()
     }
 
@@ -56,33 +56,33 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 pub struct SequentialStrategyEncoder {}
 
 impl StrategyEncoder for SequentialStrategyEncoder {
-    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
-        let mut check_amount = order.check_amount.clone();
-        if order.slippage.is_some() {
+    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
+        let mut check_amount = solution.check_amount.clone();
+        if solution.slippage.is_some() {
             let one_hundred = BigUint::from(100u32);
-            let slippage_percent = BigUint::from((order.slippage.unwrap() * 100.0) as u32);
+            let slippage_percent = BigUint::from((solution.slippage.unwrap() * 100.0) as u32);
             let multiplier = &one_hundred - slippage_percent;
-            check_amount = (&order.check_amount * multiplier) / one_hundred;
+            check_amount = (&solution.check_amount * multiplier) / one_hundred;
         }
         let mut swaps = vec![];
-        for (index, swap) in order.swaps.iter().enumerate() {
-            let is_last = index == order.swaps.len() - 1;
+        for (index, swap) in solution.swaps.iter().enumerate() {
+            let is_last = index == solution.swaps.len() - 1;
             let protocol_system = swap.component.protocol_system.clone();
             let swap_encoder = get_swap_encoder(&protocol_system);
-            let router_address = if order.router_address.is_some() {
-                order.router_address.clone().unwrap()
+            let router_address = if solution.router_address.is_some() {
+                solution.router_address.clone().unwrap()
             } else {
                 PROPELLER_ROUTER_ADDRESS.clone()
             };
             let receiver = if is_last {
-                order.receiver.clone()
+                solution.receiver.clone()
             } else {
                 router_address.clone()
             };
 
             let encoding_context = EncodingContext {
                 receiver,
-                exact_out: order.exact_out,
+                exact_out: solution.exact_out,
                 address_for_approvals: router_address,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
@@ -93,8 +93,8 @@ impl StrategyEncoder for SequentialStrategyEncoder {
         let encoded_swaps = ple_encode(swaps);
 
         let (mut unwrap, mut wrap) = (false, false);
-        if order.native_action.is_some() {
-            match order.native_action.unwrap() {
+        if solution.native_action.is_some() {
+            match solution.native_action.unwrap() {
                 NativeAction::Wrap => wrap = true,
                 NativeAction::Unwrap => unwrap = true,
             }
@@ -102,7 +102,7 @@ impl StrategyEncoder for SequentialStrategyEncoder {
         let method_calldata = (
             wrap,
             unwrap,
-            biguint_to_u256(&order.given_amount),
+            biguint_to_u256(&solution.given_amount),
             biguint_to_u256(&check_amount),
             encoded_swaps,
         )
@@ -130,7 +130,7 @@ impl StrategyEncoder for SequentialStrategyEncoder {
 pub struct SlipSwapStrategyEncoder {}
 
 impl StrategyEncoder for SlipSwapStrategyEncoder {
-    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
         todo!()
     }
     fn action_type(&self, _exact_out: bool) -> ActionType {
@@ -142,25 +142,25 @@ impl StrategyEncoder for SlipSwapStrategyEncoder {
     }
 }
 
-/// This strategy encoder is used for orders that are sent directly to the pool.
-/// Only 1 order with 1 swap is supported.
+/// This strategy encoder is used for solutions that are sent directly to the pool.
+/// Only 1 solution with 1 swap is supported.
 pub struct StraightToPoolStrategyEncoder {}
 
 impl StrategyEncoder for StraightToPoolStrategyEncoder {
-    fn encode_strategy(&self, order: Order) -> Result<Vec<u8>, Error> {
-        if order.router_address.is_none() {
+    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
+        if solution.router_address.is_none() {
             return Err(anyhow::anyhow!(
-                "Router address is required for straight to pool orders"
+                "Router address is required for straight to pool solutions"
             ));
         }
-        let swap = order.swaps.first().unwrap();
+        let swap = solution.swaps.first().unwrap();
         let protocol_system = swap.component.protocol_system.clone();
         let swap_encoder = get_swap_encoder(&protocol_system);
-        let router_address = order.router_address.unwrap();
+        let router_address = solution.router_address.unwrap();
 
         let encoding_context = EncodingContext {
-            receiver: order.receiver,
-            exact_out: order.exact_out,
+            receiver: solution.receiver,
+            exact_out: solution.exact_out,
             address_for_approvals: router_address,
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;

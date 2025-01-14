@@ -11,12 +11,9 @@ lazy_static! {
     .expect("Invalid ROUTER_ADDRESS");
 }
 
+#[derive(Clone)]
 pub struct Solution {
-    pub orders: Vec<Order>,
-}
-
-pub struct Order {
-    /// True if the order is an exact output order.
+    /// True if the solution is an exact output solution.
     pub exact_out: bool,
     /// The token being sold (exact in) or bought (exact out).
     pub given_token: Bytes,
@@ -30,9 +27,9 @@ pub struct Order {
     pub sender: Bytes,
     /// Address of the receiver.
     pub receiver: Bytes,
-    /// List of swaps to fulfill the order.
+    /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// If set to true, the order will be encoded to be sent directly to the SwapExecutor and skip the router.
+    /// If set to true, the solution will be encoded to be sent directly to the SwapExecutor and skip the router.
     /// The user is responsible for managing necessary approvals and token transfers.
     pub straight_to_pool: bool,
     // if not set, then the Propeller Router will be used

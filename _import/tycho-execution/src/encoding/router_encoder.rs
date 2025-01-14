@@ -1,6 +1,5 @@
 use crate::encoding::approvals::interface::{Approval, UserApprovalsManager};
 use crate::encoding::models::{Solution, PROPELLER_ROUTER_ADDRESS};
-use crate::encoding::strategy_encoder::StrategyEncoder;
 use crate::encoding::strategy_selector::StrategySelector;
 use crate::encoding::utils::{encode_input, ple_encode};
 use alloy_sol_types::SolValue;
@@ -17,16 +16,16 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> {
             approvals_manager,
         }
     }
-    pub fn encode_router_calldata(&self, solution: Solution) -> Result<Vec<u8>, Error> {
-        let approvals_calldata = self.handle_approvals(&solution)?; // TODO: where should we append this?
+    pub fn encode_router_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<u8>, Error> {
+        let approvals_calldata = self.handle_approvals(&solutions)?; // TODO: where should we append this?
         let mut calldata_list: Vec<Vec<u8>> = Vec::new();
-        let encode_for_batch_execute = solution.orders.len() > 1;
-        for order in solution.orders {
-            let exact_out = order.exact_out.clone();
-            let straight_to_pool = order.straight_to_pool.clone();
+        let encode_for_batch_execute = solutions.len() > 1;
+        for solution in solutions.iter() {
+            let exact_out = solution.exact_out.clone();
+            let straight_to_pool = solution.straight_to_pool.clone();
 
-            let strategy = self.strategy_selector.select_strategy(&order);
-            let method_calldata = strategy.encode_strategy(order)?;
+            let strategy = self.strategy_selector.select_strategy(&solution);
+            let method_calldata = strategy.encode_strategy((*solution).clone())?;
 
             let contract_interaction = if encode_for_batch_execute {
                 let args = (strategy.action_type(exact_out) as u16, method_calldata);
@@ -48,17 +47,17 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> {
         }
     }
 
-    fn handle_approvals(&self, solution: &Solution) -> Result<Vec<u8>, Error> {
+    fn handle_approvals(&self, solutions: &Vec<Solution>) -> Result<Vec<u8>, Error> {
         let mut approvals = Vec::new();
-        for order in solution.orders.iter() {
+        for solution in solutions.iter() {
             approvals.push(Approval {
-                token: order.given_token.clone(),
-                spender: order
+                token: solution.given_token.clone(),
+                spender: solution
                     .router_address
                     .clone()
                     .unwrap_or(PROPELLER_ROUTER_ADDRESS.clone()),
-                amount: order.given_amount.clone(),
-                owner: order.sender.clone(),
+                amount: solution.given_amount.clone(),
+                owner: solution.sender.clone(),
             });
         }
         Ok(self.approvals_manager.encode_approvals(approvals))
