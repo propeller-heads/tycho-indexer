@@ -5,7 +5,6 @@ use crate::encoding::utils::{encode_input, ple_encode};
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
-use std::cmp::PartialEq;
 
 struct RouterEncoder<S: StrategySelector, A: UserApprovalsManager> {
     strategy_selector: S,

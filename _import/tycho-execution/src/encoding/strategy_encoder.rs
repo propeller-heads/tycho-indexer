@@ -1,6 +1,7 @@
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
+use num_traits::Zero;
 use std::cmp::min;
 
 use crate::encoding::models::{
@@ -58,15 +59,21 @@ pub struct SequentialStrategyEncoder {}
 
 impl StrategyEncoder for SequentialStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
-        let mut check_amount = solution.check_amount.clone();
-        if solution.slippage.is_some() {
-            let one_hundred = BigUint::from(100u32);
-            let slippage_percent = BigUint::from((solution.slippage.unwrap() * 100.0) as u32);
-            let multiplier = &one_hundred - slippage_percent;
-            let expected_amount_with_slippage =
-                (&solution.expected_amount * multiplier) / one_hundred;
-            check_amount = min(check_amount, expected_amount_with_slippage);
-        }
+        let check_amount = if solution.check_amount.is_some() {
+            let mut check_amount = solution.check_amount.clone().unwrap();
+            if solution.slippage.is_some() {
+                let one_hundred = BigUint::from(100u32);
+                let slippage_percent = BigUint::from((solution.slippage.unwrap() * 100.0) as u32);
+                let multiplier = &one_hundred - slippage_percent;
+                let expected_amount_with_slippage =
+                    (&solution.expected_amount * multiplier) / one_hundred;
+                check_amount = min(check_amount, expected_amount_with_slippage);
+            }
+            check_amount
+        } else {
+            BigUint::ZERO
+        };
+
         let mut swaps = vec![];
         for (index, swap) in solution.swaps.iter().enumerate() {
             let is_last = index == solution.swaps.len() - 1;
@@ -106,6 +113,7 @@ impl StrategyEncoder for SequentialStrategyEncoder {
             wrap,
             unwrap,
             biguint_to_u256(&solution.given_amount),
+            if check_amount.is_zero() { false } else { true }, // if check_amount is zero, then we don't need to check
             biguint_to_u256(&check_amount),
             encoded_swaps,
         )
