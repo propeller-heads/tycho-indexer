@@ -8,23 +8,37 @@ use std::str::FromStr;
 
 pub trait SwapEncoder: Sync + Send {
     fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error>;
+    fn executor_address(&self) -> Address;
 }
 
-struct UniswapV2SwapEncoder {}
+pub struct UniswapV2SwapEncoder {
+    executor_address: Address,
+}
 
+impl UniswapV2SwapEncoder {
+    pub fn new(executor_address: Address) -> Self {
+        Self { executor_address }
+    }
+}
 impl SwapEncoder for UniswapV2SwapEncoder {
     fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error> {
         todo!()
     }
+
+    fn executor_address(&self) -> Address {
+        self.executor_address
+    }
 }
 
-struct BalancerV2SwapEncoder {
+pub struct BalancerV2SwapEncoder {
+    executor_address: Address,
     vault_address: Address,
 }
 
 impl BalancerV2SwapEncoder {
-    pub fn new() -> Self {
+    pub fn new(executor_address: Address) -> Self {
         Self {
+            executor_address,
             vault_address: Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
                 .expect("Invalid string for balancer vault address"),
         }
@@ -57,22 +71,8 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         );
         Ok(args.abi_encode())
     }
-}
 
-pub fn get_swap_encoder(protocol_system: &str) -> Box<dyn SwapEncoder> {
-    match protocol_system {
-        "uniswap_v2" => Box::new(UniswapV2SwapEncoder {}),
-        "vm:balancer_v2" => Box::new(BalancerV2SwapEncoder::new()),
-        _ => panic!("Unknown protocol system: {}", protocol_system),
-    }
-}
-
-pub fn get_swap_executor_address(protocol_system: &str) -> Address {
-    match protocol_system {
-        "uniswap_v2" => Address::from_str("0x5C2F5a71f67c01775180ADc06909288B4C329308")
-            .expect("Invalid address"),
-        "vm:balancer_v2" => Address::from_str("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4")
-            .expect("Invalid address"),
-        _ => panic!("Unknown protocol system: {}", protocol_system),
+    fn executor_address(&self) -> Address {
+        self.executor_address
     }
 }

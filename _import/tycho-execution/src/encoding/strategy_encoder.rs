@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
@@ -7,7 +8,7 @@ use std::cmp::min;
 use crate::encoding::models::{
     ActionType, EncodingContext, NativeAction, Solution, PROPELLER_ROUTER_ADDRESS,
 };
-use crate::encoding::swap_encoder::{get_swap_encoder, get_swap_executor_address};
+use crate::encoding::swap_encoder::SWAP_ENCODER_REGISTRY;
 use crate::encoding::utils::{biguint_to_u256, ple_encode};
 
 pub trait StrategyEncoder {
@@ -19,13 +20,12 @@ pub trait StrategyEncoder {
     fn encode_protocol_header(
         &self,
         protocol_data: Vec<u8>,
-        protocol_system: String,
+        executor_address: Address,
         // Token indices, split, and token inclusion are only used for split swaps
         token_in: u16,
         token_out: u16,
         split: u16, // not sure what should be the type of this :/
     ) -> Vec<u8> {
-        let executor_address = get_swap_executor_address(&protocol_system);
         let args = (executor_address, token_in, token_out, split, protocol_data);
         args.abi_encode()
     }
@@ -77,8 +77,10 @@ impl StrategyEncoder for SequentialStrategyEncoder {
         let mut swaps = vec![];
         for (index, swap) in solution.swaps.iter().enumerate() {
             let is_last = index == solution.swaps.len() - 1;
-            let protocol_system = swap.component.protocol_system.clone();
-            let swap_encoder = get_swap_encoder(&protocol_system);
+            let registry = SWAP_ENCODER_REGISTRY.read().unwrap();
+            let swap_encoder = registry
+                .get_encoder(&swap.component.protocol_system)
+                .expect("Swap encoder not found");
             let router_address = if solution.router_address.is_some() {
                 solution.router_address.clone().unwrap()
             } else {
@@ -96,7 +98,8 @@ impl StrategyEncoder for SequentialStrategyEncoder {
                 address_for_approvals: router_address,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
-            let swap_data = self.encode_protocol_header(protocol_data, protocol_system, 0, 0, 0);
+            let executor_address = swap_encoder.executor_address();
+            let swap_data = self.encode_protocol_header(protocol_data, executor_address, 0, 0, 0);
             swaps.push(swap_data);
         }
 
@@ -165,8 +168,10 @@ impl StrategyEncoder for StraightToPoolStrategyEncoder {
             ));
         }
         let swap = solution.swaps.first().unwrap();
-        let protocol_system = swap.component.protocol_system.clone();
-        let swap_encoder = get_swap_encoder(&protocol_system);
+        let registry = SWAP_ENCODER_REGISTRY.read().unwrap();
+        let swap_encoder = registry
+            .get_encoder(&swap.component.protocol_system)
+            .expect("Swap encoder not found");
         let router_address = solution.router_address.unwrap();
 
         let encoding_context = EncodingContext {
@@ -175,6 +180,7 @@ impl StrategyEncoder for StraightToPoolStrategyEncoder {
             address_for_approvals: router_address,
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
+        // TODO: here we need to pass also the address of the executor to be used
         Ok(protocol_data)
     }
 
