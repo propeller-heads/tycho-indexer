@@ -13,7 +13,7 @@ impl SwapEncoderRegistry {
         let mut encoders = HashMap::new();
 
         for (protocol, executor_address) in config.executors {
-            let builder = SwapEncoderBuilder::new(&protocol).executor_address(&executor_address);
+            let builder = SwapEncoderBuilder::new(&protocol, &executor_address);
             let encoder = builder.build().expect(&format!(
                 "Failed to build swap encoder for protocol: {}",
                 protocol
