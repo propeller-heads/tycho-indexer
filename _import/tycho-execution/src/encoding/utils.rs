@@ -12,10 +12,7 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, Error> {
     if address.len() == 20 {
         Ok(Address::from_slice(address))
     } else {
-        Err(anyhow::format_err!(
-            "Invalid ERC20 token address: {:?}",
-            address
-        ))
+        Err(anyhow::format_err!("Invalid ERC20 token address: {:?}", address))
     }
 }
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
@@ -34,6 +31,7 @@ pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
     encoded_action_data
 }
 
+#[allow(dead_code)]
 pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     let mut hasher = Keccak256::new();
     hasher.update(selector.as_bytes());
@@ -42,9 +40,9 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     // Remove extra prefix if present (32 bytes for dynamic data)
     // Alloy encoding is including a prefix for dynamic data indicating the offset or length
     // but at this point we don't want that
-    if encoded_args.len() > 32
-        && encoded_args[..32]
-            == [0u8; 31]
+    if encoded_args.len() > 32 &&
+        encoded_args[..32] ==
+            [0u8; 31]
                 .into_iter()
                 .chain([32].to_vec())
                 .collect::<Vec<u8>>()

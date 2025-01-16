@@ -1,16 +1,18 @@
+use std::cmp::min;
+
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
 use num_traits::Zero;
-use std::cmp::min;
 
-use crate::encoding::models::{
-    ActionType, EncodingContext, NativeAction, Solution, PROPELLER_ROUTER_ADDRESS,
+use crate::encoding::{
+    models::{ActionType, EncodingContext, NativeAction, Solution, PROPELLER_ROUTER_ADDRESS},
+    swap_encoder::SWAP_ENCODER_REGISTRY,
+    utils::{biguint_to_u256, ple_encode},
 };
-use crate::encoding::swap_encoder::SWAP_ENCODER_REGISTRY;
-use crate::encoding::utils::{biguint_to_u256, ple_encode};
 
+#[allow(dead_code)]
 pub trait StrategyEncoder {
     fn encode_strategy(&self, to_encode: Solution) -> Result<Vec<u8>, Error>;
 
@@ -34,7 +36,7 @@ pub trait StrategyEncoder {
 pub struct SingleSwapStrategyEncoder {}
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, _solution: Solution) -> Result<Vec<u8>, Error> {
         todo!()
     }
 
@@ -86,11 +88,7 @@ impl StrategyEncoder for SequentialStrategyEncoder {
             } else {
                 PROPELLER_ROUTER_ADDRESS.clone()
             };
-            let receiver = if is_last {
-                solution.receiver.clone()
-            } else {
-                router_address.clone()
-            };
+            let receiver = if is_last { solution.receiver.clone() } else { router_address.clone() };
 
             let encoding_context = EncodingContext {
                 receiver,
@@ -116,7 +114,7 @@ impl StrategyEncoder for SequentialStrategyEncoder {
             wrap,
             unwrap,
             biguint_to_u256(&solution.given_amount),
-            if check_amount.is_zero() { false } else { true }, // if check_amount is zero, then we don't need to check
+            !check_amount.is_zero(), /* if check_amount is zero, then we don't need to check */
             biguint_to_u256(&check_amount),
             encoded_swaps,
         )
@@ -144,7 +142,7 @@ impl StrategyEncoder for SequentialStrategyEncoder {
 pub struct SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, _solution: Solution) -> Result<Vec<u8>, Error> {
         todo!()
     }
     fn action_type(&self, _exact_out: bool) -> ActionType {

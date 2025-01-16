@@ -1,33 +1,32 @@
 use std::{env, sync::Arc};
 
 use alloy::{
-    providers::{Provider, ProviderBuilder, RootProvider},
+    providers::{ProviderBuilder, RootProvider},
     transports::BoxTransport,
 };
 use alloy_primitives::Address;
 use dotenv::dotenv;
 
+#[allow(dead_code)]
 pub struct ProtocolApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
 }
 impl ProtocolApprovalsManager {
     pub fn new() -> Self {
-        Self {
-            client: get_client(),
-        }
+        Self { client: get_client() }
     }
     pub async fn approval_needed(
         &self,
-        token: Address,
-        spender_address: Address,
-        router_address: Address,
+        _token: Address,
+        _spender_address: Address,
+        _router_address: Address,
     ) -> bool {
         todo!()
         // should be something like
         // let allowance = self
         //     .client
-        //     .call(token, "allowance(address,address)(uint256)", (router_address, spender_address))
-        //     .await;
+        //     .call(token, "allowance(address,address)(uint256)", (router_address,
+        // spender_address))     .await;
         //
         // allowance == U256::ZERO // If allowance is 0, approval is needed
     }

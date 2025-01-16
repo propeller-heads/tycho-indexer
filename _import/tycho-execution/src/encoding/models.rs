@@ -1,7 +1,7 @@
+use std::{env, str::FromStr};
+
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
-use std::env;
-use std::str::FromStr;
 use tycho_core::{dto::ProtocolComponent, Bytes};
 
 lazy_static! {
@@ -12,6 +12,7 @@ lazy_static! {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Solution {
     /// True if the solution is an exact output solution.
     pub exact_out: bool,
@@ -32,8 +33,9 @@ pub struct Solution {
     pub receiver: Bytes,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// If set to true, the solution will be encoded to be sent directly to the SwapExecutor and skip the router.
-    /// The user is responsible for managing necessary approvals and token transfers.
+    /// If set to true, the solution will be encoded to be sent directly to the SwapExecutor and
+    /// skip the router. The user is responsible for managing necessary approvals and token
+    /// transfers.
     pub straight_to_pool: bool,
     // if not set, then the Propeller Router will be used
     pub router_address: Option<Bytes>,
@@ -44,6 +46,7 @@ pub struct Solution {
 }
 
 #[derive(Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum NativeAction {
     Wrap,
     Unwrap,
@@ -61,6 +64,7 @@ pub struct Swap {
     pub split: f64,
 }
 
+#[allow(dead_code)]
 pub struct Transaction {
     pub data: Vec<u8>,
     // ETH value to be sent with the transaction.

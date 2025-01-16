@@ -1,8 +1,10 @@
-use crate::encoding::swap_encoder::swap_encoder::{
+use std::str::FromStr;
+
+use alloy_primitives::Address;
+
+use crate::encoding::swap_encoder::swap_struct_encoder::{
     BalancerV2SwapEncoder, SwapEncoder, UniswapV2SwapEncoder,
 };
-use alloy_primitives::Address;
-use std::str::FromStr;
 
 pub struct SwapEncoderBuilder {
     protocol_system: String,
@@ -14,7 +16,7 @@ impl SwapEncoderBuilder {
         SwapEncoderBuilder {
             protocol_system: protocol_system.to_string(),
             executor_address: Address::from_str(executor_address)
-                .expect(&format!("Invalid address: {}", executor_address)),
+                .unwrap_or_else(|_| panic!("Invalid address: {}", executor_address)),
         }
     }
 

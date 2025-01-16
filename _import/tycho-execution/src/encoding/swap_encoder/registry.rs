@@ -1,8 +1,10 @@
-use crate::encoding::swap_encoder::builder::SwapEncoderBuilder;
-use crate::encoding::swap_encoder::swap_encoder::SwapEncoder;
+use std::{collections::HashMap, fs};
+
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::fs;
+
+use crate::encoding::swap_encoder::{
+    builder::SwapEncoderBuilder, swap_struct_encoder::SwapEncoder,
+};
 
 pub struct SwapEncoderRegistry {
     encoders: HashMap<String, Box<dyn SwapEncoder>>,
@@ -14,16 +16,16 @@ impl SwapEncoderRegistry {
 
         for (protocol, executor_address) in config.executors {
             let builder = SwapEncoderBuilder::new(&protocol, &executor_address);
-            let encoder = builder.build().expect(&format!(
-                "Failed to build swap encoder for protocol: {}",
-                protocol
-            ));
+            let encoder = builder.build().unwrap_or_else(|_| {
+                panic!("Failed to build swap encoder for protocol: {}", protocol)
+            });
             encoders.insert(protocol, encoder);
         }
 
         Self { encoders }
     }
 
+    #[allow(clippy::borrowed_box)]
     pub fn get_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
         self.encoders.get(protocol_system)
     }

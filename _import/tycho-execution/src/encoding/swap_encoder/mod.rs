@@ -1,10 +1,12 @@
-use crate::encoding::swap_encoder::registry::{Config, SwapEncoderRegistry};
-use lazy_static::lazy_static;
 use std::sync::RwLock;
+
+use lazy_static::lazy_static;
+
+use crate::encoding::swap_encoder::registry::{Config, SwapEncoderRegistry};
 
 mod builder;
 mod registry;
-mod swap_encoder;
+mod swap_struct_encoder;
 
 lazy_static! {
     pub static ref SWAP_ENCODER_REGISTRY: RwLock<SwapEncoderRegistry> = {
