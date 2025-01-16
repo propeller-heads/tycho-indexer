@@ -7,7 +7,9 @@ use anyhow::Error;
 use std::str::FromStr;
 
 pub trait SwapEncoder: Sync + Send {
-    fn new(executor_address: Address) -> Self;
+    fn new(executor_address: Address) -> Self
+    where
+        Self: Sized;
     fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error>;
     fn executor_address(&self) -> Address;
 }
