@@ -26,3 +26,8 @@ target/
 # Built Visual Studio Code Extensions
 *.vsix
 .env
+
+#foundry
+# Compiler files
+foundry/cache/
+foundry/out/
