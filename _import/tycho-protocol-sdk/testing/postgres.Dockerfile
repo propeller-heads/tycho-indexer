@@ -1,7 +1,9 @@
 # This Dockerfile creates a custom postgres image used for CI and local deployment.
-# This is required because we use some postgres extensions that aren't in the generic Postgres image such as pg_partman or pg_cron.
+# This is required because we use some postgres extensions that aren't in the generic 
+# Postgres image such as pg_partman or pg_cron.
 
-# As an image with pg_partman already exist, we start from this one an add pg_cron and possibly other extensions on top of that.
+# As an image with pg_partman already exist, we start from this one and add pg_cron 
+# and possibly other extensions on top of that.
 FROM ghcr.io/dbsystel/postgresql-partman:15-5
 ARG PGCRON_VERSION="1.6.2"
 USER root

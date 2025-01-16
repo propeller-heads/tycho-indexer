@@ -247,7 +247,7 @@ class TestRunner:
                 self.config.adapter_build_signature,
                 self.config.adapter_build_args,
             )
-            
+
         TychoDBSingleton.clear_instance()
 
         decoder = ThirdPartyPoolTychoDecoder(
@@ -270,7 +270,9 @@ class TestRunner:
             for sell_token, buy_token in itertools.permutations(pool_state.tokens, 2):
                 for prctg in ["0.001", "0.01", "0.1"]:
                     # Try to sell 0.1% of the protocol balance
-                    sell_amount = Decimal(prctg) * pool_state.balances[sell_token.address]
+                    sell_amount = (
+                        Decimal(prctg) * pool_state.balances[sell_token.address]
+                    )
                     try:
                         amount_out, gas_used, _ = pool_state.get_amount_out(
                             sell_token, sell_amount, buy_token

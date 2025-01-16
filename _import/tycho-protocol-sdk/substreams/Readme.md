@@ -26,4 +26,4 @@ For forked protocols you'll need to also supply the config file name, e.g. `ethe
 
 ## Test your implementation
 
-To run a full end-to-end integration test you can refer to the [testing script documentation](../testing/README.md)
+To run a full end-to-end integration test you can refer to the [testing script documentation](../testing/README.md).

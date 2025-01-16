@@ -1,4 +1,5 @@
 #!/bin/bash
+# To run: ./setup_env.sh
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -46,3 +47,4 @@ pip install -r $REQUIREMENTS_FILE --index-url https://pypi.org/simple
 conda activate $ENV_NAME
 
 echo "Setup complete."
+echo "Run 'conda activate $ENV_NAME' to activate the environment."
