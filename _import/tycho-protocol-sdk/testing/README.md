@@ -36,20 +36,21 @@ The script to generate this file manually is available under `evm/scripts/buildR
 
 ## Setup testing environment
 
-### Step 1: Export Environment Variables
+## Prerequisites
 
-**DOMAIN_OWNER**
+Before setting up the Python environment, ensure the following tools and libraries are installed on your system:
 
-- **Description**: The domain owner identifier for Propellerhead's AWS account, used for authenticating on the private
-  PyPI repository.
-- **Example**: `export DOMAIN_OWNER=123456789`
+- **Git**: Version control tool (https://git-scm.com/)
+- **Rust**: Programming language and toolchain (https://www.rust-lang.org/)
+- **GCC**: GNU Compiler Collection (https://gcc.gnu.org/)
+- **libpq**: PostgreSQL client library (https://www.postgresql.org/docs/9.5/libpq.html)
+- **OpenSSL (libssl)**: OpenSSL development library (https://github.com/openssl/openssl)
+- **pkg-config**: Helper tool for managing compiler flags (https://www.freedesktop.org/wiki/Software/pkg-config/)
+- **Conda**: Python package manager (https://docs.conda.io/en/latest/)
+- **pip**: Python package installer (https://pip.pypa.io/)
 
-### Step 2: Create python virtual environment for testing
-
-Run setup env script. It will create a conda virtual env and install all dependencies.
+Run the setup env script. It will create a conda virtual env and install all dependencies.
 This script must be run from within the `tycho-protocol-sdk/testing` directory.
-
-Please note that some dependencies require access to our private PyPI repository.
 
 ```
 setup_env.sh
