@@ -1,0 +1,42 @@
+name: Main workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tests-and-lints:
+    uses: ./.github/workflows/tests-and-lints-template.yaml
+    secrets:
+      eth_rpc_url: ${{ secrets.ETH_RPC_URL }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  check-release:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
+    with:
+      args: --dry-run --no-ci
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+      id-token: write # to enable use of OIDC for npm provenance
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  release:
+    needs:
+      - tests-and-lints
+      - check-release
+    if: needs.check-release.outputs.verify_release_version != ''
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+      id-token: write # to enable use of OIDC for npm provenance
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
