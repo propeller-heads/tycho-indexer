@@ -1,9 +1,8 @@
-use alloy_sol_types::SolValue;
 use anyhow::Error;
 use num_bigint::BigUint;
 
 use crate::encoding::{
-    evm::utils::{encode_input, ple_encode},
+    evm::utils::encode_input,
     models::{NativeAction, Solution, Transaction, PROPELLER_ROUTER_ADDRESS},
     router_encoder::RouterEncoder,
     strategy_encoder::StrategySelector,
@@ -23,11 +22,9 @@ impl<S: StrategySelector, A: UserApprovalsManager> EVMRouterEncoder<S, A> {
     }
 }
 impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRouterEncoder<S, A> {
-    fn encode_router_calldata(&self, solutions: Vec<Solution>) -> Result<Transaction, Error> {
+    fn encode_router_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<Transaction>, Error> {
         let _approvals_calldata = self.handle_approvals(&solutions)?; // TODO: where should we append this?
-        let mut calldata_list: Vec<Vec<u8>> = Vec::new();
-        let encode_for_batch_execute = solutions.len() > 1;
-        let mut value = BigUint::ZERO;
+        let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
             let exact_out = solution.exact_out;
             let straight_to_pool = solution.straight_to_pool;
@@ -37,31 +34,23 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
                 .select_strategy(solution);
             let method_calldata = strategy.encode_strategy((*solution).clone())?;
 
-            let contract_interaction = if encode_for_batch_execute {
-                let args = (strategy.action_type(exact_out) as u16, method_calldata);
-                args.abi_encode()
-            } else if straight_to_pool {
+            let contract_interaction = if straight_to_pool {
                 method_calldata
             } else {
                 encode_input(strategy.selector(exact_out), method_calldata)
             };
-            calldata_list.push(contract_interaction);
 
-            if solution.native_action.clone().unwrap() == NativeAction::Wrap {
-                value += solution.given_amount.clone();
-            }
+            let value = if solution.native_action.clone().unwrap() == NativeAction::Wrap {
+                solution.given_amount.clone()
+            } else {
+                BigUint::ZERO
+            };
+            transactions.push(Transaction { value, data: contract_interaction });
         }
-        let data = if encode_for_batch_execute {
-            let args = (false, ple_encode(calldata_list));
-            encode_input("batchExecute(bytes)", args.abi_encode())
-        } else {
-            calldata_list[0].clone()
-        };
-
-        Ok(Transaction { data, value })
+        Ok(transactions)
     }
 
-    fn handle_approvals(&self, solutions: &[Solution]) -> Result<Vec<u8>, Error> {
+    fn handle_approvals(&self, solutions: &[Solution]) -> Result<Vec<Vec<u8>>, Error> {
         let mut approvals = Vec::new();
         for solution in solutions.iter() {
             approvals.push(Approval {

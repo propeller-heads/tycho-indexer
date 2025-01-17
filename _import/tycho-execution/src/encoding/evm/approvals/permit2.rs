@@ -30,11 +30,11 @@ impl Permit2 {
     }
 }
 impl UserApprovalsManager for Permit2 {
-    fn encode_approvals(&self, _approvals: Vec<Approval>) -> Vec<u8> {
+    fn encode_approvals(&self, _approvals: Vec<Approval>) -> Vec<Vec<u8>> {
         // calls get_allowance_data to get nonce
         // checks if we are not permitted already
-        // puts data into a permitSingle struct if there is only 1 PermitDetails, if there are
-        // several, use PermitBatch   adds the nonce and the expiration (uniswap recommends
+        // puts data into a list of PermitSingles
+        // adds the nonce and the expiration (uniswap recommends
         // 30 days for expiration) signs data
         // returns encoded data
         todo!()
