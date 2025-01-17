@@ -5,26 +5,20 @@ use alloy_sol_types::SolValue;
 use anyhow::Error;
 
 use crate::encoding::{
-    approvals::approvals_manager::ProtocolApprovalsManager,
+    evm::{
+        approvals::protocol_approvals_manager::ProtocolApprovalsManager, utils::bytes_to_address,
+    },
     models::{EncodingContext, Swap},
-    utils::bytes_to_address,
+    swap_encoder::SwapEncoder,
 };
 
-pub trait SwapEncoder: Sync + Send {
-    fn new(executor_address: Address) -> Self
-    where
-        Self: Sized;
-    fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error>;
-    fn executor_address(&self) -> Address;
-}
-
 pub struct UniswapV2SwapEncoder {
-    executor_address: Address,
+    executor_address: String,
 }
 
 impl UniswapV2SwapEncoder {}
 impl SwapEncoder for UniswapV2SwapEncoder {
-    fn new(executor_address: Address) -> Self {
+    fn new(executor_address: String) -> Self {
         Self { executor_address }
     }
     fn encode_swap(
@@ -35,18 +29,18 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         todo!()
     }
 
-    fn executor_address(&self) -> Address {
-        self.executor_address
+    fn executor_address(&self) -> &str {
+        &self.executor_address
     }
 }
 
 pub struct BalancerV2SwapEncoder {
-    executor_address: Address,
+    executor_address: String,
     vault_address: Address,
 }
 
 impl SwapEncoder for BalancerV2SwapEncoder {
-    fn new(executor_address: Address) -> Self {
+    fn new(executor_address: String) -> Self {
         Self {
             executor_address,
             vault_address: Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
@@ -79,8 +73,8 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         Ok(args.abi_encode())
     }
 
-    fn executor_address(&self) -> Address {
-        self.executor_address
+    fn executor_address(&self) -> &str {
+        &self.executor_address
     }
 }
 

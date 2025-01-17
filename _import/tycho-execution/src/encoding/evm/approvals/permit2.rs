@@ -3,7 +3,7 @@ use std::str::FromStr;
 use alloy_primitives::U256;
 use tycho_core::Bytes;
 
-use crate::encoding::approvals::interface::{Approval, UserApprovalsManager};
+use crate::encoding::user_approvals_manager::{Approval, UserApprovalsManager};
 
 #[allow(dead_code)]
 pub struct Permit2 {

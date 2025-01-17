@@ -53,6 +53,7 @@ pub enum NativeAction {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Swap {
     /// Protocol component from tycho indexer
     pub component: ProtocolComponent,
@@ -71,12 +72,14 @@ pub struct Transaction {
     pub value: BigUint,
 }
 
+#[allow(dead_code)]
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
     pub address_for_approvals: Bytes,
 }
 
+#[allow(dead_code)]
 pub enum ActionType {
     SingleExactIn = 1,
     SingleExactOut = 2,
