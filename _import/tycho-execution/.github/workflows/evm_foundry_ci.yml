@@ -1,0 +1,33 @@
+name: EVM Foundry Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  check:
+    name: Foundry
+    runs-on: ubuntu-latest
+    env:
+      RPC_URL: ${{ secrets.ETH_RPC_URL }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Check formatting
+        run: forge fmt --check
+        working-directory: foundry
+
+      - name: Run tests
+        run: forge test -vvv
+        working-directory: foundry
+
+      - name: Run snapshot
+        run: NO_COLOR=1 forge snapshot >> $GITHUB_STEP_SUMMARY
+        working-directory: foundry
