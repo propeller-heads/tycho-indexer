@@ -1,10 +1,11 @@
-use anyhow::Error;
-
-use crate::encoding::models::Solution;
+use crate::encoding::{
+    errors::EncodingError,
+    models::{ActionType, Solution},
+};
 
 #[allow(dead_code)]
 pub trait StrategyEncoder {
-    fn encode_strategy(&self, to_encode: Solution) -> Result<Vec<u8>, Error>;
+    fn encode_strategy(&self, to_encode: Solution) -> Result<Vec<u8>, EncodingError>;
     fn selector(&self, exact_out: bool) -> &str;
 }
 

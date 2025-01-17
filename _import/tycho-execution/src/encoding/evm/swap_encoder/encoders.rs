@@ -2,9 +2,9 @@ use std::str::FromStr;
 
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
-use anyhow::Error;
 
 use crate::encoding::{
+    errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager, utils::bytes_to_address,
     },
@@ -25,7 +25,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         &self,
         _swap: Swap,
         _encoding_context: EncodingContext,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<Vec<u8>, EncodingError> {
         todo!()
     }
 
@@ -47,7 +47,11 @@ impl SwapEncoder for BalancerV2SwapEncoder {
                 .expect("Invalid string for balancer vault address"),
         }
     }
-    fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error> {
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new();
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()

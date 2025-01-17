@@ -1,3 +1,4 @@
+mod errors;
 #[cfg(feature = "evm")]
 mod evm;
 mod models;

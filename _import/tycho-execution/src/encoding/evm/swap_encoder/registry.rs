@@ -3,7 +3,10 @@ use std::{collections::HashMap, fs};
 use serde::Deserialize;
 use tycho_core::dto::Chain;
 
-use crate::encoding::{evm::swap_encoder::builder::SwapEncoderBuilder, swap_encoder::SwapEncoder};
+use crate::encoding::{
+    errors::EncodingError, evm::swap_encoder::builder::SwapEncoderBuilder,
+    swap_encoder::SwapEncoder,
+};
 
 pub struct SwapEncoderRegistry {
     encoders: HashMap<String, Box<dyn SwapEncoder>>,
@@ -40,7 +43,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_file(path: &str) -> Result<Self, anyhow::Error> {
+    pub fn from_file(path: &str) -> Result<Self, EncodingError> {
         let config_str = fs::read_to_string(path)?;
         let config: Config = serde_json::from_str(&config_str)?;
         Ok(config)

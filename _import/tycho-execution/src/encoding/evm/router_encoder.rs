@@ -1,7 +1,8 @@
-use anyhow::Error;
+use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 
 use crate::encoding::{
+    errors::EncodingError,
     evm::utils::encode_input,
     models::{NativeAction, Solution, Transaction, PROPELLER_ROUTER_ADDRESS},
     router_encoder::RouterEncoder,
@@ -22,7 +23,10 @@ impl<S: StrategySelector, A: UserApprovalsManager> EVMRouterEncoder<S, A> {
     }
 }
 impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRouterEncoder<S, A> {
-    fn encode_router_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<Transaction>, Error> {
+    fn encode_router_calldata(
+        &self,
+        solutions: Vec<Solution>,
+    ) -> Result<Vec<Transaction>, EncodingError> {
         let _approvals_calldata = self.handle_approvals(&solutions)?; // TODO: where should we append this?
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
@@ -50,7 +54,7 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
         Ok(transactions)
     }
 
-    fn handle_approvals(&self, solutions: &[Solution]) -> Result<Vec<Vec<u8>>, Error> {
+    fn handle_approvals(&self, solutions: &[Solution]) -> Result<Vec<Vec<u8>>, EncodingError> {
         let mut approvals = Vec::new();
         for solution in solutions.iter() {
             approvals.push(Approval {

@@ -7,18 +7,17 @@ edition = "2021"
 dotenv = "0.15.0"
 lazy_static = "1.4.0"
 num-bigint = "0.4.6"
-
+hex = "0.4.3"
+num-traits = "0.2.19"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.135"
+thiserror = "1.0.69"
 tokio = { version = "1.38.0", features = ["full"] }
 
 alloy = { version = "0.5.4", features = ["providers"], optional = true }
 alloy-sol-types = { version = "0.8.14", optional = true }
 alloy-primitives = { version = "0.8.9", optional = true }
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.46.0" }
-hex = "0.4.3"
-anyhow = "1.0.95"
-num-traits = "0.2.19"
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.135"
 
 [features]
 default = ["evm"]
