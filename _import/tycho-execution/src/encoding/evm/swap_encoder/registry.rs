@@ -3,9 +3,7 @@ use std::{collections::HashMap, fs};
 use serde::Deserialize;
 use tycho_core::dto::Chain;
 
-use crate::encoding::swap_encoder::{
-    builder::SwapEncoderBuilder, swap_struct_encoder::SwapEncoder,
-};
+use crate::encoding::{evm::swap_encoder::builder::SwapEncoderBuilder, swap_encoder::SwapEncoder};
 
 pub struct SwapEncoderRegistry {
     encoders: HashMap<String, Box<dyn SwapEncoder>>,
@@ -19,7 +17,7 @@ impl SwapEncoderRegistry {
             .get(&blockchain)
             .unwrap_or_else(|| panic!("No executors found for blockchain: {}", blockchain));
         for (protocol, executor_address) in executors {
-            let builder = SwapEncoderBuilder::new(&protocol, &executor_address);
+            let builder = SwapEncoderBuilder::new(protocol, executor_address);
             let encoder = builder.build().unwrap_or_else(|_| {
                 panic!("Failed to build swap encoder for protocol: {}", protocol)
             });

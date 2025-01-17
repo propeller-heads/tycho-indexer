@@ -5,18 +5,12 @@ use alloy_sol_types::SolValue;
 use anyhow::Error;
 
 use crate::encoding::{
-    approvals::approvals_manager::ProtocolApprovalsManager,
+    evm::{
+        approvals::protocol_approvals_manager::ProtocolApprovalsManager, utils::bytes_to_address,
+    },
     models::{EncodingContext, Swap},
-    utils::bytes_to_address,
+    swap_encoder::SwapEncoder,
 };
-
-pub trait SwapEncoder: Sync + Send {
-    fn new(executor_address: String) -> Self
-    where
-        Self: Sized;
-    fn encode_swap(&self, swap: Swap, encoding_context: EncodingContext) -> Result<Vec<u8>, Error>;
-    fn executor_address(&self) -> &str;
-}
 
 pub struct UniswapV2SwapEncoder {
     executor_address: String,

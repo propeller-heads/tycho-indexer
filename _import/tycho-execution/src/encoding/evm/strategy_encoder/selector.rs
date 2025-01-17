@@ -1,19 +1,15 @@
 use crate::encoding::{
-    models::Solution,
-    strategy_encoder::{
+    evm::strategy_encoder::encoder::{
         SequentialStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
-        StraightToPoolStrategyEncoder, StrategyEncoder,
+        StraightToPoolStrategyEncoder,
     },
+    models::Solution,
+    strategy_encoder::{StrategyEncoder, StrategySelector},
 };
 
-pub trait StrategySelector {
-    #[allow(dead_code)]
-    fn select_strategy(&self, solution: &Solution) -> Box<dyn StrategyEncoder>;
-}
+pub struct EVMStrategySelector;
 
-pub struct DefaultStrategySelector;
-
-impl StrategySelector for DefaultStrategySelector {
+impl StrategySelector for EVMStrategySelector {
     fn select_strategy(&self, solution: &Solution) -> Box<dyn StrategyEncoder> {
         if solution.straight_to_pool {
             Box::new(StraightToPoolStrategyEncoder {})

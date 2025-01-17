@@ -1,5 +1,6 @@
-use crate::encoding::swap_encoder::swap_struct_encoder::{
-    BalancerV2SwapEncoder, SwapEncoder, UniswapV2SwapEncoder,
+use crate::encoding::{
+    evm::swap_encoder::encoders::{BalancerV2SwapEncoder, UniswapV2SwapEncoder},
+    swap_encoder::SwapEncoder,
 };
 
 pub struct SwapEncoderBuilder {
