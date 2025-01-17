@@ -78,12 +78,3 @@ pub struct EncodingContext {
     pub exact_out: bool,
     pub address_for_approvals: Bytes,
 }
-
-#[allow(dead_code)]
-pub enum ActionType {
-    SingleExactIn = 1,
-    SingleExactOut = 2,
-    SequentialExactIn = 3,
-    SequentialExactOut = 4,
-    SplitIn = 5,
-}

@@ -15,11 +15,14 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, Error> {
         Err(anyhow::format_err!("Invalid ERC20 token address: {:?}", address))
     }
 }
+
+#[allow(dead_code)]
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
     let bytes = value.to_bytes_be();
     U256::from_be_slice(&bytes)
 }
 
+#[allow(dead_code)]
 pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
     let mut encoded_action_data: Vec<u8> = Vec::new();
 

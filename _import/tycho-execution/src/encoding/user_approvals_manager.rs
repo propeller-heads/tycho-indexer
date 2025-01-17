@@ -11,5 +11,5 @@ pub struct Approval {
 
 pub trait UserApprovalsManager {
     #[allow(dead_code)]
-    fn encode_approvals(&self, approvals: Vec<Approval>) -> Vec<u8>;
+    fn encode_approvals(&self, approvals: Vec<Approval>) -> Vec<Vec<u8>>;
 }
