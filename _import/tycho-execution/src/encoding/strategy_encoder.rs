@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::{cmp::min, str::FromStr};
 
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
@@ -97,7 +97,13 @@ impl StrategyEncoder for SequentialStrategyEncoder {
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
             let executor_address = swap_encoder.executor_address();
-            let swap_data = self.encode_protocol_header(protocol_data, executor_address, 0, 0, 0);
+            let swap_data = self.encode_protocol_header(
+                protocol_data,
+                Address::from_str(executor_address).expect("Couldn't convert executor address"),
+                0,
+                0,
+                0,
+            );
             swaps.push(swap_data);
         }
 
