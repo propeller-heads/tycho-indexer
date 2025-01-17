@@ -1,3 +1,10 @@
+## [1.2.0](https://github.com/propeller-heads/tycho-execution/compare/1.1.0...1.2.0) (2025-01-17)
+
+
+### Features
+
+* Add foundry environment and CI ([e16d7cc](https://github.com/propeller-heads/tycho-execution/commit/e16d7ccb8ef978dd2abe3993ea0981c2dae8d7e0))
+
 ## [1.1.0](https://github.com/propeller-heads/tycho-execution/compare/1.0.0...1.1.0) (2025-01-16)
 
 
