@@ -3044,7 +3044,6 @@ dependencies = [
  "alloy",
  "alloy-primitives",
  "alloy-sol-types",
- "anyhow",
  "dotenv",
  "hex",
  "lazy_static",
@@ -3052,6 +3051,7 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tokio",
  "tycho-core",
 ]

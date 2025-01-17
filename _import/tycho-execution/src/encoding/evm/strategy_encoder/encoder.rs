@@ -1,8 +1,8 @@
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
-use anyhow::Error;
 
 use crate::encoding::{
+    errors::EncodingError,
     evm::swap_encoder::SWAP_ENCODER_REGISTRY,
     models::{EncodingContext, Solution},
     strategy_encoder::StrategyEncoder,
@@ -27,7 +27,7 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 pub struct SplitSwapStrategyEncoder {}
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(&self, _solution: Solution) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, _solution: Solution) -> Result<Vec<u8>, EncodingError> {
         todo!()
     }
     fn selector(&self, _exact_out: bool) -> &str {
@@ -40,17 +40,26 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 pub struct StraightToPoolStrategyEncoder {}
 impl EVMStrategyEncoder for StraightToPoolStrategyEncoder {}
 impl StrategyEncoder for StraightToPoolStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, Error> {
+    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, EncodingError> {
         if solution.router_address.is_none() {
-            return Err(anyhow::anyhow!(
-                "Router address is required for straight to pool solutions"
+            return Err(EncodingError::InvalidInput(
+                "Router address is required for straight to pool solutions".to_string(),
             ));
         }
         let swap = solution.swaps.first().unwrap();
-        let registry = SWAP_ENCODER_REGISTRY.read().unwrap();
+        let registry = SWAP_ENCODER_REGISTRY
+            .read()
+            .map_err(|_| {
+                EncodingError::FatalError("Failed to read the swap encoder registry".to_string())
+            })?;
         let swap_encoder = registry
             .get_encoder(&swap.component.protocol_system)
-            .expect("Swap encoder not found");
+            .ok_or_else(|| {
+                EncodingError::InvalidInput(format!(
+                    "Swap encoder not found for protocol: {}",
+                    swap.component.protocol_system
+                ))
+            })?;
         let router_address = solution.router_address.unwrap();
 
         let encoding_context = EncodingContext {

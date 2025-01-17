@@ -1,18 +1,19 @@
 use alloy_primitives::{Address, Keccak256, U256};
 use alloy_sol_types::SolValue;
-use anyhow::Error;
 use num_bigint::BigUint;
 use tycho_core::Bytes;
 
+use crate::encoding::errors::EncodingError;
+
 /// Safely converts a `Bytes` object to an `Address` object.
 ///
-/// Checks the length of the `Bytes` before attempting to convert, and returns a `SimulationError`
+/// Checks the length of the `Bytes` before attempting to convert, and returns an `EncodingError`
 /// if not 20 bytes long.
-pub fn bytes_to_address(address: &Bytes) -> Result<Address, Error> {
+pub fn bytes_to_address(address: &Bytes) -> Result<Address, EncodingError> {
     if address.len() == 20 {
         Ok(Address::from_slice(address))
     } else {
-        Err(anyhow::format_err!("Invalid ERC20 token address: {:?}", address))
+        Err(EncodingError::InvalidInput(format!("Invalid ERC20 token address: {:?}", address)))
     }
 }
 
