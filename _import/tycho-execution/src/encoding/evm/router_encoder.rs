@@ -1,4 +1,3 @@
-use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 
 use crate::encoding::{

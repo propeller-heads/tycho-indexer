@@ -1,7 +1,5 @@
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
-use num_bigint::BigUint;
-use num_traits::Zero;
 
 use crate::encoding::{
     errors::EncodingError,

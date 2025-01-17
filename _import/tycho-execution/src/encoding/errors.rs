@@ -9,6 +9,9 @@ use thiserror::Error;
 /// Variants:
 /// - `InvalidInput`: Indicates that the encoding has failed due to bad input parameters.
 /// - `FatalError`: There is problem with the application setup.
+/// - `RecoverableError`: Indicates that the encoding has failed with a recoverable error. Retrying
+///   at a later time may succeed. It may have failed due to a temporary issue, such as a network
+///   problem.
 #[derive(Error, Debug)]
 #[allow(dead_code)]
 pub enum EncodingError {
@@ -16,6 +19,8 @@ pub enum EncodingError {
     InvalidInput(String),
     #[error("Fatal error: {0}")]
     FatalError(String),
+    #[error("Recoverable error: {0}")]
+    RecoverableError(String),
 }
 
 impl From<io::Error> for EncodingError {

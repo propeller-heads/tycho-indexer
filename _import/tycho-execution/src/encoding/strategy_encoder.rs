@@ -1,7 +1,4 @@
-use crate::encoding::{
-    errors::EncodingError,
-    models::{ActionType, Solution},
-};
+use crate::encoding::{errors::EncodingError, models::Solution};
 
 #[allow(dead_code)]
 pub trait StrategyEncoder {
