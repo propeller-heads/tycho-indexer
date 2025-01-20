@@ -1,3 +1,10 @@
+## [0.69.0](https://github.com/propeller-heads/tycho-simulation/compare/0.68.1...0.69.0) (2025-01-10)
+
+
+### Features
+
+* **price_printer:** dynamically adapt the quote amount to the new decimals when switching row ([65acc96](https://github.com/propeller-heads/tycho-simulation/commit/65acc968e7de203eb4e7e77cccfacdb990fe44dc))
+
 ## [0.68.1](https://github.com/propeller-heads/tycho-simulation/compare/0.68.0...0.68.1) (2025-01-07)
 
 ## [0.68.0](https://github.com/propeller-heads/tycho-simulation/compare/0.67.0...0.68.0) (2024-12-23)
