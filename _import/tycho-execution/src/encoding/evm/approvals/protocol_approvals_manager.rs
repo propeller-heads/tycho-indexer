@@ -1,49 +1,98 @@
 use std::{env, sync::Arc};
 
 use alloy::{
-    providers::{ProviderBuilder, RootProvider},
+    providers::{Provider, ProviderBuilder, RootProvider},
+    rpc::types::{TransactionInput, TransactionRequest},
     transports::BoxTransport,
 };
-use alloy_primitives::Address;
+use alloy_primitives::{Address, Bytes, TxKind, U256};
+use alloy_sol_types::SolValue;
 use dotenv::dotenv;
+use tokio::runtime::Runtime;
+
+use crate::encoding::{errors::EncodingError, evm::utils::encode_input};
 
 #[allow(dead_code)]
 pub struct ProtocolApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
+    runtime: Runtime,
 }
 impl ProtocolApprovalsManager {
     pub fn new() -> Self {
-        Self { client: get_client() }
+        let runtime = Runtime::new().expect("Failed to create runtime");
+        let client = runtime.block_on(get_client());
+        Self { client, runtime }
     }
-    pub async fn approval_needed(
+    pub fn approval_needed(
         &self,
-        _token: Address,
-        _spender_address: Address,
-        _router_address: Address,
-    ) -> bool {
-        todo!()
-        // should be something like
-        // let allowance = self
-        //     .client
-        //     .call(token, "allowance(address,address)(uint256)", (router_address,
-        // spender_address))     .await;
-        //
-        // allowance == U256::ZERO // If allowance is 0, approval is needed
+        token: Address,
+        owner_address: Address,
+        spender_address: Address,
+    ) -> Result<bool, EncodingError> {
+        let args = (owner_address, spender_address);
+        let data = encode_input("allowance(address,address)", args.abi_encode());
+        let tx = TransactionRequest {
+            to: Some(TxKind::from(token)),
+            input: TransactionInput { input: Some(Bytes::from(data)), data: None },
+            ..Default::default()
+        };
+
+        let output = self
+            .runtime
+            .block_on(async { self.client.call(&tx).await });
+        match output {
+            Ok(response) => {
+                let allowance: U256 = U256::abi_decode(&response, true).map_err(|_| {
+                    EncodingError::FatalError("Failed to decode response for allowance".to_string())
+                })?;
+
+                Ok(allowance.is_zero())
+            }
+            Err(err) => {
+                Err(EncodingError::RecoverableError(format!("Call failed with error: {:?}", err)))
+            }
+        }
     }
 }
 
-pub fn get_client() -> Arc<RootProvider<BoxTransport>> {
+pub async fn get_client() -> Arc<RootProvider<BoxTransport>> {
     dotenv().ok();
     let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| tokio::runtime::Runtime::new().unwrap())
-        .unwrap();
-    let client = runtime.block_on(async {
-        ProviderBuilder::new()
-            .on_builtin(&eth_rpc_url)
-            .await
-            .unwrap()
-    });
+    let client = ProviderBuilder::new()
+        .on_builtin(&eth_rpc_url)
+        .await
+        .expect("Failed to build provider");
     Arc::new(client)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use rstest::rstest;
+
+    use super::*;
+    #[rstest]
+    #[case::approval_not_needed(
+        "0xba12222222228d8ba445958a75a0704d566bf2c8",
+        "0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4",
+        false
+    )]
+    #[case::approval_needed(
+        "0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4",
+        "0xba12222222228d8ba445958a75a0704d566bf2c8",
+        true
+    )]
+    fn test_approval_needed(#[case] spender: &str, #[case] owner: &str, #[case] expected: bool) {
+        let manager = ProtocolApprovalsManager::new();
+
+        let token = Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let spender = Address::from_str(spender).unwrap();
+        let owner = Address::from_str(owner).unwrap();
+
+        let result = manager
+            .approval_needed(token, owner, spender)
+            .unwrap();
+        assert_eq!(result, expected);
+    }
 }

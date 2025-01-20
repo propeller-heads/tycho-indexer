@@ -53,17 +53,10 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new();
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
         let token = bytes_to_address(&swap.token_in)?;
         let router_address = bytes_to_address(&encoding_context.address_for_approvals)?;
-        let approval_needed = runtime.block_on(async {
-            token_approvals_manager
-                .approval_needed(token, self.vault_address, router_address)
-                .await
-        });
+        let approval_needed =
+            token_approvals_manager.approval_needed(token, router_address, self.vault_address)?;
         // should we return gas estimation here too?? if there is an approval needed, gas will be
         // higher.
         let args = (
