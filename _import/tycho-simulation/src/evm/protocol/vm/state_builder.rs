@@ -389,7 +389,7 @@ where
     ) -> Result<Address, SimulationError> {
         let method_name = decoded
             .split(':')
-            .last()
+            .next_back()
             .ok_or_else(|| {
                 SimulationError::FatalError(
                     "Failed to get address from call: Could not decode method name from call"
