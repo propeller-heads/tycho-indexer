@@ -1,6 +1,6 @@
 specVersion: v0.1.0
 package:
-  name: "ethereum_uniswap_v2"
+  name: "base_uniswap_v2"
   version: v0.3.2
 
 protobuf:
@@ -20,7 +20,7 @@ binaries:
 modules:
   - name: map_pools_created
     kind: map
-    initialBlock: 10008300
+    initialBlock: 6601915
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
@@ -29,7 +29,7 @@ modules:
 
   - name: store_pools
     kind: store
-    initialBlock: 10008300
+    initialBlock: 6601915
     updatePolicy: set_if_not_exists
     valueType: proto:tycho.evm.uniswap.v2.Pool
     inputs:
@@ -37,7 +37,7 @@ modules:
 
   - name: map_pool_events
     kind: map
-    initialBlock: 10008300
+    initialBlock: 6601915
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: map_pools_created
@@ -46,4 +46,4 @@ modules:
       type: proto:tycho.evm.v1.BlockChanges
 
 params:
-  map_pools_created: factory_address=5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f&protocol_type_name=uniswap_v2_pool
+  map_pools_created: factory_address=8909Dc15e40173Ff4699343b6eB8132c65e18eC6&protocol_type_name=uniswap_v2_pool

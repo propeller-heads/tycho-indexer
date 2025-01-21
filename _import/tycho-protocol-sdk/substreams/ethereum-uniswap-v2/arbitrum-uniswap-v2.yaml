@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "arbitrum_uniswap_v2"
-  version: v0.2.0
+  version: v0.3.2
 
 protobuf:
   files:
