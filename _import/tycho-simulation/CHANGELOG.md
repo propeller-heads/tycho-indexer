@@ -1,3 +1,10 @@
+## [0.70.0](https://github.com/propeller-heads/tycho-simulation/compare/0.69.0...0.70.0) (2025-01-21)
+
+
+### Features
+
+* **balancer-v3:** add a specific overwrite case for BalancerV3 vault. ([e973e68](https://github.com/propeller-heads/tycho-simulation/commit/e973e6840fb00f7a291af1c62c34ffebc6efb143))
+
 ## [0.69.0](https://github.com/propeller-heads/tycho-simulation/compare/0.68.1...0.69.0) (2025-01-10)
 
 
