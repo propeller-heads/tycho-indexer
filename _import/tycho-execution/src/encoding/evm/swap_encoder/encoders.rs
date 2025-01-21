@@ -90,7 +90,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new();
         let token = bytes_to_address(&swap.token_in)?;
-        let router_address = bytes_to_address(&encoding_context.address_for_approvals)?;
+        let router_address = bytes_to_address(&encoding_context.router_address)?;
         let approval_needed =
             token_approvals_manager.approval_needed(token, router_address, self.vault_address)?;
         // should we return gas estimation here too?? if there is an approval needed, gas will be
@@ -133,7 +133,7 @@ mod tests {
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
-            address_for_approvals: Bytes::zero(20),
+            router_address: Bytes::zero(20),
         };
         let encoder = super::UniswapV2SwapEncoder::new(String::from("0x"));
         let encoded_swap = encoder

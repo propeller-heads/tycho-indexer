@@ -65,7 +65,7 @@ impl StrategyEncoder for StraightToPoolStrategyEncoder {
         let encoding_context = EncodingContext {
             receiver: solution.receiver,
             exact_out: solution.exact_out,
-            address_for_approvals: router_address,
+            router_address,
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
         // TODO: here we need to pass also the address of the executor to be used
