@@ -328,8 +328,16 @@ class ThirdPartyPool:
             if t.address in self.involved_contracts:
                 slots, compiler = self.token_storage_slots.get(t.address)
             overwrites = ERC20OverwriteFactory(t, token_slots=slots, compiler=compiler)
+            # This is a hack made for BalancerV3. We need to find a way to properly handle this.
+            # Context: we need this to be true when we try to simulate _reservesOf[token] <= token.balanceOf(vault).
+            # But with how we currently overwrite balances (pool balance only) it's false.
+            # Proposed solution would be to index a per account token balance and use it for overwrite instead of TVL balances.
+            if address.lower() == "0xba1333333333a1ba1108e8412f11850a5c319ba9":
+                amount = 2**150 - 1 # Big amount but not too close to 2**256 to avoid overflows
+            else:
+                amount = t.to_onchain_amount(self.balances[t.address])
             overwrites.set_balance(
-                t.to_onchain_amount(self.balances[t.address]), address
+                amount, address
             )
             balance_overwrites.update(overwrites.get_tycho_overwrites())
         return balance_overwrites
