@@ -38,6 +38,7 @@ async-stream = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-retry = "0.3"
 tonic = { version = "0.12", features = ["tls-roots", "gzip"] }
+rustls = "0.23.13"
 prost = "0.13"
 prost-types = "0.13"
 clap = { workspace = true, features = ["derive", "env"] }
