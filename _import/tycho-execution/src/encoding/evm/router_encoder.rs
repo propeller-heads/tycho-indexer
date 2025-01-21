@@ -72,8 +72,7 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
                 owner: solution.sender.clone(),
             });
         }
-        Ok(self
-            .approvals_manager
-            .encode_approvals(approvals))
+        self.approvals_manager
+            .encode_approvals(approvals)
     }
 }
