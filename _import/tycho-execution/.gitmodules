@@ -1,0 +1,6 @@
+[submodule "foundry/lib/openzeppelin-contracts"]
+	path = foundry/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "foundry/lib/permit2"]
+	path = foundry/lib/permit2
+	url = https://github.com/Uniswap/permit2
