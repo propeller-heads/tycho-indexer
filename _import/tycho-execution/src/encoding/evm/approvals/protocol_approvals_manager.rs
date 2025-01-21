@@ -18,10 +18,11 @@ pub struct ProtocolApprovalsManager {
     runtime: Runtime,
 }
 impl ProtocolApprovalsManager {
-    pub fn new() -> Self {
-        let runtime = Runtime::new().expect("Failed to create runtime");
-        let client = runtime.block_on(get_client());
-        Self { client, runtime }
+    pub fn new() -> Result<Self, EncodingError> {
+        let runtime = Runtime::new()
+            .map_err(|_| EncodingError::FatalError("Failed to create runtime".to_string()))?;
+        let client = runtime.block_on(get_client())?;
+        Ok(Self { client, runtime })
     }
     pub fn approval_needed(
         &self,
@@ -56,14 +57,15 @@ impl ProtocolApprovalsManager {
     }
 }
 
-pub async fn get_client() -> Arc<RootProvider<BoxTransport>> {
+pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
     dotenv().ok();
-    let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
+    let eth_rpc_url = env::var("ETH_RPC_URL")
+        .map_err(|_| EncodingError::FatalError("Missing ETH_RPC_URL in environment".to_string()))?;
     let client = ProviderBuilder::new()
         .on_builtin(&eth_rpc_url)
         .await
-        .expect("Failed to build provider");
-    Arc::new(client)
+        .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
+    Ok(Arc::new(client))
 }
 
 #[cfg(test)]
@@ -85,7 +87,7 @@ mod tests {
         true
     )]
     fn test_approval_needed(#[case] spender: &str, #[case] owner: &str, #[case] expected: bool) {
-        let manager = ProtocolApprovalsManager::new();
+        let manager = ProtocolApprovalsManager::new().unwrap();
 
         let token = Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let spender = Address::from_str(spender).unwrap();

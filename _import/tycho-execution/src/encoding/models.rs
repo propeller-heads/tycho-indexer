@@ -1,15 +1,5 @@
-use std::{env, str::FromStr};
-
-use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolComponent, Bytes};
-
-lazy_static! {
-    pub static ref PROPELLER_ROUTER_ADDRESS: Bytes = Bytes::from_str(
-        &env::var("ROUTER_ADDRESS").expect("Missing ROUTER_ADDRESS in environment"),
-    )
-    .expect("Invalid ROUTER_ADDRESS");
-}
 
 #[derive(Clone)]
 #[allow(dead_code)]
