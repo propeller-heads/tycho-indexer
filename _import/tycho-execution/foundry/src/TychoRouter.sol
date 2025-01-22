@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 error TychoRouter__WithdrawalFailed();
-error TychoRouter__InvalidReceiver();
+error TychoRouter__AddressZero();
 
 contract TychoRouter is AccessControl {
     IAllowanceTransfer public immutable permit2;
@@ -24,9 +24,19 @@ contract TychoRouter is AccessControl {
     bytes32 public constant FUND_RESCUER_ROLE =
         0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
 
+    address public feeReceiver;
+
+    // Fee should be expressed in basis points (1/100th of a percent)
+    // For example, 100 = 1%, 500 = 5%, 1000 = 10%
+    uint256 public fee;
+
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
     );
+    event FeeReceiverSet(
+        address indexed oldFeeReceiver, address indexed newFeeReceiver
+    );
+    event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
     constructor(address _permit2) {
         permit2 = IAllowanceTransfer(_permit2);
@@ -72,13 +82,33 @@ contract TychoRouter is AccessControl {
     }
 
     /**
+     * @dev Allows setting the fee receiver.
+     */
+    function setFeeReceiver(address newfeeReceiver)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (newfeeReceiver == address(0)) revert TychoRouter__AddressZero();
+        emit FeeReceiverSet(feeReceiver, newfeeReceiver);
+        feeReceiver = newfeeReceiver;
+    }
+
+    /**
+     * @dev Allows setting the fee.
+     */
+    function setFee(uint256 newFee) external onlyRole(FEE_SETTER_ROLE) {
+        emit FeeSet(fee, newFee);
+        fee = newFee;
+    }
+
+    /**
      * @dev Allows withdrawing any ERC20 funds if funds get stuck in case of a bug.
      */
     function withdraw(IERC20[] memory tokens, address receiver)
         external
         onlyRole(FUND_RESCUER_ROLE)
     {
-        if (receiver == address(0)) revert TychoRouter__InvalidReceiver();
+        if (receiver == address(0)) revert TychoRouter__AddressZero();
 
         for (uint256 i = 0; i < tokens.length; i++) {
             // slither-disable-next-line calls-loop
@@ -98,7 +128,7 @@ contract TychoRouter is AccessControl {
         external
         onlyRole(FUND_RESCUER_ROLE)
     {
-        if (receiver == address(0)) revert TychoRouter__InvalidReceiver();
+        if (receiver == address(0)) revert TychoRouter__AddressZero();
 
         uint256 amount = address(this).balance;
         if (amount > 0) {
