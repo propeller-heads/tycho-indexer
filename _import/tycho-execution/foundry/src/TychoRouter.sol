@@ -3,9 +3,16 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+error TychoRouter__WithdrawalFailed();
+error TychoRouter__InvalidReceiver();
 
 contract TychoRouter is AccessControl {
     IAllowanceTransfer public immutable permit2;
+
+    using SafeERC20 for IERC20;
 
     //keccak256("NAME_OF_ROLE") : save gas on deployment
     bytes32 public constant EXECUTOR_SETTER_ROLE =
@@ -16,6 +23,10 @@ contract TychoRouter is AccessControl {
         0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a;
     bytes32 public constant FUND_RESCUER_ROLE =
         0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
+
+    event Withdrawal(
+        address indexed token, uint256 amount, address indexed receiver
+    );
 
     constructor(address _permit2) {
         permit2 = IAllowanceTransfer(_permit2);
@@ -61,8 +72,45 @@ contract TychoRouter is AccessControl {
     }
 
     /**
+     * @dev Allows withdrawing any ERC20 funds if funds get stuck in case of a bug.
+     */
+    function withdraw(IERC20[] memory tokens, address receiver)
+        external
+        onlyRole(FUND_RESCUER_ROLE)
+    {
+        if (receiver == address(0)) revert TychoRouter__InvalidReceiver();
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            // slither-disable-next-line calls-loop
+            uint256 tokenBalance = tokens[i].balanceOf(address(this));
+            if (tokenBalance > 0) {
+                emit Withdrawal(address(tokens[i]), tokenBalance, receiver);
+                tokens[i].safeTransfer(receiver, tokenBalance);
+            }
+        }
+    }
+
+    /**
+     * @dev Allows withdrawing any NATIVE funds if funds get stuck in case of a bug.
+     * The contract should never hold any NATIVE tokens for security reasons.
+     */
+    function withdrawNative(address receiver)
+        external
+        onlyRole(FUND_RESCUER_ROLE)
+    {
+        if (receiver == address(0)) revert TychoRouter__InvalidReceiver();
+
+        uint256 amount = address(this).balance;
+        if (amount > 0) {
+            emit Withdrawal(address(0), amount, receiver);
+            // slither-disable-next-line arbitrary-send-eth
+            bool success = payable(receiver).send(amount);
+            if (!success) revert TychoRouter__WithdrawalFailed();
+        }
+    }
+
+    /**
      * @dev Allows this contract to receive native token
      */
-    // TODO Uncomment once withdraw method is implemented - or else Slither fails
-    //    receive() external payable {}
+    receive() external payable {}
 }
