@@ -66,5 +66,5 @@ pub struct Transaction {
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
-    pub address_for_approvals: Bytes,
+    pub router_address: Bytes,
 }
