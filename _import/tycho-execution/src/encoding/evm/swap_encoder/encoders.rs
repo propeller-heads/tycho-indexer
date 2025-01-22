@@ -38,7 +38,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         let token_out_address = bytes_to_address(&swap.token_out)?;
 
         let zero_for_one = Self::get_zero_to_one(token_in_address, token_out_address);
-        let protocol_id = Bytes::from(
+        let component_id = Bytes::from(
             decode(
                 swap.component
                     .id
@@ -46,17 +46,17 @@ impl SwapEncoder for UniswapV2SwapEncoder {
             )
             .map_err(|_| {
                 EncodingError::FatalError(format!(
-                    "Failed to parse component id: {}",
+                    "Failed to parse component id for Uniswap v2: {}",
                     swap.component.id
                 ))
             })?,
         );
 
-        // Sell token address is always needed to perform manual transfer from router into the pool,
+        // Token in address is always needed to perform a manual transfer from the router,
         // since no optimizations are performed that send from one pool to the next
         let args = (
             token_in_address,
-            bytes_to_address(&protocol_id)?,
+            bytes_to_address(&component_id)?,
             bytes_to_address(&encoding_context.receiver)?,
             zero_for_one,
             encoding_context.exact_out,
@@ -135,7 +135,7 @@ mod tests {
             exact_out: false,
             router_address: Bytes::zero(20),
         };
-        let encoder = super::UniswapV2SwapEncoder::new(String::from("0x"));
+        let encoder = UniswapV2SwapEncoder::new(String::from("0x"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
