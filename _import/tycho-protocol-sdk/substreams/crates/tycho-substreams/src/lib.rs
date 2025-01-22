@@ -1,4 +1,4 @@
-mod abi;
+pub mod abi;
 pub mod attributes;
 pub mod balances;
 pub mod contract;
