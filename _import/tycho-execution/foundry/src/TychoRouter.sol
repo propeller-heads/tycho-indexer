@@ -102,7 +102,7 @@ contract TychoRouter is AccessControl {
         if (amount > 0) {
             emit Withdrawal(address(0), amount);
             // slither-disable-next-line arbitrary-send-eth
-            (bool success,) = receiver.call{value: amount}("");
+            bool success = payable(receiver).send(amount);
             if (!success) revert TychoRouter__WithdrawalFailed();
         }
     }
