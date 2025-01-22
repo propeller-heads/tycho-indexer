@@ -1,9 +1,12 @@
+use std::str::FromStr;
+
 use num_bigint::BigUint;
+use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::utils::encode_input,
-    models::{NativeAction, Solution, Transaction, PROPELLER_ROUTER_ADDRESS},
+    models::{NativeAction, Solution, Transaction},
     router_encoder::RouterEncoder,
     strategy_encoder::StrategySelector,
     user_approvals_manager::{Approval, UserApprovalsManager},
@@ -13,12 +16,13 @@ use crate::encoding::{
 pub struct EVMRouterEncoder<S: StrategySelector, A: UserApprovalsManager> {
     strategy_selector: S,
     approvals_manager: A,
+    router_address: String,
 }
 
 #[allow(dead_code)]
 impl<S: StrategySelector, A: UserApprovalsManager> EVMRouterEncoder<S, A> {
-    pub fn new(strategy_selector: S, approvals_manager: A) -> Self {
-        EVMRouterEncoder { strategy_selector, approvals_manager }
+    pub fn new(strategy_selector: S, approvals_manager: A, router_address: String) -> Self {
+        EVMRouterEncoder { strategy_selector, approvals_manager, router_address }
     }
 }
 impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRouterEncoder<S, A> {
@@ -61,7 +65,9 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
                 spender: solution
                     .router_address
                     .clone()
-                    .unwrap_or(PROPELLER_ROUTER_ADDRESS.clone()),
+                    .unwrap_or(Bytes::from_str(&self.router_address).map_err(|_| {
+                        EncodingError::FatalError("Invalid router address".to_string())
+                    })?),
                 amount: solution.given_amount.clone(),
                 owner: solution.sender.clone(),
             });

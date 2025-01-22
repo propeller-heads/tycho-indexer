@@ -3,7 +3,10 @@ use std::str::FromStr;
 use alloy_primitives::U256;
 use tycho_core::Bytes;
 
-use crate::encoding::user_approvals_manager::{Approval, UserApprovalsManager};
+use crate::encoding::{
+    errors::EncodingError,
+    user_approvals_manager::{Approval, UserApprovalsManager},
+};
 
 #[allow(dead_code)]
 pub struct Permit2 {
@@ -12,12 +15,13 @@ pub struct Permit2 {
 
 #[allow(dead_code)]
 impl Permit2 {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self, EncodingError> {
+        Ok(Self {
             address: Bytes::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
-                .expect("Permit2 address not valid"),
-        }
+                .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?,
+        })
     }
+
     fn get_allowance_data(
         &self,
         _user: Bytes,

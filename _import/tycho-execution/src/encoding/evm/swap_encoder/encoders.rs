@@ -72,15 +72,14 @@ impl SwapEncoder for UniswapV2SwapEncoder {
 
 pub struct BalancerV2SwapEncoder {
     executor_address: String,
-    vault_address: Address,
+    vault_address: String,
 }
 
 impl SwapEncoder for BalancerV2SwapEncoder {
     fn new(executor_address: String) -> Self {
         Self {
             executor_address,
-            vault_address: Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
-                .expect("Invalid string for balancer vault address"),
+            vault_address: "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
         }
     }
     fn encode_swap(
@@ -88,11 +87,15 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         swap: Swap,
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let token_approvals_manager = ProtocolApprovalsManager::new();
+        let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let token = bytes_to_address(&swap.token_in)?;
         let router_address = bytes_to_address(&encoding_context.router_address)?;
-        let approval_needed =
-            token_approvals_manager.approval_needed(token, router_address, self.vault_address)?;
+        let approval_needed = token_approvals_manager.approval_needed(
+            token,
+            router_address,
+            Address::from_str(&self.vault_address)
+                .map_err(|_| EncodingError::FatalError("Invalid vault address".to_string()))?,
+        )?;
         // should we return gas estimation here too?? if there is an approval needed, gas will be
         // higher.
         let args = (
