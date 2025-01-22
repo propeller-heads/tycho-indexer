@@ -24,7 +24,9 @@ contract TychoRouter is AccessControl {
     bytes32 public constant FUND_RESCUER_ROLE =
         0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
 
-    event Withdrawal(address indexed token, uint256 amount, address indexed receiver);
+    event Withdrawal(
+        address indexed token, uint256 amount, address indexed receiver
+    );
 
     constructor(address _permit2) {
         permit2 = IAllowanceTransfer(_permit2);
@@ -101,7 +103,6 @@ contract TychoRouter is AccessControl {
         uint256 amount = address(this).balance;
         if (amount > 0) {
             emit Withdrawal(address(0), amount, receiver);
-            // slither-disable-next-line arbitrary-send-eth
             bool success = payable(receiver).send(amount);
             if (!success) revert TychoRouter__WithdrawalFailed();
         }
