@@ -1,3 +1,0 @@
-# Native Integration
-
-Coming soon...
