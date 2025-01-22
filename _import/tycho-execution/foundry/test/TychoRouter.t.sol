@@ -14,6 +14,9 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     bytes32 public constant FUND_RESCUER_ROLE =
         0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
 
+    event ExecutorSet(address indexed executor);
+    event CallbackVerifierSet(address indexed callbackVerifier);
+
     function setupTychoRouter() public {
         deployTychoRouter();
     }
@@ -23,6 +26,10 @@ contract TychoRouterTest is TychoRouterTestTemplate {
         deployDummyContract();
 
         vm.startPrank(executorSetter);
+        vm.expectEmit();
+        // Define the event we expect to be emitted at the next step
+        emit ExecutorSet(DUMMY);
+
         tychoRouter.setSwapExecutor(DUMMY);
         vm.stopPrank();
 
@@ -82,6 +89,10 @@ contract TychoRouterTest is TychoRouterTestTemplate {
         deployDummyContract();
 
         vm.startPrank(executorSetter);
+        vm.expectEmit();
+        // Define the event we expect to be emitted at the next step
+        emit CallbackVerifierSet(DUMMY);
+
         tychoRouter.setCallbackVerifier(DUMMY);
         vm.stopPrank();
 

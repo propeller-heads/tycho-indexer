@@ -35,6 +35,8 @@ contract TychoRouter is
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
     );
+    event ExecutorSet(address indexed executor);
+    event CallbackVerifierSet(address indexed callbackVerifier);
 
     constructor(address _permit2) {
         permit2 = IAllowanceTransfer(_permit2);
@@ -91,6 +93,7 @@ contract TychoRouter is
     {
         if (target.code.length == 0) revert TychoRouter__NonContractExecutor();
         swapExecutors[target] = true;
+        emit ExecutorSet(target);
     }
 
     /**
@@ -114,6 +117,7 @@ contract TychoRouter is
     {
         if (target.code.length == 0) revert TychoRouter__NonContractVerifier();
         callbackVerifiers[target] = true;
+        emit CallbackVerifierSet(target);
     }
 
     /**
