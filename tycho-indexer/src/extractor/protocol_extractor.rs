@@ -25,7 +25,8 @@ use tycho_core::{
         ProtocolType, TxHash,
     },
     storage::{
-        ChainGateway, ContractStateGateway, ExtractionStateGateway, ProtocolGateway, StorageError,
+        BlockIdentifier, ChainGateway, ContractStateGateway, ExtractionStateGateway,
+        ProtocolGateway, StorageError,
     },
     traits::TokenPreProcessor,
     Bytes,
@@ -46,9 +47,13 @@ use crate::{
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 
+#[allow(dead_code)]
 pub struct Inner {
     cursor: Vec<u8>,
     last_processed_block: Option<Block>,
+    /// Keeps count of consecutive blocks with the same timestamp. This is then used to add some
+    /// microseconds in the blocks and maintain order.
+    same_ts_blocks_streak: u8,
     /// Used to give more informative logs
     last_report_ts: NaiveDateTime,
     last_report_block_number: u64,
@@ -102,6 +107,7 @@ where
                     inner: Arc::new(Mutex::new(Inner {
                         cursor: vec![],
                         last_processed_block: None,
+                        same_ts_blocks_streak: 0,
                         last_report_ts: chrono::Utc::now().naive_utc(),
                         last_report_block_number: 0,
                         first_message_processed: false,
@@ -111,7 +117,15 @@ where
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
                 }
             }
-            Ok(cursor) => {
+            Ok((cursor, block_id)) => {
+                let last_processed_block = gateway
+                    .get_block(block_id)
+                    .await
+                    .unwrap_or_else(|err| {
+                        error!(%chain, %err, "Found a cursor but was unable to retreive latest block");
+                        panic!("Unexpected error when fetching latest block {}", err);
+                    });
+
                 let cursor_hex = hex::encode(&cursor);
                 info!(
                     ?name,
@@ -126,8 +140,11 @@ where
                     chain_state,
                     inner: Arc::new(Mutex::new(Inner {
                         cursor,
-                        last_processed_block: None,
+                        last_processed_block: Some(last_processed_block),
                         last_report_ts: chrono::Local::now().naive_utc(),
+                        // TODO: What if the last block has the same timestamp as the previously
+                        // saved one?
+                        same_ts_blocks_streak: 0,
                         last_report_block_number: 0,
                         first_message_processed: false,
                     })),
@@ -1024,7 +1041,7 @@ pub struct ExtractorPgGateway {
 #[automock]
 #[async_trait]
 pub trait ExtractorGateway: Send + Sync {
-    async fn get_cursor(&self) -> Result<Vec<u8>, StorageError>;
+    async fn get_cursor(&self) -> Result<(Vec<u8>, i64), StorageError>;
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]);
 
@@ -1046,6 +1063,8 @@ pub trait ExtractorGateway: Send + Sync {
         &self,
         component_ids: &[&'a str],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
+
+    async fn get_block(&self, block_number: i64) -> Result<Block, StorageError>;
 }
 
 impl ExtractorPgGateway {
@@ -1077,19 +1096,28 @@ impl ExtractorPgGateway {
         Ok(())
     }
 
-    async fn get_last_cursor(&self) -> Result<Vec<u8>, StorageError> {
+    async fn get_last_extraction_state(&self) -> Result<ExtractionState, StorageError> {
         let state = self
             .state_gateway
             .get_state(&self.name, &self.chain)
             .await?;
-        Ok(state.cursor)
+        Ok(state)
     }
 }
 
 #[async_trait]
 impl ExtractorGateway for ExtractorPgGateway {
-    async fn get_cursor(&self) -> Result<Vec<u8>, StorageError> {
-        self.get_last_cursor().await
+    async fn get_block(&self, block_id: i64) -> Result<Block, StorageError> {
+        self.state_gateway
+            .get_block(&BlockIdentifier::Number((self.chain, block_id)))
+            .await
+    }
+    async fn get_cursor(&self) -> Result<(Vec<u8>, i64), StorageError> {
+        let extraction_state = self.get_last_extraction_state().await;
+        match extraction_state {
+            Ok(state) => Ok((state.cursor, state.block_id)),
+            Err(e) => Err(e),
+        }
     }
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
@@ -1319,7 +1347,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), 1)));
 
         let extractor = create_extractor(gw).await;
         let res = extractor.get_cursor().await;
@@ -1335,7 +1363,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), 1)));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
@@ -1381,7 +1409,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), 1)));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
@@ -1437,7 +1465,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), 1)));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
@@ -1492,7 +1520,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), 1)));
         gw.expect_advance()
             .times(0)
             .returning(|_, _, _| Ok(()));
@@ -1671,7 +1699,7 @@ mod test {
         extractor_gw
             .expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), 1)));
         let extractor = ProtocolExtractor::new(
             extractor_gw,
             EXTRACTOR_NAME,
@@ -1792,7 +1820,7 @@ mod test {
         extractor_gw
             .expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), 1)));
         extractor_gw
             .expect_get_components_balances()
             .return_once(|_| Ok(HashMap::new()));
@@ -1852,7 +1880,7 @@ mod test_serial_db {
             blockchain::TxWithChanges, contract::AccountBalance, ContractId, FinancialType,
             ImplementationType,
         },
-        storage::{BlockIdentifier, BlockOrTimestamp},
+        storage::BlockOrTimestamp,
         traits::TokenOwnerFinding,
     };
     use tycho_storage::postgres::{builder::GatewayBuilder, db_fixtures, testing::run_against_db};
@@ -2022,12 +2050,12 @@ mod test_serial_db {
                 .await
                 .expect("gw transaction failed");
 
-            let cursor = gw
-                .get_last_cursor()
+            let extraction_state = gw
+                .get_last_extraction_state()
                 .await
                 .expect("get cursor should succeed");
 
-            assert_eq!(cursor, "cursor@420".as_bytes());
+            assert_eq!(extraction_state.cursor, "cursor@420".as_bytes());
         })
         .await;
     }
