@@ -2,14 +2,22 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import "./SwapExecutionDispatcher.sol";
+import "./CallbackVerificationDispatcher.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__InvalidReceiver();
+error TychoRouter__NonContractExecutor();
+error TychoRouter__NonContractVerifier();
 
-contract TychoRouter is AccessControl {
+contract TychoRouter is
+    AccessControl,
+    SwapExecutionDispatcher,
+    CallbackVerificationDispatcher
+{
     IAllowanceTransfer public immutable permit2;
 
     using SafeERC20 for IERC20;
@@ -27,6 +35,8 @@ contract TychoRouter is AccessControl {
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
     );
+    event ExecutorSet(address indexed executor);
+    event CallbackVerifierSet(address indexed callbackVerifier);
 
     constructor(address _permit2) {
         permit2 = IAllowanceTransfer(_permit2);
@@ -68,7 +78,57 @@ contract TychoRouter is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        // TODO
+        for (uint256 i = 0; i < accounts.length; i++) {
+            _grantRole(role, accounts[i]);
+        }
+    }
+
+    /**
+     * @dev Entrypoint to add or replace an approved swap executor contract address
+     * @param target address of the swap method contract
+     */
+    function setSwapExecutor(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
+        if (target.code.length == 0) revert TychoRouter__NonContractExecutor();
+        swapExecutors[target] = true;
+        emit ExecutorSet(target);
+    }
+
+    /**
+     * @dev Entrypoint to remove an approved swap executor contract address
+     * @param target address of the swap method contract
+     */
+    function removeSwapExecutor(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
+        delete swapExecutors[target];
+    }
+
+    /**
+     * @dev Entrypoint to add or replace an approved swap executor contract address
+     * @param target address of the swap method contract
+     */
+    function setCallbackVerifier(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
+        if (target.code.length == 0) revert TychoRouter__NonContractVerifier();
+        callbackVerifiers[target] = true;
+        emit CallbackVerifierSet(target);
+    }
+
+    /**
+     * @dev Entrypoint to remove an approved swap executor contract address
+     * @param target address of the swap method contract
+     */
+    function removeCallbackVerifier(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
+        delete callbackVerifiers[target];
     }
 
     /**
