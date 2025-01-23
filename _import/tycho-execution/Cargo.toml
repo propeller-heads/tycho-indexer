@@ -26,6 +26,7 @@ rstest = "0.24.0"
 [features]
 default = ["evm"]
 evm = ["alloy", "alloy-sol-types", "alloy-primitives"]
+fork-tests = []
 
 [profile.bench]
 debug = true
