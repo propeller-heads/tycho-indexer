@@ -113,9 +113,9 @@ where
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
                 }
             }
-            Ok((cursor, block_id)) => {
+            Ok((cursor, block_hash)) => {
                 let last_processed_block = gateway
-                    .get_block(block_id)
+                    .get_block(block_hash)
                     .await
                     .unwrap_or_else(|err| {
                         error!(%chain, %err, "Found a cursor but was unable to retreive latest block");
@@ -1054,7 +1054,7 @@ pub struct ExtractorPgGateway {
 #[automock]
 #[async_trait]
 pub trait ExtractorGateway: Send + Sync {
-    async fn get_cursor(&self) -> Result<(Vec<u8>, i64), StorageError>;
+    async fn get_cursor(&self) -> Result<(Vec<u8>, Bytes), StorageError>;
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]);
 
@@ -1077,7 +1077,7 @@ pub trait ExtractorGateway: Send + Sync {
         component_ids: &[&'a str],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
 
-    async fn get_block(&self, block_number: i64) -> Result<Block, StorageError>;
+    async fn get_block(&self, block_number: Bytes) -> Result<Block, StorageError>;
 }
 
 impl ExtractorPgGateway {
@@ -1120,15 +1120,15 @@ impl ExtractorPgGateway {
 
 #[async_trait]
 impl ExtractorGateway for ExtractorPgGateway {
-    async fn get_block(&self, block_id: i64) -> Result<Block, StorageError> {
+    async fn get_block(&self, block_hash: Bytes) -> Result<Block, StorageError> {
         self.state_gateway
-            .get_block(&BlockIdentifier::Number((self.chain, block_id)))
+            .get_block(&BlockIdentifier::Hash(block_hash))
             .await
     }
-    async fn get_cursor(&self) -> Result<(Vec<u8>, i64), StorageError> {
+    async fn get_cursor(&self) -> Result<(Vec<u8>, Bytes), StorageError> {
         let extraction_state = self.get_last_extraction_state().await;
         match extraction_state {
-            Ok(state) => Ok((state.cursor, state.block_id)),
+            Ok(state) => Ok((state.cursor, state.block_hash)),
             Err(e) => Err(e),
         }
     }
@@ -1360,7 +1360,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok(("cursor".into(), 1)));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_get_block()
             .times(1)
             .returning(|_| Ok(Block::default()));
@@ -1379,7 +1379,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok(("cursor".into(), 1)));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
@@ -1428,7 +1428,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok(("cursor".into(), 1)));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
@@ -1487,7 +1487,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok(("cursor".into(), 1)));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
@@ -1545,7 +1545,7 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok(("cursor".into(), 1)));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(0)
             .returning(|_, _, _| Ok(()));
@@ -1727,7 +1727,7 @@ mod test {
         extractor_gw
             .expect_get_cursor()
             .times(1)
-            .returning(|| Ok(("cursor".into(), 1)));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
 
         extractor_gw
             .expect_get_block()
@@ -1853,7 +1853,7 @@ mod test {
         extractor_gw
             .expect_get_cursor()
             .times(1)
-            .returning(|| Ok(("cursor".into(), 1)));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         extractor_gw
             .expect_get_components_balances()
             .return_once(|_| Ok(HashMap::new()));
