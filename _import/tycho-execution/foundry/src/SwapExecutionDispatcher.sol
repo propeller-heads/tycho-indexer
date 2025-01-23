@@ -24,11 +24,10 @@ contract SwapExecutionDispatcher {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  token addresses if required by the executor.
      */
-    function _callSwapExecutor(
-        uint8 exchange,
-        uint256 amount,
-        bytes calldata data
-    ) internal returns (uint256 calculatedAmount) {
+    function _callSwapExecutor(uint256 amount, bytes calldata data)
+        internal
+        returns (uint256 calculatedAmount)
+    {
         address executor;
         bytes4 decodedSelector;
         bytes memory protocolData;
@@ -40,7 +39,7 @@ contract SwapExecutionDispatcher {
             ? ISwapExecutor.swap.selector
             : decodedSelector;
 
-        if (!swapExecutors[executor]){
+        if (!swapExecutors[executor]) {
             revert SwapExecutionDispatcher__UnapprovedExecutor();
         }
 

@@ -8,7 +8,10 @@ contract Constants is Test {
     address BOB = makeAddr("bob"); //bob=someone!=us
     address FUND_RESCUER = makeAddr("fundRescuer");
     address FEE_SETTER = makeAddr("feeSetter");
+    address FEE_RECEIVER = makeAddr("feeReceiver");
+
     // dummy contracts
     address DUMMY = makeAddr("dummy");
-    address FEE_RECEIVER = makeAddr("feeReceiver");
+
+    address WETH_ADDR = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 }
