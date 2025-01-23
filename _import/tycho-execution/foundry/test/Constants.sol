@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.28;
 
-contract Constants {
-    address ADMIN = address(12395012351212343412541234); //admin=us
-    address BOB = address(123); //bob=someone!=us
+import "forge-std/Test.sol";
 
+contract Constants is Test {
+    address ADMIN = makeAddr("admin"); //admin=us
+    address BOB = makeAddr("bob"); //bob=someone!=us
+    address FUND_RESCUER = makeAddr("fundRescuer");
+    address FEE_SETTER = makeAddr("feeSetter");
     // dummy contracts
-    address DUMMY = address(0x1234);
+    address DUMMY = makeAddr("dummy");
 }

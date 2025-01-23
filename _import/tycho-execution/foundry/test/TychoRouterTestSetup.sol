@@ -1,25 +1,30 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "forge-std/Test.sol";
 import "@src/TychoRouter.sol";
 import "./Constants.sol";
+import "./mock/MockERC20.sol";
 
-contract TychoRouterTestTemplate is Test, Constants {
+contract TychoRouterTestSetup is Test, Constants {
     TychoRouter tychoRouter;
-    address tychoRouterAddress;
     address executorSetter;
+    address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
+    MockERC20[] tokens;
 
-    function deployTychoRouter() internal {
+    function setUp() public {
         vm.startPrank(ADMIN);
-
-        address permit2Address =
-            address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
         tychoRouter = new TychoRouter(permit2Address);
-        tychoRouterAddress = address(tychoRouter);
         tychoRouter.grantRole(keccak256("EXECUTOR_SETTER_ROLE"), BOB);
+        tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
+        tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
         executorSetter = BOB;
+        deployDummyContract();
+        vm.stopPrank();
 
+        vm.startPrank(BOB);
+        tokens.push(new MockERC20("Token A", "A"));
+        tokens.push(new MockERC20("Token B", "B"));
+        tokens.push(new MockERC20("Token C", "C"));
         vm.stopPrank();
     }
 
