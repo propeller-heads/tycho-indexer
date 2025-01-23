@@ -1,3 +1,15 @@
+## [0.12.0](https://github.com/propeller-heads/tycho-execution/compare/0.11.0...0.12.0) (2025-01-23)
+
+
+### Features
+
+* add tests for withdraw, fee and make it DRY ([056582c](https://github.com/propeller-heads/tycho-execution/commit/056582ca2f5d792d60027574c313be2ca8ac649c))
+
+
+### Bug Fixes
+
+* pr comments ([9c99b73](https://github.com/propeller-heads/tycho-execution/commit/9c99b738841cb0dacf37bf95aec8cedebc69c5d3))
+
 ## [0.11.0](https://github.com/propeller-heads/tycho-execution/compare/0.10.0...0.11.0) (2025-01-23)
 
 
