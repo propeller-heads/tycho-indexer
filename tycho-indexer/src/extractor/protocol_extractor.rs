@@ -1361,6 +1361,9 @@ mod test {
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), 1)));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
         let res = extractor.get_cursor().await;
@@ -1380,6 +1383,9 @@ mod test {
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1426,6 +1432,9 @@ mod test {
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1482,6 +1491,9 @@ mod test {
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1537,6 +1549,9 @@ mod test {
         gw.expect_advance()
             .times(0)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1713,6 +1728,12 @@ mod test {
             .expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), 1)));
+
+        extractor_gw
+            .expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+
         let extractor = ProtocolExtractor::new(
             extractor_gw,
             EXTRACTOR_NAME,
@@ -1836,6 +1857,10 @@ mod test {
         extractor_gw
             .expect_get_components_balances()
             .return_once(|_| Ok(HashMap::new()));
+        extractor_gw
+            .expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = ProtocolExtractor::new(
             extractor_gw,
