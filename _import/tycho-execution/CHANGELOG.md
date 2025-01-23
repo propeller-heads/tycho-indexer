@@ -1,3 +1,15 @@
+## [0.10.0](https://github.com/propeller-heads/tycho-execution/compare/0.9.0...0.10.0) (2025-01-23)
+
+
+### Features
+
+* add fee methods ([0dc7edc](https://github.com/propeller-heads/tycho-execution/commit/0dc7edccfac4524209c40caede6ac052c9b575c0))
+
+
+### Bug Fixes
+
+* use FEE_SETTER_ROLE for setFeeReceiver ([15d3bec](https://github.com/propeller-heads/tycho-execution/commit/15d3becf603b127e3d450c71bf7458b72f670a40))
+
 ## [0.9.0](https://github.com/propeller-heads/tycho-execution/compare/0.8.0...0.9.0) (2025-01-22)
 
 
