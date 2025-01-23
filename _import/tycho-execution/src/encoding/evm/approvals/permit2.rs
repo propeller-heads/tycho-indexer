@@ -34,14 +34,11 @@ pub struct Permit2 {
 
 /// Type alias for representing allowance data as a tuple of (amount, expiration, nonce). Used for
 /// decoding
-type Allowance = (U160, U48, U48); // (amount, expiration, nonce)
+type Allowance = (U160, U48, U48);
 /// Expiration period for permits, set to 30 days (in seconds).
 const PERMIT_EXPIRATION: u64 = 30 * 24 * 60 * 60;
 /// Expiration period for signatures, set to 30 minutes (in seconds).
 const PERMIT_SIG_EXPIRATION: u64 = 30 * 60;
-const MAX_UINT48: U48 = U48::MAX;
-const MAX_UINT160: U160 = U160::MAX;
-const MAX_UINT256: U256 = U256::MAX;
 
 sol! {
      #[derive(Debug)]
@@ -105,7 +102,7 @@ impl Permit2 {
                 Ok(allowance)
             }
             Err(err) => Err(EncodingError::RecoverableError(format!(
-                "Call to permit 2 allowance method failed with error: {:?}",
+                "Call to permit2 allowance method failed with error: {:?}",
                 err
             ))),
         }
@@ -127,12 +124,6 @@ impl UserApprovalsManager for Permit2 {
             let expiration = U48::from(current_time + PERMIT_EXPIRATION);
             let sig_deadline = U256::from(current_time + PERMIT_SIG_EXPIRATION);
             let amount = U160::from(biguint_to_u256(&approval.amount));
-
-            // validations
-            assert!(MAX_UINT256 > sig_deadline, "signature deadline out of range");
-            assert!(MAX_UINT48 > nonce, "nonce out of range");
-            assert!(MAX_UINT160 > amount, "amount out of range");
-            assert!(MAX_UINT48 > expiration, "expiration out of range");
 
             let details = PermitDetails {
                 token: bytes_to_address(&approval.token)?,
@@ -213,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_allowance_data() {
+    fn test_get_existing_allowance() {
         let signer = PrivateKeySigner::random();
         let manager = Permit2::new(signer, 1).unwrap();
 
@@ -229,6 +220,7 @@ mod tests {
             (Uint::<160, 3>::from(0), Uint::<48, 1>::from(0), Uint::<48, 1>::from(0))
         );
     }
+
     #[test]
     fn test_encode_approvals() {
         // Set up a mock private key for signing
