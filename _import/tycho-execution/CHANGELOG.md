@@ -1,3 +1,11 @@
+## [0.11.0](https://github.com/propeller-heads/tycho-execution/compare/0.10.0...0.11.0) (2025-01-23)
+
+
+### Features
+
+* add LibPrefixLengthEncodedByteArray with tests ([f25da21](https://github.com/propeller-heads/tycho-execution/commit/f25da218d7b40878a61f6feb09f39c7fb06433f5))
+* keep assembly ([ae662d0](https://github.com/propeller-heads/tycho-execution/commit/ae662d002608c97b8e350241c5992b3659753c76))
+
 ## [0.10.0](https://github.com/propeller-heads/tycho-execution/compare/0.9.0...0.10.0) (2025-01-23)
 
 
