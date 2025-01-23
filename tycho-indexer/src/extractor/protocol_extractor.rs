@@ -47,7 +47,6 @@ use crate::{
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 
-#[allow(dead_code)]
 pub struct Inner {
     cursor: Vec<u8>,
     last_processed_block: Option<Block>,
