@@ -1,3 +1,11 @@
+## [0.9.0](https://github.com/propeller-heads/tycho-execution/compare/0.8.0...0.9.0) (2025-01-22)
+
+
+### Features
+
+* Emit events when setting executors/verifiers ([59950a7](https://github.com/propeller-heads/tycho-execution/commit/59950a7575d2a388cfc040ff8da63d98de544ac0))
+* Set swap executors and verifiers ([4cb3286](https://github.com/propeller-heads/tycho-execution/commit/4cb3286c9425a72e58c44c29d17b31261b1dd94e))
+
 ## [0.8.0](https://github.com/propeller-heads/tycho-execution/compare/0.7.0...0.8.0) (2025-01-22)
 
 
