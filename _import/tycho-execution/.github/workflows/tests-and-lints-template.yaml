@@ -70,7 +70,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Test
-        run: cargo nextest run --workspace --lib --all-targets --all-features && cargo test --doc
+        run: cargo nextest run --workspace --lib --all-targets && cargo test --doc
 
   lint:
     name: Code Lint

@@ -13,8 +13,9 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.135"
 thiserror = "1.0.69"
 tokio = { version = "1.38.0", features = ["full"] }
+chrono = "0.4.39"
 
-alloy = { version = "0.5.4", features = ["providers", "rpc-types-eth"], optional = true }
+alloy = { version = "0.5.4", features = ["providers", "rpc-types-eth", "eip712", "signer-local"], optional = true }
 alloy-sol-types = { version = "0.8.14", optional = true }
 alloy-primitives = { version = "0.8.9", optional = true }
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.46.0" }
@@ -25,6 +26,7 @@ rstest = "0.24.0"
 [features]
 default = ["evm"]
 evm = ["alloy", "alloy-sol-types", "alloy-primitives"]
+fork-tests = []
 
 [profile.bench]
 debug = true
