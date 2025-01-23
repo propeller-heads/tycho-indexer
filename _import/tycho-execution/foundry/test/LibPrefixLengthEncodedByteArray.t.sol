@@ -2,12 +2,13 @@
 pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
-import {LibPrefixLengthEncodedByteArray} from "../src/lib/LibPrefixLengthEncodedByteArray.sol";
+import {LibPrefixLengthEncodedByteArray} from
+    "../src/lib/LibPrefixLengthEncodedByteArray.sol";
 
 contract LibPrefixLengthEncodedByteArrayTest is Test {
     using LibPrefixLengthEncodedByteArray for bytes;
 
-   function testNextEmpty() public {
+    function testNextEmpty() public {
         bytes memory encoded = "";
         (bytes memory elem, bytes memory remaining) = this.next(encoded);
         assertEq(elem.length, 0);
@@ -18,7 +19,7 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         // Create encoded data: length prefix (0003) followed by "ABC"
         bytes memory encoded = hex"0003414243";
         (bytes memory elem, bytes memory remaining) = this.next(encoded);
-        
+
         assertEq(elem.length, 3);
         assertEq(elem, hex"414243"); // "ABC"
         assertEq(remaining.length, 0);
@@ -27,7 +28,7 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
     function testNextMultipleElements() public {
         // Encoded data: [0003]ABC[0002]DE
         bytes memory encoded = hex"000341424300024445";
-        
+
         // First next()
         (bytes memory elem1, bytes memory remaining1) = this.next(encoded);
         assertEq(elem1, hex"414243"); // "ABC"
@@ -53,13 +54,13 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
     function testFailInvalidLength() public {
         // Length prefix larger than remaining data
         bytes memory invalid = hex"0004414243";
-        this.next(invalid);
+        (bytes memory elem, bytes memory remaining) = this.next(invalid);
     }
 
     function testFailIncompletePrefix() public {
         // Only 1 byte instead of 2 bytes prefix
         bytes memory invalid = hex"01";
-        this.next(invalid);
+        (bytes memory elem, bytes memory remaining) = this.next(invalid);
     }
 
     function testLargeElement() public {
@@ -67,12 +68,12 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         bytes memory large = new bytes(1002); // 2 bytes prefix + 1000 bytes data
         large[0] = bytes1(uint8(0x03)); // 03
         large[1] = bytes1(uint8(0xe8)); // E8 (1000 in hex)
-        
+
         // Fill data bytes
-        for (uint i = 2; i < large.length; i++) {
+        for (uint256 i = 2; i < large.length; i++) {
             large[i] = bytes1(uint8(0x01));
         }
-        
+
         (bytes memory elem, bytes memory remaining) = this.next(large);
         assertEq(elem.length, 1000);
         assertEq(remaining.length, 0);
@@ -81,11 +82,11 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
     function testSizeWithLargeElements() public {
         // Two elements: 1000 bytes + 500 bytes
         bytes memory data = new bytes(1504); // 1000 + 2 + 500 + 2
-        
+
         // First element (1000 bytes)
         data[0] = bytes1(uint8(0x03)); // 03
         data[1] = bytes1(uint8(0xe8)); // E8 (1000 in hex)
-        
+
         // Second element (500 bytes)
         data[1002] = bytes1(uint8(0x01)); // 01
         data[1003] = bytes1(uint8(0xf4)); // F4 (500 in hex)
@@ -93,12 +94,15 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         assertEq(this.size(data), 2);
     }
 
-    function next(bytes calldata data) external pure returns (bytes memory, bytes memory) {
-        return data.next();
+    function next(bytes calldata data)
+        external
+        pure
+        returns (bytes memory elem, bytes memory remaining)
+    {
+        (elem, remaining) = data.next();
     }
 
-    function size(bytes calldata data) external pure returns (uint256) {
-        return data.size();
+    function size(bytes calldata data) external pure returns (uint256 s) {
+        s = data.size();
     }
-    
 }
