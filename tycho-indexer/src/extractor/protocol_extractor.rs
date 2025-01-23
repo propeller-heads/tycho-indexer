@@ -51,9 +51,6 @@ use crate::{
 pub struct Inner {
     cursor: Vec<u8>,
     last_processed_block: Option<Block>,
-    /// Keeps count of consecutive blocks with the same timestamp. This is then used to add some
-    /// microseconds in the blocks and maintain order.
-    same_ts_blocks_streak: u8,
     /// Used to give more informative logs
     last_report_ts: NaiveDateTime,
     last_report_block_number: u64,
@@ -107,7 +104,6 @@ where
                     inner: Arc::new(Mutex::new(Inner {
                         cursor: vec![],
                         last_processed_block: None,
-                        same_ts_blocks_streak: 0,
                         last_report_ts: chrono::Utc::now().naive_utc(),
                         last_report_block_number: 0,
                         first_message_processed: false,
@@ -142,9 +138,6 @@ where
                         cursor,
                         last_processed_block: Some(last_processed_block),
                         last_report_ts: chrono::Local::now().naive_utc(),
-                        // TODO: What if the last block has the same timestamp as the previously
-                        // saved one?
-                        same_ts_blocks_streak: 0,
                         last_report_block_number: 0,
                         first_message_processed: false,
                     })),
@@ -219,7 +212,8 @@ where
         }
     }
 
-    #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % msg.block.number))]
+    #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % msg.block.number
+    ))]
     async fn handle_tvl_changes(
         &self,
         msg: &mut BlockAggregatedChanges,
@@ -594,6 +588,21 @@ where
 
         let mut msg =
             if let Some(post_process_f) = self.post_processor { post_process_f(msg) } else { msg };
+
+        if let Some(last_processed_block) = self.get_last_processed_block().await {
+            if msg.block.ts.timestamp() == last_processed_block.ts.timestamp() {
+                // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
+                // identical timestamps. To ensure accurate ordering, we adjust each
+                // block's timestamp by adding a microsecond offset based on the
+                // number of blocks with the same timestamp encountered so far.
+                msg.block.ts += chrono::Duration::microseconds(
+                    last_processed_block
+                        .ts
+                        .timestamp_subsec_micros() as i64 +
+                        1,
+                );
+            }
+        }
 
         msg.new_tokens = self
             .construct_currency_tokens(&msg)
@@ -999,12 +1008,14 @@ where
             .get_balances(&reorg_buffer, &reverted_balances_keys_vec)
             .await?;
 
+        let new_latest_block = reorg_buffer
+            .get_most_recent_block()
+            .expect("Couldn't find most recent block in buffer during revert");
+
         let revert_message = BlockAggregatedChanges {
             extractor: self.name.clone(),
             chain: self.chain,
-            block: reorg_buffer
-                .get_most_recent_block()
-                .expect("Couldn't find most recent block in buffer during revert"),
+            block: new_latest_block.clone(),
             finalized_block_height: reverted_state[0]
                 .block_update
                 .finalized_block_height,
@@ -1020,6 +1031,8 @@ where
 
         debug!("Successfully retrieved all previous states during revert!");
 
+        self.update_last_processed_block(new_latest_block)
+            .await;
         self.update_cursor(inp.last_valid_cursor)
             .await;
 
@@ -1754,7 +1767,6 @@ mod test {
                             component_id: "comp1".to_string(),
                         },
                     )
-
                 ]),
             )]),
             ..Default::default()
@@ -2596,7 +2608,7 @@ mod test_serial_db {
                 "vm_name",
                 Chain::Ethereum,
                 0,
-                cached_gw.clone()
+                cached_gw.clone(),
             );
             let protocol_types = HashMap::from([
                 ("pt_1".to_string(), ProtocolType::default()),
