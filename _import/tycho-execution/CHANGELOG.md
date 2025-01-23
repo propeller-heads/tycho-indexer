@@ -1,3 +1,16 @@
+## [0.13.0](https://github.com/propeller-heads/tycho-execution/compare/0.12.0...0.13.0) (2025-01-23)
+
+
+### Features
+
+* Implement Permit2 ([ce9ae49](https://github.com/propeller-heads/tycho-execution/commit/ce9ae49e6f14e3cc8c7a17ca0e9267083c97cf9d))
+
+
+### Bug Fixes
+
+* Correct encoding of the approvals ([04e925f](https://github.com/propeller-heads/tycho-execution/commit/04e925fe81a585f60bc4fbd9caf7d31e8e7422ef))
+* Small improvements ([b9cfc4a](https://github.com/propeller-heads/tycho-execution/commit/b9cfc4a35b95ec1c431200c5d83ee0081ee8326a))
+
 ## [0.12.0](https://github.com/propeller-heads/tycho-execution/compare/0.11.0...0.12.0) (2025-01-23)
 
 
