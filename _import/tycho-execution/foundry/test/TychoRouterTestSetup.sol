@@ -35,4 +35,16 @@ contract TychoRouterTestSetup is Test, Constants {
         bytes memory minimalBytecode = hex"01"; // Single-byte bytecode
         vm.etch(DUMMY, minimalBytecode); // Deploy minimal bytecode
     }
+
+    /**
+     * @dev Mints tokens to the given address
+     * @param amount The amount of tokens to mint
+     * @param to The address to mint tokens to
+     */
+    function mintTokens(uint256 amount, address to) internal {
+        for (uint256 i = 0; i < tokens.length; i++) {
+            // slither-disable-next-line calls-loop
+            tokens[i].mint(to, amount);
+        }
+    }
 }

@@ -126,7 +126,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testWithdrawNativeOtherCases() public {
+    function testWithdrawNativeFailures() public {
         vm.deal(address(tychoRouter), 100 ether);
         vm.startPrank(FUND_RESCUER);
         vm.expectRevert(TychoRouter__AddressZero.selector);
@@ -142,21 +142,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
     function testWithdrawERC20Tokens() public {
         vm.startPrank(BOB);
-        // Check balances before minting
-        for (uint256 i = 0; i < tokens.length; i++) {
-            // slither-disable-next-line calls-loop
-            assertEq(tokens[i].balanceOf(address(tychoRouter)), 0);
-        }
-        // Mint tokens to tychoRouter
-        for (uint256 i = 0; i < tokens.length; i++) {
-            // slither-disable-next-line calls-loop
-            tokens[i].mint(address(tychoRouter), 100 ether);
-        }
-        // Check balances after minting
-        for (uint256 i = 0; i < tokens.length; i++) {
-            // slither-disable-next-line calls-loop
-            assertEq(tokens[i].balanceOf(address(tychoRouter)), 100 ether);
-        }
+        mintTokens(100 ether, address(tychoRouter));
         vm.stopPrank();
 
         vm.startPrank(FUND_RESCUER);
@@ -174,19 +160,28 @@ contract TychoRouterTest is TychoRouterTestSetup {
             assertEq(tokens[i].balanceOf(FUND_RESCUER), 100 ether);
         }
         vm.stopPrank();
+    }
+
+    function testWithdrawERC20TokensFailures() public {
+        mintTokens(100 ether, address(tychoRouter));
+        IERC20[] memory tokensArray = new IERC20[](3);
+        tokensArray[0] = IERC20(address(tokens[0]));
+        tokensArray[1] = IERC20(address(tokens[1]));
+        tokensArray[2] = IERC20(address(tokens[2]));
 
         vm.startPrank(FUND_RESCUER);
-        vm.expectRevert();
+        vm.expectRevert(TychoRouter__AddressZero.selector);
         tychoRouter.withdraw(tokensArray, address(0));
         vm.stopPrank();
 
+        // Not role FUND_RESCUER
         vm.startPrank(BOB);
         vm.expectRevert();
         tychoRouter.withdraw(tokensArray, FUND_RESCUER);
         vm.stopPrank();
     }
 
-    function testFeeSetterRole() public {
+    function testFeeSetting() public {
         vm.startPrank(FEE_SETTER);
         assertEq(tychoRouter.fee(), 0);
         tychoRouter.setFee(100);
@@ -196,6 +191,19 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.startPrank(BOB);
         vm.expectRevert();
         tychoRouter.setFee(200);
+        vm.stopPrank();
+    }
+
+    function testFeeReceiverSetting() public {
+        vm.startPrank(FEE_SETTER);
+        assertEq(tychoRouter.feeReceiver(), address(0));
+        tychoRouter.setFeeReceiver(FEE_RECEIVER);
+        assertEq(tychoRouter.feeReceiver(), FEE_RECEIVER);
+        vm.stopPrank();
+
+        vm.startPrank(BOB);
+        vm.expectRevert();
+        tychoRouter.setFeeReceiver(FEE_RECEIVER);
         vm.stopPrank();
     }
 }

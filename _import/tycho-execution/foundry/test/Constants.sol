@@ -10,4 +10,5 @@ contract Constants is Test {
     address FEE_SETTER = makeAddr("feeSetter");
     // dummy contracts
     address DUMMY = makeAddr("dummy");
+    address FEE_RECEIVER = makeAddr("feeReceiver");
 }
