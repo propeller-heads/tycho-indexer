@@ -14,4 +14,12 @@ contract Constants is Test {
     address DUMMY = makeAddr("dummy");
 
     address WETH_ADDR = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    /**
+     * @dev Deploys a dummy contract with non-empty bytecode
+     */
+    function deployDummyContract() internal {
+        bytes memory minimalBytecode = hex"01"; // Single-byte bytecode
+        vm.etch(DUMMY, minimalBytecode); // Deploy minimal bytecode
+    }
 }

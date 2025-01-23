@@ -10,7 +10,6 @@ import "./CallbackVerificationDispatcher.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
-error TychoRouter__NonContractExecutor();
 error TychoRouter__NonContractVerifier();
 
 contract TychoRouter is
@@ -45,7 +44,6 @@ contract TychoRouter is
         address indexed oldFeeReceiver, address indexed newFeeReceiver
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
-    event ExecutorSet(address indexed executor);
     event CallbackVerifierSet(address indexed callbackVerifier);
 
     constructor(address _permit2) {
@@ -95,26 +93,24 @@ contract TychoRouter is
 
     /**
      * @dev Entrypoint to add or replace an approved swap executor contract address
-     * @param target address of the swap method contract
+     * @param target address of the swap executor contract
      */
     function setSwapExecutor(address target)
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
-        if (target.code.length == 0) revert TychoRouter__NonContractExecutor();
-        swapExecutors[target] = true;
-        emit ExecutorSet(target);
+        _setSwapExecutor(target);
     }
 
     /**
      * @dev Entrypoint to remove an approved swap executor contract address
-     * @param target address of the swap method contract
+     * @param target address of the swap executor contract
      */
     function removeSwapExecutor(address target)
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
-        delete swapExecutors[target];
+        _removeSwapExecutor(target);
     }
 
     /**

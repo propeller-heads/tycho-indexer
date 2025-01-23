@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "@interfaces/ISwapExecutor.sol";
 
 error SwapExecutionDispatcher__UnapprovedExecutor();
+error SwapExecutionDispatcher__NonContractExecutor();
 
 /**
  * @title SwapExecutionDispatcher - Dispatch swap execution to external contracts
@@ -19,6 +20,29 @@ error SwapExecutionDispatcher__UnapprovedExecutor();
  */
 contract SwapExecutionDispatcher {
     mapping(address => bool) public swapExecutors;
+
+    event ExecutorSet(address indexed executor);
+
+    /**
+     * @dev Adds or replace an approved swap executor contract address if it is a
+     *  contract.
+     * @param target address of the swap executor contract
+     */
+    function _setSwapExecutor(address target) internal {
+        if (target.code.length == 0) {
+            revert SwapExecutionDispatcher__NonContractExecutor();
+        }
+        swapExecutors[target] = true;
+        emit ExecutorSet(target);
+    }
+
+    /**
+     * @dev Remove an approved swap executor contract address
+     * @param target address of the swap executor contract
+     */
+    function _removeSwapExecutor(address target) internal {
+        delete swapExecutors[target];
+    }
 
     /**
      * @dev Calls an executor, assumes swap.protocolData contains

@@ -29,14 +29,6 @@ contract TychoRouterTestSetup is Test, Constants {
     }
 
     /**
-     * @dev Deploys a dummy contract with non-empty bytecode
-     */
-    function deployDummyContract() internal {
-        bytes memory minimalBytecode = hex"01"; // Single-byte bytecode
-        vm.etch(DUMMY, minimalBytecode); // Deploy minimal bytecode
-    }
-
-    /**
      * @dev Mints tokens to the given address
      * @param amount The amount of tokens to mint
      * @param to The address to mint tokens to
