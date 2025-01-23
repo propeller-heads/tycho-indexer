@@ -55,7 +55,6 @@ enum FinancialType{
   PSM = 3;
 }
 
-
 enum ImplementationType {
   VM = 0;
   CUSTOM = 1;
@@ -128,6 +127,14 @@ message ContractSlot {
   bytes value = 3;
 }
 
+// A struct for following the token balance changes for a contract.
+message AccountBalanceChange {
+  // The address of the ERC20 token whose balance changed.
+  bytes token = 1;
+  // The new balance of the token. Note: it must be a big endian encoded int.
+  bytes balance = 2;
+}
+
 // Changes made to a single contract's state.
 message ContractChange {
   // The contract's address
@@ -140,6 +147,8 @@ message ContractChange {
   repeated ContractSlot slots = 4;
   // Whether this is an update, a creation or a deletion.
   ChangeType change = 5;
+  // The new ERC20 balances of the contract.
+  repeated AccountBalanceChange token_balances = 6;
 }
 
 // Aggregate entities
