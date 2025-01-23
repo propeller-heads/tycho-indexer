@@ -86,7 +86,7 @@ contract TychoRouter is AccessControl {
      */
     function setFeeReceiver(address newfeeReceiver)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(FEE_SETTER_ROLE)
     {
         if (newfeeReceiver == address(0)) revert TychoRouter__AddressZero();
         emit FeeReceiverSet(feeReceiver, newfeeReceiver);
