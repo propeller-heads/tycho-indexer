@@ -24,6 +24,7 @@ contract SwapExecutionDispatcher {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  token addresses if required by the executor.
      */
+    // slither-disable-next-line dead-code
     function _callSwapExecutor(uint256 amount, bytes calldata data)
         internal
         returns (uint256 calculatedAmount)
@@ -43,6 +44,7 @@ contract SwapExecutionDispatcher {
             revert SwapExecutionDispatcher__UnapprovedExecutor();
         }
 
+        // slither-disable-next-line low-level-calls
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(selector, amount, protocolData)
         );
@@ -60,6 +62,7 @@ contract SwapExecutionDispatcher {
         calculatedAmount = abi.decode(result, (uint256));
     }
 
+    // slither-disable-next-line dead-code
     function _decodeExecutorAndSelector(bytes calldata data)
         internal
         pure
