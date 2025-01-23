@@ -2,9 +2,9 @@
 pragma solidity ^0.8.28;
 
 import {TychoRouter} from "@src/TychoRouter.sol";
-import "./TestTemplate.sol";
+import "./TychoRouterTestSetup.sol";
 
-contract TychoRouterTest is TychoRouterTestTemplate {
+contract TychoRouterTest is TychoRouterTestSetup {
     bytes32 public constant EXECUTOR_SETTER_ROLE =
         0x6a1dd52dcad5bd732e45b6af4e7344fa284e2d7d4b23b5b09cb55d36b0685c87;
     bytes32 public constant FEE_SETTER_ROLE =
@@ -16,15 +16,11 @@ contract TychoRouterTest is TychoRouterTestTemplate {
 
     event ExecutorSet(address indexed executor);
     event CallbackVerifierSet(address indexed callbackVerifier);
-
-    function setupTychoRouter() public {
-        deployTychoRouter();
-    }
+    event Withdrawal(
+        address indexed token, uint256 amount, address indexed receiver
+    );
 
     function testSetValidExecutor() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         vm.expectEmit();
         // Define the event we expect to be emitted at the next step
@@ -37,9 +33,6 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     }
 
     function testRemoveExecutor() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         tychoRouter.setSwapExecutor(DUMMY);
         tychoRouter.removeSwapExecutor(DUMMY);
@@ -48,9 +41,6 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     }
 
     function testRemoveUnSetExecutor() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         tychoRouter.removeSwapExecutor(BOB);
         vm.stopPrank();
@@ -58,24 +48,16 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     }
 
     function testRemoveExecutorMissingSetterRole() public {
-        setupTychoRouter();
-        deployDummyContract();
         vm.expectRevert();
         tychoRouter.removeSwapExecutor(BOB);
     }
 
     function testSetExecutorMissingSetterRole() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.expectRevert();
         tychoRouter.setSwapExecutor(DUMMY);
     }
 
     function testSetExecutorNonContract() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         vm.expectRevert(
             abi.encodeWithSelector(TychoRouter__NonContractExecutor.selector)
@@ -85,9 +67,6 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     }
 
     function testSetValidVerifier() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         vm.expectEmit();
         // Define the event we expect to be emitted at the next step
@@ -100,9 +79,6 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     }
 
     function testRemoveVerifier() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         tychoRouter.setCallbackVerifier(DUMMY);
         tychoRouter.removeCallbackVerifier(DUMMY);
@@ -111,9 +87,6 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     }
 
     function testRemoveUnSetVerifier() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         tychoRouter.removeCallbackVerifier(BOB);
         vm.stopPrank();
@@ -121,29 +94,116 @@ contract TychoRouterTest is TychoRouterTestTemplate {
     }
 
     function testRemoveVerifierMissingSetterRole() public {
-        setupTychoRouter();
-        deployDummyContract();
         vm.expectRevert();
         tychoRouter.removeCallbackVerifier(BOB);
     }
 
     function testSetVerifierMissingSetterRole() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.expectRevert();
         tychoRouter.setCallbackVerifier(DUMMY);
     }
 
     function testSetVerifierNonContract() public {
-        setupTychoRouter();
-        deployDummyContract();
-
         vm.startPrank(executorSetter);
         vm.expectRevert(
             abi.encodeWithSelector(TychoRouter__NonContractVerifier.selector)
         );
         tychoRouter.setCallbackVerifier(BOB);
+        vm.stopPrank();
+    }
+
+    function testWithdrawNative() public {
+        vm.startPrank(FUND_RESCUER);
+        // Send 100 ether to tychoRouter
+        assertEq(address(tychoRouter).balance, 0);
+        assertEq(FUND_RESCUER.balance, 0);
+        vm.deal(address(tychoRouter), 100 ether);
+        vm.expectEmit();
+        emit Withdrawal(address(0), 100 ether, FUND_RESCUER);
+        tychoRouter.withdrawNative(FUND_RESCUER);
+        assertEq(address(tychoRouter).balance, 0);
+        assertEq(FUND_RESCUER.balance, 100 ether);
+        vm.stopPrank();
+    }
+
+    function testWithdrawNativeFailures() public {
+        vm.deal(address(tychoRouter), 100 ether);
+        vm.startPrank(FUND_RESCUER);
+        vm.expectRevert(TychoRouter__AddressZero.selector);
+        tychoRouter.withdrawNative(address(0));
+        vm.stopPrank();
+
+        // Not role FUND_RESCUER
+        vm.startPrank(BOB);
+        vm.expectRevert();
+        tychoRouter.withdrawNative(FUND_RESCUER);
+        vm.stopPrank();
+    }
+
+    function testWithdrawERC20Tokens() public {
+        vm.startPrank(BOB);
+        mintTokens(100 ether, address(tychoRouter));
+        vm.stopPrank();
+
+        vm.startPrank(FUND_RESCUER);
+        IERC20[] memory tokensArray = new IERC20[](3);
+        tokensArray[0] = IERC20(address(tokens[0]));
+        tokensArray[1] = IERC20(address(tokens[1]));
+        tokensArray[2] = IERC20(address(tokens[2]));
+        tychoRouter.withdraw(tokensArray, FUND_RESCUER);
+
+        // Check balances after withdrawing
+        for (uint256 i = 0; i < tokens.length; i++) {
+            // slither-disable-next-line calls-loop
+            assertEq(tokens[i].balanceOf(address(tychoRouter)), 0);
+            // slither-disable-next-line calls-loop
+            assertEq(tokens[i].balanceOf(FUND_RESCUER), 100 ether);
+        }
+        vm.stopPrank();
+    }
+
+    function testWithdrawERC20TokensFailures() public {
+        mintTokens(100 ether, address(tychoRouter));
+        IERC20[] memory tokensArray = new IERC20[](3);
+        tokensArray[0] = IERC20(address(tokens[0]));
+        tokensArray[1] = IERC20(address(tokens[1]));
+        tokensArray[2] = IERC20(address(tokens[2]));
+
+        vm.startPrank(FUND_RESCUER);
+        vm.expectRevert(TychoRouter__AddressZero.selector);
+        tychoRouter.withdraw(tokensArray, address(0));
+        vm.stopPrank();
+
+        // Not role FUND_RESCUER
+        vm.startPrank(BOB);
+        vm.expectRevert();
+        tychoRouter.withdraw(tokensArray, FUND_RESCUER);
+        vm.stopPrank();
+    }
+
+    function testFeeSetting() public {
+        vm.startPrank(FEE_SETTER);
+        assertEq(tychoRouter.fee(), 0);
+        tychoRouter.setFee(100);
+        assertEq(tychoRouter.fee(), 100);
+        vm.stopPrank();
+
+        vm.startPrank(BOB);
+        vm.expectRevert();
+        tychoRouter.setFee(200);
+        vm.stopPrank();
+    }
+
+    function testFeeReceiverSetting() public {
+        vm.startPrank(FEE_SETTER);
+        assertEq(tychoRouter.feeReceiver(), address(0));
+        tychoRouter.setFeeReceiver(FEE_RECEIVER);
+        assertEq(tychoRouter.feeReceiver(), FEE_RECEIVER);
+        vm.stopPrank();
+
+        vm.startPrank(BOB);
+        vm.expectRevert();
+        tychoRouter.setFeeReceiver(FEE_RECEIVER);
         vm.stopPrank();
     }
 }
