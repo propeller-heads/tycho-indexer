@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+import "../lib/IWETH.sol";
+import "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
+import "./CallbackVerificationDispatcher.sol";
+import "./SwapExecutionDispatcher.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -8,9 +12,12 @@ import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
+import {Swap} from "./Swap.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
+error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
+error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 
 contract TychoRouter is
     AccessControl,
@@ -19,8 +26,11 @@ contract TychoRouter is
     Pausable
 {
     IAllowanceTransfer public immutable permit2;
+    IWETH private immutable _weth;
 
     using SafeERC20 for IERC20;
+    using LibPrefixLengthEncodedByteArray for bytes;
+    using Swap for bytes;
 
     //keccak256("NAME_OF_ROLE") : save gas on deployment
     bytes32 public constant EXECUTOR_SETTER_ROLE =
@@ -48,9 +58,10 @@ contract TychoRouter is
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
-    constructor(address _permit2) {
+    constructor(address _permit2, address weth) {
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _weth = IWETH(weth);
     }
 
     /**
@@ -207,6 +218,27 @@ contract TychoRouter is
             bool success = payable(receiver).send(amount);
             if (!success) revert TychoRouter__WithdrawalFailed();
         }
+    }
+
+    /**
+     * @dev Wraps a defined amount of ETH.
+     * @param amount of native ETH to wrap.
+     */
+    function _wrapETH(uint256 amount) internal {
+        if (msg.value > 0 && msg.value != amount) {
+            revert TychoRouter__MessageValueMismatch(msg.value, amount);
+        }
+        _weth.deposit{value: amount}();
+    }
+
+    /**
+     * @dev Unwraps a defined amount of WETH.
+     * @param amount of WETH to unwrap.
+     */
+    function _unwrapETH(uint256 amount) internal {
+        uint256 unwrapAmount =
+            amount == 0 ? _weth.balanceOf(address(this)) : amount;
+        _weth.withdraw(unwrapAmount);
     }
 
     /**

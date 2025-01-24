@@ -4,16 +4,32 @@ pragma solidity ^0.8.13;
 import "@src/TychoRouter.sol";
 import "./Constants.sol";
 import "./mock/MockERC20.sol";
+import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
+
+contract TychoRouterExposed is TychoRouter {
+    constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
+
+    function wrapETH(uint256 amount) external payable {
+        return _wrapETH(amount);
+    }
+
+    function unwrapETH(uint256 amount) external {
+        return _unwrapETH(amount);
+    }
+}
 
 contract TychoRouterTestSetup is Test, Constants {
-    TychoRouter tychoRouter;
+    TychoRouterExposed tychoRouter;
     address executorSetter;
     address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     MockERC20[] tokens;
 
     function setUp() public {
+        uint256 forkBlock = 21000000;
+        vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
+
         vm.startPrank(ADMIN);
-        tychoRouter = new TychoRouter(permit2Address);
+        tychoRouter = new TychoRouterExposed(permit2Address, WETH_ADDR);
         tychoRouter.grantRole(keccak256("EXECUTOR_SETTER_ROLE"), BOB);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
