@@ -1,3 +1,17 @@
+## [0.14.0](https://github.com/propeller-heads/tycho-execution/compare/0.13.0...0.14.0) (2025-01-24)
+
+
+### Features
+
+* delegatecall to executor in SwapExecutionDispatcher ([e91ee96](https://github.com/propeller-heads/tycho-execution/commit/e91ee9612995eb038fb0f0c837438976cedc9a9a))
+* Emit event when removing executor ([1fabff1](https://github.com/propeller-heads/tycho-execution/commit/1fabff19c4427caee0a758e2f89336ea784462cb))
+
+
+### Bug Fixes
+
+* ISwapExecutor shouldn't be payable ([3df17e8](https://github.com/propeller-heads/tycho-execution/commit/3df17e892491fbb47bf6ed03680b0fb7fbb68140))
+* Silence slither warnings ([b616e11](https://github.com/propeller-heads/tycho-execution/commit/b616e11354ee325dcbecff70caf4e7daf4d144d0))
+
 ## [0.13.0](https://github.com/propeller-heads/tycho-execution/compare/0.12.0...0.13.0) (2025-01-23)
 
 
