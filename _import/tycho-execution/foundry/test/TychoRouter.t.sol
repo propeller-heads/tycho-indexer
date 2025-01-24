@@ -212,12 +212,15 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(tychoRouter.paused(), false);
         tychoRouter.pause();
         assertEq(tychoRouter.paused(), true);
+        // TODO: test swap calls when implemeted
         vm.stopPrank();
 
         vm.startPrank(UNPAUSER);
         tychoRouter.unpause();
         assertEq(tychoRouter.paused(), false);
         vm.stopPrank();
+
+        
     }
 
     function testPauseFailures() public {
