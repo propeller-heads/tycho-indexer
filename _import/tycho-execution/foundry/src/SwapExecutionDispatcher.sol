@@ -24,7 +24,7 @@ contract SwapExecutionDispatcher {
     event ExecutorSet(address indexed executor);
 
     /**
-     * @dev Adds or replace an approved swap executor contract address if it is a
+     * @dev Adds or replaces an approved swap executor contract address if it is a
      *  contract.
      * @param target address of the swap executor contract
      */
@@ -37,7 +37,7 @@ contract SwapExecutionDispatcher {
     }
 
     /**
-     * @dev Remove an approved swap executor contract address
+     * @dev Removes an approved swap executor contract address
      * @param target address of the swap executor contract
      */
     function _removeSwapExecutor(address target) internal {
@@ -46,7 +46,7 @@ contract SwapExecutionDispatcher {
 
     /**
      * @dev Calls an executor, assumes swap.protocolData contains
-     *  token addresses if required by the executor.
+     *  protocol-specific data required by the executor.
      */
     // slither-disable-next-line dead-code
     function _callSwapExecutor(uint256 amount, bytes calldata data)
@@ -60,13 +60,13 @@ contract SwapExecutionDispatcher {
         (executor, decodedSelector, protocolData) =
             _decodeExecutorAndSelector(data);
 
-        bytes4 selector = decodedSelector == bytes4(0)
-            ? ISwapExecutor.swap.selector
-            : decodedSelector;
-
         if (!swapExecutors[executor]) {
             revert SwapExecutionDispatcher__UnapprovedExecutor();
         }
+
+        bytes4 selector = decodedSelector == bytes4(0)
+            ? ISwapExecutor.swap.selector
+            : decodedSelector;
 
         // slither-disable-next-line low-level-calls
         (bool success, bytes memory result) = executor.delegatecall(
