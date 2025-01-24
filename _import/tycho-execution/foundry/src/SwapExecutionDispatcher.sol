@@ -22,6 +22,7 @@ contract SwapExecutionDispatcher {
     mapping(address => bool) public swapExecutors;
 
     event ExecutorSet(address indexed executor);
+    event ExecutorRemoved(address indexed executor);
 
     /**
      * @dev Adds or replaces an approved swap executor contract address if it is a
@@ -42,6 +43,7 @@ contract SwapExecutionDispatcher {
      */
     function _removeSwapExecutor(address target) internal {
         delete swapExecutors[target];
+        emit ExecutorRemoved(target);
     }
 
     /**

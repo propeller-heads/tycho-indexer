@@ -33,6 +33,7 @@ contract SwapExecutionDispatcherTest is Constants {
     SwapExecutionDispatcherExposed dispatcherExposed;
 
     event ExecutorSet(address indexed executor);
+    event ExecutorRemoved(address indexed executor);
 
     function setUp() public {
         uint256 forkBlock = 20673900;
@@ -52,6 +53,9 @@ contract SwapExecutionDispatcherTest is Constants {
 
     function testRemoveExecutor() public {
         dispatcherExposed.exposedSetSwapExecutor(DUMMY);
+        vm.expectEmit();
+        // Define the event we expect to be emitted at the next step
+        emit ExecutorRemoved(DUMMY);
         dispatcherExposed.exposedRemoveSwapExecutor(DUMMY);
         assert(dispatcherExposed.swapExecutors(DUMMY) == false);
     }
