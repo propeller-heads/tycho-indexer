@@ -3,11 +3,11 @@ pragma solidity ^0.8.28;
 
 import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ISwapExecutor} from "../interfaces/ISwapExecutor.sol";
+import {IExecutor} from "../interfaces/IExecutor.sol";
 
 error UniswapV2Executor__InvalidDataLength();
 
-contract UniswapV2SwapExecutor is ISwapExecutor {
+contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
     function swap(uint256 givenAmount, bytes calldata data)

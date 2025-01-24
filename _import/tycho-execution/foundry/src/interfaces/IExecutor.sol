@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 pragma abicoder v2;
 
-interface ISwapExecutor {
+interface IExecutor {
     /**
      * @notice Performs a swap on a liquidity pool.
      * @dev This method can either take the amount of the input token or the amount
@@ -31,7 +31,7 @@ interface ISwapExecutor {
         returns (uint256 calculatedAmount);
 }
 
-interface ISwapExecutorErrors {
+interface IExecutorErrors {
     error InvalidParameterLength(uint256);
     error UnknownCurveType(uint8);
 }

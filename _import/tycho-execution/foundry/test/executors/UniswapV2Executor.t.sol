@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import "@src/executors/Uniswapv2SwapExecutor.sol";
+import "@src/executors/UniswapV2Executor.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 
-contract UniswapV2SwapExecutorExposed is UniswapV2SwapExecutor {
+contract UniswapV2ExecutorExposed is UniswapV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
@@ -28,14 +28,10 @@ contract UniswapV2SwapExecutorExposed is UniswapV2SwapExecutor {
     }
 }
 
-contract UniswapV2SwapExecutorTest is
-    UniswapV2SwapExecutorExposed,
-    Test,
-    Constants
-{
+contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
     using SafeERC20 for IERC20;
 
-    UniswapV2SwapExecutorExposed uniswapV2Exposed;
+    UniswapV2ExecutorExposed uniswapV2Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
     address WETH_DAI_POOL = 0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11;
@@ -43,7 +39,7 @@ contract UniswapV2SwapExecutorTest is
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV2Exposed = new UniswapV2SwapExecutorExposed();
+        uniswapV2Exposed = new UniswapV2ExecutorExposed();
     }
 
     function testDecodeParams() public view {
