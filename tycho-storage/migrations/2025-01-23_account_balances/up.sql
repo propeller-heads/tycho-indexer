@@ -1,27 +1,44 @@
 -- ADD token_id to account_balance table.
 
--- Step 1: add zero address account (to link to ETH token)
--- Assumes each db only has 1 chain
-INSERT INTO account (chain_id, title, address)
-VALUES (
-    (SELECT id FROM chain LIMIT 1),
-    'ETH_0x0000000000000000000000000000000000000000',
-    '\x0000000000000000000000000000000000000000'
-)
-ON CONFLICT (chain_id, address) DO NOTHING;
+-- Step 1: add zero address account (to link to ETH token) if the DB has only 1 chain and 
+-- it is either ethereum or base
+DO $$
+BEGIN
+    IF (
+        SELECT COUNT(*) 
+        FROM chain 
+        WHERE name IN ('ethereum', 'base')
+    ) = 1 THEN
+        INSERT INTO account (chain_id, title, address)
+        VALUES (
+            (SELECT id FROM chain WHERE name IN ('ethereum', 'base') LIMIT 1),
+            'ETH_0x0000000000000000000000000000000000000000',
+            '\x0000000000000000000000000000000000000000'
+        )
+        ON CONFLICT (chain_id, address) DO NOTHING;
+    END IF;
+END $$;
 
--- Step 2: add ETH native token (currently only ethereum and base chains are used in our dbs 
--- so we can assume ETH is the native token)
-INSERT INTO token (account_id, symbol, decimals, tax, gas, quality)
-VALUES (
-    (SELECT id FROM account WHERE address = '\x0000000000000000000000000000000000000000'),
-    'ETH',
-    18,
-    0,
-    ARRAY[0]::BIGINT[],
-    100
-)
-ON CONFLICT (account_id) DO NOTHING;
+-- Step 2: add ETH native token if the DB has only 1 chain and it is either ethereum or base
+DO $$
+BEGIN
+    IF (
+        SELECT COUNT(*) 
+        FROM chain 
+        WHERE name IN ('ethereum', 'base')
+    ) = 1 THEN
+        INSERT INTO token (account_id, symbol, decimals, tax, gas, quality)
+        VALUES (
+            (SELECT id FROM account WHERE address = '\x0000000000000000000000000000000000000000'),
+            'ETH',
+            18,
+            0,
+            ARRAY[0]::BIGINT[],
+            100
+        )
+        ON CONFLICT (account_id) DO NOTHING;
+    END IF;
+END $$;
 
 -- Step 3.1: Add the token_id column to the account_balance table
 ALTER TABLE account_balance
