@@ -27,18 +27,20 @@ contract CallbackVerificationDispatcherExposed is
         return _decodeVerifierAndSelector(data);
     }
 
-    function exposedSetVerifier(address target) external {
-        callbackVerifiers[target] = true;
+    function exposedSetCallbackVerifier(address target) external {
+        _setCallbackVerifier(target);
     }
 
-    function exposedRemoveVerifier(address target) external {}
+    function exposedRemoveCallbackVerifier(address target) external {
+        _removeCallbackVerifier(target);
+    }
 }
 
 contract CallbackVerificationDispatcherTest is Constants {
     CallbackVerificationDispatcherExposed dispatcherExposed;
 
-    event VerifierSet(address indexed executor);
-    event VerifierRemoved(address indexed executor);
+    event CallbackVerifierSet(address indexed callbackVerifier);
+    event CallbackVerifierRemoved(address indexed callbackVerifier);
 
     function setUp() public {
         uint256 forkBlock = 20673900;
@@ -46,6 +48,37 @@ contract CallbackVerificationDispatcherTest is Constants {
         dispatcherExposed = new CallbackVerificationDispatcherExposed();
         deal(WETH_ADDR, address(dispatcherExposed), 15 ether);
         deployDummyContract();
+    }
+
+    function testSetValidVerifier() public {
+        vm.expectEmit();
+        // Define the event we expect to be emitted at the next step
+        emit CallbackVerifierSet(DUMMY);
+        dispatcherExposed.exposedSetCallbackVerifier(DUMMY);
+        assert(dispatcherExposed.callbackVerifiers(DUMMY) == true);
+    }
+
+    function testRemoveVerifier() public {
+        dispatcherExposed.exposedSetCallbackVerifier(DUMMY);
+        vm.expectEmit();
+        // Define the event we expect to be emitted at the next step
+        emit CallbackVerifierRemoved(DUMMY);
+        dispatcherExposed.exposedRemoveCallbackVerifier(DUMMY);
+        assert(dispatcherExposed.callbackVerifiers(DUMMY) == false);
+    }
+
+    function testRemoveUnSetVerifier() public {
+        dispatcherExposed.exposedRemoveCallbackVerifier(BOB);
+        assert(dispatcherExposed.callbackVerifiers(BOB) == false);
+    }
+
+    function testSetVerifierNonContract() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CallbackVerificationDispatcher__NonContractVerifier.selector
+            )
+        );
+        dispatcherExposed.exposedSetCallbackVerifier(BOB);
     }
 
     function testCallVerifierSuccess() public {
@@ -56,7 +89,7 @@ contract CallbackVerificationDispatcherTest is Constants {
         // Thus, this test case designed from scratch using previously-deployed
         // Maverick callback verifier. Looking at the code, we can easily design
         // passing calldata.
-        dispatcherExposed.exposedSetVerifier(
+        dispatcherExposed.exposedSetCallbackVerifier(
             address(0x2C960bD1CFE09A26105ad3C351bEa0a3fAD0F8e8)
         );
         bytes memory data =
@@ -86,7 +119,7 @@ contract CallbackVerificationDispatcherTest is Constants {
         // Thus, this test case designed from scratch using previously-deployed
         // Maverick callback verifier. Looking at the code, we can easily design
         // passing calldata.
-        dispatcherExposed.exposedSetVerifier(
+        dispatcherExposed.exposedSetCallbackVerifier(
             address(0x2C960bD1CFE09A26105ad3C351bEa0a3fAD0F8e8)
         );
 
@@ -113,7 +146,7 @@ contract CallbackVerificationDispatcherTest is Constants {
     function testCallVerifierBadSelector() public {
         // A bad selector is provided to an approved executor - causing the call
         // itself to fail. Make sure this actually reverts.
-        dispatcherExposed.exposedSetVerifier(
+        dispatcherExposed.exposedSetCallbackVerifier(
             address(0x2C960bD1CFE09A26105ad3C351bEa0a3fAD0F8e8)
         );
         vm.startPrank(address(0xD0b2F5018B5D22759724af6d4281AC0B13266360));
@@ -127,7 +160,7 @@ contract CallbackVerificationDispatcherTest is Constants {
     function testCallVerifierParseRevertMessage() public {
         // Verification should fail because caller is not a Maverick pool
         // Check that we correctly parse the revert message
-        dispatcherExposed.exposedSetVerifier(
+        dispatcherExposed.exposedSetCallbackVerifier(
             address(0x2C960bD1CFE09A26105ad3C351bEa0a3fAD0F8e8)
         );
         bytes memory data =

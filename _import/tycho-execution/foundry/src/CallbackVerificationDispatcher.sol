@@ -18,6 +18,31 @@ error CallbackVerificationDispatcher__NonContractVerifier();
 contract CallbackVerificationDispatcher {
     mapping(address => bool) public callbackVerifiers;
 
+    event CallbackVerifierSet(address indexed callbackVerifier);
+    event CallbackVerifierRemoved(address indexed callbackVerifier);
+
+    /**
+     * @dev Adds or replaces an approved callback verifier contract address if it is a
+     *  contract.
+     * @param target address of the callback verifier contract
+     */
+    function _setCallbackVerifier(address target) internal {
+        if (target.code.length == 0) {
+            revert CallbackVerificationDispatcher__NonContractVerifier();
+        }
+        callbackVerifiers[target] = true;
+        emit CallbackVerifierSet(target);
+    }
+
+    /**
+     * @dev Removes an approved callback verifier contract address
+     * @param target address of the callback verifier contract
+     */
+    function _removeCallbackVerifier(address target) internal {
+        delete callbackVerifiers[target];
+        emit CallbackVerifierRemoved(target);
+    }
+
     /**
      * @dev Calls a callback verifier. This should revert if the callback verification fails.
      */

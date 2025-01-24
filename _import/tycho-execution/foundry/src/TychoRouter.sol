@@ -10,7 +10,6 @@ import "./CallbackVerificationDispatcher.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
-error TychoRouter__NonContractVerifier();
 
 contract TychoRouter is
     AccessControl,
@@ -44,7 +43,6 @@ contract TychoRouter is
         address indexed oldFeeReceiver, address indexed newFeeReceiver
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
-    event CallbackVerifierSet(address indexed callbackVerifier);
 
     constructor(address _permit2) {
         permit2 = IAllowanceTransfer(_permit2);
@@ -121,9 +119,7 @@ contract TychoRouter is
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
-        if (target.code.length == 0) revert TychoRouter__NonContractVerifier();
-        callbackVerifiers[target] = true;
-        emit CallbackVerifierSet(target);
+        _setCallbackVerifier(target);
     }
 
     /**
@@ -134,7 +130,7 @@ contract TychoRouter is
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
-        delete callbackVerifiers[target];
+        _removeCallbackVerifier(target);
     }
 
     /**
