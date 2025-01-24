@@ -13,8 +13,7 @@ contract UniswapV2SwapExecutorExposed is UniswapV2SwapExecutor {
             IERC20 inToken,
             address target,
             address receiver,
-            bool zeroForOne,
-            bool exactOut
+            bool zeroForOne
         )
     {
         return _decodeData(data);
@@ -49,21 +48,15 @@ contract UniswapV2SwapExecutorTest is
 
     function testDecodeParams() public view {
         bytes memory params =
-            abi.encodePacked(WETH_ADDR, address(2), address(3), false, true);
+            abi.encodePacked(WETH_ADDR, address(2), address(3), false);
 
-        (
-            IERC20 tokenIn,
-            address target,
-            address receiver,
-            bool zeroForOne,
-            bool exactOut
-        ) = uniswapV2Exposed.decodeParams(params);
+        (IERC20 tokenIn, address target, address receiver, bool zeroForOne) =
+            uniswapV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), WETH_ADDR);
         assertEq(target, address(2));
         assertEq(receiver, address(3));
         assertEq(zeroForOne, false);
-        assertEq(exactOut, true);
     }
 
     function testAmountOut() public view {
@@ -88,10 +81,8 @@ contract UniswapV2SwapExecutorTest is
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
-        bool exactOut = true;
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR, WETH_DAI_POOL, BOB, zeroForOne, exactOut
-        );
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, WETH_DAI_POOL, BOB, zeroForOne);
 
         vm.startPrank(ADMIN);
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);

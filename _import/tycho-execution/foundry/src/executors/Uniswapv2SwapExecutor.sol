@@ -15,10 +15,9 @@ contract UniswapV2SwapExecutor is ISwapExecutor {
         address target;
         address receiver;
         bool zeroForOne;
-        bool exactOut;
         IERC20 tokenIn;
 
-        (tokenIn, target, receiver, zeroForOne, exactOut) = _decodeData(data);
+        (tokenIn, target, receiver, zeroForOne) = _decodeData(data);
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
         tokenIn.safeTransfer(target, givenAmount);
 
@@ -37,15 +36,13 @@ contract UniswapV2SwapExecutor is ISwapExecutor {
             IERC20 inToken,
             address target,
             address receiver,
-            bool zeroForOne,
-            bool exactOut
+            bool zeroForOne
         )
     {
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
         zeroForOne = uint8(data[60]) > 0;
-        exactOut = uint8(data[61]) > 0;
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
