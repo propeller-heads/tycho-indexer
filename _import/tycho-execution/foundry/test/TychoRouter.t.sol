@@ -219,8 +219,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.unpause();
         assertEq(tychoRouter.paused(), false);
         vm.stopPrank();
-
-        
     }
 
     function testPauseFailures() public {
