@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
+import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IExecutor} from "../interfaces/IExecutor.sol";
+import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 
 error UniswapV2Executor__InvalidDataLength();
 
