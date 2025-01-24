@@ -4,7 +4,6 @@ pragma solidity ^0.8.28;
 import "../lib/IWETH.sol";
 import "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 import "./CallbackVerificationDispatcher.sol";
-import "./SwapExecutionDispatcher.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -88,22 +87,85 @@ contract TychoRouter is
     }
 
     /**
-     * @dev Executes a swap graph supporting internal splits token amount
+     * @dev Executes a swap graph supporting internal token amount
      *  splits, checking that the user gets more than minUserAmount of buyToken.
      */
     function swap(
         uint256 amountIn,
-        address tokenIn,
-        uint256 minUserAmount,
-        bool wrapEth,
-        bool unwrapEth,
+        address tokenOut,
+        uint256 checkAmountOut,
+        bool wrapEth, // This means ETH is the sell token
+        bool unwrapEth, // This means ETH is the buy token
         uint256 nTokens,
-        bytes calldata swaps,
+        address receiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
-        bytes calldata signature
+        bytes calldata signature,
+        bytes calldata swaps
     ) external whenNotPaused returns (uint256 amountOut) {
-        amountOut = 0;
-        // TODO
+        // For native ETH, assume funds already in our router. Else, transfer and handle approval.
+        if (wrapEth) {
+            _wrapETH(amountIn);
+        } else {
+            permit2.permit(msg.sender, permitSingle, signature);
+            permit2.transferFrom(
+                msg.sender,
+                address(this),
+                uint160(amountIn),
+                permitSingle.details.token
+            );
+        }
+
+        amountOut = _splitSwap(amountIn, nTokens, swaps);
+
+        if (fee > 0) {
+            uint256 feeAmount = (amountOut * fee) / 10000;
+            amountOut -= feeAmount;
+            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
+        }
+
+        if (amountOut < checkAmountOut) {
+            revert TychoRouter__NegativeSlippage(amountOut, checkAmountOut);
+        }
+
+        if (unwrapEth) {
+            _unwrapETH(amountOut);
+            payable(receiver).transfer(amountOut);
+        }
+    }
+
+    function _splitSwap(
+        uint256 amountIn,
+        uint256 nTokens,
+        bytes calldata swaps_
+    ) internal returns (uint256) {
+        uint256 currentAmountIn;
+        uint256 currentAmountOut;
+        uint8 tokenInIndex;
+        uint8 tokenOutIndex;
+        uint24 split;
+        bytes calldata swapData;
+
+        uint256[] memory remainingAmounts = new uint256[](nTokens);
+        uint256[] memory amounts = new uint256[](nTokens);
+        amounts[0] = amountIn;
+        remainingAmounts[0] = amountIn;
+
+        while (swaps_.length > 0) {
+            (swapData, swaps_) = swaps_.next();
+            split = swapData.splitPercentage();
+            tokenInIndex = swapData.tokenInIndex();
+            tokenOutIndex = swapData.tokenOutIndex();
+            currentAmountIn = split > 0
+                ? (amounts[tokenInIndex] * split) / 0xffffff
+                : remainingAmounts[tokenInIndex];
+            currentAmountOut =
+                _callExecutor(currentAmountIn, swapData.protocolData());
+
+            amounts[tokenOutIndex] += currentAmountOut;
+            remainingAmounts[tokenOutIndex] += currentAmountOut;
+            remainingAmounts[tokenInIndex] -= currentAmountIn;
+        }
+        return amounts[tokenOutIndex];
     }
 
     /**
