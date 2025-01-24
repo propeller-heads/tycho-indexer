@@ -159,4 +159,54 @@ mod tests {
             ))
         );
     }
+
+    #[tokio::test]
+    async fn test_encode_balancer_v2() {
+        let balancer_pool = ProtocolComponent {
+            id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
+            protocol_system: String::from("vm:balancer_v2"),
+            ..Default::default()
+        };
+        let swap = Swap {
+            component: balancer_pool,
+            token_in: Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"), // WETH
+            token_out: Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"), // DAI
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+            exact_out: false,
+            router_address: Bytes::zero(20),
+        };
+        let encoder = BalancerV2SwapEncoder::new(String::from("0x"));
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // offset pointer
+                "0000000000000000000000000000000000000000000000000000000000000020",
+                // token in
+                "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                // token out
+                "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",
+                // pool id offset
+                "00000000000000000000000000000000000000000000000000000000000000c0",
+                // receiver
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                // exact out
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                // approval needed
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                // pool id length
+                "000000000000000000000000000000000000000000000000000000000000002a",
+                // pool id
+                "3078383865364130633264444432364645456236344630333961326334313239",
+                "3646634233663536343000000000000000000000000000000000000000000000"
+            ))
+        );
+    }
 }
