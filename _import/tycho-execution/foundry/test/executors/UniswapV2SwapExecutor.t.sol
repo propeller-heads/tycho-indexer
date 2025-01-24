@@ -59,6 +59,14 @@ contract UniswapV2SwapExecutorTest is
         assertEq(zeroForOne, false);
     }
 
+    function testDecodeParamsInvalidDataLength() public {
+        bytes memory invalidParams =
+            abi.encodePacked(WETH_ADDR, address(2), address(3));
+
+        vm.expectRevert(UniswapV2Executor__InvalidDataLength.selector);
+        uniswapV2Exposed.decodeParams(invalidParams);
+    }
+
     function testAmountOut() public view {
         uint256 amountOut =
             uniswapV2Exposed.getAmountOut(WETH_DAI_POOL, 10 ** 18, false);
@@ -84,10 +92,8 @@ contract UniswapV2SwapExecutorTest is
         bytes memory protocolData =
             abi.encodePacked(WETH_ADDR, WETH_DAI_POOL, BOB, zeroForOne);
 
-        vm.startPrank(ADMIN);
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         uniswapV2Exposed.swap(amountIn, protocolData);
-        vm.stopPrank();
 
         uint256 finalBalance = DAI.balanceOf(BOB);
         assertGe(finalBalance, amountOut);

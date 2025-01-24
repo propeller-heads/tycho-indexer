@@ -5,6 +5,8 @@ import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ISwapExecutor} from "../interfaces/ISwapExecutor.sol";
 
+error UniswapV2Executor__InvalidDataLength();
+
 contract UniswapV2SwapExecutor is ISwapExecutor {
     using SafeERC20 for IERC20;
 
@@ -39,6 +41,9 @@ contract UniswapV2SwapExecutor is ISwapExecutor {
             bool zeroForOne
         )
     {
+        if (data.length != 61) {
+            revert UniswapV2Executor__InvalidDataLength();
+        }
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
