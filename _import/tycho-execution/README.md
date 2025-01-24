@@ -16,7 +16,7 @@ To run locally, simply install Slither in your conda env and run it inside the f
 conda create --name tycho-execution python=3.10
 conda activate tycho-execution
 
-python3 -m pip install slither-analyzer`
+pip install slither-analyzer
 cd foundry
 slither .
 ```

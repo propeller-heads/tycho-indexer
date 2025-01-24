@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "./SwapExecutionDispatcher.sol";
+import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 
 error TychoRouter__WithdrawalFailed();
@@ -14,7 +14,7 @@ error TychoRouter__NonContractVerifier();
 
 contract TychoRouter is
     AccessControl,
-    SwapExecutionDispatcher,
+    ExecutionDispatcher,
     CallbackVerificationDispatcher
 {
     IAllowanceTransfer public immutable permit2;
@@ -92,30 +92,30 @@ contract TychoRouter is
     }
 
     /**
-     * @dev Entrypoint to add or replace an approved swap executor contract address
-     * @param target address of the swap executor contract
+     * @dev Entrypoint to add or replace an approved executor contract address
+     * @param target address of the executor contract
      */
-    function setSwapExecutor(address target)
+    function setExecutor(address target)
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
-        _setSwapExecutor(target);
+        _setExecutor(target);
     }
 
     /**
-     * @dev Entrypoint to remove an approved swap executor contract address
-     * @param target address of the swap executor contract
+     * @dev Entrypoint to remove an approved executor contract address
+     * @param target address of the executor contract
      */
-    function removeSwapExecutor(address target)
+    function removeExecutor(address target)
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
-        _removeSwapExecutor(target);
+        _removeExecutor(target);
     }
 
     /**
-     * @dev Entrypoint to add or replace an approved swap executor contract address
-     * @param target address of the swap method contract
+     * @dev Entrypoint to add or replace an approved callback verifier contract address
+     * @param target address of the callback verifier contract
      */
     function setCallbackVerifier(address target)
         external
@@ -127,8 +127,8 @@ contract TychoRouter is
     }
 
     /**
-     * @dev Entrypoint to remove an approved swap executor contract address
-     * @param target address of the swap method contract
+     * @dev Entrypoint to remove an approved callback verifier contract address
+     * @param target address of the callback verifier contract
      */
     function removeCallbackVerifier(address target)
         external

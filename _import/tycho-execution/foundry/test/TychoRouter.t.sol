@@ -21,19 +21,19 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
     function testSetExecutorValidRole() public {
         vm.startPrank(executorSetter);
-        tychoRouter.setSwapExecutor(DUMMY);
+        tychoRouter.setExecutor(DUMMY);
         vm.stopPrank();
-        assert(tychoRouter.swapExecutors(DUMMY) == true);
+        assert(tychoRouter.executors(DUMMY) == true);
     }
 
     function testRemoveExecutorMissingSetterRole() public {
         vm.expectRevert();
-        tychoRouter.removeSwapExecutor(BOB);
+        tychoRouter.removeExecutor(BOB);
     }
 
     function testSetExecutorMissingSetterRole() public {
         vm.expectRevert();
-        tychoRouter.setSwapExecutor(DUMMY);
+        tychoRouter.setExecutor(DUMMY);
     }
 
     function testSetValidVerifier() public {

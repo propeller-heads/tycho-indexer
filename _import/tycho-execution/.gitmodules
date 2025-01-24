@@ -4,3 +4,6 @@
 [submodule "foundry/lib/permit2"]
 	path = foundry/lib/permit2
 	url = https://github.com/Uniswap/permit2
+[submodule "foundry/lib/v2-core"]
+	path = foundry/lib/v2-core
+	url = https://github.com/uniswap/v2-core
