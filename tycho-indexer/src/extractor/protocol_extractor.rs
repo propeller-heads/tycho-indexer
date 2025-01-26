@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
+use chrono::{Duration, NaiveDateTime};
 use metrics::gauge;
 use mockall::automock;
 use prost::Message;
@@ -117,7 +117,6 @@ where
                     .get_block(block_hash)
                     .await
                     .unwrap_or_else(|err| {
-                        error!(%chain, %err, "Found a cursor but was unable to retreive latest block");
                         panic!("Unexpected error when fetching latest block {}", err);
                     });
 
@@ -211,8 +210,7 @@ where
         }
     }
 
-    #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % msg.block.number
-    ))]
+    #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % msg.block.number))]
     async fn handle_tvl_changes(
         &self,
         msg: &mut BlockAggregatedChanges,
@@ -590,16 +588,17 @@ where
 
         if let Some(last_processed_block) = self.get_last_processed_block().await {
             if msg.block.ts.timestamp() == last_processed_block.ts.timestamp() {
+                debug!("Block with identical timestamp detected. Prev block ts: {:?} - New block ts: {:?}", last_processed_block.ts, msg.block.ts);
                 // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
-                // identical timestamps. To ensure accurate ordering, we adjust each
-                // block's timestamp by adding a microsecond offset based on the
-                // number of blocks with the same timestamp encountered so far.
-                msg.block.ts += chrono::Duration::microseconds(
-                    last_processed_block
-                        .ts
-                        .timestamp_subsec_micros() as i64 +
-                        1,
-                );
+                // identical timestamps (measured in seconds). To ensure accurate ordering, we
+                // adjust each block's timestamp by adding a microsecond offset
+                // based on the number of blocks with the same timestamp encountered
+                // so far.
+                // Blocks have a granularity of 1 second, so by adding 1 microsecond to the
+                // timestamp of each block with the same timestamp, we ensure ordering
+                // and prevent duplicate timestamps from being processed.
+                msg.block.ts = last_processed_block.ts + Duration::microseconds(1);
+                debug!("Adjusted block timestamp: {:?}", msg.block.ts);
             }
         }
 
