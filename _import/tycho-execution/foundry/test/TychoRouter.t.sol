@@ -14,56 +14,26 @@ contract TychoRouterTest is TychoRouterTestSetup {
     bytes32 public constant FUND_RESCUER_ROLE =
         0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
 
-    event ExecutorSet(address indexed executor);
     event CallbackVerifierSet(address indexed callbackVerifier);
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    function testSetValidExecutor() public {
+    function testSetExecutorValidRole() public {
         vm.startPrank(executorSetter);
-        vm.expectEmit();
-        // Define the event we expect to be emitted at the next step
-        emit ExecutorSet(DUMMY);
-
-        tychoRouter.setSwapExecutor(DUMMY);
+        tychoRouter.setExecutor(DUMMY);
         vm.stopPrank();
-
-        assert(tychoRouter.swapExecutors(DUMMY) == true);
-    }
-
-    function testRemoveExecutor() public {
-        vm.startPrank(executorSetter);
-        tychoRouter.setSwapExecutor(DUMMY);
-        tychoRouter.removeSwapExecutor(DUMMY);
-        vm.stopPrank();
-        assert(tychoRouter.swapExecutors(DUMMY) == false);
-    }
-
-    function testRemoveUnSetExecutor() public {
-        vm.startPrank(executorSetter);
-        tychoRouter.removeSwapExecutor(BOB);
-        vm.stopPrank();
-        assert(tychoRouter.swapExecutors(BOB) == false);
+        assert(tychoRouter.executors(DUMMY) == true);
     }
 
     function testRemoveExecutorMissingSetterRole() public {
         vm.expectRevert();
-        tychoRouter.removeSwapExecutor(BOB);
+        tychoRouter.removeExecutor(BOB);
     }
 
     function testSetExecutorMissingSetterRole() public {
         vm.expectRevert();
-        tychoRouter.setSwapExecutor(DUMMY);
-    }
-
-    function testSetExecutorNonContract() public {
-        vm.startPrank(executorSetter);
-        vm.expectRevert(
-            abi.encodeWithSelector(TychoRouter__NonContractExecutor.selector)
-        );
-        tychoRouter.setSwapExecutor(BOB);
-        vm.stopPrank();
+        tychoRouter.setExecutor(DUMMY);
     }
 
     function testSetValidVerifier() public {

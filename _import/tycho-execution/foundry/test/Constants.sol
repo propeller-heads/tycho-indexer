@@ -8,9 +8,23 @@ contract Constants is Test {
     address BOB = makeAddr("bob"); //bob=someone!=us
     address FUND_RESCUER = makeAddr("fundRescuer");
     address FEE_SETTER = makeAddr("feeSetter");
-    // dummy contracts
+    address FEE_RECEIVER = makeAddr("feeReceiver");
+
+    // Dummy contracts
     address DUMMY = makeAddr("dummy");
     address FEE_RECEIVER = makeAddr("feeReceiver");
     address PAUSER = makeAddr("pauser");
     address UNPAUSER = makeAddr("unpauser");
+
+    // Assets
+    address WETH_ADDR = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    address DAI_ADDR = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+
+    /**
+     * @dev Deploys a dummy contract with non-empty bytecode
+     */
+    function deployDummyContract() internal {
+        bytes memory minimalBytecode = hex"01"; // Single-byte bytecode
+        vm.etch(DUMMY, minimalBytecode); // Deploy minimal bytecode
+    }
 }

@@ -1,3 +1,5 @@
 @openzeppelin/=lib/openzeppelin-contracts/
+@interfaces/=interfaces/
 @permit2/=lib/permit2/
 @src/=src/
+@uniswap-v2/=lib/v2-core/

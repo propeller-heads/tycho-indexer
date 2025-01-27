@@ -1,3 +1,42 @@
+## [0.16.0](https://github.com/propeller-heads/tycho-execution/compare/0.15.0...0.16.0) (2025-01-27)
+
+
+### Features
+
+* add balance v2 encoder test ([9cecea8](https://github.com/propeller-heads/tycho-execution/commit/9cecea896833b27ec855f1ea4d981dde64f869ac))
+
+
+### Bug Fixes
+
+* async ([7c198ff](https://github.com/propeller-heads/tycho-execution/commit/7c198fff92bb6bb8858912008d0bb40364d8bcd6))
+
+## [0.15.0](https://github.com/propeller-heads/tycho-execution/compare/0.14.0...0.15.0) (2025-01-24)
+
+
+### Features
+
+* UniswapV2 SwapExecutor ([5627a19](https://github.com/propeller-heads/tycho-execution/commit/5627a1902b74ace7eccce9888b4505f77b827d43))
+
+
+### Bug Fixes
+
+* Add input validation size in Uniswapv2SwapExecutor ([ed44f4e](https://github.com/propeller-heads/tycho-execution/commit/ed44f4e993f3856dbeb14cae04acffec72c25524))
+* Remove exactOut logic from Uniswapv2SwapExecutor ([b9f4451](https://github.com/propeller-heads/tycho-execution/commit/b9f445176924e7f52d5e130f96038cfe8c44ea18))
+
+## [0.14.0](https://github.com/propeller-heads/tycho-execution/compare/0.13.0...0.14.0) (2025-01-24)
+
+
+### Features
+
+* delegatecall to executor in SwapExecutionDispatcher ([e91ee96](https://github.com/propeller-heads/tycho-execution/commit/e91ee9612995eb038fb0f0c837438976cedc9a9a))
+* Emit event when removing executor ([1fabff1](https://github.com/propeller-heads/tycho-execution/commit/1fabff19c4427caee0a758e2f89336ea784462cb))
+
+
+### Bug Fixes
+
+* ISwapExecutor shouldn't be payable ([3df17e8](https://github.com/propeller-heads/tycho-execution/commit/3df17e892491fbb47bf6ed03680b0fb7fbb68140))
+* Silence slither warnings ([b616e11](https://github.com/propeller-heads/tycho-execution/commit/b616e11354ee325dcbecff70caf4e7daf4d144d0))
+
 ## [0.13.0](https://github.com/propeller-heads/tycho-execution/compare/0.12.0...0.13.0) (2025-01-23)
 
 
