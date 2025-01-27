@@ -106,7 +106,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             encoding_context.exact_out,
             approval_needed,
         );
-        Ok(args.abi_encode())
+        Ok(args.abi_encode_packed())
     }
 
     fn executor_address(&self) -> &str {
@@ -121,8 +121,8 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_encode_uniswap_v2() {
+    #[test]
+    fn test_encode_uniswap_v2() {
         let usv2_pool = ProtocolComponent {
             id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
             ..Default::default()
@@ -160,8 +160,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_encode_balancer_v2() {
+    #[test]
+    fn test_encode_balancer_v2() {
         let balancer_pool = ProtocolComponent {
             id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
             protocol_system: String::from("vm:balancer_v2"),
@@ -187,25 +187,18 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // offset pointer
-                "0000000000000000000000000000000000000000000000000000000000000020",
                 // token in
-                "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // token out
-                "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",
-                // pool id offset
-                "00000000000000000000000000000000000000000000000000000000000000c0",
+                "6b175474e89094c44da98b954eedeac495271d0f",
+                // pool id 
+                "307838386536413063326444443236464545623634463033396132633431323936466342336635363430",
                 // receiver
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000001",
                 // exact out
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "00",
                 // approval needed
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                // pool id length
-                "000000000000000000000000000000000000000000000000000000000000002a",
-                // pool id
-                "3078383865364130633264444432364645456236344630333961326334313239",
-                "3646634233663536343000000000000000000000000000000000000000000000"
+                "01"
             ))
         );
     }
