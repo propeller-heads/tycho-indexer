@@ -10,9 +10,12 @@ contract Constants is Test {
     address FEE_SETTER = makeAddr("feeSetter");
     address FEE_RECEIVER = makeAddr("feeReceiver");
 
-    // dummy contracts
+    // Dummy contracts
     address DUMMY = makeAddr("dummy");
+    address PAUSER = makeAddr("pauser");
+    address UNPAUSER = makeAddr("unpauser");
 
+    // Assets
     address WETH_ADDR = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address DAI_ADDR = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 

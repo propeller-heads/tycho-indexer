@@ -1,3 +1,16 @@
+## [0.17.0](https://github.com/propeller-heads/tycho-execution/compare/0.16.0...0.17.0) (2025-01-27)
+
+
+### Features
+
+* add pause/unpause methods ([c982ed9](https://github.com/propeller-heads/tycho-execution/commit/c982ed99e8bd1a01ec637aa1b9cd2c5ae69ddac4))
+
+
+### Bug Fixes
+
+* ci ([4ee337d](https://github.com/propeller-heads/tycho-execution/commit/4ee337d1ee3fa5cda7bbec64b760e39028165a60))
+* test pauser ([5734b53](https://github.com/propeller-heads/tycho-execution/commit/5734b535548338adcd3a738feb559b5b16105766))
+
 ## [0.16.0](https://github.com/propeller-heads/tycho-execution/compare/0.15.0...0.16.0) (2025-01-27)
 
 

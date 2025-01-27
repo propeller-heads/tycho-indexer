@@ -17,6 +17,8 @@ contract TychoRouterTestSetup is Test, Constants {
         tychoRouter.grantRole(keccak256("EXECUTOR_SETTER_ROLE"), BOB);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
+        tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
+        tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
         executorSetter = BOB;
         deployDummyContract();
         vm.stopPrank();

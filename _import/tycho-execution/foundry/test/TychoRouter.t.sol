@@ -163,4 +163,30 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.setFeeReceiver(FEE_RECEIVER);
         vm.stopPrank();
     }
+
+    function testPause() public {
+        vm.startPrank(PAUSER);
+        assertEq(tychoRouter.paused(), false);
+        tychoRouter.pause();
+        assertEq(tychoRouter.paused(), true);
+        // TODO: test swap calls when implemeted
+        vm.stopPrank();
+
+        vm.startPrank(UNPAUSER);
+        tychoRouter.unpause();
+        assertEq(tychoRouter.paused(), false);
+        vm.stopPrank();
+
+        vm.startPrank(UNPAUSER);
+        vm.expectRevert();
+        tychoRouter.unpause();
+        vm.stopPrank();
+    }
+
+    function testPauseNonRole() public {
+        vm.startPrank(BOB);
+        vm.expectRevert();
+        tychoRouter.pause();
+        vm.stopPrank();
+    }
 }
