@@ -515,6 +515,22 @@ impl InterimContractChange {
         self.code.clear();
         self.code.extend_from_slice(code);
     }
+
+    pub fn upsert_token_balance(&mut self, token: &[u8], balance: &[u8]) {
+        self.token_balances
+            .entry(token.to_vec())
+            .and_modify(|b| {
+                b.clear();
+                b.extend_from_slice(balance);
+            })
+            .or_insert_with(|| balance.to_vec());
+    }
+
+    pub fn upsert_token_balances(&mut self, balances: &HashMap<Vec<u8>, Vec<u8>>) {
+        for (token, balance) in balances.iter() {
+            self.upsert_token_balance(token, balance);
+        }
+    }
 }
 
 impl From<InterimContractChange> for Option<ContractChange> {
