@@ -1,3 +1,10 @@
+## [0.18.0](https://github.com/propeller-heads/tycho-execution/compare/0.17.0...0.18.0) (2025-01-27)
+
+
+### Features
+
+* Perform staticcall to CallbackVerifier ([ad0748e](https://github.com/propeller-heads/tycho-execution/commit/ad0748e9c3b2431ae29be8477534853029efa27d))
+
 ## [0.17.0](https://github.com/propeller-heads/tycho-execution/compare/0.16.0...0.17.0) (2025-01-27)
 
 
