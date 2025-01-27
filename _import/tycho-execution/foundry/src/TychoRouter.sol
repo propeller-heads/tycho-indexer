@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -15,7 +16,8 @@ error TychoRouter__NonContractVerifier();
 contract TychoRouter is
     AccessControl,
     ExecutionDispatcher,
-    CallbackVerificationDispatcher
+    CallbackVerificationDispatcher,
+    Pausable
 {
     IAllowanceTransfer public immutable permit2;
 
@@ -28,6 +30,8 @@ contract TychoRouter is
         0xe6ad9a47fbda1dc18de1eb5eeb7d935e5e81b4748f3cfc61e233e64f88182060;
     bytes32 public constant PAUSER_ROLE =
         0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a;
+    bytes32 public constant UNPAUSER_ROLE =
+        0x427da25fe773164f88948d3e215c94b6554e2ed5e5f203a821c9f2f6131cf75a;
     bytes32 public constant FUND_RESCUER_ROLE =
         0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
 
@@ -61,6 +65,20 @@ contract TychoRouter is
     }
 
     /**
+     * @dev Pauses the contract
+     */
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @dev Unpauses the contract
+     */
+    function unpause() external onlyRole(UNPAUSER_ROLE) {
+        _unpause();
+    }
+
+    /**
      * @dev Executes a swap graph supporting internal splits token amount
      *  splits, checking that the user gets more than minUserAmount of buyToken.
      */
@@ -74,7 +92,7 @@ contract TychoRouter is
         bytes calldata swaps,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature
-    ) external returns (uint256 amountOut) {
+    ) external whenNotPaused returns (uint256 amountOut) {
         amountOut = 0;
         // TODO
     }
