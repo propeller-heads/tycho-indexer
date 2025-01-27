@@ -58,11 +58,9 @@ impl TryFromMessage for AccountBalance {
 
     fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
         let (msg, addr, tx) = args;
-        let balance_float = bytes_to_f64(&msg.balance).unwrap_or(f64::NAN);
         Ok(Self {
             token: msg.token.into(),
             balance: Bytes::from(msg.balance),
-            balance_float,
             modify_tx: tx.hash.clone(),
             account: addr.clone(),
         })
