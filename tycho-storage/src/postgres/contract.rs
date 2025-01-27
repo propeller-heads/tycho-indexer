@@ -49,6 +49,11 @@ impl PostgresGateway {
     ) -> Result<HashMap<i64, Balance>, StorageError> {
         use schema::account_balance::dsl::*;
         let res = if start_version_ts <= target_version_ts {
+            // Going forward
+            //                  [     changes to update    ]
+            // -----------------|--------------------------|
+            //                start                     target
+            // We query for balance updates between start and target version.
             let changed_account_ids = account_balance
                 .inner_join(schema::account::table.inner_join(schema::chain::table))
                 .filter(schema::chain::id.eq(chain_id))
@@ -76,6 +81,12 @@ impl PostgresGateway {
                 .into_iter()
                 .collect::<HashMap<i64, Balance>>()
         } else {
+            // Going backwards
+            //                  [     changes to revert    ]
+            // -----------------|--------------------------|
+            //                target                     start
+            // We query for balances valid AT the target version for accounts that were updated
+            // between target and start version.
             let changed_account_ids = account_balance
                 .inner_join(schema::account::table.inner_join(schema::chain::table))
                 .filter(schema::chain::id.eq(chain_id))
@@ -97,11 +108,11 @@ impl PostgresGateway {
                 .select((account_id, balance))
                 .order_by((account_id, valid_from.asc(), schema::transaction::index.asc()))
                 .distinct_on(account_id)
-                .get_results::<(i64, Bytes)>(conn)
+                .get_results::<(i64, Balance)>(conn)
                 .await
                 .map_err(PostgresError::from)?
                 .into_iter()
-                .collect::<HashMap<i64, Bytes>>()
+                .collect::<HashMap<i64, Balance>>()
         };
         Ok(res)
     }
@@ -1451,6 +1462,15 @@ mod test {
             ],
         )
         .await;
+        let (_, native_token) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
 
         // Account C0
         let c0 = db_fixtures::insert_account(
@@ -1461,10 +1481,11 @@ mod test {
             Some(txn[0]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 0, txn[0], Some(&ts), c0).await;
+        db_fixtures::insert_account_balance(conn, 0, native_token, txn[0], Some(&ts), c0).await;
         let c0_code =
             db_fixtures::insert_contract_code(conn, c0, txn[0], Bytes::from("C0C0C0")).await;
-        db_fixtures::insert_account_balance(conn, 100, txn[1], Some(&ts_p1), c0).await;
+        db_fixtures::insert_account_balance(conn, 100, native_token, txn[1], Some(&ts_p1), c0)
+            .await;
         // Slot 2 is never modified again
         db_fixtures::insert_slots(conn, c0, txn[1], &ts, None, &[(2, 1, None)]).await;
         // First version for slots 0 and 1.
@@ -1477,7 +1498,7 @@ mod test {
             &[(0, 1, None), (1, 5, None)],
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 101, txn[3], None, c0).await;
+        db_fixtures::insert_account_balance(conn, 101, native_token, txn[3], None, c0).await;
         // Second and final version for 0 and 1, new slots 5 and 6
         db_fixtures::insert_slots(
             conn,
@@ -1498,7 +1519,7 @@ mod test {
             Some(txn[2]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 50, txn[2], None, c1).await;
+        db_fixtures::insert_account_balance(conn, 50, native_token, txn[2], None, c1).await;
         let c1_code =
             db_fixtures::insert_contract_code(conn, c1, txn[2], Bytes::from("C1C1C1")).await;
         db_fixtures::insert_slots(
@@ -1520,7 +1541,7 @@ mod test {
             Some(txn[1]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 25, txn[1], None, c2).await;
+        db_fixtures::insert_account_balance(conn, 25, native_token, txn[1], None, c2).await;
         let c2_code =
             db_fixtures::insert_contract_code(conn, c2, txn[1], Bytes::from("C2C2C2")).await;
         db_fixtures::insert_slots(conn, c2, txn[1], &ts, None, &[(1, 2, None), (2, 4, None)]).await;
