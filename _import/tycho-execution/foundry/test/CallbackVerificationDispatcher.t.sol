@@ -112,13 +112,9 @@ contract CallbackVerificationDispatcherTest is Constants {
     }
 
     function testCallVerifierNoSelector() public {
-        // For this test, we can use any callback verifier and any calldata that we
-        // know works for this verifier. We don't care about which calldata/executor,
-        // since we are only testing the functionality of the staticcall and not
-        // the inner verifier.
-        // Thus, this test case designed from scratch using previously-deployed
-        // Maverick callback verifier. Looking at the code, we can easily design
-        // passing calldata.
+        // This test is exactly the same as testCallVerifierSuccess, except that the
+        // fn selector is not explicitly passed. The test should still pass using the
+        // default selector.
         dispatcherExposed.exposedSetCallbackVerifier(
             address(0x2C960bD1CFE09A26105ad3C351bEa0a3fAD0F8e8)
         );
