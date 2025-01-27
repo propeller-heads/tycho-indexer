@@ -15,7 +15,7 @@ error TychoRouter__NonContractVerifier();
 
 contract TychoRouter is
     AccessControl,
-    SwapExecutionDispatcher,
+    ExecutionDispatcher,
     CallbackVerificationDispatcher,
     Pausable
 {
