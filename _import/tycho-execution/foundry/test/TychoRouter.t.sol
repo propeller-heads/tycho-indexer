@@ -219,17 +219,17 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.unpause();
         assertEq(tychoRouter.paused(), false);
         vm.stopPrank();
-    }
-
-    function testPauseFailures() public {
-        vm.startPrank(BOB);
-        vm.expectRevert();
-        tychoRouter.pause();
-        vm.stopPrank();
 
         vm.startPrank(UNPAUSER);
         vm.expectRevert();
         tychoRouter.unpause();
+        vm.stopPrank();
+    }
+
+    function testPauseNonRole() public {
+        vm.startPrank(BOB);
+        vm.expectRevert();
+        tychoRouter.pause();
         vm.stopPrank();
     }
 }
