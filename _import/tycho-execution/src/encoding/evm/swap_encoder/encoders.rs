@@ -106,7 +106,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             encoding_context.exact_out,
             approval_needed,
         );
-        Ok(args.abi_encode())
+        Ok(args.abi_encode_packed())
     }
 
     fn executor_address(&self) -> &str {
@@ -121,8 +121,8 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_encode_uniswap_v2() {
+    #[test]
+    fn test_encode_uniswap_v2() {
         let usv2_pool = ProtocolComponent {
             id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
             ..Default::default()
@@ -156,6 +156,49 @@ mod tests {
                 "00",
                 // exact out
                 "00",
+            ))
+        );
+    }
+
+    #[test]
+    fn test_encode_balancer_v2() {
+        let balancer_pool = ProtocolComponent {
+            id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
+            protocol_system: String::from("vm:balancer_v2"),
+            ..Default::default()
+        };
+        let swap = Swap {
+            component: balancer_pool,
+            token_in: Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"), // WETH
+            token_out: Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"), // DAI
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+            exact_out: false,
+            router_address: Bytes::zero(20),
+        };
+        let encoder = BalancerV2SwapEncoder::new(String::from("0x"));
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // token in
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                // token out
+                "6b175474e89094c44da98b954eedeac495271d0f",
+                // pool id 
+                "307838386536413063326444443236464545623634463033396132633431323936466342336635363430",
+                // receiver
+                "0000000000000000000000000000000000000001",
+                // exact out
+                "00",
+                // approval needed
+                "01"
             ))
         );
     }
