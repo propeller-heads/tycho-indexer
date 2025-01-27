@@ -1,3 +1,15 @@
+## [0.16.0](https://github.com/propeller-heads/tycho-execution/compare/0.15.0...0.16.0) (2025-01-27)
+
+
+### Features
+
+* add balance v2 encoder test ([9cecea8](https://github.com/propeller-heads/tycho-execution/commit/9cecea896833b27ec855f1ea4d981dde64f869ac))
+
+
+### Bug Fixes
+
+* async ([7c198ff](https://github.com/propeller-heads/tycho-execution/commit/7c198fff92bb6bb8858912008d0bb40364d8bcd6))
+
 ## [0.15.0](https://github.com/propeller-heads/tycho-execution/compare/0.14.0...0.15.0) (2025-01-24)
 
 
