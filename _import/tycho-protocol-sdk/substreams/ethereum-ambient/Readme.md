@@ -9,7 +9,7 @@ Modules Description
 *   **Type**: Map
 *   **Purpose**: This module detects new pools within the Ethereum blockchain and balance changes.
 *   **Inputs**: Ethereum block data (`sf.ethereum.type.v2.Block`).
-*   **Output**: Emits data of type `proto:tycho.evm.state.v1.BlockPoolChanges`.
+*   **Output**: Emits data of type `proto:tycho.ambient.v1.BlockPoolChanges`.
 
 ### `store_pools_balances`
 
@@ -26,10 +26,10 @@ Modules Description
 ### `map_changes`
 
 *   **Type**: Map
-*   **Purpose**: This module integrates all the processed information to generate comprehensive `BlockContractChanges`. It considers new pools, balance changes and contract changes.
+*   **Purpose**: This module integrates all the processed information to generate comprehensive `BlockChanges`. It considers new pools, balance changes and contract changes.
 *   **Inputs**:
     *   Ethereum block data (`sf.ethereum.type.v2.Block`).
     *   Data from `map_pool_changes`.
     *   Data from `store_pools_balances`.
     *   Data from `store_pools`.
-*   **Output**: Emits `proto:tycho.evm.state.v1.BlockContractChanges`.
+*   **Output**: Emits `proto:tycho.evm.state.v1.BlockChanges`.

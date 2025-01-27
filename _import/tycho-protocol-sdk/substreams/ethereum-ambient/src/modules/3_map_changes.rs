@@ -3,13 +3,15 @@ use std::{
     collections::{hash_map::Entry, HashMap},
     str::FromStr,
 };
-use substreams::pb::substreams::StoreDeltas;
-
+use substreams::{
+    pb::substreams::StoreDeltas,
+    store::{StoreGet, StoreGetProto},
+};
 use substreams_ethereum::pb::eth::{self};
 
-use crate::contracts::main::AMBIENT_CONTRACT;
-use substreams::store::{StoreGet, StoreGetProto};
 use tycho_substreams::prelude::*;
+
+use crate::{contracts::main::AMBIENT_CONTRACT, pb::tycho::ambient::v1::BlockPoolChanges};
 
 struct SlotValue {
     new_value: Vec<u8>,
@@ -74,10 +76,10 @@ fn map_changes(
     block_pool_changes: BlockPoolChanges,
     balance_store: StoreDeltas,
     pool_store: StoreGetProto<ProtocolComponent>,
-) -> Result<BlockContractChanges, substreams::errors::Error> {
-    let mut block_changes = BlockContractChanges::default();
+) -> Result<BlockChanges, substreams::errors::Error> {
+    let mut block_changes = BlockChanges::default();
 
-    let mut tx_change = TransactionContractChanges::default();
+    let mut transaction_changes = TransactionChanges::default();
 
     let mut changed_contracts: HashMap<Vec<u8>, InterimContractChange> = HashMap::new();
 
@@ -93,6 +95,13 @@ fn map_changes(
         .collect();
 
     for block_tx in block.transactions() {
+        let tx = Transaction {
+            hash: block_tx.hash.clone(),
+            from: block_tx.from.clone(),
+            to: block_tx.to.clone(),
+            index: block_tx.index as u64,
+        };
+
         // extract storage changes
         let mut storage_changes = block_tx
             .calls
@@ -244,44 +253,37 @@ fn map_changes(
 
         // if there were any changes, add transaction and push the changes
         if !storage_changes.is_empty() || !balance_changes.is_empty() || !code_changes.is_empty() {
-            tx_change.tx = Some(Transaction {
-                hash: block_tx.hash.clone(),
-                from: block_tx.from.clone(),
-                to: block_tx.to.clone(),
-                index: block_tx.index as u64,
-            });
+            transaction_changes.tx = Some(tx.clone());
 
             // reuse changed_contracts hash map by draining it, next iteration
             // will start empty. This avoids a costly reallocation
             for (_, change) in changed_contracts.drain() {
-                tx_change
+                transaction_changes
                     .contract_changes
                     .push(change.into())
             }
 
             block_changes
                 .changes
-                .push(tx_change.clone());
+                .push(transaction_changes.clone());
 
             // clear out the interim contract changes after we pushed those.
-            tx_change.tx = None;
-            tx_change.contract_changes.clear();
+            transaction_changes.tx = None;
+            transaction_changes
+                .contract_changes
+                .clear();
         }
     }
+
+    // extract new protocol components
     let mut grouped_components = HashMap::new();
-    for component in &block_pool_changes.protocol_components {
-        let tx_hash = component
-            .tx
-            .clone()
-            .expect("Transaction is missing")
-            .hash;
+    for component in &block_pool_changes.new_components {
         grouped_components
-            .entry(tx_hash)
+            .entry(component.tx_index)
             .or_insert_with(Vec::new)
             .push(component.clone());
     }
-
-    for (tx_hash, components) in grouped_components {
+    for (tx_index, components) in grouped_components {
         if let Some(tx_change) = block_changes
             .changes
             .iter_mut()
@@ -290,14 +292,20 @@ fn map_changes(
                 tx_change
                     .tx
                     .as_ref()
-                    .is_some_and(|tx| tx.hash == tx_hash)
+                    .is_some_and(|tx| tx.index == tx_index)
             })
         {
+            let new_components = components
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<ProtocolComponent>>();
             tx_change
                 .component_changes
-                .extend(components);
+                .extend(new_components);
         }
     }
+
+    // extract component balance changes
     let mut balance_changes = HashMap::new();
     balance_store
         .deltas
@@ -323,17 +331,12 @@ fn map_changes(
                 token: pool.tokens[token_index].clone(),
                 balance: big_endian_bytes_balance.to_vec(),
             };
-            let tx_hash = balance_delta
-                .tx
-                .expect("Transaction is missing")
-                .hash;
             balance_changes
-                .entry(tx_hash)
+                .entry(balance_delta.tx_index)
                 .or_insert_with(Vec::new)
                 .push(balance_change);
         });
-
-    for (tx_hash, grouped_balance_changes) in balance_changes {
+    for (tx_index, grouped_balance_changes) in balance_changes {
         if let Some(tx_change) = block_changes
             .changes
             .iter_mut()
@@ -342,7 +345,7 @@ fn map_changes(
                 tx_change
                     .tx
                     .as_ref()
-                    .is_some_and(|tx| tx.hash == tx_hash)
+                    .is_some_and(|tx| tx.index == tx_index)
             })
         {
             tx_change

@@ -20,24 +20,17 @@ use crate::{
             decode_warm_path_user_cmd_call, AMBIENT_WARMPATH_CONTRACT, USER_CMD_WARMPATH_FN_SIG,
         },
     },
+    pb::tycho::ambient::v1::{AmbientBalanceDelta, BlockPoolChanges},
     utils::from_u256_to_vec,
-};
-use tycho_substreams::{
-    models::{AmbientBalanceDelta, BlockPoolChanges},
-    prelude::Transaction,
 };
 
 #[substreams::handlers::map]
 fn map_pool_changes(block: eth::v2::Block) -> Result<BlockPoolChanges, substreams::errors::Error> {
-    let mut protocol_components = Vec::new();
     let mut balance_deltas = Vec::new();
+    let mut protocol_components = Vec::new();
+
     for block_tx in block.transactions() {
-        let tx = Transaction {
-            hash: block_tx.hash.clone(),
-            from: block_tx.from.clone(),
-            to: block_tx.to.clone(),
-            index: block_tx.index as u64,
-        };
+        let tx_index = block_tx.index as u64;
         // extract storage changes
         let mut storage_changes = block_tx
             .calls
@@ -66,7 +59,7 @@ fn map_pool_changes(block: eth::v2::Block) -> Result<BlockPoolChanges, substream
 
             if call.address == AMBIENT_CONTRACT && selector == USER_CMD_FN_SIG {
                 // Extract pool creations
-                if let Some(protocol_component) = decode_pool_init(call, tx.clone())? {
+                if let Some(protocol_component) = decode_pool_init(call, tx_index)? {
                     protocol_components.push(protocol_component);
                 }
             }
@@ -109,19 +102,18 @@ fn map_pool_changes(block: eth::v2::Block) -> Result<BlockPoolChanges, substream
                 token_type: "base".to_string(),
                 token_delta: from_u256_to_vec(base_flow),
                 ordinal: call.index as u64,
-                tx: Some(tx.clone()),
+                tx_index,
             };
             let quote_balance_delta = AmbientBalanceDelta {
                 pool_hash: Vec::from(pool_hash),
                 token_type: "quote".to_string(),
                 token_delta: from_u256_to_vec(quote_flow),
                 ordinal: call.index as u64,
-                tx: Some(tx.clone()),
+                tx_index,
             };
             balance_deltas.extend([base_balance_delta.clone(), quote_balance_delta.clone()]);
         }
     }
     balance_deltas.sort_by_key(|delta| (delta.ordinal, delta.token_type.clone()));
-    let pool_changes = BlockPoolChanges { protocol_components, balance_deltas };
-    Ok(pool_changes)
+    Ok(BlockPoolChanges { balance_deltas, new_components: protocol_components })
 }

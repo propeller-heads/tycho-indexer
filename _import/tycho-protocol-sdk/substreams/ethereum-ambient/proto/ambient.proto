@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package tycho.ambient.v1;
 
-import "tycho/evm/v1/common.proto";
-
 // A change to a pool's balance. Ambient specific.
 message AmbientBalanceDelta {
   // The address of the ERC20 token whose balance changed.
@@ -14,14 +12,25 @@ message AmbientBalanceDelta {
   bytes token_delta = 3;
   // Used to determine the order of the balance changes. Necessary for the balance store.
   uint64 ordinal = 4;
-  // Transaction where the balance changed.
-  tycho.evm.v1.Transaction tx = 5;
+  // Transaction index of the balance change
+  uint64 tx_index = 5;
+}
+
+message AmbientProtocolComponent {
+  // A unique identifier for the component within the protocol.
+  string id = 1;
+  // Addresses of the ERC20 tokens used by the component.
+  repeated bytes tokens = 2;
+  // Ambient pool index [static attribute for ambient pools]
+  bytes pool_index = 3;
+  // Transaction index for the component creation
+  uint64 tx_index = 4;
 }
 
 // Ambient pool changes within a single block
 message BlockPoolChanges {
   // New protocol components added in this block
-  repeated tycho.evm.v1.ProtocolComponent protocol_components = 1;
-  // Balance changes to pools in this block
+  repeated AmbientProtocolComponent new_components = 1;
+    // Balance changes on this block
   repeated AmbientBalanceDelta balance_deltas = 2;
 }

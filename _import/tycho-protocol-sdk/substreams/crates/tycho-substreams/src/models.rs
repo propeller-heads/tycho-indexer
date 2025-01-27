@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use substreams_ethereum::pb::eth::v2::{self as sf, StorageChange};
 
 // re-export the protobuf types here.
-pub use crate::pb::tycho::{ambient::v1::*, evm::v1::*};
+pub use crate::pb::tycho::evm::v1::*;
 
 impl TransactionContractChanges {
     /// Creates a new empty `TransactionContractChanges` instance.
@@ -213,7 +213,7 @@ impl ProtocolComponent {
     /// ## Parameters
     /// - `id`: Identifier for the component.
     /// - `tx`: Reference to the associated transaction.
-    pub fn new(id: &str, tx: &Transaction) -> Self {
+    pub fn new(id: &str) -> Self {
         Self {
             id: id.to_string(),
             tokens: Vec::new(),
@@ -221,7 +221,6 @@ impl ProtocolComponent {
             static_att: Vec::new(),
             change: ChangeType::Creation.into(),
             protocol_type: None,
-            tx: Some(tx.clone()),
         }
     }
 
@@ -233,7 +232,7 @@ impl ProtocolComponent {
     /// ## Parameters
     /// - `id`: Contract address to be encoded and set as the component's ID.
     /// - `tx`: Reference to the associated transaction.
-    pub fn at_contract(id: &[u8], tx: &Transaction) -> Self {
+    pub fn at_contract(id: &[u8]) -> Self {
         Self {
             id: format!("0x{}", hex::encode(id)),
             tokens: Vec::new(),
@@ -241,7 +240,6 @@ impl ProtocolComponent {
             static_att: Vec::new(),
             change: ChangeType::Creation.into(),
             protocol_type: None,
-            tx: Some(tx.clone()),
         }
     }
 

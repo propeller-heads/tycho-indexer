@@ -1,13 +1,16 @@
 use anyhow::{anyhow, bail};
-use tycho_substreams::models::{
-    Attribute, ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
-    Transaction,
-};
-
-use crate::utils::{decode_flows_from_output, encode_pool_hash};
 use ethabi::{decode, ParamType};
 use hex_literal::hex;
 use substreams_ethereum::pb::eth::v2::Call;
+
+use tycho_substreams::models::{
+    Attribute, ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
+};
+
+use crate::{
+    pb::tycho::ambient::v1::AmbientProtocolComponent,
+    utils::{decode_flows_from_output, encode_pool_hash},
+};
 
 pub const AMBIENT_CONTRACT: [u8; 20] = hex!("aaaaaaaaa24eeeb8d57d431224f73832bc34f688");
 pub const USER_CMD_FN_SIG: [u8; 4] = hex!("a15112f9");
@@ -91,10 +94,11 @@ pub fn decode_direct_swap_call(
         bail!("Failed to decode swap call inputs.".to_string());
     }
 }
+
 pub fn decode_pool_init(
     call: &Call,
-    tx: Transaction,
-) -> Result<Option<ProtocolComponent>, anyhow::Error> {
+    tx_index: u64,
+) -> Result<Option<AmbientProtocolComponent>, anyhow::Error> {
     // Decode external call to UserCmd
     if let Ok(external_params) = decode(USER_CMD_EXTERNAL_ABI, &call.input[4..]) {
         let cmd_bytes = external_params[1]
@@ -134,28 +138,14 @@ pub fn decode_pool_init(
                 let pool_index = pool_index_buf.to_vec();
                 let pool_hash = encode_pool_hash(base.clone(), quote.clone(), pool_index.clone());
 
-                let static_attribute = Attribute {
-                    name: String::from("pool_index"),
-                    value: pool_index,
-                    change: ChangeType::Creation.into(),
-                };
-
                 let mut tokens: Vec<Vec<u8>> = vec![base.clone(), quote.clone()];
                 tokens.sort();
 
-                let new_component = ProtocolComponent {
+                let new_component = AmbientProtocolComponent {
                     id: hex::encode(pool_hash),
                     tokens,
-                    contracts: vec![AMBIENT_CONTRACT.to_vec()],
-                    static_att: vec![static_attribute],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "ambient_pool".to_string(),
-                        attribute_schema: vec![],
-                        financial_type: FinancialType::Swap.into(),
-                        implementation_type: ImplementationType::Vm.into(),
-                    }),
-                    tx: Some(tx.clone()),
+                    pool_index,
+                    tx_index,
                 };
                 Ok(Some(new_component))
             } else {
@@ -166,5 +156,27 @@ pub fn decode_pool_init(
         }
     } else {
         bail!("Failed to decode ABI external call.".to_string());
+    }
+}
+
+impl From<AmbientProtocolComponent> for ProtocolComponent {
+    fn from(component: AmbientProtocolComponent) -> Self {
+        ProtocolComponent {
+            id: component.id,
+            tokens: component.tokens,
+            contracts: vec![AMBIENT_CONTRACT.to_vec()],
+            static_att: vec![Attribute {
+                name: "pool_index".to_string(),
+                value: component.pool_index,
+                change: ChangeType::Creation.into(),
+            }],
+            change: ChangeType::Creation.into(),
+            protocol_type: Some(ProtocolType {
+                name: "ambient_pool".to_string(),
+                attribute_schema: vec![],
+                financial_type: FinancialType::Swap.into(),
+                implementation_type: ImplementationType::Vm.into(),
+            }),
+        }
     }
 }

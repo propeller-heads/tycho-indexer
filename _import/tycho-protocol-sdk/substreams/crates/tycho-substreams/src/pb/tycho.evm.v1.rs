@@ -95,9 +95,6 @@ pub struct ProtocolComponent {
     /// / Represents the functionality of the component.
     #[prost(message, optional, tag="6")]
     pub protocol_type: ::core::option::Option<ProtocolType>,
-    /// Transaction where this component was created
-    #[prost(message, optional, tag = "7")]
-    pub tx: ::core::option::Option<Transaction>,
 }
 /// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
 /// Note that if a ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
