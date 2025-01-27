@@ -536,7 +536,6 @@ pub mod fixtures {
                                 balance: Bytes::from(50000000.encode_to_vec()),
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                                 account: account_addr.clone(),
-                                balance_float: 36522027799.0,
                             },
                         )]
                         .into_iter()
@@ -590,7 +589,6 @@ pub mod fixtures {
                                 balance: Bytes::from(10.encode_to_vec()),
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001").unwrap(),
                                 account: account_addr,
-                                balance_float: 2058.0,
                             },
                         )]
                         .into_iter()

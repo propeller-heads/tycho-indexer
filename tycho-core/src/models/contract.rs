@@ -268,19 +268,12 @@ pub struct AccountBalance {
     pub account: Address,
     pub token: Address,
     pub balance: Balance,
-    pub balance_float: f64,
     pub modify_tx: TxHash,
 }
 
 impl AccountBalance {
-    pub fn new(
-        account: Address,
-        token: Address,
-        balance: Balance,
-        balance_float: f64,
-        modify_tx: TxHash,
-    ) -> Self {
-        Self { account, token, balance, balance_float, modify_tx }
+    pub fn new(account: Address, token: Address, balance: Balance, modify_tx: TxHash) -> Self {
+        Self { account, token, balance, modify_tx }
     }
 }
 
@@ -685,7 +678,6 @@ mod test {
                         balance: Bytes::from(0_i32.to_le_bytes()),
                         modify_tx: Default::default(),
                         account: account_address.clone(),
-                        balance_float: 0.0,
                     },
                 )]
                 .into_iter()
@@ -741,7 +733,6 @@ mod test {
                         balance: Bytes::from(20000_i32.to_le_bytes()),
                         modify_tx: Default::default(),
                         account: account_address,
-                        balance_float: 20000.0,
                     },
                 )]
                 .into_iter()
