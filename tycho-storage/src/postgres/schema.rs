@@ -36,6 +36,7 @@ diesel::table! {
         valid_to -> Nullable<Timestamptz>,
         inserted_ts -> Timestamptz,
         modified_ts -> Timestamptz,
+        token_id -> Int8,
     }
 }
 
@@ -292,6 +293,7 @@ diesel::table! {
 
 diesel::joinable!(account -> chain (chain_id));
 diesel::joinable!(account_balance -> account (account_id));
+diesel::joinable!(account_balance -> token (token_id));
 diesel::joinable!(account_balance -> transaction (modify_tx));
 diesel::joinable!(block -> chain (chain_id));
 diesel::joinable!(component_balance -> protocol_component (protocol_component_id));
@@ -314,8 +316,8 @@ diesel::joinable!(protocol_component -> protocol_system (protocol_system_id));
 diesel::joinable!(protocol_component -> protocol_type (protocol_type_id));
 diesel::joinable!(protocol_component_holds_contract -> contract_code (contract_code_id));
 diesel::joinable!(protocol_component_holds_contract -> protocol_component (protocol_component_id));
-diesel::joinable!(protocol_component_holds_token -> token (token_id));
 diesel::joinable!(protocol_component_holds_token -> protocol_component (protocol_component_id));
+diesel::joinable!(protocol_component_holds_token -> token (token_id));
 diesel::joinable!(protocol_state -> protocol_component (protocol_component_id));
 diesel::joinable!(protocol_state -> transaction (modify_tx));
 diesel::joinable!(protocol_state_default -> protocol_component (protocol_component_id));
