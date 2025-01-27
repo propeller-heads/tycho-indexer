@@ -65,16 +65,3 @@ REFERENCES token(id);
 
 -- Step 5: index on token_id and account
 CREATE INDEX account_balance_account_token_id_idx ON account_balance (account_id, token_id);
-
-
--- ADD balance_float to account_balance table
-
--- Step 1: Add balance_float column
-ALTER TABLE account_balance ADD COLUMN balance_float FLOAT8;
-
--- Step 2: Update the new column by converting 'balance' bytea to float8
-UPDATE account_balance
-SET balance_float = ('x' || encode(balance, 'hex'))::bit(64)::bigint::float8;
-
--- Step 3: After populating the new column, set it to NOT NULL
-ALTER TABLE account_balance ALTER COLUMN balance_float SET NOT NULL;
