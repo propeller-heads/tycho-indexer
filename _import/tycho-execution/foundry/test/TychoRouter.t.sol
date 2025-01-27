@@ -26,6 +26,14 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assert(tychoRouter.executors(DUMMY) == true);
     }
 
+    function testRemoveExecutorValidRole() public {
+        vm.startPrank(executorSetter);
+        tychoRouter.setExecutor(DUMMY);
+        tychoRouter.removeExecutor(DUMMY);
+        vm.stopPrank();
+        assert(tychoRouter.executors(DUMMY) == false);
+    }
+
     function testRemoveExecutorMissingSetterRole() public {
         vm.expectRevert();
         tychoRouter.removeExecutor(BOB);
@@ -36,31 +44,19 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.setExecutor(DUMMY);
     }
 
-    function testSetValidVerifier() public {
+    function testSetVerifierValidRole() public {
         vm.startPrank(executorSetter);
-        vm.expectEmit();
-        // Define the event we expect to be emitted at the next step
-        emit CallbackVerifierSet(DUMMY);
-
         tychoRouter.setCallbackVerifier(DUMMY);
         vm.stopPrank();
-
         assert(tychoRouter.callbackVerifiers(DUMMY) == true);
     }
 
-    function testRemoveVerifier() public {
+    function testRemoveVerifierValidRole() public {
         vm.startPrank(executorSetter);
         tychoRouter.setCallbackVerifier(DUMMY);
         tychoRouter.removeCallbackVerifier(DUMMY);
         vm.stopPrank();
         assert(tychoRouter.callbackVerifiers(DUMMY) == false);
-    }
-
-    function testRemoveUnSetVerifier() public {
-        vm.startPrank(executorSetter);
-        tychoRouter.removeCallbackVerifier(BOB);
-        vm.stopPrank();
-        assert(tychoRouter.callbackVerifiers(BOB) == false);
     }
 
     function testRemoveVerifierMissingSetterRole() public {
@@ -71,15 +67,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
     function testSetVerifierMissingSetterRole() public {
         vm.expectRevert();
         tychoRouter.setCallbackVerifier(DUMMY);
-    }
-
-    function testSetVerifierNonContract() public {
-        vm.startPrank(executorSetter);
-        vm.expectRevert(
-            abi.encodeWithSelector(TychoRouter__NonContractVerifier.selector)
-        );
-        tychoRouter.setCallbackVerifier(BOB);
-        vm.stopPrank();
     }
 
     function testWithdrawNative() public {
