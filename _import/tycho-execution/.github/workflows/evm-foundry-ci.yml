@@ -17,17 +17,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'yarn'
-          cache-dependency-path: 'foundry/yarn.lock'
-          
-      - name: Install Dependencies
-        working-directory: foundry
-        run: yarn install --frozen-lockfile
-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
