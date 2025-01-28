@@ -28,7 +28,6 @@ contract TychoRouterExposed is TychoRouter {
 
 contract TychoRouterTestSetup is Test, Constants {
     TychoRouterExposed tychoRouter;
-    address executorSetter;
     address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     UniswapV2Executor public usv2Executor;
     MockERC20[] tokens;
@@ -39,7 +38,6 @@ contract TychoRouterTestSetup is Test, Constants {
 
         vm.startPrank(ADMIN);
         tychoRouter = new TychoRouterExposed(permit2Address, WETH_ADDR);
-        tychoRouter.grantRole(keccak256("EXECUTOR_SETTER_ROLE"), BOB);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
@@ -47,7 +45,6 @@ contract TychoRouterTestSetup is Test, Constants {
         tychoRouter.grantRole(
             keccak256("EXECUTOR_SETTER_ROLE"), EXECUTOR_SETTER
         );
-        executorSetter = BOB;
         deployDummyContract();
         vm.stopPrank();
 
@@ -118,7 +115,7 @@ contract TychoRouterTestSetup is Test, Constants {
     function signPermit2(
         IAllowanceTransfer.PermitSingle memory permit,
         uint256 privateKey
-    ) internal returns (bytes memory) {
+    ) internal view returns (bytes memory) {
         bytes32 _PERMIT_DETAILS_TYPEHASH = keccak256(
             "PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
         );

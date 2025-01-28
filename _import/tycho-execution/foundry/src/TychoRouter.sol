@@ -130,13 +130,13 @@ contract TychoRouter is
         if (wrapEth) {
             _wrapETH(amountIn);
         } else if (tokenIn != address(0)) {
-                permit2.permit(msg.sender, permitSingle, signature);
-                permit2.transferFrom(
-                    msg.sender,
-                    address(this),
-                    uint160(amountIn),
-                    permitSingle.details.token
-                );
+            permit2.permit(msg.sender, permitSingle, signature);
+            permit2.transferFrom(
+                msg.sender,
+                address(this),
+                uint160(amountIn),
+                permitSingle.details.token
+            );
         }
 
         amountOut = _splitSwap(amountIn, nTokens, swaps);

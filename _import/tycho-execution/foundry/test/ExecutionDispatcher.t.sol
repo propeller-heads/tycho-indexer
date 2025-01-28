@@ -136,7 +136,7 @@ contract ExecutionDispatcherTest is Constants {
         dispatcherExposed.exposedCallExecutor(0, data);
     }
 
-    function testDecodeExecutorAndSelector() public {
+    function testDecodeExecutorAndSelector() public view {
         bytes memory data =
             hex"6611e616d2db3244244a54c754a16dd3ac7ca7a2aabbccdd1111111111111111";
         (address executor, bytes4 selector, bytes memory protocolData) =

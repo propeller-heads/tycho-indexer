@@ -9,6 +9,7 @@ contract CallbackVerificationDispatcherExposed is
 {
     function exposedCallVerifier(bytes calldata data)
         external
+        view
         returns (
             uint256 amountOwed,
             uint256 amountReceived,
@@ -176,7 +177,7 @@ contract CallbackVerificationDispatcherTest is Constants {
         dispatcherExposed.exposedCallVerifier(data);
     }
 
-    function testDecodeVerifierAndSelector() public {
+    function testDecodeVerifierAndSelector() public view {
         bytes memory data =
             hex"2C960bD1CFE09A26105ad3C351bEa0a3fAD0F8e876b20f8aA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
         (address executor, bytes4 selector, bytes memory verifierData) =
