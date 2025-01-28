@@ -18,6 +18,7 @@ contract Constants is Test {
     // Assets
     address WETH_ADDR = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address DAI_ADDR = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    address BAL_ADDR = address(0xba100000625a3754423978a60c9317c58a424e3D);
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode

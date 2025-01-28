@@ -29,7 +29,7 @@ contract BalancerV2Executor is IExecutor {
         ) = _decodeData(data);
 
         if (needsApproval) {
-            tokenIn.approve(VAULT, type(uint256).max);
+            tokenIn.approve(VAULT, givenAmount);
         }
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
