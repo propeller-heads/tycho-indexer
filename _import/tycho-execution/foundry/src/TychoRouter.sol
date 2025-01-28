@@ -143,15 +143,12 @@ contract TychoRouter is
             );
         }
 
-        amountOut = _splitSwap(amountIn, nTokens, swaps);
+        amountOut = _swap(amountIn, nTokens, swaps);
 
         if (fee > 0) {
             uint256 feeAmount = (amountOut * fee) / 10000;
             amountOut -= feeAmount;
             IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-            if (!unwrapEth) {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
         }
 
         if (minAmountOut > 0 && amountOut < minAmountOut) {
@@ -162,14 +159,15 @@ contract TychoRouter is
             _unwrapETH(amountOut);
             // slither-disable-next-line arbitrary-send-eth
             payable(receiver).transfer(amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
     }
 
-    function _splitSwap(
-        uint256 amountIn,
-        uint256 nTokens,
-        bytes calldata swaps_
-    ) internal returns (uint256) {
+    function _swap(uint256 amountIn, uint256 nTokens, bytes calldata swaps_)
+        internal
+        returns (uint256)
+    {
         uint256 currentAmountIn;
         uint256 currentAmountOut;
         uint8 tokenInIndex;

@@ -18,16 +18,18 @@ contract TychoRouterExposed is TychoRouter {
         return _unwrapETH(amount);
     }
 
-    function splitSwap(uint256 amountIn, uint256 nTokens, bytes calldata swaps)
-        external
-        returns (uint256)
-    {
-        return _splitSwap(amountIn, nTokens, swaps);
+    function ExposedSwap(
+        uint256 amountIn,
+        uint256 nTokens,
+        bytes calldata swaps
+    ) external returns (uint256) {
+        return _swap(amountIn, nTokens, swaps);
     }
 }
 
 contract TychoRouterTestSetup is Test, Constants {
     TychoRouterExposed tychoRouter;
+    address tychoRouterAddr;
     address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     UniswapV2Executor public usv2Executor;
     MockERC20[] tokens;
@@ -38,6 +40,7 @@ contract TychoRouterTestSetup is Test, Constants {
 
         vm.startPrank(ADMIN);
         tychoRouter = new TychoRouterExposed(permit2Address, WETH_ADDR);
+        tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
@@ -98,7 +101,7 @@ contract TychoRouterTestSetup is Test, Constants {
                 expiration: uint48(block.timestamp + 1 days),
                 nonce: 0
             }),
-            spender: address(tychoRouter),
+            spender: tychoRouterAddr,
             sigDeadline: block.timestamp + 1 days
         });
 
