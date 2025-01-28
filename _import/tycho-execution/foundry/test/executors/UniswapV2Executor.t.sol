@@ -34,7 +34,6 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
     UniswapV2ExecutorExposed uniswapV2Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
-    address WETH_DAI_POOL = 0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11;
 
     function setUp() public {
         uint256 forkBlock = 17323404;
