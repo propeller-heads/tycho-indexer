@@ -50,7 +50,7 @@ contract ExecutionDispatcher {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  protocol-specific data required by the executor.
      */
-    // slither-disable-next-line dead-code
+    // slither-disable-next-line delegatecall-loop
     function _callExecutor(
         address executor,
         bytes4 selector,
@@ -62,8 +62,7 @@ contract ExecutionDispatcher {
         }
 
         selector = selector == bytes4(0) ? IExecutor.swap.selector : selector;
-
-        // slither-disable-next-line low-level-calls
+        // slither-disable-next-line controlled-delegatecall,low-level-calls
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(selector, amount, data)
         );

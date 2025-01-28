@@ -10,6 +10,7 @@ error UniswapV2Executor__InvalidDataLength();
 contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
+    // slither-disable-next-line locked-ether
     function swap(uint256 givenAmount, bytes calldata data)
         external
         payable

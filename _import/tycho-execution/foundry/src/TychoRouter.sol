@@ -7,10 +7,11 @@ import "./CallbackVerificationDispatcher.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 
 error TychoRouter__WithdrawalFailed();
@@ -22,7 +23,8 @@ contract TychoRouter is
     AccessControl,
     ExecutionDispatcher,
     CallbackVerificationDispatcher,
-    Pausable
+    Pausable,
+    ReentrancyGuard
 {
     IAllowanceTransfer public immutable permit2;
     IWETH private immutable _weth;
@@ -125,7 +127,9 @@ contract TychoRouter is
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
-    ) external payable whenNotPaused returns (uint256 amountOut) {
+    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        require(receiver != address(0), "Invalid receiver address");
+
         // For native ETH, assume funds already in our router. Else, transfer and handle approval.
         if (wrapEth) {
             _wrapETH(amountIn);
@@ -145,7 +149,7 @@ contract TychoRouter is
             uint256 feeAmount = (amountOut * fee) / 10000;
             amountOut -= feeAmount;
             IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-            if (unwrapEth == false) {
+            if (!unwrapEth) {
                 IERC20(tokenOut).safeTransfer(receiver, amountOut);
             }
         }
@@ -156,6 +160,7 @@ contract TychoRouter is
 
         if (unwrapEth) {
             _unwrapETH(amountOut);
+            // slither-disable-next-line arbitrary-send-eth
             payable(receiver).transfer(amountOut);
         }
     }
