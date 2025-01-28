@@ -29,6 +29,7 @@ contract BalancerV2Executor is IExecutor {
         ) = _decodeData(data);
 
         if (needsApproval) {
+            // slither-disable-next-line unused-return
             tokenIn.approve(VAULT, givenAmount);
         }
 
