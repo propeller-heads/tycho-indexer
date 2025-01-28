@@ -13,34 +13,5 @@ services:
     ports:
       - "5431:5432"
     shm_size: "1gb"
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL}
-    volumes:
-      - ../substreams:/app/substreams
-      - ../proto:/app/proto
-      - ./tycho-indexer:/bin/tycho-indexer
-      - ./src/runner/runner.py:/app/testing/src.py
-      - ../evm:/app/evm
-      - ./src/runner:/app/testing/src/runner
-    ports:
-      - "80:80"
-    depends_on:
-      - db
-    env_file:
-      - ".env"
-    environment:
-      - DATABASE_URL=postgres://postgres:mypassword@db:5432/tycho_indexer_0
-    command:
-      - "python"
-      - "testing/src/runner/cli.py"
-      - "--package"
-      - ${SUBSTREAMS_PACKAGE}
-      - "--tycho-logs"
-      - "--db-url"
-      - "postgres://postgres:mypassword@db:5432/tycho_indexer_0"
 volumes:
   postgres_data:
