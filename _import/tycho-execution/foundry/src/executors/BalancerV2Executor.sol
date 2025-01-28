@@ -2,10 +2,12 @@
 pragma solidity ^0.8.28;
 
 import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@balancer-labs/v2-interfaces/contracts/vault/IAsset.sol";
-import "@balancer-labs/v2-interfaces/contracts/vault/IVault.sol";
-
+import {
+    IERC20,
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IAsset} from "@balancer-labs/v2-interfaces/contracts/vault/IAsset.sol";
+import {IVault} from "@balancer-labs/v2-interfaces/contracts/vault/IVault.sol";
 
 error BalancerV2Executor__InvalidDataLength();
 
@@ -27,7 +29,7 @@ contract BalancerV2Executor is IExecutor {
         ) = _decodeData(data);
 
         if (needsApproval) {
-            tokenIn.safeApprove(VAULT, type(uint256).max);
+            tokenIn.approve(VAULT, type(uint256).max);
         }
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
@@ -48,12 +50,8 @@ contract BalancerV2Executor is IExecutor {
 
         uint256 limit = 0;
 
-        calculatedAmount = IVault(VAULT).swap(
-            singleSwap,
-            funds,
-            limit,
-            block.timestamp
-        );
+        calculatedAmount =
+            IVault(VAULT).swap(singleSwap, funds, limit, block.timestamp);
     }
 
     function _decodeData(bytes calldata data)

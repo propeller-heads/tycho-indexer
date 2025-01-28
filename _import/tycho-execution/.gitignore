@@ -31,3 +31,4 @@ target/
 # Compiler files
 foundry/cache/
 foundry/out/
+foundry/node_modules/

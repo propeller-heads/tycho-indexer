@@ -1,0 +1,9 @@
+{
+  "name": "foundry",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@balancer-labs/v2-interfaces": "^0.4.0"
+  }
+}
