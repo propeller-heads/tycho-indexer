@@ -49,6 +49,7 @@ contract CallbackVerificationDispatcher {
     // slither-disable-next-line dead-code
     function _callVerifyCallback(bytes calldata data)
         internal
+        view
         returns (
             uint256 amountOwed,
             uint256 amountReceived,

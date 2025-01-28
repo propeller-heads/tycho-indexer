@@ -8,14 +8,14 @@ import {LibPrefixLengthEncodedByteArray} from
 contract LibPrefixLengthEncodedByteArrayTest is Test {
     using LibPrefixLengthEncodedByteArray for bytes;
 
-    function testNextEmpty() public {
+    function testNextEmpty() public view {
         bytes memory encoded = "";
         (bytes memory elem, bytes memory remaining) = this.next(encoded);
         assertEq(elem.length, 0);
         assertEq(remaining.length, 0);
     }
 
-    function testNextSingleElement() public {
+    function testNextSingleElement() public view {
         // Create encoded data: length prefix (0003) followed by "ABC"
         bytes memory encoded = hex"0003414243";
         (bytes memory elem, bytes memory remaining) = this.next(encoded);
@@ -25,7 +25,7 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         assertEq(remaining.length, 0);
     }
 
-    function testNextMultipleElements() public {
+    function testNextMultipleElements() public view {
         // Encoded data: [0003]ABC[0002]DE
         bytes memory encoded = hex"000341424300024445";
 
@@ -40,7 +40,7 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         assertEq(remaining2.length, 0);
     }
 
-    function testSize() public {
+    function testSize() public view {
         bytes memory empty = "";
         assertEq(this.size(empty), 0);
 
@@ -51,19 +51,19 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         assertEq(this.size(multiple), 3);
     }
 
-    function testFailInvalidLength() public {
+    function testFailInvalidLength() public view {
         // Length prefix larger than remaining data
         bytes memory invalid = hex"0004414243";
-        (bytes memory elem, bytes memory remaining) = this.next(invalid);
+        this.next(invalid);
     }
 
-    function testFailIncompletePrefix() public {
+    function testFailIncompletePrefix() public view {
         // Only 1 byte instead of 2 bytes prefix
         bytes memory invalid = hex"01";
-        (bytes memory elem, bytes memory remaining) = this.next(invalid);
+        this.next(invalid);
     }
 
-    function testLargeElement() public {
+    function testLargeElement() public view {
         // Test with a large but manageable size (1000 bytes)
         bytes memory large = new bytes(1002); // 2 bytes prefix + 1000 bytes data
         large[0] = bytes1(uint8(0x03)); // 03
@@ -79,7 +79,7 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         assertEq(remaining.length, 0);
     }
 
-    function testSizeWithLargeElements() public {
+    function testSizeWithLargeElements() public view {
         // Two elements: 1000 bytes + 500 bytes
         bytes memory data = new bytes(1504); // 1000 + 2 + 500 + 2
 
