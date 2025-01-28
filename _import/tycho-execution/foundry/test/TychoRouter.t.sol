@@ -222,8 +222,14 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes memory protocolData =
             encodeUniswapV2Swap(WETH_ADDR, WETH_DAI_POOL, ALICE, false);
 
-        bytes memory swap =
-            encodeSwap(uint8(0), uint8(1), uint24(0), protocolData);
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv2Executor),
+            bytes4(0),
+            protocolData
+        );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
@@ -247,6 +253,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(0),
             uint8(1),
             uint24(0),
+            address(usv2Executor),
+            bytes4(0),
             encodeUniswapV2Swap(
                 WETH_ADDR, WETH_DAI_POOL, address(tychoRouter), false
             )
@@ -257,6 +265,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(1),
             uint8(2),
             uint24(0),
+            address(usv2Executor),
+            bytes4(0),
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, ALICE, true)
         );
 
@@ -282,6 +292,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(0),
             uint8(1),
             (0xffffff * 60) / 100, // 60%
+            address(usv2Executor),
+            bytes4(0),
             encodeUniswapV2Swap(
                 WETH_ADDR, WETH_WBTC_POOL, address(tychoRouter), false
             )
@@ -291,6 +303,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(1),
             uint8(2),
             uint24(0),
+            address(usv2Executor),
+            bytes4(0),
             encodeUniswapV2Swap(WBTC_ADDR, USDC_WBTC_POOL, ALICE, true)
         );
         // WETH -> DAI
@@ -298,6 +312,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(0),
             uint8(3),
             uint24(0),
+            address(usv2Executor),
+            bytes4(0),
             encodeUniswapV2Swap(
                 WETH_ADDR, WETH_DAI_POOL, address(tychoRouter), false
             )
@@ -308,6 +324,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(3),
             uint8(2),
             uint24(0),
+            address(usv2Executor),
+            bytes4(0),
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, ALICE, true)
         );
 
@@ -335,8 +353,14 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes memory protocolData =
             encodeUniswapV2Swap(WETH_ADDR, WETH_DAI_POOL, ALICE, false);
 
-        bytes memory swap =
-            encodeSwap(uint8(0), uint8(1), uint24(0), protocolData);
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv2Executor),
+            bytes4(0),
+            protocolData
+        );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
@@ -381,8 +405,14 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes memory protocolData =
             encodeUniswapV2Swap(WETH_ADDR, WETH_DAI_POOL, ALICE, false);
 
-        bytes memory swap =
-            encodeSwap(uint8(0), uint8(1), uint24(0), protocolData);
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv2Executor),
+            bytes4(0),
+            protocolData
+        );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
@@ -434,8 +464,14 @@ contract TychoRouterTest is TychoRouterTestSetup {
             WETH_ADDR, WETH_DAI_POOL, address(tychoRouter), false
         );
 
-        bytes memory swap =
-            encodeSwap(uint8(0), uint8(1), uint24(0), protocolData);
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv2Executor),
+            bytes4(0),
+            protocolData
+        );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
@@ -484,8 +520,14 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes memory protocolData =
             encodeUniswapV2Swap(WETH_ADDR, WETH_DAI_POOL, ALICE, false);
 
-        bytes memory swap =
-            encodeSwap(uint8(0), uint8(1), uint24(0), protocolData);
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv2Executor),
+            bytes4(0),
+            protocolData
+        );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
@@ -528,8 +570,14 @@ contract TychoRouterTest is TychoRouterTestSetup {
             DAI_ADDR, WETH_DAI_POOL, address(tychoRouter), true
         );
 
-        bytes memory swap =
-            encodeSwap(uint8(0), uint8(1), uint24(0), protocolData);
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv2Executor),
+            bytes4(0),
+            protocolData
+        );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 

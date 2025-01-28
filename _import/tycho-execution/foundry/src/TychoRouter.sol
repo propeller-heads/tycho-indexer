@@ -11,7 +11,7 @@ import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import {Swap} from "./Swap.sol";
+import {LibSwap} from "../lib/LibSwap.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -29,7 +29,7 @@ contract TychoRouter is
 
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
-    using Swap for bytes;
+    using LibSwap for bytes;
 
     //keccak256("NAME_OF_ROLE") : save gas on deployment
     bytes32 public constant EXECUTOR_SETTER_ROLE =
@@ -185,8 +185,12 @@ contract TychoRouter is
             currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
-            currentAmountOut =
-                _callExecutor(currentAmountIn, swapData.protocolData());
+            currentAmountOut = _callExecutor(
+                swapData.executor(),
+                swapData.executorSelector(),
+                currentAmountIn,
+                swapData.protocolData()
+            );
             amounts[tokenOutIndex] += currentAmountOut;
             remainingAmounts[tokenOutIndex] += currentAmountOut;
             remainingAmounts[tokenInIndex] -= currentAmountIn;

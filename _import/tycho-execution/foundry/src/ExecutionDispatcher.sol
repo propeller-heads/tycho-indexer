@@ -51,28 +51,21 @@ contract ExecutionDispatcher {
      *  protocol-specific data required by the executor.
      */
     // slither-disable-next-line dead-code
-    function _callExecutor(uint256 amount, bytes calldata data)
-        internal
-        returns (uint256 calculatedAmount)
-    {
-        address executor;
-        bytes4 decodedSelector;
-        bytes memory protocolData;
-
-        (executor, decodedSelector, protocolData) =
-            _decodeExecutorAndSelector(data);
-
+    function _callExecutor(
+        address executor,
+        bytes4 selector,
+        uint256 amount,
+        bytes calldata data
+    ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
             revert ExecutionDispatcher__UnapprovedExecutor();
         }
 
-        bytes4 selector = decodedSelector == bytes4(0)
-            ? IExecutor.swap.selector
-            : decodedSelector;
+        selector = selector == bytes4(0) ? IExecutor.swap.selector : selector;
 
         // slither-disable-next-line low-level-calls
         (bool success, bytes memory result) = executor.delegatecall(
-            abi.encodeWithSelector(selector, amount, protocolData)
+            abi.encodeWithSelector(selector, amount, data)
         );
 
         if (!success) {
@@ -86,17 +79,5 @@ contract ExecutionDispatcher {
         }
 
         calculatedAmount = abi.decode(result, (uint256));
-    }
-
-    // slither-disable-next-line dead-code
-    function _decodeExecutorAndSelector(bytes calldata data)
-        internal
-        pure
-        returns (address executor, bytes4 selector, bytes memory protocolData)
-    {
-        require(data.length >= 24, "Invalid data length");
-        executor = address(uint160(bytes20(data[:20])));
-        selector = bytes4(data[20:24]);
-        protocolData = data[24:];
     }
 }

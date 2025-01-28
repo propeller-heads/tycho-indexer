@@ -167,10 +167,13 @@ contract TychoRouterTestSetup is Test, Constants {
         uint8 tokenInIndex,
         uint8 tokenOutIndex,
         uint24 split,
+        address executor,
+        bytes4 selector,
         bytes memory protocolData
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(tokenInIndex, tokenOutIndex, split, protocolData);
+        return abi.encodePacked(
+            tokenInIndex, tokenOutIndex, split, executor, selector, protocolData
+        );
     }
 
     function encodeUniswapV2Swap(
@@ -178,9 +181,7 @@ contract TychoRouterTestSetup is Test, Constants {
         address target,
         address receiver,
         bool zero2one
-    ) internal view returns (bytes memory) {
-        return abi.encodePacked(
-            usv2Executor, bytes4(0), tokenIn, target, receiver, zero2one
-        );
+    ) internal pure returns (bytes memory) {
+        return abi.encodePacked(tokenIn, target, receiver, zero2one);
     }
 }
