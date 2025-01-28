@@ -9,8 +9,7 @@ optimizer_runs = 1000
 via_ir = true
 
 [rpc_endpoints]
-# Public RPC endpoint
-mainnet = "https://eth.llamarpc.com"
+mainnet = "${RPC_URL}"
 
 
 [fmt]

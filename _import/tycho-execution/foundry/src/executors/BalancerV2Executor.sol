@@ -18,6 +18,7 @@ contract BalancerV2Executor is IExecutor {
 
     function swap(uint256 givenAmount, bytes calldata data)
         external
+        payable
         returns (uint256 calculatedAmount)
     {
         (
