@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use alloy::hex::decode;
+
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
 
