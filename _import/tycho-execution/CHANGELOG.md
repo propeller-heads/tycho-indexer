@@ -1,3 +1,27 @@
+## [0.21.0](https://github.com/propeller-heads/tycho-execution/compare/0.20.0...0.21.0) (2025-01-28)
+
+
+### Features
+
+* add balancer v2 executor ([a700189](https://github.com/propeller-heads/tycho-execution/commit/a700189aaf8364a55e9625c807191232663eeff8))
+* add node.js workflow ([25756ff](https://github.com/propeller-heads/tycho-execution/commit/25756fffdde57ba49985006702eee219cddeb262))
+* add tests for Balancer V2 executor ([a4e405f](https://github.com/propeller-heads/tycho-execution/commit/a4e405fb7541c96445e820db4bd48110801ad940))
+* approve max ([cb6d165](https://github.com/propeller-heads/tycho-execution/commit/cb6d165e7f901ee16a8848361a22bcb613b83c69))
+* update remappings and remove node modules ([b65b682](https://github.com/propeller-heads/tycho-execution/commit/b65b682e8db4950fc9886dc00f2d76f6239447a8))
+
+
+### Bug Fixes
+
+* balancer v2 encoder bug ([a6a624b](https://github.com/propeller-heads/tycho-execution/commit/a6a624b740c8260f63caa46707d3ffb04cc6fca2))
+* build ([5dc5e23](https://github.com/propeller-heads/tycho-execution/commit/5dc5e23239dd01c5cde5740c1d8f7a914103d54b))
+* ci ([b1ca478](https://github.com/propeller-heads/tycho-execution/commit/b1ca4782941699c548c0d6c2b3aa60711598780f))
+* clippy ([877f625](https://github.com/propeller-heads/tycho-execution/commit/877f625efc307eb902f65fcf2e1b9a052204d8f3))
+* exclude node modules from slither ([4b3c5c5](https://github.com/propeller-heads/tycho-execution/commit/4b3c5c5005e52f53b4a21f28c80b46f7c409ee01))
+* filter paths slither ([6c30cf8](https://github.com/propeller-heads/tycho-execution/commit/6c30cf8f66c7e5b95f3d216c2a3408e34886a852))
+* rm exactOut ([44db2e5](https://github.com/propeller-heads/tycho-execution/commit/44db2e52b31bbc208325e99f86b7ebad05be65ce))
+* slither ([b854282](https://github.com/propeller-heads/tycho-execution/commit/b85428212a40b7cb0d31fb57027675f7e6a5cf6f))
+* slither ([7a83edd](https://github.com/propeller-heads/tycho-execution/commit/7a83eddc92333638247a61acd1154eb65a510467))
+
 ## [0.20.0](https://github.com/propeller-heads/tycho-execution/compare/0.19.0...0.20.0) (2025-01-28)
 
 
