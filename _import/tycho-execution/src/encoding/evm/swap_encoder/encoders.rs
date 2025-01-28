@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
-use alloy::hex::decode;
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
-use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -37,28 +35,17 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
 
-        let zero_for_one = Self::get_zero_to_one(token_in_address, token_out_address);
-        let component_id = Bytes::from(
-            decode(
-                swap.component
-                    .id
-                    .trim_start_matches("0x"),
-            )
-            .map_err(|_| {
-                EncodingError::FatalError(format!(
-                    "Failed to parse component id for Uniswap v2: {}",
-                    swap.component.id
-                ))
-            })?,
-        );
+        let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
+        let component_id = Address::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid USV2 component id".to_string()))?;
 
         // Token in address is always needed to perform a manual transfer from the router,
         // since no optimizations are performed that send from one pool to the next
         let args = (
             token_in_address,
-            bytes_to_address(&component_id)?,
+            component_id,
             bytes_to_address(&encoding_context.receiver)?,
-            zero_for_one,
+            zero_to_one,
             encoding_context.exact_out,
         );
 
@@ -93,20 +80,9 @@ impl SwapEncoder for UniswapV3SwapEncoder {
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
 
-        let zero_for_one = Self::get_zero_to_one(token_in_address, token_out_address);
-        let component_id = Bytes::from(
-            decode(
-                swap.component
-                    .id
-                    .trim_start_matches("0x"),
-            )
-            .map_err(|_| {
-                EncodingError::FatalError(format!(
-                    "Failed to parse component id for Uniswap v3: {}",
-                    swap.component.id
-                ))
-            })?,
-        );
+        let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
+        let component_id = Address::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid USV3 component id".to_string()))?;
         let mut pool_fee_bytes = swap
             .component
             .static_attributes
@@ -135,8 +111,8 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             token_out_address,
             pool_fee_u24,
             bytes_to_address(&encoding_context.receiver)?,
-            bytes_to_address(&component_id)?,
-            zero_for_one,
+            component_id,
+            zero_to_one,
             encoding_context.exact_out,
         );
 
@@ -239,8 +215,8 @@ mod tests {
             ))
         );
     }
-    #[tokio::test]
-    async fn test_encode_uniswap_v3() {
+    #[test]
+    fn test_encode_uniswap_v3() {
         let encoded_pool_fee: [u8; 4] = 500u32.to_le_bytes();
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
         static_attributes.insert("pool_fee".into(), Bytes::from(encoded_pool_fee[..3].to_vec()));
