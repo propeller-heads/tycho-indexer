@@ -20,7 +20,7 @@ contract TychoRouterExposed is TychoRouter {
         return _unwrapETH(amount);
     }
 
-    function ExposedSwap(
+    function exposedSwap(
         uint256 amountIn,
         uint256 nTokens,
         bytes calldata swaps

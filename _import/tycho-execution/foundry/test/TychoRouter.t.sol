@@ -234,7 +234,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
-        tychoRouter.ExposedSwap(amountIn, 2, pleEncode(swaps));
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
 
         uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(tychoRouterAddr);
         assertEq(daiBalance, 2630432278145144658455);
@@ -271,7 +271,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
 
-        tychoRouter.ExposedSwap(amountIn, 3, pleEncode(swaps));
+        tychoRouter.exposedSwap(amountIn, 3, pleEncode(swaps));
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(tychoRouterAddr);
         assertEq(usdcBalance, 2610580090);
@@ -332,7 +332,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
 
-        tychoRouter.ExposedSwap(amountIn, 4, pleEncode(swaps));
+        tychoRouter.exposedSwap(amountIn, 4, pleEncode(swaps));
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(tychoRouterAddr);
         assertEq(usdcBalance, 2581503157);
