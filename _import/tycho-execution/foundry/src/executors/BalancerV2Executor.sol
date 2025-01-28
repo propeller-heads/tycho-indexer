@@ -18,32 +18,27 @@ contract BalancerV2Executor is IExecutor {
         external
         returns (uint256 calculatedAmount)
     {
-      
         (
             IERC20 tokenIn,
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool exactOut,
             bool needsApproval
         ) = _decodeData(data);
 
-      
         if (needsApproval) {
             tokenIn.safeApprove(VAULT, type(uint256).max);
         }
 
-     
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
             poolId: poolId,
-            kind: exactOut ? IVault.SwapKind.GIVEN_OUT : IVault.SwapKind.GIVEN_IN,
+            kind: IVault.SwapKind.GIVEN_IN,
             assetIn: IAsset(address(tokenIn)),
             assetOut: IAsset(address(tokenOut)),
             amount: givenAmount,
             userData: ""
         });
 
-      
         IVault.FundManagement memory funds = IVault.FundManagement({
             sender: address(this),
             fromInternalBalance: false,
@@ -51,10 +46,8 @@ contract BalancerV2Executor is IExecutor {
             toInternalBalance: false
         });
 
-        
-        uint256 limit = exactOut ? type(uint256).max : 0;
+        uint256 limit = 0;
 
-     
         calculatedAmount = IVault(VAULT).swap(
             singleSwap,
             funds,
@@ -71,21 +64,17 @@ contract BalancerV2Executor is IExecutor {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool exactOut,
             bool needsApproval
         )
     {
-        // Verify data length (20 + 20 + 32 + 20 + 1 + 1 = 94 bytes)
-        if (data.length != 94) {
+        if (data.length != 93) {
             revert BalancerV2Executor__InvalidDataLength();
         }
-
 
         tokenIn = IERC20(address(bytes20(data[0:20])));
         tokenOut = IERC20(address(bytes20(data[20:40])));
         poolId = bytes32(data[40:72]);
         receiver = address(bytes20(data[72:92]));
-        exactOut = uint8(data[92]) > 0;
-        needsApproval = uint8(data[93]) > 0;
+        needsApproval = uint8(data[92]) > 0;
     }
 }
