@@ -6,7 +6,9 @@ import {
     IERC20,
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+// slither-disable-next-line solc-version
 import {IAsset} from "@balancer-labs/v2-interfaces/contracts/vault/IAsset.sol";
+// slither-disable-next-line solc-version
 import {IVault} from "@balancer-labs/v2-interfaces/contracts/vault/IVault.sol";
 
 error BalancerV2Executor__InvalidDataLength();
@@ -16,6 +18,7 @@ contract BalancerV2Executor is IExecutor {
 
     address private constant VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
+    // slither-disable-next-line locked-ether
     function swap(uint256 givenAmount, bytes calldata data)
         external
         payable
