@@ -1,3 +1,21 @@
+## [0.20.0](https://github.com/propeller-heads/tycho-execution/compare/0.19.0...0.20.0) (2025-01-28)
+
+
+### Features
+
+* Add executor and selector to Swap ([c2347ac](https://github.com/propeller-heads/tycho-execution/commit/c2347ac79ec670615de5f6b90982670d9bb739ed))
+* Add swap method (first attempt) ([a8f6fc1](https://github.com/propeller-heads/tycho-execution/commit/a8f6fc1eeca8b3fcb0a5786ea538bf3fb087c111))
+* Add swap method with tests ([50429ad](https://github.com/propeller-heads/tycho-execution/commit/50429ad05cc86bf3816fe2e4b67725cec72519f8))
+* Assume that funds will never go straight from a pool to the receiver ([655cf91](https://github.com/propeller-heads/tycho-execution/commit/655cf91984fb568c5ff02efd498d093155c4e33d))
+* Smother slither and add a reentrancy guard in swap() ([dfa7033](https://github.com/propeller-heads/tycho-execution/commit/dfa7033d2e1aa2f2845335d29d6142cc9a7ac5f1))
+* Wrap and unwrap ETH ([3b2d9fc](https://github.com/propeller-heads/tycho-execution/commit/3b2d9fcbdff00be8015c1c70a20687677bf4b22c))
+
+
+### Bug Fixes
+
+* fix submodules ([0a1f522](https://github.com/propeller-heads/tycho-execution/commit/0a1f5222076f20496b520aee64999507a343b0b3))
+* Remove checkMinAmount ([d8de65a](https://github.com/propeller-heads/tycho-execution/commit/d8de65aedf459e34911f80da4dc6e44da93aa807))
+
 ## [0.19.0](https://github.com/propeller-heads/tycho-execution/compare/0.18.0...0.19.0) (2025-01-28)
 
 
