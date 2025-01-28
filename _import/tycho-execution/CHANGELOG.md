@@ -1,3 +1,10 @@
+## [0.19.0](https://github.com/propeller-heads/tycho-execution/compare/0.18.0...0.19.0) (2025-01-28)
+
+
+### Features
+
+* UniswapV3SwapEncoder ([9c63e09](https://github.com/propeller-heads/tycho-execution/commit/9c63e099a9ba90b46768a6dfd192bcdd651f7f22)), closes [/github.com/propeller-heads/tycho-protocol-sdk/blob/3c08359cf112e15c137dd5256b8dc8e9cd6c1626/substreams/ethereum-uniswap-v3/src/modules/1_map_pool_created.rs#L64](https://github.com/propeller-heads//github.com/propeller-heads/tycho-protocol-sdk/blob/3c08359cf112e15c137dd5256b8dc8e9cd6c1626/substreams/ethereum-uniswap-v3/src/modules/1_map_pool_created.rs/issues/L64)
+
 ## [0.18.0](https://github.com/propeller-heads/tycho-execution/compare/0.17.0...0.18.0) (2025-01-27)
 
 
