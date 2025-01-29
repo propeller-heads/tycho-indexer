@@ -79,7 +79,17 @@ contract TychoRouter is
      *  caller is not a pool.
      */
     fallback() external {
-        // TODO execute generic callback
+        _executeGenericCallback(msg.data);
+    }
+
+    /**
+     * @dev Check if the sender is correct and executes callback actions.
+     *  @param msgData encoded data. It must includes data for the verification.
+     */
+    function _executeGenericCallback(bytes calldata msgData) internal {
+        (uint256 amountOwed, address tokenOwed) = _callVerifyCallback(msgData);
+
+        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
     }
 
     /**

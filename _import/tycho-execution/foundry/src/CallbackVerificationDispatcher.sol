@@ -50,12 +50,7 @@ contract CallbackVerificationDispatcher {
     function _callVerifyCallback(bytes calldata data)
         internal
         view
-        returns (
-            uint256 amountOwed,
-            uint256 amountReceived,
-            address tokenOwed,
-            uint16 dataOffset
-        )
+        returns (uint256 amountOwed, address tokenOwed)
     {
         address verifier;
         bytes4 decodedSelector;
@@ -87,8 +82,7 @@ contract CallbackVerificationDispatcher {
             }
         }
 
-        (amountOwed, amountReceived, tokenOwed, dataOffset) =
-            abi.decode(result, (uint256, uint256, address, uint16));
+        (amountOwed, tokenOwed) = abi.decode(result, (uint256, address));
     }
 
     // slither-disable-next-line dead-code

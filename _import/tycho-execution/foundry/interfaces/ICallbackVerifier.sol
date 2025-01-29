@@ -11,8 +11,6 @@ interface ICallbackVerifier {
         external
         returns (
             uint256 amountOwed,
-            uint256 amountReceived,
-            address tokenOwed,
-            uint16 dataOffset
+            address tokenOwed
         );
 }
