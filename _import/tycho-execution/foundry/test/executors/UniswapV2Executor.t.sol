@@ -107,4 +107,16 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         assertEq(receiver, 0x0000000000000000000000000000000000000001);
         assertEq(zeroForOne, false);
     }
+
+    function testSwapExecutorSwap() public {
+        bytes memory protocolData =
+            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a478c2975ab1ea89e8196811f51a7b7ade33eb111d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e0000";
+        uint256 amountIn = 10 ** 18;
+        uint256 amountOut = 1847751195973566072891;
+        deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
+        uniswapV2Exposed.swap(amountIn, protocolData);
+
+        uint256 finalBalance = DAI.balanceOf(BOB);
+        assertGe(finalBalance, amountOut);
+    }
 }

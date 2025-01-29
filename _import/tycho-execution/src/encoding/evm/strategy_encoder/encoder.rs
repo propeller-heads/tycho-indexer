@@ -97,7 +97,7 @@ mod tests {
 
         let swap = Swap {
             component: ProtocolComponent {
-                id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(),
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
@@ -114,7 +114,7 @@ mod tests {
             checked_token: token_out,
             check_amount: None,
             sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-            receiver: Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap],
             straight_to_pool: true,
             router_address: Some(Bytes::zero(20)),
@@ -137,9 +137,9 @@ mod tests {
                 // in token
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // component id
-                "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+                "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
                 // receiver
-                "0000000000000000000000000000000000000001",
+                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // zero for one
                 "00",
                 // exact out
