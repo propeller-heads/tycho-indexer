@@ -635,38 +635,47 @@ async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
 
     // Ensure chains and their native tokens exist
     for chain in chains {
-        let chain_id: i64 = diesel::insert_into(schema::chain::table)
+        let chain_id_res: Result<i64, _> = diesel::insert_into(schema::chain::table)
             .values(schema::chain::name.eq(chain.to_string()))
             .on_conflict_do_nothing()
             .returning(schema::chain::id)
             .get_result(&mut conn)
-            .await
-            .expect("Could not ensure chain enum's in database");
+            .await;
 
-        let token = chain.native_token();
-        let account_id: i64 = diesel::insert_into(schema::account::table)
-            .values((
-                schema::account::chain_id.eq(chain_id),
-                schema::account::title.eq(format!("{}_{}", token.symbol, token.address)),
-                schema::account::address.eq(token.address.as_ref()),
-            ))
-            .on_conflict_do_nothing()
-            .returning(schema::account::id)
-            .get_result(&mut conn)
-            .await
-            .expect("Could not ensure native token's account in database");
-        diesel::insert_into(schema::token::table)
-            .values((
-                schema::token::account_id.eq(account_id),
-                schema::token::symbol.eq(token.symbol),
-                schema::token::decimals.eq(token.decimals as i32),
-                schema::token::gas.eq(Vec::<Option<i64>>::new()),
-                schema::token::quality.eq(100),
-            ))
-            .on_conflict_do_nothing()
-            .execute(&mut conn)
-            .await
-            .expect("Could not ensure native token in database");
+        match chain_id_res {
+            Ok(chain_id) => {
+                let token = chain.native_token();
+                let account_id: i64 = diesel::insert_into(schema::account::table)
+                    .values((
+                        schema::account::chain_id.eq(chain_id),
+                        schema::account::title.eq(format!("{}_{}", token.symbol, token.address)),
+                        schema::account::address.eq(token.address.as_ref()),
+                    ))
+                    .on_conflict_do_nothing()
+                    .returning(schema::account::id)
+                    .get_result(&mut conn)
+                    .await
+                    .expect("Could not ensure native token's account in database");
+                diesel::insert_into(schema::token::table)
+                    .values((
+                        schema::token::account_id.eq(account_id),
+                        schema::token::symbol.eq(token.symbol),
+                        schema::token::decimals.eq(token.decimals as i32),
+                        schema::token::gas.eq(Vec::<Option<i64>>::new()),
+                        schema::token::quality.eq(100),
+                    ))
+                    .on_conflict_do_nothing()
+                    .execute(&mut conn)
+                    .await
+                    .expect("Could not ensure native token in database");
+            }
+            Err(diesel::result::Error::NotFound) => {
+                continue;
+            }
+            Err(err) => {
+                panic!("Could not ensure chain enum in database: {}", err);
+            }
+        }
     }
 
     debug!("Ensured chain enum and native token presence for: {:?}", chains);
