@@ -2325,7 +2325,7 @@ mod test_serial_db {
                 .await
                 .unwrap()
                 .entity;
-            assert_eq!(tokens.len(), 2);
+            assert_eq!(tokens.len(), 3);
 
             let protocol_components = cached_gw
                 .get_protocol_components(&Chain::Ethereum, None, None, None, None)
