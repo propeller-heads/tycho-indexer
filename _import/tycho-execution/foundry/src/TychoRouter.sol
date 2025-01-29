@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
@@ -59,10 +60,17 @@ contract TychoRouter is
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
-    constructor(address _permit2, address weth) {
+    address private immutable _usv3Factory;
+
+    constructor(address _permit2, address weth, address usv3Factory) {
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _weth = IWETH(weth);
+
+        if (usv3Factory == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
+        _usv3Factory = usv3Factory;
     }
 
     /**
@@ -128,7 +136,9 @@ contract TychoRouter is
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        require(receiver != address(0), "Invalid receiver address");
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
 
         // For native ETH, assume funds already in our router. Else, transfer and handle approval.
         if (wrapEth) {
@@ -170,8 +180,8 @@ contract TychoRouter is
     {
         uint256 currentAmountIn;
         uint256 currentAmountOut;
-        uint8 tokenInIndex;
-        uint8 tokenOutIndex;
+        uint8 tokenInIndex = 0;
+        uint8 tokenOutIndex = 0;
         uint24 split;
         bytes calldata swapData;
 
@@ -340,4 +350,38 @@ contract TychoRouter is
      * @dev Allows this contract to receive native token
      */
     receive() external payable {}
+
+    /**
+     * @dev Called by UniswapV3 pool when swapping on it.
+     * See in IUniswapV3SwapCallback for documentation.
+     */
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata msgData
+    ) external {
+        (uint256 amountOwed, address tokenOwed) =
+            _verifyUSV3Callback(amount0Delta, amount1Delta, msgData);
+        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
+    }
+
+    function _verifyUSV3Callback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) internal view returns (uint256 amountOwed, address tokenOwed) {
+        address tokenIn = address(bytes20(data[0:20]));
+        address tokenOut = address(bytes20(data[20:40]));
+        uint24 poolFee = uint24(bytes3(data[40:43]));
+
+        // slither-disable-next-line unused-return
+        CallbackValidationV2.verifyCallback(
+            _usv3Factory, tokenIn, tokenOut, poolFee
+        );
+
+        amountOwed =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+
+        return (amountOwed, tokenOwed);
+    }
 }

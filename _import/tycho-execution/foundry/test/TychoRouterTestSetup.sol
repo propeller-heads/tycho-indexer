@@ -8,7 +8,9 @@ import "@src/TychoRouter.sol";
 import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
+    constructor(address _permit2, address weth, address usv3Factory)
+        TychoRouter(_permit2, weth, usv3Factory)
+    {}
 
     function wrapETH(uint256 amount) external payable {
         return _wrapETH(amount);
@@ -39,7 +41,8 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);
-        tychoRouter = new TychoRouterExposed(permit2Address, WETH_ADDR);
+        tychoRouter =
+            new TychoRouterExposed(permit2Address, WETH_ADDR, address(1));
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
