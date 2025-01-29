@@ -42,7 +42,7 @@ contract TychoRouterTestSetup is Test, Constants {
 
         vm.startPrank(ADMIN);
         tychoRouter =
-            new TychoRouterExposed(permit2Address, WETH_ADDR, address(0));
+            new TychoRouterExposed(permit2Address, WETH_ADDR, address(1));
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);

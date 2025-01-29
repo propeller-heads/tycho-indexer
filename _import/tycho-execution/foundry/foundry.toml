@@ -3,6 +3,7 @@ src = 'src'
 out = 'out'
 libs = ['lib']
 solc = "0.8.28"
+auto_detect_solc = true    # Allows per-file version detection
 evm_version = 'shanghai'
 optimizer = true
 optimizer_runs = 1000

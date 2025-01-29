@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
@@ -65,6 +66,10 @@ contract TychoRouter is
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _weth = IWETH(weth);
+
+        if (usv3Factory == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
         _usv3Factory = usv3Factory;
     }
 
@@ -131,7 +136,9 @@ contract TychoRouter is
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        require(receiver != address(0), "Invalid receiver address");
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
 
         // For native ETH, assume funds already in our router. Else, transfer and handle approval.
         if (wrapEth) {
@@ -173,8 +180,8 @@ contract TychoRouter is
     {
         uint256 currentAmountIn;
         uint256 currentAmountOut;
-        uint8 tokenInIndex;
-        uint8 tokenOutIndex;
+        uint8 tokenInIndex = 0;
+        uint8 tokenOutIndex = 0;
         uint24 split;
         bytes calldata swapData;
 
@@ -362,17 +369,14 @@ contract TychoRouter is
         int256 amount0Delta,
         int256 amount1Delta,
         bytes calldata data
-    )
-        internal
-        pure
-        returns (uint256 amountOwed, address tokenOwed)
-    {
+    ) internal view returns (uint256 amountOwed, address tokenOwed) {
         address tokenIn = address(bytes20(data[0:20]));
         address tokenOut = address(bytes20(data[20:40]));
-        uint24 fee = uint24(bytes3(data[40:43]));
+        uint24 poolFee = uint24(bytes3(data[40:43]));
 
+        // slither-disable-next-line unused-return
         CallbackValidationV2.verifyCallback(
-            _usv3Factory, tokenIn, tokenOut, fee
+            _usv3Factory, tokenIn, tokenOut, poolFee
         );
 
         amountOwed =

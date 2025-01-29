@@ -13,3 +13,6 @@
 [submodule "foundry/lib/balancer-v2-monorepo"]
 	path = foundry/lib/balancer-v2-monorepo
 	url = https://github.com/balancer/balancer-v2-monorepo
+[submodule "foundry/lib/v3-core"]
+	path = foundry/lib/v3-core
+	url = https://github.com/Uniswap/v3-core
