@@ -92,18 +92,17 @@ mod tests {
         let encoder = ExecutorEncoder {};
 
         let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-        let token_out = Bytes::from("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174");
+        let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
 
         let swap = Swap {
             component: ProtocolComponent {
-                id: "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"
-                    .to_string(),
-                protocol_system: "vm:balancer_v2".to_string(),
+                id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
             token_in: token_in.clone(),
             token_out: token_out.clone(),
-            split: 0.5,
+            split: 0f64,
         };
 
         let solution = Solution {
@@ -114,12 +113,10 @@ mod tests {
             checked_token: token_out,
             check_amount: None,
             sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-            receiver: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+            receiver: Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             swaps: vec![swap],
             straight_to_pool: true,
-            router_address: Some(
-                Bytes::from_str("0x0000000000000000000000000000000000000002").unwrap(),
-            ),
+            router_address: Some(Bytes::zero(20)),
             slippage: None,
             native_action: None,
         };
@@ -129,7 +126,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             executor_address,
-            Address::from_str("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4").unwrap()
+            Address::from_str("0x5c2f5a71f67c01775180adc06909288b4c329308").unwrap()
         );
     }
 }
