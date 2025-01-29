@@ -287,6 +287,15 @@ mod test {
 
     async fn setup_data(conn: &mut AsyncPgConnection) {
         let chain_id: i64 = db_fixtures::insert_chain(conn, "ethereum").await;
+        db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let block_ids = db_fixtures::insert_blocks(conn, chain_id).await;
         db_fixtures::insert_txns(
             conn,
