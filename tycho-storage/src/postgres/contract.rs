@@ -1409,13 +1409,14 @@ impl PostgresGateway {
 /// The tests below test the functionality using the concrete EVM types.
 #[cfg(test)]
 mod test {
+    use diesel_async::AsyncConnection;
+    use rstest::rstest;
+    use std::{str::FromStr, time::Duration};
+
     use crate::postgres::{
         db_fixtures,
         db_fixtures::{yesterday_midnight, yesterday_one_am},
     };
-    use diesel_async::AsyncConnection;
-    use rstest::rstest;
-    use std::{str::FromStr, time::Duration};
     use tycho_core::{
         storage::{BlockIdentifier, VersionKind},
         Bytes,
@@ -1886,6 +1887,15 @@ mod test {
     async fn test_insert_contract() {
         let mut conn = setup_db().await;
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let gateway = EvmGateway::from_connection(&mut conn).await;
         let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
         db_fixtures::insert_txns(
@@ -2143,6 +2153,15 @@ mod test {
     async fn test_upsert_slots_against_empty_db() {
         let mut conn = setup_db().await;
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
         let txn = db_fixtures::insert_txns(
             &mut conn,
@@ -2226,6 +2245,15 @@ mod test {
     async fn test_upsert_slots_invalidate_db_side_records() {
         let mut conn = setup_db().await;
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
         let ts = db_fixtures::yesterday_midnight();
         let txn = db_fixtures::insert_txns(
@@ -2298,6 +2326,15 @@ mod test {
 
     async fn setup_slots_delta(conn: &mut AsyncPgConnection) {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
+        db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
         let ts = db_fixtures::yesterday_midnight();
         let ts_p1 = db_fixtures::yesterday_one_am();

@@ -1793,8 +1793,35 @@ mod test {
     /// at each version.
     async fn setup_data(conn: &mut AsyncPgConnection) -> Vec<String> {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
+        db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let chain_id_sn = db_fixtures::insert_chain(conn, "starknet").await;
+        db_fixtures::insert_token(
+            conn,
+            chain_id_sn,
+            "04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
+            "SRK",
+            18,
+            Some(100),
+        )
+        .await;
         let chain_id_zk = db_fixtures::insert_chain(conn, "zksync").await;
+        db_fixtures::insert_token(
+            conn,
+            chain_id_zk,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
         let tx_hashes = [
             "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
@@ -2788,7 +2815,7 @@ mod test {
             .await
             .unwrap()
             .entity;
-        assert_eq!(tokens.len(), 4);
+        assert_eq!(tokens.len(), 5);
 
         // get weth and usdc
         let tokens = gw
@@ -2835,7 +2862,7 @@ mod test {
             .await
             .unwrap();
         assert_eq!(result.entity.len(), 1);
-        assert_eq!(result.total, Some(4));
+        assert_eq!(result.total, Some(5));
 
         let first_token_symbol = result.entity[0].symbol.clone();
 
@@ -2852,7 +2879,7 @@ mod test {
             .await
             .unwrap();
         assert_eq!(result.entity.len(), 0);
-        assert_eq!(result.total, Some(4));
+        assert_eq!(result.total, Some(5));
 
         // get tokens skipping page
         let result = gw
@@ -2867,7 +2894,7 @@ mod test {
             .await
             .unwrap();
         assert_eq!(result.entity.len(), 1);
-        assert_eq!(result.total, Some(4));
+        assert_eq!(result.total, Some(5));
         assert_ne!(result.entity[0].symbol, first_token_symbol);
     }
 
@@ -2883,7 +2910,7 @@ mod test {
             .unwrap()
             .entity;
 
-        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens.len(), 2);
         let expected_token = models::token::CurrencyToken::new(
             &ZKSYNC_PEPE.parse().unwrap(),
             "PEPE",
@@ -2894,7 +2921,7 @@ mod test {
             0,
         );
 
-        assert_eq!(tokens[0], expected_token);
+        assert_eq!(tokens[1], expected_token);
     }
 
     #[tokio::test]
@@ -2909,7 +2936,7 @@ mod test {
             .unwrap()
             .entity;
 
-        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens.len(), 2);
 
         let expected_token = models::token::CurrencyToken::new(
             &DAI.parse().unwrap(),
@@ -2921,7 +2948,7 @@ mod test {
             100,
         );
 
-        assert_eq!(tokens[0], expected_token);
+        assert_eq!(tokens[1], expected_token);
     }
 
     #[tokio::test]

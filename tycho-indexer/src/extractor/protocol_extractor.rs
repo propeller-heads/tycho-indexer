@@ -1952,6 +1952,15 @@ mod test_serial_db {
             .await
             .expect("pool should get a connection");
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
 
         match implementation_type {
             ImplementationType::Custom => {
