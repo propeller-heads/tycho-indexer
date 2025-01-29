@@ -7,3 +7,6 @@
 [submodule "foundry/lib/v2-core"]
 	path = foundry/lib/v2-core
 	url = https://github.com/uniswap/v2-core
+[submodule "foundry/lib/v3-periphery"]
+	path = foundry/lib/v3-periphery
+	url = https://github.com/Uniswap/v3-periphery
