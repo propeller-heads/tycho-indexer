@@ -17,7 +17,7 @@ use tycho_core::{
     models::{
         self,
         blockchain::{Block, Transaction},
-        contract::{Account, AccountDelta},
+        contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
@@ -49,6 +49,8 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpdateContracts(Vec<(TxHash, models::contract::AccountDelta)>),
     // Simply merge
+    InsertAccountBalances(Vec<models::contract::AccountBalance>),
+    // Simply merge
     InsertProtocolComponents(Vec<models::protocol::ProtocolComponent>),
     // Simply merge
     InsertTokens(Vec<models::token::CurrencyToken>),
@@ -69,6 +71,7 @@ impl WriteOp {
             WriteOp::SaveExtractionState(_) => "SaveExtractionState",
             WriteOp::UpsertContract(_) => "UpsertContract",
             WriteOp::UpdateContracts(_) => "UpdateContracts",
+            WriteOp::InsertAccountBalances(_) => "InsertAccountBalances",
             WriteOp::InsertProtocolComponents(_) => "InsertProtocolComponents",
             WriteOp::InsertTokens(_) => "InsertTokens",
             WriteOp::UpdateTokens(_) => "UpdateTokens",
@@ -85,10 +88,11 @@ impl WriteOp {
             WriteOp::UpdateContracts(_) => 3,
             WriteOp::InsertTokens(_) => 4,
             WriteOp::UpdateTokens(_) => 5,
-            WriteOp::InsertProtocolComponents(_) => 6,
-            WriteOp::InsertComponentBalances(_) => 7,
-            WriteOp::UpsertProtocolState(_) => 8,
-            WriteOp::SaveExtractionState(_) => 9,
+            WriteOp::InsertAccountBalances(_) => 6,
+            WriteOp::InsertProtocolComponents(_) => 7,
+            WriteOp::InsertComponentBalances(_) => 8,
+            WriteOp::UpsertProtocolState(_) => 9,
+            WriteOp::SaveExtractionState(_) => 10,
         }
     }
 }
@@ -156,6 +160,11 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (WriteOp::UpdateContracts(l), WriteOp::UpdateContracts(r)) => {
+                    self.size += r.len();
+                    l.extend(r.iter().cloned());
+                    return Ok(());
+                }
+                (WriteOp::InsertAccountBalances(l), WriteOp::InsertAccountBalances(r)) => {
                     self.size += r.len();
                     l.extend(r.iter().cloned());
                     return Ok(());
@@ -392,6 +401,11 @@ impl DBCacheWriteExecutor {
                 let changes_slice = collected_changes.as_slice();
                 self.state_gateway
                     .update_contracts(&self.chain, changes_slice, conn)
+                    .await?
+            }
+            WriteOp::InsertAccountBalances(balances) => {
+                self.state_gateway
+                    .add_account_balances(balances.as_slice(), &self.chain, conn)
                     .await?
             }
             WriteOp::InsertProtocolComponents(components) => {
@@ -766,6 +780,16 @@ impl ContractStateGateway for CachedGateway {
         self.state_gateway
             .get_accounts_delta(chain, start_version, end_version, &mut conn)
             .await
+    }
+
+    #[instrument(skip_all)]
+    async fn add_account_balances(
+        &self,
+        account_balances: &[AccountBalance],
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertAccountBalances(account_balances.to_vec()))
+            .await?;
+        Ok(())
     }
 }
 

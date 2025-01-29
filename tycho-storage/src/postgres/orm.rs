@@ -1181,15 +1181,31 @@ impl Account {
             .await
     }
 
-    /// retrieves a account by address
+    /// retrieves an account by address
     pub async fn by_address(
-        address: &[u8],
+        address: &Address,
+        chain_db_id: i64,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<Self>> {
         account::table
             .filter(account::address.eq(address))
+            .filter(account::chain_id.eq(chain_db_id))
             .select(Self::as_select())
             .get_results::<Self>(conn)
+            .await
+    }
+
+    /// retrieves account ids by addresses
+    pub async fn ids_by_addresses(
+        addresses: &[&Address],
+        chain_db_id: i64,
+        conn: &mut AsyncPgConnection,
+    ) -> QueryResult<Vec<(i64, Address)>> {
+        account::table
+            .filter(account::address.eq_any(addresses))
+            .filter(account::chain_id.eq(chain_db_id))
+            .select((account::id, account::address))
+            .get_results::<(i64, Address)>(conn)
             .await
     }
 
