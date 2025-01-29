@@ -2,11 +2,10 @@ use crate::encoding::{
     errors::EncodingError,
     models::{Solution, Transaction},
     strategy_encoder::StrategySelector,
-    user_approvals_manager::UserApprovalsManager,
 };
 
 #[allow(dead_code)]
-pub trait RouterEncoder<S: StrategySelector, A: UserApprovalsManager> {
+pub trait RouterEncoder<S: StrategySelector> {
     fn encode_router_calldata(
         &self,
         solutions: Vec<Solution>,

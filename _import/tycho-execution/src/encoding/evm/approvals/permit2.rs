@@ -7,9 +7,10 @@ use alloy::{
     signers::{local::PrivateKeySigner, SignerSync},
     transports::BoxTransport,
 };
-use alloy_primitives::{ChainId, U256};
+use alloy_primitives::{ChainId, Signature, U256};
 use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
 use chrono::Utc;
+use num_bigint::BigUint;
 use tokio::runtime::Runtime;
 use tycho_core::Bytes;
 
@@ -19,7 +20,6 @@ use crate::encoding::{
         approvals::protocol_approvals_manager::get_client,
         utils::{biguint_to_u256, bytes_to_address, encode_input},
     },
-    user_approvals_manager::{Approval, UserApprovalsManager},
 };
 
 /// Struct for managing Permit2 operations, including encoding approvals and fetching allowance
@@ -107,59 +107,48 @@ impl Permit2 {
             ))),
         }
     }
-}
-impl UserApprovalsManager for Permit2 {
-    /// Encodes multiple approvals into ABI-encoded data and signs them.
-    fn encode_approvals(&self, approvals: Vec<Approval>) -> Result<Vec<Vec<u8>>, EncodingError> {
+    /// Creates permit single and signature
+    pub fn get_permit(
+        &self,
+        spender: &Bytes,
+        owner: &Bytes,
+        token: &Bytes,
+        amount: &BigUint,
+    ) -> Result<(PermitSingle, Signature), EncodingError> {
         let current_time = Utc::now()
             .naive_utc()
             .and_utc()
             .timestamp() as u64;
 
-        let mut encoded_approvals = Vec::new();
+        let (_, _, nonce) = self.get_existing_allowance(owner, spender, token)?;
+        let expiration = U48::from(current_time + PERMIT_EXPIRATION);
+        let sig_deadline = U256::from(current_time + PERMIT_SIG_EXPIRATION);
+        let amount = U160::from(biguint_to_u256(amount));
 
-        for approval in approvals {
-            let (_, _, nonce) =
-                self.get_existing_allowance(&approval.owner, &approval.spender, &approval.token)?;
-            let expiration = U48::from(current_time + PERMIT_EXPIRATION);
-            let sig_deadline = U256::from(current_time + PERMIT_SIG_EXPIRATION);
-            let amount = U160::from(biguint_to_u256(&approval.amount));
+        let details = PermitDetails { token: bytes_to_address(token)?, amount, expiration, nonce };
 
-            let details = PermitDetails {
-                token: bytes_to_address(&approval.token)?,
-                amount,
-                expiration,
-                nonce,
-            };
+        let permit_single = PermitSingle {
+            details,
+            spender: bytes_to_address(spender)?,
+            sigDeadline: sig_deadline,
+        };
 
-            let permit_single = PermitSingle {
-                details,
-                spender: bytes_to_address(&approval.spender)?,
-                sigDeadline: sig_deadline,
-            };
-
-            let domain = eip712_domain! {
-                name: "Permit2",
-                chain_id: self.chain_id,
-                verifying_contract: self.address,
-            };
-            let hash = permit_single.eip712_signing_hash(&domain);
-            let signature = self
-                .signer
-                .sign_hash_sync(&hash)
-                .map_err(|e| {
-                    EncodingError::FatalError(format!(
-                        "Failed to sign permit2 approval with error: {}",
-                        e
-                    ))
-                })?;
-            let encoded =
-                (bytes_to_address(&approval.owner)?, permit_single, signature.as_bytes().to_vec())
-                    .abi_encode();
-            encoded_approvals.push(encoded);
-        }
-
-        Ok(encoded_approvals)
+        let domain = eip712_domain! {
+            name: "Permit2",
+            chain_id: self.chain_id,
+            verifying_contract: self.address,
+        };
+        let hash = permit_single.eip712_signing_hash(&domain);
+        let signature = self
+            .signer
+            .sign_hash_sync(&hash)
+            .map_err(|e| {
+                EncodingError::FatalError(format!(
+                    "Failed to sign permit2 approval with error: {}",
+                    e
+                ))
+            })?;
+        Ok((permit_single, signature))
     }
 }
 
@@ -222,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_approvals() {
+    fn test_get_permit() {
         // Set up a mock private key for signing
         let private_key =
             B256::from_str("4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033")
@@ -234,21 +223,10 @@ mod tests {
         let spender = Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap();
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let amount = BigUint::from(1000u64);
-        let approvals =
-            vec![Approval { owner, spender, token: token.clone(), amount: amount.clone() }];
 
-        let encoded_approvals = permit2
-            .encode_approvals(approvals)
+        let (permit, _) = permit2
+            .get_permit(&spender, &owner, &token, &amount)
             .unwrap();
-        assert_eq!(encoded_approvals.len(), 1, "Expected 1 encoded approval");
-
-        let encoded = &encoded_approvals[0];
-
-        // Remove prefix and owner (first 64 bytes) and signature (last 65 bytes)
-        let permit_single_encoded = &encoded[64..encoded.len() - 65];
-
-        let decoded_permit_single = PermitSingle::abi_decode(permit_single_encoded, false)
-            .expect("Failed to decode PermitSingle");
 
         let expected_details = PermitDetails {
             token: bytes_to_address(&token).unwrap(),
@@ -263,7 +241,7 @@ mod tests {
         };
 
         assert_eq!(
-            decoded_permit_single, expected_permit_single,
+            permit, expected_permit_single,
             "Decoded PermitSingle does not match expected values"
         );
     }
@@ -309,18 +287,13 @@ mod tests {
         assert!(receipt.status(), "Approve transaction failed");
 
         let spender = Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap();
-        let approvals = vec![Approval {
-            owner: anvil_account.clone(),
-            spender: spender.clone(),
-            token: token.clone(),
-            amount: amount.clone(),
-        }];
 
-        let encoded_approvals = permit2
-            .encode_approvals(approvals)
+        let (permit, signature) = permit2
+            .get_permit(&spender, &anvil_account, &token, &amount)
             .unwrap();
-
-        let encoded = &encoded_approvals[0];
+        let encoded =
+            (bytes_to_address(&anvil_account).unwrap(), permit, signature.as_bytes().to_vec())
+                .abi_encode();
 
         let function_signature =
             "permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)";
