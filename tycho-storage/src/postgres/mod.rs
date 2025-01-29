@@ -241,6 +241,8 @@ where
 }
 
 type ChainEnumCache = ValueIdTableCache<Chain>;
+// Maps the chain to the DB id of the native token
+type NativeTokenEnumCache = ValueIdTableCache<Chain>;
 /// ProtocolSystem is not handled as an Enum, because that would require us to restart the whole
 /// application every time we want to add another System. Hence, to diverge from the implementation
 /// of the Chain enum was a conscious decision.
@@ -444,6 +446,7 @@ async fn maybe_lookup_version_ts(
 pub(crate) struct PostgresGateway {
     protocol_system_id_cache: Arc<ProtocolSystemEnumCache>,
     chain_id_cache: Arc<ChainEnumCache>,
+    native_token_id_cache: Arc<NativeTokenEnumCache>,
     /// Any versions dated before this date, as per their `valid_to` column, will be
     /// discarded and never be inserted into the db. We supply this as an absolute date
     /// since updating it must be done carefully. To avoid gaps in versions this can't
@@ -455,12 +458,14 @@ pub(crate) struct PostgresGateway {
 impl PostgresGateway {
     pub fn with_cache(
         chain_cache: Arc<ChainEnumCache>,
+        native_token_cache: Arc<NativeTokenEnumCache>,
         protocol_system_cache: Arc<ProtocolSystemEnumCache>,
         retention_horizon: NaiveDateTime,
     ) -> Self {
         Self {
             protocol_system_id_cache: protocol_system_cache,
             chain_id_cache: chain_cache,
+            native_token_id_cache: native_token_cache,
             retention_horizon,
         }
     }
@@ -473,9 +478,13 @@ impl PostgresGateway {
         let protocol_system_cache = ProtocolSystemEnumCache::from_connection(conn)
             .await
             .expect("Failed to load protocol system cache");
+        let native_token_cache = Self::native_cache_from_connection(conn, &chain_cache)
+            .await
+            .expect("Failed to load native token cache");
 
         Self::with_cache(
             Arc::new(chain_cache),
+            Arc::new(native_token_cache),
             Arc::new(protocol_system_cache),
             NaiveDateTime::default(),
         )
@@ -487,6 +496,10 @@ impl PostgresGateway {
 
     fn get_chain(&self, id: &i64) -> Chain {
         self.chain_id_cache.get_value(id)
+    }
+
+    fn get_native_token_id(&self, chain: &Chain) -> i64 {
+        self.native_token_id_cache.get_id(chain)
     }
 
     fn get_protocol_system_id(&self, protocol_system: &String) -> i64 {
@@ -504,15 +517,64 @@ impl PostgresGateway {
         retention_horizon: NaiveDateTime,
     ) -> Result<Self, StorageError> {
         let chain_cache = ChainEnumCache::from_pool(pool.clone()).await?;
+        let native_token_cache = Self::native_cache_from_pool(pool.clone(), &chain_cache).await?;
         let protocol_system_cache: ValueIdTableCache<String> =
             ProtocolSystemEnumCache::from_pool(pool.clone()).await?;
         let gw = PostgresGateway::with_cache(
             Arc::new(chain_cache),
+            Arc::new(native_token_cache),
             Arc::new(protocol_system_cache),
             retention_horizon,
         );
 
         Ok(gw)
+    }
+
+    // Could not use FromConnection trait as it is already implemented for a Chain->id map type.
+    // Also this custom 'from connection' fn signature allows us to reuse the already fetched
+    // chain cache.
+    async fn native_cache_from_connection(
+        mut conn: &mut AsyncPgConnection,
+        chain_cache: &ChainEnumCache,
+    ) -> Result<NativeTokenEnumCache, StorageError> {
+        let mut native_tokens = Vec::new();
+
+        // loop through cached chains and fetch their native token ids
+        for chain in chain_cache.map_enum.values() {
+            let chain_id = chain_cache.get_id(chain);
+            let native_token = chain.native_token();
+            let token_id = async {
+                schema::token::table
+                    .inner_join(
+                        schema::account::table
+                            .on(schema::token::account_id.eq(schema::account::id)),
+                    )
+                    .select(schema::token::id)
+                    .filter(schema::account::chain_id.eq(chain_id))
+                    .filter(schema::account::address.eq(native_token.address))
+                    .first(&mut conn)
+                    .await
+                    .expect("Failed to load native token id!")
+            }
+            .await;
+            native_tokens.push((token_id, chain.to_string()));
+        }
+        Ok(NativeTokenEnumCache::from_tuples(native_tokens))
+    }
+
+    // Could not use FromConnection trait as it is already implemented for a Chain->id map type.
+    // Also this custom 'from connection' fn signature allows us to reuse the already fetched
+    // chain cache.
+    async fn native_cache_from_pool(
+        pool: Pool<AsyncPgConnection>,
+        chain_cache: &ChainEnumCache,
+    ) -> Result<NativeTokenEnumCache, StorageError> {
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+
+        Self::native_cache_from_connection(&mut conn, chain_cache).await
     }
 }
 
