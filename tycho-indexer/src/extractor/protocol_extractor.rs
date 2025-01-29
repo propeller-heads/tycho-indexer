@@ -15,7 +15,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_core::{
     models::{
         blockchain::{Block, BlockAggregatedChanges, BlockTag},
-        contract::{Account, AccountDelta},
+        contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
@@ -1126,8 +1126,8 @@ impl ExtractorGateway for ExtractorPgGateway {
         let mut new_protocol_components: Vec<ProtocolComponent> = vec![];
         let mut state_updates: Vec<(TxHash, ProtocolComponentStateDelta)> = vec![];
         let mut account_changes: Vec<(Bytes, AccountDelta)> = vec![];
-
-        let mut balance_changes: Vec<ComponentBalance> = vec![];
+        let mut component_balance_changes: Vec<ComponentBalance> = vec![];
+        let mut account_balance_changes: Vec<AccountBalance> = vec![];
         let mut protocol_tokens: HashSet<Bytes> = HashSet::new();
 
         for tx_update in changes.txs_with_update.iter() {
@@ -1146,7 +1146,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                 protocol_tokens.extend(new_protocol_component.tokens.clone());
             }
 
-            // Map new account / contracts
+            // Map new accounts/contracts
             for (_, account_update) in tx_update.account_deltas.iter() {
                 if account_update.is_creation() {
                     let new: Account = account_update.ref_into_account(&tx_update.tx);
@@ -1172,14 +1172,23 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .map(|state_change| (hash.clone(), state_change.clone())),
             );
 
-            // Map balance changes
-            balance_changes.extend(
+            // Map component balance changes
+            component_balance_changes.extend(
                 tx_update
                     .balance_changes
                     .clone()
                     .into_iter()
-                    .flat_map(|(_, tokens)| tokens.into_values()),
+                    .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
             );
+
+            // Map account balance changes
+            account_balance_changes.extend(
+                tx_update
+                    .account_balance_changes
+                    .clone()
+                    .into_iter()
+                    .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
+            )
         }
 
         // Insert new protocol components
@@ -1210,10 +1219,17 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .await?;
         }
 
-        // Insert balance changes
-        if !balance_changes.is_empty() {
+        // Insert component balance changes
+        if !component_balance_changes.is_empty() {
             self.state_gateway
-                .add_component_balances(balance_changes.as_slice())
+                .add_component_balances(component_balance_changes.as_slice())
+                .await?;
+        }
+
+        // Insert account balance changes
+        if !account_balance_changes.is_empty() {
+            self.state_gateway
+                .add_account_balances(account_balance_changes.as_slice())
                 .await?;
         }
 
@@ -1840,18 +1856,14 @@ mod test {
 /// between this component and the actual db interactions
 #[cfg(test)]
 mod test_serial_db {
-    use mockall::mock;
-
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
     use futures03::{stream, StreamExt};
+    use mockall::mock;
 
     use super::*;
 
     use tycho_core::{
-        models::{
-            blockchain::TxWithChanges, contract::AccountBalance, ContractId, FinancialType,
-            ImplementationType,
-        },
+        models::{blockchain::TxWithChanges, ContractId, FinancialType, ImplementationType},
         storage::{BlockIdentifier, BlockOrTimestamp},
         traits::TokenOwnerFinding,
     };

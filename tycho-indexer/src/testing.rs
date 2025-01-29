@@ -9,7 +9,7 @@ use mockall::mock;
 use tycho_core::{
     models::{
         blockchain::{Block, Transaction},
-        contract::{Account, AccountDelta},
+        contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
@@ -148,6 +148,22 @@ mock! {
             'life1: 'async_trait,
             'life2: 'async_trait,
             'life3: 'async_trait,
+            Self: 'async_trait;
+
+
+        fn add_account_balances<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            account_balances: &'life1 [AccountBalance],
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                    Output = Result<(), StorageError>,
+                > + ::core::marker::Send + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
             Self: 'async_trait;
 
     }

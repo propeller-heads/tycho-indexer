@@ -636,6 +636,20 @@ pub trait ContractStateGateway {
         start_version: Option<&BlockOrTimestamp>,
         end_version: &BlockOrTimestamp,
     ) -> Result<Vec<models::contract::AccountDelta>, StorageError>;
+
+    /// Saves multiple account balances to storage.
+    ///
+    /// # Parameters
+    /// - `account_balances` The account balances to insert.
+    /// - `chain` The chain of the account balances to be inserted.
+    /// - `block_ts` The timestamp of the block that the balances are associated with.
+    ///
+    /// # Return
+    /// Ok if all account balances could be inserted, Err if at least one token failed to insert.
+    async fn add_account_balances(
+        &self,
+        account_balances: &[models::contract::AccountBalance],
+    ) -> Result<(), StorageError>;
 }
 
 pub trait Gateway:

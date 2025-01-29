@@ -1786,12 +1786,14 @@ mod test {
         conn
     }
 
-    /// This sets up the data needed to test the gateway. The setup is structured such that each
-    /// protocol state's historical changes are kept together this makes it easy to reason about
-    /// that change an account should have at each version Please note that if you change
-    /// something here, also update the state fixtures right below, which contain protocol states
-    /// at each version.
-    async fn setup_data(conn: &mut AsyncPgConnection) -> Vec<String> {
+    /// This sets up the data needed to test the gateway. Returns the inserted chain's DB id and the
+    /// inserted transaction hashes.
+    ///
+    /// The setup is structured such that each protocol state's historical changes are kept together
+    /// to make it easy to reason about the change a state should have at each version. Please note
+    /// that if you change something here, also update the state fixtures right below, which contain
+    /// protocol states at each version.
+    async fn setup_data(conn: &mut AsyncPgConnection) -> (i64, Vec<String>) {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         db_fixtures::insert_token(
             conn,
@@ -2082,7 +2084,7 @@ mod test {
         )
         .await;
         db_fixtures::calculate_component_tvl(conn).await;
-        tx_hashes.to_vec()
+        (chain_id, tx_hashes.to_vec())
     }
 
     fn protocol_state() -> models::protocol::ProtocolComponentState {
@@ -2982,7 +2984,7 @@ mod test {
     #[tokio::test]
     async fn test_add_tokens() {
         let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
+        let (chain_id, _) = setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         // Insert one new token (USDT) and an existing token (WETH)
@@ -2990,6 +2992,7 @@ mod test {
         let old_token = db_fixtures::get_token_by_symbol(&mut conn, weth_symbol.clone()).await;
         let old_weth_account = &orm::Account::by_address(
             &Bytes::from_str(WETH.trim_start_matches("0x")).expect("address ok"),
+            chain_id,
             &mut conn,
         )
         .await
@@ -3026,6 +3029,7 @@ mod test {
         assert_eq!(inserted_token.decimals, 6);
         let inserted_account = &orm::Account::by_address(
             &Bytes::from_str(USDT.trim_start_matches("0x")).expect("address ok"),
+            chain_id,
             &mut conn,
         )
         .await
@@ -3038,6 +3042,7 @@ mod test {
         assert_eq!(new_token, old_token);
         let updated_weth_account = &orm::Account::by_address(
             &Bytes::from_str(WETH.trim_start_matches("0x")).expect("address ok"),
+            chain_id,
             &mut conn,
         )
         .await
@@ -3334,7 +3339,7 @@ mod test {
     #[tokio::test]
     async fn test_get_protocol_components_with_system_only(#[case] system: Option<String>) {
         let mut conn = setup_db().await;
-        let tx_hashes = setup_data(&mut conn).await;
+        let (_, tx_hashes) = setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let chain = Chain::Starknet;
@@ -3370,7 +3375,7 @@ mod test {
     #[tokio::test]
     async fn test_get_protocol_components_with_external_id_only(#[case] external_id: String) {
         let mut conn = setup_db().await;
-        let tx_hashes = setup_data(&mut conn).await;
+        let (_, tx_hashes) = setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let temp_ids_array = [external_id.as_str()];
@@ -3403,7 +3408,7 @@ mod test {
     #[tokio::test]
     async fn test_get_protocol_components_with_system_and_ids() {
         let mut conn = setup_db().await;
-        let tx_hashes = setup_data(&mut conn).await;
+        let (_, tx_hashes) = setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let system = "ambient".to_string();
@@ -3516,7 +3521,7 @@ mod test {
     #[tokio::test]
     async fn test_get_token_prices() {
         let mut conn = setup_db().await;
-        let _ = setup_data(&mut conn).await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
         let exp = [(Bytes::from(WETH), 1.0), (Bytes::from(USDC), 0.0005)]
             .into_iter()
@@ -3533,7 +3538,7 @@ mod test {
     #[tokio::test]
     async fn test_get_balances() {
         let mut conn = setup_db().await;
-        let _ = setup_data(&mut conn).await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
         let exp: HashMap<_, _> = [
             (
@@ -3583,7 +3588,7 @@ mod test {
     #[tokio::test]
     async fn test_get_balances_at() {
         let mut conn = setup_db().await;
-        let _ = setup_data(&mut conn).await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         // set up changed balances
@@ -3703,7 +3708,7 @@ mod test {
     #[tokio::test]
     async fn test_upsert_component_tvl() {
         let mut conn = setup_db().await;
-        let _ = setup_data(&mut conn).await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
         let chain_id = gw.get_chain_id(&Chain::Ethereum);
         let exp = [("state1", 100.0), ("no_tvl", 1.0), ("state3", 1.0)]
@@ -3734,7 +3739,7 @@ mod test {
     #[tokio::test]
     async fn test_get_protocol_systems() {
         let mut conn = setup_db().await;
-        let _ = setup_data(&mut conn).await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
         let exp = ["ambient", "zigzag"]
             .iter()
@@ -3758,7 +3763,7 @@ mod test {
     #[tokio::test]
     async fn test_get_protocol_systems_with_pagination() {
         let mut conn = setup_db().await;
-        let _ = setup_data(&mut conn).await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
         let all = ["ambient", "zigzag"];
         let exp = vec![all[0]];
@@ -3778,7 +3783,7 @@ mod test {
     #[tokio::test]
     async fn test_get_protocol_systems_chain_not_exist() {
         let mut conn = setup_db().await;
-        let _ = setup_data(&mut conn).await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let res = gw
@@ -3797,7 +3802,7 @@ mod test {
     #[tokio::test]
     async fn test_truncate_token_title() {
         let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
+        let (chain_id, _) = setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let too_long_symbol = "🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛🦏🐪🐫🦒🦘🦬🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🦮🐕\u{200d}🦺🐈🐈\u{200d}⬛🐓🦤🦚🦜🦢🦩🕊🐇🦝🦨🦡🦫🦦🦥🐁🐀🐿🦔🐾🐉🐲🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛🦏🐪🐫🦒🦘🦬🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🦮🐕\u{200d}🦺🐈🐈\u{200d}⬛🐓🦤🦚🦜🦢🦩🕊🐇🦝🦨🦡🦫🦦🦥🐁🐀🐿🦔🐾🐉🐲🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀".to_string();
@@ -3818,6 +3823,7 @@ mod test {
         let inserted_account: &Account = &orm::Account::by_address(
             &Bytes::from_str("0x052313a7af625b5a08fd3816ea0da1912ced8c8b".trim_start_matches("0x"))
                 .expect("address ok"),
+            chain_id,
             &mut conn,
         )
         .await

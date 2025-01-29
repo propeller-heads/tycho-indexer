@@ -201,9 +201,9 @@ fn build_batch_update_query<'a, O: StoredVersionedRow>(
 /// - Execute and update query to invalidate the previously retrieved entries
 ///
 /// ## Important note:
-/// This function requires that new_data is sorted by ascending execution order (block, transaction
+/// This function requires that new_data is sorted by ascending execution order (block, transaction,
 /// index) for conflicting entity_id.
-pub async fn apply_versioning<'a, N, S>(
+pub async fn apply_versioning<N, S>(
     new_data: &mut [N],
     conn: &mut AsyncPgConnection,
 ) -> Result<(), StorageError>
