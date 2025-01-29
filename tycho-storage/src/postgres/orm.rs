@@ -1270,6 +1270,7 @@ pub struct AccountBalance {
     pub id: i64,
     pub balance: Balance,
     pub account_id: i64,
+    pub token_id: i64,
     pub modify_tx: i64,
     pub valid_from: NaiveDateTime,
     pub valid_to: Option<NaiveDateTime>,
@@ -1294,7 +1295,7 @@ impl AccountBalance {
 
 #[async_trait]
 impl StoredVersionedRow for AccountBalance {
-    type EntityId = i64;
+    type EntityId = (i64, i64);
     type PrimaryKey = i64;
     type Version = NaiveDateTime;
 
@@ -1303,17 +1304,24 @@ impl StoredVersionedRow for AccountBalance {
     }
 
     fn get_entity_id(&self) -> Self::EntityId {
-        self.account_id
+        (self.account_id, self.token_id)
     }
 
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
         ids: I,
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<Box<Self>>, StorageError> {
+        let (accounts, tokens): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
+        let tuple_ids = accounts
+            .iter()
+            .zip(tokens.iter())
+            .collect::<HashSet<_>>();
+
         Ok(account_balance::table
             .filter(
                 account_balance::account_id
-                    .eq_any(ids)
+                    .eq_any(&accounts)
+                    .and(account_balance::token_id.eq_any(&tokens))
                     .and(account_balance::valid_to.is_null()),
             )
             .select(Self::as_select())
@@ -1321,6 +1329,7 @@ impl StoredVersionedRow for AccountBalance {
             .await
             .map_err(PostgresError::from)?
             .into_iter()
+            .filter(|tb| tuple_ids.contains(&(&tb.account_id, &tb.token_id)))
             .map(Box::new)
             .collect())
     }
@@ -1336,6 +1345,7 @@ impl StoredVersionedRow for AccountBalance {
 pub struct NewAccountBalance {
     pub balance: Balance,
     pub account_id: i64,
+    pub token_id: i64,
     pub modify_tx: i64,
     pub valid_from: NaiveDateTime,
     pub valid_to: Option<NaiveDateTime>,
@@ -1343,11 +1353,11 @@ pub struct NewAccountBalance {
 
 impl VersionedRow for NewAccountBalance {
     type SortKey = (i64, NaiveDateTime, i64);
-    type EntityId = i64;
+    type EntityId = (i64, i64);
     type Version = NaiveDateTime;
 
     fn get_entity_id(&self) -> Self::EntityId {
-        self.account_id
+        (self.account_id, self.token_id)
     }
 
     fn set_valid_to(&mut self, end_version: Self::Version) {
@@ -1468,7 +1478,6 @@ pub struct NewContract {
     pub chain_id: i64,
     pub creation_tx: Option<i64>,
     pub created_at: Option<NaiveDateTime>,
-    #[allow(dead_code)]
     pub deleted_at: Option<NaiveDateTime>,
     pub balance: Balance,
     pub code: Code,
@@ -1486,20 +1495,24 @@ impl NewContract {
             deleted_at: None,
         }
     }
+
     pub fn new_balance(
         &self,
         account_id: i64,
+        token_id: i64,
         modify_tx: i64,
         modify_ts: NaiveDateTime,
     ) -> NewAccountBalance {
         NewAccountBalance {
             balance: self.balance.clone(),
             account_id,
+            token_id,
             modify_tx,
             valid_from: modify_ts,
             valid_to: None,
         }
     }
+
     pub fn new_code(
         &self,
         account_id: i64,
