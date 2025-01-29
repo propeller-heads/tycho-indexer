@@ -235,7 +235,7 @@ where
     /// # Arguments
     ///
     /// * `val` - The enum variant to check for existence.
-    fn value_exist(&self, val: &E) -> bool {
+    fn value_exists(&self, val: &E) -> bool {
         self.map_id.contains_key(val)
     }
 }
@@ -246,17 +246,24 @@ type ChainEnumCache = ValueIdTableCache<Chain>;
 /// of the Chain enum was a conscious decision.
 type ProtocolSystemEnumCache = ValueIdTableCache<String>;
 
-trait FromPool<T> {
+trait FromConnection<T> {
     async fn from_pool(pool: Pool<AsyncPgConnection>) -> Result<T, StorageError>;
+    async fn from_connection(conn: &mut AsyncPgConnection) -> Result<T, StorageError>;
 }
 
-impl FromPool<ChainEnumCache> for ChainEnumCache {
+impl FromConnection<ChainEnumCache> for ChainEnumCache {
     async fn from_pool(pool: Pool<AsyncPgConnection>) -> Result<ChainEnumCache, StorageError> {
         let mut conn = pool
             .get()
             .await
             .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
 
+        Self::from_connection(&mut conn).await
+    }
+
+    async fn from_connection(
+        mut conn: &mut AsyncPgConnection,
+    ) -> Result<ChainEnumCache, StorageError> {
         let results = async {
             use schema::chain::dsl::*;
             chain
@@ -270,7 +277,7 @@ impl FromPool<ChainEnumCache> for ChainEnumCache {
     }
 }
 
-impl FromPool<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
+impl FromConnection<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
     async fn from_pool(
         pool: Pool<AsyncPgConnection>,
     ) -> Result<ProtocolSystemEnumCache, StorageError> {
@@ -279,6 +286,12 @@ impl FromPool<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
             .await
             .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
 
+        Self::from_connection(&mut conn).await
+    }
+
+    async fn from_connection(
+        mut conn: &mut AsyncPgConnection,
+    ) -> Result<ProtocolSystemEnumCache, StorageError> {
         let results = async {
             use schema::protocol_system::dsl::*;
             protocol_system
@@ -441,43 +454,31 @@ pub(crate) struct PostgresGateway {
 
 impl PostgresGateway {
     pub fn with_cache(
-        cache: Arc<ChainEnumCache>,
+        chain_cache: Arc<ChainEnumCache>,
         protocol_system_cache: Arc<ProtocolSystemEnumCache>,
         retention_horizon: NaiveDateTime,
     ) -> Self {
         Self {
             protocol_system_id_cache: protocol_system_cache,
-            chain_id_cache: cache,
+            chain_id_cache: chain_cache,
             retention_horizon,
         }
     }
 
     #[allow(dead_code)]
     pub async fn from_connection(conn: &mut AsyncPgConnection) -> Self {
-        let chain_id_mapping: Vec<(i64, String)> = async {
-            use schema::chain::dsl::*;
-            chain
-                .select((id, name))
-                .load(conn)
-                .await
-                .expect("Failed to load chain ids!")
-        }
-        .await;
+        let chain_cache = ChainEnumCache::from_connection(conn)
+            .await
+            .expect("Failed ot load chain enum cache");
+        let protocol_system_cache = ProtocolSystemEnumCache::from_connection(conn)
+            .await
+            .expect("Failed to load protocol system cache");
 
-        let protocol_system_id_mapping: Vec<(i64, String)> = async {
-            use schema::protocol_system::dsl::*;
-            protocol_system
-                .select((id, name))
-                .load(conn)
-                .await
-                .expect("Failed to load protocol system!")
-        }
-        .await;
-
-        let cache = Arc::new(ChainEnumCache::from_tuples(chain_id_mapping));
-        let protocol_system_cache =
-            Arc::new(ProtocolSystemEnumCache::from_tuples(protocol_system_id_mapping));
-        Self::with_cache(cache, protocol_system_cache, NaiveDateTime::default())
+        Self::with_cache(
+            Arc::new(chain_cache),
+            Arc::new(protocol_system_cache),
+            NaiveDateTime::default(),
+        )
     }
 
     fn get_chain_id(&self, chain: &Chain) -> i64 {
@@ -502,11 +503,11 @@ impl PostgresGateway {
         pool: Pool<AsyncPgConnection>,
         retention_horizon: NaiveDateTime,
     ) -> Result<Self, StorageError> {
-        let cache = ChainEnumCache::from_pool(pool.clone()).await?;
+        let chain_cache = ChainEnumCache::from_pool(pool.clone()).await?;
         let protocol_system_cache: ValueIdTableCache<String> =
             ProtocolSystemEnumCache::from_pool(pool.clone()).await?;
         let gw = PostgresGateway::with_cache(
-            Arc::new(cache),
+            Arc::new(chain_cache),
             Arc::new(protocol_system_cache),
             retention_horizon,
         );
