@@ -1055,7 +1055,16 @@ mod test_serial_db {
                 .get()
                 .await
                 .expect("Failed to get a connection from the pool");
-            db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            let chain_id = db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            db_fixtures::insert_token(
+                &mut connection,
+                chain_id,
+                "0000000000000000000000000000000000000000",
+                "ETH",
+                18,
+                Some(100),
+            )
+            .await;
             let gateway: PostgresGateway = PostgresGateway::from_connection(&mut connection).await;
             let (tx, rx) = mpsc::channel(10);
             let write_executor = DBCacheWriteExecutor::new(
@@ -1102,7 +1111,16 @@ mod test_serial_db {
                 .get()
                 .await
                 .expect("Failed to get a connection from the pool");
-            db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            let chain_id = db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            db_fixtures::insert_token(
+                &mut connection,
+                chain_id,
+                "0000000000000000000000000000000000000000",
+                "ETH",
+                18,
+                Some(100),
+            )
+            .await;
             db_fixtures::insert_protocol_system(&mut connection, "ambient".to_owned()).await;
             db_fixtures::insert_protocol_type(&mut connection, "ambient_pool", None, None, None)
                 .await;
@@ -1259,7 +1277,16 @@ mod test_serial_db {
                 .get()
                 .await
                 .expect("Failed to get a connection from the pool");
-            db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            let chain_id = db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            db_fixtures::insert_token(
+                &mut connection,
+                chain_id,
+                "0000000000000000000000000000000000000000",
+                "ETH",
+                18,
+                Some(100),
+            )
+            .await;
             let gateway: PostgresGateway = PostgresGateway::from_connection(&mut connection).await;
             let (tx, rx) = mpsc::channel(10);
 
