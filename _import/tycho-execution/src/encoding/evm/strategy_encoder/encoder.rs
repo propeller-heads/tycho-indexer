@@ -81,6 +81,7 @@ impl StrategyEncoder for ExecutorEncoder {
 
 #[cfg(test)]
 mod tests {
+    use alloy::hex::encode;
     use num_bigint::BigUint;
     use tycho_core::{dto::ProtocolComponent, Bytes};
 
@@ -121,12 +122,34 @@ mod tests {
             native_action: None,
         };
 
-        let (_, executor_address) = encoder
+        let (protocol_data, executor_address) = encoder
             .encode_strategy(solution)
             .unwrap();
+        let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
             Address::from_str("0x5c2f5a71f67c01775180adc06909288b4c329308").unwrap()
         );
+        assert_eq!(
+            hex_protocol_data,
+            String::from(concat!(
+                // in token
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                // component id
+                "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+                // receiver
+                "0000000000000000000000000000000000000001",
+                // zero for one
+                "00",
+                // exact out
+                "00",
+            ))
+        );
+    }
+
+    #[test]
+    fn test_selector() {
+        let encoder = ExecutorEncoder {};
+        assert_eq!(encoder.selector(false), "swap(uint256, bytes)");
     }
 }
