@@ -87,12 +87,7 @@ contract TychoRouter is
      *  @param msgData encoded data. It must includes data for the verification.
      */
     function _executeGenericCallback(bytes calldata msgData) internal {
-        (
-            uint256 amountOwed,
-            uint256 amountReceived,
-            address tokenOwed,
-            uint16 offset // I think we actually don't need this!
-        ) = _callVerifyCallback(msgData);
+        (uint256 amountOwed, address tokenOwed) = _callVerifyCallback(msgData);
 
         IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
     }
