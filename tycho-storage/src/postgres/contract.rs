@@ -1057,7 +1057,12 @@ impl PostgresGateway {
         // we can only insert balance and contract_code if we have a creation transaction.
         if let Some(tx_id) = creation_tx_id {
             diesel::insert_into(schema::account_balance::table)
-                .values(new_contract.new_balance(account_id, tx_id, created_ts))
+                .values(new_contract.new_balance(
+                    account_id,
+                    self.get_native_token_id(&new.chain),
+                    tx_id,
+                    created_ts,
+                ))
                 .execute(db)
                 .await
                 .map_err(|err| storage_error_from_diesel(err, "AccountBalance", &hex_addr, None))?;
@@ -1164,6 +1169,7 @@ impl PostgresGateway {
                 let new = orm::NewAccountBalance {
                     balance: new_balance,
                     account_id,
+                    token_id: self.get_native_token_id(chain),
                     modify_tx: tx_id,
                     valid_from: ts,
                     valid_to: None,
