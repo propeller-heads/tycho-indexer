@@ -65,6 +65,7 @@ pub struct Transaction {
 #[allow(dead_code)]
 pub struct EncodingContext {
     pub receiver: Bytes,
+    // TODO should we keep this?
     pub exact_out: bool,
     pub router_address: Bytes,
 }
