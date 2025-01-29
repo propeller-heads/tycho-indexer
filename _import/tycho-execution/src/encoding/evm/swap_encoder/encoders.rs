@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use alloy_primitives::Address;
+use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
 
 use crate::encoding::{
@@ -150,12 +150,14 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             Address::from_str(&self.vault_address)
                 .map_err(|_| EncodingError::FatalError("Invalid vault address".to_string()))?,
         )?;
-        // should we return gas estimation here too?? if there is an approval needed, gas will be
-        // higher.
+
+        let component_id = AlloyBytes::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
+
         let args = (
             bytes_to_address(&swap.token_in)?,
             bytes_to_address(&swap.token_out)?,
-            swap.component.id,
+            component_id,
             bytes_to_address(&encoding_context.receiver)?,
             encoding_context.exact_out,
             approval_needed,
@@ -266,14 +268,14 @@ mod tests {
     #[test]
     fn test_encode_balancer_v2() {
         let balancer_pool = ProtocolComponent {
-            id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
+            id: String::from("0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"),
             protocol_system: String::from("vm:balancer_v2"),
             ..Default::default()
         };
         let swap = Swap {
             component: balancer_pool,
             token_in: Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"), // WETH
-            token_out: Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"), // DAI
+            token_out: Bytes::from("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"), // BAL
             split: 0f64,
         };
         let encoding_context = EncodingContext {
@@ -293,9 +295,9 @@ mod tests {
                 // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // token out
-                "6b175474e89094c44da98b954eedeac495271d0f",
+                "2791bca1f2de4661ed88a30c99a7a9449aa84174",
                 // pool id
-                "307838386536413063326444443236464545623634463033396132633431323936466342336635363430",
+                "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
                 // receiver
                 "0000000000000000000000000000000000000001",
                 // exact out

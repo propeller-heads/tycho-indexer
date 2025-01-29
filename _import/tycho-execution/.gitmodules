@@ -10,3 +10,6 @@
 [submodule "foundry/lib/v3-periphery"]
 	path = foundry/lib/v3-periphery
 	url = https://github.com/Uniswap/v3-periphery
+[submodule "foundry/lib/balancer-v2-monorepo"]
+	path = foundry/lib/balancer-v2-monorepo
+	url = https://github.com/balancer/balancer-v2-monorepo
