@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolComponent, Bytes};
 
@@ -60,6 +61,8 @@ pub struct Transaction {
     pub data: Vec<u8>,
     // ETH value to be sent with the transaction.
     pub value: BigUint,
+    // Address of the contract to call with the calldata
+    pub to: Address,
 }
 
 #[allow(dead_code)]

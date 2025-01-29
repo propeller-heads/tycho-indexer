@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use alloy_primitives::Address;
 use alloy_sol_types::SolValue;
 
@@ -27,7 +29,7 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 pub struct SplitSwapStrategyEncoder {}
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(&self, _solution: Solution) -> Result<Vec<u8>, EncodingError> {
+    fn encode_strategy(&self, _solution: Solution) -> Result<(Vec<u8>, Address), EncodingError> {
         todo!()
     }
     fn selector(&self, _exact_out: bool) -> &str {
@@ -37,10 +39,10 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
 /// This strategy encoder is used for solutions that are sent directly to the pool.
 /// Only 1 solution with 1 swap is supported.
-pub struct StraightToPoolStrategyEncoder {}
-impl EVMStrategyEncoder for StraightToPoolStrategyEncoder {}
-impl StrategyEncoder for StraightToPoolStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<Vec<u8>, EncodingError> {
+pub struct ExecutorEncoder {}
+impl EVMStrategyEncoder for ExecutorEncoder {}
+impl StrategyEncoder for ExecutorEncoder {
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Address), EncodingError> {
         if solution.router_address.is_none() {
             return Err(EncodingError::InvalidInput(
                 "Router address is required for straight to pool solutions".to_string(),
@@ -68,10 +70,11 @@ impl StrategyEncoder for StraightToPoolStrategyEncoder {
             router_address,
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
-        // TODO: here we need to pass also the address of the executor to be used
-        Ok(protocol_data)
+        let executor_address = Address::from_str(swap_encoder.executor_address())
+            .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
+        Ok((protocol_data, executor_address))
     }
     fn selector(&self, _exact_out: bool) -> &str {
-        unimplemented!();
+        "swap(uint256, bytes)"
     }
 }

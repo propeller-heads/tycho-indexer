@@ -1,8 +1,10 @@
+use alloy_primitives::Address;
+
 use crate::encoding::{errors::EncodingError, models::Solution};
 
 #[allow(dead_code)]
 pub trait StrategyEncoder {
-    fn encode_strategy(&self, to_encode: Solution) -> Result<Vec<u8>, EncodingError>;
+    fn encode_strategy(&self, to_encode: Solution) -> Result<(Vec<u8>, Address), EncodingError>;
     fn selector(&self, exact_out: bool) -> &str;
 }
 

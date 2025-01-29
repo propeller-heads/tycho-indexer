@@ -30,7 +30,7 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
         &self,
         solutions: Vec<Solution>,
     ) -> Result<Vec<Transaction>, EncodingError> {
-        let _approvals_calldata = self.handle_approvals(&solutions)?; // TODO: where should we append this?
+        let _approvals_calldata = self.handle_approvals(&solutions)?;
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
             let exact_out = solution.exact_out;
@@ -39,7 +39,8 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
             let strategy = self
                 .strategy_selector
                 .select_strategy(solution);
-            let method_calldata = strategy.encode_strategy((*solution).clone())?;
+            let (method_calldata, target_address) =
+                strategy.encode_strategy((*solution).clone())?;
 
             let contract_interaction = if straight_to_pool {
                 method_calldata
@@ -52,7 +53,11 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
             } else {
                 BigUint::ZERO
             };
-            transactions.push(Transaction { value, data: contract_interaction });
+            transactions.push(Transaction {
+                value,
+                data: contract_interaction,
+                to: target_address,
+            });
         }
         Ok(transactions)
     }
