@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "@src/executors/UniswapV2Executor.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
-
+import {console} from "forge-std/console.sol";
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
     function decodeParams(bytes calldata data)
         external
@@ -92,5 +92,19 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
 
         uint256 finalBalance = DAI.balanceOf(BOB);
         assertGe(finalBalance, amountOut);
+    }
+
+    function testSwapExecutorEncoderData() public {
+        bytes memory protocolData =
+            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc288e6a0c2ddd26feeb64f039a2c41296fcb3f564000000000000000000000000000000000000000010000";
+        console.log(protocolData.length);
+
+        (IERC20 tokenIn, address target, address receiver, bool zeroForOne) =
+            uniswapV2Exposed.decodeParams(protocolData);
+
+        assertEq(address(tokenIn), WETH_ADDR);
+        assertEq(target, 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640);
+        assertEq(receiver, 0x0000000000000000000000000000000000000001);
+        assertEq(zeroForOne, false);
     }
 }

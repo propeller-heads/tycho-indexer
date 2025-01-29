@@ -43,7 +43,7 @@ contract UniswapV2Executor is IExecutor {
             bool zeroForOne
         )
     {
-        if (data.length != 61) {
+        if (data.length < 61) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));

@@ -126,6 +126,7 @@ mod tests {
             .encode_strategy(solution)
             .unwrap();
         let hex_protocol_data = encode(&protocol_data);
+        println!("{}", hex_protocol_data);
         assert_eq!(
             executor_address,
             Address::from_str("0x5c2f5a71f67c01775180adc06909288b4c329308").unwrap()
