@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
+import "forge-std/console.sol";
 
 error UniswapV2Executor__InvalidDataLength();
 
@@ -43,7 +44,7 @@ contract UniswapV2Executor is IExecutor {
             bool zeroForOne
         )
     {
-        if (data.length < 61) {
+        if (data.length != 61) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));
