@@ -1,24 +1,28 @@
-use super::{
-    maybe_lookup_block_ts, maybe_lookup_version_ts, orm, schema, storage_error_from_diesel,
-    versioning::{apply_partitioned_versioning, apply_versioning, VersioningEntry},
-    PostgresError, PostgresGateway, WithOrdinal, WithTxHash, MAX_TS,
-};
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
     upsert::{excluded, on_constraint},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use itertools::Itertools;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use tracing::{debug, error, instrument, Level};
+
 use tycho_core::{
     keccak256,
     models::{
-        self, contract::AccountDelta, AccountToContractStore, Address, Balance, Chain, ChangeType,
-        Code, ContractId, ContractStore, PaginationParams, StoreKey, StoreVal, TxHash,
+        contract::{Account, AccountBalance, AccountDelta},
+        AccountToContractStore, Address, Balance, Chain, ChangeType, Code, ContractId,
+        ContractStore, PaginationParams, StoreKey, StoreVal, TxHash,
     },
     storage::{BlockOrTimestamp, StorageError, Version, WithTotal},
     Bytes,
+};
+
+use super::{
+    maybe_lookup_block_ts, maybe_lookup_version_ts, orm, schema, storage_error_from_diesel,
+    versioning::{apply_partitioned_versioning, apply_versioning, VersioningEntry},
+    PostgresError, PostgresGateway, WithOrdinal, WithTxHash, MAX_TS, MAX_VERSION_TS,
 };
 
 struct CreatedOrDeleted<T> {
@@ -691,7 +695,7 @@ impl PostgresGateway {
         version: Option<&Version>,
         include_slots: bool,
         conn: &mut AsyncPgConnection,
-    ) -> Result<models::contract::Account, StorageError> {
+    ) -> Result<Account, StorageError> {
         let account_orm: orm::Account = orm::Account::by_id(id, conn)
             .await
             .map_err(|err| {
@@ -763,7 +767,7 @@ impl PostgresGateway {
                 .ok(),
             None => None,
         };
-        let mut account = models::contract::Account::new(
+        let mut account = Account::new(
             id.chain,
             account_orm.address,
             account_orm.title,
@@ -799,7 +803,7 @@ impl PostgresGateway {
         include_slots: bool,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<WithTotal<Vec<models::contract::Account>>, StorageError> {
+    ) -> Result<WithTotal<Vec<Account>>, StorageError> {
         let chain_db_id = self.get_chain_id(chain);
         let version_ts = match &version {
             Some(version) => maybe_lookup_version_ts(version, conn).await?,
@@ -946,7 +950,7 @@ impl PostgresGateway {
         let res = accounts
             .into_iter()
             .zip(native_balances.into_iter().zip(codes))
-            .map(|(account, (balance, code))| -> Result<models::contract::Account, StorageError> {
+            .map(|(account, (balance, code))| -> Result<Account, StorageError> {
                 if !(account.id == balance.account_id && balance.account_id == code.account_id) {
                     return Err(StorageError::Unexpected(format!(
                         "Identity mismatch - while retrieving entries for account id: {} \
@@ -960,7 +964,7 @@ impl PostgresGateway {
                 let code_tx = code.tx.clone().unwrap();
                 let creation_tx = account.tx.clone();
 
-                let mut contract = models::contract::Account::new(
+                let mut contract = Account::new(
                     *chain,
                     account.entity.address.clone(),
                     account.entity.title.clone(),
@@ -996,7 +1000,7 @@ impl PostgresGateway {
     /// method exists for updating these related components.
     pub async fn upsert_contract(
         &self,
-        new: &models::contract::Account,
+        new: &Account,
         db: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         let (creation_tx_id, created_ts) = if let Some(h) = &new.creation_tx {
@@ -1405,7 +1409,7 @@ impl PostgresGateway {
 
     pub async fn add_account_balances(
         &self,
-        account_balances: &[models::contract::AccountBalance],
+        account_balances: &[AccountBalance],
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
@@ -1515,6 +1519,7 @@ impl PostgresGateway {
 /// The tests below test the functionality using the concrete EVM types.
 #[cfg(test)]
 mod test {
+    use super::*;
     use diesel_async::AsyncConnection;
     use rstest::rstest;
     use std::{str::FromStr, time::Duration};
@@ -1524,11 +1529,9 @@ mod test {
         db_fixtures::{yesterday_midnight, yesterday_one_am},
     };
     use tycho_core::{
+        models::{FinancialType, ImplementationType},
         storage::{BlockIdentifier, VersionKind},
-        Bytes,
     };
-
-    use super::*;
 
     type EVMGateway = PostgresGateway;
     type MaybeTS = Option<NaiveDateTime>;
@@ -1678,9 +1681,9 @@ mod test {
         let protocol_type_id = db_fixtures::insert_protocol_type(
             conn,
             "Pool",
-            Some(models::FinancialType::Swap),
+            Some(FinancialType::Swap),
             None,
-            Some(models::ImplementationType::Custom),
+            Some(ImplementationType::Custom),
         )
         .await;
         let _ = db_fixtures::insert_protocol_component(
@@ -1698,9 +1701,9 @@ mod test {
         chain_id
     }
 
-    fn account_c0(version: u64) -> models::contract::Account {
+    fn account_c0(version: u64) -> Account {
         match version {
-            1 => models::contract::Account::new(
+            1 => Account::new(
                 Chain::Ethereum,
                 "0x6b175474e89094c44da98b954eedeac495271d0f"
                     .parse()
@@ -1727,7 +1730,7 @@ mod test {
                         .unwrap(),
                 ),
             ),
-            2 => models::contract::Account::new(
+            2 => Account::new(
                 Chain::Ethereum,
                 "0x6b175474e89094c44da98b954eedeac495271d0f"
                     .parse()
@@ -1771,9 +1774,9 @@ mod test {
             .collect()
     }
 
-    fn account_c1(version: u64) -> models::contract::Account {
+    fn account_c1(version: u64) -> Account {
         match version {
-            2 => models::contract::Account::new(
+            2 => Account::new(
                 Chain::Ethereum,
                 "0x73bce791c239c8010cd3c857d96580037ccdd0ee"
                     .parse()
@@ -1804,9 +1807,9 @@ mod test {
         }
     }
 
-    fn account_c2(version: u64) -> models::contract::Account {
+    fn account_c2(version: u64) -> Account {
         match version {
-            1 => models::contract::Account::new(
+            1 => Account::new(
                 Chain::Ethereum,
                 "0x94a3f312366b8d0a32a00986194053c0ed0cddb1"
                     .parse()
@@ -1900,7 +1903,7 @@ mod test {
     async fn test_get_contracts(
         #[case] ids: Option<Vec<Bytes>>,
         #[case] version: Option<Version>,
-        #[case] exp: Vec<models::contract::Account>,
+        #[case] exp: Vec<Account>,
     ) {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
@@ -1959,7 +1962,7 @@ mod test {
     async fn test_get_contracts_with_pagination(
         #[case] ids: Option<Vec<Bytes>>,
         #[case] version: Option<Version>,
-        #[case] exp: Vec<models::contract::Account>,
+        #[case] exp: Vec<Account>,
         #[case] exp_total: i64,
     ) {
         let mut conn = setup_db().await;
@@ -2036,7 +2039,7 @@ mod test {
         .await;
         let code = Bytes::from("1234");
         let code_hash = Bytes::from(&keccak256(&code));
-        let expected = models::contract::Account::new(
+        let expected = Account::new(
             Chain::Ethereum,
             "6B175474E89094C44Da98b954EedeAC495271d0F"
                 .parse()
@@ -2720,7 +2723,7 @@ mod test {
         let tx_hash =
             Bytes::from("bb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945");
 
-        let account_balance = models::contract::AccountBalance {
+        let account_balance = AccountBalance {
             account: Bytes::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
             token: Bytes::from_str("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
             balance: Bytes::from(1000_i32.to_be_bytes()),
