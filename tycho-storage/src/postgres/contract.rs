@@ -705,9 +705,20 @@ impl PostgresGateway {
             Some(version) => maybe_lookup_version_ts(version, conn).await?,
             None => Utc::now().naive_utc(),
         };
+        let chain = id.chain;
+        let chain_id = self.get_chain_id(&chain);
 
         let (balance_tx, balance_orm) = schema::account_balance::table
-            .inner_join(schema::transaction::table)
+            .inner_join(
+                schema::transaction::table
+                    .on(schema::transaction::id.eq(schema::account_balance::modify_tx)),
+            )
+            .inner_join(schema::token::table)
+            .inner_join(
+                schema::account::table.on(schema::account::id.eq(schema::token::account_id)),
+            )
+            .filter(schema::account::chain_id.eq(chain_id))
+            .filter(schema::account::address.eq(&chain.native_token().address))
             .filter(schema::account_balance::account_id.eq(account_orm.id))
             .filter(schema::account_balance::valid_from.le(version_ts))
             .filter(
@@ -716,11 +727,6 @@ impl PostgresGateway {
                     .or(schema::account_balance::valid_to.is_null()),
             )
             .select((schema::transaction::hash, orm::AccountBalance::as_select()))
-            .order_by((
-                schema::account_balance::account_id,
-                schema::account_balance::valid_from.desc(),
-                schema::transaction::index.desc(),
-            ))
             .first::<(Bytes, orm::AccountBalance)>(conn)
             .await
             .map_err(|err| {
