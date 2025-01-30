@@ -60,8 +60,10 @@ contract TychoRouterTestSetup is Test, Constants {
         usv2Executor = new UniswapV2Executor();
         usv3Executor = new UniswapV3Executor();
         vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setExecutor(address(usv2Executor));
-        tychoRouter.setExecutor(address(usv3Executor));
+        address[] memory executors = new address[](2);
+        executors[0] = address(usv2Executor);
+        executors[1] = address(usv3Executor);
+        tychoRouter.setExecutors(executors);
         vm.stopPrank();
 
         vm.startPrank(BOB);
