@@ -192,6 +192,7 @@ impl StrategyEncoder for StraightToPoolStrategyEncoder {
             router_address,
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
+
         // TODO: here we need to pass also the address of the executor to be used
         Ok(protocol_data)
     }
@@ -247,7 +248,7 @@ mod tests {
             .unwrap();
 
         let expected_input = String::from(concat!(
-            "e73e3baa",                                                         // selector
+            "e73e3baa",
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount out
             "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
@@ -265,17 +266,22 @@ mod tests {
         // "0000000000000000000000000000000000000000000000000000000000000000", // nonce
         // "0000000000000000000000002c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4", // spender
         // "00000000000000000000000000000000000000000000000000000000679a8006", // deadline
-        //  offsets
+        // offset of signature (from start of call data to beginning of length indication)
         // "0000000000000000000000000000000000000000000000000000000000000200",
+        // offset of ple encoded swaps (from start of call data to beginning of length indication)
         // "0000000000000000000000000000000000000000000000000000000000000280",
+        // length of signature without padding
         // "0000000000000000000000000000000000000000000000000000000000000041",
-        //  signature
-        // "fc5bac4e27cd5d71c85d232d8c6b31ea924d2e0031091ff9a39579d9e49c214328ea34876961d9200af691373c71a174e166793d02241c76adb93c5f87fe0f381c",
+        // signature + padding
+        // "a031b63a01ef5d25975663e5d6c420ef498e3a5968b593cdf846c6729a788186",
+        // "1ddaf79c51453cd501d321ee541d13593e3a266be44103eefdf6e76a032d2870",
+        // "1b00000000000000000000000000000000000000000000000000000000000000"
 
         let expected_swaps = String::from(concat!(
+            // length of ple encoded swaps without padding
+            "000000000000000000000000000000000000000000000000000000000000005d",
             // ple encoded swaps
-            "0000000000000000000000000000000000000000000000000000000000000000",
-            "000000000000000000000000000000000000000000000000000000000005d005b",
+            "005b",
             // Swap header
             "01",     // token in index
             "00",     // token out index
@@ -291,7 +297,8 @@ mod tests {
             "000000",                                   // padding
         ));
         let hex_calldata = encode(&calldata);
+
         assert_eq!(hex_calldata[..520], expected_input);
-        assert_eq!(hex_calldata[1227..], expected_swaps);
+        assert_eq!(hex_calldata[1288..], expected_swaps);
     }
 }
