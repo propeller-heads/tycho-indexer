@@ -14,9 +14,10 @@ use tycho_simulation::{
     evm::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
-            filters::{balancer_pool_filter, curve_pool_filter},
+            filters::{balancer_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter},
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
+            uniswap_v4::state::UniswapV4State,
             vm::state::EVMPoolState,
         },
         stream::ProtocolStreamBuilder,
@@ -67,6 +68,11 @@ async fn main() {
                 "vm:curve",
                 tvl_filter.clone(),
                 Some(curve_pool_filter),
+            )
+            .exchange::<UniswapV4State>(
+                "uniswap_v4",
+                tvl_filter.clone(),
+                Some(uniswap_v4_pool_with_hook_filter),
             )
             .auth_key(Some(tycho_api_key.clone()))
             .set_tokens(all_tokens)
