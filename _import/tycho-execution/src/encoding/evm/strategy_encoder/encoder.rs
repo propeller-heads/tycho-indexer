@@ -1,10 +1,9 @@
 use std::cmp::min;
 
-use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{aliases::U24, map::HashSet, ChainId, U256, U8};
+use alloy_primitives::{aliases::U24, map::HashSet, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
-use tycho_core::Bytes;
+use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -40,8 +39,8 @@ pub struct SplitSwapStrategyEncoder {
 }
 
 impl SplitSwapStrategyEncoder {
-    pub fn new(signer: PrivateKeySigner, chain_id: ChainId) -> Result<Self, EncodingError> {
-        Ok(Self { permit2: Permit2::new(signer, chain_id)? })
+    pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
+        Ok(Self { permit2: Permit2::new(signer_pk, chain)? })
     }
 }
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
@@ -72,13 +71,17 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             BigUint::ZERO
         };
 
-        let tokens: Vec<Bytes> = solution
+        let mut tokens: Vec<Bytes> = solution
             .swaps
             .iter()
             .flat_map(|swap| vec![swap.token_in.clone(), swap.token_out.clone()])
             .collect::<HashSet<Bytes>>()
             .into_iter()
             .collect();
+
+        // this is only to make the test deterministic (same index for the same token for different
+        // runs)
+        tokens.sort();
 
         let mut swaps = vec![];
         for swap in solution.swaps.iter() {
@@ -200,7 +203,6 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::hex::encode;
-    use alloy_primitives::B256;
     use tycho_core::dto::ProtocolComponent;
 
     use super::*;
@@ -210,9 +212,7 @@ mod tests {
     fn test_split_swap_strategy_encoder() {
         // Set up a mock private key for signing
         let private_key =
-            B256::from_str("4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033")
-                .expect("Invalid private key");
-        let signer = PrivateKeySigner::from_bytes(&private_key).expect("Failed to create signer");
+            "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
 
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
@@ -228,7 +228,7 @@ mod tests {
             split: 0f64,
         };
 
-        let encoder = SplitSwapStrategyEncoder::new(signer, 1).unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -284,8 +284,8 @@ mod tests {
             "0000000000000000000000000000000000000000000000000000000000000000",
             "000000000000000000000000000000000000000000000000000000000005b",
             // Swap header
-            "00",     // token in index
-            "01",     // token out index
+            "01",     // token in index
+            "00",     // token out index
             "000000", // split
             // Swap data
             "5c2f5a71f67c01775180adc06909288b4c329308", // executor address

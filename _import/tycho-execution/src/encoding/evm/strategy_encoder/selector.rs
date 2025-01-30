@@ -1,5 +1,4 @@
-use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::ChainId;
+use tycho_core::models::Chain;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -14,18 +13,18 @@ impl StrategySelector for EVMStrategySelector {
     fn select_strategy(
         &self,
         solution: &Solution,
-        signer: Option<PrivateKeySigner>,
-        chain_id: ChainId,
+        signer: Option<String>,
+        chain: Chain,
     ) -> Result<Box<dyn StrategyEncoder>, EncodingError> {
         if solution.straight_to_pool {
             Ok(Box::new(StraightToPoolStrategyEncoder {}))
         } else {
-            let signer = signer.ok_or_else(|| {
+            let signer_pk = signer.ok_or_else(|| {
                 EncodingError::FatalError(
                     "Signer is required for SplitSwapStrategyEncoder".to_string(),
                 )
             })?;
-            Ok(Box::new(SplitSwapStrategyEncoder::new(signer, chain_id).unwrap()))
+            Ok(Box::new(SplitSwapStrategyEncoder::new(signer_pk, chain).unwrap()))
         }
     }
 }

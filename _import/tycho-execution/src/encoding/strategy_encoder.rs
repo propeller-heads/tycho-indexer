@@ -1,6 +1,4 @@
-use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::ChainId;
-use tycho_core::Bytes;
+use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{errors::EncodingError, models::Solution};
 
@@ -19,7 +17,7 @@ pub trait StrategySelector {
     fn select_strategy(
         &self,
         solution: &Solution,
-        signer: Option<PrivateKeySigner>,
-        chain_id: ChainId,
+        signer_pk: Option<String>,
+        chain_id: Chain,
     ) -> Result<Box<dyn StrategyEncoder>, EncodingError>;
 }

@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
-use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::ChainId;
 use num_bigint::BigUint;
-use tycho_core::Bytes;
+use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -16,8 +14,8 @@ use crate::encoding::{
 #[allow(dead_code)]
 pub struct EVMRouterEncoder<S: StrategySelector> {
     strategy_selector: S,
-    signer: Option<PrivateKeySigner>,
-    chain_id: ChainId,
+    signer: Option<String>,
+    chain: Chain,
     router_address: String,
 }
 
@@ -26,10 +24,10 @@ impl<S: StrategySelector> EVMRouterEncoder<S> {
     pub fn new(
         strategy_selector: S,
         router_address: String,
-        signer: Option<PrivateKeySigner>,
-        chain_id: ChainId,
+        signer: Option<String>,
+        chain: Chain,
     ) -> Result<Self, EncodingError> {
-        Ok(EVMRouterEncoder { strategy_selector, signer, chain_id, router_address })
+        Ok(EVMRouterEncoder { strategy_selector, signer, chain, router_address })
     }
 }
 impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
@@ -50,7 +48,7 @@ impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
             let strategy = self.strategy_selector.select_strategy(
                 solution,
                 self.signer.clone(),
-                self.chain_id,
+                self.chain,
             )?;
             let method_calldata = strategy.encode_strategy(solution.clone(), router_address)?;
 

@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
-use alloy_primitives::{Address, Bytes as AlloyBytes};
+use alloy_primitives::{Address, Bytes as AlloyBytes, FixedBytes};
 use alloy_sol_types::SolValue;
+use tycho_core::keccak256;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -12,10 +13,18 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
+pub trait EVMSwapEncoder: SwapEncoder {
+    fn executor_selector(&self) -> FixedBytes<4> {
+        let hash = keccak256("swap(uint256,bytes)".as_bytes());
+        FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
+    }
+}
+
 pub struct UniswapV2SwapEncoder {
     executor_address: String,
 }
 
+impl EVMSwapEncoder for UniswapV2SwapEncoder {}
 impl UniswapV2SwapEncoder {
     fn get_zero_to_one(sell_token_address: Address, buy_token_address: Address) -> bool {
         sell_token_address < buy_token_address
@@ -63,6 +72,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
 pub struct UniswapV3SwapEncoder {
     executor_address: String,
 }
+impl EVMSwapEncoder for UniswapV3SwapEncoder {}
 
 impl UniswapV3SwapEncoder {
     fn get_zero_to_one(sell_token_address: Address, buy_token_address: Address) -> bool {
@@ -134,6 +144,8 @@ pub struct BalancerV2SwapEncoder {
     executor_address: String,
     vault_address: String,
 }
+
+impl EVMSwapEncoder for BalancerV2SwapEncoder {}
 
 impl SwapEncoder for BalancerV2SwapEncoder {
     fn new(executor_address: String) -> Self {

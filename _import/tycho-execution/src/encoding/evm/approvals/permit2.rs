@@ -9,17 +9,18 @@ use alloy::{
 };
 #[allow(deprecated)]
 use alloy_primitives::Signature;
+use alloy_primitives::B256;
 use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
 use tokio::runtime::Runtime;
-use tycho_core::Bytes;
+use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::get_client,
-        utils::{biguint_to_u256, bytes_to_address, encode_input},
+        utils::{biguint_to_u256, bytes_to_address, encode_input, to_chain_id},
     },
 };
 
@@ -60,10 +61,17 @@ sol! {
 
 #[allow(dead_code)]
 impl Permit2 {
-    pub fn new(signer: PrivateKeySigner, chain_id: ChainId) -> Result<Self, EncodingError> {
+    pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
+        let chain_id = to_chain_id(chain)?;
         let runtime = Runtime::new()
             .map_err(|_| EncodingError::FatalError("Failed to create runtime".to_string()))?;
         let client = runtime.block_on(get_client())?;
+        let pk = B256::from_str(&signer_pk).map_err(|_| {
+            EncodingError::FatalError("Failed to convert signer private key to B256".to_string())
+        })?;
+        let signer = PrivateKeySigner::from_bytes(&pk).map_err(|_| {
+            EncodingError::FatalError("Failed to create signer from private key".to_string())
+        })?;
         Ok(Self {
             address: Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
                 .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?,
@@ -158,7 +166,7 @@ impl Permit2 {
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::{Uint, B256};
+    use alloy_primitives::Uint;
     use num_bigint::BigUint;
 
     use super::*;
@@ -196,8 +204,9 @@ mod tests {
 
     #[test]
     fn test_get_existing_allowance() {
-        let signer = PrivateKeySigner::random();
-        let manager = Permit2::new(signer, 1).unwrap();
+        let signer_pk =
+            "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
+        let manager = Permit2::new(signer_pk, Chain::Ethereum).unwrap();
 
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let owner = Bytes::from_str("0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4").unwrap();
@@ -216,10 +225,8 @@ mod tests {
     fn test_get_permit() {
         // Set up a mock private key for signing
         let private_key =
-            B256::from_str("4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033")
-                .expect("Invalid private key");
-        let signer = PrivateKeySigner::from_bytes(&private_key).expect("Failed to create signer");
-        let permit2 = Permit2::new(signer, 1).expect("Failed to create Permit2");
+            "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
+        let permit2 = Permit2::new(private_key, Chain::Ethereum).expect("Failed to create Permit2");
 
         let owner = Bytes::from_str("0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4").unwrap();
         let spender = Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap();
@@ -257,12 +264,10 @@ mod tests {
     fn test_permit() {
         let anvil_account = Bytes::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
         let anvil_private_key =
-            B256::from_str("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-                .unwrap();
+            "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80".to_string();
 
-        let signer =
-            PrivateKeySigner::from_bytes(&anvil_private_key).expect("Failed to create signer");
-        let permit2 = Permit2::new(signer, 1).expect("Failed to create Permit2");
+        let permit2 =
+            Permit2::new(anvil_private_key, Chain::Ethereum).expect("Failed to create Permit2");
 
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let amount = BigUint::from(1000u64);

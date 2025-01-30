@@ -1,7 +1,7 @@
 use alloy_primitives::{aliases::U24, Address, Keccak256, U256};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
-use tycho_core::Bytes;
+use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::errors::EncodingError;
 
@@ -64,4 +64,11 @@ pub fn percentage_to_uint24(percentage: f64) -> U24 {
 
     let scaled = (percentage / 100.0) * (MAX_UINT24 as f64);
     U24::from(scaled.round())
+}
+
+pub fn to_chain_id(chain: Chain) -> Result<u64, EncodingError> {
+    match chain {
+        Chain::Ethereum => Ok(1),
+        _ => Err(EncodingError::FatalError("Unsupported chain".to_string())),
+    }
 }
