@@ -13,7 +13,7 @@ use tycho_substreams::models::{ChangeType, FinancialType, ImplementationType, Pr
 pub fn maybe_create_component(
     call: &Call,
     _log: &Log,
-    tx: &TransactionTrace,
+    _tx: &TransactionTrace,
 ) -> Option<ProtocolComponent> {
     match *call.address {
         // TODO: replace with your logic
@@ -36,7 +36,6 @@ pub fn maybe_create_component(
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Vm.into(),
                 }),
-                tx: Some(tx.into()),
             })
         }
         _ => None,

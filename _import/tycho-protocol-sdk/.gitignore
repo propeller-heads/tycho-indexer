@@ -14,7 +14,7 @@ target/
 
 __pycache__
 
-substreams/ethereum-template/Cargo.lock
+substreams/ethereum-template-factory/Cargo.lock
 
 .DS_Store
 
