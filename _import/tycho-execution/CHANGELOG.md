@@ -1,3 +1,20 @@
+## [0.22.0](https://github.com/propeller-heads/tycho-execution/compare/0.21.0...0.22.0) (2025-01-30)
+
+
+### Features
+
+* fixed USV3 Verification ([96af542](https://github.com/propeller-heads/tycho-execution/commit/96af5429232a851a7e7144b8a30843a3e6dc980e))
+* Implement generic callback ([fafeba9](https://github.com/propeller-heads/tycho-execution/commit/fafeba924848f107e1a00a00cfe94347fde3d919))
+* UniswapV3Executor and integration tests ([ca32446](https://github.com/propeller-heads/tycho-execution/commit/ca32446a9ee28118d8857c02abefd24389485b7e))
+* USV3 verification ([7822c4f](https://github.com/propeller-heads/tycho-execution/commit/7822c4f9132b6d64a1281f6e54a8515cb0d242d3))
+
+
+### Bug Fixes
+
+* Remove amountReceived and dataOffset from the callback verification ([63b94b5](https://github.com/propeller-heads/tycho-execution/commit/63b94b55849f2087dab78ec951c459d3811409eb))
+* Remove amountReceived, dataOffset from ICallbackVerifier interface ([33ada0c](https://github.com/propeller-heads/tycho-execution/commit/33ada0cf26209cd626c75e26fc6d56943988e0b1))
+* Remove exactOut from USV3 encoding ([d8b44f6](https://github.com/propeller-heads/tycho-execution/commit/d8b44f623b8175f4759f8a8cbd42c46e5abad3b4))
+
 ## [0.21.0](https://github.com/propeller-heads/tycho-execution/compare/0.20.0...0.21.0) (2025-01-28)
 
 

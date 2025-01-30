@@ -381,8 +381,8 @@ contract TychoRouter is
         int256 amount0Delta,
         int256 amount1Delta,
         bytes calldata data
-    ) internal view returns (uint256 amountOwed, address tokenOwed) {
-        address tokenIn = address(bytes20(data[0:20]));
+    ) internal view returns (uint256 amountIn, address tokenIn) {
+        tokenIn = address(bytes20(data[0:20]));
         address tokenOut = address(bytes20(data[20:40]));
         uint24 poolFee = uint24(bytes3(data[40:43]));
 
@@ -391,9 +391,9 @@ contract TychoRouter is
             _usv3Factory, tokenIn, tokenOut, poolFee
         );
 
-        amountOwed =
+        amountIn =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
-        return (amountOwed, tokenOwed);
+        return (amountIn, tokenIn);
     }
 }
