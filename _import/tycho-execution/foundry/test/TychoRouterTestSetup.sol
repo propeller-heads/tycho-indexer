@@ -6,6 +6,7 @@ import "./Constants.sol";
 import "./mock/MockERC20.sol";
 import "@src/TychoRouter.sol";
 import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
+import "../src/executors/UniswapV3Executor.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth, address usv3Factory)
@@ -20,7 +21,7 @@ contract TychoRouterExposed is TychoRouter {
         return _unwrapETH(amount);
     }
 
-    function ExposedSwap(
+    function exposedSwap(
         uint256 amountIn,
         uint256 nTokens,
         bytes calldata swaps
@@ -34,6 +35,7 @@ contract TychoRouterTestSetup is Test, Constants {
     address tychoRouterAddr;
     address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     UniswapV2Executor public usv2Executor;
+    UniswapV3Executor public usv3Executor;
     MockERC20[] tokens;
 
     function setUp() public {
@@ -41,8 +43,9 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);
+        address factoryV3 = address(0x1F98431c8aD98523631AE4a59f267346ea31F984);
         tychoRouter =
-            new TychoRouterExposed(permit2Address, WETH_ADDR, address(1));
+            new TychoRouterExposed(permit2Address, WETH_ADDR, factoryV3);
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
@@ -55,8 +58,10 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.stopPrank();
 
         usv2Executor = new UniswapV2Executor();
+        usv3Executor = new UniswapV3Executor();
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutor(address(usv2Executor));
+        tychoRouter.setExecutor(address(usv3Executor));
         vm.stopPrank();
 
         vm.startPrank(BOB);
@@ -189,5 +194,18 @@ contract TychoRouterTestSetup is Test, Constants {
         bool zero2one
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(tokenIn, target, receiver, zero2one);
+    }
+
+    function encodeUniswapV3Swap(
+        address tokenIn,
+        address tokenOut,
+        address receiver,
+        address target,
+        bool zero2one
+    ) internal view returns (bytes memory) {
+        IUniswapV3Pool pool = IUniswapV3Pool(target);
+        return abi.encodePacked(
+            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
+        );
     }
 }

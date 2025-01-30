@@ -215,7 +215,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
     function testSwapSimple() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // 1 WETH   ->   DAI
-        //       (univ2)
+        //       (USV2)
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, tychoRouterAddr, amountIn);
 
@@ -234,7 +234,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
-        tychoRouter.ExposedSwap(amountIn, 2, pleEncode(swaps));
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
 
         uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(tychoRouterAddr);
         assertEq(daiBalance, 2630432278145144658455);
@@ -271,7 +271,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
 
-        tychoRouter.ExposedSwap(amountIn, 3, pleEncode(swaps));
+        tychoRouter.exposedSwap(amountIn, 3, pleEncode(swaps));
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(tychoRouterAddr);
         assertEq(usdcBalance, 2610580090);
@@ -332,7 +332,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
 
-        tychoRouter.ExposedSwap(amountIn, 4, pleEncode(swaps));
+        tychoRouter.exposedSwap(amountIn, 4, pleEncode(swaps));
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(tychoRouterAddr);
         assertEq(usdcBalance, 2581503157);
@@ -605,5 +605,53 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(ALICE.balance, expectedAmount);
 
         vm.stopPrank();
+    }
+
+    function testUSV3Callback() public {
+        uint24 poolFee = 3000;
+        uint256 amountOwed = 1000000000000000000;
+        deal(WETH_ADDR, tychoRouterAddr, amountOwed);
+        uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
+
+        vm.startPrank(DAI_WETH_USV3);
+        tychoRouter.uniswapV3SwapCallback(
+            -2631245338449998525223,
+            int256(amountOwed),
+            abi.encodePacked(WETH_ADDR, DAI_ADDR, poolFee)
+        );
+        vm.stopPrank();
+
+        uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
+        assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
+    }
+
+    function testSwapSingleUSV3() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V3
+        // 1 WETH   ->   DAI
+        //       (USV3)
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, tychoRouterAddr, amountIn);
+
+        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = false;
+        bytes memory protocolData = encodeUniswapV3Swap(
+            WETH_ADDR, DAI_ADDR, tychoRouterAddr, DAI_WETH_USV3, zeroForOne
+        );
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            bytes4(0),
+            protocolData
+        );
+
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+
+        uint256 finalBalance = IERC20(DAI_ADDR).balanceOf(tychoRouterAddr);
+        assertGe(finalBalance, expAmountOut);
     }
 }
