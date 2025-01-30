@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use alloy::signers::local::PrivateKeySigner;
+use alloy_primitives::ChainId;
 use num_bigint::BigUint;
 use tycho_core::Bytes;
 
@@ -9,37 +11,48 @@ use crate::encoding::{
     models::{NativeAction, Solution, Transaction},
     router_encoder::RouterEncoder,
     strategy_encoder::StrategySelector,
-    user_approvals_manager::{Approval, UserApprovalsManager},
 };
 
 #[allow(dead_code)]
-pub struct EVMRouterEncoder<S: StrategySelector, A: UserApprovalsManager> {
+pub struct EVMRouterEncoder<S: StrategySelector> {
     strategy_selector: S,
-    approvals_manager: A,
+    signer: Option<PrivateKeySigner>,
+    chain_id: ChainId,
     router_address: String,
 }
 
 #[allow(dead_code)]
-impl<S: StrategySelector, A: UserApprovalsManager> EVMRouterEncoder<S, A> {
-    pub fn new(strategy_selector: S, approvals_manager: A, router_address: String) -> Self {
-        EVMRouterEncoder { strategy_selector, approvals_manager, router_address }
+impl<S: StrategySelector> EVMRouterEncoder<S> {
+    pub fn new(
+        strategy_selector: S,
+        router_address: String,
+        signer: Option<PrivateKeySigner>,
+        chain_id: ChainId,
+    ) -> Result<Self, EncodingError> {
+        Ok(EVMRouterEncoder { strategy_selector, signer, chain_id, router_address })
     }
 }
-impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRouterEncoder<S, A> {
+impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
     fn encode_router_calldata(
         &self,
         solutions: Vec<Solution>,
     ) -> Result<Vec<Transaction>, EncodingError> {
-        let _approvals_calldata = self.handle_approvals(&solutions)?; // TODO: where should we append this?
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
             let exact_out = solution.exact_out;
             let straight_to_pool = solution.straight_to_pool;
-
-            let strategy = self
-                .strategy_selector
-                .select_strategy(solution);
-            let method_calldata = strategy.encode_strategy((*solution).clone())?;
+            let router_address = solution
+                .router_address
+                .clone()
+                .unwrap_or(Bytes::from_str(&self.router_address).map_err(|_| {
+                    EncodingError::FatalError("Invalid router address".to_string())
+                })?);
+            let strategy = self.strategy_selector.select_strategy(
+                solution,
+                self.signer.clone(),
+                self.chain_id,
+            )?;
+            let method_calldata = strategy.encode_strategy(solution.clone(), router_address)?;
 
             let contract_interaction = if straight_to_pool {
                 method_calldata
@@ -55,24 +68,5 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
             transactions.push(Transaction { value, data: contract_interaction });
         }
         Ok(transactions)
-    }
-
-    fn handle_approvals(&self, solutions: &[Solution]) -> Result<Vec<Vec<u8>>, EncodingError> {
-        let mut approvals = Vec::new();
-        for solution in solutions.iter() {
-            approvals.push(Approval {
-                token: solution.given_token.clone(),
-                spender: solution
-                    .router_address
-                    .clone()
-                    .unwrap_or(Bytes::from_str(&self.router_address).map_err(|_| {
-                        EncodingError::FatalError("Invalid router address".to_string())
-                    })?),
-                amount: solution.given_amount.clone(),
-                owner: solution.sender.clone(),
-            });
-        }
-        self.approvals_manager
-            .encode_approvals(approvals)
     }
 }

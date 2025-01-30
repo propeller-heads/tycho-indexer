@@ -1,13 +1,14 @@
 use std::{str::FromStr, sync::Arc};
 
 use alloy::{
-    primitives::{aliases::U48, Address, Bytes as AlloyBytes, TxKind, U160},
+    primitives::{aliases::U48, Address, Bytes as AlloyBytes, ChainId, TxKind, U160, U256},
     providers::{Provider, RootProvider},
     rpc::types::{TransactionInput, TransactionRequest},
     signers::{local::PrivateKeySigner, SignerSync},
     transports::BoxTransport,
 };
-use alloy_primitives::{ChainId, Signature, U256};
+#[allow(deprecated)]
+use alloy_primitives::Signature;
 use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
@@ -108,6 +109,7 @@ impl Permit2 {
         }
     }
     /// Creates permit single and signature
+    #[allow(deprecated)]
     pub fn get_permit(
         &self,
         spender: &Bytes,

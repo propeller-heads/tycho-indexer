@@ -10,5 +10,4 @@ pub trait RouterEncoder<S: StrategySelector> {
         &self,
         solutions: Vec<Solution>,
     ) -> Result<Vec<Transaction>, EncodingError>;
-    fn handle_approvals(&self, solutions: &[Solution]) -> Result<Vec<Vec<u8>>, EncodingError>;
 }

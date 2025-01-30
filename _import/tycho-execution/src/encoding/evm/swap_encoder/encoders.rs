@@ -42,6 +42,9 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         // Token in address is always needed to perform a manual transfer from the router,
         // since no optimizations are performed that send from one pool to the next
         let args = (
+            Address::from_str(self.executor_address())
+                .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
+            self.executor_selector(),
             token_in_address,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
@@ -107,6 +110,9 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             })?;
 
         let args = (
+            Address::from_str(self.executor_address())
+                .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
+            self.executor_selector(),
             token_in_address,
             token_out_address,
             pool_fee_u24,
@@ -155,6 +161,9 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
 
         let args = (
+            Address::from_str(self.executor_address())
+                .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
+            self.executor_selector(),
             bytes_to_address(&swap.token_in)?,
             bytes_to_address(&swap.token_out)?,
             component_id,
@@ -196,7 +205,8 @@ mod tests {
             exact_out: false,
             router_address: Bytes::zero(20),
         };
-        let encoder = UniswapV2SwapEncoder::new(String::from("0x"));
+        let encoder =
+            UniswapV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -204,6 +214,10 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
+                // executor address
+                "543778987b293c7e8cf0722bb2e935ba6f4068d4",
+                // executor selector
+                "bd0625ab",
                 // in token
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // component id
@@ -239,7 +253,8 @@ mod tests {
             exact_out: false,
             router_address: Bytes::zero(20),
         };
-        let encoder = UniswapV3SwapEncoder::new(String::from("0x"));
+        let encoder =
+            UniswapV3SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -247,6 +262,10 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
+                // executor address
+                "543778987b293c7e8cf0722bb2e935ba6f4068d4",
+                // executor selector
+                "bd0625ab",
                 // in token
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // out token
@@ -283,7 +302,8 @@ mod tests {
             exact_out: false,
             router_address: Bytes::zero(20),
         };
-        let encoder = BalancerV2SwapEncoder::new(String::from("0x"));
+        let encoder =
+            BalancerV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -292,6 +312,10 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
+                // executor address
+                "543778987b293c7e8cf0722bb2e935ba6f4068d4",
+                // executor selector
+                "bd0625ab",
                 // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // token out
