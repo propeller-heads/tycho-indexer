@@ -11,8 +11,6 @@ contract UniswapV3Executor is IExecutor {
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
-    address private constant factoryV3 =
-        0x1F98431c8aD98523631AE4a59f267346ea31F984;
 
     // slither-disable-next-line locked-ether
     function swap(uint256 amountIn, bytes calldata data)
