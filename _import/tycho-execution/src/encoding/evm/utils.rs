@@ -29,7 +29,7 @@ pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
 
     for action_data in action_data_array {
         let args = (encoded_action_data, action_data.len() as u16, action_data);
-        encoded_action_data = args.abi_encode();
+        encoded_action_data = args.abi_encode_packed();
     }
 
     encoded_action_data
