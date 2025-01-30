@@ -118,7 +118,7 @@ mod tests {
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap],
-            straight_to_pool: true,
+            direct_execution: true,
             router_address: Some(Bytes::zero(20)),
             slippage: None,
             native_action: None,

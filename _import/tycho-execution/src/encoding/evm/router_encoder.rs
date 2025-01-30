@@ -34,7 +34,7 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
             let exact_out = solution.exact_out;
-            let straight_to_pool = solution.straight_to_pool;
+            let straight_to_pool = solution.direct_execution;
 
             let strategy = self
                 .strategy_selector

@@ -23,10 +23,10 @@ pub struct Solution {
     pub receiver: Bytes,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// If set to true, the solution will be encoded to be sent directly to the SwapExecutor and
+    /// If set to true, the solution will be encoded to be sent directly to the Executor and
     /// skip the router. The user is responsible for managing necessary approvals and token
     /// transfers.
-    pub straight_to_pool: bool,
+    pub direct_execution: bool,
     // if not set, then the Propeller Router will be used
     pub router_address: Option<Bytes>,
     // if set, it will be applied to check_amount
