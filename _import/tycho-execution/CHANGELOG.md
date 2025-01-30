@@ -1,3 +1,16 @@
+## [0.24.0](https://github.com/propeller-heads/tycho-execution/compare/0.23.0...0.24.0) (2025-01-30)
+
+
+### Features
+
+* rename batchSetExecutor to setExecutors ([c653062](https://github.com/propeller-heads/tycho-execution/commit/c65306202783ec80e8086423a4cec4261728da03))
+* replace setExecutor with batchSetExecutor ([ea504fa](https://github.com/propeller-heads/tycho-execution/commit/ea504faca12bdf19f4c98946a4173167a73fba2d))
+
+
+### Bug Fixes
+
+* rm redundant test ([24e95b1](https://github.com/propeller-heads/tycho-execution/commit/24e95b1206d403a9c7b2c82b12bd14c3fc7ee6c4))
+
 ## [0.23.0](https://github.com/propeller-heads/tycho-execution/compare/0.22.0...0.23.0) (2025-01-30)
 
 
