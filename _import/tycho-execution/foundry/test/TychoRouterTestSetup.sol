@@ -58,7 +58,7 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.startPrank(EXECUTOR_SETTER);
         address[] memory executors = new address[](1);
         executors[0] = address(usv2Executor);
-        tychoRouter.batchSetExecutor(executors);
+        tychoRouter.setExecutors(executors);
         vm.stopPrank();
 
         vm.startPrank(BOB);
