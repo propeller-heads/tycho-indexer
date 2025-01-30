@@ -65,3 +65,12 @@ REFERENCES token(id);
 
 -- Step 5: index on token_id and account
 CREATE INDEX account_balance_account_token_id_idx ON account_balance (account_id, token_id);
+
+-- Step 6: remove old contraints
+ALTER TABLE account_balance
+DROP CONSTRAINT account_balance_account_id_modify_tx_key;
+
+-- Step 7: add new contraint
+ALTER TABLE account_balance
+ADD CONSTRAINT account_balance_account_id_token_id_modify_tx_key
+UNIQUE (account_id, token_id, modify_tx);
