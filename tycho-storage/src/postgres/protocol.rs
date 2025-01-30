@@ -696,7 +696,7 @@ impl PostgresGateway {
         };
 
         let balances = if retrieve_balances {
-            self.get_balances(chain, ids, at.as_ref(), conn)
+            self.get_component_balances(chain, ids, at.as_ref(), conn)
                 .await?
         } else {
             HashMap::new()
@@ -1363,7 +1363,7 @@ impl PostgresGateway {
     }
 
     #[instrument(level = Level::DEBUG, skip(self, ids, conn))]
-    pub async fn get_balances(
+    pub async fn get_component_balances(
         &self,
         chain: &Chain,
         ids: Option<&[&str]>,
@@ -3540,7 +3540,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_balances() {
+    async fn test_get_component_balances() {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
@@ -3582,7 +3582,7 @@ mod test {
         .collect();
 
         let res = gw
-            .get_balances(&Chain::Ethereum, Some(&["state1"]), None, &mut conn)
+            .get_component_balances(&Chain::Ethereum, Some(&["state1"]), None, &mut conn)
             .await
             .expect("retrieving balances failed!");
 
@@ -3697,7 +3697,7 @@ mod test {
         .collect();
 
         let res = gw
-            .get_balances(
+            .get_component_balances(
                 &Chain::Ethereum,
                 Some(&["state3"]),
                 Some(&Version::from_block_number(Chain::Ethereum, 1)),

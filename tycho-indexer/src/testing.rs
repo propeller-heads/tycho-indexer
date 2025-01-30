@@ -415,7 +415,7 @@ mock! {
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity)]
-        fn get_balances<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
+        fn get_component_balances<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
             &'life0 self,
             chain: &'life1 Chain,
             ids: Option<&'life2 [&'life3 str]>,
