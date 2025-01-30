@@ -2248,7 +2248,7 @@ mod test_serial_db {
                             AccountBalance {
                                 token: base_token,
                                 balance: Bytes::from(&[0u8]),
-                                modify_tx: VM_TX_HASH_0.parse().unwrap(),
+                                modify_tx: VM_TX_HASH_1.parse().unwrap(),
                                 account: VM_CONTRACT.into(),
                             },
                         )]),
