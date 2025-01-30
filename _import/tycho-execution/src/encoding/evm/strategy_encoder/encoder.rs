@@ -71,9 +71,9 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             router_address,
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
-        let executor_address = Address::from_str(swap_encoder.executor_address())
+        let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
-        Ok((protocol_data, Bytes::from(executor_address.as_slice())))
+        Ok((protocol_data, executor_address))
     }
     fn selector(&self, _exact_out: bool) -> &str {
         "swap(uint256, bytes)"
