@@ -2,9 +2,7 @@ use tycho_core::models::Chain;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::strategy_encoder::strategy_encoders::{
-        SplitSwapStrategyEncoder, StraightToPoolStrategyEncoder,
-    },
+    evm::strategy_encoder::strategy_encoders::{ExecutorStrategyEncoder, SplitSwapStrategyEncoder},
     models::Solution,
     strategy_encoder::{StrategyEncoder, StrategySelector},
 };
@@ -18,8 +16,8 @@ impl StrategySelector for EVMStrategySelector {
         signer: Option<String>,
         chain: Chain,
     ) -> Result<Box<dyn StrategyEncoder>, EncodingError> {
-        if solution.straight_to_pool {
-            Ok(Box::new(StraightToPoolStrategyEncoder {}))
+        if solution.direct_execution {
+            Ok(Box::new(ExecutorStrategyEncoder {}))
         } else {
             let signer_pk = signer.ok_or_else(|| {
                 EncodingError::FatalError(

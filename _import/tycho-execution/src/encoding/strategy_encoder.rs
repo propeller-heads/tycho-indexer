@@ -4,8 +4,11 @@ use crate::encoding::{errors::EncodingError, models::Solution};
 
 #[allow(dead_code)]
 pub trait StrategyEncoder {
-    fn encode_strategy(&self, to_encode: Solution,router_address: Bytes,) -> Result<(Vec<u8>, Bytes), EncodingError>;
-    fn selector(&self, exact_out: bool) -> &str;
+    fn encode_strategy(
+        &self,
+        to_encode: Solution,
+        router_address: Bytes,
+    ) -> Result<(Vec<u8>, Bytes), EncodingError>;
 }
 
 pub trait StrategySelector {

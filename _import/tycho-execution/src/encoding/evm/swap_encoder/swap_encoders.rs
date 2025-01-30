@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
-use alloy_primitives::{Address, Bytes as AlloyBytes, FixedBytes};
+use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
-use tycho_core::keccak256;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -13,18 +12,11 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
-pub trait EVMSwapEncoder: SwapEncoder {
-    fn executor_selector(&self) -> FixedBytes<4> {
-        let hash = keccak256("swap(uint256,bytes)".as_bytes());
-        FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
-    }
-}
-
 pub struct UniswapV2SwapEncoder {
     executor_address: String,
+    executor_selector: String,
 }
 
-impl EVMSwapEncoder for UniswapV2SwapEncoder {}
 impl UniswapV2SwapEncoder {
     fn get_zero_to_one(sell_token_address: Address, buy_token_address: Address) -> bool {
         sell_token_address < buy_token_address
@@ -33,7 +25,7 @@ impl UniswapV2SwapEncoder {
 
 impl SwapEncoder for UniswapV2SwapEncoder {
     fn new(executor_address: String) -> Self {
-        Self { executor_address }
+        Self { executor_address, executor_selector: "swap(uint256,bytes)".to_string() }
     }
 
     fn encode_swap(
@@ -51,9 +43,6 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         // Token in address is always needed to perform a manual transfer from the router,
         // since no optimizations are performed that send from one pool to the next
         let args = (
-            Address::from_str(self.executor_address())
-                .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
-            self.executor_selector(),
             token_in_address,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
@@ -66,12 +55,16 @@ impl SwapEncoder for UniswapV2SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+
+    fn executor_selector(&self) -> &str {
+        &self.executor_selector
+    }
 }
 
 pub struct UniswapV3SwapEncoder {
     executor_address: String,
+    executor_selector: String,
 }
-impl EVMSwapEncoder for UniswapV3SwapEncoder {}
 
 impl UniswapV3SwapEncoder {
     fn get_zero_to_one(sell_token_address: Address, buy_token_address: Address) -> bool {
@@ -81,7 +74,7 @@ impl UniswapV3SwapEncoder {
 
 impl SwapEncoder for UniswapV3SwapEncoder {
     fn new(executor_address: String) -> Self {
-        Self { executor_address }
+        Self { executor_address, executor_selector: "swap(uint256,bytes)".to_string() }
     }
 
     fn encode_swap(
@@ -119,9 +112,6 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             })?;
 
         let args = (
-            Address::from_str(self.executor_address())
-                .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
-            self.executor_selector(),
             token_in_address,
             token_out_address,
             pool_fee_u24,
@@ -136,19 +126,22 @@ impl SwapEncoder for UniswapV3SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+    fn executor_selector(&self) -> &str {
+        &self.executor_selector
+    }
 }
 
 pub struct BalancerV2SwapEncoder {
     executor_address: String,
+    executor_selector: String,
     vault_address: String,
 }
-
-impl EVMSwapEncoder for BalancerV2SwapEncoder {}
 
 impl SwapEncoder for BalancerV2SwapEncoder {
     fn new(executor_address: String) -> Self {
         Self {
             executor_address,
+            executor_selector: "swap(uint256,bytes)".to_string(),
             vault_address: "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
         }
     }
@@ -171,9 +164,6 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
 
         let args = (
-            Address::from_str(self.executor_address())
-                .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
-            self.executor_selector(),
             bytes_to_address(&swap.token_in)?,
             bytes_to_address(&swap.token_out)?,
             component_id,
@@ -186,6 +176,9 @@ impl SwapEncoder for BalancerV2SwapEncoder {
 
     fn executor_address(&self) -> &str {
         &self.executor_address
+    }
+    fn executor_selector(&self) -> &str {
+        &self.executor_selector
     }
 }
 
@@ -224,10 +217,6 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // executor address
-                "543778987b293c7e8cf0722bb2e935ba6f4068d4",
-                // executor selector
-                "bd0625ab",
                 // in token
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // component id
@@ -270,10 +259,6 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // executor address
-                "543778987b293c7e8cf0722bb2e935ba6f4068d4",
-                // executor selector
-                "bd0625ab",
                 // in token
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // out token
@@ -318,10 +303,6 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // executor address
-                "543778987b293c7e8cf0722bb2e935ba6f4068d4",
-                // executor selector
-                "bd0625ab",
                 // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // token out
