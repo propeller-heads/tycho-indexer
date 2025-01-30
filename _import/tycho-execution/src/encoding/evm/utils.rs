@@ -1,5 +1,4 @@
 use alloy_primitives::{aliases::U24, Address, Keccak256, U256};
-use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 use tycho_core::Bytes;
 
@@ -21,18 +20,6 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, EncodingError> {
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
     let bytes = value.to_bytes_be();
     U256::from_be_slice(&bytes)
-}
-
-#[allow(dead_code)]
-pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
-    let mut encoded_action_data: Vec<u8> = Vec::new();
-
-    for action_data in action_data_array {
-        let args = (encoded_action_data, action_data.len() as u16, action_data);
-        encoded_action_data = args.abi_encode_packed();
-    }
-
-    encoded_action_data
 }
 
 #[allow(dead_code)]

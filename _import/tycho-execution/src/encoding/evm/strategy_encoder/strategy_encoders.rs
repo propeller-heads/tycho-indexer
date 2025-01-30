@@ -10,9 +10,7 @@ use crate::encoding::{
     evm::{
         approvals::permit2::Permit2,
         swap_encoder::SWAP_ENCODER_REGISTRY,
-        utils::{
-            biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24, ple_encode,
-        },
+        utils::{biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24},
     },
     models::{EncodingContext, NativeAction, Solution},
     strategy_encoder::StrategyEncoder,
@@ -41,6 +39,17 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
     fn encode_executor_selector(&self, selector: &str) -> FixedBytes<4> {
         let hash = keccak256(selector.as_bytes());
         FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
+    }
+
+    fn ple_encode(&self, action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
+        let mut encoded_action_data: Vec<u8> = Vec::new();
+
+        for action_data in action_data_array {
+            let args = (encoded_action_data, action_data.len() as u16, action_data);
+            encoded_action_data = args.abi_encode_packed();
+        }
+
+        encoded_action_data
     }
 }
 
@@ -139,7 +148,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             swaps.push(swap_data);
         }
 
-        let encoded_swaps = ple_encode(swaps);
+        let encoded_swaps = self.ple_encode(swaps);
         let (mut unwrap, mut wrap) = (false, false);
         if solution.native_action.is_some() {
             match solution.native_action.unwrap() {
