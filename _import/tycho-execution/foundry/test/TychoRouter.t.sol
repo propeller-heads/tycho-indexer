@@ -29,7 +29,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assert(tychoRouter.executors(DUMMY) == true);
     }
 
-    function testSetExecutorMultipleValidRole() public {
+    function testSetExecutorsValidRole() public {
         // Set multiple executors
         address[] memory executors = new address[](2);
         executors[0] = DUMMY;
