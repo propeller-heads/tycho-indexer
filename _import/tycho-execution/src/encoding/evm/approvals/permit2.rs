@@ -1,7 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use alloy::{
-    primitives::{aliases::U48, Address, Bytes as AlloyBytes, ChainId, TxKind, U160, U256},
+    primitives::{aliases::U48, Address, Bytes as AlloyBytes, TxKind, U160, U256},
     providers::{Provider, RootProvider},
     rpc::types::{TransactionInput, TransactionRequest},
     signers::{local::PrivateKeySigner, SignerSync},
@@ -20,7 +20,8 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::get_client,
-        utils::{biguint_to_u256, bytes_to_address, encode_input, to_chain_id},
+        models::ChainId,
+        utils::{biguint_to_u256, bytes_to_address, encode_input},
     },
 };
 
@@ -62,7 +63,7 @@ sol! {
 #[allow(dead_code)]
 impl Permit2 {
     pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
-        let chain_id = to_chain_id(chain)?;
+        let chain_id = ChainId::from(chain);
         let runtime = Runtime::new()
             .map_err(|_| EncodingError::FatalError("Failed to create runtime".to_string()))?;
         let client = runtime.block_on(get_client())?;
@@ -145,7 +146,7 @@ impl Permit2 {
 
         let domain = eip712_domain! {
             name: "Permit2",
-            chain_id: self.chain_id,
+            chain_id: self.chain_id.id(),
             verifying_contract: self.address,
         };
         let hash = permit_single.eip712_signing_hash(&domain);
