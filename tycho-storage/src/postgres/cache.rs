@@ -791,6 +791,22 @@ impl ContractStateGateway for CachedGateway {
             .await?;
         Ok(())
     }
+
+    #[instrument(skip_all)]
+    async fn get_account_balances(
+        &self,
+        chain: &Chain,
+        addresses: Option<&[Address]>,
+        version: Option<&Version>,
+    ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_account_balances(chain, addresses, version, &mut conn)
+            .await
+    }
 }
 
 #[async_trait]
@@ -1010,14 +1026,14 @@ impl ProtocolGateway for CachedGateway {
         &self,
         chain: &Chain,
         ids: Option<&[&str]>,
-        at: Option<&Version>,
+        version: Option<&Version>,
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_component_balances(chain, ids, at, &mut conn)
+            .get_component_balances(chain, ids, version, &mut conn)
             .await
     }
 
