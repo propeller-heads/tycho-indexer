@@ -1,3 +1,45 @@
+## [0.24.0](https://github.com/propeller-heads/tycho-execution/compare/0.23.0...0.24.0) (2025-01-30)
+
+
+### Features
+
+* rename batchSetExecutor to setExecutors ([c653062](https://github.com/propeller-heads/tycho-execution/commit/c65306202783ec80e8086423a4cec4261728da03))
+* replace setExecutor with batchSetExecutor ([ea504fa](https://github.com/propeller-heads/tycho-execution/commit/ea504faca12bdf19f4c98946a4173167a73fba2d))
+
+
+### Bug Fixes
+
+* rm redundant test ([24e95b1](https://github.com/propeller-heads/tycho-execution/commit/24e95b1206d403a9c7b2c82b12bd14c3fc7ee6c4))
+
+## [0.23.0](https://github.com/propeller-heads/tycho-execution/compare/0.22.0...0.23.0) (2025-01-30)
+
+
+### Features
+
+* add executor encoder test ([ad70a0d](https://github.com/propeller-heads/tycho-execution/commit/ad70a0d5a87f2a89d78de7f4ae783f6c80097407))
+* add swap test with hex for univ2 executor ([0196767](https://github.com/propeller-heads/tycho-execution/commit/0196767eff1d18481e3154defd92514bd45d74b9))
+* add univ2 executor test with hex ([c482e21](https://github.com/propeller-heads/tycho-execution/commit/c482e21a5f7b254a19cca53c5a86b97830a90932))
+* remove exact_out from USV2 ([8cb95f0](https://github.com/propeller-heads/tycho-execution/commit/8cb95f0950e3b57ae0c6ecc3f4c0950005ae75e7))
+* resolve pr comments ([1b8bf56](https://github.com/propeller-heads/tycho-execution/commit/1b8bf56c754254dc74233e28f3ae3a3992bbf0d3))
+* update ExecutorEncoder interface and relevant types ([5c39651](https://github.com/propeller-heads/tycho-execution/commit/5c396512cf695dab3b0d0fec16f71b916661d54d))
+
+## [0.22.0](https://github.com/propeller-heads/tycho-execution/compare/0.21.0...0.22.0) (2025-01-30)
+
+
+### Features
+
+* fixed USV3 Verification ([96af542](https://github.com/propeller-heads/tycho-execution/commit/96af5429232a851a7e7144b8a30843a3e6dc980e))
+* Implement generic callback ([fafeba9](https://github.com/propeller-heads/tycho-execution/commit/fafeba924848f107e1a00a00cfe94347fde3d919))
+* UniswapV3Executor and integration tests ([ca32446](https://github.com/propeller-heads/tycho-execution/commit/ca32446a9ee28118d8857c02abefd24389485b7e))
+* USV3 verification ([7822c4f](https://github.com/propeller-heads/tycho-execution/commit/7822c4f9132b6d64a1281f6e54a8515cb0d242d3))
+
+
+### Bug Fixes
+
+* Remove amountReceived and dataOffset from the callback verification ([63b94b5](https://github.com/propeller-heads/tycho-execution/commit/63b94b55849f2087dab78ec951c459d3811409eb))
+* Remove amountReceived, dataOffset from ICallbackVerifier interface ([33ada0c](https://github.com/propeller-heads/tycho-execution/commit/33ada0cf26209cd626c75e26fc6d56943988e0b1))
+* Remove exactOut from USV3 encoding ([d8b44f6](https://github.com/propeller-heads/tycho-execution/commit/d8b44f623b8175f4759f8a8cbd42c46e5abad3b4))
+
 ## [0.21.0](https://github.com/propeller-heads/tycho-execution/compare/0.20.0...0.21.0) (2025-01-28)
 
 

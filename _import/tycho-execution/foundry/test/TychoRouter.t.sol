@@ -19,16 +19,31 @@ contract TychoRouterTest is TychoRouterTestSetup {
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    function testSetExecutorValidRole() public {
+    function testSetExecutorsValidRole() public {
+        // Set single executor
+        address[] memory executors = new address[](1);
+        executors[0] = DUMMY;
         vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setExecutor(DUMMY);
+        tychoRouter.setExecutors(executors);
         vm.stopPrank();
         assert(tychoRouter.executors(DUMMY) == true);
+
+        // Set multiple executors
+        address[] memory executors2 = new address[](2);
+        executors2[0] = DUMMY2;
+        executors2[1] = DUMMY3;
+        vm.startPrank(EXECUTOR_SETTER);
+        tychoRouter.setExecutors(executors2);
+        vm.stopPrank();
+        assert(tychoRouter.executors(DUMMY2) == true);
+        assert(tychoRouter.executors(DUMMY3) == true);
     }
 
     function testRemoveExecutorValidRole() public {
         vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setExecutor(DUMMY);
+        address[] memory executors = new address[](1);
+        executors[0] = DUMMY;
+        tychoRouter.setExecutors(executors);
         tychoRouter.removeExecutor(DUMMY);
         vm.stopPrank();
         assert(tychoRouter.executors(DUMMY) == false);
@@ -39,9 +54,11 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.removeExecutor(BOB);
     }
 
-    function testSetExecutorMissingSetterRole() public {
+    function testSetExecutorsMissingSetterRole() public {
         vm.expectRevert();
-        tychoRouter.setExecutor(DUMMY);
+        address[] memory executors = new address[](1);
+        executors[0] = DUMMY;
+        tychoRouter.setExecutors(executors);
     }
 
     function testSetVerifierValidRole() public {
@@ -215,7 +232,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
     function testSwapSimple() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // 1 WETH   ->   DAI
-        //       (univ2)
+        //       (USV2)
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, tychoRouterAddr, amountIn);
 
@@ -605,5 +622,53 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(ALICE.balance, expectedAmount);
 
         vm.stopPrank();
+    }
+
+    function testUSV3Callback() public {
+        uint24 poolFee = 3000;
+        uint256 amountOwed = 1000000000000000000;
+        deal(WETH_ADDR, tychoRouterAddr, amountOwed);
+        uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
+
+        vm.startPrank(DAI_WETH_USV3);
+        tychoRouter.uniswapV3SwapCallback(
+            -2631245338449998525223,
+            int256(amountOwed),
+            abi.encodePacked(WETH_ADDR, DAI_ADDR, poolFee)
+        );
+        vm.stopPrank();
+
+        uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
+        assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
+    }
+
+    function testSwapSingleUSV3() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V3
+        // 1 WETH   ->   DAI
+        //       (USV3)
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, tychoRouterAddr, amountIn);
+
+        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = false;
+        bytes memory protocolData = encodeUniswapV3Swap(
+            WETH_ADDR, DAI_ADDR, tychoRouterAddr, DAI_WETH_USV3, zeroForOne
+        );
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            bytes4(0),
+            protocolData
+        );
+
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+
+        uint256 finalBalance = IERC20(DAI_ADDR).balanceOf(tychoRouterAddr);
+        assertGe(finalBalance, expAmountOut);
     }
 }

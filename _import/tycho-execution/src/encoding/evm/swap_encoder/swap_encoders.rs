@@ -58,7 +58,6 @@ impl SwapEncoder for UniswapV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             zero_to_one,
-            encoding_context.exact_out,
         );
 
         Ok(args.abi_encode_packed())
@@ -129,7 +128,6 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
-            encoding_context.exact_out,
         );
 
         Ok(args.abi_encode_packed())
@@ -238,8 +236,6 @@ mod tests {
                 "0000000000000000000000000000000000000001",
                 // zero for one
                 "00",
-                // exact out
-                "00",
             ))
         );
     }
@@ -289,8 +285,6 @@ mod tests {
                 // pool id
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
                 // zero for one
-                "00",
-                // exact out
                 "00",
             ))
         );

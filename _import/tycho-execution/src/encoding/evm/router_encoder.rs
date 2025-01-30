@@ -54,7 +54,7 @@ impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
                 self.chain,
             )?;
 
-            let contract_interaction =
+            let (contract_interaction,target_address) =
                 strategy.encode_strategy(solution.clone(), router_address)?;
 
             let value = if solution.native_action.clone().unwrap() == NativeAction::Wrap {
@@ -62,7 +62,11 @@ impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
             } else {
                 BigUint::ZERO
             };
-            transactions.push(Transaction { value, data: contract_interaction });
+            transactions.push(Transaction {
+                value,
+                data: contract_interaction,
+                to: target_address,
+            });
         }
         Ok(transactions)
     }

@@ -16,6 +16,8 @@ contract Constants is Test {
 
     // Dummy contracts
     address DUMMY = makeAddr("dummy");
+    address DUMMY2 = makeAddr("dummy2");
+    address DUMMY3 = makeAddr("dummy3");
     address PAUSER = makeAddr("pauser");
     address UNPAUSER = makeAddr("unpauser");
 
@@ -32,11 +34,17 @@ contract Constants is Test {
     address WETH_WBTC_POOL = 0xBb2b8038a1640196FbE3e38816F3e67Cba72D940;
     address USDC_WBTC_POOL = 0x004375Dff511095CC5A197A54140a24eFEF3A416;
 
+    // uniswap v3
+    address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
+
     /**
      * @dev Deploys a dummy contract with non-empty bytecode
      */
     function deployDummyContract() internal {
         bytes memory minimalBytecode = hex"01"; // Single-byte bytecode
-        vm.etch(DUMMY, minimalBytecode); // Deploy minimal bytecode
+        // Deploy minimal bytecode
+        vm.etch(DUMMY, minimalBytecode);
+        vm.etch(DUMMY2, minimalBytecode);
+        vm.etch(DUMMY3, minimalBytecode);
     }
 }
