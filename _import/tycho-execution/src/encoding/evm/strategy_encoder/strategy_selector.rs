@@ -24,7 +24,7 @@ impl StrategySelector for EVMStrategySelector {
                     "Signer is required for SplitSwapStrategyEncoder".to_string(),
                 )
             })?;
-            Ok(Box::new(SplitSwapStrategyEncoder::new(signer_pk, chain).unwrap()))
+            Ok(Box::new(SplitSwapStrategyEncoder::new(signer_pk, chain)?))
         }
     }
 }

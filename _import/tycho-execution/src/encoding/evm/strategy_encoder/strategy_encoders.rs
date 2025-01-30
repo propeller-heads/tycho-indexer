@@ -77,20 +77,17 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             &solution.given_token,
             &solution.given_amount,
         )?;
-        let min_amount_out = if solution.check_amount.is_some() {
-            let mut min_amount_out = solution.check_amount.clone().unwrap();
-            if solution.slippage.is_some() {
+        let mut min_amount_out = BigUint::ZERO;
+        if let Some(user_specified_min_amount) = solution.check_amount {
+            if let Some(slippage) = solution.slippage {
                 let one_hundred = BigUint::from(100u32);
-                let slippage_percent = BigUint::from((solution.slippage.unwrap() * 100.0) as u32);
+                let slippage_percent = BigUint::from((slippage * 100.0) as u32);
                 let multiplier = &one_hundred - slippage_percent;
                 let expected_amount_with_slippage =
                     (&solution.expected_amount * multiplier) / one_hundred;
-                min_amount_out = max(min_amount_out, expected_amount_with_slippage);
+                min_amount_out = max(user_specified_min_amount, expected_amount_with_slippage);
             }
-            min_amount_out
-        } else {
-            BigUint::ZERO
-        };
+        }
 
         let mut tokens: Vec<Bytes> = solution
             .swaps
@@ -106,7 +103,13 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let mut swaps = vec![];
         for swap in solution.swaps.iter() {
-            let registry = SWAP_ENCODER_REGISTRY.read().unwrap();
+            let registry = SWAP_ENCODER_REGISTRY
+                .read()
+                .map_err(|_| {
+                    EncodingError::FatalError(
+                        "Failed to read the swap encoder registry".to_string(),
+                    )
+                })?;
             let swap_encoder = registry
                 .get_encoder(&swap.component.protocol_system)
                 .expect("Swap encoder not found");
@@ -150,8 +153,8 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let encoded_swaps = self.ple_encode(swaps);
         let (mut unwrap, mut wrap) = (false, false);
-        if solution.native_action.is_some() {
-            match solution.native_action.unwrap() {
+        if let Some(action) = solution.native_action {
+            match action {
                 NativeAction::Wrap => wrap = true,
                 NativeAction::Unwrap => unwrap = true,
             }
@@ -186,12 +189,16 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
         solution: Solution,
         _router_address: Bytes,
     ) -> Result<(Vec<u8>, Bytes), EncodingError> {
-        if solution.router_address.is_none() {
-            return Err(EncodingError::InvalidInput(
+        let router_address = solution.router_address.ok_or_else(|| {
+            EncodingError::InvalidInput(
                 "Router address is required for straight to pool solutions".to_string(),
-            ));
-        }
-        let swap = solution.swaps.first().unwrap();
+            )
+        })?;
+
+        let swap = solution
+            .swaps
+            .first()
+            .ok_or_else(|| EncodingError::InvalidInput("No swaps found in solution".to_string()))?;
         let registry = SWAP_ENCODER_REGISTRY
             .read()
             .map_err(|_| {
@@ -205,7 +212,6 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
                     swap.component.protocol_system
                 ))
             })?;
-        let router_address = solution.router_address.unwrap();
 
         let encoding_context = EncodingContext {
             receiver: solution.receiver,

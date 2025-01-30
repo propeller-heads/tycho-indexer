@@ -57,11 +57,11 @@ impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
             let (contract_interaction, target_address) =
                 strategy.encode_strategy(solution.clone(), router_address)?;
 
-            let value = if solution.native_action.clone().unwrap() == NativeAction::Wrap {
-                solution.given_amount.clone()
-            } else {
-                BigUint::ZERO
+            let value = match solution.native_action.as_ref() {
+                Some(NativeAction::Wrap) => solution.given_amount.clone(),
+                _ => BigUint::ZERO,
             };
+
             transactions.push(Transaction {
                 value,
                 data: contract_interaction,
