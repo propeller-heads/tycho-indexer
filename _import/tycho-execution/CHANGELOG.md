@@ -1,3 +1,15 @@
+## [0.23.0](https://github.com/propeller-heads/tycho-execution/compare/0.22.0...0.23.0) (2025-01-30)
+
+
+### Features
+
+* add executor encoder test ([ad70a0d](https://github.com/propeller-heads/tycho-execution/commit/ad70a0d5a87f2a89d78de7f4ae783f6c80097407))
+* add swap test with hex for univ2 executor ([0196767](https://github.com/propeller-heads/tycho-execution/commit/0196767eff1d18481e3154defd92514bd45d74b9))
+* add univ2 executor test with hex ([c482e21](https://github.com/propeller-heads/tycho-execution/commit/c482e21a5f7b254a19cca53c5a86b97830a90932))
+* remove exact_out from USV2 ([8cb95f0](https://github.com/propeller-heads/tycho-execution/commit/8cb95f0950e3b57ae0c6ecc3f4c0950005ae75e7))
+* resolve pr comments ([1b8bf56](https://github.com/propeller-heads/tycho-execution/commit/1b8bf56c754254dc74233e28f3ae3a3992bbf0d3))
+* update ExecutorEncoder interface and relevant types ([5c39651](https://github.com/propeller-heads/tycho-execution/commit/5c396512cf695dab3b0d0fec16f71b916661d54d))
+
 ## [0.22.0](https://github.com/propeller-heads/tycho-execution/compare/0.21.0...0.22.0) (2025-01-30)
 
 
