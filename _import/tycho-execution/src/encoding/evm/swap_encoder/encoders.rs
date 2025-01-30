@@ -46,7 +46,6 @@ impl SwapEncoder for UniswapV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             zero_to_one,
-            encoding_context.exact_out,
         );
 
         Ok(args.abi_encode_packed())
@@ -210,8 +209,6 @@ mod tests {
                 // receiver
                 "0000000000000000000000000000000000000001",
                 // zero for one
-                "00",
-                // exact out
                 "00",
             ))
         );
