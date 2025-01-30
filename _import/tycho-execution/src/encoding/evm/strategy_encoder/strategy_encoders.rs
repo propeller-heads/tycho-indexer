@@ -10,7 +10,9 @@ use crate::encoding::{
     evm::{
         approvals::permit2::Permit2,
         swap_encoder::SWAP_ENCODER_REGISTRY,
-        utils::{biguint_to_u256, bytes_to_address, percentage_to_uint24, ple_encode},
+        utils::{
+            biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24, ple_encode,
+        },
     },
     models::{EncodingContext, NativeAction, Solution},
     strategy_encoder::StrategyEncoder,
@@ -36,11 +38,13 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 
 pub struct SplitSwapStrategyEncoder {
     permit2: Permit2,
+    selector: String,
 }
 
 impl SplitSwapStrategyEncoder {
     pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
-        Ok(Self { permit2: Permit2::new(signer_pk, chain)? })
+        let selector = "swap(uint256, address, address, uint256, bool, bool, uint256, address, ((address,uint160,uint48,uint48),address,uint256),bytes, bytes)".to_string();
+        Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector })
     }
 }
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
@@ -145,11 +149,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             encoded_swaps,
         )
             .abi_encode();
-        Ok(method_calldata)
-    }
 
-    fn selector(&self, _exact_out: bool) -> &str {
-        "swap(uint256, address, uint256, bytes[])"
+        let contract_interaction = encode_input(&self.selector, method_calldata);
+        Ok(contract_interaction)
     }
 }
 
@@ -192,9 +194,6 @@ impl StrategyEncoder for StraightToPoolStrategyEncoder {
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
         // TODO: here we need to pass also the address of the executor to be used
         Ok(protocol_data)
-    }
-    fn selector(&self, _exact_out: bool) -> &str {
-        unimplemented!();
     }
 }
 
@@ -248,7 +247,7 @@ mod tests {
             .unwrap();
 
         let expected_input = String::from(concat!(
-            "0000000000000000000000000000000000000000000000000000000000000020", // offset
+            "e73e3baa",                                                         // selector
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount out
             "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
@@ -298,7 +297,7 @@ mod tests {
             "0000000000",                               // padding
         ));
         let hex_calldata = encode(&calldata);
-        assert_eq!(hex_calldata[..576], expected_input);
-        assert_eq!(hex_calldata[1283..], expected_swaps);
+        assert_eq!(hex_calldata[..520], expected_input);
+        assert_eq!(hex_calldata[1227..], expected_swaps);
     }
 }

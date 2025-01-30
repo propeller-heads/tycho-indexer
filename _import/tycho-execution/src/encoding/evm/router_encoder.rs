@@ -5,7 +5,6 @@ use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::encode_input,
     models::{NativeAction, Solution, Transaction},
     router_encoder::RouterEncoder,
     strategy_encoder::StrategySelector,
@@ -37,8 +36,12 @@ impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
     ) -> Result<Vec<Transaction>, EncodingError> {
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
-            let exact_out = solution.exact_out;
-            let straight_to_pool = solution.straight_to_pool;
+            if solution.exact_out {
+                return Err(EncodingError::FatalError(
+                    "Currently only exact input solutions are supported".to_string(),
+                ));
+            }
+
             let router_address = solution
                 .router_address
                 .clone()
@@ -50,13 +53,9 @@ impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
                 self.signer.clone(),
                 self.chain,
             )?;
-            let method_calldata = strategy.encode_strategy(solution.clone(), router_address)?;
 
-            let contract_interaction = if straight_to_pool {
-                method_calldata
-            } else {
-                encode_input(strategy.selector(exact_out), method_calldata)
-            };
+            let contract_interaction =
+                strategy.encode_strategy(solution.clone(), router_address)?;
 
             let value = if solution.native_action.clone().unwrap() == NativeAction::Wrap {
                 solution.given_amount.clone()

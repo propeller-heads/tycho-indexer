@@ -9,7 +9,6 @@ pub trait StrategyEncoder {
         to_encode: Solution,
         router_address: Bytes,
     ) -> Result<Vec<u8>, EncodingError>;
-    fn selector(&self, exact_out: bool) -> &str;
 }
 
 pub trait StrategySelector {
