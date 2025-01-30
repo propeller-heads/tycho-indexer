@@ -1,6 +1,6 @@
 mod builder;
-mod encoders;
 mod registry;
+mod swap_encoders;
 
 use std::sync::RwLock;
 

@@ -1,2 +1,2 @@
-mod encoder;
-mod selector;
+mod strategy_encoders;
+mod strategy_selector;

@@ -2,7 +2,9 @@ use tycho_core::models::Chain;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::strategy_encoder::encoder::{SplitSwapStrategyEncoder, StraightToPoolStrategyEncoder},
+    evm::strategy_encoder::strategy_encoders::{
+        SplitSwapStrategyEncoder, StraightToPoolStrategyEncoder,
+    },
     models::Solution,
     strategy_encoder::{StrategyEncoder, StrategySelector},
 };
