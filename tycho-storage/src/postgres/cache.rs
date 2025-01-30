@@ -1010,7 +1010,7 @@ impl ProtocolGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn get_balances(
+    async fn get_component_balances(
         &self,
         chain: &Chain,
         ids: Option<&[&str]>,
@@ -1021,7 +1021,7 @@ impl ProtocolGateway for CachedGateway {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_balances(chain, ids, at, &mut conn)
+            .get_component_balances(chain, ids, at, &mut conn)
             .await
     }
 

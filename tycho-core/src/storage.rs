@@ -451,7 +451,7 @@ pub trait ProtocolGateway {
         target_version: &BlockOrTimestamp,
     ) -> Result<Vec<models::protocol::ComponentBalance>, StorageError>;
 
-    async fn get_balances(
+    async fn get_component_balances(
         &self,
         chain: &Chain,
         ids: Option<&[&str]>,
