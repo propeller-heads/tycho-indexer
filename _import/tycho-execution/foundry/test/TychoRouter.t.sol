@@ -27,18 +27,16 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
         assert(tychoRouter.executors(DUMMY) == true);
-    }
 
-    function testSetExecutorsValidRole() public {
         // Set multiple executors
-        address[] memory executors = new address[](2);
-        executors[0] = DUMMY;
-        executors[1] = DUMMY2;
+        address[] memory executors2 = new address[](2);
+        executors2[0] = DUMMY2;
+        executors2[1] = DUMMY3;
         vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setExecutors(executors);
+        tychoRouter.setExecutors(executors2);
         vm.stopPrank();
-        assert(tychoRouter.executors(DUMMY) == true);
         assert(tychoRouter.executors(DUMMY2) == true);
+        assert(tychoRouter.executors(DUMMY3) == true);
     }
 
     function testRemoveExecutorValidRole() public {

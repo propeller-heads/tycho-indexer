@@ -17,6 +17,7 @@ contract Constants is Test {
     // Dummy contracts
     address DUMMY = makeAddr("dummy");
     address DUMMY2 = makeAddr("dummy2");
+    address DUMMY3 = makeAddr("dummy3");
     address PAUSER = makeAddr("pauser");
     address UNPAUSER = makeAddr("unpauser");
 
@@ -41,5 +42,6 @@ contract Constants is Test {
         // Deploy minimal bytecode
         vm.etch(DUMMY, minimalBytecode);
         vm.etch(DUMMY2, minimalBytecode);
+        vm.etch(DUMMY3, minimalBytecode);
     }
 }
