@@ -46,12 +46,14 @@ impl PostgresGateway {
     #[instrument(level = Level::DEBUG, skip(self, conn))]
     async fn get_balance_deltas_internal(
         &self,
-        chain_id: i64,
+        chain: &Chain,
         start_version_ts: &NaiveDateTime,
         target_version_ts: &NaiveDateTime,
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<i64, Balance>, StorageError> {
         use schema::account_balance::dsl::*;
+        let chain_id = self.get_chain_id(chain);
+
         let res = if start_version_ts <= target_version_ts {
             // Going forward
             //                  [     changes to update    ]
@@ -69,7 +71,12 @@ impl PostgresGateway {
 
             account_balance
                 .inner_join(schema::transaction::table)
+                .inner_join(schema::token::table)
+                .inner_join(
+                    schema::account::table.on(schema::account::id.eq(schema::token::account_id)),
+                )
                 .filter(account_id.eq_any(changed_account_ids))
+                .filter(schema::account::address.eq(chain.native_token().address))
                 .filter(valid_from.le(target_version_ts))
                 .filter(
                     valid_to
@@ -102,7 +109,12 @@ impl PostgresGateway {
 
             account_balance
                 .inner_join(schema::transaction::table)
+                .inner_join(schema::token::table)
+                .inner_join(
+                    schema::account::table.on(schema::account::id.eq(schema::token::account_id)),
+                )
                 .filter(account_id.eq_any(changed_account_ids))
+                .filter(schema::account::address.eq(chain.native_token().address))
                 .filter(valid_from.le(target_version_ts))
                 .filter(
                     valid_to
@@ -1342,7 +1354,7 @@ impl PostgresGateway {
         let target_version_ts = maybe_lookup_block_ts(target_version, conn).await?;
 
         let balance_deltas = self
-            .get_balance_deltas_internal(chain_id, &start_version_ts, &target_version_ts, conn)
+            .get_balance_deltas_internal(chain, &start_version_ts, &target_version_ts, conn)
             .await?;
         let code_deltas = self
             .get_code_deltas(chain_id, &start_version_ts, &target_version_ts, conn)
