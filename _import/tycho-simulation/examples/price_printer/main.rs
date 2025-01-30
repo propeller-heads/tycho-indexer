@@ -1,6 +1,7 @@
-extern crate tycho_simulation;
 mod ui;
 pub mod utils;
+
+extern crate tycho_simulation;
 
 use std::env;
 
