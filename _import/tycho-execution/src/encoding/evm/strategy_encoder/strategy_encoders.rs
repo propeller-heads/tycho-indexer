@@ -1,4 +1,4 @@
-use std::{cmp::min, str::FromStr};
+use std::{cmp::max, str::FromStr};
 
 use alloy_primitives::{aliases::U24, map::HashSet, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
@@ -76,7 +76,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 let multiplier = &one_hundred - slippage_percent;
                 let expected_amount_with_slippage =
                     (&solution.expected_amount * multiplier) / one_hundred;
-                min_amount_out = min(min_amount_out, expected_amount_with_slippage);
+                min_amount_out = max(min_amount_out, expected_amount_with_slippage);
             }
             min_amount_out
         } else {
@@ -115,7 +115,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                         .position(|t| *t == swap.token_in)
                         .ok_or_else(|| {
                             EncodingError::InvalidInput(
-                                "Token in not found in tokens array".to_string(),
+                                "In token not found in tokens array".to_string(),
                             )
                         })?,
                 ),
@@ -125,7 +125,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                         .position(|t| *t == swap.token_out)
                         .ok_or_else(|| {
                             EncodingError::InvalidInput(
-                                "Token out not found in tokens array".to_string(),
+                                "Out token not found in tokens array".to_string(),
                             )
                         })?,
                 ),

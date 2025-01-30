@@ -15,7 +15,7 @@ pub struct EVMRouterEncoder<S: StrategySelector> {
     strategy_selector: S,
     signer: Option<String>,
     chain: Chain,
-    router_address: String,
+    router_address: Bytes,
 }
 
 #[allow(dead_code)]
@@ -26,6 +26,8 @@ impl<S: StrategySelector> EVMRouterEncoder<S> {
         signer: Option<String>,
         chain: Chain,
     ) -> Result<Self, EncodingError> {
+        let router_address = Bytes::from_str(&router_address)
+            .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
         Ok(EVMRouterEncoder { strategy_selector, signer, chain, router_address })
     }
 }
@@ -45,16 +47,14 @@ impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
             let router_address = solution
                 .router_address
                 .clone()
-                .unwrap_or(Bytes::from_str(&self.router_address).map_err(|_| {
-                    EncodingError::FatalError("Invalid router address".to_string())
-                })?);
+                .unwrap_or(self.router_address.clone());
             let strategy = self.strategy_selector.select_strategy(
                 solution,
                 self.signer.clone(),
                 self.chain,
             )?;
 
-            let (contract_interaction,target_address) =
+            let (contract_interaction, target_address) =
                 strategy.encode_strategy(solution.clone(), router_address)?;
 
             let value = if solution.native_action.clone().unwrap() == NativeAction::Wrap {
