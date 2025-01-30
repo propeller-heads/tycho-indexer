@@ -20,15 +20,32 @@ contract TychoRouterTest is TychoRouterTestSetup {
     );
 
     function testSetExecutorValidRole() public {
+        // Set single executor
+        address[] memory executors = new address[](1);
+        executors[0] = DUMMY;
         vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setExecutor(DUMMY);
+        tychoRouter.batchSetExecutor(executors);
         vm.stopPrank();
         assert(tychoRouter.executors(DUMMY) == true);
     }
 
+    function testSetExecutorMultipleValidRole() public {
+        // Set multiple executors
+        address[] memory executors = new address[](2);
+        executors[0] = DUMMY;
+        executors[1] = DUMMY2;
+        vm.startPrank(EXECUTOR_SETTER);
+        tychoRouter.batchSetExecutor(executors);
+        vm.stopPrank();
+        assert(tychoRouter.executors(DUMMY) == true);
+        assert(tychoRouter.executors(DUMMY2) == true);
+    }
+
     function testRemoveExecutorValidRole() public {
         vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setExecutor(DUMMY);
+        address[] memory executors = new address[](1);
+        executors[0] = DUMMY;
+        tychoRouter.batchSetExecutor(executors);
         tychoRouter.removeExecutor(DUMMY);
         vm.stopPrank();
         assert(tychoRouter.executors(DUMMY) == false);
@@ -41,7 +58,9 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
     function testSetExecutorMissingSetterRole() public {
         vm.expectRevert();
-        tychoRouter.setExecutor(DUMMY);
+        address[] memory executors = new address[](1);
+        executors[0] = DUMMY;
+        tychoRouter.batchSetExecutor(executors);
     }
 
     function testSetVerifierValidRole() public {

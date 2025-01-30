@@ -235,13 +235,15 @@ contract TychoRouter is
 
     /**
      * @dev Entrypoint to add or replace an approved executor contract address
-     * @param target address of the executor contract
+     * @param targets address of the executor contract
      */
-    function setExecutor(address target)
+    function batchSetExecutor(address[] memory targets)
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
-        _setExecutor(target);
+        for (uint256 i = 0; i < targets.length; i++) {
+            _setExecutor(targets[i]);
+        }
     }
 
     /**
