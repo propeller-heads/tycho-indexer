@@ -308,7 +308,9 @@ mod tests {
     }
 
     #[test]
-    fn test_split_swap_strategy_encoder() {
+    fn test_split_swap_strategy_encoder_simple_route() {
+        // Performs a single swap from WETH to DAI on a USV2 pool
+
         // Set up a mock private key for signing
         let private_key =
             "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
@@ -399,5 +401,89 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+    }
+
+    #[test]
+    fn test_split_swap_strategy_encoder_complex_route() {
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+        //
+        // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
+        //
+        //         ┌──(USV2)──> WBTC ───(USV2)──> USDC
+        //   WETH ─┤
+        //         └──(USV2)──> DAI  ───(USV2)──> USDC
+        //
+
+        // Set up a mock private key for signing
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let swap_weth_dai = Swap {
+            component: ProtocolComponent {
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: dai.clone(),
+            split: 0.5f64,
+        };
+        let swap_weth_wbtc = Swap {
+            component: ProtocolComponent {
+                id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
+            split: 0.5f64,
+        };
+        let swap_dai_usdc = Swap {
+            component: ProtocolComponent {
+                id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: dai.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+        let swap_wbtc_usdc = Swap {
+            component: ProtocolComponent {
+                id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: wbtc.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+
+        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: weth,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: usdc,
+            expected_amount: BigUint::from_str("3_000_000000").unwrap(),
+            check_amount: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
+            ..Default::default()
+        };
+        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution, router_address)
+            .unwrap();
+
+        let _hex_calldata = encode(&calldata);
     }
 }
