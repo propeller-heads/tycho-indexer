@@ -475,7 +475,7 @@ mod test {
     use crate::{extractor::models::fixtures, testing::block};
 
     use tycho_core::models::{
-        contract::AccountDelta,
+        contract::{AccountBalance, AccountDelta},
         protocol::{ComponentBalance, ProtocolComponentStateDelta},
         Chain, ChangeType,
     };
@@ -487,6 +487,7 @@ mod test {
             "Contract1".to_string(),
             fixtures::slots([(2, 2)]),
             Bytes::from("0x1999"),
+            HashMap::new(),
             Bytes::from("0x0c0c0c"),
             Bytes::from("0xbabe"),
             Bytes::from("0x4200"),
@@ -509,7 +510,7 @@ mod test {
                     address.clone(),
                     AccountDelta::new(
                         Chain::Ethereum,
-                        address,
+                        address.clone(),
                         fixtures::optional_slots([(1, 1), (2, 1)]),
                         Some(Bytes::from(1999u32).lpad(32, 0)),
                         None,
@@ -550,6 +551,40 @@ mod test {
             .collect::<HashMap<_, _>>(),
             HashMap::new(),
             HashMap::new(),
+            [
+                (
+                    address.clone(),
+                    [(
+                        Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                        AccountBalance {
+                            token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+                                .unwrap(),
+                            balance: Bytes::from("0x01"),
+                            modify_tx: Bytes::zero(32),
+                            account: address.clone(),
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+                (
+                    address.clone(),
+                    [(
+                        Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+                        AccountBalance {
+                            token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+                                .unwrap(),
+                            balance: Bytes::from("0x02"),
+                            modify_tx: Bytes::zero(32),
+                            account: address,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
             HashMap::new(),
         )
     }
@@ -669,6 +704,7 @@ mod test {
             .into_iter()
             .collect(),
             HashMap::new(),
+            HashMap::new(),
         )
     }
 
@@ -751,6 +787,7 @@ mod test {
             "Contract1".to_string(),
             fixtures::slots([(1, 1), (2, 1)]),
             Bytes::from("0x00000000000000000000000000000000000000000000000000000000000007cf"),
+            HashMap::new(),
             Bytes::from("0x0c0c0c"),
             Bytes::from("0xbabe"),
             Bytes::from("0x4200"),
@@ -764,6 +801,7 @@ mod test {
             address1.clone().to_string(),
             fixtures::slots([(1, 1), (2, 1)]),
             Bytes::from("0x00000000000000000000000000000000000000000000000000000000000000c8"),
+            HashMap::new(),
             Bytes::from("0x0c0c0c"),
             Bytes::from("0x58ca1e123f83094287ae82a842f4f49e064d6f2fa946a2130335ff131ebd010b"),
             Bytes::from("0x00"),

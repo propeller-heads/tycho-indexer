@@ -3,11 +3,13 @@ pub mod contract;
 pub mod protocol;
 pub mod token;
 
-use crate::{dto, Bytes};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::HashMap, fmt::Display, str::FromStr, sync::Arc};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
+
+use crate::{dto, Bytes};
+use token::CurrencyToken;
 
 /// Address hash literal type to uniquely identify contracts/accounts on a
 /// blockchain.
@@ -70,6 +72,42 @@ impl From<dto::Chain> for Chain {
             dto::Chain::ZkSync => Chain::ZkSync,
             dto::Chain::Arbitrum => Chain::Arbitrum,
             dto::Chain::Base => Chain::Base,
+        }
+    }
+}
+
+fn native_eth(chain: Chain) -> CurrencyToken {
+    CurrencyToken::new(
+        &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+        "ETH",
+        18,
+        0,
+        &[None],
+        chain,
+        100,
+    )
+}
+
+impl Chain {
+    /// Returns the native token symbol for the chain.
+    pub fn native_token(&self) -> CurrencyToken {
+        match self {
+            Chain::Ethereum => native_eth(Chain::Ethereum),
+            Chain::Starknet => CurrencyToken::new(
+                &Bytes::from_str(
+                    "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
+                )
+                .unwrap(),
+                "STRK",
+                18,
+                0,
+                &[None],
+                Chain::Starknet,
+                100,
+            ),
+            Chain::ZkSync => native_eth(Chain::ZkSync),
+            Chain::Arbitrum => native_eth(Chain::Arbitrum),
+            Chain::Base => native_eth(Chain::Base),
         }
     }
 }

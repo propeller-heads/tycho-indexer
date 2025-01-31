@@ -1,7 +1,9 @@
-use super::{orm, schema, storage_error_from_diesel, PostgresGateway, StorageError};
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+
 use tycho_core::models::{Chain, ExtractionState};
+
+use super::{orm, schema, storage_error_from_diesel, PostgresGateway, StorageError};
 
 impl PostgresGateway {
     pub async fn get_state(
@@ -91,10 +93,11 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
     use diesel::prelude::*;
     use diesel_async::{AsyncConnection, RunQueryDsl};
+    use std::str::FromStr;
+
+    use crate::postgres::db_fixtures;
     use tycho_core::Bytes;
 
     use super::*;
@@ -110,14 +113,18 @@ mod test {
         conn.begin_test_transaction()
             .await
             .unwrap();
-        let chain_id: i64 = diesel::insert_into(schema::chain::table)
-            .values(schema::chain::name.eq("ethereum"))
-            .returning(schema::chain::id)
-            .get_result(&mut conn)
-            .await
-            .unwrap();
+        let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
 
-        let block_ids = crate::postgres::db_fixtures::insert_blocks(&mut conn, chain_id).await;
+        let block_ids = db_fixtures::insert_blocks(&mut conn, chain_id).await;
         let extractor_name = "setup_extractor";
 
         let cursor = Some("10".as_bytes());

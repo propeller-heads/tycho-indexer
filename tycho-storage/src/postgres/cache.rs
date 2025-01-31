@@ -21,7 +21,7 @@ use tycho_core::{
     models::{
         self,
         blockchain::{Block, Transaction},
-        contract::{Account, AccountDelta},
+        contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
@@ -53,6 +53,8 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpdateContracts(Vec<(TxHash, models::contract::AccountDelta)>),
     // Simply merge
+    InsertAccountBalances(Vec<models::contract::AccountBalance>),
+    // Simply merge
     InsertProtocolComponents(Vec<models::protocol::ProtocolComponent>),
     // Simply merge
     InsertTokens(Vec<models::token::CurrencyToken>),
@@ -73,6 +75,7 @@ impl WriteOp {
             WriteOp::SaveExtractionState(_) => "SaveExtractionState",
             WriteOp::UpsertContract(_) => "UpsertContract",
             WriteOp::UpdateContracts(_) => "UpdateContracts",
+            WriteOp::InsertAccountBalances(_) => "InsertAccountBalances",
             WriteOp::InsertProtocolComponents(_) => "InsertProtocolComponents",
             WriteOp::InsertTokens(_) => "InsertTokens",
             WriteOp::UpdateTokens(_) => "UpdateTokens",
@@ -89,10 +92,11 @@ impl WriteOp {
             WriteOp::UpdateContracts(_) => 3,
             WriteOp::InsertTokens(_) => 4,
             WriteOp::UpdateTokens(_) => 5,
-            WriteOp::InsertProtocolComponents(_) => 6,
-            WriteOp::InsertComponentBalances(_) => 7,
-            WriteOp::UpsertProtocolState(_) => 8,
-            WriteOp::SaveExtractionState(_) => 9,
+            WriteOp::InsertAccountBalances(_) => 6,
+            WriteOp::InsertProtocolComponents(_) => 7,
+            WriteOp::InsertComponentBalances(_) => 8,
+            WriteOp::UpsertProtocolState(_) => 9,
+            WriteOp::SaveExtractionState(_) => 10,
         }
     }
 }
@@ -160,6 +164,11 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (WriteOp::UpdateContracts(l), WriteOp::UpdateContracts(r)) => {
+                    self.size += r.len();
+                    l.extend(r.iter().cloned());
+                    return Ok(());
+                }
+                (WriteOp::InsertAccountBalances(l), WriteOp::InsertAccountBalances(r)) => {
                     self.size += r.len();
                     l.extend(r.iter().cloned());
                     return Ok(());
@@ -396,6 +405,11 @@ impl DBCacheWriteExecutor {
                 let changes_slice = collected_changes.as_slice();
                 self.state_gateway
                     .update_contracts(&self.chain, changes_slice, conn)
+                    .await?
+            }
+            WriteOp::InsertAccountBalances(balances) => {
+                self.state_gateway
+                    .add_account_balances(balances.as_slice(), &self.chain, conn)
                     .await?
             }
             WriteOp::InsertProtocolComponents(components) => {
@@ -771,6 +785,32 @@ impl ContractStateGateway for CachedGateway {
             .get_accounts_delta(chain, start_version, end_version, &mut conn)
             .await
     }
+
+    #[instrument(skip_all)]
+    async fn add_account_balances(
+        &self,
+        account_balances: &[AccountBalance],
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertAccountBalances(account_balances.to_vec()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_account_balances(
+        &self,
+        chain: &Chain,
+        addresses: Option<&[Address]>,
+        version: Option<&Version>,
+    ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_account_balances(chain, addresses, version, false, &mut conn)
+            .await
+    }
 }
 
 #[async_trait]
@@ -986,18 +1026,18 @@ impl ProtocolGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn get_balances(
+    async fn get_component_balances(
         &self,
         chain: &Chain,
         ids: Option<&[&str]>,
-        at: Option<&Version>,
+        version: Option<&Version>,
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_balances(chain, ids, at, &mut conn)
+            .get_component_balances(chain, ids, version, &mut conn)
             .await
     }
 
@@ -1059,7 +1099,16 @@ mod test_serial_db {
                 .get()
                 .await
                 .expect("Failed to get a connection from the pool");
-            db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            let chain_id = db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            db_fixtures::insert_token(
+                &mut connection,
+                chain_id,
+                "0000000000000000000000000000000000000000",
+                "ETH",
+                18,
+                Some(100),
+            )
+            .await;
             let gateway: PostgresGateway = PostgresGateway::from_connection(&mut connection).await;
             let (tx, rx) = mpsc::channel(10);
             let write_executor = DBCacheWriteExecutor::new(
@@ -1106,7 +1155,16 @@ mod test_serial_db {
                 .get()
                 .await
                 .expect("Failed to get a connection from the pool");
-            db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            let chain_id = db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            db_fixtures::insert_token(
+                &mut connection,
+                chain_id,
+                "0000000000000000000000000000000000000000",
+                "ETH",
+                18,
+                Some(100),
+            )
+            .await;
             db_fixtures::insert_protocol_system(&mut connection, "ambient".to_owned()).await;
             db_fixtures::insert_protocol_type(&mut connection, "ambient_pool", None, None, None)
                 .await;
@@ -1263,7 +1321,16 @@ mod test_serial_db {
                 .get()
                 .await
                 .expect("Failed to get a connection from the pool");
-            db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            let chain_id = db_fixtures::insert_chain(&mut connection, "ethereum").await;
+            db_fixtures::insert_token(
+                &mut connection,
+                chain_id,
+                "0000000000000000000000000000000000000000",
+                "ETH",
+                18,
+                Some(100),
+            )
+            .await;
             let gateway: PostgresGateway = PostgresGateway::from_connection(&mut connection).await;
             let (tx, rx) = mpsc::channel(10);
 

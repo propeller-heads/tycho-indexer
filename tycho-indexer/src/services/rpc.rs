@@ -1,13 +1,12 @@
 //! This module contains Tycho RPC implementation
 #![allow(deprecated)]
-use std::{collections::HashSet, sync::Arc};
-
 use actix_web::{web, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
 use metrics::counter;
 use reqwest::StatusCode;
+use std::{collections::HashSet, sync::Arc};
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -955,27 +954,23 @@ pub async fn health() -> HttpResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
-
+    use super::*;
     use actix_web::test;
     use chrono::NaiveDateTime;
-
     use mockall::mock;
+    use std::{collections::HashMap, str::FromStr};
+
     use tycho_core::{
         models::{
-            blockchain::BlockAggregatedChanges,
             contract::Account,
             protocol::{ProtocolComponent, ProtocolComponentState},
             token::CurrencyToken,
             ChangeType,
         },
         storage::WithTotal,
-        Bytes,
     };
 
     use crate::testing::{evm_contract_slots, MockGateway};
-
-    use super::*;
 
     const WETH: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const USDC: &str = "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -1120,6 +1115,7 @@ mod tests {
             "account0".to_owned(),
             evm_contract_slots([(6, 30), (5, 25), (1, 3), (2, 1), (0, 2)]),
             Bytes::from(101u8).lpad(32, 0),
+            HashMap::new(),
             Bytes::from("C0C0C0"),
             "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                 .parse()
@@ -1150,6 +1146,7 @@ mod tests {
             "account1".to_owned(),
             evm_contract_slots([(6, 30), (5, 25), (1, 3), (2, 1), (0, 2)]),
             Bytes::from(101u8).lpad(32, 0),
+            HashMap::new(),
             Bytes::from("C0C0C0"),
             "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                 .parse()
