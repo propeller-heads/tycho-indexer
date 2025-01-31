@@ -57,6 +57,11 @@ impl From<models::contract::Account> for ResponseAccount {
             value.title,
             value.slots,
             value.native_balance,
+            value
+                .token_balances
+                .into_iter()
+                .map(|(k, v)| (k, v.balance))
+                .collect(),
             value.code,
             value.code_hash,
             value.balance_modify_tx,
@@ -590,22 +595,25 @@ pub struct ResponseAccount {
     #[schema(value_type=HashMap<String, String>, example=json!({"0x....": "0x...."}))]
     #[serde(with = "hex_hashmap_key_value")]
     pub slots: HashMap<Bytes, Bytes>,
-    #[schema(value_type=HashMap<String, String>, example="0x00")]
+    #[schema(value_type=String, example="0x00")]
     #[serde(with = "hex_bytes")]
     pub native_balance: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0xBADBABE")]
+    #[schema(value_type=HashMap<String, String>, example=json!({"0x....": "0x...."}))]
+    #[serde(with = "hex_hashmap_key_value")]
+    pub token_balances: HashMap<Bytes, Bytes>,
+    #[schema(value_type=String, example="0xBADBABE")]
     #[serde(with = "hex_bytes")]
     pub code: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0x123456789")]
+    #[schema(value_type=String, example="0x123456789")]
     #[serde(with = "hex_bytes")]
     pub code_hash: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
+    #[schema(value_type=String, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes")]
     pub balance_modify_tx: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
+    #[schema(value_type=String, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes")]
     pub code_modify_tx: Bytes,
-    #[schema(value_type=HashMap<String, String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
+    #[schema(value_type=Option<String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes_option")]
     pub creation_tx: Option<Bytes>,
 }
@@ -618,6 +626,7 @@ impl ResponseAccount {
         title: String,
         slots: HashMap<Bytes, Bytes>,
         native_balance: Bytes,
+        token_balances: HashMap<Bytes, Bytes>,
         code: Bytes,
         code_hash: Bytes,
         balance_modify_tx: Bytes,
@@ -630,6 +639,7 @@ impl ResponseAccount {
             title,
             slots,
             native_balance,
+            token_balances,
             code,
             code_hash,
             balance_modify_tx,
@@ -886,11 +896,11 @@ impl PartialEq for ProtocolComponentsRequestBody {
             _ => false,
         };
 
-        self.protocol_system == other.protocol_system &&
-            self.component_ids == other.component_ids &&
-            tvl_close_enough &&
-            self.chain == other.chain &&
-            self.pagination == other.pagination
+        self.protocol_system == other.protocol_system
+            && self.component_ids == other.component_ids
+            && tvl_close_enough
+            && self.chain == other.chain
+            && self.pagination == other.pagination
     }
 }
 
