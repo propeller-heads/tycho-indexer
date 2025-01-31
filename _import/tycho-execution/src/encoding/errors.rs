@@ -12,7 +12,7 @@ use thiserror::Error;
 /// - `RecoverableError`: Indicates that the encoding has failed with a recoverable error. Retrying
 ///   at a later time may succeed. It may have failed due to a temporary issue, such as a network
 ///   problem.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum EncodingError {
     #[error("Invalid input: {0}")]
