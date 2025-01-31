@@ -442,7 +442,9 @@ mod tests {
             },
             token_in: weth.clone(),
             token_out: wbtc.clone(),
-            split: 0.5f64,
+            // This represents the remaining 50%, but to avoid any rounding errors we set this to
+            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+            split: 0f64,
         };
         let swap_dai_usdc = Swap {
             component: ProtocolComponent {
@@ -485,5 +487,6 @@ mod tests {
             .unwrap();
 
         let _hex_calldata = encode(&calldata);
+        println!("{}", _hex_calldata);
     }
 }
