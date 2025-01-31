@@ -1,6 +1,6 @@
-use std::{cmp::max, str::FromStr};
+use std::{cmp::max, collections::HashSet, str::FromStr};
 
-use alloy_primitives::{aliases::U24, map::HashSet, FixedBytes, U256, U8};
+use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 use tycho_core::{keccak256, models::Chain, Bytes};
@@ -88,18 +88,30 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 min_amount_out = max(user_specified_min_amount, expected_amount_with_slippage);
             }
         }
+        // The tokens array is composed of the given token, the checked token and all the
+        // intermediary tokens in between. The contract expects the tokens to be in this order.
+        let solution_tokens: HashSet<Bytes> =
+            vec![solution.given_token.clone(), solution.checked_token.clone()]
+                .into_iter()
+                .collect();
 
-        let mut tokens: Vec<Bytes> = solution
+        let intermediary_tokens: HashSet<Bytes> = solution
             .swaps
             .iter()
             .flat_map(|swap| vec![swap.token_in.clone(), swap.token_out.clone()])
-            .collect::<HashSet<Bytes>>()
-            .into_iter()
             .collect();
-
+        let mut intermediary_tokens: Vec<Bytes> = intermediary_tokens
+            .difference(&solution_tokens)
+            .cloned()
+            .collect();
         // this is only to make the test deterministic (same index for the same token for different
         // runs)
-        tokens.sort();
+        intermediary_tokens.sort();
+
+        let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
+        tokens.push(solution.given_token.clone());
+        tokens.extend(intermediary_tokens);
+        tokens.push(solution.checked_token.clone());
 
         let mut swaps = vec![];
         for swap in solution.swaps.iter() {
@@ -124,7 +136,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 U8::from(
                     tokens
                         .iter()
-                        // TODO Something is wrong with our token in and out indices
                         .position(|t| *t == swap.token_in)
                         .ok_or_else(|| {
                             EncodingError::InvalidInput(
@@ -135,7 +146,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 U8::from(
                     tokens
                         .iter()
-                        // TODO Something is wrong with our token in and out indices
                         .position(|t| *t == swap.token_out)
                         .ok_or_else(|| {
                             EncodingError::InvalidInput(
@@ -325,7 +335,7 @@ mod tests {
             checked_token: dai,
             expected_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
             check_amount: None,
-            sender: Bytes::from_str("0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496").unwrap(),
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             swaps: vec![swap],
             ..Default::default()
@@ -372,8 +382,8 @@ mod tests {
             // ple encoded swaps
             "005a",
             // Swap header
-            "01",     // token in index
-            "00",     // token out index
+            "00",     // token in index
+            "01",     // token out index
             "000000", // split
             // Swap data
             "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
@@ -387,7 +397,6 @@ mod tests {
         ));
         let hex_calldata = encode(&calldata);
 
-        println!("{}", hex_calldata);
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
     }

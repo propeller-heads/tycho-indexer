@@ -14,7 +14,6 @@ import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
-import "forge-std/console.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -198,7 +197,6 @@ contract TychoRouter is
 
         uint256[] memory remainingAmounts = new uint256[](nTokens);
         uint256[] memory amounts = new uint256[](nTokens);
-        console.logUint(amountIn);
         amounts[0] = amountIn;
         remainingAmounts[0] = amountIn;
 
@@ -210,13 +208,10 @@ contract TychoRouter is
             currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
-            console.logUint(split);
-            console.logUint(tokenInIndex); // This gives 1, I guess it should be 0
-            console.logUint(currentAmountIn);
+
             currentAmountOut = _callExecutor(
                 swapData.executor(),
                 swapData.executorSelector(),
-                // TODO 0 is being passed here which makes it fail
                 currentAmountIn,
                 swapData.protocolData()
             );
