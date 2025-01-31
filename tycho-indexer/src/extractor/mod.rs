@@ -7,8 +7,9 @@ use thiserror::Error;
 use tycho_core::{
     models::{
         blockchain::{Block, BlockScoped},
+        contract::AccountBalance,
         protocol::ComponentBalance,
-        ExtractorIdentity, NormalisedMessage,
+        Address, ExtractorIdentity, NormalisedMessage,
     },
     storage::StorageError,
     Bytes,
@@ -125,12 +126,20 @@ impl<B> StateUpdateBufferEntry for BlockUpdateWithCursor<B>
 where
     B: StateUpdateBufferEntry,
 {
-    fn get_filtered_balance_update(
+    fn get_filtered_component_balance_update(
         &self,
         keys: Vec<(&String, &Bytes)>,
     ) -> HashMap<(String, Bytes), ComponentBalance> {
         self.block_update
-            .get_filtered_balance_update(keys)
+            .get_filtered_component_balance_update(keys)
+    }
+
+    fn get_filtered_account_balance_update(
+        &self,
+        keys: Vec<(&Address, &Address)>,
+    ) -> HashMap<(Address, Address), AccountBalance> {
+        self.block_update
+            .get_filtered_account_balance_update(keys)
     }
 
     fn get_filtered_protocol_state_update(

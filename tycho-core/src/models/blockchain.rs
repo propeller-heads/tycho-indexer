@@ -1,11 +1,3 @@
-use crate::{
-    models::{
-        contract::AccountDelta,
-        protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},
-        Chain, ComponentId,
-    },
-    Bytes,
-};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,11 +7,16 @@ use std::{
 };
 use tracing::warn;
 
-use super::{
-    contract::{AccountBalance, AccountChangesWithTx},
-    protocol::ProtocolChangesWithTx,
-    token::CurrencyToken,
-    Address, ExtractorIdentity, NormalisedMessage,
+use crate::{
+    models::{
+        contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
+        protocol::{
+            ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
+        },
+        token::CurrencyToken,
+        Address, Chain, ComponentId, ExtractorIdentity, NormalisedMessage,
+    },
+    Bytes,
 };
 
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
@@ -88,6 +85,7 @@ pub struct BlockAggregatedChanges {
     pub new_protocol_components: HashMap<String, ProtocolComponent>,
     pub deleted_protocol_components: HashMap<String, ProtocolComponent>,
     pub component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
+    pub account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
 }
 
@@ -105,6 +103,7 @@ impl BlockAggregatedChanges {
         new_components: HashMap<String, ProtocolComponent>,
         deleted_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
+        account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
         component_tvl: HashMap<String, f64>,
     ) -> Self {
         Self {
@@ -115,11 +114,12 @@ impl BlockAggregatedChanges {
             revert,
             state_deltas,
             account_deltas,
+            new_tokens,
             new_protocol_components: new_components,
             deleted_protocol_components: deleted_components,
             component_balances,
+            account_balances,
             component_tvl,
-            new_tokens,
         }
     }
 }
@@ -149,6 +149,7 @@ impl NormalisedMessage for BlockAggregatedChanges {
             new_protocol_components: self.new_protocol_components.clone(),
             deleted_protocol_components: self.deleted_protocol_components.clone(),
             component_balances: self.component_balances.clone(),
+            account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
         })
     }
