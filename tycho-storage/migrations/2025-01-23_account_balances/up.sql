@@ -33,7 +33,7 @@ BEGIN
             'ETH',
             18,
             0,
-            ARRAY[0]::BIGINT[],
+            ARRAY[2300, 2300, 2300, 2300]::BIGINT[],
             100
         )
         ON CONFLICT (account_id) DO NOTHING;
