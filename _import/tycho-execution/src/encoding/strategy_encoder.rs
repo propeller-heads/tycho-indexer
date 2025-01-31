@@ -1,14 +1,22 @@
-use tycho_core::Bytes;
+use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{errors::EncodingError, models::Solution};
 
 #[allow(dead_code)]
 pub trait StrategyEncoder {
-    fn encode_strategy(&self, to_encode: Solution) -> Result<(Vec<u8>, Bytes), EncodingError>;
-    fn selector(&self, exact_out: bool) -> &str;
+    fn encode_strategy(
+        &self,
+        to_encode: Solution,
+        router_address: Bytes,
+    ) -> Result<(Vec<u8>, Bytes), EncodingError>;
 }
 
 pub trait StrategySelector {
     #[allow(dead_code)]
-    fn select_strategy(&self, solution: &Solution) -> Box<dyn StrategyEncoder>;
+    fn select_strategy(
+        &self,
+        solution: &Solution,
+        signer_pk: Option<String>,
+        chain_id: Chain,
+    ) -> Result<Box<dyn StrategyEncoder>, EncodingError>;
 }

@@ -14,6 +14,7 @@ use crate::encoding::{
 
 pub struct UniswapV2SwapEncoder {
     executor_address: String,
+    executor_selector: String,
 }
 
 impl UniswapV2SwapEncoder {
@@ -24,7 +25,7 @@ impl UniswapV2SwapEncoder {
 
 impl SwapEncoder for UniswapV2SwapEncoder {
     fn new(executor_address: String) -> Self {
-        Self { executor_address }
+        Self { executor_address, executor_selector: "swap(uint256,bytes)".to_string() }
     }
 
     fn encode_swap(
@@ -54,10 +55,15 @@ impl SwapEncoder for UniswapV2SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+
+    fn executor_selector(&self) -> &str {
+        &self.executor_selector
+    }
 }
 
 pub struct UniswapV3SwapEncoder {
     executor_address: String,
+    executor_selector: String,
 }
 
 impl UniswapV3SwapEncoder {
@@ -68,7 +74,7 @@ impl UniswapV3SwapEncoder {
 
 impl SwapEncoder for UniswapV3SwapEncoder {
     fn new(executor_address: String) -> Self {
-        Self { executor_address }
+        Self { executor_address, executor_selector: "swap(uint256,bytes)".to_string() }
     }
 
     fn encode_swap(
@@ -120,10 +126,14 @@ impl SwapEncoder for UniswapV3SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+    fn executor_selector(&self) -> &str {
+        &self.executor_selector
+    }
 }
 
 pub struct BalancerV2SwapEncoder {
     executor_address: String,
+    executor_selector: String,
     vault_address: String,
 }
 
@@ -131,6 +141,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     fn new(executor_address: String) -> Self {
         Self {
             executor_address,
+            executor_selector: "swap(uint256,bytes)".to_string(),
             vault_address: "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
         }
     }
@@ -166,6 +177,9 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+    fn executor_selector(&self) -> &str {
+        &self.executor_selector
+    }
 }
 
 #[cfg(test)]
@@ -194,7 +208,8 @@ mod tests {
             exact_out: false,
             router_address: Bytes::zero(20),
         };
-        let encoder = UniswapV2SwapEncoder::new(String::from("0x"));
+        let encoder =
+            UniswapV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -235,7 +250,8 @@ mod tests {
             exact_out: false,
             router_address: Bytes::zero(20),
         };
-        let encoder = UniswapV3SwapEncoder::new(String::from("0x"));
+        let encoder =
+            UniswapV3SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -277,7 +293,8 @@ mod tests {
             exact_out: false,
             router_address: Bytes::zero(20),
         };
-        let encoder = BalancerV2SwapEncoder::new(String::from("0x"));
+        let encoder =
+            BalancerV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();

@@ -1,58 +1,67 @@
 use std::str::FromStr;
 
 use num_bigint::BigUint;
-use tycho_core::Bytes;
+use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::encode_input,
     models::{NativeAction, Solution, Transaction},
     router_encoder::RouterEncoder,
     strategy_encoder::StrategySelector,
-    user_approvals_manager::{Approval, UserApprovalsManager},
 };
 
 #[allow(dead_code)]
-pub struct EVMRouterEncoder<S: StrategySelector, A: UserApprovalsManager> {
+pub struct EVMRouterEncoder<S: StrategySelector> {
     strategy_selector: S,
-    approvals_manager: A,
-    router_address: String,
+    signer: Option<String>,
+    chain: Chain,
+    router_address: Bytes,
 }
 
 #[allow(dead_code)]
-impl<S: StrategySelector, A: UserApprovalsManager> EVMRouterEncoder<S, A> {
-    pub fn new(strategy_selector: S, approvals_manager: A, router_address: String) -> Self {
-        EVMRouterEncoder { strategy_selector, approvals_manager, router_address }
+impl<S: StrategySelector> EVMRouterEncoder<S> {
+    pub fn new(
+        strategy_selector: S,
+        router_address: String,
+        signer: Option<String>,
+        chain: Chain,
+    ) -> Result<Self, EncodingError> {
+        let router_address = Bytes::from_str(&router_address)
+            .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
+        Ok(EVMRouterEncoder { strategy_selector, signer, chain, router_address })
     }
 }
-impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRouterEncoder<S, A> {
+impl<S: StrategySelector> RouterEncoder<S> for EVMRouterEncoder<S> {
     fn encode_router_calldata(
         &self,
         solutions: Vec<Solution>,
     ) -> Result<Vec<Transaction>, EncodingError> {
-        let _approvals_calldata = self.handle_approvals(&solutions)?;
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
-            let exact_out = solution.exact_out;
-            let straight_to_pool = solution.direct_execution;
+            if solution.exact_out {
+                return Err(EncodingError::FatalError(
+                    "Currently only exact input solutions are supported".to_string(),
+                ));
+            }
 
-            let strategy = self
-                .strategy_selector
-                .select_strategy(solution);
-            let (method_calldata, target_address) =
-                strategy.encode_strategy((*solution).clone())?;
+            let router_address = solution
+                .router_address
+                .clone()
+                .unwrap_or(self.router_address.clone());
+            let strategy = self.strategy_selector.select_strategy(
+                solution,
+                self.signer.clone(),
+                self.chain,
+            )?;
 
-            let contract_interaction = if straight_to_pool {
-                method_calldata
-            } else {
-                encode_input(strategy.selector(exact_out), method_calldata)
+            let (contract_interaction, target_address) =
+                strategy.encode_strategy(solution.clone(), router_address)?;
+
+            let value = match solution.native_action.as_ref() {
+                Some(NativeAction::Wrap) => solution.given_amount.clone(),
+                _ => BigUint::ZERO,
             };
 
-            let value = if solution.native_action.clone().unwrap() == NativeAction::Wrap {
-                solution.given_amount.clone()
-            } else {
-                BigUint::ZERO
-            };
             transactions.push(Transaction {
                 value,
                 data: contract_interaction,
@@ -60,24 +69,5 @@ impl<S: StrategySelector, A: UserApprovalsManager> RouterEncoder<S, A> for EVMRo
             });
         }
         Ok(transactions)
-    }
-
-    fn handle_approvals(&self, solutions: &[Solution]) -> Result<Vec<Vec<u8>>, EncodingError> {
-        let mut approvals = Vec::new();
-        for solution in solutions.iter() {
-            approvals.push(Approval {
-                token: solution.given_token.clone(),
-                spender: solution
-                    .router_address
-                    .clone()
-                    .unwrap_or(Bytes::from_str(&self.router_address).map_err(|_| {
-                        EncodingError::FatalError("Invalid router address".to_string())
-                    })?),
-                amount: solution.given_amount.clone(),
-                owner: solution.sender.clone(),
-            });
-        }
-        self.approvals_manager
-            .encode_approvals(approvals)
     }
 }

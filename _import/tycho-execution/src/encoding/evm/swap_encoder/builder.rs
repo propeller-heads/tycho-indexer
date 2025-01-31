@@ -1,5 +1,5 @@
 use crate::encoding::{
-    evm::swap_encoder::encoders::{BalancerV2SwapEncoder, UniswapV2SwapEncoder},
+    evm::swap_encoder::swap_encoders::{BalancerV2SwapEncoder, UniswapV2SwapEncoder},
     swap_encoder::SwapEncoder,
 };
 

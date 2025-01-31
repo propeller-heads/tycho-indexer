@@ -14,4 +14,5 @@ pub trait SwapEncoder: Sync + Send {
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError>;
     fn executor_address(&self) -> &str;
+    fn executor_selector(&self) -> &str;
 }

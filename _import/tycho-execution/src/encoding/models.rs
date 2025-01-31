@@ -1,7 +1,7 @@
 use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolComponent, Bytes};
 
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 #[allow(dead_code)]
 pub struct Solution {
     /// True if the solution is an exact output solution.
@@ -35,14 +35,14 @@ pub struct Solution {
     pub native_action: Option<NativeAction>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 pub enum NativeAction {
     Wrap,
     Unwrap,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct Swap {
     /// Protocol component from tycho indexer
@@ -51,7 +51,7 @@ pub struct Swap {
     pub token_in: Bytes,
     /// Token being output from the pool.
     pub token_out: Bytes,
-    /// Fraction of the amount to be swapped in this operation.
+    /// Percentage of the amount to be swapped in this operation.
     pub split: f64,
 }
 
