@@ -1,3 +1,22 @@
+## [0.25.0](https://github.com/propeller-heads/tycho-execution/compare/0.24.0...0.25.0) (2025-01-31)
+
+
+### Features
+
+* Add ChainId model ([089e7d2](https://github.com/propeller-heads/tycho-execution/commit/089e7d2e0f7fcd60c591ff0d1e5e56a7d7ae93dd))
+* Implement SplitSwapStrategyEncoder ([feb91cc](https://github.com/propeller-heads/tycho-execution/commit/feb91cc639aaf9e5056662158f2cbbbb61f9021e))
+* Remove generalisation on user approvals manager ([3a69bbf](https://github.com/propeller-heads/tycho-execution/commit/3a69bbf6035df123a076f1f91011300e1c672527))
+* Simplify router encoder ([6e8d2ed](https://github.com/propeller-heads/tycho-execution/commit/6e8d2ede595ecafe42cd1025f67ed4ab0083360d))
+
+
+### Bug Fixes
+
+* Don't leak evm specific code to interfaces(PrivateKeySigner, Chain) ([7a8872c](https://github.com/propeller-heads/tycho-execution/commit/7a8872cc415cf99f0122dcc92e87b6e09932d465))
+* Post merge's fixes ([a28b548](https://github.com/propeller-heads/tycho-execution/commit/a28b54888e08fe23ed20ef8b0a385f094bca3c28))
+* replace all unwraps with proper error handling ([5f3d440](https://github.com/propeller-heads/tycho-execution/commit/5f3d4406bdfed1d20df5614e74efeb7fcd5cffc1))
+* Use abi_encode_packed in ple_encode() ([82e671d](https://github.com/propeller-heads/tycho-execution/commit/82e671df395477e800afc6b6bc94d5a07d78ec04))
+* Use max instead of min to get the min_amount_out ([575c5be](https://github.com/propeller-heads/tycho-execution/commit/575c5bea5ec9c07f3bc729d140ad14a2a779b184))
+
 ## [0.24.0](https://github.com/propeller-heads/tycho-execution/compare/0.23.0...0.24.0) (2025-01-30)
 
 
