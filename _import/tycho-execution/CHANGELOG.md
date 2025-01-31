@@ -1,3 +1,11 @@
+## [0.25.2](https://github.com/propeller-heads/tycho-execution/compare/0.25.1...0.25.2) (2025-01-31)
+
+
+### Bug Fixes
+
+* Accidentally changed wrong test's calldata ([faacd3f](https://github.com/propeller-heads/tycho-execution/commit/faacd3f25cdfbc808acdf90aa50b2a86de7af62d))
+* Expect decimal during encoding, add assert to test ([5a81ed6](https://github.com/propeller-heads/tycho-execution/commit/5a81ed6be51be568233a610e2be92f466c482410))
+
 ## [0.25.1](https://github.com/propeller-heads/tycho-execution/compare/0.25.0...0.25.1) (2025-01-31)
 
 
