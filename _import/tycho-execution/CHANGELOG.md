@@ -1,3 +1,10 @@
+## [0.25.3](https://github.com/propeller-heads/tycho-execution/compare/0.25.2...0.25.3) (2025-01-31)
+
+
+### Bug Fixes
+
+* transfer ETH if tokenOut is ETH ([3245ea7](https://github.com/propeller-heads/tycho-execution/commit/3245ea7295d6659a427fe09d23da720fa9cfe5d6))
+
 ## [0.25.2](https://github.com/propeller-heads/tycho-execution/compare/0.25.1...0.25.2) (2025-01-31)
 
 
