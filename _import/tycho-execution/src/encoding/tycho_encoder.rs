@@ -10,4 +10,6 @@ pub trait TychoEncoder<S: StrategySelector> {
         &self,
         solutions: Vec<Solution>,
     ) -> Result<Vec<Transaction>, EncodingError>;
+
+    fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError>;
 }
