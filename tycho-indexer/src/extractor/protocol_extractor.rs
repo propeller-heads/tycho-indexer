@@ -2254,15 +2254,26 @@ mod test_serial_db {
                 "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688".to_owned(),
                 fixtures::slots([(1, 200)]),
                 Bytes::from(1000_u64).lpad(32, 0),
+                HashMap::from([(
+                    Bytes::from_str(WETH_ADDRESS).unwrap(),
+                    AccountBalance {
+                        token: Bytes::from_str(WETH_ADDRESS).unwrap(),
+                        balance: Bytes::from(&[0u8]),
+                        modify_tx: Bytes::zero(32),
+                        account: "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688"
+                            .parse()
+                            .unwrap(),
+                    },
+                )]),
                 vec![0, 0, 0, 0].into(),
                 "0xe8e77626586f73b955364c7b4bbf0bb7f7685ebd40e852b164633a4acbd3244c"
                     .parse()
                     .unwrap(),
-                VM_TX_HASH_1.parse().unwrap(),
+                Bytes::zero(32),
                 VM_TX_HASH_0.parse().unwrap(),
                 Some(VM_TX_HASH_0.parse().unwrap()),
             ),
-            _ => panic!("Unkown version"),
+            _ => panic!("Unknown version"),
         }
     }
 

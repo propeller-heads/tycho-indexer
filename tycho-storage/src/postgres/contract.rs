@@ -718,36 +718,19 @@ impl PostgresGateway {
             None => Utc::now().naive_utc(),
         };
         let chain = id.chain;
-        let chain_id = self.get_chain_id(&chain);
 
-        let (balance_tx, balance_orm) = schema::account_balance::table
-            .inner_join(
-                schema::transaction::table
-                    .on(schema::transaction::id.eq(schema::account_balance::modify_tx)),
-            )
-            .inner_join(schema::token::table)
-            .inner_join(
-                schema::account::table.on(schema::account::id.eq(schema::token::account_id)),
-            )
-            .filter(schema::account::chain_id.eq(chain_id))
-            .filter(schema::account::address.eq(&chain.native_token().address))
-            .filter(schema::account_balance::account_id.eq(account_orm.id))
-            .filter(schema::account_balance::valid_from.le(version_ts))
-            .filter(
-                schema::account_balance::valid_to
-                    .gt(Some(version_ts))
-                    .or(schema::account_balance::valid_to.is_null()),
-            )
-            .select((schema::transaction::hash, orm::AccountBalance::as_select()))
-            .first::<(Bytes, orm::AccountBalance)>(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(
-                    err,
-                    "AccountBalance",
-                    &hex::encode(&id.address),
-                    Some("Account".to_owned()),
-                )
+        let mut all_balances = self
+            .get_account_balances(&chain, Some(&[id.address.clone()]), version, true, conn)
+            .await?;
+        let account_balances = all_balances
+            .get_mut(&id.address)
+            .ok_or_else(|| {
+                StorageError::NotFound("account_balances".to_string(), id.address.to_string())
+            })?;
+        let native_balance = account_balances
+            .remove(&chain.native_token().address)
+            .ok_or_else(|| {
+                StorageError::NotFound("native_balance".to_string(), id.address.to_string())
             })?;
 
         let (code_tx, code_orm) = schema::contract_code::table
@@ -786,14 +769,16 @@ impl PostgresGateway {
             None => None,
         };
         let mut account = Account::new(
-            id.chain,
+            chain,
             account_orm.address,
             account_orm.title,
             HashMap::new(),
-            balance_orm.balance,
+            native_balance.balance,
+            account_balances.clone(),
             code_orm.code,
             code_orm.hash,
-            balance_tx,
+            // TODO: remove balance_modify_tx from Account
+            Bytes::zero(32),
             code_tx,
             creation_tx,
         );
@@ -897,33 +882,16 @@ impl PostgresGateway {
                 .collect::<Vec<_>>()
         };
 
+        let mut all_balances = self
+            .get_account_balances(chain, ids, version, true, conn)
+            .await?;
+
         // take all ids and query both code and storage
         let account_ids = accounts
             .iter()
             .map(|a| a.id)
             .collect::<HashSet<_>>();
 
-        let native_balances = {
-            use schema::account_balance::dsl::*;
-            account_balance
-                .inner_join(schema::transaction::table)
-                .filter(account_id.eq_any(&account_ids))
-                .filter(valid_from.le(version_ts))
-                .filter(
-                    valid_to
-                        .is_null()
-                        .or(valid_to.gt(version_ts)),
-                )
-                .order_by((account_id, schema::transaction::index.desc()))
-                .select((orm::AccountBalance::as_select(), schema::transaction::hash))
-                .distinct_on(account_id)
-                .get_results::<(orm::AccountBalance, Bytes)>(conn)
-                .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(entity, tx)| WithTxHash { entity, tx: Some(tx) })
-                .collect::<Vec<_>>()
-        };
         let codes = {
             use schema::contract_code::dsl::*;
             contract_code
@@ -955,42 +923,58 @@ impl PostgresGateway {
             None
         };
 
-        if !(accounts.len() == native_balances.len() && native_balances.len() == codes.len()) {
+        if accounts.len() != codes.len() {
             return Err(StorageError::Unexpected(format!(
-                "Some accounts were missing either code or account balance entities. \
-                    Got {} accounts {} account balances and {} code entries.",
+                "Some accounts were missing either code. Got {} accounts and {} code entries.",
                 accounts.len(),
-                native_balances.len(),
                 codes.len(),
             )));
         }
 
         let res = accounts
             .into_iter()
-            .zip(native_balances.into_iter().zip(codes))
-            .map(|(account, (balance, code))| -> Result<Account, StorageError> {
-                if !(account.id == balance.account_id && balance.account_id == code.account_id) {
+            .zip(codes)
+            .map(|(account, code)| -> Result<Account, StorageError> {
+                if account.id != code.account_id {
                     return Err(StorageError::Unexpected(format!(
                         "Identity mismatch - while retrieving entries for account id: {} \
-                            encountered balance for id {} and code for id {}",
-                        &account.id, &balance.account_id, &code.account_id
+                            encountered code for id {}",
+                        &account.id, &code.account_id
                     )));
                 }
 
-                // Note: it is safe to call unwrap here, as above we always wrap it into Some
-                let balance_tx = balance.tx.unwrap();
+                // Note: it is safe to call unwrap here since above we always wrap it into Some
                 let code_tx = code.tx.clone().unwrap();
                 let creation_tx = account.tx.clone();
+
+                let balances = all_balances
+                    .get_mut(&account.address)
+                    .ok_or_else(|| {
+                        StorageError::NotFound(
+                            "account_balances".to_string(),
+                            account.address.to_string(),
+                        )
+                    })?;
+                let native_balance = balances
+                    .remove(&chain.native_token().address)
+                    .ok_or_else(|| {
+                        StorageError::NotFound(
+                            "native_balance".to_string(),
+                            account.address.to_string(),
+                        )
+                    })?;
 
                 let mut contract = Account::new(
                     *chain,
                     account.entity.address.clone(),
                     account.entity.title.clone(),
                     HashMap::new(),
-                    balance.entity.balance.clone(),
+                    native_balance.balance,
+                    balances.clone(),
                     code.entity.code.clone(),
                     code.entity.hash.clone(),
-                    balance_tx,
+                    // TODO: remove balance_modify_tx from Account
+                    Bytes::zero(32),
                     code_tx,
                     creation_tx,
                 );
@@ -1536,6 +1520,7 @@ impl PostgresGateway {
         chain: &Chain,
         accounts: Option<&[Address]>,
         at: Option<&Version>,
+        include_native: bool,
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError> {
         // NOTE: the returned AccountBalances have a default value for tx_hash as it is assumed
@@ -1636,9 +1621,8 @@ impl PostgresGateway {
                         StorageError::NotFound("Token".to_owned(), token_id.to_string())
                     })?
                     .clone();
-                if token_address == chain.native_token().address {
-                    // Skip native token balances as they are already return within the account
-                    // structs
+                if !include_native && token_address == chain.native_token().address {
+                    // Skip native token balances if not requested
                     continue;
                 }
                 let account_balance = AccountBalance::new(
@@ -1869,13 +1853,45 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(100u64).lpad(32, 0),
+                vec![
+                    (
+                        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(1000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                    (
+                        "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(2000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
                 Bytes::from("C0C0C0"),
                 "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                     .parse()
                     .unwrap(),
-                "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
@@ -1896,13 +1912,45 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(101u64).lpad(32, 0),
+                vec![
+                    (
+                        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(1000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                    (
+                        "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(2000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
                 Bytes::from("C0C0C0"),
                 "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                     .parse()
                     .unwrap(),
-                "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
@@ -1942,13 +1990,12 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(50u64).lpad(32, 0),
+                HashMap::new(),
                 Bytes::from("C1C1C1"),
                 "0xa04b84acdf586a694085997f32c4aa11c2726a7f7e0b677a27d44d180c08e07f"
                     .parse()
                     .unwrap(),
-                "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                     .parse()
                     .unwrap(),
@@ -1975,13 +2022,12 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(25u64).lpad(32, 0),
+                HashMap::new(),
                 Bytes::from("C2C2C2"),
                 "0x7eb1e0ed9d018991eed6077f5be45b52347f6e5870728809d368ead5b96a1e96"
                     .parse()
                     .unwrap(),
-                "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
                     .parse()
                     .unwrap(),
@@ -2010,12 +2056,12 @@ mod test {
 
         let gateway = EVMGateway::from_connection(&mut conn).await;
         let id = ContractId::new(Chain::Ethereum, Bytes::from(acc_address));
-        let actual = gateway
+        let result = gateway
             .get_contract(&id, None, include_slots, &mut conn)
             .await
             .unwrap();
 
-        assert_eq!(expected, actual);
+        assert_eq!(result, expected);
     }
 
     #[rstest]
@@ -2202,11 +2248,10 @@ mod test {
             "NewAccount".to_owned(),
             HashMap::new(),
             Bytes::from("0x64"),
+            HashMap::new(),
             code,
             code_hash,
-            "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                .parse()
-                .expect("txhash ok"),
+            Bytes::zero(32),
             "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                 .parse()
                 .expect("txhash ok"),
@@ -2244,7 +2289,7 @@ mod test {
             .expect("block found");
         db_fixtures::insert_txns(&mut conn, &[(block.id, 100, modify_txhash)]).await;
         let mut account = account_c1(2);
-        account.set_balance(&Bytes::from("0x2710"), &modify_txhash.parse().unwrap());
+        account.set_balance(&Bytes::from("0x2710"), &Bytes::zero(32));
         let update = AccountDelta::new(
             account.chain,
             account.address.clone(),
@@ -2953,7 +2998,7 @@ mod test {
         .collect();
 
         let res = gw
-            .get_account_balances(&Chain::Ethereum, Some(&[account_addr]), None, &mut conn)
+            .get_account_balances(&Chain::Ethereum, Some(&[account_addr]), None, false, &mut conn)
             .await
             .expect("retrieving balances failed!");
 
