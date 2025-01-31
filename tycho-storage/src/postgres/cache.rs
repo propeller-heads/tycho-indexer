@@ -804,7 +804,7 @@ impl ContractStateGateway for CachedGateway {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_account_balances(chain, addresses, version, &mut conn)
+            .get_account_balances(chain, addresses, version, false, &mut conn)
             .await
     }
 }
