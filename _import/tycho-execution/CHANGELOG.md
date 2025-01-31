@@ -1,3 +1,11 @@
+## [0.25.1](https://github.com/propeller-heads/tycho-execution/compare/0.25.0...0.25.1) (2025-01-31)
+
+
+### Bug Fixes
+
+* Fix selector - shouldn't contain spaces ([5d6f0c1](https://github.com/propeller-heads/tycho-execution/commit/5d6f0c1673932e55c1ba64b25a02a51426328e3e))
+* Fix token index order in strategy encoding. ([c85c353](https://github.com/propeller-heads/tycho-execution/commit/c85c353e344a1fec4a2fbcd5b460b37f2edfc91e))
+
 ## [0.25.0](https://github.com/propeller-heads/tycho-execution/compare/0.24.0...0.25.0) (2025-01-31)
 
 
