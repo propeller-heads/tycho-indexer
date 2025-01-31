@@ -177,6 +177,8 @@ contract TychoRouter is
 
         if (unwrapEth) {
             _unwrapETH(amountOut);
+        }
+        if (tokenOut == address(0)) {
             // slither-disable-next-line arbitrary-send-eth
             payable(receiver).transfer(amountOut);
         } else {
