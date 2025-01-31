@@ -5,7 +5,7 @@ use crate::encoding::{
 };
 
 #[allow(dead_code)]
-pub trait RouterEncoder<S: StrategySelector> {
+pub trait TychoEncoder<S: StrategySelector> {
     fn encode_router_calldata(
         &self,
         solutions: Vec<Solution>,
