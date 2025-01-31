@@ -208,6 +208,7 @@ contract TychoRouter is
             currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
+
             currentAmountOut = _callExecutor(
                 swapData.executor(),
                 swapData.executorSelector(),
