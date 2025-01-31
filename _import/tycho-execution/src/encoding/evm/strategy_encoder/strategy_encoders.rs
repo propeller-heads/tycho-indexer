@@ -1,6 +1,6 @@
-use std::{cmp::max, str::FromStr};
+use std::{cmp::max, collections::HashSet, str::FromStr};
 
-use alloy_primitives::{aliases::U24, map::HashSet, FixedBytes, U256, U8};
+use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 use tycho_core::{keccak256, models::Chain, Bytes};
@@ -60,7 +60,7 @@ pub struct SplitSwapStrategyEncoder {
 
 impl SplitSwapStrategyEncoder {
     pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
-        let selector = "swap(uint256, address, address, uint256, bool, bool, uint256, address, ((address,uint160,uint48,uint48),address,uint256),bytes, bytes)".to_string();
+        let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
         Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector })
     }
 }
@@ -88,18 +88,30 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 min_amount_out = max(user_specified_min_amount, expected_amount_with_slippage);
             }
         }
+        // The tokens array is composed of the given token, the checked token and all the
+        // intermediary tokens in between. The contract expects the tokens to be in this order.
+        let solution_tokens: HashSet<Bytes> =
+            vec![solution.given_token.clone(), solution.checked_token.clone()]
+                .into_iter()
+                .collect();
 
-        let mut tokens: Vec<Bytes> = solution
+        let intermediary_tokens: HashSet<Bytes> = solution
             .swaps
             .iter()
             .flat_map(|swap| vec![swap.token_in.clone(), swap.token_out.clone()])
-            .collect::<HashSet<Bytes>>()
-            .into_iter()
             .collect();
-
+        let mut intermediary_tokens: Vec<Bytes> = intermediary_tokens
+            .difference(&solution_tokens)
+            .cloned()
+            .collect();
         // this is only to make the test deterministic (same index for the same token for different
         // runs)
-        tokens.sort();
+        intermediary_tokens.sort();
+
+        let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
+        tokens.push(solution.given_token.clone());
+        tokens.extend(intermediary_tokens);
+        tokens.push(solution.checked_token.clone());
 
         let mut swaps = vec![];
         for swap in solution.swaps.iter() {
@@ -299,14 +311,14 @@ mod tests {
     fn test_split_swap_strategy_encoder() {
         // Set up a mock private key for signing
         let private_key =
-            "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
         let swap = Swap {
             component: ProtocolComponent {
-                id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(),
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
@@ -323,19 +335,19 @@ mod tests {
             checked_token: dai,
             expected_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
             check_amount: None,
-            sender: Bytes::from_str("0x2c6A3cd97c6283b95Ac8C5A4459eBB0d5Fd404F4").unwrap(),
-            receiver: Bytes::from_str("0x2c6A3cd97c6283b95Ac8C5A4459eBB0d5Fd404F4").unwrap(),
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             swaps: vec![swap],
             ..Default::default()
         };
-        let router_address = Bytes::from_str("0x2c6A3cd97c6283b95Ac8C5A4459eBB0d5Fd404F4").unwrap();
+        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
 
         let (calldata, _) = encoder
             .encode_strategy(solution, router_address)
             .unwrap();
 
         let expected_input = String::from(concat!(
-            "e73e3baa",
+            "4860f9ed",
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount out
             "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
@@ -343,7 +355,7 @@ mod tests {
             "0000000000000000000000000000000000000000000000000000000000000000", // wrap
             "0000000000000000000000000000000000000000000000000000000000000000", // unwrap
             "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
-            "0000000000000000000000002c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4", // receiver
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         ));
         // after this there is the permit and because of the deadlines (that depend on block time)
         // it's hard to assert
@@ -370,15 +382,15 @@ mod tests {
             // ple encoded swaps
             "005a",
             // Swap header
-            "01",     // token in index
-            "00",     // token out index
+            "00",     // token in index
+            "01",     // token out index
             "000000", // split
             // Swap data
             "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
             "bd0625ab",                                 // selector
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-            "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
-            "2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4", // receiver
+            "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
             "000000",                                   // padding
