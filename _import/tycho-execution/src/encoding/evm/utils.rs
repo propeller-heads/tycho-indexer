@@ -44,11 +44,11 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     call_data
 }
 
-/// Converts a percentage to a `U24` value. The percentage is a `f64` value between 0 and 100.
+/// Converts a decimal to a `U24` value. The percentage is a `f64` value between 0 and 1.
 /// MAX_UINT24 corresponds to 100%.
-pub fn percentage_to_uint24(percentage: f64) -> U24 {
+pub fn percentage_to_uint24(decimal: f64) -> U24 {
     const MAX_UINT24: u32 = 16_777_215; // 2^24 - 1
 
-    let scaled = (percentage / 100.0) * (MAX_UINT24 as f64);
+    let scaled = (decimal / 1.0) * (MAX_UINT24 as f64);
     U24::from(scaled.round())
 }
