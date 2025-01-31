@@ -12,7 +12,6 @@ use tokio::runtime::Runtime;
 
 use crate::encoding::{errors::EncodingError, evm::utils::encode_input};
 
-#[allow(dead_code)]
 pub struct ProtocolApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
     runtime: Runtime,

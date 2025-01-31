@@ -3,7 +3,6 @@ use crate::encoding::{
     models::{EncodingContext, Swap},
 };
 
-#[allow(dead_code)]
 pub trait SwapEncoder: Sync + Send {
     fn new(executor_address: String) -> Self
     where

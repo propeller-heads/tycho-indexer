@@ -60,7 +60,6 @@ sol! {
     }
 }
 
-#[allow(dead_code)]
 impl Permit2 {
     pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
         let chain_id = ChainId::from(chain);

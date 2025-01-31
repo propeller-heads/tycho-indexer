@@ -2,7 +2,6 @@ use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{errors::EncodingError, models::Solution};
 
-#[allow(dead_code)]
 pub trait StrategyEncoder {
     fn encode_strategy(
         &self,
@@ -12,7 +11,6 @@ pub trait StrategyEncoder {
 }
 
 pub trait StrategySelector {
-    #[allow(dead_code)]
     fn select_strategy(
         &self,
         solution: &Solution,

@@ -10,25 +10,23 @@ use crate::encoding::{
     tycho_encoder::TychoEncoder,
 };
 
-#[allow(dead_code)]
 pub struct EVMTychoEncoder<S: StrategySelector> {
     strategy_selector: S,
-    signer: Option<String>,
+    signer_pk: Option<String>,
     chain: Chain,
     router_address: Bytes,
 }
 
-#[allow(dead_code)]
 impl<S: StrategySelector> EVMTychoEncoder<S> {
     pub fn new(
         strategy_selector: S,
         router_address: String,
-        signer: Option<String>,
+        signer_pk: Option<String>,
         chain: Chain,
     ) -> Result<Self, EncodingError> {
         let router_address = Bytes::from_str(&router_address)
             .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
-        Ok(EVMTychoEncoder { strategy_selector, signer, chain, router_address })
+        Ok(EVMTychoEncoder { strategy_selector, signer_pk, chain, router_address })
     }
 }
 impl<S: StrategySelector> TychoEncoder<S> for EVMTychoEncoder<S> {
@@ -51,7 +49,7 @@ impl<S: StrategySelector> TychoEncoder<S> for EVMTychoEncoder<S> {
 
             let strategy = self.strategy_selector.select_strategy(
                 solution,
-                self.signer.clone(),
+                self.signer_pk.clone(),
                 self.chain,
             )?;
             let (contract_interaction, target_address) =

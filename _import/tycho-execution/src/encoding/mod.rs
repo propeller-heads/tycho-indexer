@@ -1,7 +1,7 @@
 mod errors;
 #[cfg(feature = "evm")]
-mod evm;
-mod models;
+pub mod evm;
+pub mod models;
 mod strategy_encoder;
 mod swap_encoder;
-mod tycho_encoder;
+pub mod tycho_encoder;
