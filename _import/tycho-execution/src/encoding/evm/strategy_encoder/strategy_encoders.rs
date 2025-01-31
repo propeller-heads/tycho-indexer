@@ -124,6 +124,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 U8::from(
                     tokens
                         .iter()
+                        // TODO Something is wrong with our token in and out indices
                         .position(|t| *t == swap.token_in)
                         .ok_or_else(|| {
                             EncodingError::InvalidInput(
@@ -134,6 +135,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 U8::from(
                     tokens
                         .iter()
+                        // TODO Something is wrong with our token in and out indices
                         .position(|t| *t == swap.token_out)
                         .ok_or_else(|| {
                             EncodingError::InvalidInput(
@@ -385,6 +387,7 @@ mod tests {
         ));
         let hex_calldata = encode(&calldata);
 
+        println!("{}", hex_calldata);
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
     }

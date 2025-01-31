@@ -39,7 +39,10 @@ contract TychoRouterTestSetup is Test, Constants {
     MockERC20[] tokens;
 
     function setUp() public {
-        uint256 forkBlock = 21000000;
+        // TODO I changed the forked block to match the signature
+        // of the integration test and now all the other tests fail
+        // fix this when the integration test passes.
+        uint256 forkBlock = 21742149;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);
