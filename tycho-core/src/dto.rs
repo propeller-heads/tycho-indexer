@@ -1596,6 +1596,7 @@ mod test {
                     }),
                 ])),
             ]),
+            account_balances: HashMap::new(),
             component_tvl: HashMap::new(),
             account_deltas: Default::default(),
         }
