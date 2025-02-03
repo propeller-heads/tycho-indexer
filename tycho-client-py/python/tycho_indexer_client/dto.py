@@ -4,7 +4,8 @@ from typing import Dict, List, Optional, Set, Union
 from uuid import UUID
 
 from hexbytes import HexBytes as _HexBytes
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator, RootModel
+from pydantic_core.core_schema import ValidationInfo
 
 
 class HexBytes(_HexBytes):
@@ -16,7 +17,7 @@ class HexBytes(_HexBytes):
         yield cls.validate
 
     @classmethod
-    def __modify_schema__(cls, field_schema):
+    def __get_pydantic_json_schema__(cls, field_schema):
         # __modify_schema__ should mutate the dict it receives in place,
         # the returned value will be ignored
         field_schema.update(
@@ -25,7 +26,7 @@ class HexBytes(_HexBytes):
         )
 
     @classmethod
-    def validate(cls, v: str):
+    def validate(cls, v: str, _: ValidationInfo):
         data = _HexBytes(v)
 
         return cls(data)
@@ -107,9 +108,8 @@ class ComponentBalance(BaseModel):
     component_id: str
 
 
-class TokenBalances(BaseModel):
-    __root__: Dict[HexBytes, ComponentBalance]
-    
+class TokenBalances(RootModel[Dict[HexBytes, ComponentBalance]]):
+
     def items(self):
             return self.__root__.items()
 
@@ -190,7 +190,7 @@ class ResponseAccount(BaseModel):
     creation_tx: Optional[HexBytes] = None
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
 
     @property
     def balance(self) -> HexBytes:
@@ -238,6 +238,9 @@ class FeedMessage(BaseModel):
     state_msgs: dict[str, StateSyncMessage]
     sync_states: dict[str, SynchronizerState]
 
+    def __repr__(self):
+        return f"FeedMessage(n_state_msgs={len(self.state_msgs)}, n_sync_states={len(self.sync_states)})"
+
 
 # Client Parameters
 
@@ -263,7 +266,7 @@ class ProtocolComponentsParams(BaseModel):
     tvl_gt: Optional[int] = None
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
 
 
 class ProtocolStateParams(BaseModel):
@@ -273,7 +276,7 @@ class ProtocolStateParams(BaseModel):
     version: Optional[VersionParams] = None
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
         use_enum_values = True
 
 
@@ -293,7 +296,7 @@ class ContractStateParams(BaseModel):
         return values
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
 
 
 class PaginationParams(BaseModel):
@@ -308,4 +311,4 @@ class TokensParams(BaseModel):
     traded_n_days_ago: Optional[int] = None
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
