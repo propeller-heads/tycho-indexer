@@ -13,7 +13,7 @@ error CallbackVerificationDispatcher__NonContractVerifier();
  *  verification. This allows dynamically adding new supported protocols
  *  without needing to upgrade any contracts.
  *
- *  Note Verifier contracts need to implement the ICallbackVerifier interface
+ *  Note: Verifier contracts need to implement the ICallbackVerifier interface
  */
 contract CallbackVerificationDispatcher {
     mapping(address => bool) public callbackVerifiers;

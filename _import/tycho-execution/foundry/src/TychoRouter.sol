@@ -75,32 +75,6 @@ contract TychoRouter is
     }
 
     /**
-     * @dev We use the fallback function to allow flexibility on callback.
-     * This function will delegate call a verifier contract and should revert if the
-     *  caller is not a pool.
-     */
-    fallback() external {
-        _executeGenericCallback(msg.data);
-    }
-
-    /**
-     * @dev Check if the sender is correct and executes callback actions.
-     *  @param msgData encoded data. It must includes data for the verification.
-     */
-    function _executeGenericCallback(bytes calldata msgData) internal {
-        (uint256 amountOwed, address tokenOwed) = _callVerifyCallback(msgData);
-
-        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
-    }
-
-    /**
-     * @dev Pauses the contract
-     */
-    function pause() external onlyRole(PAUSER_ROLE) {
-        _pause();
-    }
-
-    /**
      * @dev Unpauses the contract
      */
     function unpause() external onlyRole(UNPAUSER_ROLE) {
@@ -116,7 +90,7 @@ contract TychoRouter is
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
-     * - Swaps are executed sequentially using the `_splitSwap` function.
+     * - Swaps are executed sequentially using the `_swap` function.
      * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is bigger than 0.
      *
@@ -193,6 +167,26 @@ contract TychoRouter is
         }
     }
 
+    /**
+     * @dev Executes sequential swaps as defined by the provided swap graph.
+     *
+     * This function processes a series of swaps encoded in the `swaps_` byte array. Each swap operation determines:
+     * - The indices of the input and output tokens (via `tokenInIndex()` and `tokenOutIndex()`).
+     * - The portion of the available amount to be used for the swap, indicated by the `split` value.
+     *
+     * Two important notes:
+     * - The contract assumes that token indexes follow a specific order: the sell token is at index 0, followed by any
+     *  intermediary tokens, and finally the buy token.
+     * - A `split` value of 0 is interpreted as 100% of the available amount (i.e., the entire remaining balance).
+     *  This means that in scenarios without explicit splits the value should be 0, and when splits are present,
+     *  the last swap should also have a split value of 0.
+     *
+     * @param amountIn The initial amount of the sell token to be swapped.
+     * @param nTokens The total number of tokens involved in the swap path, used to initialize arrays for internal tracking.
+     * @param swaps_ Encoded swap graph data containing the details of each swap operation.
+     *
+     * @return The total amount of the buy token obtained after all swaps have been executed.
+     */
     function _swap(uint256 amountIn, uint256 nTokens, bytes calldata swaps_)
         internal
         returns (uint256)
@@ -229,6 +223,32 @@ contract TychoRouter is
             remainingAmounts[tokenInIndex] -= currentAmountIn;
         }
         return amounts[tokenOutIndex];
+    }
+
+    /**
+     * @dev We use the fallback function to allow flexibility on callback.
+     * This function will static call a verifier contract and should revert if the
+     *  caller is not a pool.
+     */
+    fallback() external {
+        _executeGenericCallback(msg.data);
+    }
+
+    /**
+     * @dev Check if the sender is correct and executes callback actions.
+     *  @param msgData encoded data. It must includes data for the verification.
+     */
+    function _executeGenericCallback(bytes calldata msgData) internal {
+        (uint256 amountOwed, address tokenOwed) = _callVerifyCallback(msgData);
+
+        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
+    }
+
+    /**
+     * @dev Pauses the contract
+     */
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
     }
 
     /**
