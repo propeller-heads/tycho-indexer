@@ -733,4 +733,56 @@ contract TychoRouterTest is TychoRouterTestSetup {
         // all of it (and thus our splits are correct).
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
+
+    function testSwapAmountInNotFullySpent() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V2
+        // Has invalid data as input! There is only one swap with 60% of the input amount
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+
+        bytes memory protocolData = encodeUniswapV2Swap(
+            WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
+        );
+
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv2Executor),
+            bytes4(0),
+            protocolData
+        );
+
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__AmountInNotFullySpent.selector, 400000000000000000
+            )
+        );
+
+        tychoRouter.swap(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            0,
+            false,
+            false,
+            2,
+            ALICE,
+            permitSingle,
+            signature,
+            pleEncode(swaps)
+        );
+
+        vm.stopPrank();
+    }
 }
