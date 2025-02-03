@@ -625,6 +625,11 @@ mod test {
 
     #[tokio::test]
     async fn test_extractor_runner_builder() {
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
+        provider
+            .install_default()
+            .expect("Failed to install rustls crypto provider");
+
         // Mock the Extractor
         let mut mock_extractor = MockExtractor::new();
         mock_extractor
