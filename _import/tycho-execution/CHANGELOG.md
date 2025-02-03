@@ -1,3 +1,10 @@
+## [0.26.0](https://github.com/propeller-heads/tycho-execution/compare/0.25.3...0.26.0) (2025-02-03)
+
+
+### Features
+
+* Verify that no amount in is left in the router ([0860d67](https://github.com/propeller-heads/tycho-execution/commit/0860d67d7a339a0fcc2533be856b64b1db394764))
+
 ## [0.25.3](https://github.com/propeller-heads/tycho-execution/compare/0.25.2...0.25.3) (2025-01-31)
 
 
