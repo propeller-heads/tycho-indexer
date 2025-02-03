@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
+use chrono::{Duration, NaiveDateTime};
 use metrics::gauge;
 use mockall::automock;
 use prost::Message;
@@ -25,7 +25,8 @@ use tycho_core::{
         ProtocolType, TxHash,
     },
     storage::{
-        ChainGateway, ContractStateGateway, ExtractionStateGateway, ProtocolGateway, StorageError,
+        BlockIdentifier, ChainGateway, ContractStateGateway, ExtractionStateGateway,
+        ProtocolGateway, StorageError,
     },
     traits::TokenPreProcessor,
     Bytes,
@@ -111,7 +112,14 @@ where
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
                 }
             }
-            Ok(cursor) => {
+            Ok((cursor, block_hash)) => {
+                let last_processed_block = gateway
+                    .get_block(block_hash)
+                    .await
+                    .unwrap_or_else(|err| {
+                        panic!("Unexpected error when fetching latest block {}", err);
+                    });
+
                 let cursor_hex = hex::encode(&cursor);
                 info!(
                     ?name,
@@ -126,7 +134,7 @@ where
                     chain_state,
                     inner: Arc::new(Mutex::new(Inner {
                         cursor,
-                        last_processed_block: None,
+                        last_processed_block: Some(last_processed_block),
                         last_report_ts: chrono::Local::now().naive_utc(),
                         last_report_block_number: 0,
                         first_message_processed: false,
@@ -578,6 +586,22 @@ where
         let mut msg =
             if let Some(post_process_f) = self.post_processor { post_process_f(msg) } else { msg };
 
+        if let Some(last_processed_block) = self.get_last_processed_block().await {
+            if msg.block.ts.timestamp() == last_processed_block.ts.timestamp() {
+                debug!("Block with identical timestamp detected. Prev block ts: {:?} - New block ts: {:?}", last_processed_block.ts, msg.block.ts);
+                // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
+                // identical timestamps (measured in seconds). To ensure accurate ordering, we
+                // adjust each block's timestamp by adding a microsecond offset
+                // based on the number of blocks with the same timestamp encountered
+                // so far.
+                // Blocks have a granularity of 1 second, so by adding 1 microsecond to the
+                // timestamp of each block with the same timestamp, we ensure ordering
+                // and prevent duplicate timestamps from being processed.
+                msg.block.ts = last_processed_block.ts + Duration::microseconds(1);
+                debug!("Adjusted block timestamp: {:?}", msg.block.ts);
+            }
+        }
+
         msg.new_tokens = self
             .construct_currency_tokens(&msg)
             .await?;
@@ -982,12 +1006,14 @@ where
             .get_balances(&reorg_buffer, &reverted_balances_keys_vec)
             .await?;
 
+        let new_latest_block = reorg_buffer
+            .get_most_recent_block()
+            .expect("Couldn't find most recent block in buffer during revert");
+
         let revert_message = BlockAggregatedChanges {
             extractor: self.name.clone(),
             chain: self.chain,
-            block: reorg_buffer
-                .get_most_recent_block()
-                .expect("Couldn't find most recent block in buffer during revert"),
+            block: new_latest_block.clone(),
             finalized_block_height: reverted_state[0]
                 .block_update
                 .finalized_block_height,
@@ -1003,6 +1029,8 @@ where
 
         debug!("Successfully retrieved all previous states during revert!");
 
+        self.update_last_processed_block(new_latest_block)
+            .await;
         self.update_cursor(inp.last_valid_cursor)
             .await;
 
@@ -1024,7 +1052,7 @@ pub struct ExtractorPgGateway {
 #[automock]
 #[async_trait]
 pub trait ExtractorGateway: Send + Sync {
-    async fn get_cursor(&self) -> Result<Vec<u8>, StorageError>;
+    async fn get_cursor(&self) -> Result<(Vec<u8>, Bytes), StorageError>;
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]);
 
@@ -1046,6 +1074,8 @@ pub trait ExtractorGateway: Send + Sync {
         &self,
         component_ids: &[&'a str],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
+
+    async fn get_block(&self, block_number: Bytes) -> Result<Block, StorageError>;
 }
 
 impl ExtractorPgGateway {
@@ -1077,19 +1107,28 @@ impl ExtractorPgGateway {
         Ok(())
     }
 
-    async fn get_last_cursor(&self) -> Result<Vec<u8>, StorageError> {
+    async fn get_last_extraction_state(&self) -> Result<ExtractionState, StorageError> {
         let state = self
             .state_gateway
             .get_state(&self.name, &self.chain)
             .await?;
-        Ok(state.cursor)
+        Ok(state)
     }
 }
 
 #[async_trait]
 impl ExtractorGateway for ExtractorPgGateway {
-    async fn get_cursor(&self) -> Result<Vec<u8>, StorageError> {
-        self.get_last_cursor().await
+    async fn get_block(&self, block_hash: Bytes) -> Result<Block, StorageError> {
+        self.state_gateway
+            .get_block(&BlockIdentifier::Hash(block_hash))
+            .await
+    }
+    async fn get_cursor(&self) -> Result<(Vec<u8>, Bytes), StorageError> {
+        let extraction_state = self.get_last_extraction_state().await;
+        match extraction_state {
+            Ok(state) => Ok((state.cursor, state.block_hash)),
+            Err(e) => Err(e),
+        }
     }
 
     async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
@@ -1255,10 +1294,9 @@ impl ExtractorGateway for ExtractorPgGateway {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use float_eq::assert_float_eq;
     use mockall::mock;
-
-    use super::*;
 
     use crate::{pb::testing::fixtures as pb_fixtures, testing::MockGateway};
 
@@ -1319,7 +1357,10 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
         let res = extractor.get_cursor().await;
@@ -1335,10 +1376,13 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1381,10 +1425,13 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1437,10 +1484,13 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1492,10 +1542,13 @@ mod test {
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_advance()
             .times(0)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = create_extractor(gw).await;
 
@@ -1510,6 +1563,90 @@ mod test {
             Err(_) => panic!("Expected Ok(None) but got Err(..)"),
         }
         assert_eq!(extractor.get_cursor().await, "cursor@420");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data_same_ts() {
+        // This test is to ensure that the extractor can handle multiple blocks with the same
+        // timestamp
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_advance()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+
+        let extractor = create_extractor(gw).await;
+
+        let block_1 = pb_fixtures::pb_blocks(1);
+        let mut block_2 = pb_fixtures::pb_blocks(2);
+        let mut block_3 = pb_fixtures::pb_blocks(3);
+        let block_1_ts = block_1.ts;
+
+        block_2.ts = block_1_ts;
+        block_3.ts = block_1_ts;
+
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                pb::tycho::evm::v1::BlockChanges { block: Some(block_1), changes: vec![] },
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(1),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                pb::tycho::evm::v1::BlockChanges { block: Some(block_2), changes: vec![] },
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(2),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@2");
+        assert_eq!(
+            extractor
+                .get_last_processed_block()
+                .await
+                .unwrap()
+                .ts
+                .timestamp_subsec_micros(),
+            1
+        );
+
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                pb::tycho::evm::v1::BlockChanges { block: Some(block_3), changes: vec![] },
+                Some(format!("cursor@{}", 3).as_str()),
+                Some(2),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@3");
+        assert_eq!(
+            extractor
+                .get_last_processed_block()
+                .await
+                .unwrap()
+                .ts
+                .timestamp_subsec_micros(),
+            2
+        );
     }
 
     fn token_prices() -> HashMap<Bytes, f64> {
@@ -1671,7 +1808,13 @@ mod test {
         extractor_gw
             .expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+
+        extractor_gw
+            .expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+
         let extractor = ProtocolExtractor::new(
             extractor_gw,
             EXTRACTOR_NAME,
@@ -1726,7 +1869,6 @@ mod test {
                             component_id: "comp1".to_string(),
                         },
                     )
-
                 ]),
             )]),
             ..Default::default()
@@ -1792,10 +1934,14 @@ mod test {
         extractor_gw
             .expect_get_cursor()
             .times(1)
-            .returning(|| Ok("cursor".into()));
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         extractor_gw
             .expect_get_components_balances()
             .return_once(|_| Ok(HashMap::new()));
+        extractor_gw
+            .expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
 
         let extractor = ProtocolExtractor::new(
             extractor_gw,
@@ -1847,19 +1993,21 @@ mod test_serial_db {
 
     use super::*;
 
+    use crate::{
+        extractor::models::fixtures,
+        pb::{sf::substreams::v1::BlockRef, testing::fixtures as pb_fixtures},
+    };
     use tycho_core::{
         models::{
             blockchain::TxWithChanges, contract::AccountBalance, ContractId, FinancialType,
             ImplementationType,
         },
-        storage::{BlockIdentifier, BlockOrTimestamp},
+        storage::BlockOrTimestamp,
         traits::TokenOwnerFinding,
     };
-    use tycho_storage::postgres::{builder::GatewayBuilder, db_fixtures, testing::run_against_db};
-
-    use crate::{
-        extractor::models::fixtures,
-        pb::{sf::substreams::v1::BlockRef, testing::fixtures as pb_fixtures},
+    use tycho_storage::postgres::{
+        builder::GatewayBuilder, db_fixtures, db_fixtures::yesterday_midnight,
+        testing::run_against_db,
     };
 
     mock! {
@@ -2022,12 +2170,12 @@ mod test_serial_db {
                 .await
                 .expect("gw transaction failed");
 
-            let cursor = gw
-                .get_last_cursor()
+            let extraction_state = gw
+                .get_last_extraction_state()
                 .await
                 .expect("get cursor should succeed");
 
-            assert_eq!(cursor, "cursor@420".as_bytes());
+            assert_eq!(extraction_state.cursor, "cursor@420".as_bytes());
         })
         .await;
     }
@@ -2568,7 +2716,7 @@ mod test_serial_db {
                 "vm_name",
                 Chain::Ethereum,
                 0,
-                cached_gw.clone()
+                cached_gw.clone(),
             );
             let protocol_types = HashMap::from([
                 ("pt_1".to_string(), ProtocolType::default()),
@@ -2705,6 +2853,158 @@ mod test_serial_db {
             );
         })
             .await;
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_timestamp_conflict_resolution_with_revert() {
+        run_against_db(|pool| async move {
+            let mut conn = pool
+                .get()
+                .await
+                .expect("pool should get a connection");
+
+            let database_url =
+                std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
+
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_1",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Vm),
+            )
+            .await;
+
+            db_fixtures::insert_protocol_type(
+                &mut conn,
+                "pt_2",
+                Some(FinancialType::Swap),
+                None,
+                Some(ImplementationType::Vm),
+            )
+            .await;
+
+            let (cached_gw, _gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
+                .set_chains(&[Chain::Ethereum])
+                .set_protocol_systems(&["vm_protocol_system".to_string()])
+                .build()
+                .await
+                .unwrap();
+
+            let gw = ExtractorPgGateway::new("vm_name", Chain::Ethereum, 0, cached_gw.clone());
+            let protocol_types = HashMap::from([
+                ("pt_1".to_string(), ProtocolType::default()),
+                ("pt_2".to_string(), ProtocolType::default()),
+            ]);
+            let protocol_cache = ProtocolMemoryCache::new(
+                Chain::Ethereum,
+                chrono::Duration::seconds(900),
+                Arc::new(cached_gw),
+            );
+            let preprocessor = get_mocked_token_pre_processor();
+            let extractor = ProtocolExtractor::new(
+                gw,
+                "vm_name",
+                Chain::Ethereum,
+                ChainState::default(),
+                "vm_protocol_system".to_string(),
+                protocol_cache,
+                protocol_types,
+                preprocessor,
+                None,
+            )
+            .await
+            .expect("Failed to create extractor");
+
+            // Send a sequence of block scoped data with the same timestamp.
+            let base_ts = yesterday_midnight().timestamp() as u64;
+            let versions = [1, 2, 3, 4];
+
+            let inp_sequence = versions
+                .into_iter()
+                .map(|version| {
+                    pb_fixtures::pb_block_scoped_data(
+                        pb::tycho::evm::v1::BlockChanges {
+                            block: Some(pb::tycho::evm::v1::Block {
+                                number: version,
+                                hash: Bytes::from(version)
+                                    .lpad(32, 0)
+                                    .to_vec(),
+                                parent_hash: Bytes::from(version - 1)
+                                    .lpad(32, 0)
+                                    .to_vec(),
+                                ts: {
+                                    if version == 4 {
+                                        base_ts + 1
+                                    } else {
+                                        base_ts
+                                    }
+                                },
+                            }),
+                            changes: vec![],
+                        },
+                        Some(format!("cursor@{}", version).as_str()),
+                        Some(5), // Buffered
+                    )
+                })
+                .collect::<Vec<_>>() // materialize into Vec
+                .into_iter();
+
+            stream::iter(inp_sequence)
+                .for_each(|inp| async {
+                    extractor
+                        .handle_tick_scoped_data(inp)
+                        .await
+                        .unwrap();
+                })
+                .await;
+
+            // Revert block #4, which had a timestamp of 1 second after block #3.
+            extractor
+                .handle_revert(BlockUndoSignal {
+                    last_valid_block: Some(BlockRef {
+                        id: "0x0000000000000000000000000000000000000000000000000000000000000003"
+                            .to_string(),
+                        number: 3,
+                    }),
+                    last_valid_cursor: "cursor@3".into(),
+                })
+                .await
+                .unwrap()
+                .unwrap();
+
+            // New block #4 should have the same timestamp as block #3.
+            extractor
+                .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                    pb::tycho::evm::v1::BlockChanges {
+                        block: Some(pb::tycho::evm::v1::Block {
+                            number: 4,
+                            hash: Bytes::from(4_u64).lpad(32, 0).to_vec(),
+                            parent_hash: Bytes::from(3_u64).lpad(32, 0).to_vec(),
+                            ts: base_ts,
+                        }),
+                        changes: vec![],
+                    },
+                    Some(format!("cursor@{}", 4).as_str()),
+                    Some(5), // Buffered
+                ))
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(extractor.get_cursor().await, "cursor@4");
+            // New block #4 should have the same timestamp as block #3 + 3 microseconds
+            assert_eq!(
+                extractor
+                    .get_last_processed_block()
+                    .await
+                    .unwrap()
+                    .ts
+                    .timestamp_subsec_micros(),
+                3
+            );
+        })
+        .await;
     }
 
     fn get_native_inp_sequence(
