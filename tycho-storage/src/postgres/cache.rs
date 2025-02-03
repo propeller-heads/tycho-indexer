@@ -208,7 +208,7 @@ pub enum DBCacheMessage {
 /// - If the block is old, we execute the transaction immediately.
 /// - If the block is pending, we group the transaction with other transactions that finish before
 ///   we observe the next block.
-
+///
 /// # Write Cache
 ///
 /// This struct handles writes in a centralised and sequential manner. It
@@ -1476,6 +1476,15 @@ mod test_serial_db {
             ],
         )
         .await;
+        let (_, native_token) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
 
         // set up contract data
         let c0 = db_fixtures::insert_account(
@@ -1486,12 +1495,13 @@ mod test_serial_db {
             Some(txn[0]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 0, txn[0], Some(&ts), c0).await;
+        db_fixtures::insert_account_balance(conn, 0, native_token, txn[0], Some(&ts), c0).await;
         db_fixtures::insert_contract_code(conn, c0, txn[0], Bytes::from_str("C0C0C0").unwrap())
             .await;
         db_fixtures::insert_account_balance(
             conn,
             100,
+            native_token,
             txn[1],
             Some(&(ts + Duration::from_secs(3600))),
             c0,
@@ -1507,7 +1517,7 @@ mod test_serial_db {
             &[(0, 1, None), (1, 5, None)],
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 101, txn[3], None, c0).await;
+        db_fixtures::insert_account_balance(conn, 101, native_token, txn[3], None, c0).await;
         db_fixtures::insert_slots(
             conn,
             c0,
@@ -1526,7 +1536,7 @@ mod test_serial_db {
             Some(txn[2]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 50, txn[2], None, c1).await;
+        db_fixtures::insert_account_balance(conn, 50, native_token, txn[2], None, c1).await;
         db_fixtures::insert_contract_code(conn, c1, txn[2], Bytes::from_str("C1C1C1").unwrap())
             .await;
         db_fixtures::insert_slots(
@@ -1547,7 +1557,7 @@ mod test_serial_db {
             Some(txn[1]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 25, txn[1], None, c2).await;
+        db_fixtures::insert_account_balance(conn, 25, native_token, txn[1], None, c2).await;
         db_fixtures::insert_contract_code(conn, c2, txn[1], Bytes::from_str("C2C2C2").unwrap())
             .await;
         db_fixtures::insert_slots(

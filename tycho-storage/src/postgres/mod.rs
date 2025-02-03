@@ -940,6 +940,7 @@ pub mod db_fixtures {
     pub async fn insert_account_balance(
         conn: &mut AsyncPgConnection,
         new_balance: u64,
+        token_id: i64,
         tx_id: i64,
         end_ts: Option<&NaiveDateTime>,
         account: i64,
@@ -957,14 +958,14 @@ pub mod db_fixtures {
         b0[24..].copy_from_slice(&new_balance_bytes);
 
         {
-            use schema::account_balance::dsl::*;
-            diesel::insert_into(account_balance)
+            diesel::insert_into(schema::account_balance::table)
                 .values((
-                    account_id.eq(account),
-                    balance.eq(b0.as_slice()),
-                    modify_tx.eq(tx_id),
-                    valid_from.eq(ts),
-                    valid_to.eq(end_ts),
+                    schema::account_balance::account_id.eq(account),
+                    schema::account_balance::balance.eq(b0.as_slice()),
+                    schema::account_balance::token_id.eq(token_id),
+                    schema::account_balance::modify_tx.eq(tx_id),
+                    schema::account_balance::valid_from.eq(ts),
+                    schema::account_balance::valid_to.eq(end_ts),
                 ))
                 .execute(conn)
                 .await
