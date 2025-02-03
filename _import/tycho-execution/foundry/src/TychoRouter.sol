@@ -18,6 +18,7 @@ import {LibSwap} from "../lib/LibSwap.sol";
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
+error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 
 contract TychoRouter is
@@ -153,6 +154,7 @@ contract TychoRouter is
         // For native ETH, assume funds already in our router. Else, transfer and handle approval.
         if (wrapEth) {
             _wrapETH(amountIn);
+            tokenIn = address(_weth);
         } else if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
             permit2.transferFrom(
@@ -173,6 +175,11 @@ contract TychoRouter is
 
         if (minAmountOut > 0 && amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
+
+        uint256 leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
+        if (leftoverAmountIn > 0) {
+            revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
         }
 
         if (unwrapEth) {
