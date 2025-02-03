@@ -9,7 +9,7 @@ use std::{
 use alloy_primitives::Address;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
 use tycho_core::Bytes;
 
@@ -233,7 +233,7 @@ impl TychoStreamDecoder {
                 .iter()
                 .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
                 .collect();
-            info!("Updating engine with snapshot");
+            info!("Updating engine with {} snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
                 block.clone().into(),
@@ -241,7 +241,7 @@ impl TychoStreamDecoder {
                 HashMap::new(),
             )
             .await;
-            info!("Engine updated with snapshot");
+            info!("Engine updated");
 
             let mut new_components = HashMap::new();
 
@@ -288,6 +288,7 @@ impl TychoStreamDecoder {
                                 warn!(pool = id, error = %e, "StateDecodingFailure");
                                 continue 'outer;
                             } else {
+                                error!(pool = id, error = %e, "StateDecodingFailure");
                                 return Err(StreamDecodeError::Fatal(format!("{e}")));
                             }
                         }
@@ -296,6 +297,7 @@ impl TychoStreamDecoder {
                     warn!(pool = id, "MissingDecoderRegistration");
                     continue 'outer;
                 } else {
+                    error!(pool = id, "MissingDecoderRegistration");
                     return Err(StreamDecodeError::Fatal(format!(
                         "Missing decoder registration for: {id}"
                     )));
@@ -303,7 +305,7 @@ impl TychoStreamDecoder {
             }
 
             if !new_components.is_empty() {
-                debug!("Decoded {} snapshots for protocol {}", new_components.len(), protocol);
+                info!("Decoded {} snapshots for protocol {}", new_components.len(), protocol);
             }
             updated_states.extend(new_components);
 
@@ -315,7 +317,7 @@ impl TychoStreamDecoder {
                     .iter()
                     .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
                     .collect();
-                info!("Updating engine with deltas");
+                info!("Updating engine with {} deltas", deltas.state_updates.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
                     block.clone().into(),
@@ -323,7 +325,7 @@ impl TychoStreamDecoder {
                     account_update_by_address,
                 )
                 .await;
-                info!("Engine updated with deltas");
+                info!("Engine updated");
 
                 for (id, update) in deltas.state_updates {
                     match updated_states.entry(id.clone()) {
