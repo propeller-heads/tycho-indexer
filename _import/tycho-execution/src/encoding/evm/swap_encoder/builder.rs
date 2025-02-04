@@ -1,4 +1,5 @@
 use crate::encoding::{
+    errors::EncodingError,
     evm::swap_encoder::swap_encoders::{BalancerV2SwapEncoder, UniswapV2SwapEncoder},
     swap_encoder::SwapEncoder,
 };
@@ -16,11 +17,14 @@ impl SwapEncoderBuilder {
         }
     }
 
-    pub fn build(self) -> Result<Box<dyn SwapEncoder>, String> {
+    pub fn build(self) -> Result<Box<dyn SwapEncoder>, EncodingError> {
         match self.protocol_system.as_str() {
             "uniswap_v2" => Ok(Box::new(UniswapV2SwapEncoder::new(self.executor_address))),
             "vm:balancer_v2" => Ok(Box::new(BalancerV2SwapEncoder::new(self.executor_address))),
-            _ => Err(format!("Unknown protocol system: {}", self.protocol_system)),
+            _ => Err(EncodingError::FatalError(format!(
+                "Unknown protocol system: {}",
+                self.protocol_system
+            ))),
         }
     }
 }

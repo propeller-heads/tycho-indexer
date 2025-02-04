@@ -4,9 +4,11 @@ use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolComponent, models::Chain, Bytes};
 use tycho_execution::encoding::{
     evm::{
-        strategy_encoder::strategy_selector::EVMStrategySelector, tycho_encoder::EVMTychoEncoder,
+        strategy_encoder::strategy_encoder_registry::EVMStrategyEncoderRegistry,
+        tycho_encoder::EVMTychoEncoder,
     },
     models::{Solution, Swap},
+    strategy_encoder::StrategyEncoderRegistry,
     tycho_encoder::TychoEncoder,
 };
 
@@ -17,11 +19,14 @@ fn main() {
         Some("0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string());
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
         .expect("Failed to create user address");
+    let executors_file_path = "src/encoding/config/executor_addresses.json";
 
     // Initialize the encoder
-    let encoder =
-        EVMTychoEncoder::new(EVMStrategySelector, router_address, signer_pk, Chain::Ethereum)
-            .expect("Failed to create encoder");
+    let strategy_encoder_registry =
+        EVMStrategyEncoderRegistry::new(Chain::Ethereum, executors_file_path, signer_pk.clone())
+            .expect("Failed to create strategy encoder registry");
+    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address)
+        .expect("Failed to create encoder");
 
     // ------------------- Encode a simple swap -------------------
 

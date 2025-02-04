@@ -12,6 +12,7 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
+#[derive(Clone)]
 pub struct UniswapV2SwapEncoder {
     executor_address: String,
     executor_selector: String,
@@ -59,8 +60,13 @@ impl SwapEncoder for UniswapV2SwapEncoder {
     fn executor_selector(&self) -> &str {
         &self.executor_selector
     }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
 }
 
+#[derive(Clone)]
 pub struct UniswapV3SwapEncoder {
     executor_address: String,
     executor_selector: String,
@@ -129,8 +135,12 @@ impl SwapEncoder for UniswapV3SwapEncoder {
     fn executor_selector(&self) -> &str {
         &self.executor_selector
     }
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
 }
 
+#[derive(Clone)]
 pub struct BalancerV2SwapEncoder {
     executor_address: String,
     executor_selector: String,
@@ -178,6 +188,9 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     }
     fn executor_selector(&self) -> &str {
         &self.executor_selector
+    }
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
     }
 }
 
