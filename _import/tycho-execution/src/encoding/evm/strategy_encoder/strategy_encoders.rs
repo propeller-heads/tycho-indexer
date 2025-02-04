@@ -9,6 +9,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
+        constants::WETH_ADDRESS,
         swap_encoder::SWAP_ENCODER_REGISTRY,
         utils::{biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24},
     },
@@ -108,10 +109,27 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         // runs)
         intermediary_tokens.sort();
 
+        let (mut unwrap, mut wrap) = (false, false);
+        if let Some(action) = solution.native_action.clone() {
+            match action {
+                NativeAction::Wrap => wrap = true,
+                NativeAction::Unwrap => unwrap = true,
+            }
+        }
+
         let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
-        tokens.push(solution.given_token.clone());
+        if wrap {
+            tokens.push(WETH_ADDRESS.clone());
+        } else {
+            tokens.push(solution.given_token.clone());
+        }
         tokens.extend(intermediary_tokens);
-        tokens.push(solution.checked_token.clone());
+
+        if unwrap {
+            tokens.push(WETH_ADDRESS.clone());
+        } else {
+            tokens.push(solution.checked_token.clone());
+        }
 
         let mut swaps = vec![];
         for swap in solution.swaps.iter() {
@@ -164,13 +182,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         }
 
         let encoded_swaps = self.ple_encode(swaps);
-        let (mut unwrap, mut wrap) = (false, false);
-        if let Some(action) = solution.native_action {
-            match action {
-                NativeAction::Wrap => wrap = true,
-                NativeAction::Unwrap => unwrap = true,
-            }
-        }
         let method_calldata = (
             biguint_to_u256(&solution.given_amount),
             bytes_to_address(&solution.given_token)?,
@@ -247,7 +258,10 @@ mod tests {
     use tycho_core::{dto::ProtocolComponent, Bytes};
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::{
+        evm::constants::{NATIVE_ADDRESS, WETH_ADDRESS},
+        models::Swap,
+    };
 
     #[test]
     fn test_executor_strategy_encode() {
@@ -401,6 +415,100 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+    }
+
+    #[test]
+    fn test_split_swap_strategy_encoder_simple_route_wrap() {
+        // Performs a single swap from WETH to DAI on a USV2 pool, wrapping ETH
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+
+        // Set up a mock private key for signing
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let swap = Swap {
+            component: ProtocolComponent {
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: WETH_ADDRESS.clone(),
+            token_out: dai.clone(),
+            split: 0f64,
+        };
+
+        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: NATIVE_ADDRESS.clone(),
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: dai,
+            expected_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
+            check_amount: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            swaps: vec![swap],
+            native_action: Some(NativeAction::Wrap),
+            ..Default::default()
+        };
+        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution, router_address)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
+    }
+
+    #[test]
+    fn test_split_swap_strategy_encoder_simple_route_unwrap() {
+        // Performs a single swap from DAI to WETH on a USV2 pool, unwrapping ETH at the end
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+
+        // Set up a mock private key for signing
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let swap = Swap {
+            component: ProtocolComponent {
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: dai.clone(),
+            token_out: WETH_ADDRESS.clone(),
+            split: 0f64,
+        };
+
+        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: dai,
+            given_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
+            checked_token: NATIVE_ADDRESS.clone(),
+            expected_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            check_amount: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            swaps: vec![swap],
+            native_action: Some(NativeAction::Unwrap),
+            ..Default::default()
+        };
+        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution, router_address)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
     }
 
     #[test]
