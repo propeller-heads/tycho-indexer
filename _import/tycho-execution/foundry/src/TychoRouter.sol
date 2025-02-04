@@ -208,6 +208,7 @@ contract TychoRouter is
             tokenInIndex = swapData.tokenInIndex();
             tokenOutIndex = swapData.tokenOutIndex();
             split = swapData.splitPercentage();
+
             currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
