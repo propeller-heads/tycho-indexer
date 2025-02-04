@@ -6,7 +6,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         strategy_encoder::strategy_encoders::{ExecutorStrategyEncoder, SplitSwapStrategyEncoder},
-        swap_encoder::registry::SwapEncoderRegistry,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
     models::Solution,
     strategy_encoder::{StrategyEncoder, StrategyEncoderRegistry},

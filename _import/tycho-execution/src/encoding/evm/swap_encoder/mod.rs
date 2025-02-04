@@ -1,3 +1,3 @@
 mod builder;
-pub mod registry;
+pub mod swap_encoder_registry;
 mod swap_encoders;

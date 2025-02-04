@@ -10,7 +10,7 @@ use crate::encoding::{
     evm::{
         approvals::permit2::Permit2,
         constants::WETH_ADDRESS,
-        swap_encoder::registry::SwapEncoderRegistry,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24},
     },
     models::{EncodingContext, NativeAction, Solution},
