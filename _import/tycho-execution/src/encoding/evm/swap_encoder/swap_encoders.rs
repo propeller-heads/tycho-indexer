@@ -168,7 +168,6 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             bytes_to_address(&swap.token_out)?,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
-            encoding_context.exact_out,
             approval_needed,
         );
         Ok(args.abi_encode_packed())
@@ -285,11 +284,12 @@ mod tests {
         let swap = Swap {
             component: balancer_pool,
             token_in: Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"), // WETH
-            token_out: Bytes::from("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"), // BAL
+            token_out: Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D"), // BAL
             split: 0f64,
         };
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+            // The receiver was generated with `makeAddr("bob") using forge`
+            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
             exact_out: false,
             router_address: Bytes::zero(20),
         };
@@ -299,6 +299,7 @@ mod tests {
             .encode_swap(swap, encoding_context)
             .unwrap();
         let hex_swap = encode(&encoded_swap);
+        println!("{}", hex_swap);
 
         assert_eq!(
             hex_swap,
@@ -306,13 +307,11 @@ mod tests {
                 // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // token out
-                "2791bca1f2de4661ed88a30c99a7a9449aa84174",
+                "ba100000625a3754423978a60c9317c58a424e3d",
                 // pool id
                 "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
                 // receiver
-                "0000000000000000000000000000000000000001",
-                // exact out
-                "00",
+                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // approval needed
                 "01"
             ))
