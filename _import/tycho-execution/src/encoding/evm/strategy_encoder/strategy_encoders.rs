@@ -69,6 +69,7 @@ impl SplitSwapStrategyEncoder {
     }
 
     fn validate_swaps(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
+        let mut swaps_by_token: HashMap<Bytes, Vec<&Swap>> = HashMap::new();
         for swap in swaps {
             if swap.split >= 1.0 {
                 return Err(EncodingError::InvalidInput(format!(
@@ -76,11 +77,6 @@ impl SplitSwapStrategyEncoder {
                     swap.split
                 )));
             }
-        }
-
-        let mut swaps_by_token: HashMap<Bytes, Vec<&Swap>> = HashMap::new();
-
-        for swap in swaps {
             swaps_by_token
                 .entry(swap.token_in.clone())
                 .or_default()
@@ -88,13 +84,6 @@ impl SplitSwapStrategyEncoder {
         }
 
         for (token, token_swaps) in swaps_by_token {
-            if token_swaps.is_empty() {
-                return Err(EncodingError::InvalidInput(format!(
-                    "No swaps found for token {:?}",
-                    token
-                )));
-            }
-
             // Single swaps don't need remainder handling
             if token_swaps.len() == 1 {
                 if token_swaps[0].split != 0.0 {
@@ -839,14 +828,13 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_token_path_connectivity_multiple_swaps_failure() {
+    fn test_validate_token_path_connectivity_disconnected_path() {
         let encoder = get_mock_split_swap_strategy_encoder();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
 
-        // Test case 1: Disconnected path
         let disconnected_swaps = vec![
             Swap {
                 component: ProtocolComponent {
@@ -875,8 +863,15 @@ mod tests {
             result,
             Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
         ));
+    }
 
-        // Test case 2: Unreachable checked token
+    #[test]
+    fn test_validate_token_path_connectivity_unreachable_checked_token() {
+        let encoder = get_mock_split_swap_strategy_encoder();
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
         let unreachable_swaps = vec![Swap {
             component: ProtocolComponent {
                 id: "pool1".to_string(),
@@ -892,8 +887,14 @@ mod tests {
             result,
             Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
         ));
+    }
 
-        // Test case 3: Empty swaps
+    #[test]
+    fn test_validate_token_path_connectivity_empty_swaps() {
+        let encoder = get_mock_split_swap_strategy_encoder();
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
         let empty_swaps: Vec<Swap> = vec![];
         let result = encoder.validate_token_path_connectivity(&empty_swaps, &weth, &usdc);
         assert!(matches!(
@@ -966,11 +967,10 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_swaps_multiple_swaps_failures() {
+    fn test_validate_swaps_no_remainder_split() {
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        // Test case 1: Invalid - splits sum to 100% with no remainder
         let invalid_total_swaps = vec![
             Swap {
                 component: ProtocolComponent {
@@ -998,8 +998,13 @@ mod tests {
             encoder.validate_swaps(&invalid_total_swaps),
             Err(EncodingError::InvalidInput(msg)) if msg.contains("must have exactly one 0% split")
         ));
+    }
 
-        // Test case 2: Invalid - zero split not at end
+    #[test]
+    fn test_validate_swaps_zero_split_not_at_end() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
         let invalid_zero_position_swaps = vec![
             Swap {
                 component: ProtocolComponent {
@@ -1022,12 +1027,18 @@ mod tests {
                 split: 0.5,
             },
         ];
+        let encoder = get_mock_split_swap_strategy_encoder();
         assert!(matches!(
             encoder.validate_swaps(&invalid_zero_position_swaps),
             Err(EncodingError::InvalidInput(msg)) if msg.contains("must be the last swap")
         ));
+    }
 
-        // Test case 3: Invalid - splits exceed 100%
+    #[test]
+    fn test_validate_swaps_splits_exceed_hundred_percent() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
         let invalid_overflow_swaps = vec![
             Swap {
                 component: ProtocolComponent {
