@@ -1524,7 +1524,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError> {
         // NOTE: the returned AccountBalances have a default value for tx_hash as it is assumed
-        // the caller does not need them.
+        // the caller does not need them and we get a large performance boost by skipping them.
 
         let version_ts = match &at {
             Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),

@@ -82,7 +82,7 @@ fn native_eth(chain: Chain) -> CurrencyToken {
         "ETH",
         18,
         0,
-        &[None],
+        &[Some(2300)],
         chain,
         100,
     )

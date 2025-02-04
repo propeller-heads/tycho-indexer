@@ -478,7 +478,7 @@ impl PostgresGateway {
         let protocol_system_cache = ProtocolSystemEnumCache::from_connection(conn)
             .await
             .expect("Failed to load protocol system cache");
-        let native_token_cache = Self::native_cache_from_connection(conn, &chain_cache)
+        let native_token_cache = Self::native_token_cache_from_connection(conn, &chain_cache)
             .await
             .expect("Failed to load native token cache");
 
@@ -533,7 +533,7 @@ impl PostgresGateway {
     // Could not use FromConnection trait as it is already implemented for a Chain->id map type.
     // Also this custom 'from connection' fn signature allows us to reuse the already fetched
     // chain cache.
-    async fn native_cache_from_connection(
+    async fn native_token_cache_from_connection(
         mut conn: &mut AsyncPgConnection,
         chain_cache: &ChainEnumCache,
     ) -> Result<NativeTokenEnumCache, StorageError> {
@@ -574,7 +574,7 @@ impl PostgresGateway {
             .await
             .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
 
-        Self::native_cache_from_connection(&mut conn, chain_cache).await
+        Self::native_token_cache_from_connection(&mut conn, chain_cache).await
     }
 }
 
