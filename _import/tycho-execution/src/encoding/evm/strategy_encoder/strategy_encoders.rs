@@ -54,6 +54,13 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
     }
 }
 
+/// Represents the encoder for a swap strategy which supports single, sequential and split swaps.
+///
+/// # Fields
+///
+/// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
+/// * `permit2`: Permit2, the object containing necessary information for managing permit2 operations
+/// * `selector`: String, the selector for the swap function in the router contract
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Permit2,
@@ -213,7 +220,11 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 }
 
 /// This strategy encoder is used for solutions that are sent directly to the pool.
-/// Only 1 solution with 1 swap is supported.
+/// Only one solution with one swap is supported.
+///
+/// # Fields
+///
+/// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
 pub struct ExecutorStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
 }

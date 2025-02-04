@@ -11,8 +11,15 @@ use crate::encoding::{
     tycho_encoder::TychoEncoder,
 };
 
+/// Represents an encoder for a swap through the given router address using any strategy supported
+/// by the strategy registry.
+///
+/// # Fields
+/// * `strategy_registry`: S, the strategy registry to use to select the best strategy to encode a
+/// solution, based on its supported strategies and the solution attributes.
+/// * `router_address`: Bytes, the address of the router to use to execute the swaps.
 pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
-    strategy_selector: S,
+    strategy_registry: S,
     router_address: Bytes,
 }
 
@@ -20,7 +27,7 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
     pub fn new(strategy_selector: S, router_address: String) -> Result<Self, EncodingError> {
         let router_address = Bytes::from_str(&router_address)
             .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
-        Ok(EVMTychoEncoder { strategy_selector, router_address })
+        Ok(EVMTychoEncoder { strategy_registry: strategy_selector, router_address })
     }
 }
 
@@ -82,7 +89,7 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
                 .unwrap_or(self.router_address.clone());
 
             let strategy = self
-                .strategy_selector
+                .strategy_registry
                 .get_encoder(solution)?;
             let (contract_interaction, target_address) =
                 strategy.encode_strategy(solution.clone(), router_address)?;

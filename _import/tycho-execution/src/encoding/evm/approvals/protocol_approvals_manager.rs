@@ -12,6 +12,7 @@ use tokio::runtime::Runtime;
 
 use crate::encoding::{errors::EncodingError, evm::utils::encode_input};
 
+/// A manager for checking if an approval is needed for interacting with a certain spender.
 pub struct ProtocolApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
     runtime: Runtime,
@@ -23,6 +24,9 @@ impl ProtocolApprovalsManager {
         let client = runtime.block_on(get_client())?;
         Ok(Self { client, runtime })
     }
+
+    /// Checks the current allowance for the given token, owner, and spender, and returns True
+    /// if the current allowance is zero.
     pub fn approval_needed(
         &self,
         token: Address,

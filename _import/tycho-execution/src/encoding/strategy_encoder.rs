@@ -13,6 +13,9 @@ pub trait StrategyEncoder {
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>>;
 }
 
+
+/// Contains the supported strategies to encode a solution, and chooses the best strategy to encode
+/// a solution based on the solution's attributes.
 pub trait StrategyEncoderRegistry {
     fn new(
         chain: Chain,
@@ -21,6 +24,8 @@ pub trait StrategyEncoderRegistry {
     ) -> Result<Self, EncodingError>
     where
         Self: Sized;
+
+    /// Returns the strategy encoder that should be used to encode the given solution.
     #[allow(clippy::borrowed_box)]
     fn get_encoder(&self, solution: &Solution) -> Result<&Box<dyn StrategyEncoder>, EncodingError>;
 }

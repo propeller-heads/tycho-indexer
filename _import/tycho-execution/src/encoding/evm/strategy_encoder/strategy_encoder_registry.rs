@@ -12,6 +12,12 @@ use crate::encoding::{
     strategy_encoder::{StrategyEncoder, StrategyEncoderRegistry},
 };
 
+
+/// Contains all supported strategies to encode a solution.
+///
+/// # Fields
+/// * `strategies` - A hashmap containing the name of the strategy as a key and the strategy
+/// encoder as a value.
 pub struct EVMStrategyEncoderRegistry {
     strategies: HashMap<String, Box<dyn StrategyEncoder>>,
 }

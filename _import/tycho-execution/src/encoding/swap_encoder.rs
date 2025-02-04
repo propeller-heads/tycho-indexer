@@ -2,6 +2,8 @@ use crate::encoding::{
     errors::EncodingError,
     models::{EncodingContext, Swap},
 };
+
+/// This trait must be implemented in order to encode a swap for a specific protocol.
 pub trait SwapEncoder: Sync + Send {
     fn new(executor_address: String) -> Self
     where

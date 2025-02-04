@@ -1,6 +1,8 @@
 use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolComponent, Bytes};
 
+/// Represents a solution containing details describing an order, and  instructions for filling
+/// the order.
 #[derive(Clone, Default, Debug)]
 pub struct Solution {
     /// Address of the sender.
@@ -35,12 +37,17 @@ pub struct Solution {
     pub direct_execution: bool,
 }
 
+/// Represents an action to be performed on the native token either before or after the swap.
+/// `Wrap` means that the native token will be wrapped before the first swap, and `Unwrap`
+/// means that the native token will be unwrapped after the last swap, before being sent to the
+/// receiver.
 #[derive(Clone, PartialEq, Debug)]
 pub enum NativeAction {
     Wrap,
     Unwrap,
 }
 
+/// Represents a swap operation to be performed on a pool.
 #[derive(Clone, Debug)]
 pub struct Swap {
     /// Protocol component from tycho indexer
@@ -49,10 +56,16 @@ pub struct Swap {
     pub token_in: Bytes,
     /// Token being output from the pool.
     pub token_out: Bytes,
-    /// Percentage of the amount to be swapped in this operation (for example, 0.5 means 50%)
+    /// Decimal of the amount to be swapped in this operation (for example, 0.5 means 50%)
     pub split: f64,
 }
 
+/// Represents a transaction to be executed on the Ethereum network.
+///
+/// # Fields
+/// * `to`: Address of the contract to call with the calldata
+/// * `value`: ETH value to be sent with the transaction.
+/// * `data`: Encoded calldata for the transaction.
 #[derive(Clone, Debug)]
 pub struct Transaction {
     // Address of the contract to call with the calldata
@@ -63,6 +76,8 @@ pub struct Transaction {
     pub data: Vec<u8>,
 }
 
+
+/// Represents necessary attributes for encoding an order.
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
