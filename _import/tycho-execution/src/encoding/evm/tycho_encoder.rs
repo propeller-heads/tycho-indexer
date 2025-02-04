@@ -11,27 +11,69 @@ use crate::encoding::{
     tycho_encoder::TychoEncoder,
 };
 
-#[allow(dead_code)]
 pub struct EVMTychoEncoder<S: StrategySelector> {
     strategy_selector: S,
-    signer: Option<String>,
+    signer_pk: Option<String>,
     chain: Chain,
     router_address: Bytes,
 }
 
-#[allow(dead_code)]
 impl<S: StrategySelector> EVMTychoEncoder<S> {
     pub fn new(
         strategy_selector: S,
         router_address: String,
-        signer: Option<String>,
+        signer_pk: Option<String>,
         chain: Chain,
     ) -> Result<Self, EncodingError> {
         let router_address = Bytes::from_str(&router_address)
             .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
-        Ok(EVMTychoEncoder { strategy_selector, signer, chain, router_address })
+        Ok(EVMTychoEncoder { strategy_selector, signer_pk, chain, router_address })
     }
 }
+
+impl<S: StrategySelector> EVMTychoEncoder<S> {
+    fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
+        if solution.exact_out {
+            return Err(EncodingError::FatalError(
+                "Currently only exact input solutions are supported".to_string(),
+            ));
+        }
+        if solution.swaps.is_empty() {
+            return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
+        }
+        if let Some(native_action) = solution.clone().native_action {
+            if native_action == NativeAction::Wrap {
+                if solution.given_token != *NATIVE_ADDRESS {
+                    return Err(EncodingError::FatalError(
+                        "ETH must be the input token in order to wrap".to_string(),
+                    ));
+                }
+                if let Some(first_swap) = solution.swaps.first() {
+                    if first_swap.token_in != *WETH_ADDRESS {
+                        return Err(EncodingError::FatalError(
+                            "WETH must be the first swap's input in order to wrap".to_string(),
+                        ));
+                    }
+                }
+            } else if native_action == NativeAction::Unwrap {
+                if solution.checked_token != *NATIVE_ADDRESS {
+                    return Err(EncodingError::FatalError(
+                        "ETH must be the output token in order to unwrap".to_string(),
+                    ));
+                }
+                if let Some(last_swap) = solution.swaps.last() {
+                    if last_swap.token_out != *WETH_ADDRESS {
+                        return Err(EncodingError::FatalError(
+                            "WETH must be the last swap's output in order to unwrap".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl<S: StrategySelector> TychoEncoder<S> for EVMTychoEncoder<S> {
     fn encode_router_calldata(
         &self,
@@ -48,7 +90,7 @@ impl<S: StrategySelector> TychoEncoder<S> for EVMTychoEncoder<S> {
 
             let strategy = self.strategy_selector.select_strategy(
                 solution,
-                self.signer.clone(),
+                self.signer_pk.clone(),
                 self.chain,
             )?;
             let (contract_interaction, target_address) =
@@ -66,47 +108,6 @@ impl<S: StrategySelector> TychoEncoder<S> for EVMTychoEncoder<S> {
             });
         }
         Ok(transactions)
-    }
-
-    fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
-        if solution.exact_out {
-            return Err(EncodingError::FatalError(
-                "Currently only exact input solutions are supported".to_string(),
-            ));
-        }
-        if solution.swaps.is_empty() {
-            return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
-        }
-        if let Some(native_action) = solution.clone().native_action {
-            if native_action == NativeAction::Wrap {
-                if let Some(first_swap) = solution.swaps.first() {
-                    if first_swap.token_in != *WETH_ADDRESS {
-                        return Err(EncodingError::FatalError(
-                            "WETH must be the first swap's input in order to wrap".to_string(),
-                        ));
-                    }
-                }
-                if solution.given_token != *NATIVE_ADDRESS {
-                    return Err(EncodingError::FatalError(
-                        "ETH must be the input token in order to wrap".to_string(),
-                    ));
-                }
-            } else if native_action == NativeAction::Unwrap {
-                if let Some(last_swap) = solution.swaps.last() {
-                    if last_swap.token_out != *WETH_ADDRESS {
-                        return Err(EncodingError::FatalError(
-                            "WETH must be the last swap's output in order to unwrap".to_string(),
-                        ));
-                    }
-                }
-                if solution.checked_token != *NATIVE_ADDRESS {
-                    return Err(EncodingError::FatalError(
-                        "ETH must be the output token in order to unwrap".to_string(),
-                    ));
-                }
-            }
-        }
-        Ok(())
     }
 }
 
@@ -406,7 +407,7 @@ mod tests {
 
         let solution = Solution {
             exact_out: false,
-            given_token: NATIVE_ADDRESS.clone(),
+            checked_token: NATIVE_ADDRESS.clone(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
             ..Default::default()

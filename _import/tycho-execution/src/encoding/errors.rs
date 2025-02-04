@@ -13,7 +13,6 @@ use thiserror::Error;
 ///   at a later time may succeed. It may have failed due to a temporary issue, such as a network
 ///   problem.
 #[derive(Error, Debug, PartialEq)]
-#[allow(dead_code)]
 pub enum EncodingError {
     #[error("Invalid input: {0}")]
     InvalidInput(String),
