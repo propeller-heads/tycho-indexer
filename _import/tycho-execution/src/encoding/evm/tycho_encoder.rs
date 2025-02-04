@@ -407,7 +407,7 @@ mod tests {
 
         let solution = Solution {
             exact_out: false,
-            given_token: NATIVE_ADDRESS.clone(),
+            checked_token: NATIVE_ADDRESS.clone(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
             ..Default::default()
