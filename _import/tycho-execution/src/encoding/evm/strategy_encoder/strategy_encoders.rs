@@ -14,11 +14,12 @@ use crate::encoding::{
     evm::{
         approvals::permit2::Permit2,
         constants::{NATIVE_ADDRESS, WETH_ADDRESS},
-        swap_encoder::SWAP_ENCODER_REGISTRY,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24},
     },
     models::{EncodingContext, NativeAction, Solution, Swap},
     strategy_encoder::StrategyEncoder,
+    swap_encoder::SwapEncoder,
 };
 
 pub trait EVMStrategyEncoder: StrategyEncoder {
@@ -58,14 +59,19 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 }
 
 pub struct SplitSwapStrategyEncoder {
+    swap_encoder_registry: SwapEncoderRegistry,
     permit2: Permit2,
     selector: String,
 }
 
 impl SplitSwapStrategyEncoder {
-    pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
+    pub fn new(
+        signer_pk: String,
+        chain: Chain,
+        swap_encoder_registry: SwapEncoderRegistry,
+    ) -> Result<Self, EncodingError> {
         let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
-        Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector })
+        Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector, swap_encoder_registry })
     }
 
     fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
@@ -286,16 +292,14 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let mut swaps = vec![];
         for swap in solution.swaps.iter() {
-            let registry = SWAP_ENCODER_REGISTRY
-                .read()
-                .map_err(|_| {
-                    EncodingError::FatalError(
-                        "Failed to read the swap encoder registry".to_string(),
-                    )
+            let swap_encoder = self
+                .get_swap_encoder(&swap.component.protocol_system)
+                .ok_or_else(|| {
+                    EncodingError::InvalidInput(format!(
+                        "Swap encoder not found for protocol: {}",
+                        swap.component.protocol_system
+                    ))
                 })?;
-            let swap_encoder = registry
-                .get_encoder(&swap.component.protocol_system)
-                .expect("Swap encoder not found");
 
             let encoding_context = EncodingContext {
                 receiver: router_address.clone(),
@@ -353,11 +357,24 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         let contract_interaction = encode_input(&self.selector, method_calldata);
         Ok((contract_interaction, router_address))
     }
+
+    fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
+        self.swap_encoder_registry
+            .get_encoder(protocol_system)
+    }
 }
 
 /// This strategy encoder is used for solutions that are sent directly to the pool.
 /// Only 1 solution with 1 swap is supported.
-pub struct ExecutorStrategyEncoder {}
+pub struct ExecutorStrategyEncoder {
+    swap_encoder_registry: SwapEncoderRegistry,
+}
+
+impl ExecutorStrategyEncoder {
+    pub fn new(swap_encoder_registry: SwapEncoderRegistry) -> Self {
+        Self { swap_encoder_registry }
+    }
+}
 impl EVMStrategyEncoder for ExecutorStrategyEncoder {}
 impl StrategyEncoder for ExecutorStrategyEncoder {
     fn encode_strategy(
@@ -375,13 +392,9 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             .swaps
             .first()
             .ok_or_else(|| EncodingError::InvalidInput("No swaps found in solution".to_string()))?;
-        let registry = SWAP_ENCODER_REGISTRY
-            .read()
-            .map_err(|_| {
-                EncodingError::FatalError("Failed to read the swap encoder registry".to_string())
-            })?;
-        let swap_encoder = registry
-            .get_encoder(&swap.component.protocol_system)
+
+        let swap_encoder = self
+            .get_swap_encoder(&swap.component.protocol_system)
             .ok_or_else(|| {
                 EncodingError::InvalidInput(format!(
                     "Swap encoder not found for protocol: {}",
@@ -400,6 +413,10 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
         Ok((protocol_data, executor_address))
     }
+    fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
+        self.swap_encoder_registry
+            .get_encoder(protocol_system)
+    }
 }
 
 #[cfg(test)]
@@ -417,9 +434,15 @@ mod tests {
         models::Swap,
     };
 
+    fn get_swap_encoder_registry() -> SwapEncoderRegistry {
+        SwapEncoderRegistry::new("src/encoding/config/executor_addresses.json", Chain::Ethereum)
+            .unwrap()
+    }
+
     #[test]
     fn test_executor_strategy_encode() {
-        let encoder = ExecutorStrategyEncoder {};
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder = ExecutorStrategyEncoder::new(swap_encoder_registry);
 
         let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
         let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
@@ -525,8 +548,10 @@ mod tests {
             token_out: dai.clone(),
             split: 0f64,
         };
-
-        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -625,8 +650,10 @@ mod tests {
             token_out: dai.clone(),
             split: 0f64,
         };
-
-        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: NATIVE_ADDRESS.clone(),
@@ -672,8 +699,10 @@ mod tests {
             token_out: WETH_ADDRESS.clone(),
             split: 0f64,
         };
-
-        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: dai,
@@ -760,8 +789,10 @@ mod tests {
             token_out: usdc.clone(),
             split: 0f64,
         };
-
-        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,

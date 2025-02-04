@@ -1,3 +1,17 @@
+## [0.30.1](https://github.com/propeller-heads/tycho-execution/compare/0.30.0...0.30.1) (2025-02-04)
+
+
+### Bug Fixes
+
+* deprecated signature ([576f89d](https://github.com/propeller-heads/tycho-execution/commit/576f89d24ca25ab37ae59b4db97cbff946d6da58))
+
+## [0.30.0](https://github.com/propeller-heads/tycho-execution/compare/0.29.1...0.30.0) (2025-02-04)
+
+
+### Features
+
+* Refactor Registries ([23875b8](https://github.com/propeller-heads/tycho-execution/commit/23875b8b02396690b3f028c7696ea5b95e17e40e))
+
 ## [0.29.1](https://github.com/propeller-heads/tycho-execution/compare/0.29.0...0.29.1) (2025-02-04)
 
 
