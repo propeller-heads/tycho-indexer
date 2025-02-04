@@ -16,13 +16,11 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, EncodingError> {
     }
 }
 
-#[allow(dead_code)]
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
     let bytes = value.to_bytes_be();
     U256::from_be_slice(&bytes)
 }
 
-#[allow(dead_code)]
 pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     let mut hasher = Keccak256::new();
     hasher.update(selector.as_bytes());

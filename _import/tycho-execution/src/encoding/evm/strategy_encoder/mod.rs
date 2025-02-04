@@ -1,2 +1,2 @@
 mod strategy_encoders;
-mod strategy_selector;
+pub mod strategy_selector;
