@@ -242,9 +242,9 @@ fn validate_swaps(swaps: &[Swap]) -> Result<(), EncodingError> {
 
         // Single swaps don't need remainder handling
         if token_swaps.len() == 1 {
-            if token_swaps[0].split != 1.0 {
+            if token_swaps[0].split != 0.0 {
                 return Err(EncodingError::InvalidInput(format!(
-                    "Single swap must have 100% split for token {:?}",
+                    "Single swap must have 0% split for token {:?}",
                     token
                 )));
             }
@@ -778,5 +778,276 @@ mod tests {
 
         let _hex_calldata = encode(&calldata);
         println!("{}", _hex_calldata);
+    }
+
+    #[test]
+    fn test_validate_token_path_connectivity_single_swap() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+        let swaps = vec![Swap {
+            component: ProtocolComponent {
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: dai.clone(),
+            split: 0f64,
+        }];
+        let result = validate_token_path_connectivity(&swaps, &weth, &dai);
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_validate_token_path_connectivity_multiple_swaps() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.5f64,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: dai.clone(),
+                token_out: usdc.clone(),
+                split: 0f64,
+            },
+        ];
+        let result = validate_token_path_connectivity(&swaps, &weth, &usdc);
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_validate_token_path_connectivity_multiple_swaps_failure() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+
+        // Test case 1: Disconnected path
+        let disconnected_swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool1".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.5,
+            },
+            // This swap is disconnected from the WETH->DAI path
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool2".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: wbtc.clone(),
+                token_out: usdc.clone(),
+                split: 0.0,
+            },
+        ];
+        let result = validate_token_path_connectivity(&disconnected_swaps, &weth, &usdc);
+        assert!(matches!(
+            result,
+            Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
+        ));
+
+        // Test case 2: Unreachable checked token
+        let unreachable_swaps = vec![Swap {
+            component: ProtocolComponent {
+                id: "pool1".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: dai.clone(),
+            split: 1.0,
+        }];
+        let result = validate_token_path_connectivity(&unreachable_swaps, &weth, &usdc);
+        assert!(matches!(
+            result,
+            Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
+        ));
+
+        // Test case 3: Empty swaps
+        let empty_swaps: Vec<Swap> = vec![];
+        let result = validate_token_path_connectivity(&empty_swaps, &weth, &usdc);
+        assert!(matches!(
+            result,
+            Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
+        ));
+    }
+
+    #[test]
+    fn test_validate_swaps_single_swap() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+        let swaps = vec![Swap {
+            component: ProtocolComponent {
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: dai.clone(),
+            split: 0f64,
+        }];
+        let result = validate_swaps(&swaps);
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_validate_swaps_multiple_swaps() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        // Valid case: Multiple swaps with proper splits (50%, 30%, remainder)
+        let valid_swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool1".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.5,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool2".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.3,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool3".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.0, // Remainder (20%)
+            },
+        ];
+        assert!(validate_swaps(&valid_swaps).is_ok());
+    }
+
+    #[test]
+    fn test_validate_swaps_multiple_swaps_failures() {
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        // Test case 1: Invalid - splits sum to 100% with no remainder
+        let invalid_total_swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool1".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.7,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool2".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.3,
+            },
+        ];
+        assert!(matches!(
+            validate_swaps(&invalid_total_swaps),
+            Err(EncodingError::InvalidInput(msg)) if msg.contains("must have exactly one 0% split")
+        ));
+
+        // Test case 2: Invalid - zero split not at end
+        let invalid_zero_position_swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool1".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.0,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool2".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.5,
+            },
+        ];
+        assert!(matches!(
+            validate_swaps(&invalid_zero_position_swaps),
+            Err(EncodingError::InvalidInput(msg)) if msg.contains("must be the last swap")
+        ));
+
+        // Test case 3: Invalid - splits exceed 100%
+        let invalid_overflow_swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool1".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.6,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool2".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.5,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool3".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0.0,
+            },
+        ];
+        assert!(matches!(
+            validate_swaps(&invalid_overflow_swaps),
+            Err(EncodingError::InvalidInput(msg)) if msg.contains("must be <100%")
+        ));
     }
 }
