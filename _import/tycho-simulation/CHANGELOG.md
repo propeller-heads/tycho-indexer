@@ -1,3 +1,11 @@
+## [0.71.1](https://github.com/propeller-heads/tycho-simulation/compare/0.71.0...0.71.1) (2025-02-04)
+
+
+### Bug Fixes
+
+* skip decode failures on example streams ([5febdc9](https://github.com/propeller-heads/tycho-simulation/commit/5febdc9bbb1f67019354610e6a799b59d5a9f1c7))
+* warn on updates for unknown pools in example instead of panic ([473feeb](https://github.com/propeller-heads/tycho-simulation/commit/473feebbfbdb856cbe9137a41e339afa4bd350ba))
+
 ## [0.71.0](https://github.com/propeller-heads/tycho-simulation/compare/0.70.0...0.71.0) (2025-01-30)
 
 
