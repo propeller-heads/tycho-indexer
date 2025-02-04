@@ -75,6 +75,7 @@ async fn main() {
                 Some(uniswap_v4_pool_with_hook_filter),
             )
             .auth_key(Some(tycho_api_key.clone()))
+            .skip_state_decode_failures(true)
             .set_tokens(all_tokens)
             .await
             .build()
