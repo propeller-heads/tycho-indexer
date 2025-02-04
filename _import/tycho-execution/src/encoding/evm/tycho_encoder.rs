@@ -32,6 +32,50 @@ impl<S: StrategySelector> EVMTychoEncoder<S> {
         Ok(EVMTychoEncoder { strategy_selector, signer, chain, router_address })
     }
 }
+
+impl<S: StrategySelector> EVMTychoEncoder<S> {
+    fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
+        if solution.exact_out {
+            return Err(EncodingError::FatalError(
+                "Currently only exact input solutions are supported".to_string(),
+            ));
+        }
+        if solution.swaps.is_empty() {
+            return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
+        }
+        if let Some(native_action) = solution.clone().native_action {
+            if native_action == NativeAction::Wrap {
+                if solution.given_token != *NATIVE_ADDRESS {
+                    return Err(EncodingError::FatalError(
+                        "ETH must be the input token in order to wrap".to_string(),
+                    ));
+                }
+                if let Some(first_swap) = solution.swaps.first() {
+                    if first_swap.token_in != *WETH_ADDRESS {
+                        return Err(EncodingError::FatalError(
+                            "WETH must be the first swap's input in order to wrap".to_string(),
+                        ));
+                    }
+                }
+            } else if native_action == NativeAction::Unwrap {
+                if solution.checked_token != *NATIVE_ADDRESS {
+                    return Err(EncodingError::FatalError(
+                        "ETH must be the output token in order to unwrap".to_string(),
+                    ));
+                }
+                if let Some(last_swap) = solution.swaps.last() {
+                    if last_swap.token_out != *WETH_ADDRESS {
+                        return Err(EncodingError::FatalError(
+                            "WETH must be the last swap's output in order to unwrap".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl<S: StrategySelector> TychoEncoder<S> for EVMTychoEncoder<S> {
     fn encode_router_calldata(
         &self,
@@ -66,47 +110,6 @@ impl<S: StrategySelector> TychoEncoder<S> for EVMTychoEncoder<S> {
             });
         }
         Ok(transactions)
-    }
-
-    fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
-        if solution.exact_out {
-            return Err(EncodingError::FatalError(
-                "Currently only exact input solutions are supported".to_string(),
-            ));
-        }
-        if solution.swaps.is_empty() {
-            return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
-        }
-        if let Some(native_action) = solution.clone().native_action {
-            if native_action == NativeAction::Wrap {
-                if let Some(first_swap) = solution.swaps.first() {
-                    if first_swap.token_in != *WETH_ADDRESS {
-                        return Err(EncodingError::FatalError(
-                            "WETH must be the first swap's input in order to wrap".to_string(),
-                        ));
-                    }
-                }
-                if solution.given_token != *NATIVE_ADDRESS {
-                    return Err(EncodingError::FatalError(
-                        "ETH must be the input token in order to wrap".to_string(),
-                    ));
-                }
-            } else if native_action == NativeAction::Unwrap {
-                if let Some(last_swap) = solution.swaps.last() {
-                    if last_swap.token_out != *WETH_ADDRESS {
-                        return Err(EncodingError::FatalError(
-                            "WETH must be the last swap's output in order to unwrap".to_string(),
-                        ));
-                    }
-                }
-                if solution.checked_token != *NATIVE_ADDRESS {
-                    return Err(EncodingError::FatalError(
-                        "ETH must be the output token in order to unwrap".to_string(),
-                    ));
-                }
-            }
-        }
-        Ok(())
     }
 }
 
