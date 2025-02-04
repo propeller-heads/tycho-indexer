@@ -40,6 +40,7 @@ pub async fn load_all_tokens(
     tycho_url: &str,
     no_tls: bool,
     auth_key: Option<&str>,
+    chain: Chain,
 ) -> HashMap<Bytes, Token> {
     let rpc_url =
         if no_tls { format!("http://{tycho_url}") } else { format!("https://{tycho_url}") };
@@ -47,7 +48,7 @@ pub async fn load_all_tokens(
 
     #[allow(clippy::mutable_key_type)]
     rpc_client
-        .get_all_tokens(Chain::Ethereum, Some(100), Some(42), 3_000)
+        .get_all_tokens(chain, Some(100), Some(42), 3_000)
         .await
         .expect("Unable to load tokens")
         .into_iter()
