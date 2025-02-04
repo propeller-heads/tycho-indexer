@@ -1,3 +1,27 @@
+## [0.29.0](https://github.com/propeller-heads/tycho-execution/compare/0.28.0...0.29.0) (2025-02-04)
+
+
+### Features
+
+* add swap encoder test in balancer v2 executor ([6333072](https://github.com/propeller-heads/tycho-execution/commit/6333072178b77bdc9a7950ed0ab84f30695d1b72))
+
+
+### Bug Fixes
+
+* executor test naming ([e6310d6](https://github.com/propeller-heads/tycho-execution/commit/e6310d65d1cb1c37ef0cef55090bf4abbe1fb275))
+
+## [0.28.0](https://github.com/propeller-heads/tycho-execution/compare/0.27.0...0.28.0) (2025-02-04)
+
+
+### Features
+
+* Tycho encoder validation ([4bc6159](https://github.com/propeller-heads/tycho-execution/commit/4bc615913ecb41a551a8b970ba5d96f0fc20ca42))
+
+
+### Bug Fixes
+
+* test_validate_fails_for_unwrap_wrong_last_swap ([0660321](https://github.com/propeller-heads/tycho-execution/commit/06603210bcd567ce50ec79344024ea2b722ebcd3))
+
 ## [0.27.0](https://github.com/propeller-heads/tycho-execution/compare/0.26.0...0.27.0) (2025-02-04)
 
 
