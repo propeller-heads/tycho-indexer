@@ -498,8 +498,10 @@ mod tests {
             token_out: dai.clone(),
             split: 0f64,
         };
-
-        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: NATIVE_ADDRESS.clone(),
@@ -545,8 +547,10 @@ mod tests {
             token_out: WETH_ADDRESS.clone(),
             split: 0f64,
         };
-
-        let encoder = SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap();
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: dai,

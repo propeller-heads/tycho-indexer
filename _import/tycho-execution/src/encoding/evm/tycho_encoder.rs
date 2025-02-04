@@ -24,7 +24,7 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
     }
 }
 
-impl<S: StrategySelector> EVMTychoEncoder<S> {
+impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
         if solution.exact_out {
             return Err(EncodingError::FatalError(
@@ -104,13 +104,12 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
 
 #[cfg(test)]
 mod tests {
-    use tycho_core::models::Chain;
-
-    use tycho_core::dto::ProtocolComponent;
+    use tycho_core::{dto::ProtocolComponent, models::Chain};
 
     use super::*;
-    use crate::encoding::{strategy_encoder::StrategyEncoder, swap_encoder::SwapEncoder};
-    use crate::encoding::{models::Swap, strategy_encoder::StrategyEncoder};
+    use crate::encoding::{
+        models::Swap, strategy_encoder::StrategyEncoder, swap_encoder::SwapEncoder,
+    };
 
     struct MockStrategyRegistry {
         strategy: Box<dyn StrategyEncoder>,
