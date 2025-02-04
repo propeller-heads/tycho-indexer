@@ -1,3 +1,15 @@
+## [0.28.0](https://github.com/propeller-heads/tycho-execution/compare/0.27.0...0.28.0) (2025-02-04)
+
+
+### Features
+
+* Tycho encoder validation ([4bc6159](https://github.com/propeller-heads/tycho-execution/commit/4bc615913ecb41a551a8b970ba5d96f0fc20ca42))
+
+
+### Bug Fixes
+
+* test_validate_fails_for_unwrap_wrong_last_swap ([0660321](https://github.com/propeller-heads/tycho-execution/commit/06603210bcd567ce50ec79344024ea2b722ebcd3))
+
 ## [0.27.0](https://github.com/propeller-heads/tycho-execution/compare/0.26.0...0.27.0) (2025-02-04)
 
 
