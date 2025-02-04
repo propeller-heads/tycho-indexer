@@ -16,6 +16,7 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use tokio::{select, sync::mpsc::Receiver};
+use tracing::warn;
 use tycho_core::Bytes;
 use tycho_simulation::protocol::{
     models::{BlockUpdate, ProtocolComponent},
@@ -151,17 +152,20 @@ impl App {
                 .map(|el| el.spot_price(&comp.tokens[0], &comp.tokens[1]))
                 .unwrap_or(Ok(0.0));
 
-            self.items.push(Data {
-                component: comp.clone(),
-                state: update
-                    .states
-                    .get(id)
-                    .unwrap_or_else(|| panic!("Received update for unknown pool {}", comp.address))
-                    .clone(),
-                name,
-                tokens,
-                price: format!("{}", price.expect("Expected f64 as spot price")),
-            });
+            match update.states.get(id) {
+                Some(state) => {
+                    self.items.push(Data {
+                        component: comp.clone(),
+                        state: state.clone(),
+                        name,
+                        tokens,
+                        price: format!("{}", price.expect("Expected f64 as spot price")),
+                    });
+                }
+                None => {
+                    warn!("Received update for unknown pool {}", comp.address)
+                }
+            };
         }
 
         for (address, state) in update.states.iter() {

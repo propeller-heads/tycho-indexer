@@ -335,6 +335,7 @@ impl TychoStreamDecoder {
                             state
                                 .delta_transition(update, &state_guard.tokens)
                                 .map_err(|e| {
+                                    error!(pool = id, error = ?e, "DeltaTransitionError");
                                     StreamDecodeError::Fatal(format!("TransitionFailure: {e:?}"))
                                 })?;
                         }
@@ -347,6 +348,7 @@ impl TychoStreamDecoder {
                                     state
                                         .delta_transition(update, &state_guard.tokens)
                                         .map_err(|e| {
+                                            error!(pool = id, error = ?e, "DeltaTransitionError");
                                             StreamDecodeError::Fatal(format!(
                                                 "TransitionFailure: {e:?}"
                                             ))
