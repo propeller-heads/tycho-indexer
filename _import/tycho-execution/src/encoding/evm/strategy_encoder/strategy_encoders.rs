@@ -242,26 +242,33 @@ fn validate_swaps(swaps: &[Swap]) -> Result<(), EncodingError> {
 
         // Single swaps don't need remainder handling
         if token_swaps.len() == 1 {
+            if token_swaps[0].split != 1.0 {
+                return Err(EncodingError::InvalidInput(format!(
+                    "Single swap must have 100% split for token {:?}",
+                    token
+                )));
+            }
             continue;
         }
 
         // Check if exactly one swap has 0% split and it's the last one
-        let zero_splits: Vec<_> = token_swaps
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| s.split == 0.0)
-            .collect();
-
-        if zero_splits.len() != 1 {
-            return Err(EncodingError::InvalidInput(format!(
-                "Token {:?} must have exactly one 0% split for remainder handling",
-                token
-            )));
+        let mut found_zero_split = false;
+        for (i, swap) in token_swaps.iter().enumerate() {
+            match (swap.split == 0.0, i == token_swaps.len() - 1) {
+                (true, false) => {
+                    return Err(EncodingError::InvalidInput(format!(
+                        "The 0% split for token {:?} must be the last swap",
+                        token
+                    )))
+                }
+                (true, true) => found_zero_split = true,
+                (false, _) => (),
+            }
         }
 
-        if zero_splits[0].0 != token_swaps.len() - 1 {
+        if !found_zero_split {
             return Err(EncodingError::InvalidInput(format!(
-                "The 0% split for token {:?} must be the last swap",
+                "Token {:?} must have exactly one 0% split for remainder handling",
                 token
             )));
         }
@@ -300,56 +307,48 @@ fn validate_token_path_connectivity(
     checked_token: &Bytes,
 ) -> Result<(), EncodingError> {
     // Build directed graph of token flows
-    let mut graph: HashMap<Bytes, HashSet<Bytes>> = HashMap::new();
+    let mut graph: HashMap<&Bytes, HashSet<&Bytes>> = HashMap::new();
     for swap in swaps {
         graph
-            .entry(swap.token_in.clone())
+            .entry(&swap.token_in)
             .or_default()
-            .insert(swap.token_out.clone());
+            .insert(&swap.token_out);
     }
 
     // BFS from given_token
     let mut visited = HashSet::new();
     let mut queue = VecDeque::new();
-    queue.push_back(given_token.clone());
+    queue.push_back(given_token);
 
     while let Some(token) = queue.pop_front() {
-        if !visited.insert(token.clone()) {
+        if !visited.insert(token) {
             continue;
         }
 
-        if let Some(next_tokens) = graph.get(&token) {
-            for next_token in next_tokens {
+        // Early success check
+        if token == checked_token && visited.len() == graph.len() + 1 {
+            return Ok(());
+        }
+
+        if let Some(next_tokens) = graph.get(token) {
+            for &next_token in next_tokens {
                 if !visited.contains(next_token) {
-                    queue.push_back(next_token.clone());
+                    queue.push_back(next_token);
                 }
             }
         }
     }
 
-    // Verify all tokens are visited
-    let all_tokens: HashSet<_> = graph
-        .keys()
-        .chain(graph.values().flat_map(|v| v.iter()))
-        .collect();
-
-    for token in all_tokens {
-        if !visited.contains(token) {
-            return Err(EncodingError::InvalidInput(format!(
-                "Token {:?} is not connected to the main path",
-                token
-            )));
-        }
-    }
-
-    // Verify checked_token is reachable
+    // If we get here, either checked_token wasn't reached or not all tokens were visited
     if !visited.contains(checked_token) {
-        return Err(EncodingError::InvalidInput(
+        Err(EncodingError::InvalidInput(
             "Checked token is not reachable through swap path".to_string(),
-        ));
+        ))
+    } else {
+        Err(EncodingError::InvalidInput(
+            "Some tokens are not connected to the main path".to_string(),
+        ))
     }
-
-    Ok(())
 }
 
 /// This strategy encoder is used for solutions that are sent directly to the pool.
