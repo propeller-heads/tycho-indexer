@@ -25,7 +25,7 @@ fn main() {
     let strategy_encoder_registry =
         EVMStrategyEncoderRegistry::new(Chain::Ethereum, executors_file_path, signer_pk.clone())
             .expect("Failed to create strategy encoder registry");
-    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address)
+    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address, Chain::Ethereum)
         .expect("Failed to create encoder");
 
     // ------------------- Encode a simple swap -------------------

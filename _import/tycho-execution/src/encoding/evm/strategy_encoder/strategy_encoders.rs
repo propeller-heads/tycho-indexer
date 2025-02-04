@@ -9,7 +9,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
-        constants::WETH_ADDRESS,
+        constants::wrapped_address,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24},
     },
@@ -58,6 +58,7 @@ pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Permit2,
     selector: String,
+    wrapped_address: Bytes,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -67,7 +68,13 @@ impl SplitSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
     ) -> Result<Self, EncodingError> {
         let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
-        Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector, swap_encoder_registry })
+        let wrapped_address = wrapped_address(chain);
+        Ok(Self {
+            permit2: Permit2::new(signer_pk, chain)?,
+            selector,
+            swap_encoder_registry,
+            wrapped_address,
+        })
     }
 }
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
@@ -126,14 +133,14 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
         if wrap {
-            tokens.push(WETH_ADDRESS.clone());
+            tokens.push(self.wrapped_address.clone());
         } else {
             tokens.push(solution.given_token.clone());
         }
         tokens.extend(intermediary_tokens);
 
         if unwrap {
-            tokens.push(WETH_ADDRESS.clone());
+            tokens.push(self.wrapped_address.clone());
         } else {
             tokens.push(solution.checked_token.clone());
         }
@@ -278,9 +285,16 @@ mod tests {
 
     use super::*;
     use crate::encoding::{
-        evm::constants::{NATIVE_ADDRESS, WETH_ADDRESS},
+        evm::constants::{native_address, wrapped_address},
         models::Swap,
     };
+    fn eth() -> Bytes {
+        native_address(Chain::Ethereum)
+    }
+
+    fn weth() -> Bytes {
+        wrapped_address(Chain::Ethereum)
+    }
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
         SwapEncoderRegistry::new("src/encoding/config/executor_addresses.json", Chain::Ethereum)
@@ -292,7 +306,7 @@ mod tests {
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder = ExecutorStrategyEncoder::new(swap_encoder_registry);
 
-        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+        let token_in = weth();
         let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
 
         let swap = Swap {
@@ -494,7 +508,7 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: WETH_ADDRESS.clone(),
+            token_in: weth(),
             token_out: dai.clone(),
             split: 0f64,
         };
@@ -504,7 +518,7 @@ mod tests {
                 .unwrap();
         let solution = Solution {
             exact_out: false,
-            given_token: NATIVE_ADDRESS.clone(),
+            given_token: eth(),
             given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
             checked_token: dai,
             expected_amount: Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
@@ -544,7 +558,7 @@ mod tests {
                 ..Default::default()
             },
             token_in: dai.clone(),
-            token_out: WETH_ADDRESS.clone(),
+            token_out: weth(),
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
@@ -555,7 +569,7 @@ mod tests {
             exact_out: false,
             given_token: dai,
             given_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
-            checked_token: NATIVE_ADDRESS.clone(),
+            checked_token: eth(),
             expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
             check_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -590,7 +604,7 @@ mod tests {
         let private_key =
             "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let weth = weth();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
