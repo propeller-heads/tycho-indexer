@@ -818,7 +818,8 @@ mod tests {
     fn get_mock_split_swap_strategy_encoder() -> SplitSwapStrategyEncoder {
         let private_key =
             "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-        SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum).unwrap()
+        let swap_encoder_registry = get_swap_encoder_registry();
+        SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry).unwrap()
     }
 
     #[test]
