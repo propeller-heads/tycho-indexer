@@ -1,3 +1,24 @@
+## [0.27.0](https://github.com/propeller-heads/tycho-execution/compare/0.26.0...0.27.0) (2025-02-04)
+
+
+### Features
+
+* Add complex swap to quickstart example ([80454f0](https://github.com/propeller-heads/tycho-execution/commit/80454f012d1d6c9a79aed02ab95c8290c02ceaba))
+* Add simple quickstart example ([84d162d](https://github.com/propeller-heads/tycho-execution/commit/84d162d418f383bb9dee56ba281f24f686bff19d))
+
+
+### Bug Fixes
+
+* bring back one #[allow(dead_code)] ([ae315b4](https://github.com/propeller-heads/tycho-execution/commit/ae315b452aa231d63529aca5834ef80d7eb1f320))
+* Calculate min_amount_out correctly and extend test to prove this ([de1c782](https://github.com/propeller-heads/tycho-execution/commit/de1c782bc1184f8437226986fc148ebf3995ece9))
+
+## [0.26.0](https://github.com/propeller-heads/tycho-execution/compare/0.25.3...0.26.0) (2025-02-03)
+
+
+### Features
+
+* Verify that no amount in is left in the router ([0860d67](https://github.com/propeller-heads/tycho-execution/commit/0860d67d7a339a0fcc2533be856b64b1db394764))
+
 ## [0.25.3](https://github.com/propeller-heads/tycho-execution/compare/0.25.2...0.25.3) (2025-01-31)
 
 

@@ -16,7 +16,6 @@ use crate::encoding::{
     strategy_encoder::StrategyEncoder,
 };
 
-#[allow(dead_code)]
 pub trait EVMStrategyEncoder: StrategyEncoder {
     fn encode_swap_header(
         &self,
@@ -77,16 +76,18 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             &solution.given_token,
             &solution.given_amount,
         )?;
-        let mut min_amount_out = BigUint::ZERO;
-        if let Some(user_specified_min_amount) = solution.check_amount {
-            if let Some(slippage) = solution.slippage {
-                let one_hundred = BigUint::from(100u32);
-                let slippage_percent = BigUint::from((slippage * 100.0) as u32);
-                let multiplier = &one_hundred - slippage_percent;
-                let expected_amount_with_slippage =
-                    (&solution.expected_amount * multiplier) / one_hundred;
-                min_amount_out = max(user_specified_min_amount, expected_amount_with_slippage);
-            }
+        let mut min_amount_out = solution
+            .check_amount
+            .unwrap_or(BigUint::ZERO);
+
+        if let (Some(expected_amount), Some(slippage)) =
+            (solution.expected_amount.as_ref(), solution.slippage)
+        {
+            let one_hundred = BigUint::from(100u32);
+            let slippage_percent = BigUint::from((slippage * 100.0) as u32);
+            let multiplier = &one_hundred - slippage_percent;
+            let expected_amount_with_slippage = (expected_amount * &multiplier) / &one_hundred;
+            min_amount_out = max(min_amount_out, expected_amount_with_slippage);
         }
         // The tokens array is composed of the given token, the checked token and all the
         // intermediary tokens in between. The contract expects the tokens to be in this order.
@@ -244,6 +245,7 @@ mod tests {
 
     use alloy::hex::encode;
     use num_bigint::BigUint;
+    use rstest::rstest;
     use tycho_core::{dto::ProtocolComponent, Bytes};
 
     use super::*;
@@ -271,7 +273,7 @@ mod tests {
             exact_out: false,
             given_token: token_in,
             given_amount: BigUint::from(1000000000000000000u64),
-            expected_amount: BigUint::from(1000000000000000000u64),
+            expected_amount: Some(BigUint::from(1000000000000000000u64)),
             checked_token: token_out,
             check_amount: None,
             sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
@@ -307,8 +309,37 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_split_swap_strategy_encoder_simple_route() {
+    #[rstest]
+    #[case::no_check_no_slippage(
+        None,
+        None,
+        None,
+        U256::from_str("0").unwrap(),
+    )]
+    #[case::with_check_no_slippage(
+        None,
+        None,
+    Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
+        U256::from_str("3_000_000000000000000000").unwrap(),
+    )]
+    #[case::no_check_with_slippage(
+        Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
+        Some(0.01f64),
+        None,
+        U256::from_str("2_970_000000000000000000").unwrap(),
+    )]
+    #[case::with_check_and_slippage(
+        Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
+        Some(0.01f64),
+        Some(BigUint::from_str("2_999_000000000000000000").unwrap()),
+        U256::from_str("2_999_000000000000000000").unwrap(),
+    )]
+    fn test_split_swap_strategy_encoder_simple_route(
+        #[case] expected_amount: Option<BigUint>,
+        #[case] slippage: Option<f64>,
+        #[case] check_amount: Option<BigUint>,
+        #[case] expected_min_amount: U256,
+    ) {
         // Performs a single swap from WETH to DAI on a USV2 pool
 
         // Set up a mock private key for signing
@@ -335,8 +366,9 @@ mod tests {
             given_token: weth,
             given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
             checked_token: dai,
-            expected_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
-            check_amount: None,
+            expected_amount,
+            slippage,
+            check_amount,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             swaps: vec![swap],
@@ -347,18 +379,20 @@ mod tests {
         let (calldata, _) = encoder
             .encode_strategy(solution, router_address)
             .unwrap();
+        let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
+        let expected_input = [
+            "4860f9ed",                                                             // Function selector
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
+            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
+            "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",      // token out
+            &expected_min_amount_encoded,                                            // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000",      // wrap
+            "0000000000000000000000000000000000000000000000000000000000000000",      // unwrap
+            "0000000000000000000000000000000000000000000000000000000000000002",      // tokens length
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",      // receiver
+        ]
+            .join("");
 
-        let expected_input = String::from(concat!(
-            "4860f9ed",
-            "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount out
-            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-            "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
-            "0000000000000000000000000000000000000000000000000000000000000000", // min amount out
-            "0000000000000000000000000000000000000000000000000000000000000000", // wrap
-            "0000000000000000000000000000000000000000000000000000000000000000", // unwrap
-            "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
-            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        ));
         // after this there is the permit and because of the deadlines (that depend on block time)
         // it's hard to assert
         // "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
@@ -473,7 +507,7 @@ mod tests {
             given_token: weth,
             given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
             checked_token: usdc,
-            expected_amount: BigUint::from_str("3_000_000000").unwrap(),
+            expected_amount: Some(BigUint::from_str("3_000_000000").unwrap()),
             check_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),

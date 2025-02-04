@@ -15,7 +15,7 @@ error ExecutionDispatcher__NonContractExecutor();
  *  be called using delegatecall so they can share state with the main
  *  contract if needed.
  *
- *  Note Executor contracts need to implement the IExecutor interface unless
+ *  Note: Executor contracts need to implement the IExecutor interface unless
  *  an alternate selector is specified.
  */
 contract ExecutionDispatcher {

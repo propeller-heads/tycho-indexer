@@ -4,7 +4,6 @@ use crate::encoding::{
     strategy_encoder::StrategySelector,
 };
 
-#[allow(dead_code)]
 pub trait TychoEncoder<S: StrategySelector> {
     fn encode_router_calldata(
         &self,
