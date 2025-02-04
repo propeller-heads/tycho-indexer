@@ -907,7 +907,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_swaps_single_swap() {
+    fn test_validate_swap_single() {
         let encoder = get_mock_split_swap_strategy_encoder();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
@@ -926,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_swaps_multiple_swaps() {
+    fn test_validate_swaps_multiple() {
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
