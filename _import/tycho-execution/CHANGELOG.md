@@ -1,3 +1,11 @@
+## [0.29.1](https://github.com/propeller-heads/tycho-execution/compare/0.29.0...0.29.1) (2025-02-04)
+
+
+### Bug Fixes
+
+* Fix bug with token indexing when wrapping/unwrapping ([3f4e27a](https://github.com/propeller-heads/tycho-execution/commit/3f4e27a34890b8865d59956d009bd4a44aa7fe54))
+* test fixes after merge ([ff283bc](https://github.com/propeller-heads/tycho-execution/commit/ff283bc33383aa38ddeca7891795c0bcac1164fc))
+
 ## [0.29.0](https://github.com/propeller-heads/tycho-execution/compare/0.28.0...0.29.0) (2025-02-04)
 
 
