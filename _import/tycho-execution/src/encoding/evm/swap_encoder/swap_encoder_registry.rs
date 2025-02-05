@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs};
 
-use tycho_core::models::Chain;
+use tycho_core::dto::Chain;
 
 use crate::encoding::{
     errors::EncodingError, evm::swap_encoder::builder::SwapEncoderBuilder,

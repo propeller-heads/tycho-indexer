@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
 use num_bigint::BigUint;
-use tycho_core::{dto::ProtocolComponent, models::Chain, Bytes};
+use tycho_core::{
+    dto::{Chain, ProtocolComponent},
+    Bytes,
+};
 use tycho_execution::encoding::{
     evm::{
         strategy_encoder::strategy_encoder_registry::EVMStrategyEncoderRegistry,

@@ -111,7 +111,7 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
 
 #[cfg(test)]
 mod tests {
-    use tycho_core::{dto::ProtocolComponent, models::Chain};
+    use tycho_core::dto::{Chain, ProtocolComponent};
 
     use super::*;
     use crate::encoding::{
