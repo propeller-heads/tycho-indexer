@@ -1,4 +1,4 @@
-use tycho_core::models::Chain;
+use tycho_core::dto::Chain;
 
 pub struct ChainId(u64);
 
