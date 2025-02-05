@@ -7,14 +7,12 @@ use alloy::{
     signers::{local::PrivateKeySigner, SignerSync},
     transports::BoxTransport,
 };
-#[allow(deprecated)]
-use alloy_primitives::Signature;
-use alloy_primitives::B256;
+use alloy_primitives::{PrimitiveSignature as Signature, B256};
 use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
 use tokio::runtime::Runtime;
-use tycho_core::{models::Chain, Bytes};
+use tycho_core::{dto::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -117,7 +115,6 @@ impl Permit2 {
         }
     }
     /// Creates permit single and signature
-    #[allow(deprecated)]
     pub fn get_permit(
         &self,
         spender: &Bytes,

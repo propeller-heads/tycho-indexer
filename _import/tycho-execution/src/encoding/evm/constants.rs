@@ -1,5 +1,5 @@
 use alloy_primitives::hex;
-use tycho_core::{models::Chain, Bytes};
+use tycho_core::{dto::Chain, Bytes};
 
 pub fn native_address(chain: Chain) -> Bytes {
     match chain {

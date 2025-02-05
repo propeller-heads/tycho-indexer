@@ -1,4 +1,4 @@
-use tycho_core::{models::Chain, Bytes};
+use tycho_core::{dto::Chain, Bytes};
 
 use crate::encoding::{errors::EncodingError, models::Solution, swap_encoder::SwapEncoder};
 
