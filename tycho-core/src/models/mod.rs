@@ -93,18 +93,9 @@ impl Chain {
     pub fn native_token(&self) -> CurrencyToken {
         match self {
             Chain::Ethereum => native_eth(Chain::Ethereum),
-            Chain::Starknet => CurrencyToken::new(
-                &Bytes::from_str(
-                    "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
-                )
-                .unwrap(),
-                "STRK",
-                18,
-                0,
-                &[None],
-                Chain::Starknet,
-                100,
-            ),
+            // It was decided that STRK token will be tracked as a dedicated AccountBalance on
+            // Starknet accounts and ETH balances will be tracked as a native balance.
+            Chain::Starknet => native_eth(Chain::Starknet),
             Chain::ZkSync => native_eth(Chain::ZkSync),
             Chain::Arbitrum => native_eth(Chain::Arbitrum),
             Chain::Base => native_eth(Chain::Base),
