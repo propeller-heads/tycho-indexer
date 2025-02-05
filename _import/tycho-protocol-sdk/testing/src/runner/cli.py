@@ -7,9 +7,7 @@ def main() -> None:
         description="Run indexer within a specified range of blocks"
     )
     parser.add_argument("--package", type=str, help="Name of the package to test.")
-    parser.add_argument(
-        "--tycho-logs", action="store_true", help="Enable Tycho logs."
-    )
+    parser.add_argument("--tycho-logs", action="store_true", help="Enable Tycho logs.")
     parser.add_argument(
         "--db-url",
         default="postgres://postgres:mypassword@localhost:5431/tycho_indexer_0",

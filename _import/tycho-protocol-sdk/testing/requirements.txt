@@ -3,4 +3,4 @@ PyYAML==6.0.1
 Requests==2.32.2
 web3==5.31.3
 git+https://github.com/propeller-heads/tycho-indexer.git@0.49.0#subdirectory=tycho-client-py
-git+https://github.com/propeller-heads/tycho-simulation.git@0.69.0#subdirectory=tycho_simulation_py
+git+https://github.com/propeller-heads/tycho-simulation.git@348cf5114f7f6bebd2cb56732c0a81e27736fd12#subdirectory=tycho_simulation_py
