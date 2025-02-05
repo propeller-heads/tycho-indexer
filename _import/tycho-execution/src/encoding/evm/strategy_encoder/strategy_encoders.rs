@@ -3,7 +3,7 @@ use std::{cmp::max, collections::HashSet, str::FromStr};
 use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
-use tycho_core::{keccak256, models::Chain, Bytes};
+use tycho_core::{dto::Chain, keccak256, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
