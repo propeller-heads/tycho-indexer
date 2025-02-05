@@ -11,7 +11,7 @@ required-features = ["evm"]
 [dependencies]
 dotenv = "0.15.0"
 lazy_static = "1.4.0"
-num-bigint = "0.4.6"
+num-bigint = { version = "0.4.6", features = ["serde"] }
 hex = "0.4.3"
 num-traits = "0.2.19"
 serde = { version = "1.0.217", features = ["derive"] }

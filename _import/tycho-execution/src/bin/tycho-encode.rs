@@ -7,13 +7,13 @@ use tycho_execution::encoding::{
         strategy_encoder::strategy_encoder_registry::EVMStrategyEncoderRegistry,
         tycho_encoder::EVMTychoEncoder,
     },
+    models::Solution,
     strategy_encoder::StrategyEncoderRegistry,
     tycho_encoder::TychoEncoder,
 };
 
 mod lib {
     pub mod help;
-    pub mod parse;
 }
 
 const DEFAULT_ROUTER_ADDRESS: &str = "0x1234567890123456789012345678901234567890";
@@ -70,8 +70,7 @@ fn encode_swaps(
     router_address: &str,
     private_key: Option<String>,
 ) -> Result<Value, Box<dyn std::error::Error>> {
-    let input_json: Value = serde_json::from_str(input)?;
-    let solution = lib::parse::parse_solution(input_json)?;
+    let solution: Solution = serde_json::from_str(input)?;
 
     let strategy_selector =
         EVMStrategyEncoderRegistry::new(Chain::Ethereum, DEFAULT_EXECUTORS_FILE_PATH, private_key)?;
