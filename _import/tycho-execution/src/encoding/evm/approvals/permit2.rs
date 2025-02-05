@@ -12,7 +12,7 @@ use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
 use tokio::runtime::Runtime;
-use tycho_core::{models::Chain, Bytes};
+use tycho_core::{dto::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
