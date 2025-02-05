@@ -6,6 +6,7 @@ edition = "2021"
 [[bin]]
 name = "tycho-encode"
 path = "src/bin/tycho-encode.rs"
+required-features = ["evm"]
 
 [dependencies]
 dotenv = "0.15.0"

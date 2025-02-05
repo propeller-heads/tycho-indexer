@@ -1,6 +1,5 @@
 use std::io::{self, Read};
 
-use hex;
 use serde_json::Value;
 use tycho_core::dto::Chain;
 use tycho_execution::encoding::{
