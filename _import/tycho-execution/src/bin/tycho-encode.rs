@@ -8,7 +8,7 @@ use hex;
 use num_bigint::BigUint;
 use serde_json::Value;
 use tycho_core::{
-    dto::{Chain as DtoChain, ProtocolComponent},
+    dto::{Chain, ProtocolComponent},
     Bytes,
 };
 use tycho_execution::encoding::{
@@ -22,6 +22,7 @@ use tycho_execution::encoding::{
 };
 
 const DEFAULT_ROUTER_ADDRESS: &str = "0x1234567890123456789012345678901234567890";
+const DEFAULT_EXECUTORS_FILE_PATH: &str = "src/encoding/config/executor_addresses.json";
 const HELP_TEXT: &str = "\
 USAGE:
     tycho-encode [ROUTER_ADDRESS]
@@ -232,13 +233,13 @@ fn parse_protocol_component(obj: &Value) -> Result<ProtocolComponent, Box<dyn st
             .get("chain")
             .and_then(|v| v.as_str())
             .map(|s| match s.to_lowercase().as_str() {
-                "ethereum" => DtoChain::Ethereum,
-                "starknet" => DtoChain::Starknet,
-                "zksync" => DtoChain::ZkSync,
-                "arbitrum" => DtoChain::Arbitrum,
-                _ => DtoChain::Ethereum, // Default to Ethereum
+                "ethereum" => Chain::Ethereum,
+                "starknet" => Chain::Starknet,
+                "zksync" => Chain::ZkSync,
+                "arbitrum" => Chain::Arbitrum,
+                _ => Chain::Ethereum, // Default to Ethereum
             })
-            .unwrap_or(DtoChain::Ethereum),
+            .unwrap_or(Chain::Ethereum),
         tokens: obj
             .get("tokens")
             .and_then(|v| v.as_array())
@@ -306,41 +307,17 @@ fn parse_protocol_component(obj: &Value) -> Result<ProtocolComponent, Box<dyn st
 fn encode_swaps(input: &str, router_address: &str) -> Result<Value, Box<dyn std::error::Error>> {
     // Parse the input JSON
     let input_json: Value = serde_json::from_str(input)?;
+    let solution = parse_solution(input_json)?;
 
-    // Extract the chain from the input JSON
-    let chain = input_json
-        .get("chain")
-        .and_then(|v| v.as_str())
-        .map(|s| match s.to_lowercase().as_str() {
-            "ethereum" => DtoChain::Ethereum,
-            "starknet" => DtoChain::Starknet,
-            "zksync" => DtoChain::ZkSync,
-            "arbitrum" => DtoChain::Arbitrum,
-            _ => DtoChain::Ethereum, // Default to Ethereum
-        })
-        .unwrap_or(DtoChain::Ethereum);
+    // Create encoder and encode the solution
+    let strategy_selector =
+        EVMStrategyEncoderRegistry::new(Chain::Ethereum, DEFAULT_EXECUTORS_FILE_PATH, None)?;
+    let encoder = EVMTychoEncoder::new(strategy_selector, router_address.to_string())?;
+    let transactions = encoder.encode_router_calldata(vec![solution])?;
 
-    // Parse the solution from the input JSON
-    let mut solution = parse_solution(input_json)?;
-    solution.direct_execution = true;
-
-    // Create the strategy encoder based on the chain
-    let strategy_encoder: Value = match chain {
-        DtoChain::Ethereum => {
-            // Create encoder and encode the solution with empty executors file path
-            let strategy_selector = EVMStrategyEncoderRegistry::new(DtoChain::Ethereum, "", None)?;
-            let encoder = EVMTychoEncoder::new(strategy_selector, router_address.to_string())?;
-            let transactions = encoder.encode_router_calldata(vec![solution])?;
-
-            let result: Result<Value, Box<dyn std::error::Error>> = Ok(serde_json::json!({
-                "to": format!("0x{}", hex::encode(&transactions[0].to)),
-                "value": format!("0x{}", hex::encode(transactions[0].value.to_bytes_be())),
-                "data": format!("0x{}", hex::encode(&transactions[0].data)),
-            }));
-            result
-        }
-        _ => Err(format!("Unsupported chain: {:?}", chain).into()),
-    }?;
-
-    Ok(strategy_encoder)
+    Ok(serde_json::json!({
+        "to": format!("0x{}", hex::encode(&transactions[0].to)),
+        "value": format!("0x{}", hex::encode(transactions[0].value.to_bytes_be())),
+        "data": format!("0x{}", hex::encode(&transactions[0].data)),
+    }))
 }

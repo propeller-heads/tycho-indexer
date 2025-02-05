@@ -29,25 +29,6 @@ impl SwapEncoderRegistry {
         Ok(Self { encoders })
     }
 
-    pub fn new_direct_execution() -> Self {
-        let mut encoders = HashMap::new();
-
-        // Add default encoders with their respective executor addresses
-        let default_encoders = [
-            ("uniswap_v2", "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"),
-            ("vm:balancer_v2", "0xBA12222222228d8Ba445958a75a0704d566BF2C8"),
-        ];
-
-        for (protocol, executor_address) in default_encoders {
-            let builder = SwapEncoderBuilder::new(protocol, executor_address);
-            if let Ok(encoder) = builder.build() {
-                encoders.insert(protocol.to_string(), encoder);
-            }
-        }
-
-        Self { encoders }
-    }
-
     #[allow(clippy::borrowed_box)]
     pub fn get_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
         self.encoders.get(protocol_system)
