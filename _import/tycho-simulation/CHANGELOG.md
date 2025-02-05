@@ -1,3 +1,12 @@
+## [0.72.0](https://github.com/propeller-heads/tycho-simulation/compare/0.71.1...0.72.0) (2025-02-05)
+
+
+### Features
+
+* add chain ver to load_all_tokens ([1853916](https://github.com/propeller-heads/tycho-simulation/commit/185391671ca3a4885c1390a6a409e6d759bc9921))
+* re-export shallow reimplementions of tycho core models ([1cae440](https://github.com/propeller-heads/tycho-simulation/commit/1cae4404dc5383e42cad68dbffac37baf85c2a28))
+* update tycho version to a Base supported version ([cfbfeaa](https://github.com/propeller-heads/tycho-simulation/commit/cfbfeaabde77283eea83e95f11c6ef47bd9dce8d))
+
 ## [0.71.1](https://github.com/propeller-heads/tycho-simulation/compare/0.71.0...0.71.1) (2025-02-04)
 
 
