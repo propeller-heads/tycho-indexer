@@ -7,7 +7,7 @@ use tycho_core::{
     dto::{Chain, ProtocolComponent},
     Bytes,
 };
-use tycho_execution::encoding::models::{Solution, Swap};
+use tycho_execution::encoding::models::{NativeAction, Solution, Swap};
 
 pub fn parse_solution(input: Value) -> Result<Solution, Box<dyn std::error::Error>> {
     let obj = input
@@ -58,7 +58,15 @@ pub fn parse_solution(input: Value) -> Result<Solution, Box<dyn std::error::Erro
             .get("router_address")
             .map(parse_bytes)
             .transpose()?,
-        native_action: None, // TODO: Implement if needed
+        native_action: obj
+            .get("native_action")
+            .and_then(|v| v.as_str())
+            .map(|s| match s.to_lowercase().as_str() {
+                "wrap" => Some(NativeAction::Wrap),
+                "unwrap" => Some(NativeAction::Unwrap),
+                _ => None, // Default to None
+            })
+            .flatten(),
         direct_execution: obj
             .get("direct_execution")
             .and_then(|v| v.as_bool())
