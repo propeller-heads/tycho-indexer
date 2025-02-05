@@ -1,5 +1,13 @@
 use num_bigint::BigUint;
-use tycho_core::{dto::ProtocolComponent, Bytes};
+use tycho_core::{
+    dto::{Chain as TychoCoreChain, ProtocolComponent},
+    Bytes,
+};
+
+use crate::encoding::{
+    constants::{NATIVE_ADDRESSES, WRAPPED_ADDRESSES},
+    errors::EncodingError,
+};
 
 #[derive(Clone, Default, Debug)]
 pub struct Solution {
@@ -67,4 +75,66 @@ pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
     pub router_address: Bytes,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ChainId(pub u64);
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Chain {
+    pub id: ChainId,
+    pub name: String,
+    pub native_token: Bytes,
+    pub wrapped_token: Bytes,
+}
+
+impl ChainId {
+    pub fn id(&self) -> u64 {
+        self.0
+    }
+}
+
+impl From<TychoCoreChain> for ChainId {
+    fn from(chain: TychoCoreChain) -> Self {
+        match chain {
+            TychoCoreChain::Ethereum => ChainId(1),
+            TychoCoreChain::ZkSync => ChainId(324),
+            TychoCoreChain::Arbitrum => ChainId(42161),
+            TychoCoreChain::Starknet => ChainId(0),
+        }
+    }
+}
+
+impl Chain {
+    pub fn from_tycho_core_chain(
+        chain: TychoCoreChain,
+        native_token: Option<Bytes>,
+        wrapped_token: Option<Bytes>,
+    ) -> Result<Self, EncodingError> {
+        let native_token_address = match native_token {
+            Some(token) => token,
+            None => NATIVE_ADDRESSES.get(&chain)
+                .cloned()
+                .ok_or_else(|| EncodingError::InvalidInput(format!(
+                    "Native token does not have a default address for chain {:?}. Please pass the native token address",
+                    chain
+                )))?,
+        };
+
+        let wrapped_token_address = match wrapped_token {
+            Some(token) => token,
+            None => WRAPPED_ADDRESSES.get(&chain)
+                .cloned()
+                .ok_or_else(|| EncodingError::InvalidInput(format!(
+                    "Wrapped token does not have a default address for chain {:?}. Please pass the wrapped token address",
+                    chain
+                )))?,
+        };
+        Ok(Chain {
+            id: chain.into(),
+            name: chain.to_string(),
+            native_token: native_token_address,
+            wrapped_token: wrapped_token_address,
+        })
+    }
 }

@@ -12,15 +12,15 @@ use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
 use tokio::runtime::Runtime;
-use tycho_core::{dto::Chain, Bytes};
+use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::get_client,
-        models::ChainId,
         utils::{biguint_to_u256, bytes_to_address, encode_input},
     },
+    models::{Chain, ChainId},
 };
 
 /// Struct for managing Permit2 operations, including encoding approvals and fetching allowance
@@ -60,7 +60,6 @@ sol! {
 
 impl Permit2 {
     pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
-        let chain_id = ChainId::from(chain);
         let runtime = Runtime::new()
             .map_err(|_| EncodingError::FatalError("Failed to create runtime".to_string()))?;
         let client = runtime.block_on(get_client())?;
@@ -76,7 +75,7 @@ impl Permit2 {
             client,
             runtime,
             signer,
-            chain_id,
+            chain_id: chain.id,
         })
     }
 
@@ -199,11 +198,28 @@ mod tests {
         }
     }
 
+    fn eth() -> Bytes {
+        Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap()
+    }
+
+    fn weth() -> Bytes {
+        Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap()
+    }
+
+    fn eth_chain() -> Chain {
+        Chain {
+            id: ChainId(1),
+            name: String::from("ethereum"),
+            native_token: eth(),
+            wrapped_token: weth(),
+        }
+    }
+
     #[test]
     fn test_get_existing_allowance() {
         let signer_pk =
             "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
-        let manager = Permit2::new(signer_pk, Chain::Ethereum).unwrap();
+        let manager = Permit2::new(signer_pk, eth_chain()).unwrap();
 
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let owner = Bytes::from_str("0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4").unwrap();
@@ -223,7 +239,7 @@ mod tests {
         // Set up a mock private key for signing
         let private_key =
             "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
-        let permit2 = Permit2::new(private_key, Chain::Ethereum).expect("Failed to create Permit2");
+        let permit2 = Permit2::new(private_key, eth_chain()).expect("Failed to create Permit2");
 
         let owner = Bytes::from_str("0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4").unwrap();
         let spender = Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap();
@@ -264,7 +280,7 @@ mod tests {
             "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80".to_string();
 
         let permit2 =
-            Permit2::new(anvil_private_key, Chain::Ethereum).expect("Failed to create Permit2");
+            Permit2::new(anvil_private_key, eth_chain()).expect("Failed to create Permit2");
 
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let amount = BigUint::from(1000u64);

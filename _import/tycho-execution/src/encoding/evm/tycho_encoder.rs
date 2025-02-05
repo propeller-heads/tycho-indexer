@@ -1,12 +1,11 @@
 use std::str::FromStr;
 
 use num_bigint::BigUint;
-use tycho_core::{dto::Chain, Bytes};
+use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::constants::{native_address, wrapped_address},
-    models::{NativeAction, Solution, Transaction},
+    models::{Chain, NativeAction, Solution, Transaction},
     strategy_encoder::StrategyEncoderRegistry,
     tycho_encoder::TychoEncoder,
 };
@@ -26,14 +25,17 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
     ) -> Result<Self, EncodingError> {
         let router_address = Bytes::from_str(&router_address)
             .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
-        let native_address = native_address(chain);
-        let wrapped_address = wrapped_address(chain);
-        if chain != Chain::Ethereum {
+        if chain.name != *"ethereum" {
             return Err(EncodingError::InvalidInput(
                 "Currently only Ethereum is supported".to_string(),
             ));
         }
-        Ok(EVMTychoEncoder { strategy_selector, router_address, native_address, wrapped_address })
+        Ok(EVMTychoEncoder {
+            strategy_selector,
+            router_address,
+            native_address: chain.native_token,
+            wrapped_address: chain.wrapped_token,
+        })
     }
 }
 
@@ -119,15 +121,26 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
 
 #[cfg(test)]
 mod tests {
-    use tycho_core::dto::{Chain, ProtocolComponent};
+    use tycho_core::dto::{Chain as TychoCoreChain, ProtocolComponent};
 
     use super::*;
     use crate::encoding::{
-        models::Swap, strategy_encoder::StrategyEncoder, swap_encoder::SwapEncoder,
+        models::{ChainId, Swap},
+        strategy_encoder::StrategyEncoder,
+        swap_encoder::SwapEncoder,
     };
 
     struct MockStrategyRegistry {
         strategy: Box<dyn StrategyEncoder>,
+    }
+
+    fn eth_chain() -> Chain {
+        Chain {
+            id: ChainId(1),
+            name: TychoCoreChain::Ethereum.to_string(),
+            native_token: eth(),
+            wrapped_token: weth(),
+        }
     }
 
     fn dai() -> Bytes {
@@ -135,11 +148,11 @@ mod tests {
     }
 
     fn eth() -> Bytes {
-        native_address(Chain::Ethereum)
+        Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap()
     }
 
     fn weth() -> Bytes {
-        wrapped_address(Chain::Ethereum)
+        Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap()
     }
 
     impl StrategyEncoderRegistry for MockStrategyRegistry {
@@ -181,11 +194,11 @@ mod tests {
     }
 
     fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
-        let strategy_selector = MockStrategyRegistry::new(Chain::Ethereum, "", None).unwrap();
+        let strategy_selector = MockStrategyRegistry::new(eth_chain(), "", None).unwrap();
         EVMTychoEncoder::new(
             strategy_selector,
             "0x1234567890abcdef1234567890abcdef12345678".to_string(),
-            Chain::Ethereum,
+            eth_chain(),
         )
         .unwrap()
     }
