@@ -3,6 +3,10 @@ name = "tycho-execution"
 version = "0.30.1"
 edition = "2021"
 
+[[bin]]
+name = "tycho-encode"
+path = "src/bin/tycho-encode.rs"
+
 [dependencies]
 dotenv = "0.15.0"
 lazy_static = "1.4.0"

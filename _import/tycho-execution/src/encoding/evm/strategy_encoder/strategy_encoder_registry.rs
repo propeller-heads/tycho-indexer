@@ -22,7 +22,11 @@ impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
         executors_file_path: &str,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
-        let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, Chain::Ethereum)?;
+        let swap_encoder_registry = if executors_file_path.is_empty() {
+            SwapEncoderRegistry::new_direct_execution()
+        } else {
+            SwapEncoderRegistry::new(executors_file_path, Chain::Ethereum)?
+        };
 
         let mut strategies: HashMap<String, Box<dyn StrategyEncoder>> = HashMap::new();
         strategies.insert(
