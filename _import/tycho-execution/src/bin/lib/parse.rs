@@ -61,12 +61,11 @@ pub fn parse_solution(input: Value) -> Result<Solution, Box<dyn std::error::Erro
         native_action: obj
             .get("native_action")
             .and_then(|v| v.as_str())
-            .map(|s| match s.to_lowercase().as_str() {
+            .and_then(|s| match s.to_lowercase().as_str() {
                 "wrap" => Some(NativeAction::Wrap),
                 "unwrap" => Some(NativeAction::Unwrap),
                 _ => None, // Default to None
-            })
-            .flatten(),
+            }),
         direct_execution: obj
             .get("direct_execution")
             .and_then(|v| v.as_bool())
