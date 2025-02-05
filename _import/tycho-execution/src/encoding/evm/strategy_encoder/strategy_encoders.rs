@@ -113,9 +113,9 @@ impl SplitSwapStrategyEncoder {
                     }
                     (true, true) => found_zero_split = true,
                     (false, _) => {
-                        if swap.split <= 0.0 {
+                        if swap.split < 0.0 {
                             return Err(EncodingError::InvalidInput(format!(
-                                "Non-remainder splits must be >0% for token {:?}",
+                                "All splits must be >= 0% for token {:?}",
                                 token
                             )));
                         }
