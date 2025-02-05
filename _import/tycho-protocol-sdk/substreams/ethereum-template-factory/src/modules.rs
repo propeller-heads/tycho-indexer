@@ -9,8 +9,8 @@
 //!
 //! ## Alternative Module
 //! If your protocol uses a vault-like contract to manage balances, or if pools are
-//! registered within a singleton contract, refer to the `modules_singleton` module
-//! for an appropriate alternative.
+//! registered within a singleton contract, refer to the `ethereum-template-singleton`
+//! substream for an appropriate alternative.
 //!
 //! ## Warning
 //! This template provides a general framework for indexing a protocol. However, it is

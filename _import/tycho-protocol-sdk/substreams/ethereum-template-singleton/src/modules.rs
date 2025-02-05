@@ -1,5 +1,19 @@
 //! Template for Protocols with singleton contract
 //!
+//! This template provides a starting point for protocols that follow a singleton
+//! pattern. Usually these protocols employ a fixed set of contracts instead of
+//! deploying new contracts per component.
+//!
+//! ## Alternative Module
+//! If your protocol uses individual contracts deployed with a factory to manage
+//! components and balances, refer to the `ethereum-template-factory` substream for an
+//! appropriate alternative.
+//!
+//! ## Warning
+//! This template provides a general framework for indexing a protocol. However, it is
+//! likely that you will need to adapt the steps to suit your specific use case. Use the
+//! provided code with care and ensure you fully understand each step before proceeding
+//! with your implementation
 //!
 use std::collections::HashMap;
 use anyhow::Result;
@@ -73,16 +87,17 @@ fn store_protocol_tokens(map_protocol_components: BlockTransactionProtocolCompon
 /// Extracts balance changes per component
 ///
 /// This template function inspects ERC20 transfer events to/from the singleton contract
-/// to extract balance changes.  If a transfer to the component is detected, it's
+/// to extract balance changes. If a transfer to the component is detected, it's
 /// balanced is increased and if a balance from the component is detected its balance
 /// is decreased.
 ///
 /// ## Note:
-/// Changes are necessary if your protocol uses native ETH or your component burns or
-/// mints tokens without emitting transfer events.
-///
-/// You may want to ignore LP tokens if your protocol emits transfer events for these
-/// here.
+/// - If your protocol emits events that let you calculate balance deltas more
+///     efficiently you may want to use those instead of raw transfers.
+/// - Changes are necessary if your protocol uses native ETH or your component burns or
+///     mints tokens without emitting transfer events.
+/// - You may want to ignore LP tokens if your protocol emits transfer events for these
+///     here.
 #[substreams::handlers::map]
 fn map_relative_component_balance(params: String, block: eth::v2::Block, store: StoreGetInt64) -> Result<BlockBalanceDeltas> {
     let config: DeploymentConfig = serde_qs::from_str(params.as_str())?;
