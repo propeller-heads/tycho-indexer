@@ -18,9 +18,10 @@ mod lib {
 
 const DEFAULT_ROUTER_ADDRESS: &str = "0x1234567890123456789012345678901234567890";
 const DEFAULT_EXECUTORS_FILE_PATH: &str = "src/encoding/config/executor_addresses.json";
+const DEFAULT_PRIVATE_KEY: &str =
+    "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
 
     // Show help text if requested
@@ -33,6 +34,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get(1)
         .map(|s| s.as_str())
         .unwrap_or(DEFAULT_ROUTER_ADDRESS);
+
+    let private_key = args
+        .get(2)
+        .map(|s| s.to_string())
+        .or_else(|| Some(DEFAULT_PRIVATE_KEY.to_string()));
 
     // Read from stdin until EOF
     let mut buffer = String::new();
@@ -47,11 +53,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Parse the JSON input to verify it's valid
-    serde_json::from_str::<Value>(&buffer)
-        .map_err(|e| format!("Failed to parse JSON input: {}", e))?;
+    let input_json: Value =
+        serde_json::from_str(&buffer).map_err(|e| format!("Failed to parse JSON input: {}", e))?;
+
+    // Check if direct_execution is false and private_key is missing
+    if let Some(obj) = input_json.as_object() {
+        if let Some(direct_execution) = obj
+            .get("direct_execution")
+            .and_then(|v| v.as_bool())
+        {
+            if !direct_execution && private_key.is_none() {
+                eprintln!("Error: Private key is required when direct_execution is false");
+                eprintln!("{}", lib::help::HELP_TEXT);
+                std::process::exit(1);
+            }
+        }
+    }
 
     // Encode the solution
-    let encoded = encode_swaps(&buffer, router_address)?;
+    let encoded = encode_swaps(&buffer, router_address, private_key)?;
 
     // Output the encoded result as JSON to stdout
     println!(
@@ -63,12 +83,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn encode_swaps(input: &str, router_address: &str) -> Result<Value, Box<dyn std::error::Error>> {
+fn encode_swaps(
+    input: &str,
+    router_address: &str,
+    private_key: Option<String>,
+) -> Result<Value, Box<dyn std::error::Error>> {
     let input_json: Value = serde_json::from_str(input)?;
     let solution = lib::parse::parse_solution(input_json)?;
 
     let strategy_selector =
-        EVMStrategyEncoderRegistry::new(Chain::Ethereum, DEFAULT_EXECUTORS_FILE_PATH, None)?;
+        EVMStrategyEncoderRegistry::new(Chain::Ethereum, DEFAULT_EXECUTORS_FILE_PATH, private_key)?;
     let encoder = EVMTychoEncoder::new(strategy_selector, router_address.to_string())?;
     let transactions = encoder.encode_router_calldata(vec![solution])?;
 

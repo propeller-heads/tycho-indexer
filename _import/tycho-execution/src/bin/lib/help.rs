@@ -1,9 +1,10 @@
 pub const HELP_TEXT: &str = "\
 USAGE:
-    tycho-encode [ROUTER_ADDRESS]
+    tycho-encode [ROUTER_ADDRESS] [PRIVATE_KEY]
 
 ARGS:
     ROUTER_ADDRESS    The address of the router contract [default: 0x1234567890123456789012345678901234567890]
+    PRIVATE_KEY      The private key for signing Permit2 approvals (required when direct_execution is false)
 
 The program reads a JSON object from stdin containing the swap details and outputs the encoded transaction.
 The JSON object should have the following structure:
