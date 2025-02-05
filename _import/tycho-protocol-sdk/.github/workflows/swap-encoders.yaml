@@ -13,6 +13,10 @@ env:
 jobs:
   tests:
     uses: propeller-heads/tycho-protocol-sdk/.github/workflows/python-tests.yaml@main
+    secrets:
+      role-to-assume: ${{ secrets.ROLE_TO_ASSUME }}
+      aws-region: ${{ secrets.AWS_REGION }}
+      domain-owner: ${{ secrets.DOMAIN_OWNER }}
 
   formatting:
     name: Formatting
@@ -26,6 +30,10 @@ jobs:
 
     - name: Setup Env
       uses: ./.github/actions/setup_env
+      with:
+        role-to-assume: ${{ secrets.ROLE_TO_ASSUME }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        domain-owner: ${{ secrets.DOMAIN_OWNER }}
 
     - name: Black Formatting
       run: |

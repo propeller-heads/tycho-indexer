@@ -11,6 +11,13 @@ on:
         required: false
         type: number
         default: 15
+    secrets:
+      role-to-assume:
+        required: true
+      aws-region:
+        required: true
+      domain-owner:
+        required: true
 
 jobs:
   test-python:
@@ -22,8 +29,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Env
-        uses: ./.github/actions/setup_env
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Cache Env
+        uses: actions/cache@v3
+        id: env-cache
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ env.pythonLocation }}-${{ hashFiles('./propeller-swap-encoders/requirements.txt') }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4.0.1
+        with:
+          role-to-assume: ${{ secrets.role-to-assume }}
+          audience: sts.amazonaws.com
+          aws-region: ${{ secrets.aws-region }}
+
+      - name: Install Dependencies
+        if: ${{ steps.env-cache.outputs.cache-hit != 'true' }}
+        run: |
+          aws codeartifact login --tool pip --domain propeller --domain-owner ${{secrets.domain-owner}} --repository protosim
+          python -m pip install --upgrade pip
+          pip install -r propeller-swap-encoders/requirements.txt --no-cache
+        shell: bash
 
       - name: Test with pytest
         id: tests

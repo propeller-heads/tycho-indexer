@@ -1,6 +1,17 @@
 name: Setup/Cache Env
 description: 'Sets up and caches a python env. Will only install dependencies if no cache was hit.'
 
+inputs:
+  role-to-assume:
+    required: true
+    description: 'The role to assume'
+  aws-region:
+    required: true
+    description: 'The aws region to use'
+  domain-owner:
+    required: true
+    description: 'The domain owner'
+
 runs:
     using: composite
     steps:
@@ -19,14 +30,14 @@ runs:
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4.0.1
       with:
-        role-to-assume: arn:aws:iam::827659017777:role/github-actions
+        role-to-assume: ${{ inputs.role-to-assume }}
         audience: sts.amazonaws.com
-        aws-region: eu-central-1
+        aws-region: ${{ inputs.aws-region }}
 
     - name: Install Dependencies
       if: ${{ steps.env-cache.outputs.cache-hit != 'true' }}
       run: |
-        aws codeartifact login --tool pip --domain propeller --domain-owner 827659017777 --repository protosim
+        aws codeartifact login --tool pip --domain propeller --domain-owner ${{inputs.domain-owner}} --repository protosim
         python -m pip install --upgrade pip
         pip install -r propeller-swap-encoders/requirements.txt --no-cache
       shell: bash
