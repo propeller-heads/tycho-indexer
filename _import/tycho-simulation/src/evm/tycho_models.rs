@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 use alloy_primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString};
+pub use tycho_core::dto::{Chain, ChangeType};
 use uuid::Uuid;
 
 use super::engine_db::simulation_db::BlockHeader;
@@ -110,50 +110,6 @@ impl BlockAccountChanges {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
-)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-pub enum Chain {
-    #[default]
-    Ethereum,
-    ZkSync,
-    Starknet,
-    Arbitrum,
-}
-
-impl From<tycho_core::dto::Chain> for Chain {
-    fn from(value: tycho_core::dto::Chain) -> Self {
-        match value {
-            tycho_core::dto::Chain::Ethereum => Chain::Ethereum,
-            tycho_core::dto::Chain::ZkSync => Chain::ZkSync,
-            tycho_core::dto::Chain::Starknet => Chain::Starknet,
-            tycho_core::dto::Chain::Arbitrum => Chain::Arbitrum,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, Display, EnumString)]
-pub enum ChangeType {
-    #[default]
-    Update,
-    Deletion,
-    Creation,
-    Unspecified,
-}
-
-impl From<tycho_core::dto::ChangeType> for ChangeType {
-    fn from(value: tycho_core::dto::ChangeType) -> Self {
-        match value {
-            tycho_core::dto::ChangeType::Update => ChangeType::Update,
-            tycho_core::dto::ChangeType::Deletion => ChangeType::Deletion,
-            tycho_core::dto::ChangeType::Creation => ChangeType::Creation,
-            tycho_core::dto::ChangeType::Unspecified => ChangeType::Unspecified,
-        }
-    }
-}
-
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct AccountUpdate {
     pub address: Address,
@@ -182,14 +138,14 @@ impl AccountUpdate {
 impl From<tycho_core::dto::AccountUpdate> for AccountUpdate {
     fn from(value: tycho_core::dto::AccountUpdate) -> Self {
         Self {
-            chain: value.chain.into(),
+            chain: value.chain,
             address: Address::from_slice(&value.address[..20]), // Convert address field to Address
             slots: u256_num::map_slots_to_u256(value.slots),
             balance: value
                 .balance
                 .map(|balance| u256_num::bytes_to_u256(balance.into())),
             code: value.code.map(|code| code.to_vec()),
-            change: value.change.into(),
+            change: value.change,
         }
     }
 }
@@ -304,7 +260,7 @@ impl std::fmt::Debug for ResponseAccount {
 impl From<tycho_core::dto::ResponseAccount> for ResponseAccount {
     fn from(value: tycho_core::dto::ResponseAccount) -> Self {
         Self {
-            chain: value.chain.into(),
+            chain: value.chain,
             address: Address::from_slice(&value.address[..20]), // Convert address field to Address
             title: value.title.clone(),
             slots: u256_num::map_slots_to_u256(value.slots),
