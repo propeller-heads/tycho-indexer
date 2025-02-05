@@ -25,7 +25,7 @@ impl ProtocolApprovalsManager {
         Ok(Self { client, runtime })
     }
 
-    /// Checks the current allowance for the given token, owner, and spender, and returns True
+    /// Checks the current allowance for the given token, owner, and spender, and returns true
     /// if the current allowance is zero.
     pub fn approval_needed(
         &self,
@@ -60,6 +60,7 @@ impl ProtocolApprovalsManager {
     }
 }
 
+/// Gets the client used for interacting with the EVM-compatible network.
 pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
     dotenv().ok();
     let eth_rpc_url = env::var("ETH_RPC_URL")

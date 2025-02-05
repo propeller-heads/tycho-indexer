@@ -24,10 +24,10 @@ pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
 }
 
 impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
-    pub fn new(strategy_selector: S, router_address: String) -> Result<Self, EncodingError> {
+    pub fn new(strategy_registry: S, router_address: String) -> Result<Self, EncodingError> {
         let router_address = Bytes::from_str(&router_address)
             .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
-        Ok(EVMTychoEncoder { strategy_registry: strategy_selector, router_address })
+        Ok(EVMTychoEncoder { strategy_registry, router_address })
     }
 }
 
@@ -165,9 +165,9 @@ mod tests {
     }
 
     fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
-        let strategy_selector = MockStrategyRegistry::new(Chain::Ethereum, "", None).unwrap();
+        let strategy_registry = MockStrategyRegistry::new(Chain::Ethereum, "", None).unwrap();
         EVMTychoEncoder::new(
-            strategy_selector,
+            strategy_registry,
             "0x1234567890abcdef1234567890abcdef12345678".to_string(),
         )
         .unwrap()

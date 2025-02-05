@@ -2,6 +2,7 @@ use tycho_core::{models::Chain, Bytes};
 
 use crate::encoding::{errors::EncodingError, models::Solution, swap_encoder::SwapEncoder};
 
+/// Encodes a solution using a specific strategy.
 pub trait StrategyEncoder {
     fn encode_strategy(
         &self,

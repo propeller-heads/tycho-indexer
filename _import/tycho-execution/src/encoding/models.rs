@@ -18,7 +18,7 @@ pub struct Solution {
     /// False if the solution is an exact input solution. Currently only exact input solutions are
     /// supported.
     pub exact_out: bool,
-    // If set, it will be applied to expected_amount
+    /// If set, it will be applied to expected_amount
     pub slippage: Option<f64>,
     /// Expected amount of the bought token (exact in) or sold token (exact out).
     pub expected_amount: Option<BigUint>,
@@ -27,9 +27,9 @@ pub struct Solution {
     pub check_amount: Option<BigUint>,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    // If not set, then the Tycho Router will be used
+    /// If not set, then the Tycho Router will be used
     pub router_address: Option<Bytes>,
-    // If set, the corresponding native action will be executed.
+    /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
     /// If set to true, the solution will be encoded to be sent directly to the Executor and
     /// skip the router. The user is responsible for managing necessary approvals and token
@@ -69,15 +69,18 @@ pub struct Swap {
 /// * `data`: Encoded calldata for the transaction.
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    // Address of the contract to call with the calldata
     pub to: Bytes,
-    // Native token value to be sent with the transaction.
     pub value: BigUint,
-    // Encoded calldata for the transaction.
     pub data: Vec<u8>,
 }
 
 /// Represents necessary attributes for encoding an order.
+///
+/// # Fields
+///
+/// * `receiver`: Address of the receiver of the out token after the swaps are completed.
+/// * `exact_out`: true if the solution is a buy order, false if it is a sell order.
+/// * `router_address`: Address of the router contract to be used for the swaps.
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,

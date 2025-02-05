@@ -18,7 +18,10 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
+/// Encodes a solution using a specific strategy for execution on the EVM-compatible network.
 pub trait EVMStrategyEncoder: StrategyEncoder {
+    /// Encodes information necessary for performing a single swap against a given executor for
+    /// a protocol.
     fn encode_swap_header(
         &self,
         token_in: U8,
@@ -37,11 +40,17 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
         encoded.extend(protocol_data);
         encoded
     }
+
+    /// Encodes a selector string into its 4-byte representation.
     fn encode_executor_selector(&self, selector: &str) -> FixedBytes<4> {
         let hash = keccak256(selector.as_bytes());
         FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
     }
 
+    /// Uses prefix-length encoding to efficient encode action data.
+    ///
+    /// Prefix-length encoding is a data encoding method where the beginning of a data segment
+    /// (the "prefix") contains information about the length of the following data.
     fn ple_encode(&self, action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
         let mut encoded_action_data: Vec<u8> = Vec::new();
 
@@ -57,7 +66,6 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 /// Represents the encoder for a swap strategy which supports single, sequential and split swaps.
 ///
 /// # Fields
-///
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
 /// * `permit2`: Permit2, the object containing necessary information for managing permit2
 ///   operations
@@ -78,7 +86,9 @@ impl SplitSwapStrategyEncoder {
         Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector, swap_encoder_registry })
     }
 }
+
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
+
 impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(
         &self,
@@ -224,7 +234,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 /// the router. Only one solution with one swap is supported.
 ///
 /// # Fields
-///
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
 pub struct ExecutorStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
