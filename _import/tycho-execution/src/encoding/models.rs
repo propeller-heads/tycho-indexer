@@ -2,6 +2,8 @@ use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_core::{dto::ProtocolComponent, Bytes};
 
+use crate::encoding::serde_primitives::{biguint_string, biguint_string_option};
+
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Solution {
@@ -76,58 +78,4 @@ pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
     pub router_address: Bytes,
-}
-
-// Custom serialization for BigUint as string
-mod biguint_string {
-    use std::str::FromStr;
-
-    use num_bigint::BigUint;
-    use serde::{self, Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S>(value: &BigUint, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&value.to_string())
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<BigUint, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        BigUint::from_str(&s).map_err(serde::de::Error::custom)
-    }
-}
-
-// Custom serialization for Option<BigUint> as string
-mod biguint_string_option {
-    use std::str::FromStr;
-
-    use num_bigint::BigUint;
-    use serde::{self, Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S>(value: &Option<BigUint>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match value {
-            Some(v) => serializer.serialize_str(&v.to_string()),
-            None => serializer.serialize_none(),
-        }
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<BigUint>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let opt = Option::<String>::deserialize(deserializer)?;
-        match opt {
-            Some(s) => BigUint::from_str(&s)
-                .map(Some)
-                .map_err(serde::de::Error::custom),
-            None => Ok(None),
-        }
-    }
 }

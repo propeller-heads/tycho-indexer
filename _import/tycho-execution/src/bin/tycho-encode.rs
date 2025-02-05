@@ -16,10 +16,10 @@ mod lib {
     pub mod help;
 }
 
-const DEFAULT_ROUTER_ADDRESS: &str = "0x1234567890123456789012345678901234567890";
+const DEFAULT_ROUTER_ADDRESS: &str = "0xaa820C29648D5EA543d712cC928377Bd7206a0E7";
 const DEFAULT_EXECUTORS_FILE_PATH: &str = "src/encoding/config/executor_addresses.json";
 const DEFAULT_PRIVATE_KEY: &str =
-    "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
+    "0x938f4da9d3a947a4a6c53cfd8fcdd876641d6a4519243820b648af0bc3e67f7c";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
