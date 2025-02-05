@@ -32,6 +32,15 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
 }
 
 impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
+    /// Raises an `EncodingError` if the solution is not considered valid.
+    ///
+    /// A solution is considered valid if all the following conditions are met:
+    /// * The solution is not exact out.
+    /// * The solution has at least one swap.
+    /// * If the solution is wrapping, the given token is the chain's native token and the first
+    ///   swap's input is the chain's wrapped token.
+    /// * If the solution is unwrapping, the checked token is the chain's native token and the last
+    ///   swap's output is the chain's wrapped token.
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
         if solution.exact_out {
             return Err(EncodingError::FatalError(

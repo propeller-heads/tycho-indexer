@@ -90,6 +90,14 @@ impl SplitSwapStrategyEncoder {
         Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector, swap_encoder_registry })
     }
 
+    /// Raises an error if the split percentages are invalid.
+    ///
+    /// Split percentages are considered valid of all the following conditions are met:
+    /// * Each split amount is < 1 (100%)
+    /// * There is exactly one 0% split for each token, and it's the last swap specified, signifying
+    ///   to the router to send the remainder of the token to the designated protocol
+    /// * The sum of all non-remainder splits for each token is < 1 (100%)
+    /// * There are no negative split amounts
     fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
         let mut swaps_by_token: HashMap<Bytes, Vec<&Swap>> = HashMap::new();
         for swap in swaps {
@@ -160,6 +168,12 @@ impl SplitSwapStrategyEncoder {
         Ok(())
     }
 
+    /// Raises an error if swaps do not represent a valid path from the given token to the checked
+    /// token.
+    ///
+    /// A path is considered valid of all the following conditions are met:
+    /// * The checked token is reachable from the given token through the swap path
+    /// * There are tokens which are unconnected from the main path
     fn validate_swap_path(
         &self,
         swaps: &[Swap],
