@@ -13,7 +13,6 @@ pub trait StrategyEncoder {
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>>;
 }
 
-
 /// Contains the supported strategies to encode a solution, and chooses the best strategy to encode
 /// a solution based on the solution's attributes.
 pub trait StrategyEncoderRegistry {

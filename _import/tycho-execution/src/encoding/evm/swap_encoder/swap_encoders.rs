@@ -12,7 +12,6 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
-
 /// Encodes a swap on a Uniswap V2 pool through the given executor address.
 ///
 /// # Fields
@@ -151,7 +150,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
     }
 }
 
-/// Encodes a swap on a Balancer pool through the given executor address.
+/// Encodes a swap on a Balancer V2 pool through the given executor address.
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.

@@ -38,6 +38,7 @@ pub struct Solution {
 }
 
 /// Represents an action to be performed on the native token either before or after the swap.
+///
 /// `Wrap` means that the native token will be wrapped before the first swap, and `Unwrap`
 /// means that the native token will be unwrapped after the last swap, before being sent to the
 /// receiver.
@@ -60,22 +61,21 @@ pub struct Swap {
     pub split: f64,
 }
 
-/// Represents a transaction to be executed on the Ethereum network.
+/// Represents a transaction to be executed.
 ///
 /// # Fields
 /// * `to`: Address of the contract to call with the calldata
-/// * `value`: ETH value to be sent with the transaction.
+/// * `value`: Native token value to be sent with the transaction.
 /// * `data`: Encoded calldata for the transaction.
 #[derive(Clone, Debug)]
 pub struct Transaction {
     // Address of the contract to call with the calldata
     pub to: Bytes,
-    // ETH value to be sent with the transaction.
+    // Native token value to be sent with the transaction.
     pub value: BigUint,
     // Encoded calldata for the transaction.
     pub data: Vec<u8>,
 }
-
 
 /// Represents necessary attributes for encoding an order.
 pub struct EncodingContext {

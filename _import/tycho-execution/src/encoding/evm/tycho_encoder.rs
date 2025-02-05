@@ -16,7 +16,7 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `strategy_registry`: S, the strategy registry to use to select the best strategy to encode a
-/// solution, based on its supported strategies and the solution attributes.
+///   solution, based on its supported strategies and the solution attributes.
 /// * `router_address`: Bytes, the address of the router to use to execute the swaps.
 pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
     strategy_registry: S,

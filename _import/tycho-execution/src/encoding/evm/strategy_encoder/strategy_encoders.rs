@@ -59,7 +59,8 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 /// # Fields
 ///
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
-/// * `permit2`: Permit2, the object containing necessary information for managing permit2 operations
+/// * `permit2`: Permit2, the object containing necessary information for managing permit2
+///   operations
 /// * `selector`: String, the selector for the swap function in the router contract
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -219,8 +220,8 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
     }
 }
 
-/// This strategy encoder is used for solutions that are sent directly to the pool.
-/// Only one solution with one swap is supported.
+/// This strategy encoder is used for solutions that are sent directly to the executor, bypassing
+/// the router. Only one solution with one swap is supported.
 ///
 /// # Fields
 ///
@@ -243,7 +244,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
     ) -> Result<(Vec<u8>, Bytes), EncodingError> {
         let router_address = solution.router_address.ok_or_else(|| {
             EncodingError::InvalidInput(
-                "Router address is required for straight to pool solutions".to_string(),
+                "Router address is required for straight-to-executor solutions".to_string(),
             )
         })?;
 
