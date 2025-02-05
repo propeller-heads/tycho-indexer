@@ -207,7 +207,7 @@ impl TychoStreamDecoder {
                     })
                     .collect::<Result<Vec<_>, StreamDecodeError>>()?
                     .into_iter()
-                    .flat_map(|(id, address, comp)| {
+                    .flat_map(|(id, _, comp)| {
                         let tokens = comp
                             .tokens
                             .iter()
@@ -215,7 +215,7 @@ impl TychoStreamDecoder {
                             .collect::<Vec<_>>();
 
                         if tokens.len() == comp.tokens.len() {
-                            Some((id.clone(), ProtocolComponent::new(address, tokens)))
+                            Some((id.clone(), ProtocolComponent::new(tokens, comp.clone())))
                         } else {
                             // We may reach this point if the removed component
                             //  contained low quality tokens, in this case the component
@@ -274,7 +274,7 @@ impl TychoStreamDecoder {
                 }
                 new_pairs.insert(
                     id.clone(),
-                    ProtocolComponent::new(Bytes::from(id.as_str()), component_tokens),
+                    ProtocolComponent::new(component_tokens, snapshot.component.clone()),
                 );
 
                 // Construct state from snapshot

@@ -24,11 +24,12 @@
 //! It's worth emphasizing that although the term "pair" used in this
 //! module refers to a trading pair, it does not necessarily imply two
 //! tokens only. Some pairs might have more than two tokens.
-use std::{collections::HashMap, future::Future};
+use std::{collections::HashMap, default::Default, future::Future};
 
+use chrono::NaiveDateTime;
 use num_bigint::BigUint;
 use tycho_client::feed::Header;
-use tycho_core::Bytes;
+use tycho_core::{dto::Chain, Bytes};
 
 use super::state::ProtocolSim;
 use crate::models::Token;
@@ -41,14 +42,57 @@ use crate::models::Token;
 /// * `tokens`: `Vec<ERC20Token>`, the tokens of the trading pair
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProtocolComponent {
+    #[deprecated(since = "0.73.0", note = "Use `id` instead")]
     pub address: Bytes,
+    pub id: Bytes,
     pub tokens: Vec<Token>,
+    pub protocol_system: String,
+    pub protocol_type_name: String,
+    pub chain: Chain,
+    pub contract_ids: Vec<Bytes>,
+    pub static_attributes: HashMap<String, Bytes>,
+    pub creation_tx: Bytes,
+    pub created_at: NaiveDateTime,
 }
 
 impl ProtocolComponent {
-    pub fn new(address: Bytes, mut tokens: Vec<Token>) -> Self {
+    #[allow(deprecated)]
+    pub fn new(mut tokens: Vec<Token>, core_model: tycho_core::dto::ProtocolComponent) -> Self {
         tokens.sort_unstable_by_key(|t| t.address.clone());
-        ProtocolComponent { address, tokens }
+        let id = Bytes::from(core_model.id.as_str());
+        ProtocolComponent {
+            id: id.clone(),
+            address: id,
+            tokens,
+            protocol_system: core_model.protocol_system,
+            protocol_type_name: core_model.protocol_type_name,
+            chain: core_model.chain,
+            contract_ids: core_model.contract_ids,
+            static_attributes: core_model.static_attributes,
+            creation_tx: core_model.creation_tx,
+            created_at: core_model.created_at,
+        }
+    }
+}
+
+impl From<ProtocolComponent> for tycho_core::dto::ProtocolComponent {
+    fn from(component: ProtocolComponent) -> Self {
+        tycho_core::dto::ProtocolComponent {
+            id: hex::encode(component.id),
+            protocol_system: component.protocol_system,
+            protocol_type_name: component.protocol_type_name,
+            chain: component.chain,
+            tokens: component
+                .tokens
+                .into_iter()
+                .map(|t| t.address)
+                .collect(),
+            contract_ids: component.contract_ids,
+            static_attributes: component.static_attributes,
+            change: Default::default(),
+            creation_tx: component.creation_tx,
+            created_at: component.created_at,
+        }
     }
 }
 
