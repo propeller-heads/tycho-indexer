@@ -52,24 +52,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
-    // Parse the JSON input to verify it's valid
-    let input_json: Value =
-        serde_json::from_str(&buffer).map_err(|e| format!("Failed to parse JSON input: {}", e))?;
-
-    // Check if direct_execution is false and private_key is missing
-    if let Some(obj) = input_json.as_object() {
-        if let Some(direct_execution) = obj
-            .get("direct_execution")
-            .and_then(|v| v.as_bool())
-        {
-            if !direct_execution && private_key.is_none() {
-                eprintln!("Error: Private key is required when direct_execution is false");
-                eprintln!("{}", lib::help::HELP_TEXT);
-                std::process::exit(1);
-            }
-        }
-    }
-
     // Encode the solution
     let encoded = encode_swaps(&buffer, router_address, private_key)?;
 
