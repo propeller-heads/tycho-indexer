@@ -13,3 +13,6 @@
 [submodule "foundry/lib/v3-core"]
 	path = foundry/lib/v3-core
 	url = https://github.com/Uniswap/v3-core
+[submodule "foundry/lib/v4-core"]
+	path = foundry/lib/v4-core
+	url = https://github.com/Uniswap/v4-core
