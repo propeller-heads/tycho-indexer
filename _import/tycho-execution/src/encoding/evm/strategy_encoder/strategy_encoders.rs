@@ -76,8 +76,8 @@ impl SplitSwapStrategyEncoder {
             permit2: Permit2::new(signer_pk, chain.clone())?,
             selector,
             swap_encoder_registry,
-            native_address: chain.native_token.clone(),
-            wrapped_address: chain.wrapped_token.clone(),
+            native_address: chain.native_token()?,
+            wrapped_address: chain.wrapped_token()?,
         })
     }
 
@@ -440,15 +440,10 @@ mod tests {
     };
 
     use super::*;
-    use crate::encoding::models::{ChainId, Swap};
+    use crate::encoding::models::Swap;
 
     fn eth_chain() -> Chain {
-        Chain {
-            id: ChainId(1),
-            name: TychoCoreChain::Ethereum.to_string(),
-            native_token: eth(),
-            wrapped_token: weth(),
-        }
+        TychoCoreChain::Ethereum.into()
     }
 
     fn eth() -> Bytes {

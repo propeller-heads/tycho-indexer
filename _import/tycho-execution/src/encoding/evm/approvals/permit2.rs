@@ -164,6 +164,7 @@ mod tests {
 
     use alloy_primitives::Uint;
     use num_bigint::BigUint;
+    use tycho_core::dto::Chain as TychoCoreChain;
 
     use super::*;
 
@@ -198,21 +199,8 @@ mod tests {
         }
     }
 
-    fn eth() -> Bytes {
-        Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap()
-    }
-
-    fn weth() -> Bytes {
-        Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap()
-    }
-
     fn eth_chain() -> Chain {
-        Chain {
-            id: ChainId(1),
-            name: String::from("ethereum"),
-            native_token: eth(),
-            wrapped_token: weth(),
-        }
+        TychoCoreChain::Ethereum.into()
     }
 
     #[test]

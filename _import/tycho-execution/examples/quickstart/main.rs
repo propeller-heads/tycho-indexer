@@ -24,8 +24,7 @@ fn main() {
         .expect("Failed to create user address");
     let executors_file_path = "src/encoding/config/executor_addresses.json";
 
-    let eth_chain = Chain::from_tycho_core_chain(TychoCoreChain::Ethereum, None, None)
-        .expect("Failed to create chain.");
+    let eth_chain = Chain::from(TychoCoreChain::Ethereum);
     // Initialize the encoder
     let strategy_encoder_registry =
         EVMStrategyEncoderRegistry::new(eth_chain.clone(), executors_file_path, signer_pk.clone())

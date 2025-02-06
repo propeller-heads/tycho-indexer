@@ -1,13 +1,11 @@
+use hex;
 use num_bigint::BigUint;
 use tycho_core::{
     dto::{Chain as TychoCoreChain, ProtocolComponent},
     Bytes,
 };
 
-use crate::encoding::{
-    constants::{NATIVE_ADDRESSES, WRAPPED_ADDRESSES},
-    errors::EncodingError,
-};
+use crate::encoding::errors::EncodingError;
 
 #[derive(Clone, Default, Debug)]
 pub struct Solution {
@@ -84,8 +82,6 @@ pub struct ChainId(pub u64);
 pub struct Chain {
     pub id: ChainId,
     pub name: String,
-    pub native_token: Bytes,
-    pub wrapped_token: Bytes,
 }
 
 impl ChainId {
@@ -105,36 +101,33 @@ impl From<TychoCoreChain> for ChainId {
     }
 }
 
-impl Chain {
-    pub fn from_tycho_core_chain(
-        chain: TychoCoreChain,
-        native_token: Option<Bytes>,
-        wrapped_token: Option<Bytes>,
-    ) -> Result<Self, EncodingError> {
-        let native_token_address = match native_token {
-            Some(token) => token,
-            None => NATIVE_ADDRESSES.get(&chain)
-                .cloned()
-                .ok_or_else(|| EncodingError::InvalidInput(format!(
-                    "Native token does not have a default address for chain {:?}. Please pass the native token address",
-                    chain
-                )))?,
-        };
+impl From<TychoCoreChain> for Chain {
+    fn from(chain: TychoCoreChain) -> Self {
+        Chain { id: chain.into(), name: chain.to_string() }
+    }
+}
 
-        let wrapped_token_address = match wrapped_token {
-            Some(token) => token,
-            None => WRAPPED_ADDRESSES.get(&chain)
-                .cloned()
-                .ok_or_else(|| EncodingError::InvalidInput(format!(
-                    "Wrapped token does not have a default address for chain {:?}. Please pass the wrapped token address",
-                    chain
-                )))?,
-        };
-        Ok(Chain {
-            id: chain.into(),
-            name: chain.to_string(),
-            native_token: native_token_address,
-            wrapped_token: wrapped_token_address,
-        })
+impl Chain {
+    pub fn native_token(&self) -> Result<Bytes, EncodingError> {
+        match self.id.id() {
+            1 => Ok(Bytes::from(hex::decode("0000000000000000000000000000000000000000").map_err(
+                |_| EncodingError::FatalError("Failed to decode native token".to_string()),
+            )?)),
+            _ => Err(EncodingError::InvalidInput(format!(
+                "Native token not set for chain {:?}. Double check the chain is supported.",
+                self.name
+            ))),
+        }
+    }
+    pub fn wrapped_token(&self) -> Result<Bytes, EncodingError> {
+        match self.id.id() {
+            1 => Ok(Bytes::from(hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").map_err(
+                |_| EncodingError::FatalError("Failed to decode wrapped token".to_string()),
+            )?)),
+            _ => Err(EncodingError::InvalidInput(format!(
+                "Wrapped token not set for chain {:?}. Double check the chain is supported.",
+                self.name
+            ))),
+        }
     }
 }

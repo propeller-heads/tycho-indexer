@@ -33,8 +33,8 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
         Ok(EVMTychoEncoder {
             strategy_selector,
             router_address,
-            native_address: chain.native_token,
-            wrapped_address: chain.wrapped_token,
+            native_address: chain.native_token()?,
+            wrapped_address: chain.wrapped_token()?,
         })
     }
 }
@@ -125,9 +125,7 @@ mod tests {
 
     use super::*;
     use crate::encoding::{
-        models::{ChainId, Swap},
-        strategy_encoder::StrategyEncoder,
-        swap_encoder::SwapEncoder,
+        models::Swap, strategy_encoder::StrategyEncoder, swap_encoder::SwapEncoder,
     };
 
     struct MockStrategyRegistry {
@@ -135,12 +133,7 @@ mod tests {
     }
 
     fn eth_chain() -> Chain {
-        Chain {
-            id: ChainId(1),
-            name: TychoCoreChain::Ethereum.to_string(),
-            native_token: eth(),
-            wrapped_token: weth(),
-        }
+        TychoCoreChain::Ethereum.into()
     }
 
     fn dai() -> Bytes {
