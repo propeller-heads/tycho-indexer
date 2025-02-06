@@ -58,3 +58,15 @@ impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
         }
     }
 }
+
+impl Clone for EVMStrategyEncoderRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            strategies: self
+                .strategies
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone_box()))
+                .collect(),
+        }
+    }
+}

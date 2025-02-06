@@ -73,6 +73,7 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 /// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
 ///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
+#[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Permit2,
@@ -405,6 +406,10 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         self.swap_encoder_registry
             .get_encoder(protocol_system)
     }
+
+    fn clone_box(&self) -> Box<dyn StrategyEncoder> {
+        Box::new(self.clone())
+    }
 }
 
 /// This strategy encoder is used for solutions that are sent directly to the executor, bypassing
@@ -412,6 +417,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
+#[derive(Clone)]
 pub struct ExecutorStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
 }
@@ -459,9 +465,14 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
         Ok((protocol_data, executor_address))
     }
+
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
         self.swap_encoder_registry
             .get_encoder(protocol_system)
+    }
+
+    fn clone_box(&self) -> Box<dyn StrategyEncoder> {
+        Box::new(self.clone())
     }
 }
 

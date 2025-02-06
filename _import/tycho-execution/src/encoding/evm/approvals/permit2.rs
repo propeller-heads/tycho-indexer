@@ -25,10 +25,11 @@ use crate::encoding::{
 
 /// Struct for managing Permit2 operations, including encoding approvals and fetching allowance
 /// data.
+#[derive(Clone)]
 pub struct Permit2 {
     address: Address,
     client: Arc<RootProvider<BoxTransport>>,
-    runtime: Runtime,
+    runtime: Arc<Runtime>,
     signer: PrivateKeySigner,
     chain_id: ChainId,
 }
@@ -73,7 +74,7 @@ impl Permit2 {
             address: Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
                 .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?,
             client,
-            runtime,
+            runtime: Arc::new(runtime),
             signer,
             chain_id: chain.id,
         })

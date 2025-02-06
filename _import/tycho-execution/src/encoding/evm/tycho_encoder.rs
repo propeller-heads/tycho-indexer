@@ -19,6 +19,7 @@ use crate::encoding::{
 /// * `router_address`: Bytes, the address of the router to use to execute the swaps.
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped native token
+#[derive(Clone)]
 pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
     strategy_registry: S,
     router_address: Bytes,
@@ -183,6 +184,7 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
     struct MockStrategy;
 
     impl StrategyEncoder for MockStrategy {
@@ -201,6 +203,9 @@ mod tests {
 
         fn get_swap_encoder(&self, _protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
             None
+        }
+        fn clone_box(&self) -> Box<dyn StrategyEncoder> {
+            Box::new(self.clone())
         }
     }
 
