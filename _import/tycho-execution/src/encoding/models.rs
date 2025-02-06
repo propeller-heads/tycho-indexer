@@ -1,15 +1,19 @@
 use hex;
 use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use tycho_core::{
     dto::{Chain as TychoCoreChain, ProtocolComponent},
     Bytes,
 };
 
-use crate::encoding::errors::EncodingError;
+use crate::encoding::{
+    errors::EncodingError,
+    serde_primitives::{biguint_string, biguint_string_option},
+};
 
 /// Represents a solution containing details describing an order, and  instructions for filling
 /// the order.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct Solution {
     /// Address of the sender.
     pub sender: Bytes,
@@ -18,18 +22,22 @@ pub struct Solution {
     /// The token being sold (exact in) or bought (exact out).
     pub given_token: Bytes,
     /// Amount of the given token.
+    #[serde(with = "biguint_string")]
     pub given_amount: BigUint,
     /// The token being bought (exact in) or sold (exact out).
     pub checked_token: Bytes,
     /// False if the solution is an exact input solution. Currently only exact input solutions are
     /// supported.
+    #[serde(default)]
     pub exact_out: bool,
     /// If set, it will be applied to expected_amount
     pub slippage: Option<f64>,
     /// Expected amount of the bought token (exact in) or sold token (exact out).
+    #[serde(with = "biguint_string_option")]
     pub expected_amount: Option<BigUint>,
     /// Minimum amount to be checked for the solution to be valid.
     /// If not set, the check will not be performed.
+    #[serde(with = "biguint_string_option")]
     pub check_amount: Option<BigUint>,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
@@ -40,6 +48,7 @@ pub struct Solution {
     /// If set to true, the solution will be encoded to be sent directly to the Executor and
     /// skip the router. The user is responsible for managing necessary approvals and token
     /// transfers.
+    #[serde(default)]
     pub direct_execution: bool,
 }
 
@@ -48,14 +57,15 @@ pub struct Solution {
 /// `Wrap` means that the native token will be wrapped before the first swap, and `Unwrap`
 /// means that the native token will be unwrapped after the last swap, before being sent to the
 /// receiver.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum NativeAction {
     Wrap,
     Unwrap,
 }
 
 /// Represents a swap operation to be performed on a pool.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Swap {
     /// Protocol component from tycho indexer
     pub component: ProtocolComponent,
@@ -64,6 +74,7 @@ pub struct Swap {
     /// Token being output from the pool.
     pub token_out: Bytes,
     /// Decimal of the amount to be swapped in this operation (for example, 0.5 means 50%)
+    #[serde(default)]
     pub split: f64,
 }
 
