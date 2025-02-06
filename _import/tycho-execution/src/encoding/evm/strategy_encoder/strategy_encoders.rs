@@ -181,6 +181,10 @@ impl SplitSwapStrategyEncoder {
     /// A path is considered valid if all the following conditions are met:
     /// * The checked token is reachable from the given token through the swap path
     /// * There are no tokens which are unconnected from the main path
+    ///
+    /// If the given token is the native token and the native action is WRAP, it will be converted
+    /// to the wrapped token before validating the swap path. The same principle applies for the
+    /// checked token and the UNWRAP action.
     fn validate_swap_path(
         &self,
         swaps: &[Swap],
