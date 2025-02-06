@@ -169,7 +169,7 @@ mod tests {
     impl StrategyEncoderRegistry for MockStrategyRegistry {
         fn new(
             _chain: Chain,
-            _executors_file_path: &str,
+            _executors_file_path: Option<&str>,
             _signer_pk: Option<String>,
         ) -> Result<MockStrategyRegistry, EncodingError> {
             Ok(Self { strategy: Box::new(MockStrategy) })
@@ -205,7 +205,7 @@ mod tests {
     }
 
     fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
-        let strategy_registry = MockStrategyRegistry::new(eth_chain(), "", None).unwrap();
+        let strategy_registry = MockStrategyRegistry::new(eth_chain(), None, None).unwrap();
         EVMTychoEncoder::new(
             strategy_registry,
             "0x1234567890abcdef1234567890abcdef12345678".to_string(),

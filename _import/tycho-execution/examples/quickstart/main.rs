@@ -22,12 +22,11 @@ fn main() {
         Some("0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string());
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
         .expect("Failed to create user address");
-    let executors_file_path = "src/encoding/config/executor_addresses.json";
 
     let eth_chain = Chain::from(TychoCoreChain::Ethereum);
     // Initialize the encoder
     let strategy_encoder_registry =
-        EVMStrategyEncoderRegistry::new(eth_chain.clone(), executors_file_path, signer_pk.clone())
+        EVMStrategyEncoderRegistry::new(eth_chain.clone(), None, signer_pk.clone())
             .expect("Failed to create strategy encoder registry");
     let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address, eth_chain)
         .expect("Failed to create encoder");

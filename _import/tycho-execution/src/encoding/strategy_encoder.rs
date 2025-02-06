@@ -23,7 +23,7 @@ pub trait StrategyEncoder {
 pub trait StrategyEncoderRegistry {
     fn new(
         chain: Chain,
-        executors_file_path: &str,
+        executors_file_path: Option<&str>,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError>
     where

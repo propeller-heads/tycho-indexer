@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::encoding::{
     errors::EncodingError,
     evm::{
+        constants::DEFAULT_EXECUTORS_FILE_PATH,
         strategy_encoder::strategy_encoders::{ExecutorStrategyEncoder, SplitSwapStrategyEncoder},
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
@@ -22,10 +23,13 @@ pub struct EVMStrategyEncoderRegistry {
 impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
     fn new(
         chain: Chain,
-        executors_file_path: &str,
+        executors_file_path: Option<&str>,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
-        let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain.clone())?;
+        let swap_encoder_registry = SwapEncoderRegistry::new(
+            executors_file_path.unwrap_or(DEFAULT_EXECUTORS_FILE_PATH),
+            chain.clone(),
+        )?;
 
         let mut strategies: HashMap<String, Box<dyn StrategyEncoder>> = HashMap::new();
         strategies.insert(
