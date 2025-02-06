@@ -61,8 +61,14 @@ sol! {
 
 impl Permit2 {
     pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
-        let runtime = Runtime::new()
-            .map_err(|_| EncodingError::FatalError("Failed to create runtime".to_string()))?;
+        let runtime = tokio::runtime::Handle::try_current()
+            .is_err()
+            .then(|| {
+                tokio::runtime::Runtime::new().map_err(|_| {
+                    EncodingError::FatalError("Failed to create tokio runtime".to_string())
+                })
+            })
+            .ok_or(EncodingError::FatalError("Failed to get tokio runtime".to_string()))??;
         let client = runtime.block_on(get_client())?;
         let pk = B256::from_str(&signer_pk).map_err(|_| {
             EncodingError::FatalError("Failed to convert signer private key to B256".to_string())
