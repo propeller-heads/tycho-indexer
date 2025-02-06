@@ -19,8 +19,6 @@ mod lib {
 
 use lib::cli::Cli;
 
-const DEFAULT_EXECUTORS_FILE_PATH: &str = "src/encoding/config/executor_addresses.json";
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
@@ -35,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Encode the solution
-    let encoded = encode_swaps(&buffer, &cli.router_address, cli.private_key)?;
+    let encoded = encode_swaps(&buffer, &cli.router_address, &cli.config_path, cli.private_key)?;
 
     // Output the encoded result as JSON to stdout
     println!(
@@ -50,12 +48,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn encode_swaps(
     input: &str,
     router_address: &str,
+    config_path: &str,
     private_key: Option<String>,
 ) -> Result<Value, Box<dyn std::error::Error>> {
     let solution: Solution = serde_json::from_str(input)?;
 
     let strategy_selector =
-        EVMStrategyEncoderRegistry::new(Chain::Ethereum, DEFAULT_EXECUTORS_FILE_PATH, private_key)?;
+        EVMStrategyEncoderRegistry::new(Chain::Ethereum, config_path, private_key)?;
     let encoder = EVMTychoEncoder::new(strategy_selector, router_address.to_string())?;
     let transactions = encoder.encode_router_calldata(vec![solution])?;
 

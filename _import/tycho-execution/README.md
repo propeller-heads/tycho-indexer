@@ -8,26 +8,45 @@ designed to be safe, straightforward, and quick to set up, so anyone can start t
 
 ## Bin Usage Guide
 
+### Installation
+
+First, build and install the binary:
+```bash
+# Build the project
+cargo build --release
+
+# Install the binary to your system
+cargo install --path .
+```
+
+After installation, the `tycho-encode` command will be available to use from any directory in your terminal. The command accepts the following options:
+
+- `-c`: Path to the executor addresses configuration file (defaults to `src/encoding/config/executor_addresses.json`)
+- `-p`: Private key for signing approvals (required when direct_execution is false)
+- `ROUTER_ADDRESS`: Router contract address (defaults to `0xaa820C29648D5EA543d712cC928377Bd7206a0E7`)
+
+
 ### Encoding Transactions
 
 To encode a transaction, you can pipe a JSON payload to the binary:
 
 ```bash
-echo '<solution_payload>' | cargo run
+# Using default config path
+echo '<solution_payload>' | tycho-encode
+
+# Using custom config path
+echo '<solution_payload>' | tycho-encode -c /path/to/your/config.json
+
+# Using custom router address and config path
+echo '<solution_payload>' | tycho-encode -c /path/to/your/config.json 0x1234...5678
 ```
 
 #### Example
 
 Here's a complete example that encodes a swap from WETH to DAI using Uniswap V2:
 
-First build the project:
 ```bash
-cargo build --release
-```
-
-After that, you can use the binary directly:
-```bash
-echo '{"sender":"0x1234567890123456789012345678901234567890","receiver":"0x1234567890123456789012345678901234567890","given_token":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","given_amount":"1000000000000000000","checked_token":"0x6B175474E89094C44Da98b954EedeAC495271d0F","exact_out":false,"slippage":0.01,"expected_amount":"1000000000000000000","check_amount":"990000000000000000","router_address":"0xaa820C29648D5EA543d712cC928377Bd7206a0E7","swaps":[{"component":{"id":"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640","protocol_system":"uniswap_v2","protocol_type_name":"UniswapV2Pool","chain":"ethereum","tokens":["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"],"contract_ids":["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"],"static_attributes":{"factory":"0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f"},"change":"Update","creation_tx":"0x0000000000000000000000000000000000000000000000000000000000000000","created_at":"2024-02-28T12:00:00"},"token_in":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","token_out":"0x6B175474E89094C44Da98b954EedeAC495271d0F","split":1.0}],"direct_execution":true}' | cargo run --release
+echo '{"sender":"0x1234567890123456789012345678901234567890","receiver":"0x1234567890123456789012345678901234567890","given_token":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","given_amount":"1000000000000000000","checked_token":"0x6B175474E89094C44Da98b954EedeAC495271d0F","exact_out":false,"slippage":0.01,"expected_amount":"1000000000000000000","check_amount":"990000000000000000","router_address":"0xaa820C29648D5EA543d712cC928377Bd7206a0E7","swaps":[{"component":{"id":"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640","protocol_system":"uniswap_v2","protocol_type_name":"UniswapV2Pool","chain":"ethereum","tokens":["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"],"contract_ids":["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"],"static_attributes":{"factory":"0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f"},"change":"Update","creation_tx":"0x0000000000000000000000000000000000000000000000000000000000000000","created_at":"2024-02-28T12:00:00"},"token_in":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","token_out":"0x6B175474E89094C44Da98b954EedeAC495271d0F","split":1.0}],"direct_execution":true}' | tycho-encode
 ```
 
 
