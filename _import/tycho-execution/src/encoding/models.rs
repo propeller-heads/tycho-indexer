@@ -11,7 +11,6 @@ use crate::encoding::{
     serde_primitives::{biguint_string, biguint_string_option},
 };
 
-
 /// Represents a solution containing details describing an order, and  instructions for filling
 /// the order.
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
@@ -53,7 +52,6 @@ pub struct Solution {
     pub direct_execution: bool,
 }
 
-
 /// Represents an action to be performed on the native token either before or after the swap.
 ///
 /// `Wrap` means that the native token will be wrapped before the first swap, and `Unwrap`
@@ -65,8 +63,6 @@ pub enum NativeAction {
     Wrap,
     Unwrap,
 }
-
-
 
 /// Represents a swap operation to be performed on a pool.
 #[derive(Clone, Debug, Deserialize, Serialize)]
