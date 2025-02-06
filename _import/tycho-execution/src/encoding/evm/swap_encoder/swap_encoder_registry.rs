@@ -2,7 +2,8 @@ use std::{collections::HashMap, fs};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{constants::DEFAULT_EXECUTORS_JSON, swap_encoder::builder::SwapEncoderBuilder}, models::Chain,
+    evm::{constants::DEFAULT_EXECUTORS_JSON, swap_encoder::builder::SwapEncoderBuilder},
+    models::Chain,
     swap_encoder::SwapEncoder,
 };
 
