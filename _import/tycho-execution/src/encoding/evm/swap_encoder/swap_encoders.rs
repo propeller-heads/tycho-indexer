@@ -107,7 +107,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
         let mut pool_fee_bytes = swap
             .component
             .static_attributes
-            .get("pool_fee")
+            .get("fee")
             .ok_or_else(|| {
                 EncodingError::FatalError(
                     "Pool fee not found in Uniswap v3 static attributes".to_string(),
@@ -259,7 +259,7 @@ mod tests {
     fn test_encode_uniswap_v3() {
         let encoded_pool_fee: [u8; 4] = 500u32.to_le_bytes();
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("pool_fee".into(), Bytes::from(encoded_pool_fee[..3].to_vec()));
+        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee[..3].to_vec()));
 
         let usv3_pool = ProtocolComponent {
             id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
