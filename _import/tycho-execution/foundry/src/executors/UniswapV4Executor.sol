@@ -12,11 +12,13 @@ import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/types/BalanceDelta.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IHooks} from "@uniswap/v4-core/interfaces/IHooks.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/interfaces/callback/IUnlockCallback.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 error UniswapV4Executor__SwapFailed();
+error UniswapV4Executor__InsufficientOutput();
 
-contract UniswapV4Executor is IExecutor {
+contract UniswapV4Executor is IExecutor, IUnlockCallback {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
     using SafeCast for int128;
@@ -26,10 +28,16 @@ contract UniswapV4Executor is IExecutor {
     uint256 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
-    // slither-disable-next-line locked-ether
+    struct SwapCallbackData {
+        PoolKey key;
+        IPoolManager.SwapParams params;
+        address tokenIn;
+        address tokenOut;
+        address receiver;
+    }
+
     function swap(uint256 amountIn, bytes calldata data)
-        external
-        payable
+        external payable
         returns (uint256 amountOut)
     {
         (
@@ -55,21 +63,56 @@ contract UniswapV4Executor is IExecutor {
             sqrtPriceLimitX96: uint160(zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1)
         });
 
+        // Transfer tokens from sender to this contract
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+
+        // Approve PoolManager to spend tokens
+        IERC20(tokenIn).approve(target, amountIn);
+
+        SwapCallbackData memory callbackData = SwapCallbackData({
+            key: key,
+            params: params,
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            receiver: receiver
+        });
+
         IPoolManager poolManager = IPoolManager(target);
         
-        try poolManager.swap(key, params, abi.encode(key)) returns (BalanceDelta delta) {
-            if (zeroForOne) {
-                amountOut = delta.amount1() < 0 ? (-delta.amount1()).toUint256() : 0;
-            } else {
-                amountOut = delta.amount0() < 0 ? (-delta.amount0()).toUint256() : 0;
-            }
+        try poolManager.unlock(abi.encode(callbackData)) returns (bytes memory result) {
+            amountOut = abi.decode(result, (uint256));
+            
+            if (amountOut == 0) revert UniswapV4Executor__InsufficientOutput();
 
+            // Transfer output tokens to receiver if not this contract
             if (receiver != address(this)) {
                 IERC20(tokenOut).safeTransfer(receiver, amountOut);
             }
         } catch {
             revert UniswapV4Executor__SwapFailed();
         }
+    }
+
+    function unlockCallback(bytes calldata rawData) external returns (bytes memory) {
+        SwapCallbackData memory data = abi.decode(rawData, (SwapCallbackData));
+        
+        IPoolManager poolManager = IPoolManager(msg.sender);
+        
+      
+        BalanceDelta delta = poolManager.swap(data.key, data.params, "");
+
+       
+        uint256 amountOut;
+        if (data.params.zeroForOne) {
+            amountOut = delta.amount1() < 0 ? (-delta.amount1()).toUint256() : 0;
+        } else {
+            amountOut = delta.amount0() < 0 ? (-delta.amount0()).toUint256() : 0;
+        }
+
+      
+        poolManager.settle();
+
+        return abi.encode(amountOut);
     }
 
     function _decodeData(bytes calldata data)
@@ -95,6 +138,4 @@ contract UniswapV4Executor is IExecutor {
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
     }
-
-    
 }
