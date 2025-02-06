@@ -234,6 +234,7 @@ pub struct BlockChanges {
     pub new_protocol_components: HashMap<String, ProtocolComponent>,
     pub deleted_protocol_components: HashMap<String, ProtocolComponent>,
     pub component_balances: HashMap<String, TokenBalances>,
+    pub account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
 }
 
@@ -250,6 +251,7 @@ impl BlockChanges {
         new_protocol_components: HashMap<String, ProtocolComponent>,
         deleted_protocol_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>>,
+        account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
     ) -> Self {
         BlockChanges {
             extractor: extractor.to_owned(),
@@ -266,6 +268,7 @@ impl BlockChanges {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            account_balances,
             component_tvl: HashMap::new(),
         }
     }
@@ -305,6 +308,16 @@ impl BlockChanges {
                     .or_insert_with(|| v);
             });
 
+        other
+            .account_balances
+            .into_iter()
+            .for_each(|(k, v)| {
+                self.account_balances
+                    .entry(k)
+                    .and_modify(|e| e.extend(v.clone()))
+                    .or_insert(v);
+            });
+
         self.component_tvl
             .extend(other.component_tvl);
         self.new_protocol_components
@@ -336,6 +349,8 @@ impl BlockChanges {
 
     pub fn filter_by_contract<F: Fn(&Bytes) -> bool>(&mut self, keep: F) {
         self.account_updates
+            .retain(|k, _| keep(k));
+        self.account_balances
             .retain(|k, _| keep(k));
     }
 
@@ -658,6 +673,7 @@ impl fmt::Debug for ResponseAccount {
             .field("title", &self.title)
             .field("slots", &self.slots)
             .field("native_balance", &self.native_balance)
+            .field("token_balances", &self.token_balances)
             .field("code", &format!("[{} bytes]", self.code.len()))
             .field("code_hash", &self.code_hash)
             .field("balance_modify_tx", &self.balance_modify_tx)
@@ -665,6 +681,18 @@ impl fmt::Debug for ResponseAccount {
             .field("creation_tx", &self.creation_tx)
             .finish()
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct AccountBalance {
+    #[serde(with = "hex_bytes")]
+    pub account: Bytes,
+    #[serde(with = "hex_bytes")]
+    pub token: Bytes,
+    #[serde(with = "hex_bytes")]
+    pub balance: Bytes,
+    #[serde(with = "hex_bytes")]
+    pub modify_tx: Bytes,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema)]
@@ -1525,7 +1553,7 @@ mod test {
         assert_eq!(request_body.protocol_ids, Some(expected_ids));
     }
 
-    fn create_models_block_entity_changes() -> crate::models::blockchain::BlockAggregatedChanges {
+    fn create_models_block_changes() -> crate::models::blockchain::BlockAggregatedChanges {
         let base_ts = 1694534400; // Example base timestamp for 2023-09-14T00:00:00
 
         crate::models::blockchain::BlockAggregatedChanges {
@@ -1603,7 +1631,16 @@ mod test {
                     }),
                 ])),
             ]),
-            account_balances: HashMap::new(),
+            account_balances: HashMap::from([
+                (Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), HashMap::from([
+                    (Bytes::from_str("0x7a250d5630b4cf539739df2c5dacb4c659f2488d").unwrap(), models::contract::AccountBalance {
+                        account: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                        token: Bytes::from_str("0x7a250d5630b4cf539739df2c5dacb4c659f2488d").unwrap(),
+                        balance: Bytes::from("0x000003e8"),
+                        modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000007531").unwrap(),
+                    }),
+                    ])),
+            ]),
             component_tvl: HashMap::new(),
             account_deltas: Default::default(),
         }
@@ -1615,7 +1652,7 @@ mod test {
         // dto::BlockChanges.
 
         // Create a models::BlockAggregatedChanges instance
-        let block_entity_changes = create_models_block_entity_changes();
+        let block_entity_changes = create_models_block_changes();
 
         // Serialize the struct into JSON
         let json_data = serde_json::to_string(&block_entity_changes).expect("Failed to serialize");
@@ -1934,6 +1971,7 @@ mod test {
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
         );
 
         let block_account_changes_new = BlockChanges::new(
@@ -1943,6 +1981,7 @@ mod test {
             0,
             true,
             new_account_updates,
+            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
@@ -1978,6 +2017,7 @@ mod test {
             0,
             true,
             expected_account_updates,
+            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
