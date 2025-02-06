@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 
-use tycho_core::dto::Chain;
-
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         strategy_encoder::strategy_encoders::{ExecutorStrategyEncoder, SplitSwapStrategyEncoder},
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::Solution,
+    models::{Chain, Solution},
     strategy_encoder::{StrategyEncoder, StrategyEncoderRegistry},
 };
 
@@ -27,7 +25,7 @@ impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
         executors_file_path: &str,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
-        let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, Chain::Ethereum)?;
+        let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain.clone())?;
 
         let mut strategies: HashMap<String, Box<dyn StrategyEncoder>> = HashMap::new();
         strategies.insert(

@@ -1,6 +1,10 @@
-use tycho_core::{dto::Chain, Bytes};
+use tycho_core::Bytes;
 
-use crate::encoding::{errors::EncodingError, models::Solution, swap_encoder::SwapEncoder};
+use crate::encoding::{
+    errors::EncodingError,
+    models::{Chain, Solution},
+    swap_encoder::SwapEncoder,
+};
 
 /// Encodes a solution using a specific strategy.
 pub trait StrategyEncoder {

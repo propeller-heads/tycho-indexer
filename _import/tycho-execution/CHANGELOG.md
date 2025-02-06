@@ -1,3 +1,23 @@
+## [0.33.0](https://github.com/propeller-heads/tycho-execution/compare/0.32.0...0.33.0) (2025-02-06)
+
+
+### Features
+
+* Get native/wrapped addresses from chain ([8cd7d9f](https://github.com/propeller-heads/tycho-execution/commit/8cd7d9f76e0b68bbf71f61bc56ab60a5e5693327))
+* Take Chain object containing native/wrapped addresses ([e83b8d9](https://github.com/propeller-heads/tycho-execution/commit/e83b8d9aef130839dd88355e110172e1377bad80))
+
+
+### Bug Fixes
+
+* Do not let user specify the native/wrapped token ([1a07c7d](https://github.com/propeller-heads/tycho-execution/commit/1a07c7dc61ff7f86739ba7fbde2e7a42ebdf284f))
+
+## [0.32.0](https://github.com/propeller-heads/tycho-execution/compare/0.31.0...0.32.0) (2025-02-06)
+
+
+### Features
+
+* Accept any struct that implements Into<ProtocolComponent> in Swap ([cb14022](https://github.com/propeller-heads/tycho-execution/commit/cb140226814add4f8141f3ad36784379a80d656c))
+
 ## [0.31.0](https://github.com/propeller-heads/tycho-execution/compare/0.30.1...0.31.0) (2025-02-05)
 
 

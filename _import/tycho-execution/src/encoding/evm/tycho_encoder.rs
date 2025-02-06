@@ -5,8 +5,7 @@ use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::constants::{NATIVE_ADDRESS, WETH_ADDRESS},
-    models::{NativeAction, Solution, Transaction},
+    models::{Chain, NativeAction, Solution, Transaction},
     strategy_encoder::StrategyEncoderRegistry,
     tycho_encoder::TychoEncoder,
 };
@@ -18,16 +17,34 @@ use crate::encoding::{
 /// * `strategy_registry`: S, the strategy registry to use to select the best strategy to encode a
 ///   solution, based on its supported strategies and the solution attributes.
 /// * `router_address`: Bytes, the address of the router to use to execute the swaps.
+/// * `native_address`: Address of the chain's native token
+/// * `wrapped_address`: Address of the chain's wrapped native token
 pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
     strategy_registry: S,
     router_address: Bytes,
+    native_address: Bytes,
+    wrapped_address: Bytes,
 }
 
 impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
-    pub fn new(strategy_registry: S, router_address: String) -> Result<Self, EncodingError> {
+    pub fn new(
+        strategy_registry: S,
+        router_address: String,
+        chain: Chain,
+    ) -> Result<Self, EncodingError> {
         let router_address = Bytes::from_str(&router_address)
             .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
-        Ok(EVMTychoEncoder { strategy_registry, router_address })
+        if chain.name != *"ethereum" {
+            return Err(EncodingError::InvalidInput(
+                "Currently only Ethereum is supported".to_string(),
+            ));
+        }
+        Ok(EVMTychoEncoder {
+            strategy_registry,
+            router_address,
+            native_address: chain.native_token()?,
+            wrapped_address: chain.wrapped_token()?,
+        })
     }
 }
 
@@ -52,28 +69,30 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
         }
         if let Some(native_action) = solution.clone().native_action {
             if native_action == NativeAction::Wrap {
-                if solution.given_token != *NATIVE_ADDRESS {
+                if solution.given_token != self.native_address {
                     return Err(EncodingError::FatalError(
-                        "ETH must be the input token in order to wrap".to_string(),
+                        "Native token must be the input token in order to wrap".to_string(),
                     ));
                 }
                 if let Some(first_swap) = solution.swaps.first() {
-                    if first_swap.token_in != *WETH_ADDRESS {
+                    if first_swap.token_in != self.wrapped_address {
                         return Err(EncodingError::FatalError(
-                            "WETH must be the first swap's input in order to wrap".to_string(),
+                            "Wrapped token must be the first swap's input in order to wrap"
+                                .to_string(),
                         ));
                     }
                 }
             } else if native_action == NativeAction::Unwrap {
-                if solution.checked_token != *NATIVE_ADDRESS {
+                if solution.checked_token != self.native_address {
                     return Err(EncodingError::FatalError(
-                        "ETH must be the output token in order to unwrap".to_string(),
+                        "Native token must be the output token in order to unwrap".to_string(),
                     ));
                 }
                 if let Some(last_swap) = solution.swaps.last() {
-                    if last_swap.token_out != *WETH_ADDRESS {
+                    if last_swap.token_out != self.wrapped_address {
                         return Err(EncodingError::FatalError(
-                            "WETH must be the last swap's output in order to unwrap".to_string(),
+                            "Wrapped token must be the last swap's output in order to unwrap"
+                                .to_string(),
                         ));
                     }
                 }
@@ -120,7 +139,7 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
 
 #[cfg(test)]
 mod tests {
-    use tycho_core::dto::{Chain, ProtocolComponent};
+    use tycho_core::dto::{Chain as TychoCoreChain, ProtocolComponent};
 
     use super::*;
     use crate::encoding::{
@@ -131,8 +150,20 @@ mod tests {
         strategy: Box<dyn StrategyEncoder>,
     }
 
+    fn eth_chain() -> Chain {
+        TychoCoreChain::Ethereum.into()
+    }
+
     fn dai() -> Bytes {
         Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap()
+    }
+
+    fn eth() -> Bytes {
+        Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap()
+    }
+
+    fn weth() -> Bytes {
+        Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap()
     }
 
     impl StrategyEncoderRegistry for MockStrategyRegistry {
@@ -174,10 +205,11 @@ mod tests {
     }
 
     fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
-        let strategy_registry = MockStrategyRegistry::new(Chain::Ethereum, "", None).unwrap();
+        let strategy_registry = MockStrategyRegistry::new(eth_chain(), "", None).unwrap();
         EVMTychoEncoder::new(
             strategy_registry,
             "0x1234567890abcdef1234567890abcdef12345678".to_string(),
+            eth_chain(),
         )
         .unwrap()
     }
@@ -192,7 +224,7 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: WETH_ADDRESS.clone(),
+            token_in: weth(),
             token_out: dai(),
             split: 0f64,
         };
@@ -200,7 +232,7 @@ mod tests {
         let solution = Solution {
             exact_out: false,
             given_amount: eth_amount_in.clone(),
-            given_token: NATIVE_ADDRESS.clone(),
+            given_token: eth(),
             router_address: None,
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
@@ -244,14 +276,14 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: WETH_ADDRESS.clone(),
+            token_in: weth(),
             token_out: dai(),
             split: 0f64,
         };
 
         let solution = Solution {
             exact_out: false,
-            given_token: NATIVE_ADDRESS.clone(),
+            given_token: eth(),
             checked_token: dai(),
             check_amount: None,
             swaps: vec![swap],
@@ -273,14 +305,14 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: WETH_ADDRESS.clone(),
+            token_in: weth(),
             token_out: dai(),
             split: 0f64,
         };
 
         let solution = Solution {
             exact_out: false,
-            given_token: WETH_ADDRESS.clone(),
+            given_token: weth(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()
@@ -291,7 +323,9 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap(),
-            EncodingError::FatalError("ETH must be the input token in order to wrap".to_string())
+            EncodingError::FatalError(
+                "Native token must be the input token in order to wrap".to_string()
+            )
         );
     }
 
@@ -304,14 +338,14 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: NATIVE_ADDRESS.clone(),
+            token_in: eth(),
             token_out: dai(),
             split: 0f64,
         };
 
         let solution = Solution {
             exact_out: false,
-            given_token: NATIVE_ADDRESS.clone(),
+            given_token: eth(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()
@@ -323,7 +357,7 @@ mod tests {
         assert_eq!(
             result.err().unwrap(),
             EncodingError::FatalError(
-                "WETH must be the first swap's input in order to wrap".to_string()
+                "Wrapped token must be the first swap's input in order to wrap".to_string()
             )
         );
     }
@@ -333,7 +367,7 @@ mod tests {
         let encoder = get_mocked_tycho_encoder();
         let solution = Solution {
             exact_out: false,
-            given_token: NATIVE_ADDRESS.clone(),
+            given_token: eth(),
             swaps: vec![],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()
@@ -358,13 +392,13 @@ mod tests {
                 ..Default::default()
             },
             token_in: dai(),
-            token_out: WETH_ADDRESS.clone(),
+            token_out: weth(),
             split: 0f64,
         };
 
         let solution = Solution {
             exact_out: false,
-            checked_token: NATIVE_ADDRESS.clone(),
+            checked_token: eth(),
             check_amount: None,
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
@@ -386,14 +420,14 @@ mod tests {
                 ..Default::default()
             },
             token_in: dai(),
-            token_out: WETH_ADDRESS.clone(),
+            token_out: weth(),
             split: 0f64,
         };
 
         let solution = Solution {
             exact_out: false,
             given_token: dai(),
-            checked_token: WETH_ADDRESS.clone(),
+            checked_token: weth(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
             ..Default::default()
@@ -405,7 +439,7 @@ mod tests {
         assert_eq!(
             result.err().unwrap(),
             EncodingError::FatalError(
-                "ETH must be the output token in order to unwrap".to_string()
+                "Native token must be the output token in order to unwrap".to_string()
             )
         );
     }
@@ -420,13 +454,13 @@ mod tests {
                 ..Default::default()
             },
             token_in: dai(),
-            token_out: NATIVE_ADDRESS.clone(),
+            token_out: eth(),
             split: 0f64,
         };
 
         let solution = Solution {
             exact_out: false,
-            checked_token: NATIVE_ADDRESS.clone(),
+            checked_token: eth(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
             ..Default::default()
@@ -438,7 +472,7 @@ mod tests {
         assert_eq!(
             result.err().unwrap(),
             EncodingError::FatalError(
-                "WETH must be the last swap's output in order to unwrap".to_string()
+                "Wrapped token must be the last swap's output in order to unwrap".to_string()
             )
         );
     }
