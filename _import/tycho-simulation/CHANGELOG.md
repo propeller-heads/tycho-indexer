@@ -1,3 +1,10 @@
+## [0.73.0](https://github.com/propeller-heads/tycho-simulation/compare/0.72.0...0.73.0) (2025-02-06)
+
+
+### Features
+
+* Extend ProtocolComponent to have the attributes of the core model ([38f9cbc](https://github.com/propeller-heads/tycho-simulation/commit/38f9cbca680f5a4e617c111f9647ce7622e2adf0))
+
 ## [0.72.0](https://github.com/propeller-heads/tycho-simulation/compare/0.71.1...0.72.0) (2025-02-05)
 
 
