@@ -4340,7 +4340,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "alloy",
  "alloy-primitives",
@@ -4352,6 +4352,7 @@ dependencies = [
  "lazy_static",
  "num-bigint",
  "num-traits",
+ "once_cell",
  "rstest",
  "serde",
  "serde_json",

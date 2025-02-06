@@ -1,6 +1,13 @@
+use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tycho_core::{dto::ProtocolComponent, Bytes};
+use tycho_core::{
+    dto::{Chain as TychoCoreChain, ProtocolComponent},
+    Bytes,
+};
+
+use crate::encoding::errors::EncodingError;
+
 
 use crate::encoding::serde_primitives::{biguint_string, biguint_string_option};
 
@@ -88,6 +95,63 @@ pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
     pub router_address: Bytes,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ChainId(pub u64);
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Chain {
+    pub id: ChainId,
+    pub name: String,
+}
+
+impl ChainId {
+    pub fn id(&self) -> u64 {
+        self.0
+    }
+}
+
+impl From<TychoCoreChain> for ChainId {
+    fn from(chain: TychoCoreChain) -> Self {
+        match chain {
+            TychoCoreChain::Ethereum => ChainId(1),
+            TychoCoreChain::ZkSync => ChainId(324),
+            TychoCoreChain::Arbitrum => ChainId(42161),
+            TychoCoreChain::Starknet => ChainId(0),
+        }
+    }
+}
+
+impl From<TychoCoreChain> for Chain {
+    fn from(chain: TychoCoreChain) -> Self {
+        Chain { id: chain.into(), name: chain.to_string() }
+    }
+}
+
+impl Chain {
+    pub fn native_token(&self) -> Result<Bytes, EncodingError> {
+        match self.id.id() {
+            1 => Ok(Bytes::from(hex::decode("0000000000000000000000000000000000000000").map_err(
+                |_| EncodingError::FatalError("Failed to decode native token".to_string()),
+            )?)),
+            _ => Err(EncodingError::InvalidInput(format!(
+                "Native token not set for chain {:?}. Double check the chain is supported.",
+                self.name
+            ))),
+        }
+    }
+    pub fn wrapped_token(&self) -> Result<Bytes, EncodingError> {
+        match self.id.id() {
+            1 => Ok(Bytes::from(hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").map_err(
+                |_| EncodingError::FatalError("Failed to decode wrapped token".to_string()),
+            )?)),
+            _ => Err(EncodingError::InvalidInput(format!(
+                "Wrapped token not set for chain {:?}. Double check the chain is supported.",
+                self.name
+            ))),
+        }
+    }
 }
 
 mod tests {
