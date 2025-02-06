@@ -19,6 +19,7 @@ serde_json = "1.0.135"
 thiserror = "1.0.69"
 tokio = { version = "1.38.0", features = ["full"] }
 chrono = "0.4.39"
+clap = { version = "4.5.3", features = ["derive"] }
 
 alloy = { version = "0.9.2", features = ["providers", "rpc-types-eth", "eip712", "signer-local"], optional = true }
 alloy-sol-types = { version = "0.8.14", optional = true }

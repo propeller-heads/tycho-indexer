@@ -5,7 +5,6 @@ use tycho_core::{dto::ProtocolComponent, Bytes};
 use crate::encoding::serde_primitives::{biguint_string, biguint_string_option};
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
 pub struct Solution {
     /// Address of the sender.
     pub sender: Bytes,

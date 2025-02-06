@@ -6,27 +6,34 @@ Tycho Execution makes it easy to trade on different DEXs by handling the complex
 custom code for each DEX, you get a simple, ready-to-use tool that generates the necessary data to execute trades. It's
 designed to be safe, straightforward, and quick to set up, so anyone can start trading without extra effort.
 
-## Usage Guide
+## Bin Usage Guide
 
 ### Encoding Transactions
 
-To encode a transaction, you can pipe a JSON payload to the `tycho-encode` binary:
+To encode a transaction, you can pipe a JSON payload to the binary:
 
 ```bash
-echo '<json_payload>' | cargo run --bin tycho-encode
+echo '<solution_payload>' | cargo run
 ```
 
 #### Example
 
 Here's a complete example that encodes a swap from WETH to DAI using Uniswap V2:
 
+First build the project:
 ```bash
-echo '{"sender":"0x1234567890123456789012345678901234567890","receiver":"0x1234567890123456789012345678901234567890","given_token":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","given_amount":"1000000000000000000","checked_token":"0x6B175474E89094C44Da98b954EedeAC495271d0F","exact_out":false,"slippage":0.01,"expected_amount":"1000000000000000000","check_amount":"990000000000000000","router_address":"0xaa820C29648D5EA543d712cC928377Bd7206a0E7","swaps":[{"component":{"id":"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640","protocol_system":"uniswap_v2","protocol_type_name":"UniswapV2Pool","chain":"ethereum","tokens":["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"],"contract_ids":["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"],"static_attributes":{"factory":"0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f"},"change":"Update","creation_tx":"0x0000000000000000000000000000000000000000000000000000000000000000","created_at":"2024-02-28T12:00:00"},"token_in":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","token_out":"0x6B175474E89094C44Da98b954EedeAC495271d0F","split":1.0}],"direct_execution":false}' | cargo run
+cargo build --release
 ```
 
-#### JSON Payload Structure
+After that, you can use the binary directly:
+```bash
+echo '{"sender":"0x1234567890123456789012345678901234567890","receiver":"0x1234567890123456789012345678901234567890","given_token":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","given_amount":"1000000000000000000","checked_token":"0x6B175474E89094C44Da98b954EedeAC495271d0F","exact_out":false,"slippage":0.01,"expected_amount":"1000000000000000000","check_amount":"990000000000000000","router_address":"0xaa820C29648D5EA543d712cC928377Bd7206a0E7","swaps":[{"component":{"id":"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640","protocol_system":"uniswap_v2","protocol_type_name":"UniswapV2Pool","chain":"ethereum","tokens":["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"],"contract_ids":["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"],"static_attributes":{"factory":"0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f"},"change":"Update","creation_tx":"0x0000000000000000000000000000000000000000000000000000000000000000","created_at":"2024-02-28T12:00:00"},"token_in":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","token_out":"0x6B175474E89094C44Da98b954EedeAC495271d0F","split":1.0}],"direct_execution":true}' | cargo run --release
+```
 
-The input JSON payload requires the following fields:
+
+#### JSON Payload Structure: Solution struct
+
+The `Solution` struct is composed of the following fields:
 
 - `sender`: The address initiating the transaction
 - `receiver`: The address receiving the output tokens
