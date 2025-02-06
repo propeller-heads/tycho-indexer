@@ -1,3 +1,26 @@
+## [0.32.0](https://github.com/propeller-heads/tycho-execution/compare/0.31.0...0.32.0) (2025-02-06)
+
+
+### Features
+
+* Accept any struct that implements Into<ProtocolComponent> in Swap ([cb14022](https://github.com/propeller-heads/tycho-execution/commit/cb140226814add4f8141f3ad36784379a80d656c))
+
+## [0.31.0](https://github.com/propeller-heads/tycho-execution/compare/0.30.1...0.31.0) (2025-02-05)
+
+
+### Features
+
+* add tests for split swap validations ([b69aef9](https://github.com/propeller-heads/tycho-execution/commit/b69aef9b8f1d253bb465a39669bd18aa5f355aa5))
+* add tests for wrap unwrap case ([4d97c3f](https://github.com/propeller-heads/tycho-execution/commit/4d97c3f16d263c975f1f42bebae9666af789eb10))
+* add validation for split swap ([f80ffa9](https://github.com/propeller-heads/tycho-execution/commit/f80ffa924f1da626bef0751c92c09fb133d2ba85))
+
+
+### Bug Fixes
+
+* checks in validations ([95edd5b](https://github.com/propeller-heads/tycho-execution/commit/95edd5b1fe99fd96163dcf74c2a570a7c8a480a1))
+* get_mock_split_swap_strategy_encoder ([7b72263](https://github.com/propeller-heads/tycho-execution/commit/7b7226356d3bde61da987946dbc10ae3eec33722))
+* use native action to validate path ([c787f5e](https://github.com/propeller-heads/tycho-execution/commit/c787f5e722ad8a9f9a24e6ea09f59dfcf5f82239))
+
 ## [0.30.1](https://github.com/propeller-heads/tycho-execution/compare/0.30.0...0.30.1) (2025-02-04)
 
 
