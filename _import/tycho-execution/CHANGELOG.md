@@ -1,3 +1,30 @@
+## [0.34.0](https://github.com/propeller-heads/tycho-execution/compare/0.33.0...0.34.0) (2025-02-06)
+
+
+### Features
+
+* add default private key ([d3ad0ba](https://github.com/propeller-heads/tycho-execution/commit/d3ad0ba5bfd50cc3db50b8d341fca2c1c5fcdad3))
+* add encoder bin ([4f7fe3b](https://github.com/propeller-heads/tycho-execution/commit/4f7fe3b96d767c5df3757607777f3caec0d61d5b))
+* add md ([d3be9d1](https://github.com/propeller-heads/tycho-execution/commit/d3be9d1489121522333253ce9f420865f59fdf6a))
+* add serde primitive, update command ([b938560](https://github.com/propeller-heads/tycho-execution/commit/b93856073cad79564190a43007f33a2cf4f3dbd7))
+* default native action ([80f1ca9](https://github.com/propeller-heads/tycho-execution/commit/80f1ca913b9ca74f6dd3739d9472533dcda59892))
+* remove direct execution hardcode ([ae6b1ed](https://github.com/propeller-heads/tycho-execution/commit/ae6b1ed658721a067d55e5b64e3a93b15f2b66af))
+* remove manual parsing ([fd4045e](https://github.com/propeller-heads/tycho-execution/commit/fd4045e6fe9c2379df2c278282db1e26e4b83c20))
+* simplify ([8d97f73](https://github.com/propeller-heads/tycho-execution/commit/8d97f73ec7f034fa84908eec41087f3212520b33))
+* update cli params and docs ([32c3bd2](https://github.com/propeller-heads/tycho-execution/commit/32c3bd22202c250d9c7de4d971e39ef7169c02a6))
+* use clap for cli and resolve pr comments ([a5166f2](https://github.com/propeller-heads/tycho-execution/commit/a5166f282dfbcd6c161a84dee7b9dac0efe01ba3))
+
+
+### Bug Fixes
+
+* chain.into() ([520bee5](https://github.com/propeller-heads/tycho-execution/commit/520bee5a5d8d383cdca99c96d41022183827ffb0))
+* ci ([a3cf443](https://github.com/propeller-heads/tycho-execution/commit/a3cf4430563f88490a62a7e7a0051c3c64ea6d81))
+* ci ([6cec83f](https://github.com/propeller-heads/tycho-execution/commit/6cec83fde57e64405499e2343179bf4bd2a40820))
+* fmt ([3bb5b0c](https://github.com/propeller-heads/tycho-execution/commit/3bb5b0c7c69179c8b087bc42bbd722bda5cc89a7))
+* fmt ([7df1995](https://github.com/propeller-heads/tycho-execution/commit/7df1995655e55f1ad62a32c265ba1fd7174562db))
+* remove redundant parse checks ([c4f9fd0](https://github.com/propeller-heads/tycho-execution/commit/c4f9fd0fa6e1ee4d32ec0cd7e4d833f18681eec1))
+* rm v4-core ([1dad36d](https://github.com/propeller-heads/tycho-execution/commit/1dad36d7a84120aecfcb0867c9733c12efb72fe6))
+
 ## [0.33.0](https://github.com/propeller-heads/tycho-execution/compare/0.32.0...0.33.0) (2025-02-06)
 
 
