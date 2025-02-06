@@ -10,8 +10,17 @@ use crate::encoding::{
     tycho_encoder::TychoEncoder,
 };
 
+/// Represents an encoder for a swap through the given router address using any strategy supported
+/// by the strategy registry.
+///
+/// # Fields
+/// * `strategy_registry`: S, the strategy registry to use to select the best strategy to encode a
+///   solution, based on its supported strategies and the solution attributes.
+/// * `router_address`: Bytes, the address of the router to use to execute the swaps.
+/// * `native_address`: Address of the chain's native token
+/// * `wrapped_address`: Address of the chain's wrapped native token
 pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
-    strategy_selector: S,
+    strategy_registry: S,
     router_address: Bytes,
     native_address: Bytes,
     wrapped_address: Bytes,
@@ -19,7 +28,7 @@ pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
 
 impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
     pub fn new(
-        strategy_selector: S,
+        strategy_registry: S,
         router_address: String,
         chain: Chain,
     ) -> Result<Self, EncodingError> {
@@ -31,7 +40,7 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
             ));
         }
         Ok(EVMTychoEncoder {
-            strategy_selector,
+            strategy_registry,
             router_address,
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
@@ -40,6 +49,15 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
 }
 
 impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
+    /// Raises an `EncodingError` if the solution is not considered valid.
+    ///
+    /// A solution is considered valid if all the following conditions are met:
+    /// * The solution is not exact out.
+    /// * The solution has at least one swap.
+    /// * If the solution is wrapping, the given token is the chain's native token and the first
+    ///   swap's input is the chain's wrapped token.
+    /// * If the solution is unwrapping, the checked token is the chain's native token and the last
+    ///   swap's output is the chain's wrapped token.
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
         if solution.exact_out {
             return Err(EncodingError::FatalError(
@@ -99,7 +117,7 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
                 .unwrap_or(self.router_address.clone());
 
             let strategy = self
-                .strategy_selector
+                .strategy_registry
                 .get_encoder(solution)?;
             let (contract_interaction, target_address) =
                 strategy.encode_strategy(solution.clone(), router_address)?;
@@ -187,9 +205,9 @@ mod tests {
     }
 
     fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
-        let strategy_selector = MockStrategyRegistry::new(eth_chain(), "", None).unwrap();
+        let strategy_registry = MockStrategyRegistry::new(eth_chain(), "", None).unwrap();
         EVMTychoEncoder::new(
-            strategy_selector,
+            strategy_registry,
             "0x1234567890abcdef1234567890abcdef12345678".to_string(),
             eth_chain(),
         )

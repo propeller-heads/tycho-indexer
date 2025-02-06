@@ -16,11 +16,13 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, EncodingError> {
     }
 }
 
+/// Converts a general `BigUint` to an EVM-specific `U256` value.
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
     let bytes = value.to_bytes_be();
     U256::from_be_slice(&bytes)
 }
 
+/// Encodes the input data for a function call to the given function selector.
 pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     let mut hasher = Keccak256::new();
     hasher.update(selector.as_bytes());

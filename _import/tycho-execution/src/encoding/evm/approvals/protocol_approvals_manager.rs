@@ -12,6 +12,7 @@ use tokio::runtime::Runtime;
 
 use crate::encoding::{errors::EncodingError, evm::utils::encode_input};
 
+/// A manager for checking if an approval is needed for interacting with a certain spender.
 pub struct ProtocolApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
     runtime: Runtime,
@@ -23,6 +24,9 @@ impl ProtocolApprovalsManager {
         let client = runtime.block_on(get_client())?;
         Ok(Self { client, runtime })
     }
+
+    /// Checks the current allowance for the given token, owner, and spender, and returns true
+    /// if the current allowance is zero.
     pub fn approval_needed(
         &self,
         token: Address,
@@ -56,6 +60,7 @@ impl ProtocolApprovalsManager {
     }
 }
 
+/// Gets the client used for interacting with the EVM-compatible network.
 pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
     dotenv().ok();
     let eth_rpc_url = env::var("ETH_RPC_URL")

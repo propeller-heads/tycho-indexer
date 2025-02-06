@@ -11,6 +11,9 @@ use crate::encoding::{
     serde_primitives::{biguint_string, biguint_string_option},
 };
 
+
+/// Represents a solution containing details describing an order, and  instructions for filling
+/// the order.
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct Solution {
     /// Address of the sender.
@@ -28,7 +31,7 @@ pub struct Solution {
     /// supported.
     #[serde(default)]
     pub exact_out: bool,
-    // If set, it will be applied to expected_amount
+    /// If set, it will be applied to expected_amount
     pub slippage: Option<f64>,
     /// Expected amount of the bought token (exact in) or sold token (exact out).
     #[serde(with = "biguint_string_option")]
@@ -39,9 +42,9 @@ pub struct Solution {
     pub check_amount: Option<BigUint>,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    // If not set, then the Tycho Router will be used
+    /// If not set, then the Tycho Router will be used
     pub router_address: Option<Bytes>,
-    // If set, the corresponding native action will be executed.
+    /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
     /// If set to true, the solution will be encoded to be sent directly to the Executor and
     /// skip the router. The user is responsible for managing necessary approvals and token
@@ -50,6 +53,12 @@ pub struct Solution {
     pub direct_execution: bool,
 }
 
+
+/// Represents an action to be performed on the native token either before or after the swap.
+///
+/// `Wrap` means that the native token will be wrapped before the first swap, and `Unwrap`
+/// means that the native token will be unwrapped after the last swap, before being sent to the
+/// receiver.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NativeAction {
@@ -57,6 +66,9 @@ pub enum NativeAction {
     Unwrap,
 }
 
+
+
+/// Represents a swap operation to be performed on a pool.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Swap {
     /// Protocol component from tycho indexer
@@ -65,7 +77,7 @@ pub struct Swap {
     pub token_in: Bytes,
     /// Token being output from the pool.
     pub token_out: Bytes,
-    /// Percentage of the amount to be swapped in this operation (for example, 0.5 means 50%)
+    /// Decimal of the amount to be swapped in this operation (for example, 0.5 means 50%)
     #[serde(default)]
     pub split: f64,
 }
@@ -81,16 +93,26 @@ impl Swap {
     }
 }
 
+/// Represents a transaction to be executed.
+///
+/// # Fields
+/// * `to`: Address of the contract to call with the calldata
+/// * `value`: Native token value to be sent with the transaction.
+/// * `data`: Encoded calldata for the transaction.
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    // Address of the contract to call with the calldata
     pub to: Bytes,
-    // ETH value to be sent with the transaction.
     pub value: BigUint,
-    // Encoded calldata for the transaction.
     pub data: Vec<u8>,
 }
 
+/// Represents necessary attributes for encoding an order.
+///
+/// # Fields
+///
+/// * `receiver`: Address of the receiver of the out token after the swaps are completed.
+/// * `exact_out`: true if the solution is a buy order, false if it is a sell order.
+/// * `router_address`: Address of the router contract to be used for the swaps.
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,

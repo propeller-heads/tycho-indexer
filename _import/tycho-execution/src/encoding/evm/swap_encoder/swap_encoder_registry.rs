@@ -5,12 +5,16 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
+/// Registry containing all supported `SwapEncoders`.
 #[derive(Clone)]
 pub struct SwapEncoderRegistry {
+    /// A hashmap containing the protocol system as a key and the `SwapEncoder` as a value.
     encoders: HashMap<String, Box<dyn SwapEncoder>>,
 }
 
 impl SwapEncoderRegistry {
+    /// Populates the registry with the `SwapEncoders` for the given blockchain by parsing the
+    /// executors' addresses in the file at the given path.
     pub fn new(executors_file_path: &str, blockchain: Chain) -> Result<Self, EncodingError> {
         let config_str = fs::read_to_string(executors_file_path)?;
         let config: HashMap<String, HashMap<String, String>> = serde_json::from_str(&config_str)?;
