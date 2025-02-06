@@ -59,6 +59,17 @@ pub struct Swap {
     pub split: f64,
 }
 
+impl Swap {
+    pub fn new<T: Into<ProtocolComponent>>(
+        component: T,
+        token_in: Bytes,
+        token_out: Bytes,
+        split: f64,
+    ) -> Self {
+        Self { component: component.into(), token_in, token_out, split }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Transaction {
     // Address of the contract to call with the calldata
@@ -129,5 +140,44 @@ impl Chain {
                 self.name
             ))),
         }
+    }
+}
+
+mod tests {
+    use super::*;
+
+    struct MockProtocolComponent {
+        id: String,
+        protocol_system: String,
+    }
+
+    impl From<MockProtocolComponent> for ProtocolComponent {
+        fn from(component: MockProtocolComponent) -> Self {
+            ProtocolComponent {
+                id: component.id,
+                protocol_system: component.protocol_system,
+                tokens: vec![],
+                protocol_type_name: "".to_string(),
+                chain: Default::default(),
+                contract_ids: vec![],
+                static_attributes: Default::default(),
+                change: Default::default(),
+                creation_tx: Default::default(),
+                created_at: Default::default(),
+            }
+        }
+    }
+
+    #[test]
+    fn test_swap_new() {
+        let component = MockProtocolComponent {
+            id: "i-am-an-id".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+        };
+        let swap = Swap::new(component, Bytes::from("0x12"), Bytes::from("34"), 0.5);
+        assert_eq!(swap.token_in, Bytes::from("0x12"));
+        assert_eq!(swap.token_out, Bytes::from("0x34"));
+        assert_eq!(swap.component.protocol_system, "uniswap_v2");
+        assert_eq!(swap.component.id, "i-am-an-id");
     }
 }

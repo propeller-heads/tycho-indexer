@@ -1,3 +1,10 @@
+## [0.32.0](https://github.com/propeller-heads/tycho-execution/compare/0.31.0...0.32.0) (2025-02-06)
+
+
+### Features
+
+* Accept any struct that implements Into<ProtocolComponent> in Swap ([cb14022](https://github.com/propeller-heads/tycho-execution/commit/cb140226814add4f8141f3ad36784379a80d656c))
+
 ## [0.31.0](https://github.com/propeller-heads/tycho-execution/compare/0.30.1...0.31.0) (2025-02-05)
 
 
