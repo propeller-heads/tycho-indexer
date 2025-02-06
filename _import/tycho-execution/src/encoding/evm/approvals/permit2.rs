@@ -11,7 +11,10 @@ use alloy_primitives::{PrimitiveSignature as Signature, B256};
 use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
-use tokio::runtime::Runtime;
+use tokio::{
+    runtime::{Handle, Runtime},
+    task::block_in_place,
+};
 use tycho_core::Bytes;
 
 use crate::encoding::{
@@ -29,9 +32,15 @@ use crate::encoding::{
 pub struct Permit2 {
     address: Address,
     client: Arc<RootProvider<BoxTransport>>,
-    runtime: Arc<Runtime>,
     signer: PrivateKeySigner,
     chain_id: ChainId,
+    runtime_handle: Handle,
+    // Store the runtime to prevent it from being dropped before use.
+    // This is required since tycho-execution does not have a pre-existing runtime.
+    // However, if the library is used in a context where a runtime already exists, it is not
+    // necessary to store it.
+    #[allow(dead_code)]
+    runtime: Option<Arc<Runtime>>,
 }
 
 /// Type alias for representing allowance data as a tuple of (amount, expiration, nonce). Used for
@@ -61,15 +70,16 @@ sol! {
 
 impl Permit2 {
     pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| {
-                tokio::runtime::Runtime::new().map_err(|_| {
-                    EncodingError::FatalError("Failed to create tokio runtime".to_string())
-                })
-            })
-            .ok_or(EncodingError::FatalError("Failed to get tokio runtime".to_string()))??;
-        let client = runtime.block_on(get_client())?;
+        let (handle, runtime) = match Handle::try_current() {
+            Ok(h) => (h, None),
+            Err(_) => {
+                let rt = Arc::new(Runtime::new().map_err(|_| {
+                    EncodingError::FatalError("Failed to create a new tokio runtime".to_string())
+                })?);
+                (rt.handle().clone(), Some(rt))
+            }
+        };
+        let client = block_in_place(|| handle.block_on(get_client()))?;
         let pk = B256::from_str(&signer_pk).map_err(|_| {
             EncodingError::FatalError("Failed to convert signer private key to B256".to_string())
         })?;
@@ -80,9 +90,10 @@ impl Permit2 {
             address: Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
                 .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?,
             client,
-            runtime: Arc::new(runtime),
+            runtime_handle: handle,
             signer,
             chain_id: chain.id,
+            runtime,
         })
     }
 
@@ -101,9 +112,10 @@ impl Permit2 {
             ..Default::default()
         };
 
-        let output = self
-            .runtime
-            .block_on(async { self.client.call(&tx).await });
+        let output = block_in_place(|| {
+            self.runtime_handle
+                .block_on(async { self.client.call(&tx).await })
+        });
         match output {
             Ok(response) => {
                 let allowance: Allowance =
@@ -290,14 +302,16 @@ mod tests {
             input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
             ..Default::default()
         };
-        let receipt = permit2.runtime.block_on(async {
-            let pending_tx = permit2
-                .client
-                .send_transaction(tx)
-                .await
-                .unwrap();
-            // Wait for the transaction to be mined
-            pending_tx.get_receipt().await.unwrap()
+        let receipt = block_in_place(|| {
+            permit2.runtime_handle.block_on(async {
+                let pending_tx = permit2
+                    .client
+                    .send_transaction(tx)
+                    .await
+                    .unwrap();
+                // Wait for the transaction to be mined
+                pending_tx.get_receipt().await.unwrap()
+            })
         });
         assert!(receipt.status(), "Approve transaction failed");
 
@@ -321,7 +335,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = permit2.runtime.block_on(async {
+        let result = permit2.runtime_handle.block_on(async {
             let pending_tx = permit2
                 .client
                 .send_transaction(tx)
