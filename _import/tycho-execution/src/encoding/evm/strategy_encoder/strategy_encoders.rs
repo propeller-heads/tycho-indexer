@@ -506,7 +506,7 @@ mod tests {
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
         let eth_chain = eth_chain();
-        SwapEncoderRegistry::new("src/encoding/config/executor_addresses.json", eth_chain).unwrap()
+        SwapEncoderRegistry::new(None, eth_chain).unwrap()
     }
 
     #[test]
