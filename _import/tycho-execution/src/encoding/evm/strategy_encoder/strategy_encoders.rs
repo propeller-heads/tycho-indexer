@@ -7,17 +7,16 @@ use std::{
 use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
-use tycho_core::{dto::Chain, keccak256, Bytes};
+use tycho_core::{keccak256, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
-        constants::{NATIVE_ADDRESS, WETH_ADDRESS},
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24},
     },
-    models::{EncodingContext, NativeAction, Solution, Swap},
+    models::{Chain, EncodingContext, NativeAction, Solution, Swap},
     strategy_encoder::StrategyEncoder,
     swap_encoder::SwapEncoder,
 };
@@ -62,6 +61,8 @@ pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Permit2,
     selector: String,
+    native_address: Bytes,
+    wrapped_address: Bytes,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -71,7 +72,13 @@ impl SplitSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
     ) -> Result<Self, EncodingError> {
         let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
-        Ok(Self { permit2: Permit2::new(signer_pk, chain)?, selector, swap_encoder_registry })
+        Ok(Self {
+            permit2: Permit2::new(signer_pk, chain.clone())?,
+            selector,
+            swap_encoder_registry,
+            native_address: chain.native_token()?,
+            wrapped_address: chain.wrapped_token()?,
+        })
     }
 
     fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
@@ -152,18 +159,18 @@ impl SplitSwapStrategyEncoder {
         native_action: &Option<NativeAction>,
     ) -> Result<(), EncodingError> {
         // Convert ETH to WETH only if there's a corresponding wrap/unwrap action
-        let given_token = if *given_token == *NATIVE_ADDRESS {
+        let given_token = if *given_token == *self.native_address {
             match native_action {
-                Some(NativeAction::Wrap) => &WETH_ADDRESS,
+                Some(NativeAction::Wrap) => &self.wrapped_address,
                 _ => given_token,
             }
         } else {
             given_token
         };
 
-        let checked_token = if *checked_token == *NATIVE_ADDRESS {
+        let checked_token = if *checked_token == *self.native_address {
             match native_action {
-                Some(NativeAction::Unwrap) => &WETH_ADDRESS,
+                Some(NativeAction::Unwrap) => &self.wrapped_address,
                 _ => checked_token,
             }
         } else {
@@ -278,14 +285,14 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
         if wrap {
-            tokens.push(WETH_ADDRESS.clone());
+            tokens.push(self.wrapped_address.clone());
         } else {
             tokens.push(solution.given_token.clone());
         }
         tokens.extend(intermediary_tokens);
 
         if unwrap {
-            tokens.push(WETH_ADDRESS.clone());
+            tokens.push(self.wrapped_address.clone());
         } else {
             tokens.push(solution.checked_token.clone());
         }
@@ -424,19 +431,32 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::hex::encode;
+    use alloy_primitives::hex;
     use num_bigint::BigUint;
     use rstest::rstest;
-    use tycho_core::{dto::ProtocolComponent, Bytes};
-
-    use super::*;
-    use crate::encoding::{
-        evm::constants::{NATIVE_ADDRESS, WETH_ADDRESS},
-        models::Swap,
+    use tycho_core::{
+        dto::{Chain as TychoCoreChain, ProtocolComponent},
+        Bytes,
     };
 
+    use super::*;
+    use crate::encoding::models::Swap;
+
+    fn eth_chain() -> Chain {
+        TychoCoreChain::Ethereum.into()
+    }
+
+    fn eth() -> Bytes {
+        Bytes::from(hex!("0000000000000000000000000000000000000000").to_vec())
+    }
+
+    fn weth() -> Bytes {
+        Bytes::from(hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").to_vec())
+    }
+
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
-        SwapEncoderRegistry::new("src/encoding/config/executor_addresses.json", Chain::Ethereum)
-            .unwrap()
+        let eth_chain = eth_chain();
+        SwapEncoderRegistry::new("src/encoding/config/executor_addresses.json", eth_chain).unwrap()
     }
 
     #[test]
@@ -444,7 +464,7 @@ mod tests {
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder = ExecutorStrategyEncoder::new(swap_encoder_registry);
 
-        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+        let token_in = weth();
         let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
 
         let swap = Swap {
@@ -550,8 +570,7 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
-                .unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -646,17 +665,16 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: WETH_ADDRESS.clone(),
+            token_in: weth(),
             token_out: dai.clone(),
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
-                .unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
         let solution = Solution {
             exact_out: false,
-            given_token: NATIVE_ADDRESS.clone(),
+            given_token: eth(),
             given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
             checked_token: dai,
             expected_amount: Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
@@ -696,18 +714,17 @@ mod tests {
                 ..Default::default()
             },
             token_in: dai.clone(),
-            token_out: WETH_ADDRESS.clone(),
+            token_out: weth(),
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
-                .unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: dai,
             given_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
-            checked_token: NATIVE_ADDRESS.clone(),
+            checked_token: eth(),
             expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
             check_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -742,7 +759,7 @@ mod tests {
         let private_key =
             "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let weth = weth();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -791,8 +808,7 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry)
-                .unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -819,7 +835,7 @@ mod tests {
         let private_key =
             "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
         let swap_encoder_registry = get_swap_encoder_registry();
-        SplitSwapStrategyEncoder::new(private_key, Chain::Ethereum, swap_encoder_registry).unwrap()
+        SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap()
     }
 
     #[test]

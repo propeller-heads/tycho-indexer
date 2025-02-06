@@ -4242,6 +4242,7 @@ dependencies = [
  "lazy_static",
  "num-bigint",
  "num-traits",
+ "once_cell",
  "rstest",
  "serde",
  "serde_json",

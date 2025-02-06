@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use num_bigint::BigUint;
 use tycho_core::{
-    dto::{Chain, ProtocolComponent},
+    dto::{Chain as TychoCoreChain, ProtocolComponent},
     Bytes,
 };
 use tycho_execution::encoding::{
@@ -10,7 +10,7 @@ use tycho_execution::encoding::{
         strategy_encoder::strategy_encoder_registry::EVMStrategyEncoderRegistry,
         tycho_encoder::EVMTychoEncoder,
     },
-    models::{Solution, Swap},
+    models::{Chain, Solution, Swap},
     strategy_encoder::StrategyEncoderRegistry,
     tycho_encoder::TychoEncoder,
 };
@@ -24,11 +24,12 @@ fn main() {
         .expect("Failed to create user address");
     let executors_file_path = "src/encoding/config/executor_addresses.json";
 
+    let eth_chain = Chain::from(TychoCoreChain::Ethereum);
     // Initialize the encoder
     let strategy_encoder_registry =
-        EVMStrategyEncoderRegistry::new(Chain::Ethereum, executors_file_path, signer_pk.clone())
+        EVMStrategyEncoderRegistry::new(eth_chain.clone(), executors_file_path, signer_pk.clone())
             .expect("Failed to create strategy encoder registry");
-    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address)
+    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address, eth_chain)
         .expect("Failed to create encoder");
 
     // ------------------- Encode a simple swap -------------------

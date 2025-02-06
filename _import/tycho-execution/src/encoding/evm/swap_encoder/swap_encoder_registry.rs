@@ -1,9 +1,7 @@
 use std::{collections::HashMap, fs};
 
-use tycho_core::dto::Chain;
-
 use crate::encoding::{
-    errors::EncodingError, evm::swap_encoder::builder::SwapEncoderBuilder,
+    errors::EncodingError, evm::swap_encoder::builder::SwapEncoderBuilder, models::Chain,
     swap_encoder::SwapEncoder,
 };
 
@@ -15,10 +13,10 @@ pub struct SwapEncoderRegistry {
 impl SwapEncoderRegistry {
     pub fn new(executors_file_path: &str, blockchain: Chain) -> Result<Self, EncodingError> {
         let config_str = fs::read_to_string(executors_file_path)?;
-        let config: HashMap<Chain, HashMap<String, String>> = serde_json::from_str(&config_str)?;
+        let config: HashMap<String, HashMap<String, String>> = serde_json::from_str(&config_str)?;
         let mut encoders = HashMap::new();
         let executors = config
-            .get(&blockchain)
+            .get(&blockchain.name)
             .ok_or(EncodingError::FatalError("No executors found for blockchain".to_string()))?;
         for (protocol, executor_address) in executors {
             let builder = SwapEncoderBuilder::new(protocol, executor_address);
