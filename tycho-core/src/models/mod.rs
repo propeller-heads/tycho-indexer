@@ -3,11 +3,13 @@ pub mod contract;
 pub mod protocol;
 pub mod token;
 
-use crate::{dto, Bytes};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::HashMap, fmt::Display, str::FromStr, sync::Arc};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
+
+use crate::{dto, Bytes};
+use token::CurrencyToken;
 
 /// Address hash literal type to uniquely identify contracts/accounts on a
 /// blockchain.
@@ -70,6 +72,33 @@ impl From<dto::Chain> for Chain {
             dto::Chain::ZkSync => Chain::ZkSync,
             dto::Chain::Arbitrum => Chain::Arbitrum,
             dto::Chain::Base => Chain::Base,
+        }
+    }
+}
+
+fn native_eth(chain: Chain) -> CurrencyToken {
+    CurrencyToken::new(
+        &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+        "ETH",
+        18,
+        0,
+        &[Some(2300)],
+        chain,
+        100,
+    )
+}
+
+impl Chain {
+    /// Returns the native token symbol for the chain.
+    pub fn native_token(&self) -> CurrencyToken {
+        match self {
+            Chain::Ethereum => native_eth(Chain::Ethereum),
+            // It was decided that STRK token will be tracked as a dedicated AccountBalance on
+            // Starknet accounts and ETH balances will be tracked as a native balance.
+            Chain::Starknet => native_eth(Chain::Starknet),
+            Chain::ZkSync => native_eth(Chain::ZkSync),
+            Chain::Arbitrum => native_eth(Chain::Arbitrum),
+            Chain::Base => native_eth(Chain::Base),
         }
     }
 }

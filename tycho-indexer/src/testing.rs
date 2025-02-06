@@ -9,7 +9,7 @@ use mockall::mock;
 use tycho_core::{
     models::{
         blockchain::{Block, Transaction},
-        contract::{Account, AccountDelta},
+        contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
@@ -140,6 +140,42 @@ mock! {
             Box<
                 dyn ::core::future::Future<
                     Output = Result<Vec<AccountDelta>, StorageError>,
+                > + ::core::marker::Send + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            'life2: 'async_trait,
+            'life3: 'async_trait,
+            Self: 'async_trait;
+
+
+        fn add_account_balances<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            account_balances: &'life1 [AccountBalance],
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                    Output = Result<(), StorageError>,
+                > + ::core::marker::Send + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+
+        #[allow(clippy::type_complexity)]
+        fn get_account_balances<'life0, 'life1, 'life2, 'life3, 'async_trait>(
+            &'life0 self,
+            chain: &'life1 Chain,
+            accounts: Option<&'life2 [Address]>,
+            version: Option<&'life3 Version>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                    Output = Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError>,
                 > + ::core::marker::Send + 'async_trait,
             >,
         >
@@ -399,11 +435,11 @@ mock! {
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity)]
-        fn get_balances<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
+        fn get_component_balances<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
             &'life0 self,
             chain: &'life1 Chain,
             ids: Option<&'life2 [&'life3 str]>,
-            at: Option<&'life4 Version>,
+            version: Option<&'life4 Version>,
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<

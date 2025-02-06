@@ -4,14 +4,13 @@ use tracing::warn;
 
 use crate::{
     keccak256,
-    models::{Chain, ChangeType, ContractId, DeltaError},
+    models::{
+        blockchain::Transaction,
+        protocol::{ComponentBalance, ProtocolComponent},
+        Address, Balance, Chain, ChangeType, Code, CodeHash, ComponentId, ContractId, DeltaError,
+        StoreKey, StoreVal, TxHash,
+    },
     Bytes,
-};
-
-use super::{
-    blockchain::Transaction,
-    protocol::{ComponentBalance, ProtocolComponent},
-    Address, Balance, Code, CodeHash, ComponentId, StoreKey, StoreVal, TxHash,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -21,6 +20,7 @@ pub struct Account {
     pub title: String,
     pub slots: HashMap<StoreKey, StoreVal>,
     pub native_balance: Balance,
+    pub token_balances: HashMap<Address, AccountBalance>,
     pub code: Code,
     pub code_hash: CodeHash,
     pub balance_modify_tx: TxHash,
@@ -36,6 +36,7 @@ impl Account {
         title: String,
         slots: HashMap<StoreKey, StoreVal>,
         native_balance: Balance,
+        token_balances: HashMap<Address, AccountBalance>,
         code: Code,
         code_hash: CodeHash,
         balance_modify_tx: TxHash,
@@ -48,6 +49,7 @@ impl Account {
             title,
             slots,
             native_balance,
+            token_balances,
             code,
             code_hash,
             balance_modify_tx,
@@ -131,6 +133,8 @@ impl AccountDelta {
                 .map(|(k, v)| (k, v.map(Into::into).unwrap_or_default()))
                 .collect(),
             self.balance.unwrap_or_default(),
+            // token balances are not set in the delta
+            HashMap::new(),
             self.code.clone().unwrap_or_default(),
             self.code
                 .as_ref()
@@ -156,6 +160,8 @@ impl AccountDelta {
                 .map(|(k, v)| (k, v.map(Into::into).unwrap_or_default()))
                 .collect(),
             self.balance.unwrap_or_default(),
+            // token balances are not set in the delta
+            HashMap::new(),
             self.code.clone().unwrap_or_default(),
             self.code
                 .as_ref()
@@ -185,6 +191,8 @@ impl AccountDelta {
                 .map(|(k, v)| (k, v.unwrap_or_default()))
                 .collect(),
             self.balance.clone().unwrap_or_default(),
+            // token balances are not set in the delta
+            HashMap::new(),
             self.code.clone().unwrap_or_default(),
             self.code
                 .as_ref()
@@ -268,19 +276,12 @@ pub struct AccountBalance {
     pub account: Address,
     pub token: Address,
     pub balance: Balance,
-    pub balance_float: f64,
     pub modify_tx: TxHash,
 }
 
 impl AccountBalance {
-    pub fn new(
-        account: Address,
-        token: Address,
-        balance: Balance,
-        balance_float: f64,
-        modify_tx: TxHash,
-    ) -> Self {
-        Self { account, token, balance, balance_float, modify_tx }
+    pub fn new(account: Address, token: Address, balance: Balance, modify_tx: TxHash) -> Self {
+        Self { account, token, balance, modify_tx }
     }
 }
 
@@ -434,6 +435,11 @@ impl From<&AccountChangesWithTx> for Vec<Account> {
                         .map(|(k, v)| (k, v.unwrap_or_default())) //TODO: is default ok here or should it be Bytes::zero(32)
                         .collect(),
                     update.balance.unwrap_or_default(),
+                    value
+                        .account_balances
+                        .get(&update.address)
+                        .cloned()
+                        .unwrap_or_default(),
                     update.code.clone().unwrap_or_default(),
                     update
                         .code
@@ -558,6 +564,7 @@ mod test {
             "0xe688b84b23f322a994a53dbf8e15fa82cdb71127".into(),
             HashMap::new(),
             Bytes::from(10000u64).lpad(32, 0),
+            HashMap::new(),
             code.into(),
             code_hash,
             Bytes::zero(32),
@@ -685,7 +692,6 @@ mod test {
                         balance: Bytes::from(0_i32.to_le_bytes()),
                         modify_tx: Default::default(),
                         account: account_address.clone(),
-                        balance_float: 0.0,
                     },
                 )]
                 .into_iter()
@@ -741,7 +747,6 @@ mod test {
                         balance: Bytes::from(20000_i32.to_le_bytes()),
                         modify_tx: Default::default(),
                         account: account_address,
-                        balance_float: 20000.0,
                     },
                 )]
                 .into_iter()

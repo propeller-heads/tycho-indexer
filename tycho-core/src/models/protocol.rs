@@ -1,15 +1,14 @@
-use crate::{
-    models::{Chain, ChangeType},
-    Bytes,
-};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use tracing::warn;
 
-use super::{
-    blockchain::Transaction, Address, AttrStoreKey, Balance, ComponentId, DeltaError, StoreVal,
-    TxHash,
+use crate::{
+    models::{
+        blockchain::Transaction, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId,
+        DeltaError, StoreVal, TxHash,
+    },
+    Bytes,
 };
 
 /// `ProtocolComponent` provides detailed descriptions of a component of a protocol,
