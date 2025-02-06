@@ -71,8 +71,8 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
-/// * `permit2`: Permit2, the object containing necessary information for managing permit2
-///   operations
+/// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
+///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -92,7 +92,7 @@ impl SplitSwapStrategyEncoder {
 
     /// Raises an error if the split percentages are invalid.
     ///
-    /// Split percentages are considered valid of all the following conditions are met:
+    /// Split percentages are considered valid if all the following conditions are met:
     /// * Each split amount is < 1 (100%)
     /// * There is exactly one 0% split for each token, and it's the last swap specified, signifying
     ///   to the router to send the remainder of the token to the designated protocol
@@ -171,9 +171,9 @@ impl SplitSwapStrategyEncoder {
     /// Raises an error if swaps do not represent a valid path from the given token to the checked
     /// token.
     ///
-    /// A path is considered valid of all the following conditions are met:
+    /// A path is considered valid if all the following conditions are met:
     /// * The checked token is reachable from the given token through the swap path
-    /// * There are tokens which are unconnected from the main path
+    /// * There are no tokens which are unconnected from the main path
     fn validate_swap_path(
         &self,
         swaps: &[Swap],

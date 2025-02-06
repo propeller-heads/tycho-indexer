@@ -16,7 +16,7 @@ pub struct SwapEncoderRegistry {
 
 impl SwapEncoderRegistry {
     /// Populates the registry with the `SwapEncoders` for the given blockchain by parsing the
-    /// executors in the file at the given path.
+    /// executors' addresses in the file at the given path.
     pub fn new(executors_file_path: &str, blockchain: Chain) -> Result<Self, EncodingError> {
         let config_str = fs::read_to_string(executors_file_path)?;
         let config: HashMap<Chain, HashMap<String, String>> = serde_json::from_str(&config_str)?;
