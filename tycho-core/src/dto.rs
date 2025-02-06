@@ -896,11 +896,11 @@ impl PartialEq for ProtocolComponentsRequestBody {
             _ => false,
         };
 
-        self.protocol_system == other.protocol_system
-            && self.component_ids == other.component_ids
-            && tvl_close_enough
-            && self.chain == other.chain
-            && self.pagination == other.pagination
+        self.protocol_system == other.protocol_system &&
+            self.component_ids == other.component_ids &&
+            tvl_close_enough &&
+            self.chain == other.chain &&
+            self.pagination == other.pagination
     }
 }
 
