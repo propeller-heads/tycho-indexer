@@ -4,6 +4,7 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
+/// Builds a `SwapEncoder` for the given protocol system and executor address.
 pub struct SwapEncoderBuilder {
     protocol_system: String,
     executor_address: String,
