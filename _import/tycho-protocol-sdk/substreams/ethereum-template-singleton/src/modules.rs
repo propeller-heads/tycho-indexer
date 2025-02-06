@@ -14,21 +14,16 @@
 //! likely that you will need to adapt the steps to suit your specific use case. Use the
 //! provided code with care and ensure you fully understand each step before proceeding
 //! with your implementation
-//!
-use std::collections::HashMap;
+use crate::{pool_factories, pool_factories::DeploymentConfig};
 use anyhow::Result;
-use substreams::pb::substreams::StoreDeltas;
-use substreams::prelude::*;
-use substreams_ethereum::Event;
-use substreams_ethereum::pb::eth;
-use tycho_substreams::balances::aggregate_balances_changes;
-use tycho_substreams::contract::extract_contract_changes_builder;
-use tycho_substreams::prelude::*;
 use itertools::Itertools;
 use prost::Message;
-use substreams_ethereum::block_view::CallView;
-use crate::pool_factories;
-use crate::pool_factories::DeploymentConfig;
+use std::collections::HashMap;
+use substreams::{pb::substreams::StoreDeltas, prelude::*};
+use substreams_ethereum::{block_view::CallView, pb::eth, Event};
+use tycho_substreams::{
+    balances::aggregate_balances_changes, contract::extract_contract_changes_builder, prelude::*,
+};
 
 /// Find and create all relevant protocol components
 ///
@@ -48,12 +43,7 @@ fn map_protocol_components(
                     .logs_with_calls()
                     .filter_map(|(log, call)| {
                         // TODO: ensure this method is implemented correctly
-                        pool_factories::maybe_create_component(
-                            call.call,
-                            log,
-                            tx,
-                            &config,
-                        )
+                        pool_factories::maybe_create_component(call.call, log, tx, &config)
                     })
                     .collect::<Vec<_>>();
 
@@ -68,8 +58,12 @@ fn map_protocol_components(
 }
 
 #[substreams::handlers::store]
-fn store_protocol_tokens(map_protocol_components: BlockTransactionProtocolComponents, store: StoreSetInt64) {
-    map_protocol_components.tx_components
+fn store_protocol_tokens(
+    map_protocol_components: BlockTransactionProtocolComponents,
+    store: StoreSetInt64,
+) {
+    map_protocol_components
+        .tx_components
         .into_iter()
         .for_each(|tx_pc| {
             tx_pc
@@ -92,20 +86,22 @@ fn store_protocol_tokens(map_protocol_components: BlockTransactionProtocolCompon
 /// is decreased.
 ///
 /// ## Note:
-/// - If your protocol emits events that let you calculate balance deltas more
-///     efficiently you may want to use those instead of raw transfers.
-/// - Changes are necessary if your protocol uses native ETH or your component burns or
-///     mints tokens without emitting transfer events.
-/// - You may want to ignore LP tokens if your protocol emits transfer events for these
-///     here.
+/// - If your protocol emits events that let you calculate balance deltas more efficiently you may
+///   want to use those instead of raw transfers.
+/// - Changes are necessary if your protocol uses native ETH or your component burns or mints tokens
+///   without emitting transfer events.
+/// - You may want to ignore LP tokens if your protocol emits transfer events for these here.
 #[substreams::handlers::map]
-fn map_relative_component_balance(params: String, block: eth::v2::Block, store: StoreGetInt64) -> Result<BlockBalanceDeltas> {
+fn map_relative_component_balance(
+    params: String,
+    block: eth::v2::Block,
+    store: StoreGetInt64,
+) -> Result<BlockBalanceDeltas> {
     let config: DeploymentConfig = serde_qs::from_str(params.as_str())?;
     let res = block
         .transactions()
         .flat_map(|tx| {
-            tx
-                .logs_with_calls()
+            tx.logs_with_calls()
                 .filter_map(|(log, call)| {
                     let token_addr_hex = hex::encode(&log.address);
                     if !store.has_last(&token_addr_hex) {
@@ -222,18 +218,16 @@ fn map_protocol_changes(
             balances
                 .values()
                 .for_each(|token_bc_map| {
-                    token_bc_map
-                        .values()
-                        .for_each(|bc| {
-                            // track component balance
-                            builder.add_balance_change(bc);
-                            // track vault contract balance
-                            contract_changes.upsert_token_balance(bc.token.as_slice(), bc.balance.as_slice())
-                        })
+                    token_bc_map.values().for_each(|bc| {
+                        // track component balance
+                        builder.add_balance_change(bc);
+                        // track vault contract balance
+                        contract_changes
+                            .upsert_token_balance(bc.token.as_slice(), bc.balance.as_slice())
+                    })
                 });
             builder.add_contract_changes(&contract_changes);
         });
-
 
     // Extract and insert any storage changes that happened for any of the components.
     extract_contract_changes_builder(

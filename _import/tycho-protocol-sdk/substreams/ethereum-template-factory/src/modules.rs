@@ -27,26 +27,22 @@
 //! Adjustments to the template may include:
 //! - Handling native ETH balances alongside token balances.
 //! - Customizing indexing logic for specific factory contract behavior.
-use std::collections::HashMap;
-use anyhow::Result;
-use substreams::pb::substreams::StoreDeltas;
-use substreams::prelude::*;
-use substreams_ethereum::Event;
-use substreams_ethereum::pb::eth;
-use tycho_substreams::balances::aggregate_balances_changes;
-use tycho_substreams::contract::extract_contract_changes_builder;
-use tycho_substreams::prelude::*;
-use itertools::Itertools;
 use crate::pool_factories;
+use anyhow::Result;
+use itertools::Itertools;
+use std::collections::HashMap;
+use substreams::{pb::substreams::StoreDeltas, prelude::*};
+use substreams_ethereum::{pb::eth, Event};
+use tycho_substreams::{
+    balances::aggregate_balances_changes, contract::extract_contract_changes_builder, prelude::*,
+};
 
 /// Find and create all relevant protocol components
 ///
 /// This method maps over blocks and instantiates ProtocolComponents with a unique ids
 /// as well as all necessary metadata for routing and encoding.
 #[substreams::handlers::map]
-fn map_protocol_components(
-    block: eth::v2::Block
-) -> Result<BlockTransactionProtocolComponents> {
+fn map_protocol_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
     Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
@@ -55,11 +51,7 @@ fn map_protocol_components(
                     .logs_with_calls()
                     .filter_map(|(log, call)| {
                         // TODO: ensure this method is implemented correctly
-                        pool_factories::maybe_create_component(
-                            call.call,
-                            log,
-                            tx,
-                        )
+                        pool_factories::maybe_create_component(call.call, log, tx)
                     })
                     .collect::<Vec<_>>();
 
@@ -79,17 +71,21 @@ fn map_protocol_components(
 /// you need to access the whole set of components within your indexing logic.
 ///
 /// Popular use cases are:
-/// - Checking if a contract belongs to a component. In this case suggest to use an
-///     address as the store key so lookup operations are O(1).
-/// - Tallying up relative balances changes to calcualte absolute erc20 token balances
-///     per component.
+/// - Checking if a contract belongs to a component. In this case suggest to use an address as the
+///   store key so lookup operations are O(1).
+/// - Tallying up relative balances changes to calcualte absolute erc20 token balances per
+///   component.
 ///
 /// Usually you can skip this step if:
 /// - You are interested in a static set of components only
 /// - Your protocol emits balance change events with absolute values
 #[substreams::handlers::store]
-fn store_protocol_components(map_protocol_components: BlockTransactionProtocolComponents, store: StoreSetRaw) {
-    map_protocol_components.tx_components
+fn store_protocol_components(
+    map_protocol_components: BlockTransactionProtocolComponents,
+    store: StoreSetRaw,
+) {
+    map_protocol_components
+        .tx_components
         .into_iter()
         .for_each(|tx_pc| {
             tx_pc
@@ -120,8 +116,12 @@ fn store_protocol_components(map_protocol_components: BlockTransactionProtocolCo
 /// You may want to ignore LP tokens if your protocol emits transfer events for these
 /// here.
 #[substreams::handlers::map]
-fn map_relative_component_balance(block: eth::v2::Block, store: StoreGetRaw) -> Result<BlockBalanceDeltas> {
-    let res = block.logs()
+fn map_relative_component_balance(
+    block: eth::v2::Block,
+    store: StoreGetRaw,
+) -> Result<BlockBalanceDeltas> {
+    let res = block
+        .logs()
         .filter_map(|log| {
             crate::abi::erc20::events::Transfer::match_and_decode(log).map(|transfer| {
                 let to_addr = hex::encode(transfer.to.as_slice());
@@ -235,7 +235,6 @@ fn map_protocol_changes(
                 });
         });
 
-
     // Extract and insert any storage changes that happened for any of the components.
     extract_contract_changes_builder(
         &block,
@@ -250,7 +249,6 @@ fn map_protocol_changes(
         },
         &mut transaction_changes,
     );
-
 
     // Process all `transaction_changes` for final output in the `BlockChanges`,
     //  sorted by transaction index (the key).

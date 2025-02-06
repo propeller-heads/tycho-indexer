@@ -4,7 +4,6 @@ pub mod balances;
 pub mod contract;
 mod mock_store;
 pub mod models;
-#[allow(clippy::too_long_first_doc_paragraph)]
 mod pb;
 
 pub mod prelude {

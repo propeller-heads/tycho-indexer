@@ -1,7 +1,8 @@
 use substreams::hex;
 use substreams_ethereum::pb::eth::v2::{Call, Log, TransactionTrace};
-use tycho_substreams::models::{ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType};
-
+use tycho_substreams::models::{
+    ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
+};
 
 /// Potentially constructs a new ProtocolComponent given a call
 ///

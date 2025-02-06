@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use substreams_ethereum::pb::eth::v2::{Call, Log, TransactionTrace};
-use tycho_substreams::models::{ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType};
-
+use tycho_substreams::models::{
+    ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
+};
 
 #[derive(Deserialize)]
 pub struct DeploymentConfig {
@@ -47,7 +48,6 @@ pub fn maybe_create_component(
         None
     }
 }
-
 
 #[cfg(test)]
 mod test {

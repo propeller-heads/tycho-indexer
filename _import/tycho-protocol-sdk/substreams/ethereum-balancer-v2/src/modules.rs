@@ -253,7 +253,7 @@ pub fn map_protocol_changes(
                         let id = components_store
                             .get_last(format!("pool:0x{}", hex::encode(address)))
                             .unwrap(); // Shouldn't happen because we filter by known components in
-                        // `extract_contract_changes_builder`
+                                       // `extract_contract_changes_builder`
                         change.mark_component_as_updated(&id);
                     }
                 })
