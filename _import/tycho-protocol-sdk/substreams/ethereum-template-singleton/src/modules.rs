@@ -102,7 +102,7 @@ fn map_relative_component_balance(
         .transactions()
         .flat_map(|tx| {
             tx.logs_with_calls()
-                .map(|(_log, _call)| -> Vec<BalanceDelta> {
+                .flat_map(|(_log, _call)| -> Vec<BalanceDelta> {
                     /*
                     TODO: Parse events/calls to extract balance deltas
 
@@ -138,7 +138,6 @@ fn map_relative_component_balance(
                     */
                     vec![]
                 })
-                .flatten()
         })
         .collect::<Vec<_>>();
 

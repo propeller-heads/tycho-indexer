@@ -39,7 +39,8 @@ use std::collections::HashMap;
 use substreams::{pb::substreams::StoreDeltas, prelude::*};
 use substreams_ethereum::{pb::eth, Event};
 use tycho_substreams::{
-    balances::aggregate_balances_changes, contract::extract_contract_changes_builder, prelude::*,
+    abi::erc20, balances::aggregate_balances_changes, contract::extract_contract_changes_builder,
+    prelude::*,
 };
 
 /// Find and create all relevant protocol components
@@ -128,7 +129,7 @@ fn map_relative_component_balance(
     let res = block
         .logs()
         .filter_map(|log| {
-            crate::abi::erc20::events::Transfer::match_and_decode(log).map(|transfer| {
+            erc20::events::Transfer::match_and_decode(log).map(|transfer| {
                 let to_addr = hex::encode(transfer.to.as_slice());
                 let from_addr = hex::encode(transfer.from.as_slice());
                 let tx = log.receipt.transaction;
