@@ -6,10 +6,10 @@ use tycho_core::{
     Bytes,
 };
 
-use crate::encoding::errors::EncodingError;
-
-
-use crate::encoding::serde_primitives::{biguint_string, biguint_string_option};
+use crate::encoding::{
+    errors::EncodingError,
+    serde_primitives::{biguint_string, biguint_string_option},
+};
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct Solution {
