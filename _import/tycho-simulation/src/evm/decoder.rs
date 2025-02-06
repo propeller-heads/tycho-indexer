@@ -42,8 +42,10 @@ struct DecoderState {
 
 type DecodeFut =
     Pin<Box<dyn Future<Output = Result<Box<dyn ProtocolSim>, InvalidSnapshotError>> + Send + Sync>>;
-type RegistryFn =
-    dyn Fn(ComponentWithState, Header, Arc<RwLock<DecoderState>>) -> DecodeFut + Send + Sync;
+type AccountBalances = HashMap<Bytes, HashMap<Bytes, Bytes>>;
+type RegistryFn = dyn Fn(ComponentWithState, Header, AccountBalances, Arc<RwLock<DecoderState>>) -> DecodeFut
+    + Send
+    + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
 
 /// A decoder to process raw messages.
@@ -111,10 +113,11 @@ impl TychoStreamDecoder {
         let decoder = Box::new(
             move |component: ComponentWithState,
                   header: Header,
+                  account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
                   state: Arc<RwLock<DecoderState>>| {
                 Box::pin(async move {
                     let guard = state.read().await;
-                    T::try_from_with_block(component, header, &guard.tokens)
+                    T::try_from_with_block(component, header, &account_balances, &guard.tokens)
                         .await
                         .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
                 }) as DecodeFut
@@ -240,6 +243,16 @@ impl TychoStreamDecoder {
                 .iter()
                 .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
                 .collect();
+            let account_balances = protocol_msg
+                .clone()
+                .snapshots
+                .get_vm_storage()
+                .iter()
+                .map(|(addr, acc)| {
+                    let balances = acc.token_balances.clone();
+                    (addr.clone(), balances)
+                })
+                .collect::<AccountBalances>();
             info!("Updating engine with {} snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
@@ -302,7 +315,14 @@ impl TychoStreamDecoder {
 
                 // Construct state from snapshot
                 if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
-                    match state_decode_f(snapshot, block.clone(), self.state.clone()).await {
+                    match state_decode_f(
+                        snapshot,
+                        block.clone(),
+                        account_balances.clone(),
+                        self.state.clone(),
+                    )
+                    .await
+                    {
                         Ok(state) => {
                             new_components.insert(id.clone(), state);
                         }

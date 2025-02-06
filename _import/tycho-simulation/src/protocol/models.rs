@@ -130,6 +130,7 @@ pub trait TryFromWithBlock<T> {
     fn try_from_with_block(
         value: T,
         block: Header,
+        account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
     where

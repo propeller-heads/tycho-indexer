@@ -22,6 +22,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
+        _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
@@ -126,14 +127,11 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::str::FromStr;
 
     use chrono::DateTime;
     use rstest::rstest;
-    use tycho_core::{
-        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
-        hex_bytes::Bytes,
-    };
+    use tycho_core::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
 
@@ -198,9 +196,14 @@ mod tests {
             component: usv4_component(),
         };
 
-        let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new())
-            .await
-            .unwrap();
+        let result = UniswapV4State::try_from_with_block(
+            snapshot,
+            header(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .await
+        .unwrap();
 
         let fees = UniswapV4Fees::new(0, 0, 500);
         let expected = UniswapV4State::new(
@@ -252,7 +255,13 @@ mod tests {
             component,
         };
 
-        let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
+        let result = UniswapV4State::try_from_with_block(
+            snapshot,
+            header(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .await;
 
         assert!(result.is_err());
         assert!(matches!(

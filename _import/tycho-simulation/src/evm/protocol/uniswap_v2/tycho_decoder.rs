@@ -18,6 +18,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         _block: Header,
+        _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let reserve0 = U256::from_be_slice(
@@ -42,13 +43,10 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::str::FromStr;
 
     use chrono::DateTime;
-    use tycho_core::{
-        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
-        hex_bytes::Bytes,
-    };
+    use tycho_core::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
 
@@ -97,7 +95,13 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
+        let result = UniswapV2State::try_from_with_block(
+            snapshot,
+            header(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .await;
 
         assert!(result.is_ok());
         let res = result.unwrap();
@@ -120,7 +124,13 @@ mod tests {
             component: usv2_component(),
         };
 
-        let result = UniswapV2State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
+        let result = UniswapV2State::try_from_with_block(
+            snapshot,
+            header(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .await;
 
         assert!(result.is_err());
 

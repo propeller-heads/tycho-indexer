@@ -455,10 +455,14 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let usv4_state =
-            UniswapV4State::try_from_with_block(state, Default::default(), &Default::default())
-                .await
-                .unwrap();
+        let usv4_state = UniswapV4State::try_from_with_block(
+            state,
+            Default::default(),
+            &Default::default(),
+            &Default::default(),
+        )
+        .await
+        .unwrap();
 
         let t0 = Token::new(
             "0x647e32181a64f4ffd4f0b0b4b052ec05b277729c",
