@@ -52,10 +52,12 @@ fn encode_swaps(
     private_key: Option<String>,
 ) -> Result<Value, Box<dyn std::error::Error>> {
     let solution: Solution = serde_json::from_str(input)?;
+    let chain = Chain::Ethereum;
 
     let strategy_selector =
-        EVMStrategyEncoderRegistry::new(Chain::Ethereum, config_path, private_key)?;
-    let encoder = EVMTychoEncoder::new(strategy_selector, router_address.to_string())?;
+        EVMStrategyEncoderRegistry::new(chain.into(), config_path, private_key)?;
+    let encoder =
+        EVMTychoEncoder::new(strategy_selector, router_address.to_string(), chain.into())?;
     let transactions = encoder.encode_router_calldata(vec![solution])?;
 
     Ok(serde_json::json!({
