@@ -140,7 +140,7 @@ impl App {
 
     pub fn update_data(&mut self, update: BlockUpdate) {
         for (id, comp) in update.new_pairs.iter() {
-            let name = format!("{:#042x}", comp.address);
+            let name = format!("{:#042x}", comp.id);
             let tokens = comp
                 .tokens
                 .iter()
@@ -163,7 +163,7 @@ impl App {
                     });
                 }
                 None => {
-                    warn!("Received update for unknown pool {}", comp.address)
+                    warn!("Received update for unknown pool {}", comp.id)
                 }
             };
         }
@@ -173,7 +173,7 @@ impl App {
             let entry = self
                 .items
                 .iter()
-                .find_position(|e| e.component.address == eth_address);
+                .find_position(|e| e.component.id == eth_address);
             if let Some((index, _)) = entry {
                 let row = self.items.get_mut(index).unwrap();
                 let price = state.spot_price(&row.component.tokens[0], &row.component.tokens[1]);
@@ -187,7 +187,7 @@ impl App {
                 .items
                 .iter()
                 .enumerate()
-                .find(|(_, e)| e.component.address == comp.address);
+                .find(|(_, e)| e.component.id == comp.id);
             if let Some((idx, _)) = entry {
                 self.items.remove(idx);
             }
