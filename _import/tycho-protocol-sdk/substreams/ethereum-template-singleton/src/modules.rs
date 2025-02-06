@@ -4,6 +4,10 @@
 //! pattern. Usually these protocols employ a fixed set of contracts instead of
 //! deploying new contracts per component.
 //!
+//! ## Assumptions
+//! - Assumes a single vault contract is enough to simulate all swaps
+//! - Assumes any price or liquidity change on a pool is linked to a tvl change
+//!
 //! ## Alternative Module
 //! If your protocol uses individual contracts deployed with a factory to manage
 //! components and balances, refer to the `ethereum-template-factory` substream for an
@@ -17,10 +21,9 @@
 use crate::{pool_factories, pool_factories::DeploymentConfig};
 use anyhow::Result;
 use itertools::Itertools;
-use prost::Message;
 use std::collections::HashMap;
 use substreams::{pb::substreams::StoreDeltas, prelude::*};
-use substreams_ethereum::{block_view::CallView, pb::eth, Event};
+use substreams_ethereum::pb::eth;
 use tycho_substreams::{
     balances::aggregate_balances_changes, contract::extract_contract_changes_builder, prelude::*,
 };
@@ -80,70 +83,66 @@ fn store_protocol_tokens(
 
 /// Extracts balance changes per component
 ///
-/// This template function inspects ERC20 transfer events to/from the singleton contract
-/// to extract balance changes. If a transfer to the component is detected, it's
-/// balanced is increased and if a balance from the component is detected its balance
-/// is decreased.
+/// This function parses protocol specific events that incur tvl changes into
+/// BalanceDelta structs.
 ///
 /// ## Note:
-/// - If your protocol emits events that let you calculate balance deltas more efficiently you may
-///   want to use those instead of raw transfers.
-/// - Changes are necessary if your protocol uses native ETH or your component burns or mints tokens
-///   without emitting transfer events.
-/// - You may want to ignore LP tokens if your protocol emits transfer events for these here.
+/// - You only need to account for balances that immediately available as liquidity, e.g. user
+///   deposits or accumulated swap fees should not be accounted for.
+/// - Take special care if your protocol uses native ETH or your component burns or mints tokens.
+/// - You may want to ignore LP tokens if the tvl is covered via regular erc20 tokens.
 #[substreams::handlers::map]
 fn map_relative_component_balance(
     params: String,
     block: eth::v2::Block,
-    store: StoreGetInt64,
+    _store: StoreGetInt64,
 ) -> Result<BlockBalanceDeltas> {
-    let config: DeploymentConfig = serde_qs::from_str(params.as_str())?;
+    let _config: DeploymentConfig = serde_qs::from_str(params.as_str())?;
     let res = block
         .transactions()
         .flat_map(|tx| {
             tx.logs_with_calls()
-                .filter_map(|(log, call)| {
-                    let token_addr_hex = hex::encode(&log.address);
-                    if !store.has_last(&token_addr_hex) {
-                        return None;
-                    }
+                .map(|(_log, _call)| -> Vec<BalanceDelta> {
+                    /*
+                    TODO: Parse events/calls to extract balance deltas
 
-                    crate::abi::erc20::events::Transfer::match_and_decode(log).map(|transfer| {
-                        let to_addr = transfer.to.as_slice();
-                        let from_addr = transfer.from.as_slice();
-                        if let Some(component_id) = extract_component_id_from_call(call) {
-                            if to_addr == config.vault_address {
-                                return Some(BalanceDelta {
-                                    ord: log.ordinal,
-                                    tx: Some(tx.into()),
-                                    token: log.address.to_vec(),
-                                    delta: transfer.value.to_signed_bytes_be(),
-                                    component_id: component_id.encode_to_vec(),
-                                });
-                            } else if from_addr == config.vault_address {
-                                return Some(BalanceDelta {
-                                    ord: log.ordinal,
-                                    tx: Some(tx.into()),
-                                    token: log.address.to_vec(),
-                                    delta: (transfer.value.neg()).to_signed_bytes_be(),
-                                    component_id: component_id.encode_to_vec(),
-                                });
+                    Please parse your protocols events here that incur tvl changes to
+                    components and emit a BalanceChange event for each affected
+                    component and token combination.
+
+                    ## Example
+
+                    ```rust
+                    if let Some(ev) = core_events::Swapped::match_and_decode(log) {
+                        let pool_id = hash_pool_key(&ev.pool_key);
+                        vec![
+                            BalanceDelta {
+                                ord: log.ordinal,
+                                tx: Some(tx.into()),
+                                token: ev.pool_key.0.clone(),
+                                delta: ev.delta0.to_signed_bytes_be(),
+                                component_id: pool_id.clone().into(),
+                            },
+                            BalanceDelta {
+                                ord: log.ordinal,
+                                tx: Some(tx.into()),
+                                token: ev.pool_key.1.clone(),
+                                delta: &ev.delta1.to_signed_bytes_be(),
+                                component_id: pool_id.into(),
                             }
-                        }
-                        None
-                    })
+                        ]
+                    } else {
+                        vec![]
+                    }
+                    ```
+                    */
+                    vec![]
                 })
                 .flatten()
         })
         .collect::<Vec<_>>();
 
     Ok(BlockBalanceDeltas { balance_deltas: res })
-}
-
-// TODO: given a relevant balance changing call associate it with the respective
-//  component
-fn extract_component_id_from_call(_call: CallView) -> Option<String> {
-    todo!()
 }
 
 /// Aggregates relative balances values into absolute values
@@ -221,6 +220,11 @@ fn map_protocol_changes(
                     token_bc_map.values().for_each(|bc| {
                         // track component balance
                         builder.add_balance_change(bc);
+                        // Mark this component as updates since we are using manual update tracking
+                        // TODO: ensure this covers all cases a component should be marked as
+                        let component_id =
+                            String::from_utf8(bc.component_id.clone()).expect("bad component id");
+                        builder.mark_component_as_updated(&component_id);
                         // track vault contract balance
                         contract_changes
                             .upsert_token_balance(bc.token.as_slice(), bc.balance.as_slice())

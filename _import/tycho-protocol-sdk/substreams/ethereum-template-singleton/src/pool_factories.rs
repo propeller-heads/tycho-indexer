@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use substreams_ethereum::pb::eth::v2::{Call, Log, TransactionTrace};
 use tycho_substreams::models::{
-    ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
+    Attribute, ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
 };
 
 #[derive(Deserialize)]
@@ -31,10 +31,18 @@ pub fn maybe_create_component(
                 // TODO: add the components tokens
             ],
             contracts: vec![
-                // TODO: any contracts required during swapping
+                config.vault_address.clone(),
+                // TODO: any additional contracts required during swapping
             ],
             static_att: vec![
-                // TODO: any additional metadata required, e.g. for swap encoding
+                // Singleton components are marked as manual updates since we can't
+                // infer component updates from vault storage updates. The template
+                // later sets update markers on components that had a balance change.
+                Attribute {
+                    name: "manual_updates".to_string(),
+                    value: vec![1u8],
+                    change: ChangeType::Creation.into(),
+                }, // TODO: any additional metadata required, e.g. for swap encoding
             ],
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {

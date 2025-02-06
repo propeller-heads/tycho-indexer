@@ -7,6 +7,11 @@
 //! If your protocol supports native ETH, you may need to adjust the balance tracking
 //! logic in `map_relative_component_balance` to account for native token handling.
 //!
+//! ## Assumptions
+//! - Assumes each pool has a single newly deployed contract linked to it
+//! - Assumes pool identifier equals the deployed contract address
+//! - Assumes any price or liquidity updated correlates with a pools contract storage update.
+//!
 //! ## Alternative Module
 //! If your protocol uses a vault-like contract to manage balances, or if pools are
 //! registered within a singleton contract, refer to the `ethereum-template-singleton`
