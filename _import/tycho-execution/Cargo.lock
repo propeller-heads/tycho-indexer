@@ -4317,8 +4317,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-core"
-version = "0.46.0"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?tag=0.46.0#481b2f252eddb98442eab78069fa427068b5050d"
+version = "0.55.2"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?tag=0.55.2#dfa50d5e318253001938655a49aa3e05f958d89e"
 dependencies = [
  "anyhow",
  "async-trait",
