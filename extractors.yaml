@@ -8,7 +8,7 @@ extractors:
     protocol_types:
       - name: "ambient_pool"
         financial_type: "Swap"
-    spkg: "substreams/ethereum-ambient/ethereum-ambient-v0.4.0.spkg"
+    spkg: "substreams/ethereum-ambient/tycho-ethereum-ambient-v0.4.0.spkg"
     module_name: "map_changes"
     post_processor: "transcode_ambient_balances"
 
@@ -21,7 +21,7 @@ extractors:
     protocol_types:
       - name: "uniswap_v2_pool"
         financial_type: "Swap"
-    spkg: "substreams/ethereum-uniswap-v2/ethereum-uniswap-v2-v0.3.0.spkg"
+    spkg: "substreams/ethereum-uniswap-v2/tycho-ethereum-uniswap-v2-v0.3.0.spkg"
     module_name: "map_pool_events"
 
   sushiswap_v2:
@@ -33,7 +33,7 @@ extractors:
     protocol_types:
       - name: "sushiswap_v2_pool"
         financial_type: "Swap"
-    spkg: "substreams/ethereum-uniswap-v2/ethereum-sushiswap-v2-v0.2.0.spkg"
+    spkg: "substreams/ethereum-uniswap-v2/tycho-ethereum-sushiswap-v2-v0.2.0.spkg"
     module_name: "map_pool_events"
     post_processor: "add_default_usv2_attributes_then_transcode_balances"
 
@@ -46,7 +46,7 @@ extractors:
     protocol_types:
       - name: "uniswap_v3_pool"
         financial_type: "Swap"
-    spkg: "substreams/ethereum-uniswap-v3/ethereum-uniswap-v3-v0.1.0.spkg"
+    spkg: "substreams/ethereum-uniswap-v3/tycho-ethereum-uniswap-v3-v0.1.0.spkg"
     module_name: "map_pool_events"
     post_processor: "add_default_attributes_uniswapv3"
 
@@ -59,6 +59,6 @@ extractors:
     protocol_types:
       - name: "balancer_pool"
         financial_type: "Swap"
-    spkg: "substreams/ethereum-balancer/ethereum-balancer-v0.1.0.spkg"
+    spkg: "substreams/ethereum-balancer/tycho-ethereum-balancer-v0.1.0.spkg"
     module_name: "map_protocol_changes"
     post_processor: "ignore_self_balances"

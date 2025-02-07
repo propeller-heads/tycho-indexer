@@ -54,6 +54,10 @@ pub struct GlobalArgs {
     //Default is for backward compatibility but needs to be removed later
     pub s3_bucket: Option<String>,
 
+    /// Url of the spkg registry used to retrieve spkgs
+    #[clap(env = "SPKG_REGISTRY", long, default_value = "https://spkg.io/v1/packages/")]
+    pub spkg_registry_url: Option<String>,
+
     /// Substreams API endpoint
     #[clap(name = "endpoint", long, default_value = "https://mainnet.eth.streamingfast.io")]
     pub endpoint_url: String,
@@ -216,6 +220,7 @@ mod cli_tests {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
+                spkg_registry_url: Some("https://spkg.io/v1/packages/".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
                 server_version_prefix: "v1".to_string(),
@@ -262,6 +267,7 @@ mod cli_tests {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
+                spkg_registry_url: Some("https://spkg.io/v1/packages/".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
                 server_version_prefix: "v1".to_string(),

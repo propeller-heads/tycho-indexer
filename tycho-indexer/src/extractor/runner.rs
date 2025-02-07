@@ -1,11 +1,13 @@
-use std::{collections::HashMap, env, path::Path, sync::Arc};
+use std::{collections::HashMap, env, ffi::OsStr, fs, path::Path, sync::Arc};
 
 use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
 use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_s3::Client;
+use aws_sdk_s3::Client as AWSClient;
 use metrics::gauge;
 use prost::Message;
+use regex::Regex;
+use reqwest::Client;
 use serde::Deserialize;
 use tokio::{
     runtime::Handle,
@@ -353,6 +355,7 @@ pub struct ExtractorBuilder {
     config: ExtractorConfig,
     endpoint_url: String,
     s3_bucket: Option<String>,
+    spkg_registry_url: Option<String>,
     token: String,
     extractor: Option<Arc<dyn Extractor>>,
     final_block_only: bool,
@@ -364,11 +367,17 @@ pub struct ExtractorBuilder {
 pub type HandleResult = (JoinHandle<Result<(), ExtractionError>>, ExtractorHandle);
 
 impl ExtractorBuilder {
-    pub fn new(config: &ExtractorConfig, endpoint_url: &str, s3_bucket: Option<&str>) -> Self {
+    pub fn new(
+        config: &ExtractorConfig,
+        endpoint_url: &str,
+        s3_bucket: Option<&str>,
+        spkg_registry_url: Option<&str>,
+    ) -> Self {
         Self {
             config: config.clone(),
             endpoint_url: endpoint_url.to_owned(),
             s3_bucket: s3_bucket.map(ToString::to_string),
+            spkg_registry_url: spkg_registry_url.map(ToString::to_string),
             token: env::var("SUBSTREAMS_API_TOKEN").unwrap_or("".to_string()),
             extractor: None,
             final_block_only: false,
@@ -413,26 +422,67 @@ impl ExtractorBuilder {
     }
 
     async fn ensure_spkg(&self) -> Result<(), ExtractionError> {
-        // Pull spkg from s3 and copy it at `spkg_path`
-        if !Path::new(&self.config.spkg).exists() {
-            download_file_from_s3(
-                self.s3_bucket.as_ref().ok_or_else(|| {
-                    ExtractionError::Setup(format!(
-                        "Missing spkg and s3 bucket config for {}",
-                        &self.config.spkg
-                    ))
-                })?,
-                &self.config.spkg,
-                Path::new(&self.config.spkg),
-            )
-            .await
-            .map_err(|e| {
+        let spkg_path = Path::new(&self.config.spkg);
+
+        if spkg_path.exists() {
+            info!("Found SPKG: {:?}", spkg_path);
+            return Ok(());
+        }
+
+        let registry_url = self
+            .spkg_registry_url
+            .as_ref()
+            .ok_or_else(|| {
                 ExtractionError::Setup(format!(
-                    "Failed to download {} from s3. {}",
-                    &self.config.spkg, e
+                    "Missing SPKG file and no registry URL configured for {}",
+                    self.config.spkg
                 ))
             })?;
+
+        let file_name = spkg_path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| {
+                ExtractionError::Setup(format!("Invalid file name in path: {:?}", spkg_path))
+            })?;
+
+        let version_regex = Regex::new(r"(.+)-v([\d.]+)\.spkg$").unwrap();
+        let (package_name, version) = version_regex
+            .captures(file_name)
+            .and_then(|caps| Some((caps.get(1)?.as_str(), caps.get(2)?.as_str())))
+            .ok_or_else(|| {
+                ExtractionError::Setup(format!(
+                    "Couldn't find specified spkg version in the file name: {:?}",
+                    spkg_path
+                ))
+            })?;
+
+        let download_url =
+            format!("{}/{}/v{}", registry_url.trim_end_matches('/'), package_name, version);
+
+        if let Err(e) = download_spkg_from_registry(&download_url, spkg_path).await {
+            warn!(
+                "Failed to download from registry: {}. Error: {}. Trying S3 fallback...",
+                download_url, e
+            );
+
+            let s3_bucket = self.s3_bucket.as_ref().ok_or_else(|| {
+                ExtractionError::Setup(format!(
+                    "Missing SPKG file and no S3 bucket configured for {}",
+                    &self.config.spkg
+                ))
+            })?;
+
+            download_file_from_s3(s3_bucket, &self.config.spkg, spkg_path)
+                .await
+                .map_err(|_| {
+                    ExtractionError::Setup(format!(
+                        "Failed to download {} from the registry and s3. {}",
+                        &self.config.spkg, e
+                    ))
+                })?
         }
+
         Ok(())
     }
 
@@ -566,7 +616,7 @@ async fn download_file_from_s3(
         .load()
         .await;
 
-    let client = Client::new(&config);
+    let client = AWSClient::new(&config);
 
     let resp = client
         .get_object()
@@ -579,11 +629,34 @@ async fn download_file_from_s3(
 
     // Ensure the directory exists
     if let Some(parent) = download_path.parent() {
-        std::fs::create_dir_all(parent)
+        fs::create_dir_all(parent)
             .context(format!("Failed to create directories for {:?}", parent))?;
     }
 
-    std::fs::write(download_path, data.into_bytes()).unwrap();
+    fs::write(download_path, data.into_bytes()).unwrap();
+
+    Ok(())
+}
+
+pub async fn download_spkg_from_registry(package_url: &str, download_path: &Path) -> Result<()> {
+    info!("Downloading file from package registry: {:?} to {:?}", package_url, download_path);
+
+    let client = Client::new();
+
+    let response = client.get(package_url).send().await?;
+
+    if !response.status().is_success() {
+        anyhow::bail!("Failed to download file: HTTP {}", response.status());
+    }
+
+    let data = response.bytes().await?;
+
+    // Ensure the directory exists
+    if let Some(parent) = download_path.parent() {
+        fs::create_dir_all(parent)
+            .context(format!("Failed to create directories for {:?}", parent))?;
+    }
+    fs::write(download_path, data).unwrap();
 
     Ok(())
 }
@@ -655,6 +728,7 @@ mod test {
                 None,
             ),
             "https://mainnet.eth.streamingfast.io",
+            None,
             None,
         )
         .token("test_token")

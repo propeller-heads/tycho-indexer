@@ -64,6 +64,7 @@ mini-moka = "0.10.3"
 num-bigint = "0.4.4"
 num-traits = "0.2.19"
 num_cpus = "1.16.0"
+regex = "1.11.1"
 
 [dev-dependencies]
 actix-rt = "2.9.0"
