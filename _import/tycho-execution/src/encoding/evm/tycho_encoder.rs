@@ -167,7 +167,7 @@ mod tests {
     impl StrategyEncoderRegistry for MockStrategyRegistry {
         fn new(
             _chain: tycho_core::dto::Chain,
-            _executors_file_path: Option<&str>,
+            _executors_file_path: Option<String>,
             _signer_pk: Option<String>,
         ) -> Result<MockStrategyRegistry, EncodingError> {
             Ok(Self { strategy: Box::new(MockStrategy) })

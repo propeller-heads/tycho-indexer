@@ -22,7 +22,7 @@ pub struct EVMStrategyEncoderRegistry {
 impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
     fn new(
         chain: tycho_core::dto::Chain,
-        executors_file_path: Option<&str>,
+        executors_file_path: Option<String>,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
         let chain = Chain::from(chain);

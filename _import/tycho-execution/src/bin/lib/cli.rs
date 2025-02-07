@@ -1,6 +1,5 @@
 pub use clap::Parser;
 pub const DEFAULT_ROUTER_ADDRESS: &str = "0xaa820C29648D5EA543d712cC928377Bd7206a0E7";
-pub const DEFAULT_CONFIG_PATH: &str = "src/encoding/config/executor_addresses.json";
 
 #[derive(Parser)]
 /// Encode swap transactions for the Tycho router
@@ -45,6 +44,6 @@ pub struct Cli {
     pub private_key: Option<String>,
 
     /// Path to the executor addresses configuration file
-    #[arg(short, default_value = DEFAULT_CONFIG_PATH)]
-    pub config_path: String,
+    #[arg(short)]
+    pub config_path: Option<String>,
 }
