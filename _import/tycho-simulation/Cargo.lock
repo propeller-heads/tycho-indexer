@@ -7870,8 +7870,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.32.0"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=58749bd65b697673aff94f75954dff5504182041#58749bd65b697673aff94f75954dff5504182041"
+version = "0.33.0"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=1e2c628ba969594709912157b0b8df816684b95d#1e2c628ba969594709912157b0b8df816684b95d"
 dependencies = [
  "alloy 0.9.2",
  "alloy-primitives",
@@ -7882,6 +7882,7 @@ dependencies = [
  "lazy_static",
  "num-bigint",
  "num-traits",
+ "once_cell",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

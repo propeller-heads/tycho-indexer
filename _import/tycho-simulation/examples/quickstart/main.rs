@@ -128,7 +128,7 @@ async fn main() {
     let strategy_encoder_registry =
         EVMStrategyEncoderRegistry::new(Chain::Ethereum, None, signer_pk.clone())
             .expect("Failed to create strategy encoder registry");
-    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address)
+    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address, Chain::Ethereum)
         .expect("Failed to create encoder");
 
     while let Some(message) = protocol_stream.next().await {
