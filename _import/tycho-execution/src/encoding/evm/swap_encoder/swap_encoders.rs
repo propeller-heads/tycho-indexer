@@ -104,7 +104,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let component_id = Address::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid USV3 component id".to_string()))?;
-        let mut pool_fee_bytes = swap
+        let pool_fee_bytes = swap
             .component
             .static_attributes
             .get("fee")
@@ -113,19 +113,16 @@ impl SwapEncoder for UniswapV3SwapEncoder {
                     "Pool fee not found in Uniswap v3 static attributes".to_string(),
                 )
             })?
-            .as_ref()
             .to_vec();
 
-        // Reverse to get be bytes, since this is encoded as le bytes
-        pool_fee_bytes.reverse();
+        // this is necessary to pad on the left with zeros if the fee is less than 3 bytes
+        let mut padded_fee_bytes = [0u8; 3];
+        let start = 3 - pool_fee_bytes.len();
+        padded_fee_bytes[start..].copy_from_slice(&pool_fee_bytes);
 
-        let pool_fee_u24: [u8; 3] = pool_fee_bytes[pool_fee_bytes.len() - 3..]
+        let pool_fee_u24: [u8; 3] = padded_fee_bytes[(padded_fee_bytes.len() - 3)..]
             .try_into()
-            .map_err(|_| {
-                EncodingError::FatalError(
-                    "Pool fee static attribute must be at least 3 bytes".to_string(),
-                )
-            })?;
+            .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
 
         let args = (
             token_in_address,
@@ -214,6 +211,7 @@ mod tests {
     use std::collections::HashMap;
 
     use alloy::hex::encode;
+    use num_bigint::BigInt;
     use tycho_core::{dto::ProtocolComponent, Bytes};
 
     use super::*;
@@ -257,9 +255,10 @@ mod tests {
     }
     #[test]
     fn test_encode_uniswap_v3() {
-        let encoded_pool_fee: [u8; 4] = 500u32.to_le_bytes();
+        let fee = BigInt::from(500);
+        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee[..3].to_vec()));
+        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
 
         let usv3_pool = ProtocolComponent {
             id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
