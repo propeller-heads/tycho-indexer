@@ -58,6 +58,8 @@ async fn main() {
             false,
             Some(tycho_api_key.as_str()),
             Chain::Ethereum,
+            None,
+            None,
         )
         .await;
         let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
