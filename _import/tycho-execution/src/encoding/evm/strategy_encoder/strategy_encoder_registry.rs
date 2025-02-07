@@ -21,10 +21,11 @@ pub struct EVMStrategyEncoderRegistry {
 
 impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
     fn new(
-        chain: Chain,
-        executors_file_path: &str,
+        chain: tycho_core::dto::Chain,
+        executors_file_path: Option<String>,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
+        let chain = Chain::from(chain);
         let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain.clone())?;
 
         let mut strategies: HashMap<String, Box<dyn StrategyEncoder>> = HashMap::new();
@@ -51,6 +52,18 @@ impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
             self.strategies
                 .get("split_swap")
                 .ok_or(EncodingError::FatalError("Split swap strategy not found. Please pass the signer private key to the StrategySelector constructor".to_string()))
+        }
+    }
+}
+
+impl Clone for EVMStrategyEncoderRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            strategies: self
+                .strategies
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone_box()))
+                .collect(),
         }
     }
 }

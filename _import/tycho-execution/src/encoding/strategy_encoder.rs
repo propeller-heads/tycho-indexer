@@ -1,21 +1,14 @@
-use tycho_core::Bytes;
+use tycho_core::{dto::Chain, Bytes};
 
-use crate::encoding::{
-    errors::EncodingError,
-    models::{Chain, Solution},
-    swap_encoder::SwapEncoder,
-};
+use crate::encoding::{errors::EncodingError, models::Solution, swap_encoder::SwapEncoder};
 
 /// Encodes a solution using a specific strategy.
 pub trait StrategyEncoder {
-    fn encode_strategy(
-        &self,
-        to_encode: Solution,
-        router_address: Bytes,
-    ) -> Result<(Vec<u8>, Bytes), EncodingError>;
+    fn encode_strategy(&self, to_encode: Solution) -> Result<(Vec<u8>, Bytes), EncodingError>;
 
     #[allow(clippy::borrowed_box)]
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>>;
+    fn clone_box(&self) -> Box<dyn StrategyEncoder>;
 }
 
 /// Contains the supported strategies to encode a solution, and chooses the best strategy to encode
@@ -23,7 +16,7 @@ pub trait StrategyEncoder {
 pub trait StrategyEncoderRegistry {
     fn new(
         chain: Chain,
-        executors_file_path: &str,
+        executors_file_path: Option<String>,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError>
     where

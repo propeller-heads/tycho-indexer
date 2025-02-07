@@ -1,7 +1,9 @@
 use std::{collections::HashMap, fs};
 
 use crate::encoding::{
-    errors::EncodingError, evm::swap_encoder::builder::SwapEncoderBuilder, models::Chain,
+    errors::EncodingError,
+    evm::{constants::DEFAULT_EXECUTORS_JSON, swap_encoder::builder::SwapEncoderBuilder},
+    models::Chain,
     swap_encoder::SwapEncoder,
 };
 
@@ -15,8 +17,20 @@ pub struct SwapEncoderRegistry {
 impl SwapEncoderRegistry {
     /// Populates the registry with the `SwapEncoders` for the given blockchain by parsing the
     /// executors' addresses in the file at the given path.
-    pub fn new(executors_file_path: &str, blockchain: Chain) -> Result<Self, EncodingError> {
-        let config_str = fs::read_to_string(executors_file_path)?;
+    pub fn new(
+        executors_file_path: Option<String>,
+        blockchain: Chain,
+    ) -> Result<Self, EncodingError> {
+        let config_str = if let Some(ref path) = executors_file_path {
+            fs::read_to_string(path).map_err(|e| {
+                EncodingError::FatalError(format!(
+                    "Error reading executors file from {:?}: {}",
+                    executors_file_path, e
+                ))
+            })?
+        } else {
+            DEFAULT_EXECUTORS_JSON.to_string()
+        };
         let config: HashMap<String, HashMap<String, String>> = serde_json::from_str(&config_str)?;
         let mut encoders = HashMap::new();
         let executors = config

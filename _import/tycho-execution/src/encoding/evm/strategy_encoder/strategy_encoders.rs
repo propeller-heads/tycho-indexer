@@ -73,6 +73,7 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 /// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
 ///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
+#[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Permit2,
@@ -260,11 +261,7 @@ impl SplitSwapStrategyEncoder {
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-        router_address: Bytes,
-    ) -> Result<(Vec<u8>, Bytes), EncodingError> {
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         self.validate_split_percentages(&solution.swaps)?;
         self.validate_swap_path(
             &solution.swaps,
@@ -273,7 +270,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             &solution.native_action,
         )?;
         let (permit, signature) = self.permit2.get_permit(
-            &router_address,
+            &solution.router_address,
             &solution.sender,
             &solution.given_token,
             &solution.given_amount,
@@ -345,9 +342,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 })?;
 
             let encoding_context = EncodingContext {
-                receiver: router_address.clone(),
+                receiver: solution.router_address.clone(),
                 exact_out: solution.exact_out,
-                router_address: router_address.clone(),
+                router_address: solution.router_address.clone(),
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
             let swap_data = self.encode_swap_header(
@@ -398,12 +395,16 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             .abi_encode();
 
         let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, router_address))
+        Ok((contract_interaction, solution.router_address))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
         self.swap_encoder_registry
             .get_encoder(protocol_system)
+    }
+
+    fn clone_box(&self) -> Box<dyn StrategyEncoder> {
+        Box::new(self.clone())
     }
 }
 
@@ -412,6 +413,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
+#[derive(Clone)]
 pub struct ExecutorStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
 }
@@ -423,17 +425,7 @@ impl ExecutorStrategyEncoder {
 }
 impl EVMStrategyEncoder for ExecutorStrategyEncoder {}
 impl StrategyEncoder for ExecutorStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-        _router_address: Bytes,
-    ) -> Result<(Vec<u8>, Bytes), EncodingError> {
-        let router_address = solution.router_address.ok_or_else(|| {
-            EncodingError::InvalidInput(
-                "Router address is required for straight-to-executor solutions".to_string(),
-            )
-        })?;
-
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         let swap = solution
             .swaps
             .first()
@@ -451,7 +443,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
         let encoding_context = EncodingContext {
             receiver: solution.receiver,
             exact_out: solution.exact_out,
-            router_address,
+            router_address: solution.router_address,
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
 
@@ -459,9 +451,14 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
         Ok((protocol_data, executor_address))
     }
+
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
         self.swap_encoder_registry
             .get_encoder(protocol_system)
+    }
+
+    fn clone_box(&self) -> Box<dyn StrategyEncoder> {
+        Box::new(self.clone())
     }
 }
 
@@ -495,7 +492,7 @@ mod tests {
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
         let eth_chain = eth_chain();
-        SwapEncoderRegistry::new("src/encoding/config/executor_addresses.json", eth_chain).unwrap()
+        SwapEncoderRegistry::new(None, eth_chain).unwrap()
     }
 
     #[test]
@@ -529,13 +526,13 @@ mod tests {
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap],
             direct_execution: true,
-            router_address: Some(Bytes::zero(20)),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             slippage: None,
             native_action: None,
         };
 
         let (protocol_data, executor_address) = encoder
-            .encode_strategy(solution, Bytes::zero(20))
+            .encode_strategy(solution)
             .unwrap();
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
@@ -620,13 +617,13 @@ mod tests {
             check_amount,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             ..Default::default()
         };
-        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
 
         let (calldata, _) = encoder
-            .encode_strategy(solution, router_address)
+            .encode_strategy(solution)
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
         let expected_input = [
@@ -720,14 +717,14 @@ mod tests {
             check_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()
         };
-        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
 
         let (calldata, _) = encoder
-            .encode_strategy(solution, router_address)
+            .encode_strategy(solution)
             .unwrap();
 
         let hex_calldata = encode(&calldata);
@@ -768,14 +765,14 @@ mod tests {
             check_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
             ..Default::default()
         };
-        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
 
         let (calldata, _) = encoder
-            .encode_strategy(solution, router_address)
+            .encode_strategy(solution)
             .unwrap();
 
         let hex_calldata = encode(&calldata);
@@ -857,13 +854,13 @@ mod tests {
             check_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
             ..Default::default()
         };
-        let router_address = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
 
         let (calldata, _) = encoder
-            .encode_strategy(solution, router_address)
+            .encode_strategy(solution)
             .unwrap();
 
         let _hex_calldata = encode(&calldata);
