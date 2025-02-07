@@ -1,5 +1,4 @@
 pub use clap::Parser;
-pub const DEFAULT_ROUTER_ADDRESS: &str = "0xaa820C29648D5EA543d712cC928377Bd7206a0E7";
 
 #[derive(Parser)]
 /// Encode swap transactions for the Tycho router
@@ -35,10 +34,6 @@ pub const DEFAULT_ROUTER_ADDRESS: &str = "0xaa820C29648D5EA543d712cC928377Bd7206
 /// }
 /// ```
 pub struct Cli {
-    /// Router contract address to use for encoding transactions
-    #[arg(default_value = DEFAULT_ROUTER_ADDRESS)]
-    pub router_address: String,
-
     /// Private key for signing approvals (required when direct_execution is false)
     #[arg(short)]
     pub private_key: Option<String>,

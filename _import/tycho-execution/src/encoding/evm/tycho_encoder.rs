@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use num_bigint::BigUint;
 use tycho_core::Bytes;
 
@@ -10,31 +8,22 @@ use crate::encoding::{
     tycho_encoder::TychoEncoder,
 };
 
-/// Represents an encoder for a swap through the given router address using any strategy supported
-/// by the strategy registry.
+/// Represents an encoder for a swap using any strategy supported by the strategy registry.
 ///
 /// # Fields
 /// * `strategy_registry`: S, the strategy registry to use to select the best strategy to encode a
 ///   solution, based on its supported strategies and the solution attributes.
-/// * `router_address`: Bytes, the address of the router to use to execute the swaps.
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped native token
 #[derive(Clone)]
 pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
     strategy_registry: S,
-    router_address: Bytes,
     native_address: Bytes,
     wrapped_address: Bytes,
 }
 
 impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
-    pub fn new(
-        strategy_registry: S,
-        router_address: String,
-        chain: tycho_core::dto::Chain,
-    ) -> Result<Self, EncodingError> {
-        let router_address = Bytes::from_str(&router_address)
-            .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
+    pub fn new(strategy_registry: S, chain: tycho_core::dto::Chain) -> Result<Self, EncodingError> {
         let chain: Chain = Chain::from(chain);
         if chain.name != *"ethereum" {
             return Err(EncodingError::InvalidInput(
@@ -43,7 +32,6 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
         }
         Ok(EVMTychoEncoder {
             strategy_registry,
-            router_address,
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
         })
@@ -113,16 +101,11 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
         for solution in solutions.iter() {
             self.validate_solution(solution)?;
 
-            let router_address = solution
-                .router_address
-                .clone()
-                .unwrap_or(self.router_address.clone());
-
             let strategy = self
                 .strategy_registry
                 .get_encoder(solution)?;
             let (contract_interaction, target_address) =
-                strategy.encode_strategy(solution.clone(), router_address)?;
+                strategy.encode_strategy(solution.clone())?;
 
             let value = match solution.native_action.as_ref() {
                 Some(NativeAction::Wrap) => solution.given_amount.clone(),
@@ -141,6 +124,8 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use tycho_core::dto::{Chain as TychoCoreChain, ProtocolComponent};
 
     use super::*;
@@ -185,11 +170,7 @@ mod tests {
     struct MockStrategy;
 
     impl StrategyEncoder for MockStrategy {
-        fn encode_strategy(
-            &self,
-            _solution: Solution,
-            _router_address: Bytes,
-        ) -> Result<(Vec<u8>, Bytes), EncodingError> {
+        fn encode_strategy(&self, _solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
             Ok((
                 Bytes::from_str("0x1234")
                     .unwrap()
@@ -209,12 +190,7 @@ mod tests {
     fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
         let strategy_registry =
             MockStrategyRegistry::new(TychoCoreChain::Ethereum, None, None).unwrap();
-        EVMTychoEncoder::new(
-            strategy_registry,
-            "0x1234567890abcdef1234567890abcdef12345678".to_string(),
-            TychoCoreChain::Ethereum,
-        )
-        .unwrap()
+        EVMTychoEncoder::new(strategy_registry, TychoCoreChain::Ethereum).unwrap()
     }
 
     #[test]
@@ -236,7 +212,7 @@ mod tests {
             exact_out: false,
             given_amount: eth_amount_in.clone(),
             given_token: eth(),
-            router_address: None,
+            router_address: Bytes::from_str("0x1234567890abcdef1234567890abcdef12345678").unwrap(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()

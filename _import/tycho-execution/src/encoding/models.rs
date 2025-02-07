@@ -41,8 +41,8 @@ pub struct Solution {
     pub check_amount: Option<BigUint>,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// If not set, then the Tycho Router will be used
-    pub router_address: Option<Bytes>,
+    /// Address of the router contract to be used for the swaps.
+    pub router_address: Bytes,
     /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
     /// If set to true, the solution will be encoded to be sent directly to the Executor and

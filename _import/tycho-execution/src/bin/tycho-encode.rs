@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Encode the solution
-    let encoded = encode_swaps(&buffer, &cli.router_address, cli.config_path, cli.private_key)?;
+    let encoded = encode_swaps(&buffer, cli.config_path, cli.private_key)?;
 
     // Output the encoded result as JSON to stdout
     println!(
@@ -47,7 +47,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn encode_swaps(
     input: &str,
-    router_address: &str,
     config_path: Option<String>,
     private_key: Option<String>,
 ) -> Result<Value, Box<dyn std::error::Error>> {
@@ -55,7 +54,7 @@ fn encode_swaps(
     let chain = Chain::Ethereum;
 
     let strategy_selector = EVMStrategyEncoderRegistry::new(chain, config_path, private_key)?;
-    let encoder = EVMTychoEncoder::new(strategy_selector, router_address.to_string(), chain)?;
+    let encoder = EVMTychoEncoder::new(strategy_selector, chain)?;
     let transactions = encoder.encode_router_calldata(vec![solution])?;
 
     Ok(serde_json::json!({

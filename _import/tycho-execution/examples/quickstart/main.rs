@@ -17,7 +17,8 @@ use tycho_execution::encoding::{
 
 fn main() {
     // Setup variables
-    let router_address = "0x1234567890abcdef1234567890abcdef12345678".to_string();
+    let router_address = Bytes::from_str("0x1234567890abcdef1234567890abcdef12345678")
+        .expect("Failed to create router address");
     let signer_pk =
         Some("0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string());
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
@@ -27,9 +28,8 @@ fn main() {
     let strategy_encoder_registry =
         EVMStrategyEncoderRegistry::new(TychoCoreChain::Ethereum, None, signer_pk.clone())
             .expect("Failed to create strategy encoder registry");
-    let encoder =
-        EVMTychoEncoder::new(strategy_encoder_registry, router_address, TychoCoreChain::Ethereum)
-            .expect("Failed to create encoder");
+    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, TychoCoreChain::Ethereum)
+        .expect("Failed to create encoder");
 
     // ------------------- Encode a simple swap -------------------
 
@@ -64,6 +64,7 @@ fn main() {
         exact_out: false,   // it's an exact in solution
         check_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
+        router_address,
         ..Default::default()
     };
 
