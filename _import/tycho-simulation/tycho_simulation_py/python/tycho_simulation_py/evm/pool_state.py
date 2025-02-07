@@ -9,15 +9,13 @@ from logging import getLogger
 from typing import Optional, cast, TypeVar
 
 import eth_abi
-from eth_utils import keccak
 from eth_typing import HexStr
+from eth_utils import keccak
 
-from . import token
 from . import SimulationEngine, AccountInfo, SimulationParameters
+from . import token
 from .adapter_contract import AdapterContract
 from .constants import MAX_BALANCE, EXTERNAL_ACCOUNT
-from ..exceptions import RecoverableSimulationException
-from ..models import EVMBlock, Capability, Address, EthereumToken
 from .utils import (
     ContractCompiler,
     ERC20Slots,
@@ -27,6 +25,8 @@ from .utils import (
     ERC20OverwriteFactory,
     get_code_for_address,
 )
+from ..exceptions import RecoverableSimulationException
+from ..models import EVMBlock, Capability, Address, EthereumToken
 
 ADAPTER_ADDRESS = "0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270"
 
@@ -51,6 +51,7 @@ class ThirdPartyPool:
         trace: bool = False,
         involved_contracts=None,
         token_storage_slots=None,
+        balance_owner_overrides: Optional[dict[Address, int]] = None,
     ):
         self.id_ = id_
         """The pools identifier."""
@@ -60,6 +61,10 @@ class ThirdPartyPool:
 
         self.balances = balances
         """The pools token balances."""
+
+        self.balance_overrides = balance_owner_overrides
+        """Overrides the balances of the pool for simulation. This is useful for contracts where the pool does not own the balances (e.g. Vault)
+        and the balance owner needs to be overwritten by a value that is not the Pool's Balances."""
 
         self.block = block
         """The current block, will be used to set vm context."""
@@ -357,9 +362,9 @@ class ThirdPartyPool:
             # Context: we need this to be true when we try to simulate _reservesOf[token] <= token.balanceOf(vault).
             # But with how we currently overwrite balances (pool balance only) it's false.
             # Proposed solution would be to index a per account token balance and use it for overwrite instead of TVL balances.
-            if address.lower() == "0xba1333333333a1ba1108e8412f11850a5c319ba9":
-                amount = 2**150 - 1 # Big amount but not too close to 2**256 to avoid overflows
-            else:
+
+            amount = self.balance_overrides.get(t.address)
+            if amount is None:
                 amount = t.to_onchain_amount(self.balances[t.address])
             overwrites.set_balance(
                 amount, address

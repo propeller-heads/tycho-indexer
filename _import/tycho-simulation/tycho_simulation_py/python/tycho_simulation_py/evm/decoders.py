@@ -8,10 +8,10 @@ from tycho_indexer_client import dto
 from tycho_indexer_client.dto import ComponentWithState, BlockChanges, HexBytes
 
 from . import AccountUpdate, BlockHeader
-from ..models import EVMBlock, EthereumToken
 from .pool_state import ThirdPartyPool
 from .storage import TychoDBSingleton
 from .utils import decode_tycho_exchange
+from ..models import EVMBlock, EthereumToken
 
 log = getLogger(__name__)
 
@@ -97,9 +97,10 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         decoded_pools = {}
         failed_pools = set()
         handle_vm_updates(block, snapshot.vm_storage)
+        token_balance_overrides = {account.address: account.token_balances for account in snapshot.vm_storage.values()}
         for snap in snapshot.states.values():
             try:
-                pool = self.decode_pool_state(snap, block)
+                pool = self.decode_pool_state(snap, block, token_balance_overrides)
                 decoded_pools[pool.id_] = pool
             except TychoDecodeError as e:
                 log.log(
@@ -127,7 +128,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         return decoded_pools
 
     def decode_pool_state(
-        self, snapshot: ComponentWithState, block: EVMBlock
+        self, snapshot: ComponentWithState, block: EVMBlock, token_balance_overrides: dict[HexBytes, dict[HexBytes, HexBytes]] = {}
     ) -> ThirdPartyPool:
         component = snapshot.component
         state_attributes = snapshot.state.attributes
@@ -156,6 +157,11 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             for address in component.contract_ids:
                 self.contract_pools[address.hex()].append(pool_id)
 
+        balance_overrides = None
+        if optional_attributes.get("balance_owner"):
+            balance_overrides = token_balance_overrides.get(HexBytes(optional_attributes["balance_owner"]))
+            balance_overrides = {t.hex(): int(b) for t, b in balance_overrides.items()} if balance_overrides else None
+
         return ThirdPartyPool(
             id_=pool_id,
             tokens=tuple(tokens),
@@ -166,6 +172,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             trace=self.trace,
             manual_updates=manual_updates,
             involved_contracts=set(to_checksum_address(b.hex()) for b in component.contract_ids),
+            balance_owner_overrides=balance_overrides,
             **optional_attributes,
         )
 
