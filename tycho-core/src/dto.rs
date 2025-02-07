@@ -1721,6 +1721,16 @@ mod test {
                         }
                     }
             },
+            "account_balances": {
+                "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                        "account": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                        "token": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                        "balance": "0x01f4",
+                        "modify_tx": "0x01"
+                    }
+                }
+            },
             "component_tvl": {
                 "protocol_1": 1000.0
             }
@@ -1794,6 +1804,16 @@ mod test {
                         "balance_float": 1.270062661329837E21,
                         "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
                         "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
+                        }
+                    }
+                },
+                "account_balances": {
+                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                        "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                            "account": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                            "token": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                            "balance": "0x01f4",
+                            "modify_tx": "0x01"
                         }
                     }
                 },
