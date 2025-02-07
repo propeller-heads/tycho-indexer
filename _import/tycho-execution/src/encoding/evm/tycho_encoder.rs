@@ -31,10 +31,11 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
     pub fn new(
         strategy_registry: S,
         router_address: String,
-        chain: Chain,
+        chain: tycho_core::dto::Chain,
     ) -> Result<Self, EncodingError> {
         let router_address = Bytes::from_str(&router_address)
             .map_err(|_| EncodingError::FatalError("Invalid router address".to_string()))?;
+        let chain: Chain = Chain::from(chain);
         if chain.name != *"ethereum" {
             return Err(EncodingError::InvalidInput(
                 "Currently only Ethereum is supported".to_string(),
@@ -151,10 +152,6 @@ mod tests {
         strategy: Box<dyn StrategyEncoder>,
     }
 
-    fn eth_chain() -> Chain {
-        TychoCoreChain::Ethereum.into()
-    }
-
     fn dai() -> Bytes {
         Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap()
     }
@@ -169,7 +166,7 @@ mod tests {
 
     impl StrategyEncoderRegistry for MockStrategyRegistry {
         fn new(
-            _chain: Chain,
+            _chain: tycho_core::dto::Chain,
             _executors_file_path: Option<&str>,
             _signer_pk: Option<String>,
         ) -> Result<MockStrategyRegistry, EncodingError> {
@@ -210,11 +207,12 @@ mod tests {
     }
 
     fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
-        let strategy_registry = MockStrategyRegistry::new(eth_chain(), None, None).unwrap();
+        let strategy_registry =
+            MockStrategyRegistry::new(TychoCoreChain::Ethereum, None, None).unwrap();
         EVMTychoEncoder::new(
             strategy_registry,
             "0x1234567890abcdef1234567890abcdef12345678".to_string(),
-            eth_chain(),
+            TychoCoreChain::Ethereum,
         )
         .unwrap()
     }

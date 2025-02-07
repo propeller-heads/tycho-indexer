@@ -21,10 +21,11 @@ pub struct EVMStrategyEncoderRegistry {
 
 impl StrategyEncoderRegistry for EVMStrategyEncoderRegistry {
     fn new(
-        chain: Chain,
+        chain: tycho_core::dto::Chain,
         executors_file_path: Option<&str>,
         signer_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
+        let chain = Chain::from(chain);
         let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain.clone())?;
 
         let mut strategies: HashMap<String, Box<dyn StrategyEncoder>> = HashMap::new();

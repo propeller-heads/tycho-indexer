@@ -10,7 +10,7 @@ use tycho_execution::encoding::{
         strategy_encoder::strategy_encoder_registry::EVMStrategyEncoderRegistry,
         tycho_encoder::EVMTychoEncoder,
     },
-    models::{Chain, Solution, Swap},
+    models::{Solution, Swap},
     strategy_encoder::StrategyEncoderRegistry,
     tycho_encoder::TychoEncoder,
 };
@@ -23,13 +23,13 @@ fn main() {
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
         .expect("Failed to create user address");
 
-    let eth_chain = Chain::from(TychoCoreChain::Ethereum);
     // Initialize the encoder
     let strategy_encoder_registry =
-        EVMStrategyEncoderRegistry::new(eth_chain.clone(), None, signer_pk.clone())
+        EVMStrategyEncoderRegistry::new(TychoCoreChain::Ethereum, None, signer_pk.clone())
             .expect("Failed to create strategy encoder registry");
-    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address, eth_chain)
-        .expect("Failed to create encoder");
+    let encoder =
+        EVMTychoEncoder::new(strategy_encoder_registry, router_address, TychoCoreChain::Ethereum)
+            .expect("Failed to create encoder");
 
     // ------------------- Encode a simple swap -------------------
 
