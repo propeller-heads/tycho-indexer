@@ -44,16 +44,16 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
 /// * `no_tls` - Whether to use HTTP instead of HTTPS.
 /// * `auth_key` - The API key to use for authentication.
 /// * `chain` - The chain to load tokens from.
-/// * `quality_filter` - The minimum quality of tokens to load. Defaults to 100 if not provided.
-/// * `activity_filter` - The max number of days since the token was last traded. Defaults are chain
-///   specific and applied if not provided.
+/// * `min_quality` - The minimum quality of tokens to load. Defaults to 100 if not provided.
+/// * `max_days_since_last_trade` - The max number of days since the token was last traded. Defaults
+///   are chain specific and applied if not provided.
 pub async fn load_all_tokens(
     tycho_url: &str,
     no_tls: bool,
     auth_key: Option<&str>,
     chain: Chain,
-    quality_filter: Option<i32>,
-    activity_filter: Option<u64>,
+    min_quality: Option<i32>,
+    max_days_since_last_trade: Option<u64>,
 ) -> HashMap<Bytes, Token> {
     info!("Loading tokens from Tycho...");
     let rpc_url =
@@ -61,14 +61,14 @@ pub async fn load_all_tokens(
     let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key).unwrap();
 
     // Chain specific defaults for special case chains. Otherwise defaults to 42 days.
-    let default_activity_filter = HashMap::from([(Chain::Base, 10_u64)]);
+    let default_min_days = HashMap::from([(Chain::Base, 10_u64)]);
 
     #[allow(clippy::mutable_key_type)]
     rpc_client
         .get_all_tokens(
             chain,
-            quality_filter.or(Some(100)),
-            activity_filter.or(default_activity_filter
+            min_quality.or(Some(100)),
+            max_days_since_last_trade.or(default_min_days
                 .get(&chain)
                 .or(Some(&42))
                 .copied()),
