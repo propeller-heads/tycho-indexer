@@ -1,3 +1,27 @@
+## [0.35.0](https://github.com/propeller-heads/tycho-execution/compare/0.34.0...0.35.0) (2025-02-07)
+
+
+### Features
+
+* Add clone to EVMTychoEncoder ([b333d60](https://github.com/propeller-heads/tycho-execution/commit/b333d60d69ffc37d45d065494902161462e52ada))
+* Add uniswap v3 to swap encoders list ([c791c93](https://github.com/propeller-heads/tycho-execution/commit/c791c93cb5ea0c39de46338c45f5575f30215189))
+* Get current runtime if there is any ([12f85cc](https://github.com/propeller-heads/tycho-execution/commit/12f85ccc0a4e5e30f06a4dd3db514c5cf5f91ba0))
+* Increase tycho-core version ([6bbb6da](https://github.com/propeller-heads/tycho-execution/commit/6bbb6da1cdb24e8e1c280aa176941cb01c467219))
+* Make executors_file_path optional and use a default value if None ([4680a4b](https://github.com/propeller-heads/tycho-execution/commit/4680a4be2429ab90bcb440fb1f57105f4f244360))
+* Read default executors at compile time into a json ([f5232f4](https://github.com/propeller-heads/tycho-execution/commit/f5232f403ee8f09c3bf83be865e326540b781740))
+* Remove router_address from TychoEncoder ([a234ff7](https://github.com/propeller-heads/tycho-execution/commit/a234ff701f8be8a3ad28630035cfe474a4702ad5))
+* The execution structs should receiver tycho_core Chain ([cad9f39](https://github.com/propeller-heads/tycho-execution/commit/cad9f394cdbd22850417b09a1f590ee41245946a))
+* Use block_in_place instead of block_on ([d4af59d](https://github.com/propeller-heads/tycho-execution/commit/d4af59d4dca83547d208e8d87ddc56b16153e64b))
+
+
+### Bug Fixes
+
+* After rebase fixes ([bef4740](https://github.com/propeller-heads/tycho-execution/commit/bef4740a1d22312ed5745ce5e0199f919c784962))
+* Change version of serde to match tycho-simulation ([3116fef](https://github.com/propeller-heads/tycho-execution/commit/3116fef0d785ecae3cbd2b6c747036cd11ca331e))
+* Don't have a DEFAULT_CONFIG_PATH in bin ([d7f20aa](https://github.com/propeller-heads/tycho-execution/commit/d7f20aa74fdae67b096aebb376ca8d11cb72c930))
+* Uniswap v3 pool fee is big endian, not little endian ([0c9050c](https://github.com/propeller-heads/tycho-execution/commit/0c9050cf79e78d26ca098d945f3380e73f689455))
+* **univ3:** The fee keyword is just "fee" and not "pool_fee" ([164d062](https://github.com/propeller-heads/tycho-execution/commit/164d062ad9ceb9ceb7ec26e0253d62972fc967cc))
+
 ## [0.34.0](https://github.com/propeller-heads/tycho-execution/compare/0.33.0...0.34.0) (2025-02-06)
 
 
