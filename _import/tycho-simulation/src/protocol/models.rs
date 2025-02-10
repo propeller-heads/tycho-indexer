@@ -57,21 +57,49 @@ pub struct ProtocolComponent {
 
 impl ProtocolComponent {
     #[allow(deprecated)]
-    pub fn new(mut tokens: Vec<Token>, core_model: tycho_core::dto::ProtocolComponent) -> Self {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: Bytes,
+        protocol_system: String,
+        protocol_type_name: String,
+        chain: Chain,
+        tokens: Vec<Token>,
+        contract_ids: Vec<Bytes>,
+        static_attributes: HashMap<String, Bytes>,
+        creation_tx: Bytes,
+        created_at: NaiveDateTime,
+    ) -> Self {
+        ProtocolComponent {
+            address: Default::default(),
+            id,
+            tokens,
+            protocol_system,
+            protocol_type_name,
+            chain,
+            contract_ids,
+            static_attributes,
+            creation_tx,
+            created_at,
+        }
+    }
+
+    pub fn from_with_tokens(
+        core_model: tycho_core::dto::ProtocolComponent,
+        mut tokens: Vec<Token>,
+    ) -> Self {
         tokens.sort_unstable_by_key(|t| t.address.clone());
         let id = Bytes::from(core_model.id.as_str());
-        ProtocolComponent {
-            id: id.clone(),
-            address: id,
+        ProtocolComponent::new(
+            id.clone(),
+            core_model.protocol_system,
+            core_model.protocol_type_name,
+            core_model.chain,
             tokens,
-            protocol_system: core_model.protocol_system,
-            protocol_type_name: core_model.protocol_type_name,
-            chain: core_model.chain,
-            contract_ids: core_model.contract_ids,
-            static_attributes: core_model.static_attributes,
-            creation_tx: core_model.creation_tx,
-            created_at: core_model.created_at,
-        }
+            core_model.contract_ids,
+            core_model.static_attributes,
+            core_model.creation_tx,
+            core_model.created_at,
+        )
     }
 }
 
