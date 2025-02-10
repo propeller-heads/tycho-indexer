@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IPoolManager} from "@uniswap/v4-core/interfaces/IPoolManager.sol";
-import {Currency, CurrencyLibrary} from "@uniswap/v4-core/types/Currency.sol";
-import {PoolKey} from "@uniswap/v4-core/types/PoolKey.sol";
-import {BalanceDelta} from "@uniswap/v4-core/types/BalanceDelta.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import {IHooks} from "@uniswap/v4-core/interfaces/IHooks.sol";
-import {IUnlockCallback} from "@uniswap/v4-core/interfaces/callback/IUnlockCallback.sol";
-import {TransientStateLibrary} from "@uniswap/v4-core/libraries/TransientStateLibrary.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {TransientStateLibrary} from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
+import {V4Router} from "@uniswap/v4-periphery/src/V4Router.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 error UniswapV4Executor__SwapFailed();
 error UniswapV4Executor__InsufficientOutput();
 error UniswapV4Executor__ManagerMismatch();
 
-contract UniswapV4Executor is IExecutor {
+contract UniswapV4Executor is IExecutor, V4Router {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
     using SafeCast for int128;
@@ -35,6 +36,8 @@ contract UniswapV4Executor is IExecutor {
         address tokenOut;
         address receiver;
     }
+
+    constructor(IPoolManager _poolManager) V4Router(_poolManager) {}
 
     function swap(
         uint256 amountIn,
@@ -110,5 +113,15 @@ contract UniswapV4Executor is IExecutor {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
+    }
+
+    function _pay(
+        Currency token,
+        address payer,
+        uint256 amount
+    ) internal override {}
+
+    function msgSender() public view override returns (address) {
+        return msg.sender;
     }
 }

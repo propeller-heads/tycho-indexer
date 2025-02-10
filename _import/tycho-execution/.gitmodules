@@ -16,3 +16,6 @@
 [submodule "foundry/lib/v4-core"]
 	path = foundry/lib/v4-core
 	url = https://github.com/Uniswap/v4-core
+[submodule "foundry/lib/universal-router"]
+	path = foundry/lib/universal-router
+	url = https://github.com/uniswap/universal-router
