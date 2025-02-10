@@ -3,7 +3,7 @@
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
 [submodule "foundry/lib/permit2"]
 	path = foundry/lib/permit2
-	url = https://github.com/Uniswap/permit2
+	url = https://github.com/uniswap/permit2
 [submodule "foundry/lib/v2-core"]
 	path = foundry/lib/v2-core
 	url = https://github.com/uniswap/v2-core
@@ -16,6 +16,3 @@
 [submodule "foundry/lib/v4-core"]
 	path = foundry/lib/v4-core
 	url = https://github.com/Uniswap/v4-core
-[submodule "foundry/lib/universal-router"]
-	path = foundry/lib/universal-router
-	url = https://github.com/uniswap/universal-router
