@@ -1,3 +1,10 @@
+## [0.74.2](https://github.com/propeller-heads/tycho-simulation/compare/0.74.1...0.74.2) (2025-02-10)
+
+
+### Bug Fixes
+
+* Create a ProtocolComponent::new() that doesn't depend on tycho-core ([8f44f08](https://github.com/propeller-heads/tycho-simulation/commit/8f44f08025fe574ce80c10fea87d9ddbd909add6))
+
 ## [0.74.1](https://github.com/propeller-heads/tycho-simulation/compare/0.74.0...0.74.1) (2025-02-10)
 
 
