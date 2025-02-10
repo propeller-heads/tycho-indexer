@@ -1,3 +1,15 @@
+## [0.74.0](https://github.com/propeller-heads/tycho-simulation/compare/0.73.0...0.74.0) (2025-02-10)
+
+
+### Features
+
+* add filter args to load_all_tokens ([b1a76a8](https://github.com/propeller-heads/tycho-simulation/commit/b1a76a862714a6e33c1cb0a51b38796cab9c150c))
+
+
+### Bug Fixes
+
+* improve load_all_tokens arg names ([cfc4f51](https://github.com/propeller-heads/tycho-simulation/commit/cfc4f5193d595b6ec079886f949d8d1ef8a14df6))
+
 ## [0.73.0](https://github.com/propeller-heads/tycho-simulation/compare/0.72.0...0.73.0) (2025-02-06)
 
 
