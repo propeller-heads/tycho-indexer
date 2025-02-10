@@ -5,7 +5,7 @@ pub(crate) mod liquidity_math;
 mod solidity_math;
 pub(crate) mod sqrt_price_math;
 pub(crate) mod swap_math;
-pub(crate) mod tick_list;
+pub mod tick_list;
 pub(crate) mod tick_math;
 
 #[derive(Debug)]
