@@ -36,9 +36,15 @@ async fn main() {
     let tvl_threshold = 10_000.0;
     let tvl_filter = ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold);
 
-    let all_tokens =
-        load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str()), Chain::Ethereum)
-            .await;
+    let all_tokens = load_all_tokens(
+        tycho_url.as_str(),
+        false,
+        Some(tycho_api_key.as_str()),
+        Chain::Ethereum,
+        None,
+        None,
+    )
+    .await;
     let mut pairs: HashMap<String, Vec<Token>> = HashMap::new();
 
     let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, Chain::Ethereum)
