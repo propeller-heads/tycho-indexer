@@ -215,7 +215,10 @@ impl TychoStreamDecoder {
                             .collect::<Vec<_>>();
 
                         if tokens.len() == comp.tokens.len() {
-                            Some((id.clone(), ProtocolComponent::new(tokens, comp.clone())))
+                            Some((
+                                id.clone(),
+                                ProtocolComponent::from_with_tokens(comp.clone(), tokens),
+                            ))
                         } else {
                             // We may reach this point if the removed component
                             //  contained low quality tokens, in this case the component
@@ -274,7 +277,10 @@ impl TychoStreamDecoder {
                 }
                 new_pairs.insert(
                     id.clone(),
-                    ProtocolComponent::new(component_tokens, snapshot.component.clone()),
+                    ProtocolComponent::from_with_tokens(
+                        snapshot.component.clone(),
+                        component_tokens,
+                    ),
                 );
 
                 // Construct state from snapshot
