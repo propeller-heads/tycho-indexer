@@ -1,3 +1,10 @@
+## [0.74.1](https://github.com/propeller-heads/tycho-simulation/compare/0.74.0...0.74.1) (2025-02-10)
+
+
+### Bug Fixes
+
+* make TickList public ([82a6062](https://github.com/propeller-heads/tycho-simulation/commit/82a60628feecb88f0fe26996eba7f8d7363c1028))
+
 ## [0.74.0](https://github.com/propeller-heads/tycho-simulation/compare/0.73.0...0.74.0) (2025-02-10)
 
 
