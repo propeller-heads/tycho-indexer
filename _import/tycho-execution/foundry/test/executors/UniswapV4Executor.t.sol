@@ -77,6 +77,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
     }
 
     function testSwapUniswapV4() public {
+        vm.startPrank(BOB);
         uint256 amountIn = 1 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         assertEq(USDE.balanceOf(address(uniswapV4Exposed)), amountIn);
@@ -92,5 +93,28 @@ contract UniswapV4ExecutorTest is Test, Constants {
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
         assertEq(USDE.balanceOf(address(uniswapV4Exposed)), 0);
+        vm.stopPrank();
+    }
+
+    function testSwapUniswapV4With1Inch() public {
+        vm.startPrank(BOB);
+        uint256 amountIn = 1 ether;
+        deal(INCH_ADDR, address(uniswapV4Exposed), amountIn);
+        assertEq(
+            IERC20(INCH_ADDR).balanceOf(address(uniswapV4Exposed)),
+            amountIn
+        );
+
+        bytes memory data = abi.encodePacked(
+            INCH_ADDR,
+            USDC_ADDR,
+            uint24(10000), // 0.01% fee tier
+            address(this),
+            true,
+            int24(200)
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        assertEq(IERC20(INCH_ADDR).balanceOf(address(uniswapV4Exposed)), 0);
     }
 }
