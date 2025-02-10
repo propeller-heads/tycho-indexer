@@ -81,11 +81,6 @@ contract UniswapV4Executor is IExecutor {
             amountOut = abi.decode(result, (uint256));
 
             if (amountOut == 0) revert UniswapV4Executor__InsufficientOutput();
-
-            // Transfer output tokens to receiver if not this contract
-            if (receiver != address(this)) {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
         } catch {
             revert UniswapV4Executor__SwapFailed();
         }
