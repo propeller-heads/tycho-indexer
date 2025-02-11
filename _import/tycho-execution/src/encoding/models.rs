@@ -95,11 +95,13 @@ impl Swap {
 /// * `to`: Address of the contract to call with the calldata
 /// * `value`: Native token value to be sent with the transaction.
 /// * `data`: Encoded calldata for the transaction.
+/// * `selector`: Only relevant for direct executions. The selector of the function to be called.
 #[derive(Clone, Debug)]
 pub struct Transaction {
     pub to: Bytes,
     pub value: BigUint,
     pub data: Vec<u8>,
+    pub selector: Option<String>,
 }
 
 /// Represents necessary attributes for encoding an order.
