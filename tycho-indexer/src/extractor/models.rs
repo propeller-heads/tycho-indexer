@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use tycho_core::{
     models::{
         blockchain::{Block, BlockAggregatedChanges, BlockScoped, TxWithChanges},
-        contract::AccountChangesWithTx,
+        contract::{AccountBalance, AccountChangesWithTx},
         protocol::{ComponentBalance, ProtocolChangesWithTx, ProtocolComponent},
         token::CurrencyToken,
         Address, AttrStoreKey, Chain, ComponentId,
@@ -207,6 +207,7 @@ impl BlockChanges {
             state_deltas: aggregated_changes.state_updates,
             account_deltas: aggregated_changes.account_deltas,
             component_balances: aggregated_changes.balance_changes,
+            account_balances: aggregated_changes.account_balance_changes,
             component_tvl: HashMap::new(),
         })
     }
@@ -273,7 +274,7 @@ impl StateUpdateBufferEntry for BlockChanges {
     }
 
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
-    fn get_filtered_balance_update(
+    fn get_filtered_component_balance_update(
         &self,
         keys: Vec<(&ComponentId, &Address)>,
     ) -> HashMap<(String, Bytes), ComponentBalance> {
@@ -289,6 +290,31 @@ impl StateUpdateBufferEntry for BlockChanges {
                     .filter(|(token, _)| keys_set.contains(&(component_id, token)))
                 {
                     res.entry((component_id.clone(), token.clone()))
+                        .or_insert(value.clone());
+                }
+            }
+        }
+
+        res
+    }
+
+    #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
+    fn get_filtered_account_balance_update(
+        &self,
+        keys: Vec<(&Address, &Address)>,
+    ) -> HashMap<(Address, Address), AccountBalance> {
+        // Convert keys to a HashSet for faster lookups
+        let keys_set: HashSet<(&Bytes, &Bytes)> = keys.into_iter().collect();
+
+        let mut res = HashMap::new();
+
+        for update in self.txs_with_update.iter().rev() {
+            for (account, balance_update) in update.account_balance_changes.iter() {
+                for (token, value) in balance_update
+                    .iter()
+                    .filter(|(token, _)| keys_set.contains(&(account, token)))
+                {
+                    res.entry((account.clone(), token.clone()))
                         .or_insert(value.clone());
                 }
             }
@@ -342,16 +368,13 @@ impl From<BlockEntityChanges> for BlockChanges {
 
 #[cfg(test)]
 pub mod fixtures {
+    use super::*;
     use chrono::NaiveDateTime;
     use prost::Message;
     use std::str::FromStr;
 
-    use super::*;
-
     use tycho_core::models::{
-        blockchain::Transaction,
-        contract::{AccountBalance, AccountDelta},
-        protocol::ProtocolComponentStateDelta,
+        blockchain::Transaction, contract::AccountDelta, protocol::ProtocolComponentStateDelta,
         ChangeType,
     };
     use tycho_storage::postgres::db_fixtures::yesterday_midnight;
@@ -536,7 +559,6 @@ pub mod fixtures {
                                 balance: Bytes::from(50000000.encode_to_vec()),
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                                 account: account_addr.clone(),
-                                balance_float: 36522027799.0,
                             },
                         )]
                         .into_iter()
@@ -590,7 +612,6 @@ pub mod fixtures {
                                 balance: Bytes::from(10.encode_to_vec()),
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001").unwrap(),
                                 account: account_addr,
-                                balance_float: 2058.0,
                             },
                         )]
                         .into_iter()
@@ -728,10 +749,9 @@ pub mod fixtures {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use prost::Message;
     use std::str::FromStr;
-
-    use super::*;
 
     #[test]
     fn test_block_contract_changes_state_filter() {
@@ -781,7 +801,7 @@ mod test {
 
         #[allow(clippy::mutable_key_type)]
         // Clippy thinks that hashmaps with Bytes are a mutable type.
-        let filtered = BlockChanges::from(block).get_filtered_balance_update(keys);
+        let filtered = BlockChanges::from(block).get_filtered_component_balance_update(keys);
 
         assert_eq!(
             filtered,
@@ -795,6 +815,42 @@ mod test {
                         "0x0000000000000000000000000000000000000000000000000000000000000001"
                     ),
                     component_id: c_id_key.clone()
+                }
+            )])
+        )
+    }
+
+    #[test]
+    fn test_block_contract_changes_account_balance_filter() {
+        let block = fixtures::block_state_changes();
+
+        let account = Bytes::from_str("0x0000000000000000000000000000000061626364").unwrap();
+        let token_key = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let missing_token = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let missing_account =
+            Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        let keys = vec![
+            (&account, &token_key),
+            (&account, &missing_token),
+            (&missing_account, &token_key),
+        ];
+
+        #[allow(clippy::mutable_key_type)]
+        // Clippy thinks that hashmaps with Bytes are a mutable type.
+        let filtered = BlockChanges::from(block).get_filtered_account_balance_update(keys);
+
+        assert_eq!(
+            filtered,
+            HashMap::from([(
+                (account.clone(), token_key.clone()),
+                AccountBalance {
+                    token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                    balance: Bytes::from(10.encode_to_vec()),
+                    modify_tx: Bytes::from(
+                        "0x0000000000000000000000000000000000000000000000000000000000000001"
+                    ),
+                    account: account.clone()
                 }
             )])
         )
@@ -841,7 +897,7 @@ mod test {
 
         #[allow(clippy::mutable_key_type)]
         // Clippy thinks that hashmaps with Bytes are a mutable type.
-        let filtered = BlockChanges::from(block).get_filtered_balance_update(keys);
+        let filtered = BlockChanges::from(block).get_filtered_component_balance_update(keys);
 
         assert_eq!(
             filtered,

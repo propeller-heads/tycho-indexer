@@ -15,7 +15,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_core::{
     models::{
         blockchain::{Block, BlockAggregatedChanges, BlockTag},
-        contract::{Account, AccountDelta},
+        contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
@@ -232,7 +232,7 @@ where
         let balances = {
             let rb = self.reorg_buffer.lock().await;
             let mut balances = self
-                .get_balances(&rb, &balance_request)
+                .get_component_balances(&rb, &balance_request)
                 .await?;
             // we assume the retrieved balances contain all tokens of the component
             // here, doing this merge the other way around would not be safe.
@@ -294,18 +294,18 @@ where
         Ok(())
     }
 
-    /// Returns balances at the tip of the reorg buffer.
+    /// Returns component balances at the tip of the reorg buffer.
     ///
     /// Will return the requested balances at the tip of the reorg buffer. Might need
     /// to go to storage to retrieve balances that are not stored within the buffer.
-    async fn get_balances(
+    async fn get_component_balances(
         &self,
         reorg_buffer: &ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>,
         reverted_balances_keys: &[(&String, &Bytes)],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, ExtractionError> {
         // First search in the buffer
         let (buffered_balances, missing_balances_keys) =
-            reorg_buffer.lookup_balances(reverted_balances_keys);
+            reorg_buffer.lookup_component_balances(reverted_balances_keys);
 
         let missing_balances_map: HashMap<String, Vec<Bytes>> = missing_balances_keys
             .into_iter()
@@ -314,7 +314,7 @@ where
                 map
             });
 
-        trace!(?missing_balances_map, "Missing balance keys after buffer lookup");
+        trace!(?missing_balances_map, "Missing component balance keys after buffer lookup");
 
         // Then get the missing balances from db
         let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
@@ -365,6 +365,85 @@ where
                 })
                 .fold(HashMap::new(), |mut acc, (c_id, b_changes)| {
                     acc.entry(c_id)
+                        .or_default()
+                        .extend(b_changes);
+                    acc
+                });
+        Ok(combined_balances)
+    }
+
+    /// Returns account balances at the tip of the reorg buffer.
+    ///
+    /// Will return the requested balances at the tip of the reorg buffer. Might need
+    /// to go to storage to retrieve account balances that are not stored within the buffer.
+    async fn get_account_balances(
+        &self,
+        reorg_buffer: &ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>,
+        reverted_balances_keys: &[(&Address, &Address)],
+    ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, ExtractionError> {
+        // First search in the buffer
+        let (buffered_balances, missing_balances_keys) =
+            reorg_buffer.lookup_account_balances(reverted_balances_keys);
+
+        let missing_balances_map: HashMap<Address, Vec<Address>> = missing_balances_keys
+            .into_iter()
+            .fold(HashMap::new(), |mut map, (account, token)| {
+                map.entry(account)
+                    .or_default()
+                    .push(token);
+                map
+            });
+
+        trace!(?missing_balances_map, "Missing account balance keys after buffer lookup");
+
+        // Then get the missing account balances from db
+        let missing_balances = self
+            .gateway
+            .get_account_balances(
+                &missing_balances_map
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+
+        let empty = HashMap::<Address, AccountBalance>::new();
+
+        let combined_balances: HashMap<Address, HashMap<Address, AccountBalance>> =
+            missing_balances_map
+                .iter()
+                .map(|(account, tokens)| {
+                    let balances_for_account = missing_balances
+                        .get(account)
+                        .unwrap_or(&empty);
+                    let filtered_balances: HashMap<_, _> = tokens
+                        .iter()
+                        .map(|token| {
+                            let balance = balances_for_account
+                                .get(token)
+                                .cloned()
+                                .unwrap_or_else(|| AccountBalance {
+                                    token: token.clone(),
+                                    balance: Bytes::new(),
+                                    modify_tx: Bytes::new(),
+                                    account: account.clone(),
+                                });
+                            (token.clone(), balance)
+                        })
+                        .collect();
+                    (account.clone(), filtered_balances)
+                })
+                .chain(buffered_balances)
+                .map(|(account, balances)| {
+                    (
+                        account,
+                        balances
+                            .into_iter()
+                            .collect::<HashMap<_, _>>(),
+                    )
+                })
+                .fold(HashMap::new(), |mut acc, (account, b_changes)| {
+                    acc.entry(account)
                         .or_default()
                         .extend(b_changes);
                     acc
@@ -949,8 +1028,8 @@ where
                 acc
             });
 
-        // Handle token balance changes
-        let reverted_balances_keys: HashSet<(&String, Bytes)> = reverted_state
+        // Handle component balance changes
+        let reverted_component_balances_keys: HashSet<(&String, Bytes)> = reverted_state
             .iter()
             .flat_map(|block_msg| {
                 block_msg
@@ -971,15 +1050,48 @@ where
             })
             .collect();
 
-        let reverted_balances_keys_vec = reverted_balances_keys
+        let reverted_component_balances_keys_vec = reverted_component_balances_keys
             .iter()
             .map(|(id, token)| (*id, token))
             .collect::<Vec<_>>();
 
-        trace!("Reverted balance keys {:?}", &reverted_balances_keys_vec);
+        trace!("Reverted component balance keys {:?}", &reverted_component_balances_keys_vec);
 
-        let combined_balances = self
-            .get_balances(&reorg_buffer, &reverted_balances_keys_vec)
+        let combined_component_balances = self
+            .get_component_balances(&reorg_buffer, &reverted_component_balances_keys_vec)
+            .await?;
+
+        // Handle account balance changes
+        let reverted_account_balances_keys: HashSet<(Bytes, Bytes)> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .txs_with_update
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .account_balance_changes
+                            .iter()
+                            .filter(|(account, _)| account_deltas.contains_key(*account))
+                            .flat_map(|(account, balance_change)| {
+                                balance_change
+                                    .iter()
+                                    .map(move |(token, _)| (account.clone(), token.clone()))
+                            })
+                    })
+            })
+            .collect();
+
+        let reverted_account_balances_keys_vec = reverted_account_balances_keys
+            .iter()
+            .map(|(account, token)| (account, token))
+            .collect::<Vec<_>>();
+
+        trace!("Reverted account balance keys {:?}", &reverted_account_balances_keys_vec);
+
+        let combined_account_balances = self
+            .get_account_balances(&reorg_buffer, &reverted_account_balances_keys_vec)
             .await?;
 
         let revert_message = BlockAggregatedChanges {
@@ -997,7 +1109,8 @@ where
             new_tokens: HashMap::new(),
             new_protocol_components: reverted_components_deletions,
             deleted_protocol_components: reverted_components_creations,
-            component_balances: combined_balances,
+            component_balances: combined_component_balances,
+            account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
         };
 
@@ -1040,12 +1153,17 @@ pub trait ExtractorGateway: Send + Sync {
         component_ids: &[&'a str],
     ) -> Result<Vec<ProtocolComponentState>, StorageError>;
 
-    async fn get_contracts(&self, component_ids: &[Address]) -> Result<Vec<Account>, StorageError>;
+    async fn get_contracts(&self, addresses: &[Address]) -> Result<Vec<Account>, StorageError>;
 
     async fn get_components_balances<'a>(
         &self,
         component_ids: &[&'a str],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
+
+    async fn get_account_balances(
+        &self,
+        accounts: &[Address],
+    ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError>;
 }
 
 impl ExtractorPgGateway {
@@ -1126,8 +1244,8 @@ impl ExtractorGateway for ExtractorPgGateway {
         let mut new_protocol_components: Vec<ProtocolComponent> = vec![];
         let mut state_updates: Vec<(TxHash, ProtocolComponentStateDelta)> = vec![];
         let mut account_changes: Vec<(Bytes, AccountDelta)> = vec![];
-
-        let mut balance_changes: Vec<ComponentBalance> = vec![];
+        let mut component_balance_changes: Vec<ComponentBalance> = vec![];
+        let mut account_balance_changes: Vec<AccountBalance> = vec![];
         let mut protocol_tokens: HashSet<Bytes> = HashSet::new();
 
         for tx_update in changes.txs_with_update.iter() {
@@ -1146,7 +1264,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                 protocol_tokens.extend(new_protocol_component.tokens.clone());
             }
 
-            // Map new account / contracts
+            // Map new accounts/contracts
             for (_, account_update) in tx_update.account_deltas.iter() {
                 if account_update.is_creation() {
                     let new: Account = account_update.ref_into_account(&tx_update.tx);
@@ -1172,14 +1290,23 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .map(|state_change| (hash.clone(), state_change.clone())),
             );
 
-            // Map balance changes
-            balance_changes.extend(
+            // Map component balance changes
+            component_balance_changes.extend(
                 tx_update
                     .balance_changes
                     .clone()
                     .into_iter()
-                    .flat_map(|(_, tokens)| tokens.into_values()),
+                    .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
             );
+
+            // Map account balance changes
+            account_balance_changes.extend(
+                tx_update
+                    .account_balance_changes
+                    .clone()
+                    .into_iter()
+                    .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
+            )
         }
 
         // Insert new protocol components
@@ -1210,10 +1337,17 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .await?;
         }
 
-        // Insert balance changes
-        if !balance_changes.is_empty() {
+        // Insert component balance changes
+        if !component_balance_changes.is_empty() {
             self.state_gateway
-                .add_component_balances(balance_changes.as_slice())
+                .add_component_balances(component_balance_changes.as_slice())
+                .await?;
+        }
+
+        // Insert account balance changes
+        if !account_balance_changes.is_empty() {
+            self.state_gateway
+                .add_account_balances(account_balance_changes.as_slice())
                 .await?;
         }
 
@@ -1236,9 +1370,9 @@ impl ExtractorGateway for ExtractorPgGateway {
             .map(|state_data| state_data.entity)
     }
 
-    async fn get_contracts(&self, component_ids: &[Address]) -> Result<Vec<Account>, StorageError> {
+    async fn get_contracts(&self, addresses: &[Address]) -> Result<Vec<Account>, StorageError> {
         self.state_gateway
-            .get_contracts(&self.chain, Some(component_ids), None, true, None)
+            .get_contracts(&self.chain, Some(addresses), None, true, None)
             .await
             .map(|contract_data| contract_data.entity)
     }
@@ -1248,17 +1382,25 @@ impl ExtractorGateway for ExtractorPgGateway {
         component_ids: &[&'a str],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError> {
         self.state_gateway
-            .get_balances(&self.chain, Some(component_ids), None)
+            .get_component_balances(&self.chain, Some(component_ids), None)
+            .await
+    }
+
+    async fn get_account_balances(
+        &self,
+        accounts: &[Address],
+    ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError> {
+        self.state_gateway
+            .get_account_balances(&self.chain, Some(accounts), None)
             .await
     }
 }
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use float_eq::assert_float_eq;
     use mockall::mock;
-
-    use super::*;
 
     use crate::{pb::testing::fixtures as pb_fixtures, testing::MockGateway};
 
@@ -1840,18 +1982,14 @@ mod test {
 /// between this component and the actual db interactions
 #[cfg(test)]
 mod test_serial_db {
-    use mockall::mock;
-
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
     use futures03::{stream, StreamExt};
+    use mockall::mock;
 
     use super::*;
 
     use tycho_core::{
-        models::{
-            blockchain::TxWithChanges, contract::AccountBalance, ContractId, FinancialType,
-            ImplementationType,
-        },
+        models::{blockchain::TxWithChanges, ContractId, FinancialType, ImplementationType},
         storage::{BlockIdentifier, BlockOrTimestamp},
         traits::TokenOwnerFinding,
     };
@@ -1896,8 +2034,7 @@ mod test_serial_db {
         let mut mock_processor = MockTokenPreProcessor::new();
         let new_tokens = vec![
             CurrencyToken::new(
-                &Bytes::from_str("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-                    .expect("Invalid address"),
+                &Bytes::from_str(WETH_ADDRESS).expect("Invalid address"),
                 "WETH",
                 18,
                 0,
@@ -1906,8 +2043,7 @@ mod test_serial_db {
                 100,
             ),
             CurrencyToken::new(
-                &Bytes::from_str("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
-                    .expect("Invalid address"),
+                &Bytes::from_str(USDC_ADDRESS).expect("Invalid address"),
                 "USDC",
                 6,
                 0,
@@ -1952,6 +2088,15 @@ mod test_serial_db {
             .await
             .expect("pool should get a connection");
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
 
         match implementation_type {
             ImplementationType::Custom => {
@@ -2047,9 +2192,9 @@ mod test_serial_db {
             false,
             HashMap::from([
                 (
-                    Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+                    Bytes::from_str(USDC_ADDRESS).unwrap(),
                     CurrencyToken::new(
-                        &Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+                        &Bytes::from_str(USDC_ADDRESS).unwrap(),
                         "USDC",
                         6,
                         0,
@@ -2059,9 +2204,9 @@ mod test_serial_db {
                     ),
                 ),
                 (
-                    Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+                    Bytes::from(WETH_ADDRESS),
                     CurrencyToken::new(
-                        &Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+                        &Bytes::from(WETH_ADDRESS),
                         "WETH",
                         18,
                         0,
@@ -2083,8 +2228,8 @@ mod test_serial_db {
                         protocol_type_name: "pool".to_string(),
                         chain: Chain::Ethereum,
                         tokens: vec![
-                            Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
-                            Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+                            Bytes::from_str(USDC_ADDRESS).unwrap(),
+                            Bytes::from_str(WETH_ADDRESS).unwrap(),
                         ],
                         contract_addresses: vec![],
                         creation_tx: Default::default(),
@@ -2109,23 +2254,34 @@ mod test_serial_db {
                 "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688".to_owned(),
                 fixtures::slots([(1, 200)]),
                 Bytes::from(1000_u64).lpad(32, 0),
+                HashMap::from([(
+                    Bytes::from_str(WETH_ADDRESS).unwrap(),
+                    AccountBalance {
+                        token: Bytes::from_str(WETH_ADDRESS).unwrap(),
+                        balance: Bytes::from(&[0u8]),
+                        modify_tx: Bytes::zero(32),
+                        account: "0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688"
+                            .parse()
+                            .unwrap(),
+                    },
+                )]),
                 vec![0, 0, 0, 0].into(),
                 "0xe8e77626586f73b955364c7b4bbf0bb7f7685ebd40e852b164633a4acbd3244c"
                     .parse()
                     .unwrap(),
-                VM_TX_HASH_1.parse().unwrap(),
+                Bytes::zero(32),
                 VM_TX_HASH_0.parse().unwrap(),
                 Some(VM_TX_HASH_0.parse().unwrap()),
             ),
-            _ => panic!("Unkown version"),
+            _ => panic!("Unknown version"),
         }
     }
 
     // Creates a BlockChanges object with a VM contract creation and an account update. Based on an
     // Ambient pool creation
     fn vm_creation_and_update() -> BlockChanges {
-        let base_token = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-        let quote_token = Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+        let base_token = Bytes::from_str(WETH_ADDRESS).unwrap();
+        let quote_token = Bytes::from_str(USDC_ADDRESS).unwrap();
         let component_id = "ambient_USDC_ETH".to_string();
         BlockChanges::new(
             "vm:ambient".to_owned(),
@@ -2184,7 +2340,6 @@ mod test_serial_db {
                             AccountBalance {
                                 token: base_token.clone(),
                                 balance: Bytes::from(&[0u8]),
-                                balance_float: 10.0,
                                 modify_tx: VM_TX_HASH_0.parse().unwrap(),
                                 account: VM_CONTRACT.into(),
                             },
@@ -2228,8 +2383,7 @@ mod test_serial_db {
                             AccountBalance {
                                 token: base_token,
                                 balance: Bytes::from(&[0u8]),
-                                balance_float: 10.0,
-                                modify_tx: VM_TX_HASH_0.parse().unwrap(),
+                                modify_tx: VM_TX_HASH_1.parse().unwrap(),
                                 account: VM_CONTRACT.into(),
                             },
                         )]),
@@ -2256,8 +2410,8 @@ mod test_serial_db {
                 protocol_type_name: "pool".to_string(),
                 chain: Chain::Ethereum,
                 tokens: vec![
-                    Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
-                    Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+                    Bytes::from_str(USDC_ADDRESS).unwrap(),
+                    Bytes::from_str(WETH_ADDRESS).unwrap(),
                 ],
                 contract_addresses: vec![],
                 creation_tx: Bytes::from_str(
@@ -2318,7 +2472,7 @@ mod test_serial_db {
                 .await
                 .unwrap()
                 .entity;
-            assert_eq!(tokens.len(), 2);
+            assert_eq!(tokens.len(), 3);
 
             let protocol_components = cached_gw
                 .get_protocol_components(&Chain::Ethereum, None, None, None, None)
@@ -2472,7 +2626,7 @@ mod test_serial_db {
                         chain: Chain::Ethereum,
                         tokens: vec![
                             Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
-                            Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                            Bytes::from_str(USDC_ADDRESS).unwrap(),
                         ],
                         contract_addresses: vec![],
                         static_attributes: HashMap::new(),
@@ -2489,7 +2643,7 @@ mod test_serial_db {
                         chain: Chain::Ethereum,
                         tokens: vec![
                             Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
-                            Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                            Bytes::from_str(WETH_ADDRESS).unwrap(),
                         ],
                         contract_addresses: vec![],
                         static_attributes: HashMap::new(),
@@ -2500,15 +2654,15 @@ mod test_serial_db {
                 ]),
                 component_balances: HashMap::from([
                     ("pc_1".to_string(), HashMap::from([
-                        (Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), ComponentBalance {
-                            token: Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                        (Bytes::from_str(USDC_ADDRESS).unwrap(), ComponentBalance {
+                            token: Bytes::from_str(USDC_ADDRESS).unwrap(),
                             balance: Bytes::from("0x00000001"),
                             balance_float: 1.0,
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
                             component_id: "pc_1".to_string(),
                         }),
-                        (Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), ComponentBalance {
-                            token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                        (Bytes::from_str(WETH_ADDRESS).unwrap(), ComponentBalance {
+                            token: Bytes::from_str(WETH_ADDRESS).unwrap(),
                             balance: Bytes::from("0x000003e8"),
                             balance_float: 1000.0,
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000007531").unwrap(),
@@ -2516,6 +2670,7 @@ mod test_serial_db {
                         }),
                     ])),
                 ]),
+                account_balances: HashMap::new(),
                 component_tvl: HashMap::new(),
                 account_deltas: Default::default(),
             };
@@ -2622,6 +2777,8 @@ mod test_serial_db {
                 .expect("not good type");
 
             let base_ts = db_fixtures::yesterday_midnight().timestamp();
+            let account1 = Bytes::from_str("0000000000000000000000000000000000000001").unwrap();
+            let account2 = Bytes::from_str("0000000000000000000000000000000000000002").unwrap();
             let block_account_expected = BlockAggregatedChanges {
                 extractor: "vm_name".to_string(),
                 chain: Chain::Ethereum,
@@ -2635,8 +2792,8 @@ mod test_serial_db {
                 finalized_block_height: 1,
                 revert: true,
                 account_deltas: HashMap::from([
-                    (Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(), AccountDelta {
-                        address: Bytes::from_str("0000000000000000000000000000000000000001").unwrap(),
+                    (account1.clone(), AccountDelta {
+                        address: account1.clone(),
                         chain: Chain::Ethereum,
                         slots: HashMap::from([
                             (Bytes::from("0x03"), Some(Bytes::new())),
@@ -2646,8 +2803,8 @@ mod test_serial_db {
                         code: None,
                         change: ChangeType::Update,
                     }),
-                    (Bytes::from_str("0x0000000000000000000000000000000000000002").unwrap(), AccountDelta {
-                        address: Bytes::from_str("0000000000000000000000000000000000000002").unwrap(),
+                    (account2.clone(), AccountDelta {
+                        address: account2.clone(),
                         chain: Chain::Ethereum,
                         slots: HashMap::from([
                             (Bytes::from("0x01"), Some(Bytes::from("0x02"))),
@@ -2667,10 +2824,10 @@ mod test_serial_db {
                         chain: Chain::Ethereum,
                         tokens: vec![
                             Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
-                            Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                            Bytes::from_str(USDC_ADDRESS).unwrap(),
                         ],
                         contract_addresses: vec![
-                            Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                            account1.clone(),
                         ],
                         static_attributes: HashMap::new(),
                         change: ChangeType::Deletion,
@@ -2680,15 +2837,15 @@ mod test_serial_db {
                 ]),
                 component_balances: HashMap::from([
                     ("pc_1".to_string(), HashMap::from([
-                        (Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), ComponentBalance {
-                            token: Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                        (Bytes::from_str(USDC_ADDRESS).unwrap(), ComponentBalance {
+                            token: Bytes::from_str(USDC_ADDRESS).unwrap(),
                             balance: Bytes::from("0x00000064"),
                             balance_float: 100.0,
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000007532").unwrap(),
                             component_id: "pc_1".to_string(),
                         }),
-                        (Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(), ComponentBalance {
-                            token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                        (Bytes::from_str(WETH_ADDRESS).unwrap(), ComponentBalance {
+                            token: Bytes::from_str(WETH_ADDRESS).unwrap(),
                             balance: Bytes::from("0x00000001"),
                             balance_float: 1.0,
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
@@ -2696,9 +2853,34 @@ mod test_serial_db {
                         }),
                     ])),
                 ]),
+                account_balances: HashMap::from([
+                    (account1.clone(), HashMap::from([
+                        (Bytes::from_str(WETH_ADDRESS).unwrap(), AccountBalance {
+                        token: Bytes::from_str(WETH_ADDRESS).unwrap(),
+                        balance: Bytes::from("0x00000001"),
+                        modify_tx:Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+                        account: account1.clone(),
+                        }),
+                        (Bytes::from_str(USDC_ADDRESS).unwrap(), AccountBalance {
+                        token: Bytes::from_str(USDC_ADDRESS).unwrap(),
+                        balance: Bytes::from("0x00000064"),
+                        modify_tx:Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000007532").unwrap(),
+                        account: account1.clone(),
+                        }),
+                    ])),
+                    (account2.clone(), HashMap::from([
+                        (Bytes::from_str(USDC_ADDRESS).unwrap(), AccountBalance {
+                        token: Bytes::from_str(USDC_ADDRESS).unwrap(),
+                        balance: Bytes::from("0x00000001"),
+                        modify_tx:Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000007531").unwrap(),
+                        account: account2.clone(),
+                        }),
+                    ]))
+                ]),
                 component_tvl: HashMap::new(),
                 state_deltas: Default::default(),
             };
+
             assert_eq!(
                 res,
                 &block_account_expected

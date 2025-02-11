@@ -1,24 +1,28 @@
-use super::{
-    maybe_lookup_block_ts, maybe_lookup_version_ts, orm, schema, storage_error_from_diesel,
-    versioning::{apply_partitioned_versioning, apply_versioning, VersioningEntry},
-    PostgresError, PostgresGateway, WithOrdinal, WithTxHash, MAX_TS,
-};
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
     upsert::{excluded, on_constraint},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use itertools::Itertools;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use tracing::{debug, error, instrument, Level};
+
 use tycho_core::{
     keccak256,
     models::{
-        self, contract::AccountDelta, AccountToContractStore, Address, Balance, Chain, ChangeType,
-        Code, ContractId, ContractStore, PaginationParams, StoreKey, StoreVal, TxHash,
+        contract::{Account, AccountBalance, AccountDelta},
+        AccountToContractStore, Address, Balance, Chain, ChangeType, Code, ContractId,
+        ContractStore, PaginationParams, StoreKey, StoreVal, TxHash,
     },
     storage::{BlockOrTimestamp, StorageError, Version, WithTotal},
     Bytes,
+};
+
+use super::{
+    maybe_lookup_block_ts, maybe_lookup_version_ts, orm, schema, storage_error_from_diesel,
+    versioning::{apply_partitioned_versioning, apply_versioning, VersioningEntry},
+    PostgresError, PostgresGateway, WithOrdinal, WithTxHash, MAX_TS, MAX_VERSION_TS,
 };
 
 struct CreatedOrDeleted<T> {
@@ -42,13 +46,20 @@ impl PostgresGateway {
     #[instrument(level = Level::DEBUG, skip(self, conn))]
     async fn get_balance_deltas_internal(
         &self,
-        chain_id: i64,
+        chain: &Chain,
         start_version_ts: &NaiveDateTime,
         target_version_ts: &NaiveDateTime,
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<i64, Balance>, StorageError> {
         use schema::account_balance::dsl::*;
+        let chain_id = self.get_chain_id(chain);
+
         let res = if start_version_ts <= target_version_ts {
+            // Going forward
+            //                  [     changes to update    ]
+            // -----------------|--------------------------|
+            //                start                     target
+            // We query for balance updates between start and target version.
             let changed_account_ids = account_balance
                 .inner_join(schema::account::table.inner_join(schema::chain::table))
                 .filter(schema::chain::id.eq(chain_id))
@@ -60,7 +71,12 @@ impl PostgresGateway {
 
             account_balance
                 .inner_join(schema::transaction::table)
+                .inner_join(schema::token::table)
+                .inner_join(
+                    schema::account::table.on(schema::account::id.eq(schema::token::account_id)),
+                )
                 .filter(account_id.eq_any(changed_account_ids))
+                .filter(schema::account::address.eq(chain.native_token().address))
                 .filter(valid_from.le(target_version_ts))
                 .filter(
                     valid_to
@@ -76,6 +92,12 @@ impl PostgresGateway {
                 .into_iter()
                 .collect::<HashMap<i64, Balance>>()
         } else {
+            // Going backwards
+            //                  [     changes to revert    ]
+            // -----------------|--------------------------|
+            //                target                     start
+            // We query for balances valid AT the target version for accounts that were updated
+            // between target and start version.
             let changed_account_ids = account_balance
                 .inner_join(schema::account::table.inner_join(schema::chain::table))
                 .filter(schema::chain::id.eq(chain_id))
@@ -87,7 +109,12 @@ impl PostgresGateway {
 
             account_balance
                 .inner_join(schema::transaction::table)
+                .inner_join(schema::token::table)
+                .inner_join(
+                    schema::account::table.on(schema::account::id.eq(schema::token::account_id)),
+                )
                 .filter(account_id.eq_any(changed_account_ids))
+                .filter(schema::account::address.eq(chain.native_token().address))
                 .filter(valid_from.le(target_version_ts))
                 .filter(
                     valid_to
@@ -97,11 +124,11 @@ impl PostgresGateway {
                 .select((account_id, balance))
                 .order_by((account_id, valid_from.asc(), schema::transaction::index.asc()))
                 .distinct_on(account_id)
-                .get_results::<(i64, Bytes)>(conn)
+                .get_results::<(i64, Balance)>(conn)
                 .await
                 .map_err(PostgresError::from)?
                 .into_iter()
-                .collect::<HashMap<i64, Bytes>>()
+                .collect::<HashMap<i64, Balance>>()
         };
         Ok(res)
     }
@@ -680,7 +707,7 @@ impl PostgresGateway {
         version: Option<&Version>,
         include_slots: bool,
         conn: &mut AsyncPgConnection,
-    ) -> Result<models::contract::Account, StorageError> {
+    ) -> Result<Account, StorageError> {
         let account_orm: orm::Account = orm::Account::by_id(id, conn)
             .await
             .map_err(|err| {
@@ -690,31 +717,20 @@ impl PostgresGateway {
             Some(version) => maybe_lookup_version_ts(version, conn).await?,
             None => Utc::now().naive_utc(),
         };
+        let chain = id.chain;
 
-        let (balance_tx, balance_orm) = schema::account_balance::table
-            .inner_join(schema::transaction::table)
-            .filter(schema::account_balance::account_id.eq(account_orm.id))
-            .filter(schema::account_balance::valid_from.le(version_ts))
-            .filter(
-                schema::account_balance::valid_to
-                    .gt(Some(version_ts))
-                    .or(schema::account_balance::valid_to.is_null()),
-            )
-            .select((schema::transaction::hash, orm::AccountBalance::as_select()))
-            .order_by((
-                schema::account_balance::account_id,
-                schema::account_balance::valid_from.desc(),
-                schema::transaction::index.desc(),
-            ))
-            .first::<(Bytes, orm::AccountBalance)>(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(
-                    err,
-                    "AccountBalance",
-                    &hex::encode(&id.address),
-                    Some("Account".to_owned()),
-                )
+        let mut all_balances = self
+            .get_account_balances(&chain, Some(&[id.address.clone()]), version, true, conn)
+            .await?;
+        let account_balances = all_balances
+            .get_mut(&id.address)
+            .ok_or_else(|| {
+                StorageError::NotFound("account_balances".to_string(), id.address.to_string())
+            })?;
+        let native_balance = account_balances
+            .remove(&chain.native_token().address)
+            .ok_or_else(|| {
+                StorageError::NotFound("native_balance".to_string(), id.address.to_string())
             })?;
 
         let (code_tx, code_orm) = schema::contract_code::table
@@ -752,15 +768,17 @@ impl PostgresGateway {
                 .ok(),
             None => None,
         };
-        let mut account = models::contract::Account::new(
-            id.chain,
+        let mut account = Account::new(
+            chain,
             account_orm.address,
             account_orm.title,
             HashMap::new(),
-            balance_orm.balance,
+            native_balance.balance,
+            account_balances.clone(),
             code_orm.code,
             code_orm.hash,
-            balance_tx,
+            // TODO: remove balance_modify_tx from Account
+            Bytes::zero(32),
             code_tx,
             creation_tx,
         );
@@ -788,7 +806,7 @@ impl PostgresGateway {
         include_slots: bool,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<WithTotal<Vec<models::contract::Account>>, StorageError> {
+    ) -> Result<WithTotal<Vec<Account>>, StorageError> {
         let chain_db_id = self.get_chain_id(chain);
         let version_ts = match &version {
             Some(version) => maybe_lookup_version_ts(version, conn).await?,
@@ -864,33 +882,16 @@ impl PostgresGateway {
                 .collect::<Vec<_>>()
         };
 
+        let mut all_balances = self
+            .get_account_balances(chain, ids, version, true, conn)
+            .await?;
+
         // take all ids and query both code and storage
         let account_ids = accounts
             .iter()
             .map(|a| a.id)
             .collect::<HashSet<_>>();
 
-        let native_balances = {
-            use schema::account_balance::dsl::*;
-            account_balance
-                .inner_join(schema::transaction::table)
-                .filter(account_id.eq_any(&account_ids))
-                .filter(valid_from.le(version_ts))
-                .filter(
-                    valid_to
-                        .is_null()
-                        .or(valid_to.gt(version_ts)),
-                )
-                .order_by((account_id, schema::transaction::index.desc()))
-                .select((orm::AccountBalance::as_select(), schema::transaction::hash))
-                .distinct_on(account_id)
-                .get_results::<(orm::AccountBalance, Bytes)>(conn)
-                .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(entity, tx)| WithTxHash { entity, tx: Some(tx) })
-                .collect::<Vec<_>>()
-        };
         let codes = {
             use schema::contract_code::dsl::*;
             contract_code
@@ -922,42 +923,58 @@ impl PostgresGateway {
             None
         };
 
-        if !(accounts.len() == native_balances.len() && native_balances.len() == codes.len()) {
+        if accounts.len() != codes.len() {
             return Err(StorageError::Unexpected(format!(
-                "Some accounts were missing either code or account balance entities. \
-                    Got {} accounts {} account balances and {} code entries.",
+                "Some accounts were missing either code. Got {} accounts and {} code entries.",
                 accounts.len(),
-                native_balances.len(),
                 codes.len(),
             )));
         }
 
         let res = accounts
             .into_iter()
-            .zip(native_balances.into_iter().zip(codes))
-            .map(|(account, (balance, code))| -> Result<models::contract::Account, StorageError> {
-                if !(account.id == balance.account_id && balance.account_id == code.account_id) {
+            .zip(codes)
+            .map(|(account, code)| -> Result<Account, StorageError> {
+                if account.id != code.account_id {
                     return Err(StorageError::Unexpected(format!(
                         "Identity mismatch - while retrieving entries for account id: {} \
-                            encountered balance for id {} and code for id {}",
-                        &account.id, &balance.account_id, &code.account_id
+                            encountered code for id {}",
+                        &account.id, &code.account_id
                     )));
                 }
 
-                // Note: it is safe to call unwrap here, as above we always wrap it into Some
-                let balance_tx = balance.tx.unwrap();
+                // Note: it is safe to call unwrap here since above we always wrap it into Some
                 let code_tx = code.tx.clone().unwrap();
                 let creation_tx = account.tx.clone();
 
-                let mut contract = models::contract::Account::new(
+                let balances = all_balances
+                    .get_mut(&account.address)
+                    .ok_or_else(|| {
+                        StorageError::NotFound(
+                            "account_balances".to_string(),
+                            account.address.to_string(),
+                        )
+                    })?;
+                let native_balance = balances
+                    .remove(&chain.native_token().address)
+                    .ok_or_else(|| {
+                        StorageError::NotFound(
+                            "native_balance".to_string(),
+                            account.address.to_string(),
+                        )
+                    })?;
+
+                let mut contract = Account::new(
                     *chain,
                     account.entity.address.clone(),
                     account.entity.title.clone(),
                     HashMap::new(),
-                    balance.entity.balance.clone(),
+                    native_balance.balance,
+                    balances.clone(),
                     code.entity.code.clone(),
                     code.entity.hash.clone(),
-                    balance_tx,
+                    // TODO: remove balance_modify_tx from Account
+                    Bytes::zero(32),
                     code_tx,
                     creation_tx,
                 );
@@ -985,7 +1002,7 @@ impl PostgresGateway {
     /// method exists for updating these related components.
     pub async fn upsert_contract(
         &self,
-        new: &models::contract::Account,
+        new: &Account,
         db: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         let (creation_tx_id, created_ts) = if let Some(h) = &new.creation_tx {
@@ -1046,7 +1063,12 @@ impl PostgresGateway {
         // we can only insert balance and contract_code if we have a creation transaction.
         if let Some(tx_id) = creation_tx_id {
             diesel::insert_into(schema::account_balance::table)
-                .values(new_contract.new_balance(account_id, tx_id, created_ts))
+                .values(new_contract.new_balance(
+                    account_id,
+                    self.get_native_token_id(&new.chain),
+                    tx_id,
+                    created_ts,
+                ))
                 .execute(db)
                 .await
                 .map_err(|err| storage_error_from_diesel(err, "AccountBalance", &hex_addr, None))?;
@@ -1153,6 +1175,7 @@ impl PostgresGateway {
                 let new = orm::NewAccountBalance {
                     balance: new_balance,
                     account_id,
+                    token_id: self.get_native_token_id(chain),
                     modify_tx: tx_id,
                     valid_from: ts,
                     valid_to: None,
@@ -1315,7 +1338,7 @@ impl PostgresGateway {
         let target_version_ts = maybe_lookup_block_ts(target_version, conn).await?;
 
         let balance_deltas = self
-            .get_balance_deltas_internal(chain_id, &start_version_ts, &target_version_ts, conn)
+            .get_balance_deltas_internal(chain, &start_version_ts, &target_version_ts, conn)
             .await?;
         let code_deltas = self
             .get_code_deltas(chain_id, &start_version_ts, &target_version_ts, conn)
@@ -1385,6 +1408,238 @@ impl PostgresGateway {
             .collect::<Result<HashMap<_, _>, _>>()?;
         Ok(deltas.into_values().collect())
     }
+
+    pub async fn add_account_balances(
+        &self,
+        account_balances: &[AccountBalance],
+        chain: &Chain,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<(), StorageError> {
+        let chain_id = self.get_chain_id(chain);
+
+        // fetch linked tokens
+        let token_addresses = account_balances
+            .iter()
+            .map(|b| b.token.clone())
+            .collect::<Vec<_>>();
+        let token_ids: HashMap<Address, i64> = schema::token::table
+            .inner_join(schema::account::table)
+            .select((schema::account::address, schema::token::id))
+            .filter(schema::account::address.eq_any(&token_addresses))
+            .load::<(Address, i64)>(conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .collect();
+
+        // fetch linked transactions
+        let modify_txs = account_balances
+            .iter()
+            .map(|b| b.modify_tx.clone())
+            .collect::<Vec<_>>();
+        let modify_txs_refs = modify_txs.iter().collect::<Vec<_>>();
+        let transaction_ids_and_ts =
+            orm::Transaction::ids_and_ts_by_hash(modify_txs_refs.as_ref(), conn)
+                .await
+                .map_err(PostgresError::from)?
+                .into_iter()
+                .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
+                .collect::<HashMap<TxHash, (i64, i64, NaiveDateTime)>>();
+
+        // fetch linked accounts
+        let account_addresses = account_balances
+            .iter()
+            .map(|b| b.account.clone())
+            .collect::<Vec<_>>();
+        let account_address_refs = account_addresses
+            .iter()
+            .collect::<Vec<_>>();
+        let account_ids =
+            orm::Account::ids_by_addresses(account_address_refs.as_ref(), chain_id, conn)
+                .await
+                .map_err(PostgresError::from)?
+                .into_iter()
+                .map(|(id, address)| (address, id))
+                .collect::<HashMap<Address, i64>>();
+
+        // collect account balance updates
+        let mut new_account_balances = Vec::new();
+        for balance in account_balances.iter() {
+            let token_id = *token_ids
+                .get(&balance.token)
+                .ok_or_else(|| {
+                    StorageError::NotFound("Token".to_owned(), hex::encode(&balance.token))
+                })?;
+            let account_id = *account_ids
+                .get(&balance.account)
+                .ok_or_else(|| {
+                    StorageError::NotFound("Account".to_owned(), hex::encode(&balance.account))
+                })?;
+            let (tx_id, tx_index, tx_ts) = *transaction_ids_and_ts
+                .get(&balance.modify_tx)
+                .ok_or_else(|| {
+                    StorageError::NotFound(
+                        "Transaction".to_owned(),
+                        hex::encode(&balance.modify_tx),
+                    )
+                })?;
+            let new_account_balance = orm::NewAccountBalance {
+                balance: balance.balance.clone(),
+                account_id,
+                token_id,
+                modify_tx: tx_id,
+                valid_from: tx_ts,
+                valid_to: None,
+            };
+            new_account_balances.push(WithOrdinal::new(
+                new_account_balance,
+                (account_id, token_id, tx_ts, tx_index),
+            ));
+        }
+
+        // insert account balances
+        if !account_balances.is_empty() {
+            new_account_balances.sort_by_cached_key(|b| b.ordinal);
+            let mut sorted = new_account_balances
+                .into_iter()
+                .map(|b| b.entity)
+                .collect::<Vec<_>>();
+            apply_versioning::<_, orm::AccountBalance>(&mut sorted, conn).await?;
+            diesel::insert_into(schema::account_balance::table)
+                .values(&sorted)
+                .execute(conn)
+                .await
+                .map_err(|err| storage_error_from_diesel(err, "AccountBalance", "batch", None))?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn get_account_balances(
+        &self,
+        chain: &Chain,
+        accounts: Option<&[Address]>,
+        at: Option<&Version>,
+        include_native: bool,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<Address, HashMap<Address, AccountBalance>>, StorageError> {
+        // NOTE: the returned AccountBalances have a default value for tx_hash as it is assumed
+        // the caller does not need them and we get a large performance boost by skipping them.
+
+        let version_ts = match &at {
+            Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),
+            None => None,
+        };
+        let chain_id = self.get_chain_id(chain);
+
+        // NOTE: the balances query is split into 3 separate queries to avoid excessive table joins
+        // and improve performance. The queries are as follows:
+
+        // Query 1: account db ids
+        let mut account_query = schema::account::table
+            .filter(schema::account::chain_id.eq(chain_id))
+            .select((schema::account::id, schema::account::address))
+            .into_boxed();
+        if let Some(accounts) = accounts {
+            account_query = account_query.filter(schema::account::address.eq_any(accounts));
+        }
+        let account_ids = account_query
+            .get_results::<(i64, Address)>(conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        // Query 2: balances
+        let mut balance_query = schema::account_balance::table
+            .filter(schema::account_balance::account_id.eq_any(account_ids.keys()))
+            .filter(
+                schema::account_balance::valid_to
+                    .gt(version_ts.unwrap_or(*MAX_VERSION_TS))
+                    .or(schema::account_balance::valid_to.is_null()),
+            )
+            .into_boxed();
+        // if a version timestamp is provided, we want to filter by valid_from <= version_ts
+        if let Some(ts) = version_ts {
+            balance_query = balance_query.filter(schema::account_balance::valid_from.le(ts));
+        }
+        let balances_map = balance_query
+            .select((
+                schema::account_balance::account_id,
+                schema::account_balance::token_id,
+                schema::account_balance::balance,
+            ))
+            .order(schema::account_balance::account_id.asc())
+            .get_results::<(i64, i64, Balance)>(conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .group_by(|e| e.0)
+            .into_iter()
+            .map(|(acc_id, balances)| {
+                account_ids
+                    .get(&acc_id)
+                    .cloned() // Avoid needing .clone() later
+                    .ok_or_else(|| StorageError::NotFound("Account".to_owned(), acc_id.to_string()))
+                    .map(|account| {
+                        (
+                            account,
+                            balances
+                                .map(|(_, tid, bal)| (tid, bal))
+                                .collect::<HashMap<_, _>>(),
+                        )
+                    })
+            })
+            .collect::<Result<HashMap<_, _>, StorageError>>()?;
+
+        // Query 3: token addresses
+        let tokens = schema::token::table
+            .inner_join(schema::account::table)
+            .filter(
+                schema::token::id.eq_any(
+                    balances_map
+                        .values()
+                        .flat_map(|b| b.keys())
+                        .collect::<Vec<_>>(),
+                ),
+            )
+            .select((schema::token::id, schema::account::address))
+            .get_results::<(i64, Address)>(conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        // Replace token ids with addresses
+        let mut balances = HashMap::with_capacity(balances_map.len());
+        for (account, balance_map) in balances_map {
+            let mut new_balance_map = HashMap::new();
+            for (token_id, balance) in balance_map {
+                let token_address = tokens
+                    .get(&token_id)
+                    .ok_or_else(|| {
+                        StorageError::NotFound("Token".to_owned(), token_id.to_string())
+                    })?
+                    .clone();
+                if !include_native && token_address == chain.native_token().address {
+                    // Skip native token balances if not requested
+                    continue;
+                }
+                let account_balance = AccountBalance::new(
+                    account.clone(),
+                    token_address.clone(),
+                    balance,
+                    TxHash::from(
+                        "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    ),
+                );
+                new_balance_map.insert(token_address, account_balance);
+            }
+            balances.insert(account, new_balance_map);
+        }
+
+        Ok(balances)
+    }
 }
 
 /// Tests for PostgresGateway's ContractStateGateway methods
@@ -1392,21 +1647,21 @@ impl PostgresGateway {
 /// The tests below test the functionality using the concrete EVM types.
 #[cfg(test)]
 mod test {
+    use super::*;
+    use diesel_async::AsyncConnection;
+    use rstest::rstest;
+    use std::{str::FromStr, time::Duration};
+
     use crate::postgres::{
         db_fixtures,
         db_fixtures::{yesterday_midnight, yesterday_one_am},
     };
-    use diesel_async::AsyncConnection;
-    use rstest::rstest;
-    use std::{str::FromStr, time::Duration};
     use tycho_core::{
+        models::{FinancialType, ImplementationType},
         storage::{BlockIdentifier, VersionKind},
-        Bytes,
     };
 
-    use super::*;
-
-    type EvmGateway = PostgresGateway;
+    type EVMGateway = PostgresGateway;
     type MaybeTS = Option<NaiveDateTime>;
 
     async fn setup_db() -> AsyncPgConnection {
@@ -1420,11 +1675,14 @@ mod test {
         conn
     }
 
-    /// This sets up the data needed to test the gateway. The setup is structured such that each
-    /// accounts historical changes are kept together this makes it easy to reason about that change
-    /// an account should have at each version Please not that if you change something here, also
-    /// update the account fixtures right below, which contain account states at each version
-    async fn setup_data(conn: &mut AsyncPgConnection) {
+    /// This sets up the data needed to test the gateway and returns the DB id of the inserted
+    /// chain.
+    ///
+    /// The setup is structured such that each accounts historical changes are kept together this
+    /// makes it easy to reason about that change an account should have at each version. Please
+    /// note that if you change something here, also update the account fixtures right below, which
+    /// contain account states at each version.
+    async fn setup_data(conn: &mut AsyncPgConnection) -> i64 {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
         let ts = db_fixtures::yesterday_midnight();
@@ -1451,6 +1709,15 @@ mod test {
             ],
         )
         .await;
+        let (_, native_token) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
 
         // Account C0
         let c0 = db_fixtures::insert_account(
@@ -1461,10 +1728,11 @@ mod test {
             Some(txn[0]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 0, txn[0], Some(&ts), c0).await;
+        db_fixtures::insert_account_balance(conn, 0, native_token, txn[0], Some(&ts), c0).await;
         let c0_code =
             db_fixtures::insert_contract_code(conn, c0, txn[0], Bytes::from("C0C0C0")).await;
-        db_fixtures::insert_account_balance(conn, 100, txn[1], Some(&ts_p1), c0).await;
+        db_fixtures::insert_account_balance(conn, 100, native_token, txn[1], Some(&ts_p1), c0)
+            .await;
         // Slot 2 is never modified again
         db_fixtures::insert_slots(conn, c0, txn[1], &ts, None, &[(2, 1, None)]).await;
         // First version for slots 0 and 1.
@@ -1477,7 +1745,7 @@ mod test {
             &[(0, 1, None), (1, 5, None)],
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 101, txn[3], None, c0).await;
+        db_fixtures::insert_account_balance(conn, 101, native_token, txn[3], None, c0).await;
         // Second and final version for 0 and 1, new slots 5 and 6
         db_fixtures::insert_slots(
             conn,
@@ -1488,6 +1756,26 @@ mod test {
             &[(0, 2, Some(1)), (1, 3, Some(5)), (5, 25, None), (6, 30, None)],
         )
         .await;
+        let (_, usdc_id) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "USDC",
+            18,
+            Some(100),
+        )
+        .await;
+        db_fixtures::insert_account_balance(conn, 1000, usdc_id, txn[0], None, c0).await;
+        let (_, weth_id) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "WETH",
+            18,
+            Some(100),
+        )
+        .await;
+        db_fixtures::insert_account_balance(conn, 2000, weth_id, txn[0], None, c0).await;
 
         // Account C1
         let c1 = db_fixtures::insert_account(
@@ -1498,7 +1786,7 @@ mod test {
             Some(txn[2]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 50, txn[2], None, c1).await;
+        db_fixtures::insert_account_balance(conn, 50, native_token, txn[2], None, c1).await;
         let c1_code =
             db_fixtures::insert_contract_code(conn, c1, txn[2], Bytes::from("C1C1C1")).await;
         db_fixtures::insert_slots(
@@ -1520,7 +1808,7 @@ mod test {
             Some(txn[1]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 25, txn[1], None, c2).await;
+        db_fixtures::insert_account_balance(conn, 25, native_token, txn[1], None, c2).await;
         let c2_code =
             db_fixtures::insert_contract_code(conn, c2, txn[1], Bytes::from("C2C2C2")).await;
         db_fixtures::insert_slots(conn, c2, txn[1], &ts, None, &[(1, 2, None), (2, 4, None)]).await;
@@ -1532,9 +1820,9 @@ mod test {
         let protocol_type_id = db_fixtures::insert_protocol_type(
             conn,
             "Pool",
-            Some(models::FinancialType::Swap),
+            Some(FinancialType::Swap),
             None,
-            Some(models::ImplementationType::Custom),
+            Some(ImplementationType::Custom),
         )
         .await;
         let _ = db_fixtures::insert_protocol_component(
@@ -1548,11 +1836,13 @@ mod test {
             Some(vec![c0_code, c1_code, c2_code]),
         )
         .await;
+
+        chain_id
     }
 
-    fn account_c0(version: u64) -> models::contract::Account {
+    fn account_c0(version: u64) -> Account {
         match version {
-            1 => models::contract::Account::new(
+            1 => Account::new(
                 Chain::Ethereum,
                 "0x6b175474e89094c44da98b954eedeac495271d0f"
                     .parse()
@@ -1563,13 +1853,45 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(100u64).lpad(32, 0),
+                vec![
+                    (
+                        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(1000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                    (
+                        "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(2000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
                 Bytes::from("C0C0C0"),
                 "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                     .parse()
                     .unwrap(),
-                "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
@@ -1579,7 +1901,7 @@ mod test {
                         .unwrap(),
                 ),
             ),
-            2 => models::contract::Account::new(
+            2 => Account::new(
                 Chain::Ethereum,
                 "0x6b175474e89094c44da98b954eedeac495271d0f"
                     .parse()
@@ -1590,13 +1912,45 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(101u64).lpad(32, 0),
+                vec![
+                    (
+                        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(1000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                    (
+                        "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                            .parse()
+                            .unwrap(),
+                        AccountBalance::new(
+                            "0x6b175474e89094c44da98b954eedeac495271d0f"
+                                .parse()
+                                .unwrap(),
+                            "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                                .parse()
+                                .unwrap(),
+                            Bytes::from(2000_i32.to_be_bytes()).lpad(32, 0),
+                            Bytes::zero(32),
+                        ),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
                 Bytes::from("C0C0C0"),
                 "0x106781541fd1c596ade97569d584baf47e3347d3ac67ce7757d633202061bdc4"
                     .parse()
                     .unwrap(),
-                "0x50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
@@ -1623,9 +1977,9 @@ mod test {
             .collect()
     }
 
-    fn account_c1(version: u64) -> models::contract::Account {
+    fn account_c1(version: u64) -> Account {
         match version {
-            2 => models::contract::Account::new(
+            2 => Account::new(
                 Chain::Ethereum,
                 "0x73bce791c239c8010cd3c857d96580037ccdd0ee"
                     .parse()
@@ -1636,13 +1990,12 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(50u64).lpad(32, 0),
+                HashMap::new(),
                 Bytes::from("C1C1C1"),
                 "0xa04b84acdf586a694085997f32c4aa11c2726a7f7e0b677a27d44d180c08e07f"
                     .parse()
                     .unwrap(),
-                "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                     .parse()
                     .unwrap(),
@@ -1656,9 +2009,9 @@ mod test {
         }
     }
 
-    fn account_c2(version: u64) -> models::contract::Account {
+    fn account_c2(version: u64) -> Account {
         match version {
-            1 => models::contract::Account::new(
+            1 => Account::new(
                 Chain::Ethereum,
                 "0x94a3f312366b8d0a32a00986194053c0ed0cddb1"
                     .parse()
@@ -1669,13 +2022,12 @@ mod test {
                     .map(|(k, v)| (k, v.unwrap_or(Bytes::from("0x00"))))
                     .collect(),
                 Bytes::from(25u64).lpad(32, 0),
+                HashMap::new(),
                 Bytes::from("C2C2C2"),
                 "0x7eb1e0ed9d018991eed6077f5be45b52347f6e5870728809d368ead5b96a1e96"
                     .parse()
                     .unwrap(),
-                "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
-                    .parse()
-                    .unwrap(),
+                Bytes::zero(32),
                 "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
                     .parse()
                     .unwrap(),
@@ -1702,14 +2054,14 @@ mod test {
             expected.slots.clear();
         }
 
-        let gateway = EvmGateway::from_connection(&mut conn).await;
+        let gateway = EVMGateway::from_connection(&mut conn).await;
         let id = ContractId::new(Chain::Ethereum, Bytes::from(acc_address));
-        let actual = gateway
+        let result = gateway
             .get_contract(&id, None, include_slots, &mut conn)
             .await
             .unwrap();
 
-        assert_eq!(expected, actual);
+        assert_eq!(result, expected);
     }
 
     #[rstest]
@@ -1752,11 +2104,11 @@ mod test {
     async fn test_get_contracts(
         #[case] ids: Option<Vec<Bytes>>,
         #[case] version: Option<Version>,
-        #[case] exp: Vec<models::contract::Account>,
+        #[case] exp: Vec<Account>,
     ) {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let addresses = ids.as_deref();
 
         let results = gw
@@ -1811,12 +2163,12 @@ mod test {
     async fn test_get_contracts_with_pagination(
         #[case] ids: Option<Vec<Bytes>>,
         #[case] version: Option<Version>,
-        #[case] exp: Vec<models::contract::Account>,
+        #[case] exp: Vec<Account>,
         #[case] exp_total: i64,
     ) {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let addresses = ids.as_deref();
 
         let result = gw
@@ -1839,7 +2191,7 @@ mod test {
     #[tokio::test]
     async fn test_get_missing_account() {
         let mut conn = setup_db().await;
-        let gateway = EvmGateway::from_connection(&mut conn).await;
+        let gateway = EVMGateway::from_connection(&mut conn).await;
         let contract_id = ContractId::new(
             Chain::Ethereum,
             Bytes::from("6B175474E89094C44Da98b954EedeAC495271d0F"),
@@ -1859,7 +2211,16 @@ mod test {
     async fn test_insert_contract() {
         let mut conn = setup_db().await;
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
-        let gateway = EvmGateway::from_connection(&mut conn).await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
+        let gateway = EVMGateway::from_connection(&mut conn).await;
         let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
         db_fixtures::insert_txns(
             &mut conn,
@@ -1879,7 +2240,7 @@ mod test {
         .await;
         let code = Bytes::from("1234");
         let code_hash = Bytes::from(&keccak256(&code));
-        let expected = models::contract::Account::new(
+        let expected = Account::new(
             Chain::Ethereum,
             "6B175474E89094C44Da98b954EedeAC495271d0F"
                 .parse()
@@ -1887,11 +2248,10 @@ mod test {
             "NewAccount".to_owned(),
             HashMap::new(),
             Bytes::from("0x64"),
+            HashMap::new(),
             code,
             code_hash,
-            "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                .parse()
-                .expect("txhash ok"),
+            Bytes::zero(32),
             "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                 .parse()
                 .expect("txhash ok"),
@@ -1921,7 +2281,7 @@ mod test {
     async fn test_update_contracts() {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let modify_txhash = "62f4d4f29d10db8722cb66a2adb0049478b11988c8b43cd446b755afb8954678";
         let tx_hash_bytes = Bytes::from(modify_txhash);
         let block = orm::Block::by_number(Chain::Ethereum, 2, &mut conn)
@@ -1929,7 +2289,7 @@ mod test {
             .expect("block found");
         db_fixtures::insert_txns(&mut conn, &[(block.id, 100, modify_txhash)]).await;
         let mut account = account_c1(2);
-        account.set_balance(&Bytes::from("0x2710"), &modify_txhash.parse().unwrap());
+        account.set_balance(&Bytes::from("0x2710"), &Bytes::zero(32));
         let update = AccountDelta::new(
             account.chain,
             account.address.clone(),
@@ -1987,7 +2347,7 @@ mod test {
         let deletion_tx = "36984d97c02a98614086c0f9e9c4e97f7e0911f6f136b3c8a76d37d6d524d1e5";
         let address_bytes = Bytes::from(address);
         let id = ContractId::new(Chain::Ethereum, address_bytes.clone());
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let tx_hash = Bytes::from(deletion_tx);
         let (block_id, block_ts) = schema::block::table
             .select((schema::block::id, schema::block::ts))
@@ -2101,7 +2461,7 @@ mod test {
     ) {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let addresses: Option<&[Address]> = addresses.as_deref();
 
         let res = gw
@@ -2116,6 +2476,15 @@ mod test {
     async fn test_upsert_slots_against_empty_db() {
         let mut conn = setup_db().await;
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
         let txn = db_fixtures::insert_txns(
             &mut conn,
@@ -2177,7 +2546,7 @@ mod test {
         ]
         .into_iter()
         .collect();
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
 
         gw.upsert_slots(input_slots, &mut conn)
             .await
@@ -2199,6 +2568,15 @@ mod test {
     async fn test_upsert_slots_invalidate_db_side_records() {
         let mut conn = setup_db().await;
         let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let blk = db_fixtures::insert_blocks(&mut conn, chain_id).await;
         let ts = db_fixtures::yesterday_midnight();
         let txn = db_fixtures::insert_txns(
@@ -2247,7 +2625,7 @@ mod test {
         )]
         .into_iter()
         .collect();
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
 
         gw.upsert_slots(input_slots, &mut conn)
             .await
@@ -2271,6 +2649,15 @@ mod test {
 
     async fn setup_slots_delta(conn: &mut AsyncPgConnection) {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
+        db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
         let ts = db_fixtures::yesterday_midnight();
         let ts_p1 = db_fixtures::yesterday_one_am();
@@ -2335,7 +2722,7 @@ mod test {
     async fn get_slots_delta_forward() {
         let mut conn = setup_db().await;
         setup_slots_delta(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let chain_id = gw.get_chain_id(&Chain::Ethereum);
         let storage: ContractStore = vec![(0u8, 2u8), (1u8, 3u8), (5u8, 25u8), (6u8, 30u8)]
             .into_iter()
@@ -2362,7 +2749,7 @@ mod test {
     async fn get_slots_delta_backward() {
         let mut conn = setup_db().await;
         setup_slots_delta(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let chain_id = gw.get_chain_id(&Chain::Ethereum);
         let storage: ContractStore = vec![(0u8, 1u8), (1u8, 5u8), (5u8, 0u8), (6u8, 0u8)]
             .into_iter()
@@ -2392,11 +2779,9 @@ mod test {
     #[case::no_start_version(None)]
     #[tokio::test]
     async fn get_accounts_delta_backward(#[case] start_version: Option<BlockOrTimestamp>) {
-        use std::str::FromStr;
-
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let exp = vec![
             // c0 had some changes which need to be reverted
             AccountDelta::new(
@@ -2445,7 +2830,7 @@ mod test {
     async fn get_accounts_delta_forward() {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let exp = vec![
             // c0 updates some slots and balances
             AccountDelta::new(
@@ -2506,15 +2891,16 @@ mod test {
                 panic!("Must use forward or backward")
             }
         };
-        setup_data(&mut conn).await;
+        let chain_db_id = setup_data(&mut conn).await;
         let c1 = &orm::Account::by_address(
             &Bytes::from("73BcE791c239c8010Cd3C857d96580037CCdd0EE"),
+            chain_db_id,
             &mut conn,
         )
         .await
         .unwrap()[0];
         db_fixtures::delete_account(&mut conn, c1.id, &ts_p1).await;
-        let gw = EvmGateway::from_connection(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
         let start_version = BlockOrTimestamp::Timestamp(start_ts);
         let end_version = BlockOrTimestamp::Timestamp(end_ts);
         let exp = Err(StorageError::Unexpected(format!(
@@ -2525,6 +2911,96 @@ mod test {
         let res = gw
             .get_accounts_delta(&Chain::Ethereum, Some(&start_version), &end_version, &mut conn)
             .await;
+
+        assert_eq!(res, exp);
+    }
+
+    #[tokio::test]
+    async fn test_add_account_balances() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+        let tx_hash =
+            Bytes::from("50449de1973d86f21bfafa7c72011854a7e33a226709dc3e2e4edcca34188388");
+
+        let account_balance = AccountBalance {
+            account: Bytes::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+            token: Bytes::from_str("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+            balance: Bytes::from(2000_i32.to_be_bytes()),
+            modify_tx: tx_hash,
+        };
+
+        gw.add_account_balances(&[account_balance], &Chain::Ethereum, &mut conn)
+            .await
+            .unwrap();
+
+        let inserted_data = schema::account_balance::table
+            .inner_join(
+                schema::token::table.on(schema::token::id.eq(schema::account_balance::token_id)),
+            )
+            .inner_join(
+                schema::account::table.on(schema::account::id.eq(schema::token::account_id)),
+            )
+            .filter(
+                schema::account::address
+                    .eq(Bytes::from_str("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()),
+            )
+            .filter(schema::account_balance::valid_to.is_null())
+            .select(orm::AccountBalance::as_select())
+            .first::<orm::AccountBalance>(&mut conn)
+            .await
+            .unwrap();
+
+        assert_eq!(inserted_data.balance, Bytes::from(2000_i32.to_be_bytes()));
+    }
+
+    #[tokio::test]
+    async fn test_get_account_balances() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+        let weth_addr = Bytes::from_str("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let usdc_addr = Bytes::from_str("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+        let account_addr = Bytes::from_str("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
+        let exp: HashMap<_, _> = [
+            (
+                account_addr.clone(),
+                weth_addr.clone(),
+                AccountBalance::new(
+                    account_addr.clone(),
+                    weth_addr,
+                    Balance::from(2000_i32.to_be_bytes()).lpad(32, 0),
+                    Bytes::zero(32),
+                ),
+            ),
+            (
+                account_addr.clone(),
+                usdc_addr.clone(),
+                AccountBalance::new(
+                    account_addr.clone(),
+                    usdc_addr,
+                    Balance::from(1000_i32.to_be_bytes()).lpad(32, 0),
+                    Bytes::zero(32),
+                ),
+            ),
+        ]
+        .into_iter()
+        .group_by(|e| e.0.clone())
+        .into_iter()
+        .map(|(account, group)| {
+            (
+                account,
+                group
+                    .map(|(_, token, bal)| (token, bal))
+                    .collect::<HashMap<_, _>>(),
+            )
+        })
+        .collect();
+
+        let res = gw
+            .get_account_balances(&Chain::Ethereum, Some(&[account_addr]), None, false, &mut conn)
+            .await
+            .expect("retrieving balances failed!");
 
         assert_eq!(res, exp);
     }

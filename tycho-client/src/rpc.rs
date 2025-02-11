@@ -746,6 +746,7 @@ mod tests {
                     "title": "",
                     "slots": {},
                     "native_balance": "0x01f4",
+                    "token_balances": {},
                     "code": "0x00",
                     "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
                     "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",

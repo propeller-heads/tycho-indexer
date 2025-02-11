@@ -287,6 +287,15 @@ mod test {
 
     async fn setup_data(conn: &mut AsyncPgConnection) {
         let chain_id: i64 = db_fixtures::insert_chain(conn, "ethereum").await;
+        db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let block_ids = db_fixtures::insert_blocks(conn, chain_id).await;
         db_fixtures::insert_txns(
             conn,
@@ -493,6 +502,15 @@ mod test {
             ],
         )
         .await;
+        let (_, native_token) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
 
         // Account C0
         let c0 = db_fixtures::insert_account(
@@ -503,12 +521,13 @@ mod test {
             Some(txn[0]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 0, txn[0], Some(&ts), c0).await;
+        db_fixtures::insert_account_balance(conn, 0, native_token, txn[0], Some(&ts), c0).await;
         db_fixtures::insert_contract_code(conn, c0, txn[0], Bytes::from_str("C0C0C0").unwrap())
             .await;
         db_fixtures::insert_account_balance(
             conn,
             100,
+            native_token,
             txn[1],
             Some(&(ts + Duration::from_secs(3600))),
             c0,
@@ -526,7 +545,7 @@ mod test {
             &[(0, 1, None), (1, 5, None)],
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 101, txn[3], None, c0).await;
+        db_fixtures::insert_account_balance(conn, 101, native_token, txn[3], None, c0).await;
         // Second and final version for 0 and 1, new slots 5 and 6
         db_fixtures::insert_slots(
             conn,
@@ -547,7 +566,7 @@ mod test {
             Some(txn[2]),
         )
         .await;
-        db_fixtures::insert_account_balance(conn, 50, txn[2], None, c1).await;
+        db_fixtures::insert_account_balance(conn, 50, native_token, txn[2], None, c1).await;
         db_fixtures::insert_contract_code(conn, c1, txn[2], Bytes::from_str("C1C1C1").unwrap())
             .await;
         db_fixtures::insert_slots(

@@ -235,28 +235,37 @@ where
     /// # Arguments
     ///
     /// * `val` - The enum variant to check for existence.
-    fn value_exist(&self, val: &E) -> bool {
+    fn value_exists(&self, val: &E) -> bool {
         self.map_id.contains_key(val)
     }
 }
 
 type ChainEnumCache = ValueIdTableCache<Chain>;
+// Maps the chain to the DB id of the native token
+type NativeTokenEnumCache = ValueIdTableCache<Chain>;
 /// ProtocolSystem is not handled as an Enum, because that would require us to restart the whole
 /// application every time we want to add another System. Hence, to diverge from the implementation
 /// of the Chain enum was a conscious decision.
 type ProtocolSystemEnumCache = ValueIdTableCache<String>;
 
-trait FromPool<T> {
+trait FromConnection<T> {
     async fn from_pool(pool: Pool<AsyncPgConnection>) -> Result<T, StorageError>;
+    async fn from_connection(conn: &mut AsyncPgConnection) -> Result<T, StorageError>;
 }
 
-impl FromPool<ChainEnumCache> for ChainEnumCache {
+impl FromConnection<ChainEnumCache> for ChainEnumCache {
     async fn from_pool(pool: Pool<AsyncPgConnection>) -> Result<ChainEnumCache, StorageError> {
         let mut conn = pool
             .get()
             .await
             .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
 
+        Self::from_connection(&mut conn).await
+    }
+
+    async fn from_connection(
+        mut conn: &mut AsyncPgConnection,
+    ) -> Result<ChainEnumCache, StorageError> {
         let results = async {
             use schema::chain::dsl::*;
             chain
@@ -270,7 +279,7 @@ impl FromPool<ChainEnumCache> for ChainEnumCache {
     }
 }
 
-impl FromPool<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
+impl FromConnection<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
     async fn from_pool(
         pool: Pool<AsyncPgConnection>,
     ) -> Result<ProtocolSystemEnumCache, StorageError> {
@@ -279,6 +288,12 @@ impl FromPool<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
             .await
             .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
 
+        Self::from_connection(&mut conn).await
+    }
+
+    async fn from_connection(
+        mut conn: &mut AsyncPgConnection,
+    ) -> Result<ProtocolSystemEnumCache, StorageError> {
         let results = async {
             use schema::protocol_system::dsl::*;
             protocol_system
@@ -431,6 +446,7 @@ async fn maybe_lookup_version_ts(
 pub(crate) struct PostgresGateway {
     protocol_system_id_cache: Arc<ProtocolSystemEnumCache>,
     chain_id_cache: Arc<ChainEnumCache>,
+    native_token_id_cache: Arc<NativeTokenEnumCache>,
     /// Any versions dated before this date, as per their `valid_to` column, will be
     /// discarded and never be inserted into the db. We supply this as an absolute date
     /// since updating it must be done carefully. To avoid gaps in versions this can't
@@ -441,43 +457,37 @@ pub(crate) struct PostgresGateway {
 
 impl PostgresGateway {
     pub fn with_cache(
-        cache: Arc<ChainEnumCache>,
+        chain_cache: Arc<ChainEnumCache>,
+        native_token_cache: Arc<NativeTokenEnumCache>,
         protocol_system_cache: Arc<ProtocolSystemEnumCache>,
         retention_horizon: NaiveDateTime,
     ) -> Self {
         Self {
             protocol_system_id_cache: protocol_system_cache,
-            chain_id_cache: cache,
+            chain_id_cache: chain_cache,
+            native_token_id_cache: native_token_cache,
             retention_horizon,
         }
     }
 
     #[allow(dead_code)]
     pub async fn from_connection(conn: &mut AsyncPgConnection) -> Self {
-        let chain_id_mapping: Vec<(i64, String)> = async {
-            use schema::chain::dsl::*;
-            chain
-                .select((id, name))
-                .load(conn)
-                .await
-                .expect("Failed to load chain ids!")
-        }
-        .await;
+        let chain_cache = ChainEnumCache::from_connection(conn)
+            .await
+            .expect("Failed ot load chain enum cache");
+        let protocol_system_cache = ProtocolSystemEnumCache::from_connection(conn)
+            .await
+            .expect("Failed to load protocol system cache");
+        let native_token_cache = Self::native_token_cache_from_connection(conn, &chain_cache)
+            .await
+            .expect("Failed to load native token cache");
 
-        let protocol_system_id_mapping: Vec<(i64, String)> = async {
-            use schema::protocol_system::dsl::*;
-            protocol_system
-                .select((id, name))
-                .load(conn)
-                .await
-                .expect("Failed to load protocol system!")
-        }
-        .await;
-
-        let cache = Arc::new(ChainEnumCache::from_tuples(chain_id_mapping));
-        let protocol_system_cache =
-            Arc::new(ProtocolSystemEnumCache::from_tuples(protocol_system_id_mapping));
-        Self::with_cache(cache, protocol_system_cache, NaiveDateTime::default())
+        Self::with_cache(
+            Arc::new(chain_cache),
+            Arc::new(native_token_cache),
+            Arc::new(protocol_system_cache),
+            NaiveDateTime::default(),
+        )
     }
 
     fn get_chain_id(&self, chain: &Chain) -> i64 {
@@ -486,6 +496,10 @@ impl PostgresGateway {
 
     fn get_chain(&self, id: &i64) -> Chain {
         self.chain_id_cache.get_value(id)
+    }
+
+    fn get_native_token_id(&self, chain: &Chain) -> i64 {
+        self.native_token_id_cache.get_id(chain)
     }
 
     fn get_protocol_system_id(&self, protocol_system: &String) -> i64 {
@@ -502,16 +516,65 @@ impl PostgresGateway {
         pool: Pool<AsyncPgConnection>,
         retention_horizon: NaiveDateTime,
     ) -> Result<Self, StorageError> {
-        let cache = ChainEnumCache::from_pool(pool.clone()).await?;
+        let chain_cache = ChainEnumCache::from_pool(pool.clone()).await?;
+        let native_token_cache = Self::native_cache_from_pool(pool.clone(), &chain_cache).await?;
         let protocol_system_cache: ValueIdTableCache<String> =
             ProtocolSystemEnumCache::from_pool(pool.clone()).await?;
         let gw = PostgresGateway::with_cache(
-            Arc::new(cache),
+            Arc::new(chain_cache),
+            Arc::new(native_token_cache),
             Arc::new(protocol_system_cache),
             retention_horizon,
         );
 
         Ok(gw)
+    }
+
+    // Could not use FromConnection trait as it is already implemented for a Chain->id map type.
+    // Also this custom 'from connection' fn signature allows us to reuse the already fetched
+    // chain cache.
+    async fn native_token_cache_from_connection(
+        mut conn: &mut AsyncPgConnection,
+        chain_cache: &ChainEnumCache,
+    ) -> Result<NativeTokenEnumCache, StorageError> {
+        let mut native_tokens = Vec::new();
+
+        // loop through cached chains and fetch their native token ids
+        for chain in chain_cache.map_enum.values() {
+            let chain_id = chain_cache.get_id(chain);
+            let native_token = chain.native_token();
+            let token_id = async {
+                schema::token::table
+                    .inner_join(
+                        schema::account::table
+                            .on(schema::token::account_id.eq(schema::account::id)),
+                    )
+                    .select(schema::token::id)
+                    .filter(schema::account::chain_id.eq(chain_id))
+                    .filter(schema::account::address.eq(native_token.address))
+                    .first(&mut conn)
+                    .await
+                    .expect("Failed to load native token id!")
+            }
+            .await;
+            native_tokens.push((token_id, chain.to_string()));
+        }
+        Ok(NativeTokenEnumCache::from_tuples(native_tokens))
+    }
+
+    // Could not use FromConnection trait as it is already implemented for a Chain->id map type.
+    // Also this custom 'from connection' fn signature allows us to reuse the already fetched
+    // chain cache.
+    async fn native_cache_from_pool(
+        pool: Pool<AsyncPgConnection>,
+        chain_cache: &ChainEnumCache,
+    ) -> Result<NativeTokenEnumCache, StorageError> {
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+
+        Self::native_token_cache_from_connection(&mut conn, chain_cache).await
     }
 }
 
@@ -569,18 +632,53 @@ async fn connect(db_url: &str) -> Result<Pool<AsyncPgConnection>, StorageError> 
 /// - If there was an issue ensuring the presence of chains in the database.
 async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
     let mut conn = pool.get().await.expect("connection ok");
-    diesel::insert_into(schema::chain::table)
-        .values(
-            chains
-                .iter()
-                .map(|c| schema::chain::name.eq(c.to_string()))
-                .collect::<Vec<_>>(),
-        )
-        .on_conflict_do_nothing()
-        .execute(&mut conn)
-        .await
-        .expect("chains ensured");
-    debug!("Ensured chain enum presence for: {:?}", chains);
+
+    // Ensure chains and their native tokens exist
+    for chain in chains {
+        let chain_id_res: Result<i64, _> = diesel::insert_into(schema::chain::table)
+            .values(schema::chain::name.eq(chain.to_string()))
+            .on_conflict_do_nothing()
+            .returning(schema::chain::id)
+            .get_result(&mut conn)
+            .await;
+
+        match chain_id_res {
+            Ok(chain_id) => {
+                let token = chain.native_token();
+                let account_id: i64 = diesel::insert_into(schema::account::table)
+                    .values((
+                        schema::account::chain_id.eq(chain_id),
+                        schema::account::title.eq(format!("{}_{}", token.symbol, token.address)),
+                        schema::account::address.eq(token.address.as_ref()),
+                    ))
+                    .on_conflict_do_nothing()
+                    .returning(schema::account::id)
+                    .get_result(&mut conn)
+                    .await
+                    .expect("Could not ensure native token's account in database");
+                diesel::insert_into(schema::token::table)
+                    .values((
+                        schema::token::account_id.eq(account_id),
+                        schema::token::symbol.eq(token.symbol),
+                        schema::token::decimals.eq(token.decimals as i32),
+                        schema::token::gas.eq(Vec::<Option<i64>>::new()),
+                        schema::token::quality.eq(100),
+                    ))
+                    .on_conflict_do_nothing()
+                    .execute(&mut conn)
+                    .await
+                    .expect("Could not ensure native token in database");
+            }
+            Err(diesel::result::Error::NotFound) => {
+                continue;
+            }
+            Err(err) => {
+                panic!("Could not ensure chain enum in database: {}", err);
+            }
+        }
+    }
+
+    debug!("Ensured chain enum and native token presence for: {:?}", chains);
 }
 
 async fn ensure_protocol_systems(protocol_systems: &[String], pool: Pool<AsyncPgConnection>) {
@@ -940,6 +1038,7 @@ pub mod db_fixtures {
     pub async fn insert_account_balance(
         conn: &mut AsyncPgConnection,
         new_balance: u64,
+        token_id: i64,
         tx_id: i64,
         end_ts: Option<&NaiveDateTime>,
         account: i64,
@@ -957,14 +1056,14 @@ pub mod db_fixtures {
         b0[24..].copy_from_slice(&new_balance_bytes);
 
         {
-            use schema::account_balance::dsl::*;
-            diesel::insert_into(account_balance)
+            diesel::insert_into(schema::account_balance::table)
                 .values((
-                    account_id.eq(account),
-                    balance.eq(b0.as_slice()),
-                    modify_tx.eq(tx_id),
-                    valid_from.eq(ts),
-                    valid_to.eq(end_ts),
+                    schema::account_balance::account_id.eq(account),
+                    schema::account_balance::balance.eq(b0.as_slice()),
+                    schema::account_balance::token_id.eq(token_id),
+                    schema::account_balance::modify_tx.eq(tx_id),
+                    schema::account_balance::valid_from.eq(ts),
+                    schema::account_balance::valid_to.eq(end_ts),
                 ))
                 .execute(conn)
                 .await

@@ -1398,11 +1398,11 @@ pub mod fixtures {
                             token_balances: vec![
                                 AccountBalanceChange {
                                     token: address_from_str(USDC_ADDRESS),
-                                    balance: 1_i32.to_be_bytes().to_vec(),
+                                    balance: 100_i32.to_be_bytes().to_vec(),
                                 },
                                 AccountBalanceChange {
                                     token: address_from_str(WETH_ADDRESS),
-                                    balance: 1_i32.to_be_bytes().to_vec(),
+                                    balance: 100_i32.to_be_bytes().to_vec(),
                                 },
                             ],
                         },
