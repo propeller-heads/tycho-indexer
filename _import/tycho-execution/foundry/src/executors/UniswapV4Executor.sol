@@ -75,9 +75,7 @@ contract UniswapV4Executor is IExecutor, V4Router {
         uint8 action = uint8(bytes1(actions[0]));
 
         // Get receiver from params[2] for all cases
-        (, address _receiver,) =
-            abi.decode(params[2], (Currency, address, uint256));
-        receiver = _receiver;
+        (, receiver,) = abi.decode(params[2], (Currency, address, uint256));
 
         if (action == uint8(Actions.SWAP_EXACT_IN_SINGLE)) {
             IV4Router.ExactInputSingleParams memory swapParams =
