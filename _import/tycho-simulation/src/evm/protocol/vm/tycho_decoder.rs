@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -49,7 +49,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         snapshot: ComponentWithState,
         block: Header,
         all_tokens: &HashMap<Bytes, Token>,
-    ) -> Result<Self, Self::Error> {
+    ) -> Result<(Self, HashMap<Bytes, String>), Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
 
@@ -115,7 +115,20 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .contract_ids
             .iter()
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
-            .collect();
+            .collect::<HashSet<Address>>();
+
+        let contracts_map = if manual_updates {
+            // avoid triggering updates for account changes if manual updates are expected
+            HashMap::new()
+        } else {
+            // enable triggering updates to this pool for all involved contracts
+            snapshot
+                .component
+                .contract_ids
+                .iter()
+                .map(|address| (address.clone(), id.clone()))
+                .collect()
+        };
 
         let protocol_name = snapshot
             .component
@@ -155,7 +168,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
 
         pool_state.set_spot_prices(all_tokens)?;
 
-        Ok(pool_state)
+        Ok((pool_state, contracts_map))
     }
 }
 
@@ -312,14 +325,17 @@ mod tests {
             .await
             .unwrap();
 
+        let res_pool = res.0;
+
+        assert_eq!(res.1, HashMap::new());
         assert_eq!(
-            res.get_balance_owner(),
+            res_pool.get_balance_owner(),
             Some(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
         );
         let mut exp_involved_contracts = HashSet::new();
         exp_involved_contracts
             .insert(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap());
-        assert_eq!(res.get_involved_contracts(), exp_involved_contracts);
-        assert!(res.get_manual_updates());
+        assert_eq!(res_pool.get_involved_contracts(), exp_involved_contracts);
+        assert!(res_pool.get_manual_updates());
     }
 }

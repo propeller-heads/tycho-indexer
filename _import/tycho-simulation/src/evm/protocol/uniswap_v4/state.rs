@@ -459,7 +459,8 @@ mod tests {
         let usv4_state =
             UniswapV4State::try_from_with_block(state, Default::default(), &Default::default())
                 .await
-                .unwrap();
+                .unwrap()
+                .0;
 
         let t0 = Token::new(
             "0x647e32181a64f4ffd4f0b0b4b052ec05b277729c",

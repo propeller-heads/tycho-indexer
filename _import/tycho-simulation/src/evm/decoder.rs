@@ -36,10 +36,18 @@ pub enum StreamDecodeError {
 struct DecoderState {
     tokens: HashMap<Bytes, Token>,
     states: HashMap<String, Box<dyn ProtocolSim>>,
+    // maps contract address to the pools they affect
+    contracts_map: HashMap<Bytes, Vec<String>>,
 }
 
-type DecodeFut =
-    Pin<Box<dyn Future<Output = Result<Box<dyn ProtocolSim>, InvalidSnapshotError>> + Send + Sync>>;
+type ContractMap = HashMap<Bytes, String>;
+type DecodeFut = Pin<
+    Box<
+        dyn Future<Output = Result<(Box<dyn ProtocolSim>, ContractMap), InvalidSnapshotError>>
+            + Send
+            + Sync,
+    >,
+>;
 type RegistryFn =
     dyn Fn(ComponentWithState, Header, Arc<RwLock<DecoderState>>) -> DecodeFut + Send + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
@@ -114,7 +122,7 @@ impl TychoStreamDecoder {
                     let guard = state.read().await;
                     T::try_from_with_block(component, header, &guard.tokens)
                         .await
-                        .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
+                        .map(|(c, m)| (Box::new(c) as Box<dyn ProtocolSim>, m))
                 }) as DecodeFut
             },
         );
@@ -149,6 +157,7 @@ impl TychoStreamDecoder {
         let mut updated_states = HashMap::new();
         let mut new_pairs = HashMap::new();
         let mut removed_pairs = HashMap::new();
+        let mut contracts_map = HashMap::new();
 
         let block = msg
             .state_msgs
@@ -190,6 +199,7 @@ impl TychoStreamDecoder {
                 }
             }
 
+            // Remove untracked components
             let state_guard = self.state.read().await;
             removed_pairs.extend(
                 protocol_msg
@@ -286,7 +296,13 @@ impl TychoStreamDecoder {
                 // Construct state from snapshot
                 if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
                     match state_decode_f(snapshot, block.clone(), self.state.clone()).await {
-                        Ok(state) => {
+                        Ok((state, contracts)) => {
+                            for (key, value) in contracts {
+                                contracts_map
+                                    .entry(key)
+                                    .or_insert_with(Vec::new)
+                                    .push(value);
+                            }
                             new_components.insert(id.clone(), state);
                         }
                         Err(e) => {
@@ -378,6 +394,13 @@ impl TychoStreamDecoder {
         state_guard
             .states
             .extend(updated_states.clone().into_iter());
+        for (key, values) in contracts_map {
+            state_guard
+                .contracts_map
+                .entry(key)
+                .or_insert_with(Vec::new)
+                .extend(values);
+        }
 
         // Send the tick with all updated states
         Ok(BlockUpdate::new(block.number, updated_states, new_pairs)
