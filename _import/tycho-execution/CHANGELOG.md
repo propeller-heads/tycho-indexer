@@ -1,3 +1,10 @@
+## [0.35.1](https://github.com/propeller-heads/tycho-execution/compare/0.35.0...0.35.1) (2025-02-11)
+
+
+### Bug Fixes
+
+* (TychoRouter) Revert if empty swaps ([37efe52](https://github.com/propeller-heads/tycho-execution/commit/37efe52c10ea9028f735c3cfc15af0bc9c57a745))
+
 ## [0.35.0](https://github.com/propeller-heads/tycho-execution/compare/0.34.0...0.35.0) (2025-02-07)
 
 
