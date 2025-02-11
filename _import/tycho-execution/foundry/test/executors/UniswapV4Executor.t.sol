@@ -9,7 +9,9 @@ import {console} from "forge-std/console.sol";
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
     constructor(IPoolManager _poolManager) UniswapV4Executor(_poolManager) {}
 
-    function decodeData(bytes calldata data)
+    function decodeData(
+        bytes calldata data
+    )
         external
         pure
         returns (
@@ -36,14 +38,23 @@ contract UniswapV4ExecutorTest is Test, Constants {
     function setUp() public {
         uint256 forkBlock = 21817316;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV4Exposed =
-            new UniswapV4ExecutorExposed(IPoolManager(poolManager));
+        uniswapV4Exposed = new UniswapV4ExecutorExposed(
+            IPoolManager(poolManager)
+        );
     }
 
     function testDecodeParamsUniswapV4() public view {
         uint24 expectedPoolFee = 500;
-        bytes memory data = abi.encodePacked(
-            USDE_ADDR, USDT_ADDR, expectedPoolFee, address(2), false, int24(1)
+        address expectedReceiver = address(2);
+
+        bytes memory data = _encodeExactInputSingle(
+            USDE_ADDR,
+            USDT_ADDR,
+            expectedPoolFee,
+            expectedReceiver,
+            false,
+            1,
+            100 // amountIn doesn't matter for this test
         );
 
         (
@@ -58,16 +69,9 @@ contract UniswapV4ExecutorTest is Test, Constants {
         assertEq(tokenIn, USDE_ADDR);
         assertEq(tokenOut, USDT_ADDR);
         assertEq(fee, expectedPoolFee);
-        assertEq(receiver, address(2));
+        assertEq(receiver, expectedReceiver);
         assertEq(zeroForOne, false);
         assertEq(tickSpacing, 1);
-    }
-
-    function testDecodeParamsInvalidDataLength() public {
-        bytes memory data = abi.encodePacked(USDE_ADDR, USDT_ADDR);
-
-        vm.expectRevert(UniswapV4Executor__InvalidDataLength.selector);
-        uniswapV4Exposed.decodeData(data);
     }
 
     function testSwapUniswapV4() public {
@@ -75,19 +79,21 @@ contract UniswapV4ExecutorTest is Test, Constants {
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
-        uint256 usdeBalanceBeforeSwapExecutor =
-            USDE.balanceOf(address(uniswapV4Exposed));
+        uint256 usdeBalanceBeforeSwapExecutor = USDE.balanceOf(
+            address(uniswapV4Exposed)
+        );
         assertEq(usdeBalanceBeforeSwapExecutor, amountIn);
         uint256 usdtBalanceBeforeSwapBob = USDT.balanceOf(address(BOB));
         assertEq(usdtBalanceBeforeSwapBob, 0);
 
-        bytes memory data = abi.encodePacked(
+        bytes memory data = _encodeExactInputSingle(
             USDE_ADDR,
             USDT_ADDR,
-            uint24(100), // 0.01% fee tier
+            100,
             BOB,
             true,
-            int24(1)
+            1,
+            uint128(amountIn)
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
@@ -97,5 +103,46 @@ contract UniswapV4ExecutorTest is Test, Constants {
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(USDT.balanceOf(BOB) == amountOut && amountOut > 0);
+    }
+
+    function _encodeExactInputSingle(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        address receiver,
+        bool zeroForOne,
+        uint24 tickSpacing,
+        uint128 amountIn
+    ) internal pure returns (bytes memory) {
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(zeroForOne ? tokenIn : tokenOut),
+            currency1: Currency.wrap(zeroForOne ? tokenOut : tokenIn),
+            fee: fee,
+            tickSpacing: int24(tickSpacing),
+            hooks: IHooks(address(0))
+        });
+
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.SWAP_EXACT_IN_SINGLE),
+            uint8(Actions.SETTLE_ALL),
+            uint8(Actions.TAKE)
+        );
+
+        bytes[] memory params = new bytes[](3);
+
+        params[0] = abi.encode(
+            IV4Router.ExactInputSingleParams({
+                poolKey: key,
+                zeroForOne: zeroForOne,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                hookData: bytes("")
+            })
+        );
+
+        params[1] = abi.encode(key.currency0, amountIn);
+        params[2] = abi.encode(key.currency1, receiver, 0);
+
+        return abi.encode(actions, params);
     }
 }
