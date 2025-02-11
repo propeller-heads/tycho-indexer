@@ -672,6 +672,13 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertGe(finalBalance, expAmountOut);
     }
 
+    function testEmptySwapsRevert() public {
+        uint256 amountIn = 10 ** 18;
+        bytes memory swaps = "";
+        vm.expectRevert(TychoRouter__EmptySwaps.selector);
+        tychoRouter.exposedSwap(amountIn, 2, swaps);
+    }
+
     function testSingleSwapIntegration() public {
         // Test created with calldata from our router encoder, replacing the executor
         // address with the USV2 executor address.
