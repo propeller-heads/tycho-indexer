@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     future::Future,
     pin::Pin,
     str::FromStr,
@@ -11,7 +11,7 @@ use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
-use tycho_core::Bytes;
+use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     evm::{
@@ -349,6 +349,65 @@ impl TychoStreamDecoder {
                 .await;
                 info!("Engine updated");
 
+                // update states related to contracts with account deltas
+                let mut pools_to_update = HashSet::new();
+                // get pools related to the updated accounts
+                for (account, _update) in deltas.account_updates {
+                    pools_to_update.extend(match contracts_map.get(&account) {
+                        Some(contracts) => contracts.clone(),
+                        None => state_guard
+                            .contracts_map
+                            .get(&account)
+                            .cloned()
+                            .unwrap_or_default(),
+                    });
+                }
+                // update the pools
+                for pool in pools_to_update {
+                    match updated_states.entry(pool.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            // if state exists in updated_states, update it
+                            let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
+                            state
+                                .delta_transition(
+                                    ProtocolStateDelta::default(),
+                                    &state_guard.tokens,
+                                )
+                                .map_err(|e| {
+                                    error!(pool = pool, error = ?e, "DeltaTransitionError");
+                                    StreamDecodeError::Fatal(format!("TransitionFailure: {e:?}"))
+                                })?;
+                        }
+                        Entry::Vacant(_) => {
+                            match state_guard.states.get(&pool) {
+                                // if state does not exist in updated_states, update the stored
+                                // state
+                                Some(stored_state) => {
+                                    let mut state = stored_state.clone();
+                                    state
+                                        .delta_transition(
+                                            ProtocolStateDelta::default(),
+                                            &state_guard.tokens,
+                                        )
+                                        .map_err(|e| {
+                                            error!(pool = pool, error = ?e, "DeltaTransitionError");
+                                            StreamDecodeError::Fatal(format!(
+                                                "TransitionFailure: {e:?}"
+                                            ))
+                                        })?;
+                                    updated_states.insert(pool.clone(), state);
+                                }
+                                None => debug!(
+                                    pool = pool,
+                                    reason = "MissingState",
+                                    "DeltaTransitionError"
+                                ),
+                            }
+                        }
+                    }
+                }
+
+                // update states with protocol state deltas (attribute changes etc.)
                 for (id, update) in deltas.state_updates {
                     match updated_states.entry(id.clone()) {
                         Entry::Occupied(mut entry) => {
