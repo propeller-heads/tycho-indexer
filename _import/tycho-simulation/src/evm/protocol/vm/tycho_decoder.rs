@@ -241,7 +241,7 @@ mod tests {
     fn load_balancer_account_data() -> Vec<AccountUpdate> {
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path =
-            Path::new(project_root).join("tests/assets/decoder/balancer_snapshot.json");
+            Path::new(project_root).join("tests/assets/decoder/balancer_v2_snapshot.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
 

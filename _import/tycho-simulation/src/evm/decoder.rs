@@ -447,7 +447,6 @@ impl TychoStreamDecoder {
                 }
             };
         }
-
         // Persist the newly added/updated states
         let mut state_guard = self.state.write().await;
         state_guard
@@ -471,17 +470,14 @@ impl TychoStreamDecoder {
 mod tests {
     use std::{fs, path::Path};
 
+    use mockall::predicate::*;
     use num_bigint::ToBigUint;
     use rstest::*;
-    use tycho_client::feed::FeedMessage;
-    use tycho_core::Bytes;
 
+    use super::*;
     use crate::{
-        evm::{
-            decoder::{StreamDecodeError, TychoStreamDecoder},
-            protocol::uniswap_v2::state::UniswapV2State,
-        },
-        models::Token,
+        evm::protocol::uniswap_v2::state::UniswapV2State, models::Token,
+        protocol::state::MockProtocolSim,
     };
 
     async fn setup_decoder(set_tokens: bool) -> TychoStreamDecoder {
@@ -606,5 +602,60 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_decode_updates_state_on_contract_change() {
+        let decoder = setup_decoder(true).await;
+
+        // Create the mock instances
+        let mut mock_state = MockProtocolSim::new();
+
+        mock_state
+            .expect_clone_box()
+            .times(1)
+            .returning(|| {
+                let mut cloned_mock_state = MockProtocolSim::new();
+                // Expect `delta_transition` to be called once with any parameters
+                cloned_mock_state
+                    .expect_delta_transition()
+                    .times(1)
+                    .returning(|_, _| Ok(()));
+                cloned_mock_state
+                    .expect_clone_box()
+                    .times(1)
+                    .returning(|| Box::new(MockProtocolSim::new()));
+                Box::new(cloned_mock_state)
+            });
+
+        // Insert mock state into `updated_states`
+        let pool_id =
+            "0x93d199263632a4ef4bb438f1feb99e57b4b5f0bd0000000000000000000005c2".to_string();
+        decoder
+            .state
+            .write()
+            .await
+            .states
+            .insert(pool_id.clone(), Box::new(mock_state) as Box<dyn ProtocolSim>);
+        decoder
+            .state
+            .write()
+            .await
+            .contracts_map
+            .insert(
+                Bytes::from("0xba12222222228d8ba445958a75a0704d566bf2c8").lpad(20, 0),
+                vec![pool_id.clone()],
+            );
+
+        // Load a test message containing a contract update
+        let msg = load_test_msg("balancer_v2_delta");
+
+        // Decode the message
+        let _ = decoder
+            .decode(msg)
+            .await
+            .expect("decode failure");
+
+        // The mock framework will assert that `delta_transition` was called exactly once
     }
 }

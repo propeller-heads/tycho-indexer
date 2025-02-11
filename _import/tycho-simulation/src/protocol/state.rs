@@ -46,6 +46,8 @@
 //! ```
 use std::{any::Any, collections::HashMap};
 
+#[cfg(test)]
+use mockall::mock;
 use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
@@ -140,5 +142,71 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
 impl Clone for Box<dyn ProtocolSim> {
     fn clone(&self) -> Box<dyn ProtocolSim> {
         self.clone_box()
+    }
+}
+
+#[cfg(test)]
+mock! {
+    #[derive(Debug)]
+    pub ProtocolSim {
+        pub fn fee(&self) -> f64;
+        pub fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError>;
+        pub fn get_amount_out(
+            &self,
+            amount_in: BigUint,
+            token_in: &Token,
+            token_out: &Token,
+        ) -> Result<GetAmountOutResult, SimulationError>;
+        pub fn delta_transition(
+            &mut self,
+            delta: ProtocolStateDelta,
+            tokens: &HashMap<Bytes, Token>,
+        ) -> Result<(), TransitionError<String>>;
+        pub fn clone_box(&self) -> Box<dyn ProtocolSim>;
+        pub fn eq(&self, other: &dyn ProtocolSim) -> bool;
+    }
+}
+
+#[cfg(test)]
+impl ProtocolSim for MockProtocolSim {
+    fn fee(&self) -> f64 {
+        self.fee()
+    }
+
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        self.spot_price(base, quote)
+    }
+
+    fn get_amount_out(
+        &self,
+        amount_in: BigUint,
+        token_in: &Token,
+        token_out: &Token,
+    ) -> Result<GetAmountOutResult, SimulationError> {
+        self.get_amount_out(amount_in, token_in, token_out)
+    }
+
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+        tokens: &HashMap<Bytes, Token>,
+    ) -> Result<(), TransitionError<String>> {
+        self.delta_transition(delta, tokens)
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        self.clone_box()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        panic!("MockProtocolSim does not support as_any")
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        panic!("MockProtocolSim does not support as_any_mut")
+    }
+
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
+        self.eq(other)
     }
 }

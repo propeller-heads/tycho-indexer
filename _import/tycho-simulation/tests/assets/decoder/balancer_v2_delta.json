@@ -1,0 +1,77 @@
+{
+  "state_msgs": {
+    "vm:balancer_v2": {
+      "header": {
+        "hash": "0x985c985381d51f7768902baa56da51819c843d300d128a505705833ea68dc210",
+        "number": 21823189,
+        "parent_hash": "0x298b11c34ed6d8d13f5cdb9b86528a4dd2e12aedd5121ce6dc698761e1b27f6e",
+        "revert": false
+      },
+      "snapshots": {
+        "states": {},
+        "vm_storage": {}
+      },
+      "deltas": {
+        "extractor": "vm:balancer_v2",
+        "chain": "ethereum",
+        "block": {
+          "number": 21823189,
+          "hash": "0x985c985381d51f7768902baa56da51819c843d300d128a505705833ea68dc210",
+          "parent_hash": "0x298b11c34ed6d8d13f5cdb9b86528a4dd2e12aedd5121ce6dc698761e1b27f6e",
+          "chain": "ethereum",
+          "ts": "2025-02-11T12:09:35"
+        },
+        "finalized_block_height": 21823111,
+        "revert": false,
+        "new_tokens": {},
+        "account_updates": {
+          "0xba12222222228d8ba445958a75a0704d566bf2c8": {
+            "address": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+            "chain": "ethereum",
+            "slots": {
+              "0x43f6aa0cddef7ef5e613fa5a2609fdc84dcdcc7deb972c7b99a7def94b47469a": "0x014cfed5000000000000000000000000000000000000008d518759c491e97bb6",
+              "0x68937bc243fb8cd085e8097a3892e1d1ea282143f39fc35e8cd0c3f7550b8a2a": "0x014cfed500000000000000000000000000000000000001d3eb473a072ae36163"
+            },
+            "balance": null,
+            "code": null,
+            "change": "Update"
+          }
+        },
+        "state_updates": {},
+        "new_protocol_components": {},
+        "deleted_protocol_components": {},
+        "component_balances": {
+          "0x93d199263632a4ef4bb438f1feb99e57b4b5f0bd0000000000000000000005c2": {
+            "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": {
+              "token": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+              "balance": "0x01d3eb473a072ae36163",
+              "balance_float": 8.631583065547079e+21,
+              "modify_tx": "0xecd63d913fd99d950565c9639446ffc9ab354807f0af256e454bc2924b170f60",
+              "component_id": "0x93d199263632a4ef4bb438f1feb99e57b4b5f0bd0000000000000000000005c2"
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+              "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "balance": "0x8d518759c491e97bb6",
+              "balance_float": 2.606865677332771e+21,
+              "modify_tx": "0xecd63d913fd99d950565c9639446ffc9ab354807f0af256e454bc2924b170f60",
+              "component_id": "0x93d199263632a4ef4bb438f1feb99e57b4b5f0bd0000000000000000000005c2"
+            }
+          }
+        },
+        "component_tvl": {
+          "0x93d199263632a4ef4bb438f1feb99e57b4b5f0bd0000000000000000000005c2": 12902.997863620163
+        }
+      },
+      "removed_components": {}
+    }
+  },
+  "sync_states": {
+    "vm:balancer_v2": {
+      "status": "ready",
+      "hash": "0x985c985381d51f7768902baa56da51819c843d300d128a505705833ea68dc210",
+      "number": 21823189,
+      "parent_hash": "0x298b11c34ed6d8d13f5cdb9b86528a4dd2e12aedd5121ce6dc698761e1b27f6e",
+      "revert": false
+    }
+  }
+}
