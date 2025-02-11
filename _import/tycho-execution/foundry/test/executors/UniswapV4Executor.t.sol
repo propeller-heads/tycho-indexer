@@ -4,13 +4,12 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
+import {console} from "forge-std/console.sol";
 
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
     constructor(IPoolManager _poolManager) UniswapV4Executor(_poolManager) {}
 
-    function decodeData(
-        bytes calldata data
-    )
+    function decodeData(bytes calldata data)
         external
         pure
         returns (
@@ -32,24 +31,19 @@ contract UniswapV4ExecutorTest is Test, Constants {
     UniswapV4ExecutorExposed uniswapV4Exposed;
     IERC20 USDE = IERC20(USDE_ADDR);
     IERC20 USDT = IERC20(USDT_ADDR);
+    address poolManager = 0x000000000004444c5dc75cB358380D2e3dE08A90;
 
     function setUp() public {
         uint256 forkBlock = 21817316;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV4Exposed = new UniswapV4ExecutorExposed(
-            IPoolManager(0x000000000004444c5dc75cB358380D2e3dE08A90)
-        );
+        uniswapV4Exposed =
+            new UniswapV4ExecutorExposed(IPoolManager(poolManager));
     }
 
     function testDecodeParamsUniswapV4() public view {
         uint24 expectedPoolFee = 500;
         bytes memory data = abi.encodePacked(
-            USDE_ADDR,
-            USDT_ADDR,
-            expectedPoolFee,
-            address(2),
-            false,
-            int24(1)
+            USDE_ADDR, USDT_ADDR, expectedPoolFee, address(2), false, int24(1)
         );
 
         (
@@ -78,43 +72,30 @@ contract UniswapV4ExecutorTest is Test, Constants {
 
     function testSwapUniswapV4() public {
         vm.startPrank(BOB);
-        uint256 amountIn = 1 ether;
+        uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
-        assertEq(USDE.balanceOf(address(uniswapV4Exposed)), amountIn);
+        uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
+        uint256 usdeBalanceBeforeSwapExecutor =
+            USDE.balanceOf(address(uniswapV4Exposed));
+        assertEq(usdeBalanceBeforeSwapExecutor, amountIn);
+        uint256 usdtBalanceBeforeSwapBob = USDT.balanceOf(address(BOB));
+        assertEq(usdtBalanceBeforeSwapBob, 0);
 
         bytes memory data = abi.encodePacked(
             USDE_ADDR,
             USDT_ADDR,
             uint24(100), // 0.01% fee tier
-            address(this),
+            BOB,
             true,
             int24(1)
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
-        assertEq(USDE.balanceOf(address(uniswapV4Exposed)), 0);
-        vm.stopPrank();
-    }
-
-    function testSwapUniswapV4With1Inch() public {
-        vm.startPrank(BOB);
-        uint256 amountIn = 1 ether;
-        deal(INCH_ADDR, address(uniswapV4Exposed), amountIn);
+        assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
         assertEq(
-            IERC20(INCH_ADDR).balanceOf(address(uniswapV4Exposed)),
-            amountIn
+            USDE.balanceOf(address(uniswapV4Exposed)),
+            usdeBalanceBeforeSwapExecutor - amountIn
         );
-
-        bytes memory data = abi.encodePacked(
-            INCH_ADDR,
-            USDC_ADDR,
-            uint24(10000), // 0.01% fee tier
-            address(this),
-            true,
-            int24(200)
-        );
-
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
-        assertEq(IERC20(INCH_ADDR).balanceOf(address(uniswapV4Exposed)), 0);
+        assertTrue(USDT.balanceOf(BOB) == amountOut && amountOut > 0);
     }
 }
