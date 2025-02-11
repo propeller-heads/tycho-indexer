@@ -1,3 +1,10 @@
+## [0.36.0](https://github.com/propeller-heads/tycho-execution/compare/0.35.1...0.36.0) (2025-02-11)
+
+
+### Features
+
+* Add selector to Transaction ([dd7ecac](https://github.com/propeller-heads/tycho-execution/commit/dd7ecac324f272385acb3717ef12a163f4958ac2))
+
 ## [0.35.1](https://github.com/propeller-heads/tycho-execution/compare/0.35.0...0.35.1) (2025-02-11)
 
 
