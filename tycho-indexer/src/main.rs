@@ -76,6 +76,13 @@ impl ExtractorConfigs {
 type ExtractionTasks = Vec<JoinHandle<Result<(), ExtractionError>>>;
 type ServerTasks = Vec<JoinHandle<Result<(), ExtractionError>>>; //TODO: introduce an error type for it
 fn main() {
+    // Install the default crypto provider to ensure TLS operations work correctly.
+    // This is required since rustls 0.23+ where the provider is not installed automatically.
+    let provider = rustls::crypto::aws_lc_rs::default_provider();
+    provider
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let cli: Cli = Cli::parse();
     let global_args = cli.args();
 
