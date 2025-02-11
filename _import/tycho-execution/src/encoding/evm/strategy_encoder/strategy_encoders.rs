@@ -261,7 +261,10 @@ impl SplitSwapStrategyEncoder {
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
+    fn encode_strategy(
+        &self,
+        solution: Solution,
+    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
         self.validate_split_percentages(&solution.swaps)?;
         self.validate_swap_path(
             &solution.swaps,
@@ -395,7 +398,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             .abi_encode();
 
         let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, solution.router_address))
+        Ok((contract_interaction, solution.router_address, None))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -425,7 +428,10 @@ impl ExecutorStrategyEncoder {
 }
 impl EVMStrategyEncoder for ExecutorStrategyEncoder {}
 impl StrategyEncoder for ExecutorStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
+    fn encode_strategy(
+        &self,
+        solution: Solution,
+    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
         let swap = solution
             .swaps
             .first()
@@ -449,7 +455,15 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
 
         let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
-        Ok((protocol_data, executor_address))
+        Ok((
+            protocol_data,
+            executor_address,
+            Some(
+                swap_encoder
+                    .executor_selector()
+                    .to_string(),
+            ),
+        ))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -531,7 +545,7 @@ mod tests {
             native_action: None,
         };
 
-        let (protocol_data, executor_address) = encoder
+        let (protocol_data, executor_address, selector) = encoder
             .encode_strategy(solution)
             .unwrap();
         let hex_protocol_data = encode(&protocol_data);
@@ -552,8 +566,8 @@ mod tests {
                 "00",
             ))
         );
+        assert_eq!(selector, Some("swap(uint256,bytes)".to_string()));
     }
-
     #[rstest]
     #[case::no_check_no_slippage(
         None,
@@ -622,7 +636,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _) = encoder
+        let (calldata, _, _) = encoder
             .encode_strategy(solution)
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
@@ -723,7 +737,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _) = encoder
+        let (calldata, _, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -771,7 +785,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _) = encoder
+        let (calldata, _, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -859,7 +873,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _) = encoder
+        let (calldata, _, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 

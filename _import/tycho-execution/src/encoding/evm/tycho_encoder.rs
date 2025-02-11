@@ -104,7 +104,7 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
             let strategy = self
                 .strategy_registry
                 .get_encoder(solution)?;
-            let (contract_interaction, target_address) =
+            let (contract_interaction, target_address, selector) =
                 strategy.encode_strategy(solution.clone())?;
 
             let value = match solution.native_action.as_ref() {
@@ -116,6 +116,7 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
                 value,
                 data: contract_interaction,
                 to: target_address,
+                selector,
             });
         }
         Ok(transactions)
@@ -170,12 +171,16 @@ mod tests {
     struct MockStrategy;
 
     impl StrategyEncoder for MockStrategy {
-        fn encode_strategy(&self, _solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
+        fn encode_strategy(
+            &self,
+            _solution: Solution,
+        ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
             Ok((
                 Bytes::from_str("0x1234")
                     .unwrap()
                     .to_vec(),
                 Bytes::from_str("0xabcd").unwrap(),
+                None,
             ))
         }
 
