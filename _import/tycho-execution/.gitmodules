@@ -16,3 +16,6 @@
 [submodule "foundry/lib/v4-core"]
 	path = foundry/lib/v4-core
 	url = https://github.com/Uniswap/v4-core
+[submodule "foundry/lib/v4-periphery"]
+	path = foundry/lib/v4-periphery
+	url = https://github.com/Uniswap/v4-periphery

@@ -47,13 +47,19 @@ contract UniswapV4Executor is IExecutor, V4Router {
 
         this.executeActions(data);
 
+        uint256 balanceAfter = IERC20(tokenOut).balanceOf(receiver);
+
         if (isExactInput) {
-            amountOut = IERC20(tokenOut).balanceOf(receiver) - balanceBefore;
+            amountOut = balanceAfter - balanceBefore;
         } else {
             amountOut = amount;
         }
 
-        if (amountOut == 0) revert UniswapV4Executor__SwapFailed();
+        // Checks if the amountOut is not 0.
+        // Slither does not allow strict equality checks.
+        if (amountOut < 1) {
+            revert UniswapV4Executor__SwapFailed();
+        }
         return amountOut;
     }
 
