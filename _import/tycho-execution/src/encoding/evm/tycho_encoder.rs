@@ -269,7 +269,7 @@ mod tests {
             exact_out: false,
             given_token: eth(),
             checked_token: dai(),
-            check_amount: None,
+            checked_amount: None,
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()
@@ -383,7 +383,7 @@ mod tests {
         let solution = Solution {
             exact_out: false,
             checked_token: eth(),
-            check_amount: None,
+            checked_amount: None,
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
             ..Default::default()

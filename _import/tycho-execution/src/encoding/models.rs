@@ -38,7 +38,7 @@ pub struct Solution {
     /// Minimum amount to be checked for the solution to be valid.
     /// If not set, the check will not be performed.
     #[serde(with = "biguint_string_option")]
-    pub check_amount: Option<BigUint>,
+    pub checked_amount: Option<BigUint>,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
     /// Address of the router contract to be used for the swaps.
