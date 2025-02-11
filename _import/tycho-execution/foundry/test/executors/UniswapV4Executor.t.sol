@@ -38,7 +38,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             new UniswapV4ExecutorExposed(IPoolManager(poolManager));
     }
 
-    function testDecodeParamsUniswapV4() public view {
+    function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
         address expectedReceiver = address(2);
         uint128 expectedAmount = 100;
@@ -62,7 +62,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         assertEq(amount, expectedAmount);
     }
 
-    function testSwapUniswapV4() public {
+    function testSwap() public {
         vm.startPrank(BOB);
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
