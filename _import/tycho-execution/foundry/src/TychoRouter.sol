@@ -17,6 +17,7 @@ import {LibSwap} from "../lib/LibSwap.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
+error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
@@ -191,6 +192,10 @@ contract TychoRouter is
         internal
         returns (uint256)
     {
+        if (swaps_.length == 0) {
+            revert TychoRouter__EmptySwaps();
+        }
+
         uint256 currentAmountIn;
         uint256 currentAmountOut;
         uint8 tokenInIndex = 0;
