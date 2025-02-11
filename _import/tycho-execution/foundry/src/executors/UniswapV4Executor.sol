@@ -31,17 +31,8 @@ contract UniswapV4Executor is IExecutor, V4Router {
         payable
         returns (uint256 amountOut)
     {
-        (
-            ,
-            address tokenOut,
-            ,
-            address receiver,
-            ,
-            ,
-            bool isExactInput,
-            ,
-            uint256 amount
-        ) = _decodeData(data);
+        (address tokenOut, address receiver, bool isExactInput, uint256 amount)
+        = _decodeData(data);
 
         uint256 balanceBefore = IERC20(tokenOut).balanceOf(receiver);
 
@@ -71,14 +62,9 @@ contract UniswapV4Executor is IExecutor, V4Router {
         internal
         pure
         returns (
-            address tokenIn,
             address tokenOut,
-            uint24 fee,
             address receiver,
-            bool zeroForOne,
-            uint24 tickSpacing,
             bool isExactInput,
-            bool isSingle,
             uint256 amount
         )
     {
@@ -97,60 +83,35 @@ contract UniswapV4Executor is IExecutor, V4Router {
             IV4Router.ExactInputSingleParams memory swapParams =
                 abi.decode(params[0], (IV4Router.ExactInputSingleParams));
 
-            tokenIn = swapParams.zeroForOne
-                ? address(uint160(swapParams.poolKey.currency0.toId()))
-                : address(uint160(swapParams.poolKey.currency1.toId()));
             tokenOut = swapParams.zeroForOne
                 ? address(uint160(swapParams.poolKey.currency1.toId()))
                 : address(uint160(swapParams.poolKey.currency0.toId()));
-            fee = swapParams.poolKey.fee;
-            zeroForOne = swapParams.zeroForOne;
-            tickSpacing = uint24(swapParams.poolKey.tickSpacing);
             isExactInput = true;
-            isSingle = true;
             amount = swapParams.amountIn;
         } else if (action == uint8(Actions.SWAP_EXACT_OUT_SINGLE)) {
             IV4Router.ExactOutputSingleParams memory swapParams =
                 abi.decode(params[0], (IV4Router.ExactOutputSingleParams));
 
-            tokenIn = swapParams.zeroForOne
-                ? address(uint160(swapParams.poolKey.currency0.toId()))
-                : address(uint160(swapParams.poolKey.currency1.toId()));
             tokenOut = swapParams.zeroForOne
                 ? address(uint160(swapParams.poolKey.currency1.toId()))
                 : address(uint160(swapParams.poolKey.currency0.toId()));
-            fee = swapParams.poolKey.fee;
-            zeroForOne = swapParams.zeroForOne;
-            tickSpacing = uint24(swapParams.poolKey.tickSpacing);
             isExactInput = false;
-            isSingle = true;
             amount = swapParams.amountOut;
         } else if (action == uint8(Actions.SWAP_EXACT_IN)) {
             IV4Router.ExactInputParams memory swapParams =
                 abi.decode(params[0], (IV4Router.ExactInputParams));
 
-            tokenIn = address(uint160(swapParams.currencyIn.toId()));
             PathKey memory lastPath =
                 swapParams.path[swapParams.path.length - 1];
             tokenOut = address(uint160(lastPath.intermediateCurrency.toId()));
-            fee = lastPath.fee;
-            zeroForOne = tokenIn < tokenOut;
-            tickSpacing = uint24(lastPath.tickSpacing);
             isExactInput = true;
-            isSingle = false;
             amount = swapParams.amountIn;
         } else if (action == uint8(Actions.SWAP_EXACT_OUT)) {
             IV4Router.ExactOutputParams memory swapParams =
                 abi.decode(params[0], (IV4Router.ExactOutputParams));
 
             tokenOut = address(uint160(swapParams.currencyOut.toId()));
-            PathKey memory firstPath = swapParams.path[0];
-            tokenIn = address(uint160(firstPath.intermediateCurrency.toId()));
-            fee = firstPath.fee;
-            zeroForOne = tokenIn < tokenOut;
-            tickSpacing = uint24(firstPath.tickSpacing);
             isExactInput = false;
-            isSingle = false;
             amount = swapParams.amountOut;
         }
     }
