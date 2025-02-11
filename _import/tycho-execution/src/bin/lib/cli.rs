@@ -14,7 +14,7 @@ pub use clap::Parser;
 ///     "exact_out": false,
 ///     "slippage": 0.01,
 ///     "expected_amount": "123...",
-///     "check_amount": "123...",
+///     "checked_amount": "123...",
 ///     "swaps": [{
 ///         "component": {
 ///             "id": "...",

@@ -279,7 +279,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             &solution.given_amount,
         )?;
         let mut min_amount_out = solution
-            .check_amount
+            .checked_amount
             .unwrap_or(BigUint::ZERO);
 
         if let (Some(expected_amount), Some(slippage)) =
@@ -534,7 +534,7 @@ mod tests {
             given_amount: BigUint::from(1000000000000000000u64),
             expected_amount: Some(BigUint::from(1000000000000000000u64)),
             checked_token: token_out,
-            check_amount: None,
+            checked_amount: None,
             sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
@@ -596,7 +596,7 @@ mod tests {
     fn test_split_swap_strategy_encoder_simple_route(
         #[case] expected_amount: Option<BigUint>,
         #[case] slippage: Option<f64>,
-        #[case] check_amount: Option<BigUint>,
+        #[case] checked_amount: Option<BigUint>,
         #[case] expected_min_amount: U256,
     ) {
         // Performs a single swap from WETH to DAI on a USV2 pool
@@ -628,7 +628,7 @@ mod tests {
             checked_token: dai,
             expected_amount,
             slippage,
-            check_amount,
+            checked_amount,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
@@ -728,7 +728,7 @@ mod tests {
             given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
             checked_token: dai,
             expected_amount: Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
-            check_amount: None,
+            checked_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
@@ -776,7 +776,7 @@ mod tests {
             given_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
             checked_token: eth(),
             expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
-            check_amount: None,
+            checked_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
@@ -865,7 +865,7 @@ mod tests {
             given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
             checked_token: usdc,
             expected_amount: Some(BigUint::from_str("3_000_000000").unwrap()),
-            check_amount: None,
+            checked_amount: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
