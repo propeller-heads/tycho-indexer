@@ -9,10 +9,13 @@ import {console} from "forge-std/console.sol";
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
     constructor(IPoolManager _poolManager) UniswapV4Executor(_poolManager) {}
 
-    function decodeData(bytes calldata data)
+    function decodeData(
+        bytes calldata data
+    )
         external
         pure
         returns (
+            address tokenIn,
             address tokenOut,
             address receiver,
             bool isExactInput,
@@ -34,8 +37,9 @@ contract UniswapV4ExecutorTest is Test, Constants {
     function setUp() public {
         uint256 forkBlock = 21817316;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV4Exposed =
-            new UniswapV4ExecutorExposed(IPoolManager(poolManager));
+        uniswapV4Exposed = new UniswapV4ExecutorExposed(
+            IPoolManager(poolManager)
+        );
     }
 
     function testDecodeParams() public view {
@@ -53,9 +57,15 @@ contract UniswapV4ExecutorTest is Test, Constants {
             expectedAmount
         );
 
-        (address tokenOut, address receiver, bool isExactInput, uint256 amount)
-        = uniswapV4Exposed.decodeData(data);
+        (
+            address tokenIn,
+            address tokenOut,
+            address receiver,
+            bool isExactInput,
+            uint256 amount
+        ) = uniswapV4Exposed.decodeData(data);
 
+        assertEq(tokenIn, USDE_ADDR);
         assertEq(tokenOut, USDT_ADDR);
         assertEq(receiver, expectedReceiver);
         assertTrue(isExactInput);
@@ -63,15 +73,21 @@ contract UniswapV4ExecutorTest is Test, Constants {
     }
 
     function testSwap() public {
-        vm.startPrank(BOB);
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
-        uint256 usdeBalanceBeforeSwapExecutor =
-            USDE.balanceOf(address(uniswapV4Exposed));
+        uint256 usdeBalanceBeforeSwapExecutor = USDE.balanceOf(
+            address(uniswapV4Exposed)
+        );
 
         bytes memory data = _encodeExactInputSingle(
-            USDE_ADDR, USDT_ADDR, 100, BOB, true, 1, uint128(amountIn)
+            USDE_ADDR,
+            USDT_ADDR,
+            100,
+            BOB,
+            true,
+            1,
+            uint128(amountIn)
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
