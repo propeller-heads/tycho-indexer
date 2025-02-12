@@ -2,9 +2,14 @@
 pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
-import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    IERC20,
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {
+    Currency, CurrencyLibrary
+} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {V4Router} from "@uniswap/v4-periphery/src/V4Router.sol";
@@ -21,10 +26,11 @@ contract UniswapV4Executor is IExecutor, V4Router {
 
     constructor(IPoolManager _poolManager) V4Router(_poolManager) {}
 
-    function swap(
-        uint256,
-        bytes calldata data
-    ) external payable returns (uint256 amountInOrOut) {
+    function swap(uint256, bytes calldata data)
+        external
+        payable
+        returns (uint256 calculatedAmount)
+    {
         (
             address tokenIn,
             address tokenOut,
@@ -36,31 +42,21 @@ contract UniswapV4Executor is IExecutor, V4Router {
         uint256 tokenOutBefore = IERC20(tokenOut).balanceOf(receiver);
         uint256 tokenInBefore = IERC20(tokenIn).balanceOf(address(this));
 
-        this.executeActions(data);
+        _executeActions(data);
 
         uint256 tokenOutAfter = IERC20(tokenOut).balanceOf(receiver);
         uint256 tokenInAfter = IERC20(tokenIn).balanceOf(address(this));
 
         if (isExactInput) {
-            amountInOrOut = tokenOutAfter - tokenOutBefore;
+            calculatedAmount = tokenOutAfter - tokenOutBefore;
         } else {
-            amountInOrOut = tokenInBefore - tokenInAfter;
+            calculatedAmount = tokenInBefore - tokenInAfter;
         }
 
-        // slither-disable-next-line incorrect-equality
-        if (amountInOrOut == 0) {
-            revert UniswapV4Executor__SwapFailed();
-        }
-        return amountInOrOut;
+        return calculatedAmount;
     }
 
-    function executeActions(bytes calldata actions) public {
-        _executeActions(actions);
-    }
-
-    function _decodeData(
-        bytes calldata data
-    )
+    function _decodeData(bytes calldata data)
         internal
         pure
         returns (
@@ -71,22 +67,18 @@ contract UniswapV4Executor is IExecutor, V4Router {
             uint256 amount
         )
     {
-        (bytes memory actions, bytes[] memory params) = abi.decode(
-            data,
-            (bytes, bytes[])
-        );
+        (bytes memory actions, bytes[] memory params) =
+            abi.decode(data, (bytes, bytes[]));
 
         // First byte of actions determines the swap type
         uint8 action = uint8(bytes1(actions[0]));
 
         // Get receiver from params[2] for all cases
-        (, receiver, ) = abi.decode(params[2], (Currency, address, uint256));
+        (, receiver,) = abi.decode(params[2], (Currency, address, uint256));
 
         if (action == uint8(Actions.SWAP_EXACT_IN_SINGLE)) {
-            IV4Router.ExactInputSingleParams memory swapParams = abi.decode(
-                params[0],
-                (IV4Router.ExactInputSingleParams)
-            );
+            IV4Router.ExactInputSingleParams memory swapParams =
+                abi.decode(params[0], (IV4Router.ExactInputSingleParams));
 
             tokenIn = swapParams.zeroForOne
                 ? address(uint160(swapParams.poolKey.currency0.toId()))
@@ -97,10 +89,8 @@ contract UniswapV4Executor is IExecutor, V4Router {
             isExactInput = true;
             amount = swapParams.amountIn;
         } else if (action == uint8(Actions.SWAP_EXACT_OUT_SINGLE)) {
-            IV4Router.ExactOutputSingleParams memory swapParams = abi.decode(
-                params[0],
-                (IV4Router.ExactOutputSingleParams)
-            );
+            IV4Router.ExactOutputSingleParams memory swapParams =
+                abi.decode(params[0], (IV4Router.ExactOutputSingleParams));
 
             tokenIn = swapParams.zeroForOne
                 ? address(uint160(swapParams.poolKey.currency0.toId()))
@@ -111,23 +101,18 @@ contract UniswapV4Executor is IExecutor, V4Router {
             isExactInput = false;
             amount = swapParams.amountOut;
         } else if (action == uint8(Actions.SWAP_EXACT_IN)) {
-            IV4Router.ExactInputParams memory swapParams = abi.decode(
-                params[0],
-                (IV4Router.ExactInputParams)
-            );
+            IV4Router.ExactInputParams memory swapParams =
+                abi.decode(params[0], (IV4Router.ExactInputParams));
 
             tokenIn = address(uint160(swapParams.currencyIn.toId()));
-            PathKey memory lastPath = swapParams.path[
-                swapParams.path.length - 1
-            ];
+            PathKey memory lastPath =
+                swapParams.path[swapParams.path.length - 1];
             tokenOut = address(uint160(lastPath.intermediateCurrency.toId()));
             isExactInput = true;
             amount = swapParams.amountIn;
         } else if (action == uint8(Actions.SWAP_EXACT_OUT)) {
-            IV4Router.ExactOutputParams memory swapParams = abi.decode(
-                params[0],
-                (IV4Router.ExactOutputParams)
-            );
+            IV4Router.ExactOutputParams memory swapParams =
+                abi.decode(params[0], (IV4Router.ExactOutputParams));
 
             PathKey memory firstPath = swapParams.path[0];
             tokenIn = address(uint160(firstPath.intermediateCurrency.toId()));
@@ -137,11 +122,10 @@ contract UniswapV4Executor is IExecutor, V4Router {
         }
     }
 
-    function _pay(
-        Currency token,
-        address payer,
-        uint256 amount
-    ) internal override {
+    function _pay(Currency token, address payer, uint256 amount)
+        internal
+        override
+    {
         token.transfer(payer, amount);
     }
 
