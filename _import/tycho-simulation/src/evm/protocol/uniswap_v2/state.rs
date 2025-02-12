@@ -10,7 +10,7 @@ use crate::{
         safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
         u256_num::{biguint_to_u256, u256_to_biguint},
     },
-    models::Token,
+    models::{Balances, Token},
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -104,6 +104,7 @@ impl ProtocolSim for UniswapV2State {
         &mut self,
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
+        _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         // reserve0 and reserve1 are considered required attributes and are expected in every delta
         // we process
@@ -300,7 +301,7 @@ mod tests {
             deleted_attributes: HashSet::new(), // usv2 doesn't have any deletable attributes
         };
 
-        let res = state.delta_transition(delta, &HashMap::new());
+        let res = state.delta_transition(delta, &HashMap::new(), &Balances::default());
 
         assert!(res.is_ok());
         assert_eq!(state.reserve0, U256::from_str("1500").unwrap());
@@ -321,7 +322,7 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        let res = state.delta_transition(delta, &HashMap::new());
+        let res = state.delta_transition(delta, &HashMap::new(), &Balances::default());
 
         assert!(res.is_err());
         // assert it errors for the missing reserve1 attribute delta

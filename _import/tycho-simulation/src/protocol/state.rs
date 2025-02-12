@@ -52,7 +52,7 @@ use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
-    models::Token,
+    models::{Balances, Token},
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -121,6 +121,7 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
         &mut self,
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
+        balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
 
     /// Clones the protocol state as a trait object.
@@ -161,6 +162,7 @@ mock! {
             &mut self,
             delta: ProtocolStateDelta,
             tokens: &HashMap<Bytes, Token>,
+            balances: &Balances,
         ) -> Result<(), TransitionError<String>>;
         pub fn clone_box(&self) -> Box<dyn ProtocolSim>;
         pub fn eq(&self, other: &dyn ProtocolSim) -> bool;
@@ -190,8 +192,9 @@ impl ProtocolSim for MockProtocolSim {
         &mut self,
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
+        balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        self.delta_transition(delta, tokens)
+        self.delta_transition(delta, tokens, balances)
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {

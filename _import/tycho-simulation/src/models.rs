@@ -5,6 +5,7 @@
 //!
 //! Tokens provide instructions on how to handle prices and amounts.
 use std::{
+    collections::HashMap,
     convert::TryFrom,
     hash::{Hash, Hasher},
 };
@@ -101,6 +102,12 @@ impl TryFrom<ResponseToken> for Token {
             ),
         })
     }
+}
+
+#[derive(Default)]
+pub struct Balances {
+    pub component_balances: HashMap<String, HashMap<Bytes, Bytes>>,
+    pub account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
 }
 
 #[cfg(test)]

@@ -22,7 +22,7 @@ use crate::{
             StepComputation, SwapResults, SwapState,
         },
     },
-    models::Token,
+    models::{Balances, Token},
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -266,6 +266,7 @@ impl ProtocolSim for UniswapV3State {
         &mut self,
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
+        _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         // apply attribute changes
         if let Some(liquidity) = delta
@@ -619,7 +620,7 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        pool.delta_transition(delta, &HashMap::new())
+        pool.delta_transition(delta, &HashMap::new(), &Balances::default())
             .unwrap();
 
         assert_eq!(pool.liquidity, 2000);

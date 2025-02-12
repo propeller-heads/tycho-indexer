@@ -61,6 +61,7 @@
         "new_protocol_components": {},
         "deleted_protocol_components": {},
         "component_balances": {},
+        "account_balances": {},
         "component_tvl": {}
       },
       "removed_components": {

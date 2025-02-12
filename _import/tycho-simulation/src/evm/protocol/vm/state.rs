@@ -27,7 +27,7 @@ use crate::{
         protocol::{u256_num::u256_to_biguint, utils::bytes_to_address},
         ContractCompiler, SlotId,
     },
-    models::Token,
+    models::{Balances, Token},
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -60,7 +60,7 @@ where
     /// The supported capabilities of this pool
     capabilities: HashSet<Capability>,
     /// Storage overwrites that will be applied to all simulations. They will be cleared
-    /// when ``clear_all_cache`` is called, i.e. usually at each block. Hence, the name.
+    /// when ``update_pool_state`` is called, i.e. usually at each block. Hence, the name.
     block_lasting_overwrites: HashMap<Address, Overwrites>,
     /// A set of all contract addresses involved in the simulation of this pool.
     involved_contracts: HashSet<Address>,
@@ -316,11 +316,62 @@ where
         Ok(limits?.0)
     }
 
-    fn clear_all_cache(&mut self, tokens: &HashMap<Bytes, Token>) -> Result<(), SimulationError> {
+    fn update_pool_state(
+        &mut self,
+        tokens: &HashMap<Bytes, Token>,
+        balances: &Balances,
+    ) -> Result<(), SimulationError> {
+        // clear cache
         self.adapter_contract
             .engine
             .clear_temp_storage();
         self.block_lasting_overwrites.clear();
+
+        // set balances
+        if !self.balances.is_empty() {
+            // Pool uses component balances for overwrites
+            if let Some(bals) = balances
+                .component_balances
+                .get(&self.id)
+            {
+                self.balances = bals
+                    .iter()
+                    .map(|(token, bal)| {
+                        let addr = bytes_to_address(token).map_err(|_| {
+                            SimulationError::FatalError(format!(
+                                "Invalid token address in balance update: {:?}",
+                                token
+                            ))
+                        })?;
+                        Ok((addr, U256::from_be_slice(bal)))
+                    })
+                    .collect::<Result<HashMap<_, _>, SimulationError>>()?;
+            }
+        } else {
+            // Pool uses contract balances for overwrites
+            for contract in &self.involved_contracts {
+                if let Some(bals) = balances
+                    .account_balances
+                    .get(&Bytes::from(contract.as_slice()))
+                {
+                    let contract_entry = self
+                        .contract_balances
+                        .entry(*contract)
+                        .or_default();
+                    for (token, bal) in bals {
+                        let addr = bytes_to_address(token).map_err(|_| {
+                            SimulationError::FatalError(format!(
+                                "Invalid token address in balance update: {:?}",
+                                token
+                            ))
+                        })?;
+                        contract_entry.insert(addr, U256::from_be_slice(bal));
+                    }
+                }
+            }
+        }
+
+        // reset spot prices
         self.set_spot_prices(tokens)?;
         Ok(())
     }
@@ -605,6 +656,7 @@ where
         &mut self,
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
+        balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
@@ -614,11 +666,11 @@ where
             {
                 // Assuming `marker` is of type `Bytes`, check its value for "truthiness"
                 if !marker.is_empty() && marker[0] != 0 {
-                    self.clear_all_cache(tokens)?;
+                    self.update_pool_state(tokens, balances)?;
                 }
             }
         } else {
-            self.clear_all_cache(tokens)?;
+            self.update_pool_state(tokens, balances)?;
         }
 
         Ok(())
@@ -650,24 +702,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::{HashMap, HashSet},
-        str::FromStr,
-    };
-
     use alloy_primitives::B256;
     use num_bigint::ToBigUint;
     use num_traits::One;
     use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
     use serde_json::Value;
 
-    use super::{
-        super::{models::Capability, state_builder::EVMPoolStateBuilder},
-        *,
-    };
+    use super::*;
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
-        protocol::vm::constants::BALANCER_V2,
+        protocol::vm::{constants::BALANCER_V2, state_builder::EVMPoolStateBuilder},
         simulation::SimulationEngine,
         tycho_models::AccountUpdate,
     };
