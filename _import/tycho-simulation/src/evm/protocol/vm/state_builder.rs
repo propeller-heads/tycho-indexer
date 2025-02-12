@@ -97,6 +97,7 @@ where
     balance_owner: Option<Address>,
     capabilities: Option<HashSet<Capability>>,
     involved_contracts: Option<HashSet<Address>>,
+    contract_balances: HashMap<Address, HashMap<Address, U256>>,
     stateless_contracts: Option<HashMap<String, Option<Vec<u8>>>>,
     token_storage_slots: Option<HashMap<Address, (ERC20Slots, ContractCompiler)>>,
     manual_updates: Option<bool>,
@@ -115,19 +116,19 @@ where
     pub fn new(
         id: String,
         tokens: Vec<TychoBytes>,
-        balances: HashMap<Address, U256>,
         block: BlockHeader,
         adapter_address: Address,
     ) -> Self {
         Self {
             id,
             tokens,
-            balances,
+            balances: HashMap::new(),
             block,
             adapter_address,
             balance_owner: None,
             capabilities: None,
             involved_contracts: None,
+            contract_balances: HashMap::new(),
             stateless_contracts: None,
             token_storage_slots: None,
             manual_updates: None,
@@ -140,6 +141,19 @@ where
 
     pub fn balance_owner(mut self, balance_owner: Address) -> Self {
         self.balance_owner = Some(balance_owner);
+        self
+    }
+
+    pub fn balances(mut self, balances: HashMap<Address, U256>) -> Self {
+        self.balances = balances;
+        self
+    }
+
+    pub fn account_balances(
+        mut self,
+        account_balances: HashMap<Address, HashMap<Address, U256>>,
+    ) -> Self {
+        self.contract_balances = account_balances;
         self
     }
 
@@ -221,26 +235,58 @@ where
         } else {
             self.get_default_capabilities()?
         };
-        Ok(EVMPoolState::new(
-            self.id,
-            self.tokens,
-            self.block,
-            self.balances,
-            self.balance_owner,
-            HashMap::new(),
-            capabilities,
-            HashMap::new(),
-            self.involved_contracts
-                .unwrap_or_default(),
-            self.token_storage_slots
-                .unwrap_or_default(),
-            self.manual_updates.unwrap_or(false),
-            self.adapter_contract.ok_or_else(|| {
-                SimulationError::FatalError(
-                    "Failed to get build engine: Adapter contract not initialized".to_string(),
-                )
-            })?,
-        ))
+
+        let adapter_contract = self.adapter_contract.ok_or_else(|| {
+            SimulationError::FatalError(
+                "Failed to get build engine: Adapter contract not initialized".to_string(),
+            )
+        })?;
+
+        if !self.contract_balances.is_empty() {
+            // Use contract balances to build the state
+            if !self.balances.is_empty() {
+                warn!("Both contract balances and component balances are set. Contract balances will be used.");
+            }
+            Ok(EVMPoolState::new(
+                self.id,
+                self.tokens,
+                self.block,
+                self.contract_balances,
+                HashMap::new(),
+                capabilities,
+                HashMap::new(),
+                self.involved_contracts
+                    .unwrap_or_default(),
+                self.token_storage_slots
+                    .unwrap_or_default(),
+                self.manual_updates.unwrap_or(false),
+                adapter_contract,
+            ))
+        } else {
+            // Use component balances to build the state
+            if self.balances.is_empty() {
+                return Err(SimulationError::FatalError(
+                    "Failed to get build EVMPoolState: no balances were set".to_string(),
+                ));
+            }
+            #[allow(deprecated)]
+            Ok(EVMPoolState::new_with_component_balances(
+                self.id,
+                self.tokens,
+                self.block,
+                self.balances,
+                self.balance_owner,
+                HashMap::new(),
+                capabilities,
+                HashMap::new(),
+                self.involved_contracts
+                    .unwrap_or_default(),
+                self.token_storage_slots
+                    .unwrap_or_default(),
+                self.manual_updates.unwrap_or(false),
+                adapter_contract,
+            ))
+        }
     }
 
     async fn get_default_engine(&self, db: D) -> Result<SimulationEngine<D>, SimulationError> {
@@ -457,7 +503,7 @@ mod tests {
     use super::*;
     use crate::evm::{
         engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
-        protocol::utils::bytes_to_address,
+        protocol::vm::constants::BALANCER_V2,
     };
 
     #[test]
@@ -470,7 +516,8 @@ mod tests {
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
         let result = tokio_test::block_on(
-            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block, adapter_address)
+            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
+                .balances(balances)
                 .build(SHARED_TYCHO_DB.clone()),
         );
 
@@ -478,6 +525,31 @@ mod tests {
         match result.unwrap_err() {
             SimulationError::FatalError(field) => {
                 assert_eq!(field, "Adapter contract bytecode not set")
+            }
+            _ => panic!("Unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn test_build_without_balances() {
+        let id = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string();
+        let tokens = vec![
+            TychoBytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+            TychoBytes::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap(),
+        ];
+        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
+        let adapter_address =
+            Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
+        let result = tokio_test::block_on(
+            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
+                .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
+                .build(SHARED_TYCHO_DB.clone()),
+        );
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            SimulationError::FatalError(field) => {
+                assert_eq!(field, "Failed to get build EVMPoolState: no balances were set")
             }
             _ => panic!("Unexpected error type"),
         }
@@ -493,8 +565,8 @@ mod tests {
         let balances = HashMap::new();
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
-        let builder =
-            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, balances, block, adapter_address);
+        let builder = EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
+            .balances(balances);
 
         let engine =
             tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone())).unwrap();

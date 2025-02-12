@@ -151,17 +151,13 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             Address::from_str(&format!("{:0>40}", hex::encode(protocol_name)))
                 .expect("Can't convert protocol name to address");
 
-        let mut pool_state_builder = EVMPoolStateBuilder::new(
-            id.clone(),
-            tokens.clone(),
-            balances,
-            block,
-            adapter_contract_address,
-        )
-        .adapter_contract_bytecode(adapter_bytecode)
-        .involved_contracts(involved_contracts)
-        .stateless_contracts(stateless_contracts)
-        .manual_updates(manual_updates);
+        let mut pool_state_builder =
+            EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)
+                .balances(balances)
+                .adapter_contract_bytecode(adapter_bytecode)
+                .involved_contracts(involved_contracts)
+                .stateless_contracts(stateless_contracts)
+                .manual_updates(manual_updates);
 
         if let Some(balance_owner) = balance_owner {
             pool_state_builder = pool_state_builder.balance_owner(balance_owner)
@@ -250,6 +246,7 @@ mod tests {
         accounts
     }
 
+    #[allow(deprecated)]
     #[tokio::test]
     async fn test_try_from_with_block() {
         let attributes: HashMap<String, Bytes> = vec![
