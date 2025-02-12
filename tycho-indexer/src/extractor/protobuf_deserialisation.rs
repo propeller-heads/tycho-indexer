@@ -75,20 +75,13 @@ impl TryFromMessage for Block {
     /// Parses block from tychos protobuf block message
     fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
         let (msg, chain) = args;
-        let ts_nano = match chain {
-            // For blockchains with subsecond block times, like Arbitrum, timestamps aren't precise
-            // enough to distinguish between two blocks accurately. To maintain accurate ordering,
-            // we adjust timestamps by appending part of the current block number as microseconds.
-            Chain::Arbitrum => (msg.number as u32 % 1000) * 1000,
-            _ => 0,
-        };
 
         Ok(Self {
             chain,
             number: msg.number,
             hash: msg.hash.into(),
             parent_hash: msg.parent_hash.into(),
-            ts: NaiveDateTime::from_timestamp_opt(msg.ts as i64, ts_nano).ok_or_else(|| {
+            ts: NaiveDateTime::from_timestamp_opt(msg.ts as i64, 0).ok_or_else(|| {
                 ExtractionError::DecodeError(format!(
                     "Failed to convert timestamp {} to datetime!",
                     msg.ts
