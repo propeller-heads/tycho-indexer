@@ -15,7 +15,6 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         returns (
             address tokenIn,
             address tokenOut,
-            address receiver,
             bool isExactInput,
             uint256 amount
         )
@@ -41,30 +40,17 @@ contract UniswapV4ExecutorTest is Test, Constants {
 
     function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
-        address expectedReceiver = address(2);
         uint128 expectedAmount = 100;
 
         bytes memory data = _encodeExactInputSingle(
-            USDE_ADDR,
-            USDT_ADDR,
-            expectedPoolFee,
-            expectedReceiver,
-            false,
-            1,
-            expectedAmount
+            USDE_ADDR, USDT_ADDR, expectedPoolFee, false, 1, expectedAmount
         );
 
-        (
-            address tokenIn,
-            address tokenOut,
-            address receiver,
-            bool isExactInput,
-            uint256 amount
-        ) = uniswapV4Exposed.decodeData(data);
+        (address tokenIn, address tokenOut, bool isExactInput, uint256 amount) =
+            uniswapV4Exposed.decodeData(data);
 
         assertEq(tokenIn, USDE_ADDR);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, expectedReceiver);
         assertTrue(isExactInput);
         assertEq(amount, expectedAmount);
     }
@@ -77,7 +63,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             USDE.balanceOf(address(uniswapV4Exposed));
 
         bytes memory data = _encodeExactInputSingle(
-            USDE_ADDR, USDT_ADDR, 100, BOB, true, 1, uint128(amountIn)
+            USDE_ADDR, USDT_ADDR, 100, true, 1, uint128(amountIn)
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
@@ -86,14 +72,13 @@ contract UniswapV4ExecutorTest is Test, Constants {
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
         );
-        assertTrue(USDT.balanceOf(BOB) == amountOut);
+        assertTrue(USDT.balanceOf(address(uniswapV4Exposed)) == amountOut);
     }
 
     function _encodeExactInputSingle(
         address tokenIn,
         address tokenOut,
         uint24 fee,
-        address receiver,
         bool zeroForOne,
         uint24 tickSpacing,
         uint128 amountIn
@@ -109,7 +94,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         bytes memory actions = abi.encodePacked(
             uint8(Actions.SWAP_EXACT_IN_SINGLE),
             uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE)
+            uint8(Actions.TAKE_ALL)
         );
 
         bytes[] memory params = new bytes[](3);
@@ -125,7 +110,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         );
 
         params[1] = abi.encode(key.currency0, amountIn);
-        params[2] = abi.encode(key.currency1, receiver, 0);
+        params[2] = abi.encode(key.currency1, 0);
 
         return abi.encode(actions, params);
     }

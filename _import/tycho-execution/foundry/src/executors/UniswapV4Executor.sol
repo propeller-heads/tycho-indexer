@@ -31,20 +31,15 @@ contract UniswapV4Executor is IExecutor, V4Router {
         payable
         returns (uint256 calculatedAmount)
     {
-        (
-            address tokenIn,
-            address tokenOut,
-            address receiver,
-            bool isExactInput,
-            uint256 amount
-        ) = _decodeData(data);
+        (address tokenIn, address tokenOut, bool isExactInput, uint256 amount) =
+            _decodeData(data);
 
         uint256 tokenOutBalanceBefore;
         uint256 tokenInBalanceBefore;
 
         tokenOutBalanceBefore = tokenOut == address(0)
-            ? receiver.balance
-            : IERC20(tokenOut).balanceOf(receiver);
+            ? address(this).balance
+            : IERC20(tokenOut).balanceOf(address(this));
 
         tokenInBalanceBefore = tokenIn == address(0)
             ? address(this).balance
@@ -56,8 +51,8 @@ contract UniswapV4Executor is IExecutor, V4Router {
         uint256 tokenInBalanceAfter;
 
         tokenOutBalanceAfter = tokenOut == address(0)
-            ? receiver.balance
-            : IERC20(tokenOut).balanceOf(receiver);
+            ? address(this).balance
+            : IERC20(tokenOut).balanceOf(address(this));
 
         tokenInBalanceAfter = tokenIn == address(0)
             ? address(this).balance
@@ -78,7 +73,6 @@ contract UniswapV4Executor is IExecutor, V4Router {
         returns (
             address tokenIn,
             address tokenOut,
-            address receiver,
             bool isExactInput,
             uint256 amount
         )
@@ -88,9 +82,6 @@ contract UniswapV4Executor is IExecutor, V4Router {
 
         // First byte of actions determines the swap type
         uint8 action = uint8(bytes1(actions[0]));
-
-        // Get receiver from params[2] for all cases
-        (, receiver,) = abi.decode(params[2], (Currency, address, uint256));
 
         if (action == uint8(Actions.SWAP_EXACT_IN_SINGLE)) {
             IV4Router.ExactInputSingleParams memory swapParams =
@@ -142,10 +133,12 @@ contract UniswapV4Executor is IExecutor, V4Router {
         internal
         override
     {
-        token.transfer(payer, amount);
+        IERC20(Currency.unwrap(token)).safeTransfer(
+            address(poolManager), amount
+        );
     }
 
     function msgSender() public view override returns (address) {
-        return msg.sender;
+        return address(this);
     }
 }
