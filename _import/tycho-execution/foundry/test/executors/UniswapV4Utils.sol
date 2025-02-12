@@ -8,7 +8,6 @@ library UniswapV4Utils {
         address tokenIn,
         address tokenOut,
         uint24 fee,
-        address receiver,
         bool zeroForOne,
         uint24 tickSpacing,
         uint128 amountIn
@@ -24,7 +23,7 @@ library UniswapV4Utils {
         bytes memory actions = abi.encodePacked(
             uint8(Actions.SWAP_EXACT_IN_SINGLE),
             uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE)
+            uint8(Actions.TAKE_ALL)
         );
 
         bytes[] memory params = new bytes[](3);
@@ -40,7 +39,7 @@ library UniswapV4Utils {
         );
 
         params[1] = abi.encode(key.currency0, amountIn);
-        params[2] = abi.encode(key.currency1, receiver, 0);
+        params[2] = abi.encode(key.currency1, 0);
 
         return abi.encode(actions, params);
     }

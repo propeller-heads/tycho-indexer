@@ -5,7 +5,7 @@ libs = ['lib']
 auto_detect_sol = true
 evm_version = 'cancun'
 optimizer = true
-optimizer_runs = 1000
+optimizer_runs = 200
 via_ir = true
 
 [rpc_endpoints]
