@@ -1,3 +1,31 @@
+## [0.37.0](https://github.com/propeller-heads/tycho-execution/compare/0.36.2...0.37.0) (2025-02-12)
+
+
+### Features
+
+* add callback ([ed90cb4](https://github.com/propeller-heads/tycho-execution/commit/ed90cb4ef1d43e09a7cd6f824ef4214598851b9f))
+* add new pair test ([7ca647f](https://github.com/propeller-heads/tycho-execution/commit/7ca647f009ad8cb71c6e8a08e64ee02285c9ae08))
+* add router params ([e62c332](https://github.com/propeller-heads/tycho-execution/commit/e62c332451d7cf0d2fc471faa7af7b26fd1a000d))
+* add test for UniswapV4Executor ([4599f07](https://github.com/propeller-heads/tycho-execution/commit/4599f07df0d4c4131f87cd41ec7bcb8b1dd47bde))
+* add univ4 executor ([cb4c8f4](https://github.com/propeller-heads/tycho-execution/commit/cb4c8f4e51d4f1900149288339c6a6fc75a515b1))
+* handle amounts in unlockCallback ([b2097ca](https://github.com/propeller-heads/tycho-execution/commit/b2097ca4a5600161166636c7f2b58f845540ed9a))
+* move encoding to test ([c264084](https://github.com/propeller-heads/tycho-execution/commit/c264084783561b3de4eeac413ed6155076ff11d5))
+* support multi swap decoding ([d998c88](https://github.com/propeller-heads/tycho-execution/commit/d998c88cfef300e41714c6c3c6164e761d14e2de))
+* update solc and add V4Router into UniswapV4Executor ([bdd3daf](https://github.com/propeller-heads/tycho-execution/commit/bdd3daffba3853ad084f7d3454e3c72fd6a1679c))
+
+
+### Bug Fixes
+
+* _pay and msgSender ([d790682](https://github.com/propeller-heads/tycho-execution/commit/d79068282aebd1e65ae32e79ec3127da25f091af))
+* add equality check, amountInOrOut check, update _decodeData ([b47cff3](https://github.com/propeller-heads/tycho-execution/commit/b47cff3fc915b8146d62b085a7a5239d85d9d993))
+* git submodules and strict equality check in v4 executor ([a8cc84d](https://github.com/propeller-heads/tycho-execution/commit/a8cc84ddce7c90aa40d69090577ef15cc95d8edf))
+* handle native token balance changes ([0c40e9e](https://github.com/propeller-heads/tycho-execution/commit/0c40e9e97923d5bad61aa812ba739c2fe4260cf8))
+* reciever issue ([ae0b07b](https://github.com/propeller-heads/tycho-execution/commit/ae0b07b2a47b93430841ce8bf437215d2f94e3bb))
+* remove executeActions wrapper, strict equality checks and rename swap return ([2371ab2](https://github.com/propeller-heads/tycho-execution/commit/2371ab2a1fb96164a54c796cb0557d64e50c2350))
+* remove extra _receiver and redundant asserts ([ff3209b](https://github.com/propeller-heads/tycho-execution/commit/ff3209b1c861c015568c3daa691f74d95ef0c978))
+* rm callback fn ([1a36c33](https://github.com/propeller-heads/tycho-execution/commit/1a36c33bc614d744cfa161dd85d6cccc671e592e))
+* rm redundant transfer ([24d4e76](https://github.com/propeller-heads/tycho-execution/commit/24d4e762a2841909245d7a4434c13f37398ae482))
+
 ## [0.36.2](https://github.com/propeller-heads/tycho-execution/compare/0.36.1...0.36.2) (2025-02-12)
 
 
