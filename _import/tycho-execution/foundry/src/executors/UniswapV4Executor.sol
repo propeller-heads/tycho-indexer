@@ -39,13 +39,29 @@ contract UniswapV4Executor is IExecutor, V4Router {
             uint256 amount
         ) = _decodeData(data);
 
-        uint256 tokenOutBalanceBefore = IERC20(tokenOut).balanceOf(receiver);
-        uint256 tokenInBalanceBefore = IERC20(tokenIn).balanceOf(address(this));
+        uint256 tokenOutBalanceBefore;
+        uint256 tokenInBalanceBefore;
+
+        tokenOutBalanceBefore = tokenOut == address(0)
+            ? receiver.balance
+            : IERC20(tokenOut).balanceOf(receiver);
+
+        tokenInBalanceBefore = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
 
         _executeActions(data);
 
-        uint256 tokenOutBalanceAfter = IERC20(tokenOut).balanceOf(receiver);
-        uint256 tokenInBalanceAfter = IERC20(tokenIn).balanceOf(address(this));
+        uint256 tokenOutBalanceAfter;
+        uint256 tokenInBalanceAfter;
+
+        tokenOutBalanceAfter = tokenOut == address(0)
+            ? receiver.balance
+            : IERC20(tokenOut).balanceOf(receiver);
+
+        tokenInBalanceAfter = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
 
         if (isExactInput) {
             calculatedAmount = tokenOutBalanceAfter - tokenOutBalanceBefore;
