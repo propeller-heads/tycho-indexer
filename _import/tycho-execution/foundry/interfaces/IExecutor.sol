@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -20,10 +20,10 @@ interface IExecutor {
      * @return calculatedAmount The amount of the output token swapped, depending on
      * the givenAmount inputted.
      */
-    function swap(uint256 givenAmount, bytes calldata data)
-        external
-        payable
-        returns (uint256 calculatedAmount);
+    function swap(
+        uint256 givenAmount,
+        bytes calldata data
+    ) external payable returns (uint256 calculatedAmount);
 }
 
 interface IExecutorErrors {

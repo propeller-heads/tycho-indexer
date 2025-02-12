@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 
@@ -27,6 +27,9 @@ contract Constants is Test {
     address BAL_ADDR = address(0xba100000625a3754423978a60c9317c58a424e3D);
     address USDC_ADDR = address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     address WBTC_ADDR = address(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
+    address INCH_ADDR = address(0x111111111117dC0aa78b770fA6A738034120C302);
+    address USDE_ADDR = address(0x4c9EDD5852cd905f086C759E8383e09bff1E68B3);
+    address USDT_ADDR = address(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
     // uniswap v2
     address WETH_DAI_POOL = 0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11;
