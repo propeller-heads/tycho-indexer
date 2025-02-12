@@ -1,3 +1,10 @@
+## [0.36.2](https://github.com/propeller-heads/tycho-execution/compare/0.36.1...0.36.2) (2025-02-12)
+
+
+### Bug Fixes
+
+* Miscellaneous audit remarks ([582533f](https://github.com/propeller-heads/tycho-execution/commit/582533fa31b1c2096566df00b7e07350f677a647))
+
 ## [0.36.1](https://github.com/propeller-heads/tycho-execution/compare/0.36.0...0.36.1) (2025-02-11)
 
 ## [0.36.0](https://github.com/propeller-heads/tycho-execution/compare/0.35.1...0.36.0) (2025-02-11)
