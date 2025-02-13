@@ -20,7 +20,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
         snapshot: ComponentWithState,
         _block: Header,
         _all_tokens: &HashMap<Bytes, Token>,
-    ) -> Result<(Self, HashMap<Bytes, String>), Self::Error> {
+    ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
             .attributes
@@ -120,7 +120,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
 
         ticks.sort_by_key(|tick| tick.index);
 
-        Ok((UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks), HashMap::new()))
+        Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
     }
 }
 
@@ -201,7 +201,7 @@ mod tests {
             300,
             vec![TickInfo::new(60, 400)],
         );
-        assert_eq!(result.unwrap().0, expected);
+        assert_eq!(result.unwrap(), expected);
     }
 
     #[tokio::test]

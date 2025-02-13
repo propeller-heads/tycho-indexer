@@ -49,7 +49,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         snapshot: ComponentWithState,
         block: Header,
         all_tokens: &HashMap<Bytes, Token>,
-    ) -> Result<(Self, HashMap<Bytes, String>), Self::Error> {
+    ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
 
@@ -117,19 +117,6 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
             .collect::<HashSet<Address>>();
 
-        let contracts_map = if manual_updates {
-            // avoid triggering updates for account changes if manual updates are expected
-            HashMap::new()
-        } else {
-            // enable triggering updates to this pool for all involved contracts
-            snapshot
-                .component
-                .contract_ids
-                .iter()
-                .map(|address| (address.clone(), id.clone()))
-                .collect()
-        };
-
         let protocol_name = snapshot
             .component
             .protocol_system
@@ -168,7 +155,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
 
         pool_state.set_spot_prices(all_tokens)?;
 
-        Ok((pool_state, contracts_map))
+        Ok(pool_state)
     }
 }
 
@@ -325,9 +312,8 @@ mod tests {
             .await
             .unwrap();
 
-        let res_pool = res.0;
+        let res_pool = res;
 
-        assert_eq!(res.1, HashMap::new());
         assert_eq!(
             res_pool.get_balance_owner(),
             Some(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())

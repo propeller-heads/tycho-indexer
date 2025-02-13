@@ -23,7 +23,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
         snapshot: ComponentWithState,
         _block: Header,
         _all_tokens: &HashMap<Bytes, Token>,
-    ) -> Result<(Self, HashMap<Bytes, String>), Self::Error> {
+    ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
             .attributes
@@ -120,10 +120,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
 
         ticks.sort_by_key(|tick| tick.index);
 
-        Ok((
-            UniswapV4State::new(liquidity, sqrt_price, fees, tick, tick_spacing, ticks),
-            HashMap::new(),
-        ))
+        Ok(UniswapV4State::new(liquidity, sqrt_price, fees, tick, tick_spacing, ticks))
     }
 }
 
@@ -206,8 +203,7 @@ mod tests {
 
         let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new())
             .await
-            .unwrap()
-            .0;
+            .unwrap();
 
         let fees = UniswapV4Fees::new(0, 0, 500);
         let expected = UniswapV4State::new(

@@ -40,14 +40,8 @@ struct DecoderState {
     contracts_map: HashMap<Bytes, Vec<String>>,
 }
 
-type ContractMap = HashMap<Bytes, String>;
-type DecodeFut = Pin<
-    Box<
-        dyn Future<Output = Result<(Box<dyn ProtocolSim>, ContractMap), InvalidSnapshotError>>
-            + Send
-            + Sync,
-    >,
->;
+type DecodeFut =
+    Pin<Box<dyn Future<Output = Result<Box<dyn ProtocolSim>, InvalidSnapshotError>> + Send + Sync>>;
 type RegistryFn =
     dyn Fn(ComponentWithState, Header, Arc<RwLock<DecoderState>>) -> DecodeFut + Send + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
@@ -122,7 +116,7 @@ impl TychoStreamDecoder {
                     let guard = state.read().await;
                     T::try_from_with_block(component, header, &guard.tokens)
                         .await
-                        .map(|(c, m)| (Box::new(c) as Box<dyn ProtocolSim>, m))
+                        .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
                 }) as DecodeFut
             },
         );
@@ -292,17 +286,25 @@ impl TychoStreamDecoder {
                         component_tokens,
                     ),
                 );
+                // collect contracts:ids mapping for states that should update on contract changes
+                for component in new_pairs.values() {
+                    if component
+                        .static_attributes
+                        .contains_key("manual_updates")
+                    {
+                        for contract in &component.contract_ids {
+                            contracts_map
+                                .entry(contract.clone())
+                                .or_insert_with(Vec::new)
+                                .push(id.clone());
+                        }
+                    }
+                }
 
                 // Construct state from snapshot
                 if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
                     match state_decode_f(snapshot, block.clone(), self.state.clone()).await {
-                        Ok((state, contracts)) => {
-                            for (key, value) in contracts {
-                                contracts_map
-                                    .entry(key)
-                                    .or_insert_with(Vec::new)
-                                    .push(value);
-                            }
+                        Ok(state) => {
                             new_components.insert(id.clone(), state);
                         }
                         Err(e) => {

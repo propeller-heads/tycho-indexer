@@ -19,7 +19,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
         snapshot: ComponentWithState,
         _block: Header,
         _all_tokens: &HashMap<Bytes, Token>,
-    ) -> Result<(Self, HashMap<Bytes, String>), Self::Error> {
+    ) -> Result<Self, Self::Error> {
         let reserve0 = U256::from_be_slice(
             snapshot
                 .state
@@ -36,7 +36,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV2State {
                 .ok_or(InvalidSnapshotError::MissingAttribute("reserve1".to_string()))?,
         );
 
-        Ok((UniswapV2State::new(reserve0, reserve1), HashMap::new()))
+        Ok(UniswapV2State::new(reserve0, reserve1))
     }
 }
 
@@ -100,7 +100,7 @@ mod tests {
         let result = UniswapV2State::try_from_with_block(snapshot, header(), &HashMap::new()).await;
 
         assert!(result.is_ok());
-        let res = result.unwrap().0;
+        let res = result.unwrap();
         assert_eq!(res.reserve0, U256::from_str("100").unwrap());
         assert_eq!(res.reserve1, U256::from_str("200").unwrap());
     }

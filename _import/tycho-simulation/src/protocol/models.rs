@@ -131,7 +131,7 @@ pub trait TryFromWithBlock<T> {
         value: T,
         block: Header,
         all_tokens: &HashMap<Bytes, Token>,
-    ) -> impl Future<Output = Result<(Self, HashMap<Bytes, String>), Self::Error>> + Send + Sync
+    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
     where
         Self: Sized;
 }
