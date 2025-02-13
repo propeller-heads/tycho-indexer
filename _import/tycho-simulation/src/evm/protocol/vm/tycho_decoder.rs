@@ -148,8 +148,11 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             });
         let adapter_bytecode = Bytecode::new_raw(get_adapter_file(protocol_name)?.into());
         let adapter_contract_address =
-            Address::from_str(&format!("{:0>40}", hex::encode(protocol_name)))
-                .expect("Can't convert protocol name to address");
+            Address::from_str(&format!("{:0>40}", hex::encode(protocol_name))).map_err(|_| {
+                InvalidSnapshotError::ValueError(
+                    "Error converting protocol name to address".to_string(),
+                )
+            })?;
 
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)
