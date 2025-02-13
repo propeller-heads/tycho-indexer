@@ -401,7 +401,7 @@ where
             .capabilities
             .contains(&Capability::TokenBalanceIndependent)
         {
-            res.push(self.get_balance_overwrites(self.tokens.clone())?);
+            res.push(self.get_balance_overwrites()?);
         }
 
         let (slots, compiler) = self
@@ -428,10 +428,7 @@ where
             .fold(HashMap::new(), |acc, overwrite| self.merge(&acc, &overwrite)))
     }
 
-    fn get_balance_overwrites(
-        &self,
-        tokens: Vec<Bytes>,
-    ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
+    fn get_balance_overwrites(&self) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let mut balance_overwrites: HashMap<Address, Overwrites> = HashMap::new();
         if !self.balances.is_empty() {
             // Backwards compatibility: Use component balances for overrides
@@ -444,7 +441,7 @@ where
                 }),
             }?;
 
-            for token in &tokens {
+            for token in &self.tokens {
                 let token_address = bytes_to_address(token)?;
                 let (slots, compiler) = if self
                     .involved_contracts
@@ -483,7 +480,6 @@ where
             }
         } else {
             // Use contract balances for overrides
-            // Note: the tokens function arg is not needed here
             for (contract, balances) in &self.contract_balances {
                 for (token, balance) in balances {
                     let (slots, compiler) = self
@@ -1048,14 +1044,12 @@ mod tests {
     async fn test_get_balance_overwrites_with_component_balances() {
         let pool_state: EVMPoolState<PreCachedDB> = setup_pool_state().await;
 
-        let dai_address = dai_addr();
-        let bal_address = bal_addr();
-        let tokens = vec![dai().address.clone(), bal().address.clone()];
-
         let overwrites = pool_state
-            .get_balance_overwrites(tokens)
+            .get_balance_overwrites()
             .unwrap();
 
+        let dai_address = dai_addr();
+        let bal_address = bal_addr();
         assert!(overwrites.contains_key(&dai_address));
         assert!(overwrites.contains_key(&bal_address));
     }
@@ -1083,7 +1077,7 @@ mod tests {
         )]);
 
         let overwrites = pool_state
-            .get_balance_overwrites(Vec::new())
+            .get_balance_overwrites()
             .unwrap();
 
         assert!(overwrites.contains_key(&dai_address));
