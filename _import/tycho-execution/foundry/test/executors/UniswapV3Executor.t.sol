@@ -8,9 +8,7 @@ import {Constants} from "../Constants.sol";
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
     constructor(address _factory) UniswapV3Executor(_factory) {}
 
-    function decodeData(
-        bytes calldata data
-    )
+    function decodeData(bytes calldata data)
         external
         pure
         returns (
@@ -44,12 +42,7 @@ contract UniswapV3ExecutorTest is Test, Constants {
     function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
         bytes memory data = abi.encodePacked(
-            WETH_ADDR,
-            DAI_ADDR,
-            expectedPoolFee,
-            address(2),
-            address(3),
-            false
+            WETH_ADDR, DAI_ADDR, expectedPoolFee, address(2), address(3), false
         );
 
         (
@@ -70,11 +63,8 @@ contract UniswapV3ExecutorTest is Test, Constants {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams = abi.encodePacked(
-            WETH_ADDR,
-            address(2),
-            address(3)
-        );
+        bytes memory invalidParams =
+            abi.encodePacked(WETH_ADDR, address(2), address(3));
 
         vm.expectRevert(UniswapV3Executor__InvalidDataLength.selector);
         uniswapV3Exposed.decodeData(invalidParams);

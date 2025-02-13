@@ -57,21 +57,16 @@ contract TychoRouter is
     uint256 public fee;
 
     event Withdrawal(
-        address indexed token,
-        uint256 amount,
-        address indexed receiver
+        address indexed token, uint256 amount, address indexed receiver
     );
     event FeeReceiverSet(
-        address indexed oldFeeReceiver,
-        address indexed newFeeReceiver
+        address indexed oldFeeReceiver, address indexed newFeeReceiver
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
-    constructor(
-        IPoolManager _poolManager,
-        address _permit2,
-        address weth
-    ) SafeCallback(_poolManager) {
+    constructor(IPoolManager _poolManager, address _permit2, address weth)
+        SafeCallback(_poolManager)
+    {
         if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -185,11 +180,10 @@ contract TychoRouter is
      *
      * @return The total amount of the buy token obtained after all swaps have been executed.
      */
-    function _swap(
-        uint256 amountIn,
-        uint256 nTokens,
-        bytes calldata swaps_
-    ) internal returns (uint256) {
+    function _swap(uint256 amountIn, uint256 nTokens, bytes calldata swaps_)
+        internal
+        returns (uint256)
+    {
         if (swaps_.length == 0) {
             revert TychoRouter__EmptySwaps();
         }
@@ -235,7 +229,7 @@ contract TychoRouter is
      *  caller is not a pool.
      */
     fallback() external {
-        _handleCallback(msg.sender, msg.data);
+        _handleCallback(msg.data);
     }
 
     /**
@@ -255,10 +249,10 @@ contract TychoRouter is
     /**
      * @dev Allows granting roles to multiple accounts in a single call.
      */
-    function batchGrantRole(
-        bytes32 role,
-        address[] memory accounts
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function batchGrantRole(bytes32 role, address[] memory accounts)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         for (uint256 i = 0; i < accounts.length; i++) {
             _grantRole(role, accounts[i]);
         }
@@ -268,9 +262,10 @@ contract TychoRouter is
      * @dev Entrypoint to add or replace an approved executor contract address
      * @param targets address of the executor contract
      */
-    function setExecutors(
-        address[] memory targets
-    ) external onlyRole(EXECUTOR_SETTER_ROLE) {
+    function setExecutors(address[] memory targets)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
         for (uint256 i = 0; i < targets.length; i++) {
             _setExecutor(targets[i]);
         }
@@ -280,9 +275,10 @@ contract TychoRouter is
      * @dev Entrypoint to remove an approved executor contract address
      * @param target address of the executor contract
      */
-    function removeExecutor(
-        address target
-    ) external onlyRole(EXECUTOR_SETTER_ROLE) {
+    function removeExecutor(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
         _removeExecutor(target);
     }
 
@@ -290,9 +286,10 @@ contract TychoRouter is
      * @dev Entrypoint to add or replace an approved callback verifier contract address
      * @param target address of the callback verifier contract
      */
-    function setCallbackVerifier(
-        address target
-    ) external onlyRole(EXECUTOR_SETTER_ROLE) {
+    function setCallbackVerifier(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
         _setCallbackVerifier(target);
     }
 
@@ -300,18 +297,20 @@ contract TychoRouter is
      * @dev Entrypoint to remove an approved callback verifier contract address
      * @param target address of the callback verifier contract
      */
-    function removeCallbackVerifier(
-        address target
-    ) external onlyRole(EXECUTOR_SETTER_ROLE) {
+    function removeCallbackVerifier(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
         _removeCallbackVerifier(target);
     }
 
     /**
      * @dev Allows setting the fee receiver.
      */
-    function setFeeReceiver(
-        address newfeeReceiver
-    ) external onlyRole(FEE_SETTER_ROLE) {
+    function setFeeReceiver(address newfeeReceiver)
+        external
+        onlyRole(FEE_SETTER_ROLE)
+    {
         if (newfeeReceiver == address(0)) revert TychoRouter__AddressZero();
         emit FeeReceiverSet(feeReceiver, newfeeReceiver);
         feeReceiver = newfeeReceiver;
@@ -328,10 +327,10 @@ contract TychoRouter is
     /**
      * @dev Allows withdrawing any ERC20 funds if funds get stuck in case of a bug.
      */
-    function withdraw(
-        IERC20[] memory tokens,
-        address receiver
-    ) external onlyRole(FUND_RESCUER_ROLE) {
+    function withdraw(IERC20[] memory tokens, address receiver)
+        external
+        onlyRole(FUND_RESCUER_ROLE)
+    {
         if (receiver == address(0)) revert TychoRouter__AddressZero();
 
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -348,9 +347,10 @@ contract TychoRouter is
      * @dev Allows withdrawing any NATIVE funds if funds get stuck in case of a bug.
      * The contract should never hold any NATIVE tokens for security reasons.
      */
-    function withdrawNative(
-        address receiver
-    ) external onlyRole(FUND_RESCUER_ROLE) {
+    function withdrawNative(address receiver)
+        external
+        onlyRole(FUND_RESCUER_ROLE)
+    {
         if (receiver == address(0)) revert TychoRouter__AddressZero();
 
         uint256 amount = address(this).balance;
@@ -378,9 +378,8 @@ contract TychoRouter is
      * @param amount of WETH to unwrap.
      */
     function _unwrapETH(uint256 amount) internal {
-        uint256 unwrapAmount = amount == 0
-            ? _weth.balanceOf(address(this))
-            : amount;
+        uint256 unwrapAmount =
+            amount == 0 ? _weth.balanceOf(address(this)) : amount;
         _weth.withdraw(unwrapAmount);
     }
 
@@ -389,9 +388,11 @@ contract TychoRouter is
      */
     receive() external payable {}
 
-    function _unlockCallback(
-        bytes calldata data
-    ) internal override returns (bytes memory) {
+    function _unlockCallback(bytes calldata data)
+        internal
+        override
+        returns (bytes memory)
+    {
         require(data.length >= 20, "Invalid data length");
         bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
         address executor = address(uint160(bytes20(data[data.length - 20:])));
@@ -402,7 +403,7 @@ contract TychoRouter is
         }
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success, ) = executor.delegatecall(
+        (bool success,) = executor.delegatecall(
             abi.encodeWithSelector(selector, protocolData)
         );
         require(success, "delegatecall to uniswap v4 callback failed");

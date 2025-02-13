@@ -12,11 +12,9 @@ import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(
-        IPoolManager _poolManager,
-        address _permit2,
-        address weth
-    ) TychoRouter(_poolManager, _permit2, weth) {}
+    constructor(IPoolManager _poolManager, address _permit2, address weth)
+        TychoRouter(_poolManager, _permit2, weth)
+    {}
 
     function wrapETH(uint256 amount) external payable {
         return _wrapETH(amount);
@@ -38,8 +36,7 @@ contract TychoRouterExposed is TychoRouter {
 contract TychoRouterTestSetup is Test, Constants {
     TychoRouterExposed tychoRouter;
     address tychoRouterAddr;
-    address permit2Address =
-        address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
+    address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     UniswapV2Executor public usv2Executor;
     UniswapV3Executor public usv3Executor;
     UniswapV4Executor public usv4Executor;
@@ -53,19 +50,15 @@ contract TychoRouterTestSetup is Test, Constants {
         address factoryV3 = address(0x1F98431c8aD98523631AE4a59f267346ea31F984);
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        tychoRouter = new TychoRouterExposed(
-            poolManager,
-            permit2Address,
-            WETH_ADDR
-        );
+        tychoRouter =
+            new TychoRouterExposed(poolManager, permit2Address, WETH_ADDR);
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
         tychoRouter.grantRole(
-            keccak256("EXECUTOR_SETTER_ROLE"),
-            EXECUTOR_SETTER
+            keccak256("EXECUTOR_SETTER_ROLE"), EXECUTOR_SETTER
         );
         deployDummyContract();
         vm.stopPrank();
@@ -113,22 +106,22 @@ contract TychoRouterTestSetup is Test, Constants {
      * @return permitSingle The `PermitSingle` struct containing the approval details.
      * @return signature The EIP-712 signature for the approval.
      */
-    function handlePermit2Approval(
-        address tokenIn,
-        uint256 amount_in
-    ) internal returns (IAllowanceTransfer.PermitSingle memory, bytes memory) {
+    function handlePermit2Approval(address tokenIn, uint256 amount_in)
+        internal
+        returns (IAllowanceTransfer.PermitSingle memory, bytes memory)
+    {
         IERC20(tokenIn).approve(permit2Address, amount_in);
         IAllowanceTransfer.PermitSingle memory permitSingle = IAllowanceTransfer
             .PermitSingle({
-                details: IAllowanceTransfer.PermitDetails({
-                    token: tokenIn,
-                    amount: uint160(amount_in),
-                    expiration: uint48(block.timestamp + 1 days),
-                    nonce: 0
-                }),
-                spender: tychoRouterAddr,
-                sigDeadline: block.timestamp + 1 days
-            });
+            details: IAllowanceTransfer.PermitDetails({
+                token: tokenIn,
+                amount: uint160(amount_in),
+                expiration: uint48(block.timestamp + 1 days),
+                nonce: 0
+            }),
+            spender: tychoRouterAddr,
+            sigDeadline: block.timestamp + 1 days
+        });
 
         bytes memory signature = signPermit2(permitSingle, ALICE_PK);
         return (permitSingle, signature);
@@ -160,9 +153,8 @@ contract TychoRouterTestSetup is Test, Constants {
                 permit2Address
             )
         );
-        bytes32 detailsHash = keccak256(
-            abi.encode(_PERMIT_DETAILS_TYPEHASH, permit.details)
-        );
+        bytes32 detailsHash =
+            keccak256(abi.encode(_PERMIT_DETAILS_TYPEHASH, permit.details));
         bytes32 permitHash = keccak256(
             abi.encode(
                 _PERMIT_SINGLE_TYPEHASH,
@@ -172,17 +164,18 @@ contract TychoRouterTestSetup is Test, Constants {
             )
         );
 
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", domainSeparator, permitHash)
-        );
+        bytes32 digest =
+            keccak256(abi.encodePacked("\x19\x01", domainSeparator, permitHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
 
         return abi.encodePacked(r, s, v);
     }
 
-    function pleEncode(
-        bytes[] memory data
-    ) public pure returns (bytes memory encoded) {
+    function pleEncode(bytes[] memory data)
+        public
+        pure
+        returns (bytes memory encoded)
+    {
         for (uint256 i = 0; i < data.length; i++) {
             encoded = bytes.concat(
                 encoded,
@@ -199,15 +192,9 @@ contract TychoRouterTestSetup is Test, Constants {
         bytes4 selector,
         bytes memory protocolData
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                tokenInIndex,
-                tokenOutIndex,
-                split,
-                executor,
-                selector,
-                protocolData
-            );
+        return abi.encodePacked(
+            tokenInIndex, tokenOutIndex, split, executor, selector, protocolData
+        );
     }
 
     function encodeUniswapV2Swap(
@@ -227,14 +214,8 @@ contract TychoRouterTestSetup is Test, Constants {
         bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return
-            abi.encodePacked(
-                tokenIn,
-                tokenOut,
-                pool.fee(),
-                receiver,
-                target,
-                zero2one
-            );
+        return abi.encodePacked(
+            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
+        );
     }
 }

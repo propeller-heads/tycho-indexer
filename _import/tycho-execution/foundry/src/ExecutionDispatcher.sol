@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
+import "forge-std/console.sol";
 
 error ExecutionDispatcher__UnapprovedExecutor();
 error ExecutionDispatcher__NonContractExecutor();
@@ -80,11 +81,16 @@ contract ExecutionDispatcher {
         calculatedAmount = abi.decode(result, (uint256));
     }
 
-    function _handleCallback(address executor, bytes calldata data) internal {
+    function _handleCallback(bytes calldata data) internal {
+        // Take last 20 bytes (excluding the final byte)
+        address executor =
+            address(bytes20(data[data.length - 21:data.length - 1]));
+
         if (!executors[executor]) {
             revert ExecutionDispatcher__UnapprovedExecutor();
         }
 
+        // slither-disable-next-line controlled-delegatecall,low-level-calls
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(IExecutor.handleCallback.selector, data)
         );
