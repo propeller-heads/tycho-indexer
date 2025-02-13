@@ -76,7 +76,8 @@ use crate::{
 ///     balances.insert(Address::random(), U256::from(1000));
 ///
 ///     // Build the EVMPoolState
-///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, balances, block, Address::random())
+///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, block, Address::random())
+///         .balances(balances)
 ///         .balance_owner(Address::random())
 ///         .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
 ///         .build(SHARED_TYCHO_DB.clone())
@@ -144,11 +145,13 @@ where
         self
     }
 
+    /// Set component balances
     pub fn balances(mut self, balances: HashMap<Address, U256>) -> Self {
         self.balances = balances;
         self
     }
 
+    /// Set contract balances
     pub fn account_balances(
         mut self,
         account_balances: HashMap<Address, HashMap<Address, U256>>,
