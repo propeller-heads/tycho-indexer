@@ -491,10 +491,7 @@ mod tests {
     use alloy_primitives::B256;
 
     use super::*;
-    use crate::evm::{
-        engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
-        protocol::vm::constants::BALANCER_V2,
-    };
+    use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};
 
     #[test]
     fn test_build_without_required_fields() {
