@@ -354,6 +354,7 @@ impl StrategyEncoder for UniswapV4StrategyEncoder {
         let mut previous_protocol_data: Vec<u8> = vec![];
         let mut first_usv4_in_token: Bytes = Bytes::default();
         let mut last_swap_was_usv4 = false;
+        println!("Hello?");
 
         for swap in solution.swaps.iter() {
             let swap_encoder = self
@@ -373,7 +374,7 @@ impl StrategyEncoder for UniswapV4StrategyEncoder {
             };
             let mut protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
             let in_token;
-
+            println!("Hello?");
             if current_swap_is_usv4 {
                 if !last_swap_was_usv4 {
                     // This is the first usv4 swap of a potential sequence. Store the input token
@@ -383,6 +384,8 @@ impl StrategyEncoder for UniswapV4StrategyEncoder {
                     // data with the previous swap's protocol data
                     protocol_data =
                         [previous_protocol_data.clone(), protocol_data.clone()].concat();
+                    println!("Previous protocol data{}", hex::encode(&previous_protocol_data));
+                    println!("Current protocol data{}", hex::encode(&protocol_data));
                 }
                 in_token = first_usv4_in_token.clone();
                 previous_protocol_data = protocol_data.clone();
@@ -1063,6 +1066,126 @@ mod tests {
 
         let _hex_calldata = encode(&calldata);
         println!("{}", _hex_calldata);
+    }
+
+    #[test]
+    fn test_usv4_encoding_strategy() {
+        // Performs a split swap from WETH to USDC though WBTC using two consecutive USV4 pools
+        //
+        //   WETH ──(USV2)──> WBTC ───(USV4)──> USDC
+        //
+
+        // Set up a mock private key for signing
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = weth();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let swap_weth_wbtc = Swap {
+            component: ProtocolComponent {
+                id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
+            // This represents the remaining 50%, but to avoid any rounding errors we set this to
+            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+            split: 0f64,
+        };
+        let swap_wbtc_usdc = Swap {
+            component: ProtocolComponent {
+                id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: wbtc.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            UniswapV4StrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: weth,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: usdc,
+            expected_amount: Some(BigUint::from_str("3_000_000000").unwrap()),
+            checked_amount: None,
+            slippage: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+            ..Default::default()
+        };
+
+        let (calldata, _, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let expected_input = [
+            "4860f9ed",                                                              // Function selector
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
+            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token out
+            "0000000000000000000000000000000000000000000000000000000000000000",      // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000",      // wrap
+            "0000000000000000000000000000000000000000000000000000000000000000",      // unwrap
+            "0000000000000000000000000000000000000000000000000000000000000003",      // tokens length
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",      // receiver
+        ]
+            .join("");
+
+        // after this there is the permit and because of the deadlines (that depend on block time)
+        // it's hard to assert
+        // "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+        // "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
+        // "0000000000000000000000000000000000000000000000000000000067c205fe", // expiration
+        // "0000000000000000000000000000000000000000000000000000000000000000", // nonce
+        // "0000000000000000000000002c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4", // spender
+        // "00000000000000000000000000000000000000000000000000000000679a8006", // deadline
+        // offset of signature (from start of call data to beginning of length indication)
+        // "0000000000000000000000000000000000000000000000000000000000000200",
+        // offset of ple encoded swaps (from start of call data to beginning of length indication)
+        // "0000000000000000000000000000000000000000000000000000000000000280",
+        // length of signature without padding
+        // "0000000000000000000000000000000000000000000000000000000000000041",
+        // signature + padding
+        // "a031b63a01ef5d25975663e5d6c420ef498e3a5968b593cdf846c6729a788186",
+        // "1ddaf79c51453cd501d321ee541d13593e3a266be44103eefdf6e76a032d2870",
+        // "1b00000000000000000000000000000000000000000000000000000000000000"
+
+        let expected_swaps = String::from(concat!(
+            // length of ple encoded swaps without padding
+            "0000000000000000000000000000000000000000000000000000000000000099",
+            // ple encoded swaps
+            "0097",   // Swap header
+            "00",     // token in index
+            "02",     // token out index
+            "000000", // split
+            // Swap data header
+            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
+            "bd0625ab",                                 // selector
+            // First swap protocol data
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+            "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "00",                                       // zero2one
+            // Second swap protocol data
+            "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // token in
+            "ae461ca67b15dc8dc81ce7615e0320da1a9ab8d5", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "01",                                       // zero2one
+            "00000000000000",                           // padding
+        ));
+        let hex_calldata = encode(&calldata);
+
+        assert_eq!(hex_calldata[..520], expected_input);
+        assert_eq!(hex_calldata[1288..], expected_swaps);
     }
 
     #[test]
