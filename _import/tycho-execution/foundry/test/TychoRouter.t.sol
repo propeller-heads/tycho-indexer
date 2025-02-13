@@ -857,15 +857,22 @@ contract TychoRouterTest is TychoRouterTestSetup {
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, tychoRouterAddr, amountIn);
 
-        bytes memory protocolData = UniswapV4Utils.encodeExactInputSingle(
-            USDE_ADDR, USDT_ADDR, 100, true, 1, uint128(amountIn)
-        );
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1)
+        });
 
-        // add executor and selector for callback
-        bytes memory protocolDataWithCallBack = abi.encodePacked(
-            protocolData,
+        bytes memory protocolData = UniswapV4Utils.encodeExactInputSingle(
+            USDE_ADDR,
+            USDT_ADDR,
+            uint256(1),
+            true,
+            address(usv4Executor),
             SafeCallback.unlockCallback.selector,
-            address(usv4Executor)
+            pools
         );
 
         bytes memory swap = encodeSwap(
@@ -874,7 +881,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint24(0),
             address(usv4Executor),
             bytes4(0),
-            protocolDataWithCallBack
+            protocolData
         );
 
         bytes[] memory swaps = new bytes[](1);

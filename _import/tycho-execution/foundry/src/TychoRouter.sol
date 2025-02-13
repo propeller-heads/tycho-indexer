@@ -449,9 +449,9 @@ contract TychoRouter is
         returns (bytes memory)
     {
         require(data.length >= 20, "Invalid data length");
-        bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
-        address executor = address(uint160(bytes20(data[data.length - 20:])));
-        bytes memory protocolData = data[:data.length - 24];
+        address executor = address(uint160(bytes20(data[0:20])));
+        bytes4 selector = bytes4(data[20:24]);
+        bytes memory protocolData = data[24:];
 
         if (!executors[executor]) {
             revert ExecutionDispatcher__UnapprovedExecutor();
