@@ -97,10 +97,10 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         decoded_pools = {}
         failed_pools = set()
         handle_vm_updates(block, snapshot.vm_storage)
-        token_balance_overrides = {account.address: account.token_balances for account in snapshot.vm_storage.values()}
+        account_balances = {account.address: account.token_balances for account in snapshot.vm_storage.values()}
         for snap in snapshot.states.values():
             try:
-                pool = self.decode_pool_state(snap, block, token_balance_overrides)
+                pool = self.decode_pool_state(snap, block, account_balances)
                 decoded_pools[pool.id_] = pool
             except TychoDecodeError as e:
                 log.log(
@@ -128,7 +128,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         return decoded_pools
 
     def decode_pool_state(
-        self, snapshot: ComponentWithState, block: EVMBlock, token_balance_overrides: dict[HexBytes, dict[HexBytes, HexBytes]] = {}
+        self, snapshot: ComponentWithState, block: EVMBlock, account_balances: dict[HexBytes, dict[HexBytes, HexBytes]] = {}
     ) -> ThirdPartyPool:
         component = snapshot.component
         state_attributes = snapshot.state.attributes
@@ -140,7 +140,11 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         except KeyError as e:
             raise TychoDecodeError(f"Unsupported token: {e}", pool_id=component.id)
 
+        # component balances
         balances = self.decode_balances(snapshot.state.balances, tokens)
+
+        # contract balances
+        contract_balances = {to_checksum_address(addr):self.decode_balances(bals) for addr, bals in account_balances if addr in component.contract_ids}
 
         optional_attributes = self.decode_optional_attributes(state_attributes)
         pool_id = component.id
@@ -157,22 +161,17 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             for address in component.contract_ids:
                 self.contract_pools[address.hex()].append(pool_id)
 
-        balance_overrides = None
-        if optional_attributes.get("balance_owner"):
-            balance_overrides = token_balance_overrides.get(HexBytes(optional_attributes["balance_owner"]))
-            balance_overrides = {t.hex(): int(b) for t, b in balance_overrides.items()} if balance_overrides else None
-
         return ThirdPartyPool(
             id_=pool_id,
             tokens=tuple(tokens),
             balances=balances,
+            contract_balances=contract_balances,
             block=block,
             marginal_prices={},
             adapter_contract_path=self.adapter_contract,
             trace=self.trace,
             manual_updates=manual_updates,
             involved_contracts=set(to_checksum_address(b.hex()) for b in component.contract_ids),
-            balance_owner_overrides=balance_overrides,
             **optional_attributes,
         )
 
@@ -225,20 +224,14 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
 
         account_updates = delta_msg.account_updates
         state_updates = delta_msg.state_updates
-        balance_updates = delta_msg.component_balances
+        component_balance_updates = delta_msg.component_balances
+        account_balance_updates = delta_msg.account_balances
 
         # Update contract changes
         vm_updates = handle_vm_updates(block, account_updates)
 
-        # add affected pools to update list
-        for account in vm_updates:
-            for pool_id in self.contract_pools.get(account.address, []):
-                pool = pools[pool_id]
-                pool.block = block
-                updated_pools[pool_id] = pool
-
-        # Update balances
-        for component_id, balance_update in balance_updates.items():
+        # Update component balances
+        for component_id, balance_update in component_balance_updates.items():
             if component_id in self.ignored_pools:
                 continue
             pool_id = self.component_pool_id.get(component_id, component_id)
@@ -248,12 +241,28 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 token = next(t for t in pool.tokens if t.address == checksum_addr)
                 balance = token.from_onchain_amount(
                     int.from_bytes(token_balance.balance, "big", signed=False)
-                )  # balances are big endian encoded
+                )
                 pool.balances[token.address] = balance
             pool.block = block
             updated_pools[pool_id] = pool
 
-        # Update state attributes
+        # Update account balances
+        for account, token_balances in account_balance_updates.items():
+            pools_to_update = self.contract_pools.get(account, [])
+            for pool_id in pools_to_update:
+                pool = pools[pool_id]
+                acc_addr = to_checksum_address(account)
+                for addr, token_balance in token_balances.items():
+                    checksum_addr = to_checksum_address(addr)
+                    token = next(t for t in pool.tokens if t.address == checksum_addr)
+                    balance = token.from_onchain_amount(
+                        int.from_bytes(token_balance.balance, "big", signed=False)
+                    )
+                    pool.contract_balances[acc_addr][token.address] = balance
+                pool.block = block
+                updated_pools[pool_id] = pool
+
+        # Update pools with state attribute changes
         for component_id, pool_update in state_updates.items():
             if component_id in self.ignored_pools:
                 continue
@@ -273,5 +282,13 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
                 pool.clear_all_cache()
 
             updated_pools[pool_id] = pool
+
+        # update pools with contract changes
+        for account in vm_updates:
+            for pool_id in self.contract_pools.get(account.address, []):
+                pool = pools[pool_id]
+                pool.block = block
+                pool.clear_all_cache()
+                updated_pools[pool_id] = pool
 
         return updated_pools
