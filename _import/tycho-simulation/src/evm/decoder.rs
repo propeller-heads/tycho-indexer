@@ -355,14 +355,21 @@ impl TychoStreamDecoder {
                 let mut pools_to_update = HashSet::new();
                 // get pools related to the updated accounts
                 for (account, _update) in deltas.account_updates {
-                    pools_to_update.extend(match contracts_map.get(&account) {
-                        Some(contracts) => contracts.clone(),
-                        None => state_guard
+                    // get new pools related to the account updated
+                    pools_to_update.extend(
+                        contracts_map
+                            .get(&account)
+                            .cloned()
+                            .unwrap_or_default(),
+                    );
+                    // get existing pools related to the account updated
+                    pools_to_update.extend(
+                        state_guard
                             .contracts_map
                             .get(&account)
                             .cloned()
                             .unwrap_or_default(),
-                    });
+                    );
                 }
                 // update the pools
                 for pool in pools_to_update {
