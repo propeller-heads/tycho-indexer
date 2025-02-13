@@ -24,6 +24,10 @@ interface IExecutor {
         uint256 givenAmount,
         bytes calldata data
     ) external payable returns (uint256 calculatedAmount);
+
+    function handleCallback(
+        bytes calldata callbackData
+    ) external returns (address tokenOwed, uint256 amountOwed);
 }
 
 interface IExecutorErrors {

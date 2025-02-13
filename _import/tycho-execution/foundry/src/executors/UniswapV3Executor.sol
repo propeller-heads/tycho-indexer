@@ -4,13 +4,22 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "@uniswap/v3-updated/CallbackValidationV2.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 
 contract UniswapV3Executor is IExecutor {
+    using SafeERC20 for IERC20;
+
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
+
+    address public immutable factory;
+
+    constructor(address factory_) {
+        factory = factory_;
+    }
 
     // slither-disable-next-line locked-ether
     function swap(uint256 amountIn, bytes calldata data)
@@ -48,6 +57,40 @@ contract UniswapV3Executor is IExecutor {
         } else {
             amountOut = amount0 > 0 ? uint256(amount0) : uint256(-amount0);
         }
+    }
+
+    function handleCallback(bytes calldata msgData)
+        external
+        returns (address tokenOwed, uint256 amountOwed)
+    {
+        int256 amount0Delta;
+        int256 amount1Delta;
+
+        (amount0Delta, amount1Delta) =
+            abi.decode(msgData[:64], (int256, int256));
+
+        bytes calldata remainingData = msgData[64:];
+        (amountOwed, tokenOwed) =
+            _verifyUSV3Callback(amount0Delta, amount1Delta, remainingData);
+        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
+    }
+
+    function _verifyUSV3Callback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) internal view returns (uint256 amountIn, address tokenIn) {
+        tokenIn = address(bytes20(data[0:20]));
+        address tokenOut = address(bytes20(data[20:40]));
+        uint24 poolFee = uint24(bytes3(data[40:43]));
+
+        // slither-disable-next-line unused-return
+        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
+
+        amountIn =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+
+        return (amountIn, tokenIn);
     }
 
     function _decodeData(bytes calldata data)

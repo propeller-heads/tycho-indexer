@@ -11,7 +11,6 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
@@ -66,24 +65,15 @@ contract TychoRouter is
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
-    address private immutable _usv3Factory;
-
-    constructor(
-        IPoolManager _poolManager,
-        address _permit2,
-        address weth,
-        address usv3Factory
-    ) SafeCallback(_poolManager) {
-        if (
-            _permit2 == address(0) || weth == address(0)
-                || usv3Factory == address(0)
-        ) {
+    constructor(IPoolManager _poolManager, address _permit2, address weth)
+        SafeCallback(_poolManager)
+    {
+        if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _weth = IWETH(weth);
-        _usv3Factory = usv3Factory;
     }
 
     /**
@@ -408,40 +398,6 @@ contract TychoRouter is
      * @dev Allows this contract to receive native token
      */
     receive() external payable {}
-
-    /**
-     * @dev Called by UniswapV3 pool when swapping on it.
-     * See in IUniswapV3SwapCallback for documentation.
-     */
-    function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata msgData
-    ) external {
-        (uint256 amountOwed, address tokenOwed) =
-            _verifyUSV3Callback(amount0Delta, amount1Delta, msgData);
-        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
-    }
-
-    function _verifyUSV3Callback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata data
-    ) internal view returns (uint256 amountIn, address tokenIn) {
-        tokenIn = address(bytes20(data[0:20]));
-        address tokenOut = address(bytes20(data[20:40]));
-        uint24 poolFee = uint24(bytes3(data[40:43]));
-
-        // slither-disable-next-line unused-return
-        CallbackValidationV2.verifyCallback(
-            _usv3Factory, tokenIn, tokenOut, poolFee
-        );
-
-        amountIn =
-            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
-
-        return (amountIn, tokenIn);
-    }
 
     function _unlockCallback(bytes calldata data)
         internal
