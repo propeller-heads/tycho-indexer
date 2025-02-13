@@ -626,24 +626,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    // function testUSV3Callback() public {
-    //     uint24 poolFee = 3000;
-    //     uint256 amountOwed = 1000000000000000000;
-    //     deal(WETH_ADDR, tychoRouterAddr, amountOwed);
-    //     uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
-
-    //     vm.startPrank(DAI_WETH_USV3);
-    //     tychoRouter.uniswapV3SwapCallback(
-    //         -2631245338449998525223,
-    //         int256(amountOwed),
-    //         abi.encodePacked(WETH_ADDR, DAI_ADDR, poolFee)
-    //     );
-    //     vm.stopPrank();
-
-    //     uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
-    //     assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
-    // }
-
     function testSwapSingleUSV3() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V3
         // 1 WETH   ->   DAI

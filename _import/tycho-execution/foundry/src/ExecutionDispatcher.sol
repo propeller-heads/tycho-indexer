@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
-import "forge-std/console.sol";
 
 error ExecutionDispatcher__UnapprovedExecutor();
 error ExecutionDispatcher__NonContractExecutor();
