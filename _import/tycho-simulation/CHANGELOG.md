@@ -1,3 +1,10 @@
+## [0.74.3](https://github.com/propeller-heads/tycho-simulation/compare/0.74.2...0.74.3) (2025-02-13)
+
+
+### Bug Fixes
+
+* dummy commit to trigger release of tycho dependency update ([7514713](https://github.com/propeller-heads/tycho-simulation/commit/7514713a1159826ba49c3ff52761e5a244ad4e8f))
+
 ## [0.74.2](https://github.com/propeller-heads/tycho-simulation/compare/0.74.1...0.74.2) (2025-02-10)
 
 
