@@ -1,3 +1,16 @@
+## [0.38.0](https://github.com/propeller-heads/tycho-execution/compare/0.37.0...0.38.0) (2025-02-13)
+
+
+### Features
+
+* Add a production foundry profile ([dae38ce](https://github.com/propeller-heads/tycho-execution/commit/dae38ceaf9b407d3ee93535ea0032804cbca9d59))
+* Support uniswap v4 callback in TychoRouter ([591d73b](https://github.com/propeller-heads/tycho-execution/commit/591d73ba717deb1773f5c10f9085cc1175df2536))
+
+
+### Bug Fixes
+
+* Verify that the executor exists in the uni v4 callback ([4c5e3bf](https://github.com/propeller-heads/tycho-execution/commit/4c5e3bf6a9070878c684ae8d029451178201d428))
+
 ## [0.37.0](https://github.com/propeller-heads/tycho-execution/compare/0.36.2...0.37.0) (2025-02-12)
 
 
