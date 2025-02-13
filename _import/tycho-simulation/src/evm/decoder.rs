@@ -560,7 +560,6 @@ mod tests {
     }
 
     fn load_test_msg(name: &str) -> FeedMessage {
-        dbg!(&name);
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path =
             Path::new(project_root).join(format!("tests/assets/decoder/{}.json", name));
