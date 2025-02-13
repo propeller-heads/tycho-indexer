@@ -2,16 +2,22 @@
 pragma solidity ^0.8.26;
 
 import "../src/executors/UniswapV2Executor.sol";
+import "../src/executors/UniswapV3Executor.sol";
+import "../src/executors/UniswapV4Executor.sol";
 import "./Constants.sol";
 import "./mock/MockERC20.sol";
 import "@src/TychoRouter.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
-import "../src/executors/UniswapV3Executor.sol";
+import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(address _permit2, address weth, address usv3Factory)
-        TychoRouter(_permit2, weth, usv3Factory)
-    {}
+    constructor(
+        IPoolManager _poolManager,
+        address _permit2,
+        address weth,
+        address usv3Factory
+    ) TychoRouter(_poolManager, _permit2, weth, usv3Factory) {}
 
     function wrapETH(uint256 amount) external payable {
         return _wrapETH(amount);
@@ -36,16 +42,20 @@ contract TychoRouterTestSetup is Test, Constants {
     address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     UniswapV2Executor public usv2Executor;
     UniswapV3Executor public usv3Executor;
+    UniswapV4Executor public usv4Executor;
     MockERC20[] tokens;
 
     function setUp() public {
-        uint256 forkBlock = 21000000;
+        uint256 forkBlock = 21817316;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);
         address factoryV3 = address(0x1F98431c8aD98523631AE4a59f267346ea31F984);
-        tychoRouter =
-            new TychoRouterExposed(permit2Address, WETH_ADDR, factoryV3);
+        address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
+        IPoolManager poolManager = IPoolManager(poolManagerAddress);
+        tychoRouter = new TychoRouterExposed(
+            poolManager, permit2Address, WETH_ADDR, factoryV3
+        );
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
@@ -59,10 +69,12 @@ contract TychoRouterTestSetup is Test, Constants {
 
         usv2Executor = new UniswapV2Executor();
         usv3Executor = new UniswapV3Executor();
+        usv4Executor = new UniswapV4Executor(poolManager);
         vm.startPrank(EXECUTOR_SETTER);
-        address[] memory executors = new address[](2);
+        address[] memory executors = new address[](3);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
+        executors[2] = address(usv4Executor);
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
 

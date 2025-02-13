@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
+import "./UniswapV4Utils.sol";
 import "@src/executors/UniswapV4Executor.sol";
-import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
+import {Test} from "../../lib/forge-std/src/Test.sol";
 import {console} from "forge-std/console.sol";
 
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
@@ -42,7 +43,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         uint24 expectedPoolFee = 500;
         uint128 expectedAmount = 100;
 
-        bytes memory data = _encodeExactInputSingle(
+        bytes memory data = UniswapV4Utils.encodeExactInputSingle(
             USDE_ADDR, USDT_ADDR, expectedPoolFee, false, 1, expectedAmount
         );
 
@@ -62,7 +63,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
-        bytes memory data = _encodeExactInputSingle(
+        bytes memory data = UniswapV4Utils.encodeExactInputSingle(
             USDE_ADDR, USDT_ADDR, 100, true, 1, uint128(amountIn)
         );
 
@@ -73,45 +74,5 @@ contract UniswapV4ExecutorTest is Test, Constants {
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(USDT.balanceOf(address(uniswapV4Exposed)) == amountOut);
-    }
-
-    function _encodeExactInputSingle(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee,
-        bool zeroForOne,
-        uint24 tickSpacing,
-        uint128 amountIn
-    ) internal pure returns (bytes memory) {
-        PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(zeroForOne ? tokenIn : tokenOut),
-            currency1: Currency.wrap(zeroForOne ? tokenOut : tokenIn),
-            fee: fee,
-            tickSpacing: int24(tickSpacing),
-            hooks: IHooks(address(0))
-        });
-
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
-
-        bytes[] memory params = new bytes[](3);
-
-        params[0] = abi.encode(
-            IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: zeroForOne,
-                amountIn: amountIn,
-                amountOutMinimum: 0,
-                hookData: bytes("")
-            })
-        );
-
-        params[1] = abi.encode(key.currency0, amountIn);
-        params[2] = abi.encode(key.currency1, 0);
-
-        return abi.encode(actions, params);
     }
 }

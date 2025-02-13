@@ -15,6 +15,8 @@ import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -28,7 +30,8 @@ contract TychoRouter is
     ExecutionDispatcher,
     CallbackVerificationDispatcher,
     Pausable,
-    ReentrancyGuard
+    ReentrancyGuard,
+    SafeCallback
 {
     IAllowanceTransfer public immutable permit2;
     IWETH private immutable _weth;
@@ -65,7 +68,12 @@ contract TychoRouter is
 
     address private immutable _usv3Factory;
 
-    constructor(address _permit2, address weth, address usv3Factory) {
+    constructor(
+        IPoolManager _poolManager,
+        address _permit2,
+        address weth,
+        address usv3Factory
+    ) SafeCallback(_poolManager) {
         if (
             _permit2 == address(0) || weth == address(0)
                 || usv3Factory == address(0)
@@ -433,5 +441,27 @@ contract TychoRouter is
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
         return (amountIn, tokenIn);
+    }
+
+    function _unlockCallback(bytes calldata data)
+        internal
+        override
+        returns (bytes memory)
+    {
+        require(data.length >= 20, "Invalid data length");
+        bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
+        address executor = address(uint160(bytes20(data[data.length - 20:])));
+        bytes memory protocolData = data[:data.length - 24];
+
+        if (!executors[executor]) {
+            revert ExecutionDispatcher__UnapprovedExecutor();
+        }
+
+        // slither-disable-next-line controlled-delegatecall,low-level-calls
+        (bool success,) = executor.delegatecall(
+            abi.encodeWithSelector(selector, protocolData)
+        );
+        require(success, "delegatecall to uniswap v4 callback failed");
+        return "";
     }
 }
