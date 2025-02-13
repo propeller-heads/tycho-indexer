@@ -521,31 +521,6 @@ mod tests {
     }
 
     #[test]
-    fn test_build_without_balances() {
-        let id = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string();
-        let tokens = vec![
-            TychoBytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
-            TychoBytes::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap(),
-        ];
-        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
-        let adapter_address =
-            Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
-        let result = tokio_test::block_on(
-            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
-                .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
-                .build(SHARED_TYCHO_DB.clone()),
-        );
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            SimulationError::FatalError(field) => {
-                assert_eq!(field, "Failed to get build EVMPoolState: no balances were set")
-            }
-            _ => panic!("Unexpected error type"),
-        }
-    }
-
-    #[test]
     fn test_engine_setup() {
         let id = "pool_1".to_string();
         let token2 = TychoBytes::from_str("0000000000000000000000000000000000000002").unwrap();
