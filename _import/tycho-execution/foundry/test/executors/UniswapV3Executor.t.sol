@@ -6,7 +6,11 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
-    function decodeData(bytes calldata data)
+    constructor(address _factory) UniswapV3Executor(_factory) {}
+
+    function decodeData(
+        bytes calldata data
+    )
         external
         pure
         returns (
@@ -22,23 +26,30 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     }
 }
 
-contract UniswapV3ExecutorTest is UniswapV3ExecutorExposed, Test, Constants {
+contract UniswapV3ExecutorTest is Test, Constants {
     using SafeERC20 for IERC20;
 
     UniswapV3ExecutorExposed uniswapV3Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
+    address factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
 
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV3Exposed = new UniswapV3ExecutorExposed();
+
+        uniswapV3Exposed = new UniswapV3ExecutorExposed(factory);
     }
 
     function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
         bytes memory data = abi.encodePacked(
-            WETH_ADDR, DAI_ADDR, expectedPoolFee, address(2), address(3), false
+            WETH_ADDR,
+            DAI_ADDR,
+            expectedPoolFee,
+            address(2),
+            address(3),
+            false
         );
 
         (
@@ -59,8 +70,11 @@ contract UniswapV3ExecutorTest is UniswapV3ExecutorExposed, Test, Constants {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams =
-            abi.encodePacked(WETH_ADDR, address(2), address(3));
+        bytes memory invalidParams = abi.encodePacked(
+            WETH_ADDR,
+            address(2),
+            address(3)
+        );
 
         vm.expectRevert(UniswapV3Executor__InvalidDataLength.selector);
         uniswapV3Exposed.decodeData(invalidParams);

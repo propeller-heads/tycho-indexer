@@ -27,7 +27,7 @@ interface IExecutor {
 
     function handleCallback(
         bytes calldata callbackData
-    ) external returns (address tokenOwed, uint256 amountOwed);
+    ) external returns (bytes memory result);
 }
 
 interface IExecutorErrors {

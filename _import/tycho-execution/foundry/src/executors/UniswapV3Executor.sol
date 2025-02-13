@@ -17,16 +17,15 @@ contract UniswapV3Executor is IExecutor {
 
     address public immutable factory;
 
-    constructor(address factory_) {
-        factory = factory_;
+    constructor(address _factory) {
+        factory = _factory;
     }
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
-        external
-        payable
-        returns (uint256 amountOut)
-    {
+    function swap(
+        uint256 amountIn,
+        bytes calldata data
+    ) external payable returns (uint256 amountOut) {
         (
             address tokenIn,
             address tokenOut,
@@ -59,20 +58,25 @@ contract UniswapV3Executor is IExecutor {
         }
     }
 
-    function handleCallback(bytes calldata msgData)
-        external
-        returns (address tokenOwed, uint256 amountOwed)
-    {
+    function handleCallback(
+        bytes calldata msgData
+    ) external returns (bytes memory result) {
         int256 amount0Delta;
         int256 amount1Delta;
 
-        (amount0Delta, amount1Delta) =
-            abi.decode(msgData[:64], (int256, int256));
+        (amount0Delta, amount1Delta) = abi.decode(
+            msgData[:64],
+            (int256, int256)
+        );
 
         bytes calldata remainingData = msgData[64:];
-        (amountOwed, tokenOwed) =
-            _verifyUSV3Callback(amount0Delta, amount1Delta, remainingData);
+        (uint256 amountOwed, address tokenOwed) = _verifyUSV3Callback(
+            amount0Delta,
+            amount1Delta,
+            remainingData
+        );
         IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
+        return abi.encode(amountOwed, tokenOwed);
     }
 
     function _verifyUSV3Callback(
@@ -85,15 +89,23 @@ contract UniswapV3Executor is IExecutor {
         uint24 poolFee = uint24(bytes3(data[40:43]));
 
         // slither-disable-next-line unused-return
-        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
+        CallbackValidationV2.verifyCallback(
+            factory,
+            tokenIn,
+            tokenOut,
+            poolFee
+        );
 
-        amountIn =
-            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        amountIn = amount0Delta > 0
+            ? uint256(amount0Delta)
+            : uint256(amount1Delta);
 
         return (amountIn, tokenIn);
     }
 
-    function _decodeData(bytes calldata data)
+    function _decodeData(
+        bytes calldata data
+    )
         internal
         pure
         returns (
@@ -116,11 +128,11 @@ contract UniswapV3Executor is IExecutor {
         zeroForOne = uint8(data[83]) > 0;
     }
 
-    function _makeV3CallbackData(address tokenIn, address tokenOut, uint24 fee)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _makeV3CallbackData(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee
+    ) internal pure returns (bytes memory) {
         return abi.encodePacked(tokenIn, tokenOut, fee);
     }
 }

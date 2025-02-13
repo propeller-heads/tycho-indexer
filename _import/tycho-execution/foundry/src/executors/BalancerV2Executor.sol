@@ -2,10 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
-import {
-    IERC20,
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 // slither-disable-next-line solc-version
 import {IAsset} from "@balancer-labs/v2-interfaces/contracts/vault/IAsset.sol";
 // slither-disable-next-line solc-version
@@ -19,11 +16,10 @@ contract BalancerV2Executor is IExecutor {
     address private constant VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 givenAmount, bytes calldata data)
-        external
-        payable
-        returns (uint256 calculatedAmount)
-    {
+    function swap(
+        uint256 givenAmount,
+        bytes calldata data
+    ) external payable returns (uint256 calculatedAmount) {
         (
             IERC20 tokenIn,
             IERC20 tokenOut,
@@ -55,11 +51,21 @@ contract BalancerV2Executor is IExecutor {
 
         uint256 limit = 0;
 
-        calculatedAmount =
-            IVault(VAULT).swap(singleSwap, funds, limit, block.timestamp);
+        calculatedAmount = IVault(VAULT).swap(
+            singleSwap,
+            funds,
+            limit,
+            block.timestamp
+        );
     }
 
-    function _decodeData(bytes calldata data)
+    function handleCallback(
+        bytes calldata data
+    ) external returns (bytes memory result) {}
+
+    function _decodeData(
+        bytes calldata data
+    )
         internal
         pure
         returns (
