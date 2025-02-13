@@ -453,6 +453,10 @@ contract TychoRouter is
         address executor = address(uint160(bytes20(data[data.length - 20:])));
         bytes memory protocolData = data[:data.length - 24];
 
+        if (!executors[executor]) {
+            revert ExecutionDispatcher__UnapprovedExecutor();
+        }
+
         // slither-disable-next-line controlled-delegatecall,low-level-calls
         (bool success,) = executor.delegatecall(
             abi.encodeWithSelector(selector, protocolData)
