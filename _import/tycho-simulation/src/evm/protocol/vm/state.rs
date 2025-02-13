@@ -298,8 +298,8 @@ where
     ///
     /// # Returns
     ///
-    /// * `Result<(), SimulationError>` - A `Result` containing the sell amount limit on success or
-    ///   a `SimulationError` on failure.
+    /// * `Result<U256, SimulationError>` - Returns the sell amount limit as a `U256` if successful,
+    ///   or a `SimulationError` on failure.
     fn get_sell_amount_limit(
         &self,
         tokens: Vec<Address>,
@@ -316,6 +316,16 @@ where
         Ok(limits?.0)
     }
 
+    /// Updates the pool state.
+    ///
+    /// It is assumed this is called on a new block. Therefore, first the pool's overwrites cache is
+    /// cleared, then the balances are updated and the spot prices are recalculated.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokens` - A hashmap of token addresses to `Token` instances. This is necessary for
+    ///   calculating new spot prices.
+    /// * `balances` - A `Balances` instance containing all balance updates on the current block.
     fn update_pool_state(
         &mut self,
         tokens: &HashMap<Bytes, Token>,
@@ -428,6 +438,16 @@ where
             .fold(HashMap::new(), |acc, overwrite| self.merge(&acc, &overwrite)))
     }
 
+    /// Gets all balance overwrites for the pool's tokens.
+    ///
+    /// If the pool uses component balances, the balances are set for the balance owner (if exists)
+    /// or for the pool itself. If the pool uses contract balances, the balances are set for the
+    /// contracts involved in the pool.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<HashMap<Address, Overwrites>, SimulationError>` - Returns a hashmap of address to
+    ///   `Overwrites` if successful, or a `SimulationError` on failure.
     fn get_balance_overwrites(&self) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let mut balance_overwrites: HashMap<Address, Overwrites> = HashMap::new();
         if !self.balances.is_empty() {

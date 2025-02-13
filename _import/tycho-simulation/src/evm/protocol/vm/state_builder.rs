@@ -46,8 +46,6 @@ use crate::{
 /// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
 /// use alloy_primitives::Address;
-/// use alloy_primitives::U256;
-/// use std::collections::HashMap;
 /// use std::path::PathBuf;
 /// use tycho_core::Bytes;
 /// use tycho_simulation::evm::engine_db::simulation_db::BlockHeader;
@@ -71,14 +69,8 @@ use crate::{
 ///         timestamp: 1632456789,
 ///     };
 ///
-///     // Optional: Add token balances
-///     let mut balances = HashMap::new();
-///     balances.insert(Address::random(), U256::from(1000));
-///
 ///     // Build the EVMPoolState
 ///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, block, Address::random())
-///         .balances(balances)
-///         .balance_owner(Address::random())
 ///         .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
 ///         .build(SHARED_TYCHO_DB.clone())
 ///         .await?;
@@ -151,7 +143,7 @@ where
         self
     }
 
-    /// Set contract balances
+    /// Set contract balances. If set, component balances will be ignored.
     pub fn account_balances(
         mut self,
         account_balances: HashMap<Address, HashMap<Address, U256>>,
@@ -248,7 +240,7 @@ where
         if !self.contract_balances.is_empty() {
             // Use contract balances to build the state
             if !self.balances.is_empty() {
-                warn!("Both contract balances and component balances are set. Contract balances will be used.");
+                warn!("Both contract balances and component balances are set. Component balances will be ignored.");
             }
             Ok(EVMPoolState::new(
                 self.id,
@@ -267,11 +259,6 @@ where
             ))
         } else {
             // Use component balances to build the state
-            if self.balances.is_empty() {
-                return Err(SimulationError::FatalError(
-                    "Failed to get build EVMPoolState: no balances were set".to_string(),
-                ));
-            }
             #[allow(deprecated)]
             Ok(EVMPoolState::new_with_component_balances(
                 self.id,

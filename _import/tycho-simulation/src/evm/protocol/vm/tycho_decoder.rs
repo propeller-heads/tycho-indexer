@@ -42,7 +42,8 @@ impl From<Header> for BlockHeader {
 impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState` into an `EVMPoolState`.
+    /// Decodes a `ComponentWithState`, block `Header` and HashMap of all available tokens into an
+    /// `EVMPoolState`.
     ///
     /// Errors with a `InvalidSnapshotError`.
     async fn try_from_with_block(
