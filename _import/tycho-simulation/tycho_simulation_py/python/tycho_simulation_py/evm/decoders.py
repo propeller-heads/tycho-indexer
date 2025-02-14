@@ -144,7 +144,11 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         balances = self.decode_balances(snapshot.state.balances, tokens)
 
         # contract balances
-        contract_balances = {to_checksum_address(addr):self.decode_balances(bals) for addr, bals in account_balances if addr in component.contract_ids}
+        contract_balances = {
+            to_checksum_address(addr): self.decode_balances(bals, tokens)
+            for addr, bals in account_balances.items()
+            if addr in component.contract_ids
+        }
 
         optional_attributes = self.decode_optional_attributes(state_attributes)
         pool_id = component.id
