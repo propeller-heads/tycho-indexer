@@ -46,6 +46,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     /// `EVMPoolState`.
     ///
     /// Errors with a `InvalidSnapshotError`.
+    #[allow(deprecated)]
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         block: Header,
@@ -55,41 +56,6 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
         let block = BlockHeader::from(block);
-
-        let balance_owner = snapshot
-            .state
-            .attributes
-            .get("balance_owner")
-            .map(|owner| Address::from_slice(owner.as_ref()));
-
-        // Decode balances: if balance_owner is present, use the balances from the balance_owner's
-        // account balance (if exists), otherwise use the balances from the component.
-        let balances = balance_owner
-            .and_then(|owner| {
-                account_balances
-                    .get(owner.as_ref() as &[u8])
-                    .map(|balances| {
-                        balances
-                            .iter()
-                            .map(|(k, v)| {
-                                (Address::from_slice(k.as_ref()), U256::from_be_slice(v.as_ref()))
-                            })
-                            .collect::<HashMap<Address, U256>>()
-                    })
-            })
-            .unwrap_or_else(|| {
-                snapshot
-                    .state
-                    .balances
-                    .iter()
-                    .map(|(k, v)| (Address::from_slice(k), U256::from_be_slice(v)))
-                    .collect()
-            });
-
-        let manual_updates = snapshot
-            .component
-            .static_attributes
-            .contains_key("manual_updates");
 
         // Decode involved contracts
         let mut stateless_contracts = HashMap::new();
@@ -129,13 +95,42 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                 break;
             }
         }
-
         let involved_contracts = snapshot
             .component
             .contract_ids
             .iter()
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
             .collect::<HashSet<Address>>();
+
+        // Decode balances
+        let balance_owner = snapshot
+            .state
+            .attributes
+            .get("balance_owner")
+            .map(|owner| Address::from_slice(owner.as_ref()));
+        let component_balances = snapshot
+            .state
+            .balances
+            .iter()
+            .map(|(k, v)| (Address::from_slice(k), U256::from_be_slice(v)))
+            .collect::<HashMap<_, _>>();
+        let account_balances = account_balances
+            .iter()
+            .filter(|(k, _)| involved_contracts.contains(&Address::from_slice(k)))
+            .map(|(k, v)| {
+                let addr = Address::from_slice(k);
+                let balances = v
+                    .iter()
+                    .map(|(k, v)| (Address::from_slice(k), U256::from_be_slice(v)))
+                    .collect();
+                (addr, balances)
+            })
+            .collect::<HashMap<_, _>>();
+
+        let manual_updates = snapshot
+            .component
+            .static_attributes
+            .contains_key("manual_updates");
 
         let protocol_name = snapshot
             .component
@@ -157,7 +152,8 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
 
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)
-                .balances(balances)
+                .balances(component_balances)
+                .account_balances(account_balances)
                 .adapter_contract_bytecode(adapter_bytecode)
                 .involved_contracts(involved_contracts)
                 .stateless_contracts(stateless_contracts)

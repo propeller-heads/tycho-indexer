@@ -132,18 +132,20 @@ where
         }
     }
 
+    #[deprecated(note = "Use account balances instead")]
     pub fn balance_owner(mut self, balance_owner: Address) -> Self {
         self.balance_owner = Some(balance_owner);
         self
     }
 
-    /// Set component balances
+    /// Set component balances. This balance belongs to the 'balance_owner' if one is set,
+    /// otherwise it belongs to the pool itself.
     pub fn balances(mut self, balances: HashMap<Address, U256>) -> Self {
         self.balances = balances;
         self
     }
 
-    /// Set contract balances. If set, component balances will be ignored.
+    /// Set contract balances
     pub fn account_balances(
         mut self,
         account_balances: HashMap<Address, HashMap<Address, U256>>,
@@ -237,46 +239,23 @@ where
             )
         })?;
 
-        if !self.contract_balances.is_empty() {
-            // Use contract balances to build the state
-            if !self.balances.is_empty() {
-                warn!("Both contract balances and component balances are set. Component balances will be ignored.");
-            }
-            Ok(EVMPoolState::new(
-                self.id,
-                self.tokens,
-                self.block,
-                self.contract_balances,
-                HashMap::new(),
-                capabilities,
-                HashMap::new(),
-                self.involved_contracts
-                    .unwrap_or_default(),
-                self.token_storage_slots
-                    .unwrap_or_default(),
-                self.manual_updates.unwrap_or(false),
-                adapter_contract,
-            ))
-        } else {
-            // Use component balances to build the state
-            #[allow(deprecated)]
-            Ok(EVMPoolState::new_with_component_balances(
-                self.id,
-                self.tokens,
-                self.block,
-                self.balances,
-                self.balance_owner,
-                HashMap::new(),
-                capabilities,
-                HashMap::new(),
-                self.involved_contracts
-                    .unwrap_or_default(),
-                self.token_storage_slots
-                    .unwrap_or_default(),
-                self.manual_updates.unwrap_or(false),
-                adapter_contract,
-            ))
-        }
+        Ok(EVMPoolState::new(
+            self.id,
+            self.tokens,
+            self.block,
+            self.balances,
+            self.balance_owner,
+            self.contract_balances,
+            HashMap::new(),
+            capabilities,
+            HashMap::new(),
+            self.involved_contracts
+                .unwrap_or_default(),
+            self.token_storage_slots
+                .unwrap_or_default(),
+            self.manual_updates.unwrap_or(false),
+            adapter_contract,
+        ))
     }
 
     async fn get_default_engine(&self, db: D) -> Result<SimulationEngine<D>, SimulationError> {

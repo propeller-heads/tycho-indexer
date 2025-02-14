@@ -47,8 +47,7 @@ where
     pub tokens: Vec<Bytes>,
     /// The current block, will be used to set vm context
     block: BlockHeader,
-    /// The pool's token balances. This has been deprecated in favor of `contract_balances`.
-    #[deprecated(note = "Use contract_balances instead")]
+    /// The pool's component balances.
     balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
     /// If given, balances will be overwritten here instead of on the pool contract during
@@ -91,50 +90,12 @@ where
     ///
     /// See struct definition of `EVMPoolState` for attribute explanations.
     #[allow(clippy::too_many_arguments)]
-    #[deprecated(note = "Use `new` instead")]
-    pub fn new_with_component_balances(
-        id: String,
-        tokens: Vec<Bytes>,
-        block: BlockHeader,
-        balances: HashMap<Address, U256>,
-        balance_owner: Option<Address>,
-        spot_prices: HashMap<(Address, Address), f64>,
-        capabilities: HashSet<Capability>,
-        block_lasting_overwrites: HashMap<Address, Overwrites>,
-        involved_contracts: HashSet<Address>,
-        token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
-        manual_updates: bool,
-        adapter_contract: TychoSimulationContract<D>,
-    ) -> Self {
-        let (component_balances, contract_balances) = if let Some(owner) = balance_owner {
-            // set balances as contract balances
-            (HashMap::new(), HashMap::from([(owner, balances.clone())]))
-        } else {
-            // assumed the balances are owned by the pool (or component) itself
-            (balances, HashMap::new())
-        };
-        Self {
-            id,
-            tokens,
-            block,
-            balances: component_balances,
-            balance_owner,
-            spot_prices,
-            capabilities,
-            block_lasting_overwrites,
-            involved_contracts,
-            contract_balances,
-            token_storage_slots,
-            manual_updates,
-            adapter_contract,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
         tokens: Vec<Bytes>,
         block: BlockHeader,
+        component_balances: HashMap<Address, U256>,
+        balance_owner: Option<Address>,
         contract_balances: HashMap<Address, HashMap<Address, U256>>,
         spot_prices: HashMap<(Address, Address), f64>,
         capabilities: HashSet<Capability>,
@@ -148,8 +109,8 @@ where
             id,
             tokens,
             block,
-            balances: HashMap::new(),
-            balance_owner: None,
+            balances: component_balances,
+            balance_owner,
             spot_prices,
             capabilities,
             block_lasting_overwrites,
@@ -450,73 +411,73 @@ where
     ///   `Overwrites` if successful, or a `SimulationError` on failure.
     fn get_balance_overwrites(&self) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let mut balance_overwrites: HashMap<Address, Overwrites> = HashMap::new();
-        if !self.balances.is_empty() {
-            // Backwards compatibility: Use component balances for overrides
-            let address = match self.balance_owner {
-                Some(address) => Ok(address),
-                None => self.id.parse().map_err(|_| {
-                    SimulationError::FatalError(
-                        "Failed to get balance overwrites: Pool ID is not an address".into(),
-                    )
-                }),
-            }?;
+        // Use component balances for overrides
+        let address = match self.balance_owner {
+            Some(address) => Ok(address),
+            None => self.id.parse().map_err(|_| {
+                SimulationError::FatalError(
+                    "Failed to get balance overwrites: Pool ID is not an address".into(),
+                )
+            }),
+        }?;
 
-            for token in &self.tokens {
-                let token_address = bytes_to_address(token)?;
-                let (slots, compiler) = if self
-                    .involved_contracts
-                    .contains(&token_address)
-                {
-                    self.token_storage_slots
-                        .get(&token_address)
-                        .cloned()
-                        .ok_or_else(|| {
-                            SimulationError::FatalError(
-                                "Failed to get balance overwrites: Token storage slots not found"
-                                    .into(),
-                            )
-                        })?
-                } else {
-                    (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
-                };
+        for token in &self.tokens {
+            let token_address = bytes_to_address(token)?;
+            let (slots, compiler) = if self
+                .involved_contracts
+                .contains(&token_address)
+            {
+                self.token_storage_slots
+                    .get(&token_address)
+                    .cloned()
+                    .ok_or_else(|| {
+                        SimulationError::FatalError(
+                            "Failed to get balance overwrites: Token storage slots not found"
+                                .into(),
+                        )
+                    })?
+            } else {
+                (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
+            };
 
-                let mut overwrites = ERC20OverwriteFactory::new(token_address, slots, compiler);
-                overwrites.set_balance(
-                    self.balances
-                        .get(&token_address)
-                        .cloned()
-                        .ok_or_else(|| {
-                            SimulationError::InvalidInput(
-                                format!(
+            let mut overwrites = ERC20OverwriteFactory::new(token_address, slots, compiler);
+            overwrites.set_balance(
+                self.balances
+                    .get(&token_address)
+                    .cloned()
+                    .ok_or_else(|| {
+                        SimulationError::InvalidInput(
+                            format!(
                                 "Failed to get balance overwrites: Token balance not found for {}",
                                 token
                             ),
-                                None,
-                            )
-                        })?,
-                    address,
-                );
+                            None,
+                        )
+                    })?,
+                address,
+            );
+            balance_overwrites.extend(overwrites.get_overwrites());
+        }
+
+        // Use contract balances for overrides (will overwrite component balances if they were set
+        // for a contract we explicitly track balances for)
+        for (contract, balances) in &self.contract_balances {
+            for (token, balance) in balances {
+                let (slots, compiler) = self
+                    .token_storage_slots
+                    .get(token)
+                    .cloned()
+                    .unwrap_or((
+                        ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
+                        ContractCompiler::Solidity,
+                    ));
+
+                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+                overwrites.set_balance(*balance, *contract);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
-        } else {
-            // Use contract balances for overrides
-            for (contract, balances) in &self.contract_balances {
-                for (token, balance) in balances {
-                    let (slots, compiler) = self
-                        .token_storage_slots
-                        .get(token)
-                        .cloned()
-                        .unwrap_or((
-                            ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
-                            ContractCompiler::Solidity,
-                        ));
-
-                    let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
-                    overwrites.set_balance(*balance, *contract);
-                    balance_overwrites.extend(overwrites.get_overwrites());
-                }
-            }
         }
+
         Ok(balance_overwrites)
     }
 
