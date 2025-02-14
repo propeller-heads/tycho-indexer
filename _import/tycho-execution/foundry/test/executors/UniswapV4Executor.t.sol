@@ -104,10 +104,10 @@ contract UniswapV4ExecutorTest is Test, Constants {
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
         uint256 usdeBalanceBeforeSwapExecutor =
-                            USDE.balanceOf(address(uniswapV4Exposed));
+            USDE.balanceOf(address(uniswapV4Exposed));
 
         UniswapV4Executor.UniswapV4Pool[] memory pools =
-                    new UniswapV4Executor.UniswapV4Pool[](1);
+            new UniswapV4Executor.UniswapV4Pool[](1);
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: uint24(100),
@@ -139,11 +139,10 @@ contract UniswapV4ExecutorTest is Test, Constants {
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
         uint256 usdeBalanceBeforeSwapExecutor =
-                            USDE.balanceOf(address(uniswapV4Exposed));
-
+            USDE.balanceOf(address(uniswapV4Exposed));
 
         UniswapV4Executor.UniswapV4Pool[] memory pools =
-                    new UniswapV4Executor.UniswapV4Pool[](2);
+            new UniswapV4Executor.UniswapV4Pool[](2);
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: uint24(100),
@@ -171,7 +170,8 @@ contract UniswapV4ExecutorTest is Test, Constants {
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
         );
-        assertTrue(IERC20(WBTC_ADDR).balanceOf(address(uniswapV4Exposed)) == amountOut);
+        assertTrue(
+            IERC20(WBTC_ADDR).balanceOf(address(uniswapV4Exposed)) == amountOut
+        );
     }
-
 }

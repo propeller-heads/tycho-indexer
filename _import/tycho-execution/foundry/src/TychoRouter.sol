@@ -450,7 +450,8 @@ contract TychoRouter is
     {
         require(data.length >= 20, "Invalid data length");
         bytes4 selector = bytes4(data[data.length - 4:]);
-        address executor = address(uint160(bytes20(data[data.length - 24:data.length - 4])));
+        address executor =
+            address(uint160(bytes20(data[data.length - 24:data.length - 4])));
         bytes memory protocolData = data[:data.length - 24];
 
         if (!executors[executor]) {

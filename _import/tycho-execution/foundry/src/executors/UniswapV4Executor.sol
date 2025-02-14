@@ -75,7 +75,6 @@ contract UniswapV4Executor is IExecutor, V4Router {
             params[1] = abi.encode(key.currency0, amountIn);
             params[2] = abi.encode(key.currency1, amountOutMin);
             swapData = abi.encode(actions, params);
-
         } else {
             PathKey[] memory path = new PathKey[](pools.length);
             for (uint256 i = 0; i < pools.length; i++) {
@@ -109,8 +108,8 @@ contract UniswapV4Executor is IExecutor, V4Router {
             params[2] = abi.encode(Currency.wrap(tokenOut), amountOutMin);
             swapData = abi.encode(actions, params);
         }
-            bytes memory fullData =
-                                abi.encodePacked( swapData, callbackExecutor, callbackSelector);
+        bytes memory fullData =
+            abi.encodePacked(swapData, callbackExecutor, callbackSelector);
         uint256 tokenOutBalanceBefore;
 
         tokenOutBalanceBefore = tokenOut == address(0)
@@ -132,11 +131,12 @@ contract UniswapV4Executor is IExecutor, V4Router {
 
     // necessary to convert bytes memory to bytes calldata
     function executeActions(bytes memory unlockData) public {
+        // slither-disable-next-line unused-return
         poolManager.unlock(unlockData);
     }
 
     function _decodeData(bytes calldata data)
-        public
+        internal
         pure
         returns (
             address tokenIn,
@@ -148,7 +148,7 @@ contract UniswapV4Executor is IExecutor, V4Router {
             UniswapV4Pool[] memory pools
         )
     {
-        if(data.length < 123) {
+        if (data.length < 123) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
@@ -168,6 +168,7 @@ contract UniswapV4Executor is IExecutor, V4Router {
             uint24 fee;
             int24 tickSpacing;
 
+            // slither-disable-next-line assembly
             assembly {
                 intermediaryToken := mload(add(poolsData, add(offset, 20)))
                 fee := shr(232, mload(add(poolsData, add(offset, 52))))
@@ -178,10 +179,7 @@ contract UniswapV4Executor is IExecutor, V4Router {
         }
     }
 
-    function _pay(Currency token, address payer, uint256 amount)
-        internal
-        override
-    {
+    function _pay(Currency token, address, uint256 amount) internal override {
         IERC20(Currency.unwrap(token)).safeTransfer(
             address(poolManager), amount
         );
