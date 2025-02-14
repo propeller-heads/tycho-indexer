@@ -12,9 +12,7 @@ import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(IPoolManager _poolManager, address _permit2, address weth)
-        TychoRouter(_poolManager, _permit2, weth)
-    {}
+    constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
 
     function wrapETH(uint256 amount) external payable {
         return _wrapETH(amount);
@@ -50,8 +48,7 @@ contract TychoRouterTestSetup is Test, Constants {
         address factoryV3 = USV3_FACTORY;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        tychoRouter =
-            new TychoRouterExposed(poolManager, permit2Address, WETH_ADDR);
+        tychoRouter = new TychoRouterExposed(permit2Address, WETH_ADDR);
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);

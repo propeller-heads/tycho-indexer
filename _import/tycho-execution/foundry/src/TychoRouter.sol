@@ -14,7 +14,6 @@ import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -23,13 +22,7 @@ error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 
-contract TychoRouter is
-    AccessControl,
-    Dispatcher,
-    Pausable,
-    ReentrancyGuard,
-    SafeCallback
-{
+contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     IAllowanceTransfer public immutable permit2;
     IWETH private immutable _weth;
 
@@ -63,9 +56,7 @@ contract TychoRouter is
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
-    constructor(IPoolManager _poolManager, address _permit2, address weth)
-        SafeCallback(_poolManager)
-    {
+    constructor(address _permit2, address weth) {
         if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -380,9 +371,8 @@ contract TychoRouter is
         );
     }
 
-    function _unlockCallback(bytes calldata data)
-        internal
-        override
+    function unlockCallback(bytes calldata data)
+        external
         returns (bytes memory)
     {
         require(data.length >= 20, "Invalid data length");

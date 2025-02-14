@@ -821,7 +821,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         // add executor and selector for callback
         bytes memory protocolDataWithCallBack = abi.encodePacked(
             protocolData,
-            SafeCallback.unlockCallback.selector,
+            TychoRouter.unlockCallback.selector,
             address(usv4Executor)
         );
 
