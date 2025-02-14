@@ -19,7 +19,6 @@ import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
 import "lib/forge-std/src/console.sol";
 
 error UniswapV4Executor__InvalidDataLength();
-error UniswapV4Executor__SwapFailed();
 
 contract UniswapV4Executor is IExecutor, V4Router {
     using SafeERC20 for IERC20;
@@ -49,9 +48,7 @@ contract UniswapV4Executor is IExecutor, V4Router {
         ) = _decodeData(data);
 
         bytes memory fullData;
-        if (pools.length == 0) {
-            console.log("problem"); // raise error
-        } else if (pools.length == 1) {
+        if (pools.length == 1) {
             PoolKey memory key = PoolKey({
                 currency0: Currency.wrap(zeroForOne ? tokenIn : tokenOut),
                 currency1: Currency.wrap(zeroForOne ? tokenOut : tokenIn),
@@ -77,12 +74,44 @@ contract UniswapV4Executor is IExecutor, V4Router {
                 })
             );
             params[1] = abi.encode(key.currency0, amountIn);
-            params[2] = abi.encode(key.currency1, 0);
+            params[2] = abi.encode(key.currency1, amountOutMin);
             bytes memory swapData = abi.encode(actions, params);
             fullData =
                 abi.encodePacked(callbackExecutor, callbackSelector, swapData);
         } else {
-            console.log("do later");
+            PathKey[] memory path = new PathKey[](pools.length);
+            for (uint256 i = 0; i < pools.length; i++) {
+                path[i] = PathKey({
+                    intermediateCurrency: Currency.wrap(pools[i].intermediaryToken),
+                    fee: pools[i].fee,
+                    tickSpacing: pools[i].tickSpacing,
+                    hooks: IHooks(address(0)),
+                    hookData: bytes("")
+                });
+            }
+
+            bytes memory actions = abi.encodePacked(
+                uint8(Actions.SWAP_EXACT_IN),
+                uint8(Actions.SETTLE_ALL),
+                uint8(Actions.TAKE_ALL)
+            );
+
+            bytes[] memory params = new bytes[](3);
+
+            Currency currencyIn = Currency.wrap(tokenIn);
+            params[0] = abi.encode(
+                IV4Router.ExactInputParams({
+                    currencyIn: currencyIn,
+                    path: path,
+                    amountIn: uint128(amountIn),
+                    amountOutMinimum: uint128(amountOutMin)
+                })
+            );
+            params[1] = abi.encode(currencyIn, amountIn);
+            params[2] = abi.encode(Currency.wrap(tokenOut), amountOutMin);
+            bytes memory swapData = abi.encode(actions, params);
+            fullData =
+                abi.encodePacked(callbackExecutor, callbackSelector, swapData);
         }
 
         uint256 tokenOutBalanceBefore;
@@ -122,7 +151,9 @@ contract UniswapV4Executor is IExecutor, V4Router {
             UniswapV4Pool[] memory pools
         )
     {
-        require(data.length >= 97, "Invalid data length");
+        if(data.length < 123) {
+            revert UniswapV4Executor__InvalidDataLength();
+        }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));

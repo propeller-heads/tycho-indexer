@@ -64,7 +64,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             tickSpacing: tickSpacing2
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInputSingle(
+        bytes memory data = UniswapV4Utils.encodeExactInput(
             USDE_ADDR,
             USDT_ADDR,
             minAmountOut,

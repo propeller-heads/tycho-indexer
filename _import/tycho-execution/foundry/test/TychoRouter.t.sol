@@ -865,7 +865,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             tickSpacing: int24(1)
         });
 
-        bytes memory protocolData = UniswapV4Utils.encodeExactInputSingle(
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
             USDE_ADDR,
             USDT_ADDR,
             uint256(1),
@@ -889,6 +889,52 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
 
-        assertTrue(IERC20(USDT_ADDR).balanceOf(tychoRouterAddr) == 99943852);
+        assertEq(IERC20(USDT_ADDR).balanceOf(tychoRouterAddr), 99943852);
+    }
+
+    function testSwapMultipleUSV4Callback() public {
+        // This test has two uniswap v4 hops that will be executed inside of the V4 pool manager
+        // USDE -> USDT -> WBTC
+        uint256 amountIn = 100 ether;
+        deal(USDE_ADDR, tychoRouterAddr, amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](2);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1)
+        });
+        pools[1] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WBTC_ADDR,
+            fee: uint24(3000),
+            tickSpacing: int24(60)
+        });
+
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR,
+            WBTC_ADDR,
+            uint256(1),
+            true,
+            address(usv4Executor),
+            SafeCallback.unlockCallback.selector,
+            pools
+        );
+
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv4Executor),
+            bytes4(0),
+            protocolData
+        );
+
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+
+        assertEq(IERC20(WBTC_ADDR).balanceOf(tychoRouterAddr), 102718);
     }
 }

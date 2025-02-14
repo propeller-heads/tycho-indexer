@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 
 library UniswapV4Utils {
-    function encodeExactInputSingle(
+    function encodeExactInput(
         address tokenIn,
         address tokenOut,
         uint256 amountOutMin,
