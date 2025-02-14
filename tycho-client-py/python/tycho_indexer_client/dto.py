@@ -184,7 +184,7 @@ class ResponseAccount(BaseModel):
     title: str
     slots: Dict[HexBytes, HexBytes]
     native_balance: HexBytes = Field(alias="balance")
-    token_balances: Dict[HexBytes, Dict[HexBytes, HexBytes]]
+    token_balances: Dict[HexBytes, HexBytes]
     code: HexBytes
     code_hash: HexBytes
     balance_modify_tx: HexBytes
