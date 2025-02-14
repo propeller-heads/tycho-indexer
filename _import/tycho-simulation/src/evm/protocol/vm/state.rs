@@ -423,14 +423,10 @@ where
             })?),
         };
         if let Some(address) = address {
-            for token in &self.tokens {
-                let token_address = bytes_to_address(token)?;
-                let (slots, compiler) = if self
-                    .involved_contracts
-                    .contains(&token_address)
-                {
+            for (token, bal) in &self.balances {
+                let (slots, compiler) = if self.involved_contracts.contains(token) {
                     self.token_storage_slots
-                        .get(&token_address)
+                        .get(token)
                         .cloned()
                         .ok_or_else(|| {
                             SimulationError::FatalError(
@@ -442,22 +438,8 @@ where
                     (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
                 };
 
-                let mut overwrites = ERC20OverwriteFactory::new(token_address, slots, compiler);
-                overwrites.set_balance(
-                    self.balances
-                        .get(&token_address)
-                        .cloned()
-                        .ok_or_else(|| {
-                            SimulationError::InvalidInput(
-                                format!(
-                                "Failed to get balance overwrites: Token balance not found for {}",
-                                token
-                            ),
-                                None,
-                            )
-                        })?,
-                    address,
-                );
+                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+                overwrites.set_balance(*bal, address);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
         }
