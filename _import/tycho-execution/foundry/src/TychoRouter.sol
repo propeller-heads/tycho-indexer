@@ -15,6 +15,7 @@ import "./ExecutionDispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
+import "forge-std/console.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -228,9 +229,10 @@ contract TychoRouter is
      * This function will static call a verifier contract and should revert if the
      *  caller is not a pool.
      */
-    fallback() external {
-        _handleCallback(msg.data);
-    }
+    // fallback() external {
+    //     bytes4 selector = bytes4(msg.data[:4]);
+    //     _handleCallback(selector, msg.data[4:]);
+    // }
 
     /**
      * @dev Pauses the contract
@@ -387,6 +389,20 @@ contract TychoRouter is
      * @dev Allows this contract to receive native token
      */
     receive() external payable {}
+
+    /**
+     * @dev Called by UniswapV3 pool when swapping on it.
+     * See in IUniswapV3SwapCallback for documentation.
+     */
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata msgData
+    ) external {
+        _handleCallback(
+            bytes4(0), abi.encodePacked(amount0Delta, amount1Delta, msgData)
+        );
+    }
 
     function _unlockCallback(bytes calldata data)
         internal

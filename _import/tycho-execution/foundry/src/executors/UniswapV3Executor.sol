@@ -5,6 +5,7 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-updated/CallbackValidationV2.sol";
+import "forge-std/console.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
@@ -69,11 +70,10 @@ contract UniswapV3Executor is IExecutor {
         external
         returns (bytes memory result)
     {
-        // Skip first 4 bytes of function selector and decode the two int256 values
         (int256 amount0Delta, int256 amount1Delta) =
-            abi.decode(msgData[4:68], (int256, int256));
+            abi.decode(msgData[:64], (int256, int256));
 
-        bytes calldata remainingData = msgData[68:];
+        bytes calldata remainingData = msgData[64:];
 
         (uint256 amountOwed, address tokenOwed) =
             _verifyUSV3Callback(amount0Delta, amount1Delta, remainingData);
@@ -87,9 +87,6 @@ contract UniswapV3Executor is IExecutor {
         int256 amount1Delta,
         bytes calldata data
     ) internal view returns (uint256 amountIn, address tokenIn) {
-        // Skip the first 64 bytes (32 bytes offset + 32 bytes length)
-        data = data[64:];
-
         tokenIn = address(bytes20(data[0:20]));
         address tokenOut = address(bytes20(data[20:40]));
         uint24 poolFee = uint24(bytes3(data[40:43]));
