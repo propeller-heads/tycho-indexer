@@ -98,4 +98,80 @@ contract UniswapV4ExecutorTest is Test, Constants {
         assertEq(decodedPools[1].fee, pool2Fee);
         assertEq(decodedPools[1].tickSpacing, tickSpacing2);
     }
+
+    function testSingleSwap() public {
+        uint256 amountIn = 100 ether;
+        deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
+        uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
+        uint256 usdeBalanceBeforeSwapExecutor =
+                            USDE.balanceOf(address(uniswapV4Exposed));
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+                    new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1)
+        });
+
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR,
+            USDT_ADDR,
+            uint256(1),
+            true,
+            address(uniswapV4Exposed),
+            SafeCallback.unlockCallback.selector,
+            pools
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
+        assertEq(
+            USDE.balanceOf(address(uniswapV4Exposed)),
+            usdeBalanceBeforeSwapExecutor - amountIn
+        );
+        assertTrue(USDT.balanceOf(address(uniswapV4Exposed)) == amountOut);
+    }
+
+    function testMultipleSwap() public {
+        // USDE -> USDT -> WBTC
+        uint256 amountIn = 100 ether;
+        deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
+        uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
+        uint256 usdeBalanceBeforeSwapExecutor =
+                            USDE.balanceOf(address(uniswapV4Exposed));
+
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+                    new UniswapV4Executor.UniswapV4Pool[](2);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1)
+        });
+        pools[1] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WBTC_ADDR,
+            fee: uint24(3000),
+            tickSpacing: int24(60)
+        });
+
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR,
+            WBTC_ADDR,
+            uint256(1),
+            true,
+            address(uniswapV4Exposed),
+            SafeCallback.unlockCallback.selector,
+            pools
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
+        assertEq(
+            USDE.balanceOf(address(uniswapV4Exposed)),
+            usdeBalanceBeforeSwapExecutor - amountIn
+        );
+        assertTrue(IERC20(WBTC_ADDR).balanceOf(address(uniswapV4Exposed)) == amountOut);
+    }
+
 }

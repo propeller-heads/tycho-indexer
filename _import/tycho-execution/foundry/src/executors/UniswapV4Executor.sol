@@ -16,7 +16,6 @@ import {V4Router} from "@uniswap/v4-periphery/src/V4Router.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
-import "lib/forge-std/src/console.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 
@@ -47,7 +46,7 @@ contract UniswapV4Executor is IExecutor, V4Router {
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
 
-        bytes memory fullData;
+        bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
                 currency0: Currency.wrap(zeroForOne ? tokenIn : tokenOut),
@@ -75,9 +74,8 @@ contract UniswapV4Executor is IExecutor, V4Router {
             );
             params[1] = abi.encode(key.currency0, amountIn);
             params[2] = abi.encode(key.currency1, amountOutMin);
-            bytes memory swapData = abi.encode(actions, params);
-            fullData =
-                abi.encodePacked(callbackExecutor, callbackSelector, swapData);
+            swapData = abi.encode(actions, params);
+
         } else {
             PathKey[] memory path = new PathKey[](pools.length);
             for (uint256 i = 0; i < pools.length; i++) {
@@ -109,11 +107,10 @@ contract UniswapV4Executor is IExecutor, V4Router {
             );
             params[1] = abi.encode(currencyIn, amountIn);
             params[2] = abi.encode(Currency.wrap(tokenOut), amountOutMin);
-            bytes memory swapData = abi.encode(actions, params);
-            fullData =
-                abi.encodePacked(callbackExecutor, callbackSelector, swapData);
+            swapData = abi.encode(actions, params);
         }
-
+            bytes memory fullData =
+                                abi.encodePacked( swapData, callbackExecutor, callbackSelector);
         uint256 tokenOutBalanceBefore;
 
         tokenOutBalanceBefore = tokenOut == address(0)
