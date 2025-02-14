@@ -8,7 +8,9 @@ import {Constants} from "../Constants.sol";
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
     constructor(address _factory) UniswapV3Executor(_factory) {}
 
-    function decodeData(bytes calldata data)
+    function decodeData(
+        bytes calldata data
+    )
         external
         pure
         returns (
@@ -42,7 +44,12 @@ contract UniswapV3ExecutorTest is Test, Constants {
     function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
         bytes memory data = abi.encodePacked(
-            WETH_ADDR, DAI_ADDR, expectedPoolFee, address(2), address(3), false
+            WETH_ADDR,
+            DAI_ADDR,
+            expectedPoolFee,
+            address(2),
+            address(3),
+            false
         );
 
         (
@@ -63,8 +70,11 @@ contract UniswapV3ExecutorTest is Test, Constants {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams =
-            abi.encodePacked(WETH_ADDR, address(2), address(3));
+        bytes memory invalidParams = abi.encodePacked(
+            WETH_ADDR,
+            address(2),
+            address(3)
+        );
 
         vm.expectRevert(UniswapV3Executor__InvalidDataLength.selector);
         uniswapV3Exposed.decodeData(invalidParams);
@@ -77,7 +87,7 @@ contract UniswapV3ExecutorTest is Test, Constants {
         uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
 
         vm.startPrank(DAI_WETH_USV3);
-        bytes memory callbackData = _encodeUSV3CallbackData(
+        bytes memory callbackData = abi.encodePacked(
             int256(amountOwed), // amount0Delta
             int256(0), // amount1Delta
             WETH_ADDR,
@@ -89,28 +99,5 @@ contract UniswapV3ExecutorTest is Test, Constants {
 
         uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
-    }
-
-    function _encodeUSV3CallbackData(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        address tokenIn,
-        address tokenOut,
-        uint24 fee
-    ) internal pure returns (bytes memory) {
-        // Dummy selector for handleCallback
-        bytes4 selector =
-            bytes4(keccak256("handleCallback(int256,int256,bytes)"));
-
-        bytes memory tokenData = abi.encodePacked(tokenIn, tokenOut, fee);
-
-        // [0:4]   - function selector
-        // [4:68]  - abi.encode(amount0Delta, amount1Delta)
-        // [68:end] - abi.encode(tokenData) where tokenData is the packed bytes
-        return abi.encodePacked(
-            selector,
-            abi.encode(amount0Delta, amount1Delta),
-            abi.encode(tokenData)
-        );
     }
 }
