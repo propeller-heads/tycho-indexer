@@ -18,53 +18,121 @@ import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
 
 error UniswapV4Executor__InvalidDataLength();
-error UniswapV4Executor__SwapFailed();
 
 contract UniswapV4Executor is IExecutor, V4Router {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
 
+    struct UniswapV4Pool {
+        address intermediaryToken;
+        uint24 fee;
+        int24 tickSpacing;
+    }
+
     constructor(IPoolManager _poolManager) V4Router(_poolManager) {}
 
-    function swap(uint256, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data)
         external
         payable
         returns (uint256 calculatedAmount)
     {
-        (address tokenIn, address tokenOut, bool isExactInput, uint256 amount) =
-            _decodeData(data);
+        (
+            address tokenIn,
+            address tokenOut,
+            uint256 amountOutMin,
+            bool zeroForOne,
+            address callbackExecutor,
+            bytes4 callbackSelector,
+            UniswapV4Executor.UniswapV4Pool[] memory pools
+        ) = _decodeData(data);
 
+        bytes memory swapData;
+        if (pools.length == 1) {
+            PoolKey memory key = PoolKey({
+                currency0: Currency.wrap(zeroForOne ? tokenIn : tokenOut),
+                currency1: Currency.wrap(zeroForOne ? tokenOut : tokenIn),
+                fee: pools[0].fee,
+                tickSpacing: pools[0].tickSpacing,
+                hooks: IHooks(address(0))
+            });
+            bytes memory actions = abi.encodePacked(
+                uint8(Actions.SWAP_EXACT_IN_SINGLE),
+                uint8(Actions.SETTLE_ALL),
+                uint8(Actions.TAKE_ALL)
+            );
+
+            bytes[] memory params = new bytes[](3);
+
+            params[0] = abi.encode(
+                IV4Router.ExactInputSingleParams({
+                    poolKey: key,
+                    zeroForOne: zeroForOne,
+                    amountIn: uint128(amountIn),
+                    amountOutMinimum: uint128(amountOutMin),
+                    hookData: bytes("")
+                })
+            );
+            params[1] = abi.encode(key.currency0, amountIn);
+            params[2] = abi.encode(key.currency1, amountOutMin);
+            swapData = abi.encode(actions, params);
+        } else {
+            PathKey[] memory path = new PathKey[](pools.length);
+            for (uint256 i = 0; i < pools.length; i++) {
+                path[i] = PathKey({
+                    intermediateCurrency: Currency.wrap(pools[i].intermediaryToken),
+                    fee: pools[i].fee,
+                    tickSpacing: pools[i].tickSpacing,
+                    hooks: IHooks(address(0)),
+                    hookData: bytes("")
+                });
+            }
+
+            bytes memory actions = abi.encodePacked(
+                uint8(Actions.SWAP_EXACT_IN),
+                uint8(Actions.SETTLE_ALL),
+                uint8(Actions.TAKE_ALL)
+            );
+
+            bytes[] memory params = new bytes[](3);
+
+            Currency currencyIn = Currency.wrap(tokenIn);
+            params[0] = abi.encode(
+                IV4Router.ExactInputParams({
+                    currencyIn: currencyIn,
+                    path: path,
+                    amountIn: uint128(amountIn),
+                    amountOutMinimum: uint128(amountOutMin)
+                })
+            );
+            params[1] = abi.encode(currencyIn, amountIn);
+            params[2] = abi.encode(Currency.wrap(tokenOut), amountOutMin);
+            swapData = abi.encode(actions, params);
+        }
+        bytes memory fullData =
+            abi.encodePacked(swapData, callbackExecutor, callbackSelector);
         uint256 tokenOutBalanceBefore;
-        uint256 tokenInBalanceBefore;
 
         tokenOutBalanceBefore = tokenOut == address(0)
             ? address(this).balance
             : IERC20(tokenOut).balanceOf(address(this));
 
-        tokenInBalanceBefore = tokenIn == address(0)
-            ? address(this).balance
-            : IERC20(tokenIn).balanceOf(address(this));
-
-        _executeActions(data);
+        executeActions(fullData);
 
         uint256 tokenOutBalanceAfter;
-        uint256 tokenInBalanceAfter;
 
         tokenOutBalanceAfter = tokenOut == address(0)
             ? address(this).balance
             : IERC20(tokenOut).balanceOf(address(this));
 
-        tokenInBalanceAfter = tokenIn == address(0)
-            ? address(this).balance
-            : IERC20(tokenIn).balanceOf(address(this));
-
-        if (isExactInput) {
-            calculatedAmount = tokenOutBalanceAfter - tokenOutBalanceBefore;
-        } else {
-            calculatedAmount = tokenInBalanceBefore - tokenInBalanceAfter;
-        }
+        calculatedAmount = tokenOutBalanceAfter - tokenOutBalanceBefore;
 
         return calculatedAmount;
+    }
+
+    // necessary to convert bytes memory to bytes calldata
+    function executeActions(bytes memory unlockData) public {
+        // slither-disable-next-line unused-return
+        poolManager.unlock(unlockData);
     }
 
     function _decodeData(bytes calldata data)
@@ -73,66 +141,45 @@ contract UniswapV4Executor is IExecutor, V4Router {
         returns (
             address tokenIn,
             address tokenOut,
-            bool isExactInput,
-            uint256 amount
+            uint256 amountOutMin,
+            bool zeroForOne,
+            address callbackExecutor,
+            bytes4 callbackSelector,
+            UniswapV4Pool[] memory pools
         )
     {
-        (bytes memory actions, bytes[] memory params) =
-            abi.decode(data, (bytes, bytes[]));
+        if (data.length < 123) {
+            revert UniswapV4Executor__InvalidDataLength();
+        }
 
-        // First byte of actions determines the swap type
-        uint8 action = uint8(bytes1(actions[0]));
+        tokenIn = address(bytes20(data[0:20]));
+        tokenOut = address(bytes20(data[20:40]));
+        amountOutMin = uint256(bytes32(data[40:72]));
+        zeroForOne = (data[72] != 0);
+        callbackExecutor = address(bytes20(data[73:93]));
+        callbackSelector = bytes4(data[93:97]);
 
-        if (action == uint8(Actions.SWAP_EXACT_IN_SINGLE)) {
-            IV4Router.ExactInputSingleParams memory swapParams =
-                abi.decode(params[0], (IV4Router.ExactInputSingleParams));
+        uint256 poolsLength = (data.length - 97) / 26; // 26 bytes per pool object
+        pools = new UniswapV4Pool[](poolsLength);
+        bytes memory poolsData = data[97:];
+        uint256 offset = 0;
+        for (uint256 i = 0; i < poolsLength; i++) {
+            address intermediaryToken;
+            uint24 fee;
+            int24 tickSpacing;
 
-            tokenIn = swapParams.zeroForOne
-                ? address(uint160(swapParams.poolKey.currency0.toId()))
-                : address(uint160(swapParams.poolKey.currency1.toId()));
-            tokenOut = swapParams.zeroForOne
-                ? address(uint160(swapParams.poolKey.currency1.toId()))
-                : address(uint160(swapParams.poolKey.currency0.toId()));
-            isExactInput = true;
-            amount = swapParams.amountIn;
-        } else if (action == uint8(Actions.SWAP_EXACT_OUT_SINGLE)) {
-            IV4Router.ExactOutputSingleParams memory swapParams =
-                abi.decode(params[0], (IV4Router.ExactOutputSingleParams));
-
-            tokenIn = swapParams.zeroForOne
-                ? address(uint160(swapParams.poolKey.currency0.toId()))
-                : address(uint160(swapParams.poolKey.currency1.toId()));
-            tokenOut = swapParams.zeroForOne
-                ? address(uint160(swapParams.poolKey.currency1.toId()))
-                : address(uint160(swapParams.poolKey.currency0.toId()));
-            isExactInput = false;
-            amount = swapParams.amountOut;
-        } else if (action == uint8(Actions.SWAP_EXACT_IN)) {
-            IV4Router.ExactInputParams memory swapParams =
-                abi.decode(params[0], (IV4Router.ExactInputParams));
-
-            tokenIn = address(uint160(swapParams.currencyIn.toId()));
-            PathKey memory lastPath =
-                swapParams.path[swapParams.path.length - 1];
-            tokenOut = address(uint160(lastPath.intermediateCurrency.toId()));
-            isExactInput = true;
-            amount = swapParams.amountIn;
-        } else if (action == uint8(Actions.SWAP_EXACT_OUT)) {
-            IV4Router.ExactOutputParams memory swapParams =
-                abi.decode(params[0], (IV4Router.ExactOutputParams));
-
-            PathKey memory firstPath = swapParams.path[0];
-            tokenIn = address(uint160(firstPath.intermediateCurrency.toId()));
-            tokenOut = address(uint160(swapParams.currencyOut.toId()));
-            isExactInput = false;
-            amount = swapParams.amountOut;
+            // slither-disable-next-line assembly
+            assembly {
+                intermediaryToken := mload(add(poolsData, add(offset, 20)))
+                fee := shr(232, mload(add(poolsData, add(offset, 52))))
+                tickSpacing := shr(232, mload(add(poolsData, add(offset, 55))))
+            }
+            pools[i] = UniswapV4Pool(intermediaryToken, fee, tickSpacing);
+            offset += 26;
         }
     }
 
-    function _pay(Currency token, address payer, uint256 amount)
-        internal
-        override
-    {
+    function _pay(Currency token, address, uint256 amount) internal override {
         IERC20(Currency.unwrap(token)).safeTransfer(
             address(poolManager), amount
         );

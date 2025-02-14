@@ -4,43 +4,34 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 
 library UniswapV4Utils {
-    function encodeExactInputSingle(
+    function encodeExactInput(
         address tokenIn,
         address tokenOut,
-        uint24 fee,
+        uint256 amountOutMin,
         bool zeroForOne,
-        uint24 tickSpacing,
-        uint128 amountIn
+        address callbackExecutor,
+        bytes4 callbackSelector,
+        UniswapV4Executor.UniswapV4Pool[] memory pools
     ) public pure returns (bytes memory) {
-        PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(zeroForOne ? tokenIn : tokenOut),
-            currency1: Currency.wrap(zeroForOne ? tokenOut : tokenIn),
-            fee: fee,
-            tickSpacing: int24(tickSpacing),
-            hooks: IHooks(address(0))
-        });
+        bytes memory encodedPools;
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
+        for (uint256 i = 0; i < pools.length; i++) {
+            encodedPools = abi.encodePacked(
+                encodedPools,
+                pools[i].intermediaryToken,
+                bytes3(pools[i].fee),
+                pools[i].tickSpacing
+            );
+        }
+
+        return abi.encodePacked(
+            tokenIn,
+            tokenOut,
+            amountOutMin,
+            zeroForOne,
+            callbackExecutor,
+            bytes4(callbackSelector),
+            encodedPools
         );
-
-        bytes[] memory params = new bytes[](3);
-
-        params[0] = abi.encode(
-            IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: zeroForOne,
-                amountIn: amountIn,
-                amountOutMinimum: 0,
-                hookData: bytes("")
-            })
-        );
-
-        params[1] = abi.encode(key.currency0, amountIn);
-        params[2] = abi.encode(key.currency1, 0);
-
-        return abi.encode(actions, params);
     }
 }
