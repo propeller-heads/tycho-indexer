@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "@interfaces/ICallback.sol";
-import "forge-std/console.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();

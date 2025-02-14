@@ -227,10 +227,10 @@ contract TychoRouter is
      * This function will static call a verifier contract and should revert if the
      *  caller is not a pool.
      */
-    // fallback() external {
-    //     bytes4 selector = bytes4(msg.data[:4]);
-    //     _handleCallback(selector, msg.data[4:]);
-    // }
+    fallback() external {
+        bytes4 selector = bytes4(msg.data[:4]);
+        _handleCallback(selector, msg.data[4:]);
+    }
 
     /**
      * @dev Pauses the contract

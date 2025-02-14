@@ -30,13 +30,12 @@ contract UniswapV3ExecutorTest is Test, Constants {
     UniswapV3ExecutorExposed uniswapV3Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
-    address factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
 
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
-        uniswapV3Exposed = new UniswapV3ExecutorExposed(factory);
+        uniswapV3Exposed = new UniswapV3ExecutorExposed(USV3_FACTORY);
     }
 
     function testDecodeParams() public view {

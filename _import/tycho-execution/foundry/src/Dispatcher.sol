@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@interfaces/ICallback.sol";
-import "forge-std/console.sol";
 
 error Dispatcher__UnapprovedExecutor();
 error Dispatcher__NonContractExecutor();
@@ -83,7 +82,7 @@ contract Dispatcher {
     }
 
     function _handleCallback(bytes4 selector, bytes memory data) internal {
-        // Access the last 20 bytes of the bytes memory data using assembly
+        // Using assembly to access the last 20 bytes of the bytes memory data
         address executor;
         // slither-disable-next-line assembly
         assembly {

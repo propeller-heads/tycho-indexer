@@ -47,7 +47,7 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);
-        address factoryV3 = address(0x1F98431c8aD98523631AE4a59f267346ea31F984);
+        address factoryV3 = USV3_FACTORY;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
         tychoRouter =
