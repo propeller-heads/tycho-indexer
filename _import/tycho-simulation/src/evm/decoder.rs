@@ -113,7 +113,7 @@ impl TychoStreamDecoder {
         let decoder = Box::new(
             move |component: ComponentWithState,
                   header: Header,
-                  account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
+                  account_balances: AccountBalances,
                   state: Arc<RwLock<DecoderState>>| {
                 Box::pin(async move {
                     let guard = state.read().await;
