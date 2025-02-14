@@ -11,10 +11,11 @@ contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
     // slither-disable-next-line locked-ether
-    function swap(
-        uint256 givenAmount,
-        bytes calldata data
-    ) external payable returns (uint256 calculatedAmount) {
+    function swap(uint256 givenAmount, bytes calldata data)
+        external
+        payable
+        returns (uint256 calculatedAmount)
+    {
         address target;
         address receiver;
         bool zeroForOne;
@@ -32,9 +33,7 @@ contract UniswapV2Executor is IExecutor {
         }
     }
 
-    function _decodeData(
-        bytes calldata data
-    )
+    function _decodeData(bytes calldata data)
         internal
         pure
         returns (
@@ -53,20 +52,20 @@ contract UniswapV2Executor is IExecutor {
         zeroForOne = uint8(data[60]) > 0;
     }
 
-    function _getAmountOut(
-        address target,
-        uint256 amountIn,
-        bool zeroForOne
-    ) internal view returns (uint256 amount) {
+    function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
+        internal
+        view
+        returns (uint256 amount)
+    {
         IUniswapV2Pair pair = IUniswapV2Pair(target);
         uint112 reserveIn;
         uint112 reserveOut;
         if (zeroForOne) {
             // slither-disable-next-line unused-return
-            (reserveIn, reserveOut, ) = pair.getReserves();
+            (reserveIn, reserveOut,) = pair.getReserves();
         } else {
             // slither-disable-next-line unused-return
-            (reserveOut, reserveIn, ) = pair.getReserves();
+            (reserveOut, reserveIn,) = pair.getReserves();
         }
 
         require(reserveIn > 0 && reserveOut > 0, "L");

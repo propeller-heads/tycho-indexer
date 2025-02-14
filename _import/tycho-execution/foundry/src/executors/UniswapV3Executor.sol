@@ -5,11 +5,13 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-updated/CallbackValidationV2.sol";
+import "@interfaces/ICallback.sol";
+import "forge-std/console.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
 
-contract UniswapV3Executor is IExecutor {
+contract UniswapV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
@@ -28,10 +30,11 @@ contract UniswapV3Executor is IExecutor {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(
-        uint256 amountIn,
-        bytes calldata data
-    ) external payable returns (uint256 amountOut) {
+    function swap(uint256 amountIn, bytes calldata data)
+        external
+        payable
+        returns (uint256 amountOut)
+    {
         (
             address tokenIn,
             address tokenOut,
@@ -64,36 +67,53 @@ contract UniswapV3Executor is IExecutor {
         }
     }
 
-    function handleCallback(
-        bytes calldata msgData
-    ) external returns (bytes memory result) {
-        (int256 amount0Delta, int256 amount1Delta) = abi.decode(
-            msgData[:64],
-            (int256, int256)
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        // slither-disable-next-line low-level-calls
+        (bool success, bytes memory result) = self.delegatecall(
+            abi.encodeWithSelector(
+                ICallback.handleCallback.selector,
+                abi.encodePacked(
+                    amount0Delta, amount1Delta, data[:data.length - 20]
+                )
+            )
         );
+        if (!success) {
+            revert(
+                string(
+                    result.length > 0
+                        ? result
+                        : abi.encodePacked("Callback failed")
+                )
+            );
+        }
+    }
+
+    function handleCallback(bytes calldata msgData)
+        external
+        returns (bytes memory result)
+    {
+        (int256 amount0Delta, int256 amount1Delta) =
+            abi.decode(msgData[:64], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[64:84]));
         address tokenOut = address(bytes20(msgData[84:104]));
         uint24 poolFee = uint24(bytes3(msgData[104:107]));
 
-        CallbackValidationV2.verifyCallback(
-            factory,
-            tokenIn,
-            tokenOut,
-            poolFee
-        );
+        // slither-disable-next-line unused-return
+        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
 
-        uint256 amountOwed = amount0Delta > 0
-            ? uint256(amount0Delta)
-            : uint256(amount1Delta);
+        uint256 amountOwed =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
         IERC20(tokenIn).safeTransfer(msg.sender, amountOwed);
         return abi.encode(amountOwed, tokenIn);
     }
 
-    function _decodeData(
-        bytes calldata data
-    )
+    function _decodeData(bytes calldata data)
         internal
         pure
         returns (
@@ -116,11 +136,11 @@ contract UniswapV3Executor is IExecutor {
         zeroForOne = uint8(data[83]) > 0;
     }
 
-    function _makeV3CallbackData(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee
-    ) internal view returns (bytes memory) {
+    function _makeV3CallbackData(address tokenIn, address tokenOut, uint24 fee)
+        internal
+        view
+        returns (bytes memory)
+    {
         return abi.encodePacked(tokenIn, tokenOut, fee, self);
     }
 }

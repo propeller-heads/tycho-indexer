@@ -8,9 +8,7 @@ import {Constants} from "../Constants.sol";
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
     constructor(address _factory) UniswapV3Executor(_factory) {}
 
-    function decodeData(
-        bytes calldata data
-    )
+    function decodeData(bytes calldata data)
         external
         pure
         returns (
@@ -44,12 +42,7 @@ contract UniswapV3ExecutorTest is Test, Constants {
     function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
         bytes memory data = abi.encodePacked(
-            WETH_ADDR,
-            DAI_ADDR,
-            expectedPoolFee,
-            address(2),
-            address(3),
-            false
+            WETH_ADDR, DAI_ADDR, expectedPoolFee, address(2), address(3), false
         );
 
         (
@@ -70,11 +63,8 @@ contract UniswapV3ExecutorTest is Test, Constants {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams = abi.encodePacked(
-            WETH_ADDR,
-            address(2),
-            address(3)
-        );
+        bytes memory invalidParams =
+            abi.encodePacked(WETH_ADDR, address(2), address(3));
 
         vm.expectRevert(UniswapV3Executor__InvalidDataLength.selector);
         uniswapV3Exposed.decodeData(invalidParams);
@@ -99,5 +89,36 @@ contract UniswapV3ExecutorTest is Test, Constants {
 
         uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
+    }
+
+    function testSwapWETHForDAI() public {
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
+
+        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = false;
+
+        bytes memory data = encodeUniswapV3Swap(
+            WETH_ADDR, DAI_ADDR, address(this), DAI_WETH_USV3, zeroForOne
+        );
+
+        uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
+
+        assertGe(amountOut, expAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
+        assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
+    }
+
+    function encodeUniswapV3Swap(
+        address tokenIn,
+        address tokenOut,
+        address receiver,
+        address target,
+        bool zero2one
+    ) internal view returns (bytes memory) {
+        IUniswapV3Pool pool = IUniswapV3Pool(target);
+        return abi.encodePacked(
+            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
+        );
     }
 }
