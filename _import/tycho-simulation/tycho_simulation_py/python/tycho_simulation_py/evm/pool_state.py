@@ -356,7 +356,16 @@ class ThirdPartyPool:
             # use contract balances for overrides
             balances_by_token = dict()
             for contract, balances in self.contract_balances.items():
-                for token, amount in balances.items():
+                for token_address, amount in balances.items():
+                    token: Optional[EthereumToken] = None
+                    for t in self.tokens:
+                        if t.address.lower() == token_address.lower():
+                            token = t
+                            break
+                    if token is None:
+                        log.warning("Found balance for token not in pool. Overwrite skipped")
+                        continue
+                    amount = token.to_onchain_amount(amount)
                     if token in balances_by_token:
                         balances_by_token[token].append((contract, amount))
                     else:
@@ -395,6 +404,7 @@ class ThirdPartyPool:
             id_=self.id_,
             tokens=self.tokens,
             balances=self.balances,
+            contract_balances=self.contract_balances,
             block=self.block,
             marginal_prices=self.marginal_prices.copy(),
             adapter_contract_path=self.adapter_contract_path,
