@@ -11,11 +11,10 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "./ExecutionDispatcher.sol";
+import "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
-import "forge-std/console.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -26,7 +25,7 @@ error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 
 contract TychoRouter is
     AccessControl,
-    ExecutionDispatcher,
+    Dispatcher,
     Pausable,
     ReentrancyGuard,
     SafeCallback
@@ -390,16 +389,7 @@ contract TychoRouter is
         bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
         address executor = address(uint160(bytes20(data[data.length - 20:])));
         bytes memory protocolData = data[:data.length - 24];
-
-        if (!executors[executor]) {
-            revert ExecutionDispatcher__UnapprovedExecutor();
-        }
-
-        // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success,) = executor.delegatecall(
-            abi.encodeWithSelector(selector, protocolData)
-        );
-        require(success, "delegatecall to uniswap v4 callback failed");
+        _handleCallback(selector, abi.encodePacked(protocolData, executor));
         return "";
     }
 }
