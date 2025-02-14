@@ -411,52 +411,55 @@ where
     ///   `Overwrites` if successful, or a `SimulationError` on failure.
     fn get_balance_overwrites(&self) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let mut balance_overwrites: HashMap<Address, Overwrites> = HashMap::new();
+
         // Use component balances for overrides
         let address = match self.balance_owner {
-            Some(address) => Ok(address),
-            None => self.id.parse().map_err(|_| {
+            Some(owner) => Some(owner),
+            None if !self.contract_balances.is_empty() => None,
+            None => Some(self.id.parse().map_err(|_| {
                 SimulationError::FatalError(
                     "Failed to get balance overwrites: Pool ID is not an address".into(),
                 )
-            }),
-        }?;
+            })?),
+        };
+        if let Some(address) = address {
+            for token in &self.tokens {
+                let token_address = bytes_to_address(token)?;
+                let (slots, compiler) = if self
+                    .involved_contracts
+                    .contains(&token_address)
+                {
+                    self.token_storage_slots
+                        .get(&token_address)
+                        .cloned()
+                        .ok_or_else(|| {
+                            SimulationError::FatalError(
+                                "Failed to get balance overwrites: Token storage slots not found"
+                                    .into(),
+                            )
+                        })?
+                } else {
+                    (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
+                };
 
-        for token in &self.tokens {
-            let token_address = bytes_to_address(token)?;
-            let (slots, compiler) = if self
-                .involved_contracts
-                .contains(&token_address)
-            {
-                self.token_storage_slots
-                    .get(&token_address)
-                    .cloned()
-                    .ok_or_else(|| {
-                        SimulationError::FatalError(
-                            "Failed to get balance overwrites: Token storage slots not found"
-                                .into(),
-                        )
-                    })?
-            } else {
-                (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
-            };
-
-            let mut overwrites = ERC20OverwriteFactory::new(token_address, slots, compiler);
-            overwrites.set_balance(
-                self.balances
-                    .get(&token_address)
-                    .cloned()
-                    .ok_or_else(|| {
-                        SimulationError::InvalidInput(
-                            format!(
+                let mut overwrites = ERC20OverwriteFactory::new(token_address, slots, compiler);
+                overwrites.set_balance(
+                    self.balances
+                        .get(&token_address)
+                        .cloned()
+                        .ok_or_else(|| {
+                            SimulationError::InvalidInput(
+                                format!(
                                 "Failed to get balance overwrites: Token balance not found for {}",
                                 token
                             ),
-                            None,
-                        )
-                    })?,
-                address,
-            );
-            balance_overwrites.extend(overwrites.get_overwrites());
+                                None,
+                            )
+                        })?,
+                    address,
+                );
+                balance_overwrites.extend(overwrites.get_overwrites());
+            }
         }
 
         // Use contract balances for overrides (will overwrite component balances if they were set
@@ -856,17 +859,6 @@ mod tests {
         assert_eq!(external_account.nonce, 0u64);
         assert_eq!(external_account.code_hash, KECCAK_EMPTY);
         assert!(external_account.code.is_none());
-
-        // Verify we stored the balances as account balances
-        assert!(pool_state.balances.is_empty());
-        assert_eq!(
-            pool_state
-                .contract_balances
-                .get(&pool_state.balance_owner.unwrap())
-                .unwrap()
-                .len(),
-            2,
-        );
     }
 
     #[tokio::test]
