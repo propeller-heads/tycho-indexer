@@ -7837,8 +7837,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.56.1"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=09c2837#09c2837c404f381751c3eb71ed6d55965ad0f3aa"
+version = "0.57.1"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?tag=0.57.1#7b511da273ad1d7d1e13a27930f32ba4c8b54338"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7863,8 +7863,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-core"
-version = "0.56.1"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=09c2837#09c2837c404f381751c3eb71ed6d55965ad0f3aa"
+version = "0.57.1"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?tag=0.57.1#7b511da273ad1d7d1e13a27930f32ba4c8b54338"
 dependencies = [
  "anyhow",
  "async-trait",
