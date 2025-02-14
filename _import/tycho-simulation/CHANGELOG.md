@@ -1,3 +1,36 @@
+## [0.74.3](https://github.com/propeller-heads/tycho-simulation/compare/0.74.2...0.74.3) (2025-02-13)
+
+
+### Bug Fixes
+
+* dummy commit to trigger release of tycho dependency update ([7514713](https://github.com/propeller-heads/tycho-simulation/commit/7514713a1159826ba49c3ff52761e5a244ad4e8f))
+
+## [0.74.2](https://github.com/propeller-heads/tycho-simulation/compare/0.74.1...0.74.2) (2025-02-10)
+
+
+### Bug Fixes
+
+* Create a ProtocolComponent::new() that doesn't depend on tycho-core ([8f44f08](https://github.com/propeller-heads/tycho-simulation/commit/8f44f08025fe574ce80c10fea87d9ddbd909add6))
+
+## [0.74.1](https://github.com/propeller-heads/tycho-simulation/compare/0.74.0...0.74.1) (2025-02-10)
+
+
+### Bug Fixes
+
+* make TickList public ([82a6062](https://github.com/propeller-heads/tycho-simulation/commit/82a60628feecb88f0fe26996eba7f8d7363c1028))
+
+## [0.74.0](https://github.com/propeller-heads/tycho-simulation/compare/0.73.0...0.74.0) (2025-02-10)
+
+
+### Features
+
+* add filter args to load_all_tokens ([b1a76a8](https://github.com/propeller-heads/tycho-simulation/commit/b1a76a862714a6e33c1cb0a51b38796cab9c150c))
+
+
+### Bug Fixes
+
+* improve load_all_tokens arg names ([cfc4f51](https://github.com/propeller-heads/tycho-simulation/commit/cfc4f5193d595b6ec079886f949d8d1ef8a14df6))
+
 ## [0.73.0](https://github.com/propeller-heads/tycho-simulation/compare/0.72.0...0.73.0) (2025-02-06)
 
 
