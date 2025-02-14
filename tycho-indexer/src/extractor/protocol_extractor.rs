@@ -177,28 +177,43 @@ where
             let distance_to_current = current_block - block.number;
             let blocks_processed = block.number - state.last_report_block_number;
             let blocks_per_minute = blocks_processed as f64 * 60.0 / time_passed as f64;
-            let time_remaining =
-                chrono::Duration::minutes((distance_to_current as f64 / blocks_per_minute) as i64);
-            let hours = time_remaining.num_hours();
-            let minutes = (time_remaining.num_minutes()) % 60;
-            info!(
-                extractor_id = self.name,
-                blocks_per_minute = format!("{blocks_per_minute:.2}"),
-                blocks_processed,
-                height = block.number,
-                estimated_current = current_block,
-                time_remaining = format!("{:02}h{:02}m", hours, minutes),
-                name = "SyncProgress"
-            );
+            if let Some(time_remaining) = chrono::Duration::try_minutes(
+                (distance_to_current as f64 / blocks_per_minute) as i64,
+            ) {
+                let hours = time_remaining.num_hours();
+                let minutes = (time_remaining.num_minutes()) % 60;
+                info!(
+                    extractor_id = self.name,
+                    blocks_per_minute = format!("{blocks_per_minute:.2}"),
+                    blocks_processed,
+                    height = block.number,
+                    estimated_current = current_block,
+                    time_remaining = format!("{:02}h{:02}m", hours, minutes),
+                    name = "SyncProgress"
+                );
+                let extractor_id = self.get_id();
+                gauge!(
+                    "extractor_sync_remaining_minutes",
+                    "chain" => extractor_id.chain.to_string(),
+                    "extractor" => extractor_id.name.to_string(),
+                )
+                .set(time_remaining.num_minutes() as f64);
+            } else {
+                warn!(
+                    "Failed to convert {} to a duration",
+                    (distance_to_current as f64 / blocks_per_minute) as i64,
+                );
+                info!(
+                    extractor_id = self.name,
+                    blocks_per_minute = format!("{blocks_per_minute:.2}"),
+                    blocks_processed,
+                    height = block.number,
+                    estimated_current = current_block,
+                    name = "SyncProgress"
+                );
+            }
             state.last_report_ts = now;
             state.last_report_block_number = block.number;
-            let extractor_id = self.get_id();
-            gauge!(
-                "extractor_sync_remaining_minutes",
-                "chain" => extractor_id.chain.to_string(),
-                "extractor" => extractor_id.name.to_string(),
-            )
-            .set(time_remaining.num_minutes() as f64);
         }
     }
 
