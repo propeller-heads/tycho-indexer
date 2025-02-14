@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
+import "@interfaces/ICallback.sol";
 import "forge-std/console.sol";
 
 error ExecutionDispatcher__UnapprovedExecutor();
@@ -95,11 +96,13 @@ contract ExecutionDispatcher {
             revert ExecutionDispatcher__UnapprovedExecutor();
         }
 
-        selector =
-            selector == bytes4(0) ? IExecutor.handleCallback.selector : selector;
+        selector = selector == bytes4(0)
+            ? ICallback.handleCallback.selector
+            : selector;
         // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success, bytes memory result) =
-            executor.delegatecall(abi.encodeWithSelector(selector, data));
+        (bool success, bytes memory result) = executor.delegatecall(
+            abi.encodeWithSelector(selector, data)
+        );
 
         if (!success) {
             revert(
