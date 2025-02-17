@@ -1,3 +1,18 @@
+## [0.39.0](https://github.com/propeller-heads/tycho-execution/compare/0.38.0...0.39.0) (2025-02-14)
+
+
+### Features
+
+* **univ4:** Implement swapping with multiple hops ([21a8c1a](https://github.com/propeller-heads/tycho-execution/commit/21a8c1a27a8370bf7471b206e78b6a2fcf38ce00))
+* **univ4:** Refactor input and handle single swap case ([be7883a](https://github.com/propeller-heads/tycho-execution/commit/be7883affc2e481fce76dcd762215efb83905478))
+
+
+### Bug Fixes
+
+* Fix PLE tests that break after foundry update ([69d03f0](https://github.com/propeller-heads/tycho-execution/commit/69d03f060872bf9cce313f2420dc95c6d7554dec))
+* **univ4:** Append callback data instead of prepending ([4d0f5ce](https://github.com/propeller-heads/tycho-execution/commit/4d0f5cec64af9c65f5a03685d4c89bb0dd0a897c))
+* **univ4:** Make slither happy ([8a8bc69](https://github.com/propeller-heads/tycho-execution/commit/8a8bc697eb68308aedf74bd605d2f555328df99c))
+
 ## [0.38.0](https://github.com/propeller-heads/tycho-execution/compare/0.37.0...0.38.0) (2025-02-13)
 
 
