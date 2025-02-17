@@ -6,6 +6,7 @@ import "@interfaces/ICallback.sol";
 
 error Dispatcher__UnapprovedExecutor();
 error Dispatcher__NonContractExecutor();
+error Dispatcher__InvalidDataLength();
 
 /**
  * @title Dispatcher - Dispatch execution to external contracts
@@ -81,16 +82,11 @@ contract Dispatcher {
         calculatedAmount = abi.decode(result, (uint256));
     }
 
-    function _handleCallback(bytes4 selector, bytes memory data) internal {
-        // Using assembly to access the last 20 bytes of the bytes memory data
-        address executor;
-        // slither-disable-next-line assembly
-        assembly {
-            let pos := sub(add(add(data, 0x20), mload(data)), 20)
-            executor := mload(pos)
-            executor := shr(96, executor)
-        }
-
+    function _handleCallback(
+        bytes4 selector,
+        address executor,
+        bytes memory data
+    ) internal {
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor();
         }

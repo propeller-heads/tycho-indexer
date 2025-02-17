@@ -21,6 +21,7 @@ error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
+error TychoRouter__InvalidDataLength();
 
 contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     IAllowanceTransfer public immutable permit2;
@@ -215,12 +216,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
     /**
      * @dev We use the fallback function to allow flexibility on callback.
-     * This function will static call a verifier contract and should revert if the
-     *  caller is not a pool.
      */
     fallback() external {
-        bytes4 selector = bytes4(msg.data[:4]);
-        _handleCallback(selector, msg.data[4:]);
+        address executor =
+            address(uint160(bytes20(msg.data[msg.data.length - 20:])));
+        bytes4 selector =
+            bytes4(msg.data[msg.data.length - 24:msg.data.length - 20]);
+        bytes memory protocolData = msg.data[:msg.data.length - 24];
+        _handleCallback(selector, executor, protocolData);
     }
 
     /**
@@ -364,22 +367,31 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     function uniswapV3SwapCallback(
         int256 amount0Delta,
         int256 amount1Delta,
-        bytes calldata msgData
+        bytes calldata data
     ) external {
+        if (data.length < 24) revert TychoRouter__InvalidDataLength();
+        address executor = address(uint160(bytes20(data[data.length - 20:])));
+        bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
+        bytes memory protocolData = data[:data.length - 24];
         _handleCallback(
-            bytes4(0), abi.encodePacked(amount0Delta, amount1Delta, msgData)
+            selector,
+            executor,
+            abi.encodePacked(amount0Delta, amount1Delta, protocolData)
         );
     }
 
+    /**
+     * @dev Called by UniswapV4 pool manager after achieving unlock state.
+     */
     function unlockCallback(bytes calldata data)
         external
         returns (bytes memory)
     {
-        require(data.length >= 20, "Invalid data length");
-        bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
+        if (data.length < 24) revert TychoRouter__InvalidDataLength();
         address executor = address(uint160(bytes20(data[data.length - 20:])));
+        bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
         bytes memory protocolData = data[:data.length - 24];
-        _handleCallback(selector, abi.encodePacked(protocolData, executor));
+        _handleCallback(selector, executor, protocolData);
         return "";
     }
 }
