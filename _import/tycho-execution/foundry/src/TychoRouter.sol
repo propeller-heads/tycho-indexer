@@ -370,8 +370,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         bytes calldata data
     ) external {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        address executor = address(uint160(bytes20(data[data.length - 20:])));
-        bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
+        bytes4 selector = bytes4(data[data.length - 4:]);
+        address executor = address(uint160(bytes20(data[data.length - 24:])));
         bytes memory protocolData = data[:data.length - 24];
         _handleCallback(
             selector,
@@ -388,8 +388,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         returns (bytes memory)
     {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        address executor = address(uint160(bytes20(data[data.length - 20:])));
-        bytes4 selector = bytes4(data[data.length - 24:data.length - 20]);
+        bytes4 selector = bytes4(data[data.length - 4:]);
+        address executor =
+            address(uint160(bytes20(data[data.length - 24:data.length - 4])));
         bytes memory protocolData = data[:data.length - 24];
         _handleCallback(selector, executor, protocolData);
         return "";

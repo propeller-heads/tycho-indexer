@@ -29,10 +29,11 @@ contract UniswapV3Executor is IExecutor, ICallback {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(
-        uint256 amountIn,
-        bytes calldata data
-    ) external payable returns (uint256 amountOut) {
+    function swap(uint256 amountIn, bytes calldata data)
+        external
+        payable
+        returns (uint256 amountOut)
+    {
         (
             address tokenIn,
             address tokenOut,
@@ -75,9 +76,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
             abi.encodeWithSelector(
                 ICallback.handleCallback.selector,
                 abi.encodePacked(
-                    amount0Delta,
-                    amount1Delta,
-                    data[:data.length - 20]
+                    amount0Delta, amount1Delta, data[:data.length - 20]
                 )
             )
         );
@@ -92,21 +91,19 @@ contract UniswapV3Executor is IExecutor, ICallback {
         }
     }
 
-    function handleCallback(
-        bytes calldata msgData
-    ) external returns (bytes memory result) {
-        (int256 amount0Delta, int256 amount1Delta) = abi.decode(
-            msgData[:64],
-            (int256, int256)
-        );
+    function handleCallback(bytes calldata msgData)
+        external
+        returns (bytes memory result)
+    {
+        (int256 amount0Delta, int256 amount1Delta) =
+            abi.decode(msgData[:64], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[64:84]));
 
         verifyCallback(msgData[64:]);
 
-        uint256 amountOwed = amount0Delta > 0
-            ? uint256(amount0Delta)
-            : uint256(amount1Delta);
+        uint256 amountOwed =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
         IERC20(tokenIn).safeTransfer(msg.sender, amountOwed);
         return abi.encode(amountOwed, tokenIn);
@@ -118,17 +115,10 @@ contract UniswapV3Executor is IExecutor, ICallback {
         uint24 poolFee = uint24(bytes3(data[40:43]));
 
         // slither-disable-next-line unused-return
-        CallbackValidationV2.verifyCallback(
-            factory,
-            tokenIn,
-            tokenOut,
-            poolFee
-        );
+        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
     }
 
-    function _decodeData(
-        bytes calldata data
-    )
+    function _decodeData(bytes calldata data)
         internal
         pure
         returns (
@@ -151,18 +141,13 @@ contract UniswapV3Executor is IExecutor, ICallback {
         zeroForOne = uint8(data[83]) > 0;
     }
 
-    function _makeV3CallbackData(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee
-    ) internal view returns (bytes memory) {
-        return
-            abi.encodePacked(
-                tokenIn,
-                tokenOut,
-                fee,
-                ICallback.handleCallback.selector,
-                self
-            );
+    function _makeV3CallbackData(address tokenIn, address tokenOut, uint24 fee)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return abi.encodePacked(
+            tokenIn, tokenOut, fee, self, ICallback.handleCallback.selector
+        );
     }
 }
