@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -115,7 +115,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
             .contract_ids
             .iter()
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
-            .collect();
+            .collect::<HashSet<Address>>();
 
         let protocol_name = snapshot
             .component
@@ -228,7 +228,7 @@ mod tests {
     fn load_balancer_account_data() -> Vec<AccountUpdate> {
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path =
-            Path::new(project_root).join("tests/assets/decoder/balancer_snapshot.json");
+            Path::new(project_root).join("tests/assets/decoder/balancer_v2_snapshot.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
 
@@ -312,14 +312,16 @@ mod tests {
             .await
             .unwrap();
 
+        let res_pool = res;
+
         assert_eq!(
-            res.get_balance_owner(),
+            res_pool.get_balance_owner(),
             Some(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
         );
         let mut exp_involved_contracts = HashSet::new();
         exp_involved_contracts
             .insert(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap());
-        assert_eq!(res.get_involved_contracts(), exp_involved_contracts);
-        assert!(res.get_manual_updates());
+        assert_eq!(res_pool.get_involved_contracts(), exp_involved_contracts);
+        assert!(res_pool.get_manual_updates());
     }
 }
