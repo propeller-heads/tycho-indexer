@@ -1,3 +1,16 @@
+## [0.75.0](https://github.com/propeller-heads/tycho-simulation/compare/0.74.4...0.75.0) (2025-02-17)
+
+
+### Features
+
+* track contract to pool state map on tycho decoder ([1750dcf](https://github.com/propeller-heads/tycho-simulation/commit/1750dcf57e66915b7a078ca9ba32c3aa8384b089))
+* trigger pool updates on related contract changes ([f19e656](https://github.com/propeller-heads/tycho-simulation/commit/f19e656b538006e0be69787d8306b931780fd66c))
+
+
+### Bug Fixes
+
+* update both new and existing pools related to the contract updated ([33284ad](https://github.com/propeller-heads/tycho-simulation/commit/33284ad3b269f7dc24265c91970128a656341489))
+
 ## [0.74.4](https://github.com/propeller-heads/tycho-simulation/compare/0.74.3...0.74.4) (2025-02-14)
 
 ## [0.74.3](https://github.com/propeller-heads/tycho-simulation/compare/0.74.2...0.74.3) (2025-02-13)
