@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import "@src/ExecutionDispatcher.sol";
+import "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 
-contract ExecutionDispatcherExposed is ExecutionDispatcher {
+contract DispatcherExposed is Dispatcher {
     function exposedCallExecutor(
         address executor,
         bytes4 selector,
@@ -23,8 +23,8 @@ contract ExecutionDispatcherExposed is ExecutionDispatcher {
     }
 }
 
-contract ExecutionDispatcherTest is Constants {
-    ExecutionDispatcherExposed dispatcherExposed;
+contract DispatcherTest is Constants {
+    DispatcherExposed dispatcherExposed;
 
     event ExecutorSet(address indexed executor);
     event ExecutorRemoved(address indexed executor);
@@ -32,7 +32,7 @@ contract ExecutionDispatcherTest is Constants {
     function setUp() public {
         uint256 forkBlock = 20673900;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        dispatcherExposed = new ExecutionDispatcherExposed();
+        dispatcherExposed = new DispatcherExposed();
         deal(WETH_ADDR, address(dispatcherExposed), 15 ether);
         deployDummyContract();
     }
@@ -61,9 +61,7 @@ contract ExecutionDispatcherTest is Constants {
 
     function testSetExecutorNonContract() public {
         vm.expectRevert(
-            abi.encodeWithSelector(
-                ExecutionDispatcher__NonContractExecutor.selector
-            )
+            abi.encodeWithSelector(Dispatcher__NonContractExecutor.selector)
         );
         dispatcherExposed.exposedSetExecutor(BOB);
     }

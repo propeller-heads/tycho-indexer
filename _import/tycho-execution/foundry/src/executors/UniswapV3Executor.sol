@@ -4,13 +4,29 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "@uniswap/v3-updated/CallbackValidationV2.sol";
+import "@interfaces/ICallback.sol";
 
 error UniswapV3Executor__InvalidDataLength();
+error UniswapV3Executor__InvalidFactory();
 
-contract UniswapV3Executor is IExecutor {
+contract UniswapV3Executor is IExecutor, ICallback {
+    using SafeERC20 for IERC20;
+
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
+
+    address public immutable factory;
+    address private immutable self;
+
+    constructor(address _factory) {
+        if (_factory == address(0)) {
+            revert UniswapV3Executor__InvalidFactory();
+        }
+        factory = _factory;
+        self = address(this);
+    }
 
     // slither-disable-next-line locked-ether
     function swap(uint256 amountIn, bytes calldata data)
@@ -50,6 +66,54 @@ contract UniswapV3Executor is IExecutor {
         }
     }
 
+    function handleCallback(bytes calldata msgData)
+        public
+        returns (bytes memory result)
+    {
+        // The data has the following layout:
+        // - amount0Delta (32 bytes)
+        // - amount1Delta (32 bytes)
+        // - dataOffset (32 bytes)
+        // - dataLength (32 bytes)
+        // - protocolData (variable length)
+
+        (int256 amount0Delta, int256 amount1Delta) =
+            abi.decode(msgData[:64], (int256, int256));
+
+        address tokenIn = address(bytes20(msgData[128:148]));
+
+        verifyCallback(msgData[128:]);
+
+        uint256 amountOwed =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+
+        IERC20(tokenIn).safeTransfer(msg.sender, amountOwed);
+        return abi.encode(amountOwed, tokenIn);
+    }
+
+    function verifyCallback(bytes calldata data) public view {
+        address tokenIn = address(bytes20(data[0:20]));
+        address tokenOut = address(bytes20(data[20:40]));
+        uint24 poolFee = uint24(bytes3(data[40:43]));
+
+        // slither-disable-next-line unused-return
+        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
+    }
+
+    function uniswapV3SwapCallback(
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
+        bytes calldata /* data */
+    ) external {
+        uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
+        uint256 dataLength =
+            uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
+
+        bytes calldata fullData = msg.data[4:dataOffset + 32 + dataLength];
+
+        handleCallback(fullData);
+    }
+
     function _decodeData(bytes calldata data)
         internal
         pure
@@ -75,9 +139,11 @@ contract UniswapV3Executor is IExecutor {
 
     function _makeV3CallbackData(address tokenIn, address tokenOut, uint24 fee)
         internal
-        pure
+        view
         returns (bytes memory)
     {
-        return abi.encodePacked(tokenIn, tokenOut, fee);
+        return abi.encodePacked(
+            tokenIn, tokenOut, fee, self, ICallback.handleCallback.selector
+        );
     }
 }

@@ -38,6 +38,7 @@ contract Constants is Test {
     address USDC_WBTC_POOL = 0x004375Dff511095CC5A197A54140a24eFEF3A416;
 
     // uniswap v3
+    address USV3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
 
     /**

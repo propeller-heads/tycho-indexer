@@ -2,12 +2,14 @@
 pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
+import "@interfaces/ICallback.sol";
 
-error ExecutionDispatcher__UnapprovedExecutor();
-error ExecutionDispatcher__NonContractExecutor();
+error Dispatcher__UnapprovedExecutor();
+error Dispatcher__NonContractExecutor();
+error Dispatcher__InvalidDataLength();
 
 /**
- * @title ExecutionDispatcher - Dispatch execution to external contracts
+ * @title Dispatcher - Dispatch execution to external contracts
  * @author PropellerHeads Devs
  * @dev Provides the ability to delegate execution of swaps to external
  *  contracts. This allows dynamically adding new supported protocols
@@ -18,7 +20,7 @@ error ExecutionDispatcher__NonContractExecutor();
  *  Note: Executor contracts need to implement the IExecutor interface unless
  *  an alternate selector is specified.
  */
-contract ExecutionDispatcher {
+contract Dispatcher {
     mapping(address => bool) public executors;
 
     event ExecutorSet(address indexed executor);
@@ -31,7 +33,7 @@ contract ExecutionDispatcher {
      */
     function _setExecutor(address target) internal {
         if (target.code.length == 0) {
-            revert ExecutionDispatcher__NonContractExecutor();
+            revert Dispatcher__NonContractExecutor();
         }
         executors[target] = true;
         emit ExecutorSet(target);
@@ -58,7 +60,7 @@ contract ExecutionDispatcher {
         bytes calldata data
     ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
-            revert ExecutionDispatcher__UnapprovedExecutor();
+            revert Dispatcher__UnapprovedExecutor();
         }
 
         selector = selector == bytes4(0) ? IExecutor.swap.selector : selector;
@@ -78,5 +80,30 @@ contract ExecutionDispatcher {
         }
 
         calculatedAmount = abi.decode(result, (uint256));
+    }
+
+    function _handleCallback(bytes calldata data) internal {
+        bytes4 selector = bytes4(data[data.length - 4:]);
+        address executor = address(uint160(bytes20(data[data.length - 24:])));
+
+        if (!executors[executor]) {
+            revert Dispatcher__UnapprovedExecutor();
+        }
+
+        selector =
+            selector == bytes4(0) ? ICallback.handleCallback.selector : selector;
+        // slither-disable-next-line controlled-delegatecall,low-level-calls
+        (bool success, bytes memory result) =
+            executor.delegatecall(abi.encodeWithSelector(selector, data));
+
+        if (!success) {
+            revert(
+                string(
+                    result.length > 0
+                        ? result
+                        : abi.encodePacked("Callback failed")
+                )
+            );
+        }
     }
 }

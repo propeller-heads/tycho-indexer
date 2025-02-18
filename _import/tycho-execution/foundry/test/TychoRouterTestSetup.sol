@@ -12,12 +12,7 @@ import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(
-        IPoolManager _poolManager,
-        address _permit2,
-        address weth,
-        address usv3Factory
-    ) TychoRouter(_poolManager, _permit2, weth, usv3Factory) {}
+    constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
 
     function wrapETH(uint256 amount) external payable {
         return _wrapETH(amount);
@@ -50,12 +45,10 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);
-        address factoryV3 = address(0x1F98431c8aD98523631AE4a59f267346ea31F984);
+        address factoryV3 = USV3_FACTORY;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        tychoRouter = new TychoRouterExposed(
-            poolManager, permit2Address, WETH_ADDR, factoryV3
-        );
+        tychoRouter = new TychoRouterExposed(permit2Address, WETH_ADDR);
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
@@ -68,7 +61,7 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.stopPrank();
 
         usv2Executor = new UniswapV2Executor();
-        usv3Executor = new UniswapV3Executor();
+        usv3Executor = new UniswapV3Executor(factoryV3);
         usv4Executor = new UniswapV4Executor(poolManager);
         vm.startPrank(EXECUTOR_SETTER);
         address[] memory executors = new address[](3);

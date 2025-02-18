@@ -5,6 +5,7 @@ import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 import "./executors/UniswapV4Utils.sol";
+import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterTest is TychoRouterTestSetup {
     bytes32 public constant EXECUTOR_SETTER_ROLE =
@@ -61,31 +62,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
         address[] memory executors = new address[](1);
         executors[0] = DUMMY;
         tychoRouter.setExecutors(executors);
-    }
-
-    function testSetVerifierValidRole() public {
-        vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setCallbackVerifier(DUMMY);
-        vm.stopPrank();
-        assert(tychoRouter.callbackVerifiers(DUMMY) == true);
-    }
-
-    function testRemoveVerifierValidRole() public {
-        vm.startPrank(EXECUTOR_SETTER);
-        tychoRouter.setCallbackVerifier(DUMMY);
-        tychoRouter.removeCallbackVerifier(DUMMY);
-        vm.stopPrank();
-        assert(tychoRouter.callbackVerifiers(DUMMY) == false);
-    }
-
-    function testRemoveVerifierMissingSetterRole() public {
-        vm.expectRevert();
-        tychoRouter.removeCallbackVerifier(BOB);
-    }
-
-    function testSetVerifierMissingSetterRole() public {
-        vm.expectRevert();
-        tychoRouter.setCallbackVerifier(DUMMY);
     }
 
     function testWithdrawNative() public {
@@ -624,24 +600,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(ALICE.balance, expectedAmount);
 
         vm.stopPrank();
-    }
-
-    function testUSV3Callback() public {
-        uint24 poolFee = 3000;
-        uint256 amountOwed = 1000000000000000000;
-        deal(WETH_ADDR, tychoRouterAddr, amountOwed);
-        uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
-
-        vm.startPrank(DAI_WETH_USV3);
-        tychoRouter.uniswapV3SwapCallback(
-            -2631245338449998525223,
-            int256(amountOwed),
-            abi.encodePacked(WETH_ADDR, DAI_ADDR, poolFee)
-        );
-        vm.stopPrank();
-
-        uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
-        assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
     }
 
     function testSwapSingleUSV3() public {

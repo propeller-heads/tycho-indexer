@@ -6,6 +6,8 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
+    constructor(address _factory) UniswapV3Executor(_factory) {}
+
     function decodeData(bytes calldata data)
         external
         pure
@@ -22,7 +24,7 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     }
 }
 
-contract UniswapV3ExecutorTest is UniswapV3ExecutorExposed, Test, Constants {
+contract UniswapV3ExecutorTest is Test, Constants {
     using SafeERC20 for IERC20;
 
     UniswapV3ExecutorExposed uniswapV3Exposed;
@@ -32,7 +34,8 @@ contract UniswapV3ExecutorTest is UniswapV3ExecutorExposed, Test, Constants {
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV3Exposed = new UniswapV3ExecutorExposed();
+
+        uniswapV3Exposed = new UniswapV3ExecutorExposed(USV3_FACTORY);
     }
 
     function testDecodeParams() public view {
@@ -64,5 +67,62 @@ contract UniswapV3ExecutorTest is UniswapV3ExecutorExposed, Test, Constants {
 
         vm.expectRevert(UniswapV3Executor__InvalidDataLength.selector);
         uniswapV3Exposed.decodeData(invalidParams);
+    }
+
+    function testUSV3Callback() public {
+        uint24 poolFee = 3000;
+        uint256 amountOwed = 1000000000000000000;
+        deal(WETH_ADDR, address(uniswapV3Exposed), amountOwed);
+        uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
+
+        vm.startPrank(DAI_WETH_USV3);
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, DAI_ADDR, poolFee);
+        uint256 dataOffset = 3; // some offset
+        uint256 dataLength = protocolData.length;
+
+        bytes memory callbackData = abi.encodePacked(
+            int256(amountOwed), // amount0Delta
+            int256(0), // amount1Delta
+            dataOffset,
+            dataLength,
+            protocolData
+        );
+        uniswapV3Exposed.handleCallback(callbackData);
+        vm.stopPrank();
+
+        uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
+        assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
+    }
+
+    function testSwapIntegration() public {
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
+
+        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = false;
+
+        bytes memory data = encodeUniswapV3Swap(
+            WETH_ADDR, DAI_ADDR, address(this), DAI_WETH_USV3, zeroForOne
+        );
+
+        uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
+
+        assertGe(amountOut, expAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
+        assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
+    }
+
+    function encodeUniswapV3Swap(
+        address tokenIn,
+        address tokenOut,
+        address receiver,
+        address target,
+        bool zero2one
+    ) internal view returns (bytes memory) {
+        IUniswapV3Pool pool = IUniswapV3Pool(target);
+        return abi.encodePacked(
+            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
+        );
     }
 }

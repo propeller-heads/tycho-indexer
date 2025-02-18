@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import "../lib/IWETH.sol";
 import "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
-import "./CallbackVerificationDispatcher.sol";
+
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -11,12 +11,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "@uniswap/v3-updated/CallbackValidationV2.sol";
-import "./ExecutionDispatcher.sol";
-import "./CallbackVerificationDispatcher.sol";
+import "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -24,15 +21,9 @@ error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
+error TychoRouter__InvalidDataLength();
 
-contract TychoRouter is
-    AccessControl,
-    ExecutionDispatcher,
-    CallbackVerificationDispatcher,
-    Pausable,
-    ReentrancyGuard,
-    SafeCallback
-{
+contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     IAllowanceTransfer public immutable permit2;
     IWETH private immutable _weth;
 
@@ -66,24 +57,13 @@ contract TychoRouter is
     );
     event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
-    address private immutable _usv3Factory;
-
-    constructor(
-        IPoolManager _poolManager,
-        address _permit2,
-        address weth,
-        address usv3Factory
-    ) SafeCallback(_poolManager) {
-        if (
-            _permit2 == address(0) || weth == address(0)
-                || usv3Factory == address(0)
-        ) {
+    constructor(address _permit2, address weth) {
+        if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _weth = IWETH(weth);
-        _usv3Factory = usv3Factory;
     }
 
     /**
@@ -236,21 +216,9 @@ contract TychoRouter is
 
     /**
      * @dev We use the fallback function to allow flexibility on callback.
-     * This function will static call a verifier contract and should revert if the
-     *  caller is not a pool.
      */
     fallback() external {
-        _executeGenericCallback(msg.data);
-    }
-
-    /**
-     * @dev Check if the sender is correct and executes callback actions.
-     *  @param msgData encoded data. It must includes data for the verification.
-     */
-    function _executeGenericCallback(bytes calldata msgData) internal {
-        (uint256 amountOwed, address tokenOwed) = _callVerifyCallback(msgData);
-
-        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
+        _handleCallback(msg.data);
     }
 
     /**
@@ -301,28 +269,6 @@ contract TychoRouter is
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
         _removeExecutor(target);
-    }
-
-    /**
-     * @dev Entrypoint to add or replace an approved callback verifier contract address
-     * @param target address of the callback verifier contract
-     */
-    function setCallbackVerifier(address target)
-        external
-        onlyRole(EXECUTOR_SETTER_ROLE)
-    {
-        _setCallbackVerifier(target);
-    }
-
-    /**
-     * @dev Entrypoint to remove an approved callback verifier contract address
-     * @param target address of the callback verifier contract
-     */
-    function removeCallbackVerifier(address target)
-        external
-        onlyRole(EXECUTOR_SETTER_ROLE)
-    {
-        _removeCallbackVerifier(target);
     }
 
     /**
@@ -414,55 +360,30 @@ contract TychoRouter is
      * See in IUniswapV3SwapCallback for documentation.
      */
     function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata msgData
-    ) external {
-        (uint256 amountOwed, address tokenOwed) =
-            _verifyUSV3Callback(amount0Delta, amount1Delta, msgData);
-        IERC20(tokenOwed).safeTransfer(msg.sender, amountOwed);
-    }
-
-    function _verifyUSV3Callback(
-        int256 amount0Delta,
-        int256 amount1Delta,
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
         bytes calldata data
-    ) internal view returns (uint256 amountIn, address tokenIn) {
-        tokenIn = address(bytes20(data[0:20]));
-        address tokenOut = address(bytes20(data[20:40]));
-        uint24 poolFee = uint24(bytes3(data[40:43]));
+    ) external {
+        if (data.length < 24) revert TychoRouter__InvalidDataLength();
+        // We are taking advantage of the fact that the data we need is already encoded in the correct format inside msg.data
+        // This way we preserve the bytes calldata (and don't need to convert it to bytes memory)
+        uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
+        uint256 dataLength =
+            uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
 
-        // slither-disable-next-line unused-return
-        CallbackValidationV2.verifyCallback(
-            _usv3Factory, tokenIn, tokenOut, poolFee
-        );
-
-        amountIn =
-            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
-
-        return (amountIn, tokenIn);
+        bytes calldata fullData = msg.data[4:dataOffset + 32 + dataLength];
+        _handleCallback(fullData);
     }
 
-    function _unlockCallback(bytes calldata data)
-        internal
-        override
+    /**
+     * @dev Called by UniswapV4 pool manager after achieving unlock state.
+     */
+    function unlockCallback(bytes calldata data)
+        external
         returns (bytes memory)
     {
-        require(data.length >= 20, "Invalid data length");
-        bytes4 selector = bytes4(data[data.length - 4:]);
-        address executor =
-            address(uint160(bytes20(data[data.length - 24:data.length - 4])));
-        bytes memory protocolData = data[:data.length - 24];
-
-        if (!executors[executor]) {
-            revert ExecutionDispatcher__UnapprovedExecutor();
-        }
-
-        // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success,) = executor.delegatecall(
-            abi.encodeWithSelector(selector, protocolData)
-        );
-        require(success, "delegatecall to uniswap v4 callback failed");
+        if (data.length < 24) revert TychoRouter__InvalidDataLength();
+        _handleCallback(data);
         return "";
     }
 }
