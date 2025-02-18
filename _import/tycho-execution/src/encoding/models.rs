@@ -65,7 +65,7 @@ pub enum NativeAction {
 }
 
 /// Represents a swap operation to be performed on a pool.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Swap {
     /// Protocol component from tycho indexer
     pub component: ProtocolComponent,
@@ -111,6 +111,7 @@ pub struct Transaction {
 /// * `receiver`: Address of the receiver of the out token after the swaps are completed.
 /// * `exact_out`: true if the solution is a buy order, false if it is a sell order.
 /// * `router_address`: Address of the router contract to be used for the swaps.
+#[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,

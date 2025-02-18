@@ -1,20 +1,20 @@
-use std::{
-    cmp::max,
-    collections::{HashMap, HashSet, VecDeque},
-    str::FromStr,
-};
+use std::{collections::HashSet, str::FromStr};
 
 use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
-use num_bigint::BigUint;
 use tycho_core::{keccak256, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
+        constants::GROUPABLE_PROTOCOLS,
+        strategy_encoder::strategy_validators::SplitSwapValidator,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
-        utils::{biguint_to_u256, bytes_to_address, encode_input, percentage_to_uint24},
+        utils::{
+            biguint_to_u256, bytes_to_address, encode_input, get_min_amount_for_solution,
+            get_token_position, percentage_to_uint24,
+        },
     },
     models::{Chain, EncodingContext, NativeAction, Solution, Swap},
     strategy_encoder::StrategyEncoder,
@@ -66,6 +66,24 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
     }
 }
 
+/// Represents a group of swaps that can be encoded into a single swap execution for gas
+/// optimization.
+///
+/// # Fields
+/// * `input_token`: Bytes, the input token of the first swap
+/// * `output_token`: Bytes, the output token of the final swap
+/// * `protocol_system`: String, the protocol system of the swaps
+/// * `swaps`: Vec<Swap>, the sequence of swaps to be executed as a group
+/// * `split`: f64, the split percentage of the first swap in the group
+#[derive(Clone, PartialEq, Debug)]
+pub struct SwapGroup {
+    input_token: Bytes,
+    output_token: Bytes,
+    protocol_system: String,
+    swaps: Vec<Swap>,
+    split: f64,
+}
+
 /// Represents the encoder for a swap strategy which supports single, sequential and split swaps.
 ///
 /// # Fields
@@ -73,6 +91,10 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 /// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
 ///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
+/// * `native_address`: Address of the chain's native token
+/// * `wrapped_address`: Address of the chain's wrapped token
+/// * `split_swap_validator`: SplitSwapValidator, responsible for checking validity of split swap
+///   solutions
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -80,6 +102,7 @@ pub struct SplitSwapStrategyEncoder {
     selector: String,
     native_address: Bytes,
     wrapped_address: Bytes,
+    split_swap_validator: SplitSwapValidator,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -95,169 +118,59 @@ impl SplitSwapStrategyEncoder {
             swap_encoder_registry,
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
+            split_swap_validator: SplitSwapValidator,
         })
     }
 
-    /// Raises an error if the split percentages are invalid.
+    /// Group consecutive swaps which can be encoded into one swap execution for gas optimization.
     ///
-    /// Split percentages are considered valid if all the following conditions are met:
-    /// * Each split amount is < 1 (100%)
-    /// * There is exactly one 0% split for each token, and it's the last swap specified, signifying
-    ///   to the router to send the remainder of the token to the designated protocol
-    /// * The sum of all non-remainder splits for each token is < 1 (100%)
-    /// * There are no negative split amounts
-    fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
-        let mut swaps_by_token: HashMap<Bytes, Vec<&Swap>> = HashMap::new();
+    /// An example where this applies is the case of USV4, which uses a PoolManager contract
+    /// to save token transfers on consecutive swaps.
+    fn group_swaps(&self, swaps: Vec<Swap>) -> Vec<SwapGroup> {
+        let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
+        let mut current_group: Option<SwapGroup> = None;
+        let mut last_swap_protocol = "".to_string();
+        let mut groupable_protocol;
+        let mut last_swap_out_token = Bytes::default();
         for swap in swaps {
-            if swap.split >= 1.0 {
-                return Err(EncodingError::InvalidInput(format!(
-                    "Split percentage must be less than 1 (100%), got {}",
-                    swap.split
-                )));
-            }
-            swaps_by_token
-                .entry(swap.token_in.clone())
-                .or_default()
-                .push(swap);
-        }
+            let current_swap_protocol = swap.component.protocol_system.clone();
+            groupable_protocol = GROUPABLE_PROTOCOLS.contains(&current_swap_protocol.as_str());
 
-        for (token, token_swaps) in swaps_by_token {
-            // Single swaps don't need remainder handling
-            if token_swaps.len() == 1 {
-                if token_swaps[0].split != 0.0 {
-                    return Err(EncodingError::InvalidInput(format!(
-                        "Single swap must have 0% split for token {:?}",
-                        token
-                    )));
+            // Split 0 can also mean that the swap is the remaining part of a branch of splits,
+            // so we need to check the last swap's out token as well
+            let no_split = swap.split == 0.0 && swap.token_in == last_swap_out_token;
+
+            if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
+                // Second or later groupable pool in a sequence of groupable pools. Merge to the
+                // current group.
+                if let Some(group) = current_group.as_mut() {
+                    group.swaps.push(swap.clone());
+                    // Update the output token of the current group.
+                    group.output_token = swap.token_out.clone();
                 }
-                continue;
-            }
-
-            let mut found_zero_split = false;
-            let mut total_percentage = 0.0;
-            for (i, swap) in token_swaps.iter().enumerate() {
-                match (swap.split == 0.0, i == token_swaps.len() - 1) {
-                    (true, false) => {
-                        return Err(EncodingError::InvalidInput(format!(
-                            "The 0% split for token {:?} must be the last swap",
-                            token
-                        )))
-                    }
-                    (true, true) => found_zero_split = true,
-                    (false, _) => {
-                        if swap.split < 0.0 {
-                            return Err(EncodingError::InvalidInput(format!(
-                                "All splits must be >= 0% for token {:?}",
-                                token
-                            )));
-                        }
-                        total_percentage += swap.split;
-                    }
+            } else {
+                // Not second or later USV4 pool. Push the current group (if it exists) and then
+                // create a new group.
+                if let Some(group) = current_group.as_mut() {
+                    grouped_swaps.push(group.clone());
                 }
+                current_group = Some(SwapGroup {
+                    input_token: swap.token_in.clone(),
+                    output_token: swap.token_out.clone(),
+                    protocol_system: current_swap_protocol.clone(),
+                    swaps: vec![swap.clone()],
+                    split: swap.split,
+                });
             }
-
-            if !found_zero_split {
-                return Err(EncodingError::InvalidInput(format!(
-                    "Token {:?} must have exactly one 0% split for remainder handling",
-                    token
-                )));
-            }
-
-            // Total must be <100% to leave room for remainder
-            if total_percentage >= 1.0 {
-                return Err(EncodingError::InvalidInput(format!(
-                    "Total of non-remainder splits for token {:?} must be <100%, got {}%",
-                    token,
-                    total_percentage * 100.0
-                )));
-            }
+            last_swap_protocol = current_swap_protocol;
+            last_swap_out_token = swap.token_out.clone();
         }
-
-        Ok(())
-    }
-
-    /// Raises an error if swaps do not represent a valid path from the given token to the checked
-    /// token.
-    ///
-    /// A path is considered valid if all the following conditions are met:
-    /// * The checked token is reachable from the given token through the swap path
-    /// * There are no tokens which are unconnected from the main path
-    ///
-    /// If the given token is the native token and the native action is WRAP, it will be converted
-    /// to the wrapped token before validating the swap path. The same principle applies for the
-    /// checked token and the UNWRAP action.
-    fn validate_swap_path(
-        &self,
-        swaps: &[Swap],
-        given_token: &Bytes,
-        checked_token: &Bytes,
-        native_action: &Option<NativeAction>,
-    ) -> Result<(), EncodingError> {
-        // Convert ETH to WETH only if there's a corresponding wrap/unwrap action
-        let given_token = if *given_token == *self.native_address {
-            match native_action {
-                Some(NativeAction::Wrap) => &self.wrapped_address,
-                _ => given_token,
-            }
-        } else {
-            given_token
-        };
-
-        let checked_token = if *checked_token == *self.native_address {
-            match native_action {
-                Some(NativeAction::Unwrap) => &self.wrapped_address,
-                _ => checked_token,
-            }
-        } else {
-            checked_token
-        };
-
-        // Build directed graph of token flows
-        let mut graph: HashMap<&Bytes, HashSet<&Bytes>> = HashMap::new();
-        for swap in swaps {
-            graph
-                .entry(&swap.token_in)
-                .or_default()
-                .insert(&swap.token_out);
+        if let Some(group) = current_group.as_mut() {
+            grouped_swaps.push(group.clone());
         }
-
-        // BFS from validation_given
-        let mut visited = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_back(given_token);
-
-        while let Some(token) = queue.pop_front() {
-            if !visited.insert(token) {
-                continue;
-            }
-
-            // Early success check
-            if token == checked_token && visited.len() == graph.len() + 1 {
-                return Ok(());
-            }
-
-            if let Some(next_tokens) = graph.get(token) {
-                for &next_token in next_tokens {
-                    if !visited.contains(next_token) {
-                        queue.push_back(next_token);
-                    }
-                }
-            }
-        }
-
-        // If we get here, either checked_token wasn't reached or not all tokens were visited
-        if !visited.contains(checked_token) {
-            Err(EncodingError::InvalidInput(
-                "Checked token is not reachable through swap path".to_string(),
-            ))
-        } else {
-            Err(EncodingError::InvalidInput(
-                "Some tokens are not connected to the main path".to_string(),
-            ))
-        }
+        grouped_swaps
     }
 }
-
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
@@ -265,32 +178,25 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         &self,
         solution: Solution,
     ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
-        self.validate_split_percentages(&solution.swaps)?;
-        self.validate_swap_path(
-            &solution.swaps,
-            &solution.given_token,
-            &solution.checked_token,
-            &solution.native_action,
-        )?;
+        self.split_swap_validator
+            .validate_split_percentages(&solution.swaps)?;
+        self.split_swap_validator
+            .validate_swap_path(
+                &solution.swaps,
+                &solution.given_token,
+                &solution.checked_token,
+                &solution.native_action,
+                &self.native_address,
+                &self.wrapped_address,
+            )?;
         let (permit, signature) = self.permit2.get_permit(
             &solution.router_address,
             &solution.sender,
             &solution.given_token,
             &solution.given_amount,
         )?;
-        let mut min_amount_out = solution
-            .checked_amount
-            .unwrap_or(BigUint::ZERO);
+        let min_amount_out = get_min_amount_for_solution(solution.clone());
 
-        if let (Some(expected_amount), Some(slippage)) =
-            (solution.expected_amount.as_ref(), solution.slippage)
-        {
-            let one_hundred = BigUint::from(100u32);
-            let slippage_percent = BigUint::from((slippage * 100.0) as u32);
-            let multiplier = &one_hundred - slippage_percent;
-            let expected_amount_with_slippage = (expected_amount * &multiplier) / &one_hundred;
-            min_amount_out = max(min_amount_out, expected_amount_with_slippage);
-        }
         // The tokens array is composed of the given token, the checked token and all the
         // intermediary tokens in between. The contract expects the tokens to be in this order.
         let solution_tokens: HashSet<Bytes> =
@@ -298,10 +204,13 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 .into_iter()
                 .collect();
 
-        let intermediary_tokens: HashSet<Bytes> = solution
-            .swaps
+        let grouped_swaps = self.group_swaps(solution.swaps);
+
+        let intermediary_tokens: HashSet<Bytes> = grouped_swaps
             .iter()
-            .flat_map(|swap| vec![swap.token_in.clone(), swap.token_out.clone()])
+            .flat_map(|grouped_swap| {
+                vec![grouped_swap.input_token.clone(), grouped_swap.output_token.clone()]
+            })
             .collect();
         let mut intermediary_tokens: Vec<Bytes> = intermediary_tokens
             .difference(&solution_tokens)
@@ -334,13 +243,13 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         }
 
         let mut swaps = vec![];
-        for swap in solution.swaps.iter() {
+        for grouped_swap in grouped_swaps.iter() {
             let swap_encoder = self
-                .get_swap_encoder(&swap.component.protocol_system)
+                .get_swap_encoder(&grouped_swap.protocol_system)
                 .ok_or_else(|| {
                     EncodingError::InvalidInput(format!(
                         "Swap encoder not found for protocol: {}",
-                        swap.component.protocol_system
+                        grouped_swap.protocol_system
                     ))
                 })?;
 
@@ -349,34 +258,22 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 exact_out: solution.exact_out,
                 router_address: solution.router_address.clone(),
             };
-            let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
+            let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
+            for swap in grouped_swap.swaps.iter() {
+                let protocol_data =
+                    swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
+                grouped_protocol_data.push(protocol_data);
+            }
+
             let swap_data = self.encode_swap_header(
-                U8::from(
-                    tokens
-                        .iter()
-                        .position(|t| *t == swap.token_in)
-                        .ok_or_else(|| {
-                            EncodingError::InvalidInput(
-                                "In token not found in tokens array".to_string(),
-                            )
-                        })?,
-                ),
-                U8::from(
-                    tokens
-                        .iter()
-                        .position(|t| *t == swap.token_out)
-                        .ok_or_else(|| {
-                            EncodingError::InvalidInput(
-                                "Out token not found in tokens array".to_string(),
-                            )
-                        })?,
-                ),
-                percentage_to_uint24(swap.split),
+                get_token_position(tokens.clone(), grouped_swap.input_token.clone())?,
+                get_token_position(tokens.clone(), grouped_swap.output_token.clone())?,
+                percentage_to_uint24(grouped_swap.split),
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
                 self.encode_executor_selector(swap_encoder.executor_selector()),
-                protocol_data,
+                grouped_protocol_data.abi_encode_packed(),
             );
             swaps.push(swap_data);
         }
@@ -599,7 +496,7 @@ mod tests {
         #[case] checked_amount: Option<BigUint>,
         #[case] expected_min_amount: U256,
     ) {
-        // Performs a single swap from WETH to DAI on a USV2 pool
+        // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping optimizations.
 
         // Set up a mock private key for signing
         let private_key =
@@ -881,358 +778,380 @@ mod tests {
         println!("{}", _hex_calldata);
     }
 
-    fn get_mock_split_swap_strategy_encoder() -> SplitSwapStrategyEncoder {
+    #[test]
+    fn test_group_swaps_simple() {
+        // The first and second swaps can be grouped since there is no split, and they are
+        // both USV4.
+        //
+        //   WETH ──(USV4)──> WBTC ───(USV4)──> USDC ───(USV2)──> DAI
+        //
+        // Set up a mock private key for signing
         let private_key =
             "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-        let swap_encoder_registry = get_swap_encoder_registry();
-        SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap()
-    }
 
-    #[test]
-    fn test_validate_path_single_swap() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-        let swaps = vec![Swap {
-            component: ProtocolComponent {
-                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
-            split: 0f64,
-        }];
-        let result = encoder.validate_swap_path(&swaps, &weth, &dai, &None);
-        assert_eq!(result, Ok(()));
-    }
-
-    #[test]
-    fn test_validate_path_multiple_swaps() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-        let swaps = vec![
-            Swap {
-                component: ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5f64,
-            },
-            Swap {
-                component: ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: dai.clone(),
-                token_out: usdc.clone(),
-                split: 0f64,
-            },
-        ];
-        let result = encoder.validate_swap_path(&swaps, &weth, &usdc, &None);
-        assert_eq!(result, Ok(()));
-    }
-
-    #[test]
-    fn test_validate_path_disconnected() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let weth = weth();
         let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
-
-        let disconnected_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool1".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-            },
-            // This swap is disconnected from the WETH->DAI path
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool2".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: wbtc.clone(),
-                token_out: usdc.clone(),
-                split: 0.0,
-            },
-        ];
-        let result = encoder.validate_swap_path(&disconnected_swaps, &weth, &usdc, &None);
-        assert!(matches!(
-            result,
-            Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
-        ));
-    }
-
-    #[test]
-    fn test_validate_path_unreachable_checked_token() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let unreachable_swaps = vec![Swap {
+        let swap_weth_wbtc = Swap {
             component: ProtocolComponent {
-                id: "pool1".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
+                protocol_system: "uniswap_v4".to_string(),
                 ..Default::default()
             },
             token_in: weth.clone(),
-            token_out: dai.clone(),
-            split: 1.0,
-        }];
-        let result = encoder.validate_swap_path(&unreachable_swaps, &weth, &usdc, &None);
-        assert!(matches!(
-            result,
-            Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
-        ));
-    }
-
-    #[test]
-    fn test_validate_path_empty_swaps() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-
-        let empty_swaps: Vec<Swap> = vec![];
-        let result = encoder.validate_swap_path(&empty_swaps, &weth, &usdc, &None);
-        assert!(matches!(
-            result,
-            Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
-        ));
-    }
-
-    #[test]
-    fn test_validate_swap_single() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-        let swaps = vec![Swap {
-            component: ProtocolComponent {
-                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
+            token_out: wbtc.clone(),
+            // This represents the remaining 50%, but to avoid any rounding errors we set this to
+            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
-        }];
-        let result = encoder.validate_split_percentages(&swaps);
-        assert_eq!(result, Ok(()));
-    }
-
-    #[test]
-    fn test_validate_swaps_multiple() {
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-
-        // Valid case: Multiple swaps with proper splits (50%, 30%, remainder)
-        let valid_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool1".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-            },
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool2".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.3,
-            },
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool3".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.0, // Remainder (20%)
-            },
-        ];
-        let encoder = get_mock_split_swap_strategy_encoder();
-        assert!(encoder
-            .validate_split_percentages(&valid_swaps)
-            .is_ok());
-    }
-
-    #[test]
-    fn test_validate_swaps_no_remainder_split() {
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-
-        let invalid_total_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool1".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.7,
-            },
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool2".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.3,
-            },
-        ];
-        let encoder = get_mock_split_swap_strategy_encoder();
-        assert!(matches!(
-            encoder.validate_split_percentages(&invalid_total_swaps),
-            Err(EncodingError::InvalidInput(msg)) if msg.contains("must have exactly one 0% split")
-        ));
-    }
-
-    #[test]
-    fn test_validate_swaps_zero_split_not_at_end() {
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-
-        let invalid_zero_position_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool1".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.0,
-            },
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool2".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-            },
-        ];
-        let encoder = get_mock_split_swap_strategy_encoder();
-        assert!(matches!(
-            encoder.validate_split_percentages(&invalid_zero_position_swaps),
-            Err(EncodingError::InvalidInput(msg)) if msg.contains("must be the last swap")
-        ));
-    }
-
-    #[test]
-    fn test_validate_swaps_splits_exceed_hundred_percent() {
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-
-        let invalid_overflow_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool1".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.6,
-            },
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool2".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-            },
-            Swap {
-                component: ProtocolComponent {
-                    id: "pool3".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.0,
-            },
-        ];
-        let encoder = get_mock_split_swap_strategy_encoder();
-        assert!(matches!(
-            encoder.validate_split_percentages(&invalid_overflow_swaps),
-            Err(EncodingError::InvalidInput(msg)) if msg.contains("must be <100%")
-        ));
-    }
-
-    #[test]
-    fn test_validate_path_wrap_eth_given_token() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-
-        let swaps = vec![Swap {
+        };
+        let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
-                id: "pool1".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
+                protocol_system: "uniswap_v4".to_string(),
                 ..Default::default()
             },
-            token_in: weth.clone(),
+            token_in: wbtc.clone(),
             token_out: usdc.clone(),
             split: 0f64,
-        }];
-
-        let result = encoder.validate_swap_path(&swaps, &eth, &usdc, &Some(NativeAction::Wrap));
-        assert_eq!(result, Ok(()));
-    }
-
-    #[test]
-    fn test_validate_token_path_connectivity_wrap_eth_checked_token() {
-        let encoder = get_mock_split_swap_strategy_encoder();
-
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-
-        let swaps = vec![Swap {
+        };
+        let swap_usdc_dai = Swap {
             component: ProtocolComponent {
-                id: "pool1".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
             token_in: usdc.clone(),
+            token_out: dai.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+
+        let grouped_swaps = encoder.group_swaps(vec![
+            swap_weth_wbtc.clone(),
+            swap_wbtc_usdc.clone(),
+            swap_usdc_dai.clone(),
+        ]);
+
+        assert_eq!(
+            grouped_swaps,
+            vec![
+                SwapGroup {
+                    swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+                    input_token: weth,
+                    output_token: usdc.clone(),
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                },
+                SwapGroup {
+                    swaps: vec![swap_usdc_dai],
+                    input_token: usdc,
+                    output_token: dai,
+                    protocol_system: "uniswap_v2".to_string(),
+                    split: 0f64,
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn test_group_swaps_complex_split() {
+        // There is a split in the solution, but it's possible to combine two of the USV4 splits.
+        // The WETH -> USDC swap cannot get grouped with anything, but the WETH -> DAI and
+        // DAI -> USDC swaps can be grouped.
+        //
+        //                            ┌──(USV4)──> USDC
+        //   WBTC ──> (USV4)──> WETH ─┤
+        //                            └──(USV4)──> DAI ───(USV4)──> USDC
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = weth();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let swap_wbtc_weth = Swap {
+            component: ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: wbtc.clone(),
             token_out: weth.clone(),
             split: 0f64,
-        }];
+        };
+        let swap_weth_usdc = Swap {
+            component: ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: usdc.clone(),
+            split: 0.5f64,
+        };
+        let swap_weth_dai = Swap {
+            component: ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: dai.clone(),
+            // This represents the remaining 50%, but to avoid any rounding errors we set this to
+            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+            split: 0f64,
+        };
+        let swap_dai_usdc = Swap {
+            component: ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: dai.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
 
-        let result = encoder.validate_swap_path(&swaps, &usdc, &eth, &Some(NativeAction::Unwrap));
-        assert_eq!(result, Ok(()));
+        let grouped_swaps = encoder.group_swaps(vec![
+            swap_wbtc_weth.clone(),
+            swap_weth_usdc.clone(),
+            swap_weth_dai.clone(),
+            swap_dai_usdc.clone(),
+        ]);
+
+        assert_eq!(
+            grouped_swaps,
+            vec![
+                SwapGroup {
+                    swaps: vec![swap_wbtc_weth],
+                    input_token: wbtc.clone(),
+                    output_token: weth.clone(),
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                },
+                SwapGroup {
+                    swaps: vec![swap_weth_usdc],
+                    input_token: weth.clone(),
+                    output_token: usdc.clone(),
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0.5f64,
+                },
+                SwapGroup {
+                    swaps: vec![swap_weth_dai, swap_dai_usdc],
+                    input_token: weth,
+                    output_token: usdc,
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn test_group_swaps_complex_split_multi_protocol() {
+        // There is a split in the solution, but it's possible to group the USV4 splits with each
+        // other and the Balancer V3 swaps with each other.
+        //
+        //         ┌──(BalancerV3)──> WBTC ──(BalancerV3)──> USDC
+        //   WETH ─┤
+        //         └──(USV4)──> DAI ───(USV4)──> USDC
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = weth();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let swap_weth_wbtc = Swap {
+            component: ProtocolComponent {
+                protocol_system: "balancer_v3".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
+            split: 0.5f64,
+        };
+        let swap_wbtc_usdc = Swap {
+            component: ProtocolComponent {
+                protocol_system: "balancer_v3".to_string(),
+                ..Default::default()
+            },
+            token_in: wbtc.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+        let swap_weth_dai = Swap {
+            component: ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: dai.clone(),
+            // This represents the remaining 50%, but to avoid any rounding errors we set this to
+            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+            split: 0f64,
+        };
+        let swap_dai_usdc = Swap {
+            component: ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: dai.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+
+        let grouped_swaps = encoder.group_swaps(vec![
+            swap_weth_wbtc.clone(),
+            swap_wbtc_usdc.clone(),
+            swap_weth_dai.clone(),
+            swap_dai_usdc.clone(),
+        ]);
+
+        assert_eq!(
+            grouped_swaps,
+            vec![
+                SwapGroup {
+                    swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+                    input_token: weth.clone(),
+                    output_token: usdc.clone(),
+                    protocol_system: "balancer_v3".to_string(),
+                    split: 0.5f64,
+                },
+                SwapGroup {
+                    swaps: vec![swap_weth_dai, swap_dai_usdc],
+                    input_token: weth,
+                    output_token: usdc,
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn test_split_encoding_strategy_usv4() {
+        // Performs a split swap from WETH to USDC though WBTC using two consecutive USV4 pools
+        //
+        //   WETH ──(USV4)──> WBTC ───(USV4)──> USDC
+        //
+
+        // Set up a mock private key for signing
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = weth();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let swap_weth_wbtc = Swap {
+            component: ProtocolComponent {
+                id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
+            // This represents the remaining 50%, but to avoid any rounding errors we set this to
+            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+            split: 0f64,
+        };
+        let swap_wbtc_usdc = Swap {
+            component: ProtocolComponent {
+                id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
+            token_in: wbtc.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: weth,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: usdc,
+            expected_amount: Some(BigUint::from_str("3_000_000000").unwrap()),
+            checked_amount: None,
+            slippage: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+            ..Default::default()
+        };
+
+        let (calldata, _, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let expected_input = [
+            "4860f9ed",                                                              // Function selector
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
+            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token out
+            "0000000000000000000000000000000000000000000000000000000000000000",      // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000",      // wrap
+            "0000000000000000000000000000000000000000000000000000000000000000",      // unwrap
+            // tokens length (not including intermediary tokens of USV4-optimized swaps)
+            "0000000000000000000000000000000000000000000000000000000000000002",
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",      // receiver
+        ]
+            .join("");
+
+        // after this there is the permit and because of the deadlines (that depend on block time)
+        // it's hard to assert
+        // "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+        // "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
+        // "0000000000000000000000000000000000000000000000000000000067c205fe", // expiration
+        // "0000000000000000000000000000000000000000000000000000000000000000", // nonce
+        // "0000000000000000000000002c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4", // spender
+        // "00000000000000000000000000000000000000000000000000000000679a8006", // deadline
+        // offset of signature (from start of call data to beginning of length indication)
+        // "0000000000000000000000000000000000000000000000000000000000000200",
+        // offset of ple encoded swaps (from start of call data to beginning of length indication)
+        // "0000000000000000000000000000000000000000000000000000000000000280",
+        // length of signature without padding
+        // "0000000000000000000000000000000000000000000000000000000000000041",
+        // signature + padding
+        // "a031b63a01ef5d25975663e5d6c420ef498e3a5968b593cdf846c6729a788186",
+        // "1ddaf79c51453cd501d321ee541d13593e3a266be44103eefdf6e76a032d2870",
+        // "1b00000000000000000000000000000000000000000000000000000000000000"
+
+        let expected_swaps = String::from(concat!(
+            // length of ple encoded swaps without padding
+            "0000000000000000000000000000000000000000000000000000000000000099",
+            // ple encoded swaps
+            "0097",   // Swap length
+            "00",     // token in index
+            "01",     // token out index
+            "000000", // split
+            // Swap data header
+            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
+            "bd0625ab",                                 // selector
+            // First swap protocol data
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+            "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "00",                                       // zero2one
+            // Second swap protocol data
+            "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // token in
+            "ae461ca67b15dc8dc81ce7615e0320da1a9ab8d5", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "01",                                       // zero2one
+            "00000000000000",                           // padding
+        ));
+        let hex_calldata = encode(&calldata);
+
+        assert_eq!(hex_calldata[..520], expected_input);
+        assert_eq!(hex_calldata[1288..], expected_swaps);
     }
 }

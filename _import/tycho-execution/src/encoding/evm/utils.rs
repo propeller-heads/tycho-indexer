@@ -1,8 +1,10 @@
-use alloy_primitives::{aliases::U24, Address, Keccak256, U256};
+use std::cmp::max;
+
+use alloy_primitives::{aliases::U24, Address, Keccak256, U256, U8};
 use num_bigint::BigUint;
 use tycho_core::Bytes;
 
-use crate::encoding::errors::EncodingError;
+use crate::encoding::{errors::EncodingError, models::Solution};
 
 /// Safely converts a `Bytes` object to an `Address` object.
 ///
@@ -51,4 +53,41 @@ pub fn percentage_to_uint24(decimal: f64) -> U24 {
 
     let scaled = (decimal / 1.0) * (MAX_UINT24 as f64);
     U24::from(scaled.round())
+}
+
+/// Gets the minimum amount out for a solution to pass when executed on-chain.
+///
+/// The minimum amount is calculated based on the expected amount and the slippage percentage, if
+/// passed. If this information is not passed, the user-passed checked amount will be used.
+/// If both the slippage and minimum user-passed checked amount are passed, the maximum of the two
+/// will be used.
+/// If neither are passed, the minimum amount will be zero.
+pub fn get_min_amount_for_solution(solution: Solution) -> BigUint {
+    let mut min_amount_out = solution
+        .checked_amount
+        .unwrap_or(BigUint::ZERO);
+
+    if let (Some(expected_amount), Some(slippage)) =
+        (solution.expected_amount.as_ref(), solution.slippage)
+    {
+        let one_hundred = BigUint::from(100u32);
+        let slippage_percent = BigUint::from((slippage * 100.0) as u32);
+        let multiplier = &one_hundred - slippage_percent;
+        let expected_amount_with_slippage = (expected_amount * &multiplier) / &one_hundred;
+        min_amount_out = max(min_amount_out, expected_amount_with_slippage);
+    }
+    min_amount_out
+}
+
+/// Gets the position of a token in a list of tokens.
+pub fn get_token_position(tokens: Vec<Bytes>, token: Bytes) -> Result<U8, EncodingError> {
+    let position = U8::from(
+        tokens
+            .iter()
+            .position(|t| *t == token)
+            .ok_or_else(|| {
+                EncodingError::InvalidInput(format!("Token {:?} not found in tokens array", token))
+            })?,
+    );
+    Ok(position)
 }

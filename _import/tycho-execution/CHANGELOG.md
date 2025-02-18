@@ -1,3 +1,18 @@
+## [0.40.0](https://github.com/propeller-heads/tycho-execution/compare/0.39.0...0.40.0) (2025-02-18)
+
+
+### Features
+
+* (WIP) UniswapV4 encoding ([f32210b](https://github.com/propeller-heads/tycho-execution/commit/f32210bb1f6103a1775975604415295260de9107))
+* Generalize group_swaps method ([47b6180](https://github.com/propeller-heads/tycho-execution/commit/47b61802eef58068d1188c25db86974c7e03f3a8))
+* Merge USV4 strategy back into split strategy ([44aabf1](https://github.com/propeller-heads/tycho-execution/commit/44aabf17612994fa126cfdfa4ef7f043b825aeee))
+
+
+### Bug Fixes
+
+* Do not count intermediary tokens in indices ([e94154b](https://github.com/propeller-heads/tycho-execution/commit/e94154bc2d72c312d07eb1aa73a0fd96214ad288))
+* Do not group split swaps ([957bf89](https://github.com/propeller-heads/tycho-execution/commit/957bf898f28a23dd451d8a0ab07eb221dec1dc11))
+
 ## [0.39.0](https://github.com/propeller-heads/tycho-execution/compare/0.38.0...0.39.0) (2025-02-14)
 
 
