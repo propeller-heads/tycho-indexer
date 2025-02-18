@@ -28,10 +28,9 @@ use clap::Subcommand;
 ///         },
 ///         "token_in": "0x...",
 ///         "token_out": "0x...",
-///         "split": 1.0
+///         "split": 0.0
 ///     }],
-///     "router_address": "0x...",
-///     "direct_execution": false
+///     "router_address": "0x..."
 /// }
 /// ```
 #[command(author, version, about, long_about = None)]
