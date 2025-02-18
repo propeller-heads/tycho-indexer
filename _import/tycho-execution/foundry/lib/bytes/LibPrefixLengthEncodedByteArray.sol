@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.26;
 
 /**
  * @title Propellerheads PrefixLengthEncoded Byte Array Library
@@ -16,11 +16,9 @@ library LibPrefixLengthEncodedByteArray {
     /**
      * @dev Pop the first element of an array and returns it with the remaining data.
      */
-    function next(bytes calldata encoded)
-        internal
-        pure
-        returns (bytes calldata elem, bytes calldata res)
-    {
+    function next(
+        bytes calldata encoded
+    ) internal pure returns (bytes calldata elem, bytes calldata res) {
         assembly {
             switch iszero(encoded.length)
             case 1 {
@@ -46,7 +44,11 @@ library LibPrefixLengthEncodedByteArray {
         assembly {
             let offset := encoded.offset
             let end := add(encoded.offset, encoded.length)
-            for {} lt(offset, end) {} {
+            for {
+
+            } lt(offset, end) {
+
+            } {
                 offset := add(offset, add(shr(240, calldataload(offset)), 2))
                 s := add(s, 1)
             }
@@ -56,11 +58,9 @@ library LibPrefixLengthEncodedByteArray {
     /**
      * @dev Cast an encoded array into a Solidity array.
      */
-    function toArray(bytes calldata encoded)
-        internal
-        pure
-        returns (bytes[] memory arr)
-    {
+    function toArray(
+        bytes calldata encoded
+    ) internal pure returns (bytes[] memory arr) {
         bytes calldata elem;
         uint256 idx = 0;
         arr = new bytes[](LibPrefixLengthEncodedByteArray.size(encoded));

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {LibPrefixLengthEncodedByteArray} from
@@ -51,14 +51,16 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         assertEq(this.size(multiple), 3);
     }
 
-    function testFailInvalidLength() public view {
+    function test_RevertIf_InvalidLength() public {
         // Length prefix larger than remaining data
+        vm.expectRevert();
         bytes memory invalid = hex"0004414243";
         this.next(invalid);
     }
 
-    function testFailIncompletePrefix() public view {
+    function test_RevertIf_IncompletePrefix() public {
         // Only 1 byte instead of 2 bytes prefix
+        vm.expectRevert();
         bytes memory invalid = hex"01";
         this.next(invalid);
     }

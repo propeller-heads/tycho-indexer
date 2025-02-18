@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.26;
 
 import "../lib/IWETH.sol";
 import "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
@@ -9,11 +9,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "./ExecutionDispatcher.sol";
 import "./CallbackVerificationDispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
@@ -27,7 +30,8 @@ contract TychoRouter is
     ExecutionDispatcher,
     CallbackVerificationDispatcher,
     Pausable,
-    ReentrancyGuard
+    ReentrancyGuard,
+    SafeCallback
 {
     IAllowanceTransfer public immutable permit2;
     IWETH private immutable _weth;
@@ -64,22 +68,22 @@ contract TychoRouter is
 
     address private immutable _usv3Factory;
 
-    constructor(address _permit2, address weth, address usv3Factory) {
+    constructor(
+        IPoolManager _poolManager,
+        address _permit2,
+        address weth,
+        address usv3Factory
+    ) SafeCallback(_poolManager) {
+        if (
+            _permit2 == address(0) || weth == address(0)
+                || usv3Factory == address(0)
+        ) {
+            revert TychoRouter__AddressZero();
+        }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _weth = IWETH(weth);
-
-        if (usv3Factory == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
         _usv3Factory = usv3Factory;
-    }
-
-    /**
-     * @dev Unpauses the contract
-     */
-    function unpause() external onlyRole(UNPAUSER_ROLE) {
-        _unpause();
     }
 
     /**
@@ -161,8 +165,7 @@ contract TychoRouter is
             _unwrapETH(amountOut);
         }
         if (tokenOut == address(0)) {
-            // slither-disable-next-line arbitrary-send-eth
-            payable(receiver).transfer(amountOut);
+            Address.sendValue(payable(receiver), amountOut);
         } else {
             IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
@@ -255,6 +258,13 @@ contract TychoRouter is
      */
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
+    }
+
+    /**
+     * @dev Unpauses the contract
+     */
+    function unpause() external onlyRole(UNPAUSER_ROLE) {
+        _unpause();
     }
 
     /**
@@ -431,5 +441,28 @@ contract TychoRouter is
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
         return (amountIn, tokenIn);
+    }
+
+    function _unlockCallback(bytes calldata data)
+        internal
+        override
+        returns (bytes memory)
+    {
+        require(data.length >= 20, "Invalid data length");
+        bytes4 selector = bytes4(data[data.length - 4:]);
+        address executor =
+            address(uint160(bytes20(data[data.length - 24:data.length - 4])));
+        bytes memory protocolData = data[:data.length - 24];
+
+        if (!executors[executor]) {
+            revert ExecutionDispatcher__UnapprovedExecutor();
+        }
+
+        // slither-disable-next-line controlled-delegatecall,low-level-calls
+        (bool success,) = executor.delegatecall(
+            abi.encodeWithSelector(selector, protocolData)
+        );
+        require(success, "delegatecall to uniswap v4 callback failed");
+        return "";
     }
 }
