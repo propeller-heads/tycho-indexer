@@ -69,7 +69,7 @@ sol! {
 }
 
 impl Permit2 {
-    pub fn new(signer_pk: String, chain: Chain) -> Result<Self, EncodingError> {
+    pub fn new(swapper_pk: String, chain: Chain) -> Result<Self, EncodingError> {
         let (handle, runtime) = match Handle::try_current() {
             Ok(h) => (h, None),
             Err(_) => {
@@ -80,8 +80,8 @@ impl Permit2 {
             }
         };
         let client = block_in_place(|| handle.block_on(get_client()))?;
-        let pk = B256::from_str(&signer_pk).map_err(|_| {
-            EncodingError::FatalError("Failed to convert signer private key to B256".to_string())
+        let pk = B256::from_str(&swapper_pk).map_err(|_| {
+            EncodingError::FatalError("Failed to convert swapper private key to B256".to_string())
         })?;
         let signer = PrivateKeySigner::from_bytes(&pk).map_err(|_| {
             EncodingError::FatalError("Failed to create signer from private key".to_string())
@@ -224,9 +224,9 @@ mod tests {
 
     #[test]
     fn test_get_existing_allowance() {
-        let signer_pk =
+        let swapper_pk =
             "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
-        let manager = Permit2::new(signer_pk, eth_chain()).unwrap();
+        let manager = Permit2::new(swapper_pk, eth_chain()).unwrap();
 
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let owner = Bytes::from_str("0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4").unwrap();

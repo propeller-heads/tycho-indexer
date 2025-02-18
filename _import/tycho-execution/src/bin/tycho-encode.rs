@@ -29,8 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Encode the solution
     let encoded = match cli.command {
-        Commands::TychoRouter { config_path, private_key } => {
-            encode_swaps(&buffer, config_path, Some(private_key), true)?
+        Commands::TychoRouter { config_path, swapper_pk } => {
+            encode_swaps(&buffer, config_path, Some(swapper_pk), true)?
         }
         Commands::DirectExecution { config_path } => {
             encode_swaps(&buffer, config_path, None, false)?
@@ -49,15 +49,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn encode_swaps(
     input: &str,
     config_path: Option<String>,
-    private_key: Option<String>,
+    swapper_pk: Option<String>,
     use_tycho_router: bool,
 ) -> Result<Value, EncodingError> {
     let solution: Solution = serde_json::from_str(input)?;
     let chain = Chain::Ethereum;
 
     let encoder = if use_tycho_router {
-        let private_key = private_key.ok_or(EncodingError::FatalError(
-            "Private key is required for tycho_router".to_string(),
+        let private_key = swapper_pk.ok_or(EncodingError::FatalError(
+            "Swapper private key is required for tycho_router".to_string(),
         ))?;
         EVMEncoderBuilder::tycho_router(chain, private_key, config_path)?.build()?
     } else {

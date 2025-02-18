@@ -46,7 +46,7 @@ pub enum Commands {
         #[arg(short, long)]
         config_path: Option<String>,
         #[arg(short, long)]
-        private_key: String,
+        swapper_pk: String,
     },
     /// Use the direct execution encoding strategy
     DirectExecution {

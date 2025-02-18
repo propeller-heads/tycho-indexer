@@ -21,12 +21,12 @@ impl EVMEncoderBuilder {
     }
     pub fn tycho_router(
         chain: Chain,
-        signer_pk: String,
+        swapper_pk: String,
         executors_file_path: Option<String>,
     ) -> Result<Self, EncodingError> {
         let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain)?;
         let strategy =
-            Box::new(SplitSwapStrategyEncoder::new(signer_pk, chain, swap_encoder_registry)?);
+            Box::new(SplitSwapStrategyEncoder::new(swapper_pk, chain, swap_encoder_registry)?);
         Ok(EVMEncoderBuilder { chain, strategy })
     }
     pub fn direct_execution(
