@@ -365,6 +365,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         bytes calldata data
     ) external {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
+        // We are taking advantage of the fact that the data we need is already encoded in the correct format inside msg.data
+        // This way we preserve the bytes calldata (and don't need to convert it to bytes memory)
         uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
         uint256 dataLength =
             uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
