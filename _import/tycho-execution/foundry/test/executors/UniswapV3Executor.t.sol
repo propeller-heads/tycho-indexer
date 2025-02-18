@@ -76,12 +76,17 @@ contract UniswapV3ExecutorTest is Test, Constants {
         uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
 
         vm.startPrank(DAI_WETH_USV3);
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, DAI_ADDR, poolFee);
+        uint256 dataOffset = 3; // some offset
+        uint256 dataLength = protocolData.length;
+
         bytes memory callbackData = abi.encodePacked(
             int256(amountOwed), // amount0Delta
             int256(0), // amount1Delta
-            WETH_ADDR,
-            DAI_ADDR,
-            poolFee
+            dataOffset,
+            dataLength,
+            protocolData
         );
         uniswapV3Exposed.handleCallback(callbackData);
         vm.stopPrank();
@@ -90,7 +95,7 @@ contract UniswapV3ExecutorTest is Test, Constants {
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
     }
 
-    function testSwapWETHForDAI() public {
+    function testSwapIntegration() public {
         uint256 amountIn = 10 ** 18;
         deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
 

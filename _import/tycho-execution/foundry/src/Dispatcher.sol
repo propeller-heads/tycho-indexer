@@ -82,11 +82,10 @@ contract Dispatcher {
         calculatedAmount = abi.decode(result, (uint256));
     }
 
-    function _handleCallback(
-        bytes4 selector,
-        address executor,
-        bytes memory data
-    ) internal {
+    function _handleCallback(bytes calldata data) internal {
+        bytes4 selector = bytes4(data[data.length - 4:]);
+        address executor = address(uint160(bytes20(data[data.length - 24:])));
+
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor();
         }

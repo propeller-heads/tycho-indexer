@@ -66,41 +66,23 @@ contract UniswapV3Executor is IExecutor, ICallback {
         }
     }
 
-    function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata data
-    ) external {
-        // slither-disable-next-line low-level-calls
-        (bool success, bytes memory result) = self.delegatecall(
-            abi.encodeWithSelector(
-                ICallback.handleCallback.selector,
-                abi.encodePacked(
-                    amount0Delta, amount1Delta, data[:data.length - 20]
-                )
-            )
-        );
-        if (!success) {
-            revert(
-                string(
-                    result.length > 0
-                        ? result
-                        : abi.encodePacked("Callback failed")
-                )
-            );
-        }
-    }
-
     function handleCallback(bytes calldata msgData)
-        external
+        public
         returns (bytes memory result)
     {
+        // The data has the following layout:
+        // - amount0Delta (32 bytes)
+        // - amount1Delta (32 bytes)
+        // - dataOffset (32 bytes)
+        // - dataLength (32 bytes)
+        // - protocolData (variable length)
+
         (int256 amount0Delta, int256 amount1Delta) =
             abi.decode(msgData[:64], (int256, int256));
 
-        address tokenIn = address(bytes20(msgData[64:84]));
+        address tokenIn = address(bytes20(msgData[128:148]));
 
-        verifyCallback(msgData[64:]);
+        verifyCallback(msgData[128:]);
 
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
@@ -116,6 +98,20 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
         // slither-disable-next-line unused-return
         CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
+    }
+
+    function uniswapV3SwapCallback(
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
+        bytes calldata /* data */
+    ) external {
+        uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
+        uint256 dataLength =
+            uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
+
+        bytes calldata fullData = msg.data[4:dataOffset + 32 + dataLength];
+
+        handleCallback(fullData);
     }
 
     function _decodeData(bytes calldata data)
