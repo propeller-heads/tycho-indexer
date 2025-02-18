@@ -4,26 +4,27 @@ use tycho_core::Bytes;
 use crate::encoding::{
     errors::EncodingError,
     models::{Chain, NativeAction, Solution, Transaction},
-    strategy_encoder::StrategyEncoderRegistry,
+    strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
 
 /// Represents an encoder for a swap using any strategy supported by the strategy registry.
 ///
 /// # Fields
-/// * `strategy_registry`: S, the strategy registry to use to select the best strategy to encode a
-///   solution, based on its supported strategies and the solution attributes.
+/// * `strategy_encoder`: Strategy encoder to follow for encoding the solution
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped native token
-#[derive(Clone)]
-pub struct EVMTychoEncoder<S: StrategyEncoderRegistry> {
-    strategy_registry: S,
+pub struct EVMTychoEncoder {
+    strategy_encoder: Box<dyn StrategyEncoder>,
     native_address: Bytes,
     wrapped_address: Bytes,
 }
 
-impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
-    pub fn new(strategy_registry: S, chain: tycho_core::dto::Chain) -> Result<Self, EncodingError> {
+impl EVMTychoEncoder {
+    pub fn new(
+        chain: tycho_core::dto::Chain,
+        strategy_encoder: Box<dyn StrategyEncoder>,
+    ) -> Result<Self, EncodingError> {
         let chain: Chain = Chain::from(chain);
         if chain.name != *"ethereum" {
             return Err(EncodingError::InvalidInput(
@@ -31,14 +32,14 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
             ));
         }
         Ok(EVMTychoEncoder {
-            strategy_registry,
+            strategy_encoder,
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
         })
     }
 }
 
-impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
+impl EVMTychoEncoder {
     /// Raises an `EncodingError` if the solution is not considered valid.
     ///
     /// A solution is considered valid if all the following conditions are met:
@@ -92,7 +93,7 @@ impl<S: StrategyEncoderRegistry> EVMTychoEncoder<S> {
     }
 }
 
-impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
+impl TychoEncoder for EVMTychoEncoder {
     fn encode_router_calldata(
         &self,
         solutions: Vec<Solution>,
@@ -101,11 +102,9 @@ impl<S: StrategyEncoderRegistry> TychoEncoder<S> for EVMTychoEncoder<S> {
         for solution in solutions.iter() {
             self.validate_solution(solution)?;
 
-            let strategy = self
-                .strategy_registry
-                .get_encoder(solution)?;
-            let (contract_interaction, target_address, selector) =
-                strategy.encode_strategy(solution.clone())?;
+            let (contract_interaction, target_address, selector) = self
+                .strategy_encoder
+                .encode_strategy(solution.clone())?;
 
             let value = match solution.native_action.as_ref() {
                 Some(NativeAction::Wrap) => solution.given_amount.clone(),
@@ -134,10 +133,6 @@ mod tests {
         models::Swap, strategy_encoder::StrategyEncoder, swap_encoder::SwapEncoder,
     };
 
-    struct MockStrategyRegistry {
-        strategy: Box<dyn StrategyEncoder>,
-    }
-
     fn dai() -> Bytes {
         Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap()
     }
@@ -148,23 +143,6 @@ mod tests {
 
     fn weth() -> Bytes {
         Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap()
-    }
-
-    impl StrategyEncoderRegistry for MockStrategyRegistry {
-        fn new(
-            _chain: tycho_core::dto::Chain,
-            _executors_file_path: Option<String>,
-            _signer_pk: Option<String>,
-        ) -> Result<MockStrategyRegistry, EncodingError> {
-            Ok(Self { strategy: Box::new(MockStrategy) })
-        }
-
-        fn get_encoder(
-            &self,
-            _solution: &Solution,
-        ) -> Result<&Box<dyn StrategyEncoder>, EncodingError> {
-            Ok(&self.strategy)
-        }
     }
 
     #[derive(Clone)]
@@ -192,10 +170,9 @@ mod tests {
         }
     }
 
-    fn get_mocked_tycho_encoder() -> EVMTychoEncoder<MockStrategyRegistry> {
-        let strategy_registry =
-            MockStrategyRegistry::new(TychoCoreChain::Ethereum, None, None).unwrap();
-        EVMTychoEncoder::new(strategy_registry, TychoCoreChain::Ethereum).unwrap()
+    fn get_mocked_tycho_encoder() -> EVMTychoEncoder {
+        let strategy_encoder = Box::new(MockStrategy {});
+        EVMTychoEncoder::new(TychoCoreChain::Ethereum, strategy_encoder).unwrap()
     }
 
     #[test]

@@ -3,21 +3,16 @@ use std::io::{self, Read};
 use clap::Parser;
 use serde_json::Value;
 use tycho_core::dto::Chain;
-use tycho_execution::encoding::{
-    evm::{
-        strategy_encoder::strategy_encoder_registry::EVMStrategyEncoderRegistry,
-        tycho_encoder::EVMTychoEncoder,
-    },
-    models::Solution,
-    strategy_encoder::StrategyEncoderRegistry,
-    tycho_encoder::TychoEncoder,
-};
+use tycho_execution::encoding::{models::Solution, tycho_encoder::TychoEncoder};
 
 mod lib {
     pub mod cli;
 }
 
 use lib::cli::Cli;
+use tycho_execution::encoding::{errors::EncodingError, evm::encoder_builder::EVMEncoderBuilder};
+
+use crate::lib::cli::Commands;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -33,8 +28,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Encode the solution
-    let encoded = encode_swaps(&buffer, cli.config_path, cli.private_key)?;
-
+    let encoded = match cli.command {
+        Commands::TychoRouter { config_path, private_key } => {
+            encode_swaps(&buffer, config_path, Some(private_key), true)?
+        }
+        Commands::DirectExecution { config_path } => {
+            encode_swaps(&buffer, config_path, None, false)?
+        }
+    };
     // Output the encoded result as JSON to stdout
     println!(
         "{}",
@@ -49,12 +50,20 @@ fn encode_swaps(
     input: &str,
     config_path: Option<String>,
     private_key: Option<String>,
-) -> Result<Value, Box<dyn std::error::Error>> {
+    use_tycho_router: bool,
+) -> Result<Value, EncodingError> {
     let solution: Solution = serde_json::from_str(input)?;
     let chain = Chain::Ethereum;
 
-    let strategy_selector = EVMStrategyEncoderRegistry::new(chain, config_path, private_key)?;
-    let encoder = EVMTychoEncoder::new(strategy_selector, chain)?;
+    let encoder = if use_tycho_router {
+        let private_key = private_key.ok_or(EncodingError::FatalError(
+            "Private key is required for tycho_router".to_string(),
+        ))?;
+        EVMEncoderBuilder::tycho_router(chain, private_key, config_path)?.build()?
+    } else {
+        EVMEncoderBuilder::direct_execution(chain, config_path)?.build()?
+    };
+
     let transactions = encoder.encode_router_calldata(vec![solution])?;
 
     Ok(serde_json::json!({

@@ -1,4 +1,5 @@
 pub use clap::Parser;
+use clap::Subcommand;
 
 #[derive(Parser)]
 /// Encode swap transactions for the Tycho router
@@ -33,12 +34,24 @@ pub use clap::Parser;
 ///     "direct_execution": false
 /// }
 /// ```
+#[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Private key for signing approvals (required when direct_execution is false)
-    #[arg(short)]
-    pub private_key: Option<String>,
+    #[command(subcommand)]
+    pub command: Commands,
+}
 
-    /// Path to the executor addresses configuration file
-    #[arg(short)]
-    pub config_path: Option<String>,
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Use the Tycho router encoding strategy
+    TychoRouter {
+        #[arg(short, long)]
+        config_path: Option<String>,
+        #[arg(short, long)]
+        private_key: String,
+    },
+    /// Use the direct execution encoding strategy
+    DirectExecution {
+        #[arg(short, long)]
+        config_path: Option<String>,
+    },
 }

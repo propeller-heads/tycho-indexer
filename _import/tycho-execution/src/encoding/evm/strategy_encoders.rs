@@ -89,9 +89,10 @@ pub struct SplitSwapStrategyEncoder {
 impl SplitSwapStrategyEncoder {
     pub fn new(
         signer_pk: String,
-        chain: Chain,
+        blockchain: tycho_core::dto::Chain,
         swap_encoder_registry: SwapEncoderRegistry,
     ) -> Result<Self, EncodingError> {
+        let chain = Chain::from(blockchain);
         let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
         Ok(Self {
             permit2: Permit2::new(signer_pk, chain.clone())?,
@@ -337,8 +338,8 @@ mod tests {
     use super::*;
     use crate::encoding::models::Swap;
 
-    fn eth_chain() -> Chain {
-        TychoCoreChain::Ethereum.into()
+    fn eth_chain() -> TychoCoreChain {
+        TychoCoreChain::Ethereum
     }
 
     fn eth() -> Bytes {
