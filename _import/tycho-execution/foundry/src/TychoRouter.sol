@@ -218,12 +218,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @dev We use the fallback function to allow flexibility on callback.
      */
     fallback() external {
-        address executor =
-            address(uint160(bytes20(msg.data[msg.data.length - 20:])));
-        bytes4 selector =
-            bytes4(msg.data[msg.data.length - 24:msg.data.length - 20]);
-        bytes memory protocolData = msg.data[:msg.data.length - 24];
-        _handleCallback(selector, executor, protocolData);
+        _handleCallback(msg.data);
     }
 
     /**
@@ -365,19 +360,17 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * See in IUniswapV3SwapCallback for documentation.
      */
     function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
         bytes calldata data
     ) external {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        bytes4 selector = bytes4(data[data.length - 4:]);
-        address executor = address(uint160(bytes20(data[data.length - 24:])));
-        bytes memory protocolData = data[:data.length - 24];
-        _handleCallback(
-            selector,
-            executor,
-            abi.encodePacked(amount0Delta, amount1Delta, protocolData)
-        );
+        uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
+        uint256 dataLength =
+            uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
+
+        bytes calldata fullData = msg.data[4:dataOffset + 32 + dataLength];
+        _handleCallback(fullData);
     }
 
     /**
@@ -388,11 +381,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         returns (bytes memory)
     {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        bytes4 selector = bytes4(data[data.length - 4:]);
-        address executor =
-            address(uint160(bytes20(data[data.length - 24:data.length - 4])));
-        bytes memory protocolData = data[:data.length - 24];
-        _handleCallback(selector, executor, protocolData);
+        _handleCallback(data);
         return "";
     }
 }
