@@ -3,7 +3,7 @@ use tycho_core::dto::Chain;
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        strategy_encoders::{ExecutorStrategyEncoder, SplitSwapStrategyEncoder},
+        strategy_encoder::strategy_encoders::{ExecutorStrategyEncoder, SplitSwapStrategyEncoder},
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         tycho_encoder::EVMTychoEncoder,
     },
