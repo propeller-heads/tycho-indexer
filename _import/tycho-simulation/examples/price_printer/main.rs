@@ -2,8 +2,7 @@ mod ui;
 pub mod utils;
 
 extern crate tycho_simulation;
-
-use std::env;
+use std::{env, str::FromStr};
 
 use clap::Parser;
 use futures::{future::select_all, StreamExt};
@@ -25,12 +24,57 @@ use tycho_simulation::{
     protocol::models::BlockUpdate,
     utils::load_all_tokens,
 };
+use utils::get_default_url;
 
 #[derive(Parser)]
 struct Cli {
     /// The tvl threshold to filter the graph by
     #[arg(short, long, default_value_t = 1000.0)]
     tvl_threshold: f64,
+    /// The target blockchain
+    #[clap(long, default_value = "ethereum")]
+    pub chain: String,
+}
+
+fn register_exchanges(
+    mut builder: ProtocolStreamBuilder,
+    chain: &Chain,
+    tvl_filter: ComponentFilter,
+) -> ProtocolStreamBuilder {
+    match chain {
+        Chain::Ethereum => {
+            builder = builder
+                .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                .exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:balancer_v2",
+                    tvl_filter.clone(),
+                    Some(balancer_pool_filter),
+                )
+                .exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:curve",
+                    tvl_filter.clone(),
+                    Some(curve_pool_filter),
+                )
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                );
+        }
+        Chain::Base => {
+            builder = builder
+                .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                )
+        }
+        Chain::ZkSync | Chain::Starknet | Chain::Arbitrum => {}
+    }
+    builder
 }
 
 #[tokio::main]
@@ -38,9 +82,13 @@ async fn main() {
     utils::setup_tracing();
     // Parse command-line arguments into a Cli struct
     let cli = Cli::parse();
+    let chain =
+        Chain::from_str(&cli.chain).unwrap_or_else(|_| panic!("Unknown chain {}", cli.chain));
 
-    let tycho_url =
-        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-beta.propellerheads.xyz".to_string());
+    let tycho_url = env::var("TYCHO_URL").unwrap_or_else(|_| {
+        get_default_url(&chain).unwrap_or_else(|| panic!("Unknown URL for chain {}", cli.chain))
+    });
+
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
@@ -57,37 +105,21 @@ async fn main() {
             tycho_url.as_str(),
             false,
             Some(tycho_api_key.as_str()),
-            Chain::Ethereum,
+            chain,
             None,
             None,
         )
         .await;
         let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
-        let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, Chain::Ethereum)
-            .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-            .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-            .exchange::<EVMPoolState<PreCachedDB>>(
-                "vm:balancer_v2",
-                tvl_filter.clone(),
-                Some(balancer_pool_filter),
-            )
-            .exchange::<EVMPoolState<PreCachedDB>>(
-                "vm:curve",
-                tvl_filter.clone(),
-                Some(curve_pool_filter),
-            )
-            .exchange::<UniswapV4State>(
-                "uniswap_v4",
-                tvl_filter.clone(),
-                Some(uniswap_v4_pool_with_hook_filter),
-            )
-            .auth_key(Some(tycho_api_key.clone()))
-            .skip_state_decode_failures(true)
-            .set_tokens(all_tokens)
-            .await
-            .build()
-            .await
-            .expect("Failed building protocol stream");
+        let mut protocol_stream =
+            register_exchanges(ProtocolStreamBuilder::new(&tycho_url, chain), &chain, tvl_filter)
+                .auth_key(Some(tycho_api_key.clone()))
+                .skip_state_decode_failures(true)
+                .set_tokens(all_tokens)
+                .await
+                .build()
+                .await
+                .expect("Failed building protocol stream");
 
         // Loop through block updates
         while let Some(msg) = protocol_stream.next().await {
