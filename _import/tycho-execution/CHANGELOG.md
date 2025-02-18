@@ -1,3 +1,18 @@
+## [0.41.0](https://github.com/propeller-heads/tycho-execution/compare/0.40.0...0.41.0) (2025-02-18)
+
+
+### Features
+
+* add back uniswapV3SwapCallback in router ([260f9d8](https://github.com/propeller-heads/tycho-execution/commit/260f9d866f9cd58d0739e24e6abcd08cb3ad4a45))
+* add uniswapV3SwapCallback in USV3 executor ([9d3b96f](https://github.com/propeller-heads/tycho-execution/commit/9d3b96f997d3295c14fd356211b66b4c308f0288))
+* Change signature of _handleCallback to take only bytes calldata ([2aa63d7](https://github.com/propeller-heads/tycho-execution/commit/2aa63d7ec0f9a74e70f258d2861b84825b35dcfd))
+* fix input decoding in usv3 executor and execution dispatcher ([80500e6](https://github.com/propeller-heads/tycho-execution/commit/80500e615eedbd3a2b075104787e817b1a1ec42f))
+* move callback testing to usv3 executor ([5853de6](https://github.com/propeller-heads/tycho-execution/commit/5853de679ad0182ce75467245054d28b916d518f))
+* rename execution dispatcher to dispatcher and use dispatcher for USV4 callback ([ad91e48](https://github.com/propeller-heads/tycho-execution/commit/ad91e485d3a7b125f4db39cb84bb504f2d6064cf))
+* update _handleCallback, add verifyCallback with docs ([076586d](https://github.com/propeller-heads/tycho-execution/commit/076586d77672faf1a02b20c69ea1de4ec8e6ae55))
+* update handleCallback in USV3 to do verification ([cccb252](https://github.com/propeller-heads/tycho-execution/commit/cccb252bf2194af55b983f73815edb0cf1782776))
+* update new interface in codebase ([bd19713](https://github.com/propeller-heads/tycho-execution/commit/bd1971334e61a128f8454d96df48889374749203))
+
 ## [0.40.0](https://github.com/propeller-heads/tycho-execution/compare/0.39.0...0.40.0) (2025-02-18)
 
 
