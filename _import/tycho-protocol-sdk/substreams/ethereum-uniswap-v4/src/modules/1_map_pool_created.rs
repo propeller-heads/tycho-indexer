@@ -37,20 +37,9 @@ fn get_new_pools(
             entity_changes: vec![EntityChanges {
                 component_id: event.id.to_vec().to_hex(),
                 attributes: vec![
-                    // Represents the pool's LP Fee. The fee is either static or dynamic.
-                    // Static fees are represented in hundredths of a bip, and can be set to a
-                    // value between 0 and 1000000 (100%) and are immutable. If
-                    // the value is set to 0x800000 (1 in the most significant bit of uint24) then
-                    // the pool has a dynamic fee. This pool is initialized
-                    // with 0 fee which can be changed later via hooks (dynamic fee).
                     Attribute {
                         name: "balance_owner".to_string(),
                         value: hex::decode(pool_manager_address).unwrap(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "fee".to_string(),
-                        value: event.fee.to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
@@ -100,6 +89,18 @@ fn get_new_pools(
                     Attribute {
                         name: "hooks".to_string(),
                         value: event.hooks.to_vec(),
+                        change: ChangeType::Creation.into(),
+                    },
+                    // Represents the pool's LP Fee. The fee is either static or dynamic. Static
+                    // fees are represented in hundredths of a bip, can be set to a value between 0
+                    // and 1000000 (100%) and are immutable. If the value is set to 0x800000 then
+                    // the pool is flagged as using dynamic fees. The dynamic fees changes should
+                    // be tracked in state attributes and the flag value set
+                    // here should remain untouched (it is needed for
+                    // generating the PoolKey for contract interactions).
+                    Attribute {
+                        name: "key_lp_fee".to_string(),
+                        value: event.fee.to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                 ],
