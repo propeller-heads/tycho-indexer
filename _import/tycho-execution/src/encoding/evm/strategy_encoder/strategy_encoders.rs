@@ -68,6 +68,24 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
     }
 }
 
+/// Represents a group of swaps that can be encoded into a single swap execution for gas
+/// optimization.
+///
+/// # Fields
+/// * `input_token`: Bytes, the input token of the first swap
+/// * `output_token`: Bytes, the output token of the final swap
+/// * `protocol_system`: String, the protocol system of the swaps
+/// * `swaps`: Vec<Swap>, the sequence of swaps to be executed as a group
+/// * `split`: f64, the split percentage of the first swap in the group
+#[derive(Clone, PartialEq, Debug)]
+pub struct SwapGroup {
+    input_token: Bytes,
+    output_token: Bytes,
+    protocol_system: String,
+    swaps: Vec<Swap>,
+    split: f64,
+}
+
 /// Represents the encoder for a swap strategy which supports single, sequential and split swaps.
 ///
 /// # Fields
@@ -268,32 +286,59 @@ impl SplitSwapStrategyEncoder {
             split_swap_validator: SplitSwapValidator,
         })
     }
+
+    /// Group consecutive swaps which can be encoded into one swap execution for gas optimization.
+    ///
+    /// An example where this applies is the case of USV4, which uses a PoolManager contract
+    /// to save token transfers on consecutive swaps.
+    fn group_swaps(&self, swaps: Vec<Swap>) -> Vec<SwapGroup> {
+        let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
+        let mut current_group: Option<SwapGroup> = None;
+        let mut last_swap_protocol = "".to_string();
+        let mut groupable_protocol;
+        let mut last_swap_out_token = Bytes::default();
+        for swap in swaps {
+            let current_swap_protocol = swap.component.protocol_system.clone();
+            groupable_protocol = GROUPABLE_PROTOCOLS.contains(&current_swap_protocol.as_str());
+
+            // Split 0 can also mean that the swap is the remaining part of a branch of splits,
+            // so we need to check the last swap's out token as well
+            let no_split = swap.split == 0.0 && swap.token_in == last_swap_out_token;
+
+            if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
+                // Second or later groupable pool in a sequence of groupable pools. Merge to the
+                // current group.
+                if let Some(group) = current_group.as_mut() {
+                    group.swaps.push(swap.clone());
+                    // Update the output token of the current group.
+                    group.output_token = swap.token_out.clone();
+                }
+            } else {
+                // Not second or later USV4 pool. Push the current group (if it exists) and then
+                // create a new group.
+                if let Some(group) = current_group.as_mut() {
+                    grouped_swaps.push(group.clone());
+                }
+                current_group = Some(SwapGroup {
+                    input_token: swap.token_in.clone(),
+                    output_token: swap.token_out.clone(),
+                    protocol_system: current_swap_protocol.clone(),
+                    swaps: vec![swap.clone()],
+                    split: swap.split,
+                });
+            }
+            last_swap_protocol = current_swap_protocol;
+            last_swap_out_token = swap.token_out.clone();
+        }
+        if let Some(group) = current_group.as_mut() {
+            grouped_swaps.push(group.clone());
+        }
+        grouped_swaps
+    }
 }
+impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 
-/// To be used if there are two or more UniswapV4 swaps consecutively. They can be combined as a
-/// gas optimization.
-#[derive(Clone)]
-pub struct UniswapV4StrategyEncoder {
-    swap_encoder_registry: SwapEncoderRegistry,
-    permit2: Permit2,
-    selector: String,
-    native_address: Bytes,
-    wrapped_address: Bytes,
-    split_swap_validator: SplitSwapValidator,
-}
-
-impl EVMStrategyEncoder for UniswapV4StrategyEncoder {}
-
-#[derive(Clone, PartialEq, Debug)]
-pub struct SwapGroup {
-    input_token: Bytes,
-    output_token: Bytes,
-    protocol_system: String,
-    swaps: Vec<Swap>,
-    split: f64,
-}
-
-impl StrategyEncoder for UniswapV4StrategyEncoder {
+impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(
         &self,
         solution: Solution,
@@ -394,202 +439,6 @@ impl StrategyEncoder for UniswapV4StrategyEncoder {
                 })?,
                 self.encode_executor_selector(swap_encoder.executor_selector()),
                 grouped_protocol_data.abi_encode_packed(),
-            );
-            swaps.push(swap_data);
-        }
-
-        let encoded_swaps = self.ple_encode(swaps);
-        let method_calldata = (
-            biguint_to_u256(&solution.given_amount),
-            bytes_to_address(&solution.given_token)?,
-            bytes_to_address(&solution.checked_token)?,
-            biguint_to_u256(&min_amount_out),
-            wrap,
-            unwrap,
-            U256::from(tokens.len()),
-            bytes_to_address(&solution.receiver)?,
-            permit,
-            signature.as_bytes().to_vec(),
-            encoded_swaps,
-        )
-            .abi_encode();
-
-        let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, solution.router_address, None))
-    }
-
-    fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
-        self.swap_encoder_registry
-            .get_encoder(protocol_system)
-    }
-
-    fn clone_box(&self) -> Box<dyn StrategyEncoder> {
-        Box::new(self.clone())
-    }
-}
-
-impl UniswapV4StrategyEncoder {
-    #[allow(dead_code)]
-    pub fn new(
-        signer_pk: String,
-        chain: Chain,
-        swap_encoder_registry: SwapEncoderRegistry,
-    ) -> Result<Self, EncodingError> {
-        let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
-        Ok(Self {
-            permit2: Permit2::new(signer_pk, chain.clone())?,
-            selector,
-            swap_encoder_registry,
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
-            split_swap_validator: SplitSwapValidator,
-        })
-    }
-
-    /// Group consecutive swaps which can be encoded into one swap execution for gas optimization.
-    ///
-    /// An example where this applies is the case of USV4, which uses a PoolManager contract
-    /// to save token transfers on consecutive swaps.
-    fn group_swaps(&self, swaps: Vec<Swap>) -> Vec<SwapGroup> {
-        let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
-        let mut current_group: Option<SwapGroup> = None;
-        let mut last_swap_protocol = "".to_string();
-        let mut groupable_protocol;
-        let mut last_swap_out_token = Bytes::default();
-        for swap in swaps {
-            let current_swap_protocol = swap.component.protocol_system.clone();
-            groupable_protocol = GROUPABLE_PROTOCOLS.contains(&current_swap_protocol.as_str());
-
-            // Split 0 can also mean that the swap is the remaining part of a branch of splits,
-            // so we need to check the last swap's out token as well
-            let no_split = swap.split == 0.0 && swap.token_in == last_swap_out_token;
-
-            if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
-                // Second or later groupable pool in a sequence of groupable pools. Merge to the
-                // current group.
-                if let Some(group) = current_group.as_mut() {
-                    group.swaps.push(swap.clone());
-                    // Update the output token of the current group.
-                    group.output_token = swap.token_out.clone();
-                }
-            } else {
-                // Not second or later USV4 pool. Push the current group (if it exists) and then
-                // create a new group.
-                if let Some(group) = current_group.as_mut() {
-                    grouped_swaps.push(group.clone());
-                }
-                current_group = Some(SwapGroup {
-                    input_token: swap.token_in.clone(),
-                    output_token: swap.token_out.clone(),
-                    protocol_system: current_swap_protocol.clone(),
-                    swaps: vec![swap.clone()],
-                    split: swap.split,
-                });
-            }
-            last_swap_protocol = current_swap_protocol;
-            last_swap_out_token = swap.token_out.clone();
-        }
-        if let Some(group) = current_group.as_mut() {
-            grouped_swaps.push(group.clone());
-        }
-        grouped_swaps
-    }
-}
-
-impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
-
-impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
-        self.split_swap_validator
-            .validate_split_percentages(&solution.swaps)?;
-        self.split_swap_validator
-            .validate_swap_path(
-                &solution.swaps,
-                &solution.given_token,
-                &solution.checked_token,
-                &solution.native_action,
-                &self.native_address,
-                &self.wrapped_address,
-            )?;
-        let (permit, signature) = self.permit2.get_permit(
-            &solution.router_address,
-            &solution.sender,
-            &solution.given_token,
-            &solution.given_amount,
-        )?;
-        let min_amount_out = get_min_amount_for_solution(solution.clone());
-
-        // The tokens array is composed of the given token, the checked token and all the
-        // intermediary tokens in between. The contract expects the tokens to be in this order.
-        let solution_tokens: HashSet<Bytes> =
-            vec![solution.given_token.clone(), solution.checked_token.clone()]
-                .into_iter()
-                .collect();
-
-        let intermediary_tokens: HashSet<Bytes> = solution
-            .swaps
-            .iter()
-            .flat_map(|swap| vec![swap.token_in.clone(), swap.token_out.clone()])
-            .collect();
-        let mut intermediary_tokens: Vec<Bytes> = intermediary_tokens
-            .difference(&solution_tokens)
-            .cloned()
-            .collect();
-        // this is only to make the test deterministic (same index for the same token for different
-        // runs)
-        intermediary_tokens.sort();
-
-        let (mut unwrap, mut wrap) = (false, false);
-        if let Some(action) = solution.native_action.clone() {
-            match action {
-                NativeAction::Wrap => wrap = true,
-                NativeAction::Unwrap => unwrap = true,
-            }
-        }
-
-        let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
-        if wrap {
-            tokens.push(self.wrapped_address.clone());
-        } else {
-            tokens.push(solution.given_token.clone());
-        }
-        tokens.extend(intermediary_tokens);
-
-        if unwrap {
-            tokens.push(self.wrapped_address.clone());
-        } else {
-            tokens.push(solution.checked_token.clone());
-        }
-
-        let mut swaps = vec![];
-        for swap in solution.swaps.iter() {
-            let swap_encoder = self
-                .get_swap_encoder(&swap.component.protocol_system)
-                .ok_or_else(|| {
-                    EncodingError::InvalidInput(format!(
-                        "Swap encoder not found for protocol: {}",
-                        swap.component.protocol_system
-                    ))
-                })?;
-
-            let encoding_context = EncodingContext {
-                receiver: solution.router_address.clone(),
-                exact_out: solution.exact_out,
-                router_address: solution.router_address.clone(),
-            };
-            let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
-            let swap_data = self.encode_swap_header(
-                get_token_position(tokens.clone(), swap.token_in.clone())?,
-                get_token_position(tokens.clone(), swap.token_out.clone())?,
-                percentage_to_uint24(swap.split),
-                Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
-                    EncodingError::FatalError("Invalid executor address".to_string())
-                })?,
-                self.encode_executor_selector(swap_encoder.executor_selector()),
-                protocol_data,
             );
             swaps.push(swap_data);
         }
@@ -812,7 +661,7 @@ mod tests {
         #[case] checked_amount: Option<BigUint>,
         #[case] expected_min_amount: U256,
     ) {
-        // Performs a single swap from WETH to DAI on a USV2 pool
+        // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping optimizations.
 
         // Set up a mock private key for signing
         let private_key =
@@ -1141,7 +990,7 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            UniswapV4StrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
 
         let grouped_swaps = encoder.group_swaps(vec![
             swap_weth_wbtc.clone(),
@@ -1227,7 +1076,7 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            UniswapV4StrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
 
         let grouped_swaps = encoder.group_swaps(vec![
             swap_wbtc_weth.clone(),
@@ -1320,7 +1169,7 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            UniswapV4StrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
 
         let grouped_swaps = encoder.group_swaps(vec![
             swap_weth_wbtc.clone(),
@@ -1351,7 +1200,7 @@ mod tests {
     }
 
     #[test]
-    fn test_usv4_encoding_strategy() {
+    fn test_split_encoding_strategy_usv4() {
         // Performs a split swap from WETH to USDC though WBTC using two consecutive USV4 pools
         //
         //   WETH ──(USV4)──> WBTC ───(USV4)──> USDC
@@ -1389,7 +1238,7 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            UniswapV4StrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -1464,135 +1313,6 @@ mod tests {
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "01",                                       // zero2one
             "00000000000000",                           // padding
-        ));
-        let hex_calldata = encode(&calldata);
-
-        assert_eq!(hex_calldata[..520], expected_input);
-        assert_eq!(hex_calldata[1288..], expected_swaps);
-    }
-    #[test]
-    fn test_usv4_encoding_strategy_no_optimization() {
-        // Performs a split swap from WETH to USDC though WBTC using one USV4 pool after a USV2
-        // pool. No swaps are optimizable here. Check that this doesn't break anything.
-        //
-        //   WETH ──(USV2)──> WBTC ───(USV4)──> USDC
-        //
-
-        // Set up a mock private key for signing
-        let private_key =
-            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
-        let weth = weth();
-        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-
-        let swap_weth_wbtc = Swap {
-            component: ProtocolComponent {
-                id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: wbtc.clone(),
-            // This represents the remaining 50%, but to avoid any rounding errors we set this to
-            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
-            split: 0f64,
-        };
-        let swap_wbtc_usdc = Swap {
-            component: ProtocolComponent {
-                id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: wbtc.clone(),
-            token_out: usdc.clone(),
-            split: 0f64,
-        };
-        let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            UniswapV4StrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
-        let solution = Solution {
-            exact_out: false,
-            given_token: weth,
-            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-            checked_token: usdc,
-            expected_amount: Some(BigUint::from_str("3_000_000000").unwrap()),
-            checked_amount: None,
-            slippage: None,
-            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
-            swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-            ..Default::default()
-        };
-
-        let (calldata, _, _) = encoder
-            .encode_strategy(solution)
-            .unwrap();
-
-        let expected_input = [
-        "4860f9ed",                                                              // Function selector
-        "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
-        "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
-        "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token out
-        "0000000000000000000000000000000000000000000000000000000000000000",      // min amount out
-        "0000000000000000000000000000000000000000000000000000000000000000",      // wrap
-        "0000000000000000000000000000000000000000000000000000000000000000",      // unwrap
-        // tokens length (not including intermediary tokens of USV4-optimized swaps)
-        "0000000000000000000000000000000000000000000000000000000000000003",
-        "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",      // receiver
-    ]
-        .join("");
-
-        // after this there is the permit and because of the deadlines (that depend on block time)
-        // it's hard to assert
-        // "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-        // "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
-        // "0000000000000000000000000000000000000000000000000000000067c205fe", // expiration
-        // "0000000000000000000000000000000000000000000000000000000000000000", // nonce
-        // "0000000000000000000000002c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4", // spender
-        // "00000000000000000000000000000000000000000000000000000000679a8006", // deadline
-        // offset of signature (from start of call data to beginning of length indication)
-        // "0000000000000000000000000000000000000000000000000000000000000200",
-        // offset of ple encoded swaps (from start of call data to beginning of length indication)
-        // "0000000000000000000000000000000000000000000000000000000000000280",
-        // length of signature without padding
-        // "0000000000000000000000000000000000000000000000000000000000000041",
-        // signature + padding
-        // "a031b63a01ef5d25975663e5d6c420ef498e3a5968b593cdf846c6729a788186",
-        // "1ddaf79c51453cd501d321ee541d13593e3a266be44103eefdf6e76a032d2870",
-        // "1b00000000000000000000000000000000000000000000000000000000000000"
-
-        let expected_swaps = String::from(concat!(
-            // length of ple encoded swaps without padding
-            "00000000000000000000000000000000000000000000000000000000000000b8",
-            // ple encoded swaps
-            "005a",   // Swap length
-            "00",     // token in index
-            "01",     // token out index
-            "000000", // split
-            // Swap data header
-            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
-            "bd0625ab",                                 // selector
-            // First swap protocol data
-            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-            "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
-            "00",                                       // zero2one
-            // ple encoded swaps
-            "005a",   // Swap length
-            "01",     // token in index
-            "02",     // token out index
-            "000000", // split
-            // Swap data header
-            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
-            "bd0625ab",                                 // selector
-            // Second swap protocol data
-            "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // token in
-            "ae461ca67b15dc8dc81ce7615e0320da1a9ab8d5", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
-            "01",                                       // zero2one
-            "0000000000000000",                         // padding
         ));
         let hex_calldata = encode(&calldata);
 
