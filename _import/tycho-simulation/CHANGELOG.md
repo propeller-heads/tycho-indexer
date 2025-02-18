@@ -1,3 +1,10 @@
+## [0.76.0](https://github.com/propeller-heads/tycho-simulation/compare/0.75.0...0.76.0) (2025-02-18)
+
+
+### Features
+
+* **example:** add base into the `price-printer` example ([b414fac](https://github.com/propeller-heads/tycho-simulation/commit/b414facadc297cdf81e98031814d44bb2bf67471))
+
 ## [0.75.0](https://github.com/propeller-heads/tycho-simulation/compare/0.74.4...0.75.0) (2025-02-17)
 
 
