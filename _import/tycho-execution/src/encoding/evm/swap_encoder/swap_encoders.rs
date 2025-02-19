@@ -202,10 +202,21 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         swap: Swap,
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
+        let mut first_swap = false;
+        if encoding_context.group_token_in == Some(swap.token_in.clone()) &&
+            encoding_context.group_token_out == Some(swap.token_out.clone())
+        {
+            first_swap = true;
+        }
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
-        let mut amount_out_min = [0u8; 32];
-        amount_out_min[31] = 1;
+        let mut amount_out_min = vec![0u8; 32]; // Create a zero-filled buffer of 32 bytes
+        let min_value = encoding_context
+            .amount_out_min
+            .unwrap_or_default()
+            .to_bytes_be();
+        // Copy the actual value to the end of the buffer, maintaining leading zeros
+        amount_out_min[(32 - min_value.len())..].copy_from_slice(&min_value);
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let callback_executor = bytes_to_address(&encoding_context.router_address)?;
 
@@ -254,6 +265,14 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
         let pool_params =
             Self::encode_pool_params(token_out_address, pool_fee_u24, pool_tick_spacing_u24);
+
+        if !first_swap {
+            return Ok(Self::encode_pool_params(
+                token_in_address,
+                pool_fee_u24,
+                pool_tick_spacing_u24,
+            ));
+        }
 
         let args = (
             token_in_address,
@@ -345,7 +364,7 @@ mod tests {
     use std::collections::HashMap;
 
     use alloy::hex::encode;
-    use num_bigint::BigInt;
+    use num_bigint::{BigInt, BigUint};
     use tycho_core::{dto::ProtocolComponent, Bytes};
 
     use super::*;
@@ -366,6 +385,9 @@ mod tests {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Bytes::zero(20),
+            group_token_in: None,
+            group_token_out: None,
+            amount_out_min: None,
         };
         let encoder =
             UniswapV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -409,6 +431,9 @@ mod tests {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Bytes::zero(20),
+            group_token_in: None,
+            group_token_out: None,
+            amount_out_min: None,
         };
         let encoder =
             UniswapV3SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -453,6 +478,9 @@ mod tests {
             receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
             exact_out: false,
             router_address: Bytes::zero(20),
+            group_token_in: None,
+            group_token_out: None,
+            amount_out_min: None,
         };
         let encoder =
             BalancerV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -480,11 +508,13 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_uniswap_v4() {
+    fn test_encode_uniswap_v4_simple_swap() {
         let fee = BigInt::from(100);
         let tick_spacing = BigInt::from(1);
         let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
         let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
+        let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
+        let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
         static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
@@ -498,8 +528,8 @@ mod tests {
         };
         let swap = Swap {
             component: usv4_pool,
-            token_in: Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"), // USDE
-            token_out: Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"), // USDT
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
             split: 0f64,
         };
         let encoding_context = EncodingContext {
@@ -509,6 +539,9 @@ mod tests {
             exact_out: false,
             // Same as the executor address
             router_address: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            group_token_in: Some(token_in),
+            group_token_out: Some(token_out),
+            amount_out_min: Some(BigUint::from(1u128)),
         };
         let encoder =
             UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -539,6 +572,63 @@ mod tests {
                 "000064",
                 // - tick spacing (3 bytes)
                 "000001"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_encode_uniswap_v4_grouped() {
+        let fee = BigInt::from(500);
+        let tick_spacing = BigInt::from(10);
+        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
+        let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
+        let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
+        let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
+        static_attributes.insert("tickSpacing".into(), Bytes::from(encoded_tick_spacing.to_vec()));
+
+        let usv4_pool = ProtocolComponent {
+            id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+            static_attributes,
+            ..Default::default()
+        };
+
+        let swap = Swap {
+            component: usv4_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+
+        let encoding_context = EncodingContext {
+            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+            exact_out: false,
+            router_address: Bytes::zero(20),
+            // Different from token_in and token_out
+            group_token_in: Some(Bytes::zero(20)),
+            group_token_out: Some(Bytes::zero(20)),
+            amount_out_min: Some(BigUint::from(1u128)),
+        };
+
+        let encoder =
+            UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // pool params:
+                // - intermediary token (20 bytes)
+                "4c9edd5852cd905f086c759e8383e09bff1e68b3",
+                // - fee (3 bytes)
+                "0001f4",
+                // - tick spacing (3 bytes)
+                "00000a"
             ))
         );
     }

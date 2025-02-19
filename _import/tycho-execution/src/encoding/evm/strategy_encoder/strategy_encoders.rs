@@ -2,6 +2,8 @@ use std::{collections::HashSet, str::FromStr};
 
 use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
+use num_bigint::BigUint;
+use num_traits::Zero;
 use tycho_core::{keccak256, Bytes};
 
 use crate::encoding::{
@@ -257,6 +259,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 receiver: solution.router_address.clone(),
                 exact_out: solution.exact_out,
                 router_address: solution.router_address.clone(),
+                group_token_in: Some(tokens.first().unwrap().clone()),
+                group_token_out: Some(tokens.last().unwrap().clone()),
+                amount_out_min: Some(BigUint::zero()),
             };
             let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
             for swap in grouped_swap.swaps.iter() {
@@ -347,6 +352,9 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             receiver: solution.receiver,
             exact_out: solution.exact_out,
             router_address: solution.router_address,
+            group_token_in: Some(solution.given_token.clone()),
+            group_token_out: Some(solution.checked_token.clone()),
+            amount_out_min: Some(BigUint::zero()),
         };
         let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context)?;
 
