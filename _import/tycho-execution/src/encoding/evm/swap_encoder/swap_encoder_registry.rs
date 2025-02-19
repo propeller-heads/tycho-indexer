@@ -19,8 +19,9 @@ impl SwapEncoderRegistry {
     /// executors' addresses in the file at the given path.
     pub fn new(
         executors_file_path: Option<String>,
-        blockchain: Chain,
+        blockchain: tycho_core::dto::Chain,
     ) -> Result<Self, EncodingError> {
+        let chain = Chain::from(blockchain);
         let config_str = if let Some(ref path) = executors_file_path {
             fs::read_to_string(path).map_err(|e| {
                 EncodingError::FatalError(format!(
@@ -34,8 +35,8 @@ impl SwapEncoderRegistry {
         let config: HashMap<String, HashMap<String, String>> = serde_json::from_str(&config_str)?;
         let mut encoders = HashMap::new();
         let executors = config
-            .get(&blockchain.name)
-            .ok_or(EncodingError::FatalError("No executors found for blockchain".to_string()))?;
+            .get(&chain.name)
+            .ok_or(EncodingError::FatalError("No executors found for chain".to_string()))?;
         for (protocol, executor_address) in executors {
             let builder = SwapEncoderBuilder::new(protocol, executor_address);
             let encoder = builder.build()?;

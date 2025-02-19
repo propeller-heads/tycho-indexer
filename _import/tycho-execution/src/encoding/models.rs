@@ -45,11 +45,6 @@ pub struct Solution {
     pub router_address: Bytes,
     /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
-    /// If set to true, the solution will be encoded to be sent directly to the Executor and
-    /// skip the router. The user is responsible for managing necessary approvals and token
-    /// transfers.
-    #[serde(default)]
-    pub direct_execution: bool,
 }
 
 /// Represents an action to be performed on the native token either before or after the swap.
