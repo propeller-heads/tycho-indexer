@@ -20,7 +20,7 @@ pub trait SwapEncoder: Sync + Send {
     fn executor_address(&self) -> &str;
 
     /// The selector of the executor function that will be called in order to perform a swap.
-    fn executor_selector(&self) -> &str;
+    fn swap_selector(&self) -> &str;
 
     /// Clones the swap encoder as a trait object.
     /// This allows the encoder to be cloned when it is being used as a `Box<dyn SwapEncoder>`.
