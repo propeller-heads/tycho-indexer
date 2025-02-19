@@ -190,9 +190,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 receiver: solution.router_address.clone(),
                 exact_out: solution.exact_out,
                 router_address: solution.router_address.clone(),
-                group_token_in: Some(tokens.first().unwrap().clone()),
-                group_token_out: Some(tokens.last().unwrap().clone()),
-                amount_out_min: Some(min_amount_out.clone()),
+                group_token_in: tokens.first().unwrap().clone(),
+                group_token_out: tokens.last().unwrap().clone(),
+                amount_out_min: min_amount_out.clone(),
             };
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
@@ -296,9 +296,9 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: router_address.clone(),
-                group_token_in: Some(swap.token_in.clone()),
-                group_token_out: Some(swap.token_out.clone()),
-                amount_out_min: Some(BigUint::from(1u128)),
+                group_token_in: swap.token_in.clone(),
+                group_token_out: swap.token_out.clone(),
+                amount_out_min: BigUint::from(1u128),
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);

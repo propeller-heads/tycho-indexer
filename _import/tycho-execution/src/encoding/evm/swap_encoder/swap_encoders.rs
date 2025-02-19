@@ -181,11 +181,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         })?;
 
         // Early check if this is not the first swap
-        if encoding_context
-            .group_token_in
-            .is_some() &&
-            encoding_context.group_token_in != Some(swap.token_in.clone())
-        {
+        if encoding_context.group_token_in != swap.token_in {
             return Ok((bytes_to_address(&swap.token_out)?, pool_fee_u24, pool_tick_spacing_u24)
                 .abi_encode_packed());
         }
@@ -193,21 +189,10 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         // This is the first swap, compute all necessary values
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
-        let group_token_in = if let Some(group_token_in) = encoding_context.group_token_in {
-            bytes_to_address(&group_token_in)?
-        } else {
-            token_in_address
-        };
-        let group_token_out = if let Some(group_token_out) = encoding_context.group_token_out {
-            bytes_to_address(&group_token_out)?
-        } else {
-            token_out_address
-        };
-        let amount_out_min = biguint_to_u256(
-            &encoding_context
-                .amount_out_min
-                .unwrap_or_default(),
-        );
+        let group_token_in_address = bytes_to_address(&encoding_context.group_token_in)?;
+        let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
+
+        let amount_out_min = biguint_to_u256(&encoding_context.amount_out_min);
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let callback_executor = bytes_to_address(&encoding_context.router_address)?;
 
@@ -215,8 +200,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
 
         let args = (
-            group_token_in,
-            group_token_out,
+            group_token_in_address,
+            group_token_out_address,
             amount_out_min,
             zero_to_one,
             callback_executor,
@@ -315,19 +300,22 @@ mod tests {
             id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
             ..Default::default()
         };
+
+        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+        let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
         let swap = Swap {
             component: usv2_pool,
-            token_in: Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
-            token_out: Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"),
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
             split: 0f64,
         };
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Bytes::zero(20),
-            group_token_in: None,
-            group_token_out: None,
-            amount_out_min: None,
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             UniswapV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -361,19 +349,21 @@ mod tests {
             static_attributes,
             ..Default::default()
         };
+        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+        let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
         let swap = Swap {
             component: usv3_pool,
-            token_in: Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
-            token_out: Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"),
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
             split: 0f64,
         };
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Bytes::zero(20),
-            group_token_in: None,
-            group_token_out: None,
-            amount_out_min: None,
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             UniswapV3SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -407,10 +397,12 @@ mod tests {
             protocol_system: String::from("vm:balancer_v2"),
             ..Default::default()
         };
+        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+        let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
         let swap = Swap {
             component: balancer_pool,
-            token_in: Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"), // WETH
-            token_out: Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D"), // BAL
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
             split: 0f64,
         };
         let encoding_context = EncodingContext {
@@ -418,9 +410,9 @@ mod tests {
             receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
             exact_out: false,
             router_address: Bytes::zero(20),
-            group_token_in: None,
-            group_token_out: None,
-            amount_out_min: None,
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             BalancerV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -479,10 +471,10 @@ mod tests {
             exact_out: false,
             // Same as the executor address
             router_address: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
-            // When group tokens are None, the token in and out are the group tokens
-            group_token_in: None,
-            group_token_out: None,
-            amount_out_min: Some(BigUint::from(1u128)),
+
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+            amount_out_min: BigUint::from(1u128),
         };
         let encoder =
             UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -548,10 +540,10 @@ mod tests {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Bytes::zero(20),
-            group_token_in: Some(group_token_in),
+            group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
-            group_token_out: Some(token_out),
-            amount_out_min: Some(BigUint::from(1u128)),
+            group_token_out: token_out.clone(),
+            amount_out_min: BigUint::from(1u128),
         };
 
         let encoder =
@@ -588,9 +580,9 @@ mod tests {
             receiver: receiver_address.clone(),
             exact_out: false,
             router_address: router_address.clone(),
-            group_token_in: Some(usde_address.clone()),
-            group_token_out: Some(wbtc_address.clone()),
-            amount_out_min: Some(BigUint::from(1u128)),
+            group_token_in: usde_address.clone(),
+            group_token_out: wbtc_address.clone(),
+            amount_out_min: BigUint::from(1u128),
         };
 
         // Setup - First sequence: USDE -> USDT
