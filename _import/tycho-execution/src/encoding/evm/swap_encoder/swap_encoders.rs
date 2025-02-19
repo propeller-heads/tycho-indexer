@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use alloy_primitives::{Address, Bytes as AlloyBytes};
+use alloy_primitives::{Address, Bytes as AlloyBytes, U256};
 use alloy_sol_types::SolValue;
 
 use crate::encoding::{
@@ -8,8 +8,7 @@ use crate::encoding::{
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{
-            biguint_to_u256, bytes_to_address, encode_function_selector, get_static_attribute,
-            pad_to_fixed_size,
+            bytes_to_address, encode_function_selector, get_static_attribute, pad_to_fixed_size,
         },
     },
     models::{EncodingContext, Swap},
@@ -192,7 +191,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let group_token_in_address = bytes_to_address(&encoding_context.group_token_in)?;
         let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
-        let amount_out_min = biguint_to_u256(&encoding_context.amount_out_min);
+        let amount_out_min = U256::from(0);
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let callback_executor = bytes_to_address(&encoding_context.router_address)?;
 
@@ -289,7 +288,7 @@ mod tests {
     use std::collections::HashMap;
 
     use alloy::hex::encode;
-    use num_bigint::{BigInt, BigUint};
+    use num_bigint::BigInt;
     use tycho_core::{dto::ProtocolComponent, Bytes};
 
     use super::*;
@@ -315,7 +314,6 @@ mod tests {
             router_address: Bytes::zero(20),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             UniswapV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -363,7 +361,6 @@ mod tests {
             router_address: Bytes::zero(20),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             UniswapV3SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -412,7 +409,6 @@ mod tests {
             router_address: Bytes::zero(20),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             BalancerV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -474,7 +470,6 @@ mod tests {
 
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(1u128),
         };
         let encoder =
             UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -490,8 +485,8 @@ mod tests {
                 "4c9edd5852cd905f086c759e8383e09bff1e68b3",
                 // group token out
                 "dac17f958d2ee523a2206206994597c13d831ec7",
-                // amount out min (0 as u128)
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                // amount out min
+                "0000000000000000000000000000000000000000000000000000000000000000",
                 // zero for one
                 "01",
                 // router address
@@ -543,7 +538,6 @@ mod tests {
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(1u128),
         };
 
         let encoder =
@@ -582,7 +576,6 @@ mod tests {
             router_address: router_address.clone(),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
-            amount_out_min: BigUint::from(1u128),
         };
 
         // Setup - First sequence: USDE -> USDT
@@ -656,8 +649,8 @@ mod tests {
                 "4c9edd5852cd905f086c759e8383e09bff1e68b3",
                 // group_token out
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                // amount out min (1 as u128)
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                // amount out min
+                "0000000000000000000000000000000000000000000000000000000000000000",
                 // zero for one
                 "01",
                 // router address

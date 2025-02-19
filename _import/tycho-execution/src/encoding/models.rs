@@ -108,7 +108,6 @@ pub struct Transaction {
 /// * `router_address`: Address of the router contract to be used for the swaps.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
-/// * `amount_out_min`: Minimum amount of the output token to be received.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub receiver: Bytes,
@@ -116,7 +115,6 @@ pub struct EncodingContext {
     pub router_address: Bytes,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
-    pub amount_out_min: BigUint,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]

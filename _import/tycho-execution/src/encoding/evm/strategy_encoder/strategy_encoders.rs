@@ -2,7 +2,6 @@ use std::{collections::HashSet, str::FromStr};
 
 use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
-use num_bigint::BigUint;
 use tycho_core::{keccak256, Bytes};
 
 use crate::encoding::{
@@ -187,16 +186,15 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let encoding_context = EncodingContext {
-                receiver: solution.router_address.clone(),
-                exact_out: solution.exact_out,
-                router_address: solution.router_address.clone(),
-                group_token_in: tokens.first().unwrap().clone(),
-                group_token_out: tokens.last().unwrap().clone(),
-                amount_out_min: min_amount_out.clone(),
-            };
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
+                let encoding_context = EncodingContext {
+                    receiver: solution.router_address.clone(),
+                    exact_out: solution.exact_out,
+                    router_address: solution.router_address.clone(),
+                    group_token_in: grouped_swap.input_token.clone(),
+                    group_token_out: grouped_swap.output_token.clone(),
+                };
                 let protocol_data =
                     swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
                 grouped_protocol_data.extend(protocol_data);
@@ -297,9 +295,8 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: router_address.clone(),
-                group_token_in: swap.token_in.clone(),
-                group_token_out: swap.token_out.clone(),
-                amount_out_min: BigUint::from(1u128),
+                group_token_in: grouped_swap.input_token.clone(),
+                group_token_out: grouped_swap.output_token.clone(),
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
