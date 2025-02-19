@@ -1,3 +1,21 @@
+## [0.44.0](https://github.com/propeller-heads/tycho-execution/compare/0.43.0...0.44.0) (2025-02-19)
+
+
+### Features
+
+* add integration test for complex swaps ([5e9b388](https://github.com/propeller-heads/tycho-execution/commit/5e9b38876e974aa9f2e62ebf754237a57fca28eb))
+* add new attributes in encoding context, update usv4 swap encoder and tests ([1bfe656](https://github.com/propeller-heads/tycho-execution/commit/1bfe656e6b1279482116be5ffddd81f83c0c381e))
+* add single swap integration test for usv4 executor ([529456f](https://github.com/propeller-heads/tycho-execution/commit/529456f40cee3e555090d7defdf50c9c341e6c50))
+* add usv4 swap encoder with single swap test ([789416b](https://github.com/propeller-heads/tycho-execution/commit/789416b2cd8f3cd9844bf2848768ea5bd7f3f6e3))
+* add util fns, change callback_selector to string, update first_swap check ([9219dd3](https://github.com/propeller-heads/tycho-execution/commit/9219dd329d5d38b8c51b40aa5664e5120c3b6dcd))
+* early return in usv4 swap encoder for second swap, add utils ([f7ddace](https://github.com/propeller-heads/tycho-execution/commit/f7ddace5591fcee3425c138b031de321fb8336ef))
+* update test_encode_uniswap_v4_grouped ([baeebb9](https://github.com/propeller-heads/tycho-execution/commit/baeebb9fe4d1df4db06aa3ce9606a59f6b12552d))
+
+
+### Bug Fixes
+
+* update EncodingContext in strategy_encoder ([7f3aca9](https://github.com/propeller-heads/tycho-execution/commit/7f3aca90ba20ec68fa6f3ba3267aa87cb2540d70))
+
 ## [0.43.0](https://github.com/propeller-heads/tycho-execution/compare/0.42.0...0.43.0) (2025-02-19)
 
 
