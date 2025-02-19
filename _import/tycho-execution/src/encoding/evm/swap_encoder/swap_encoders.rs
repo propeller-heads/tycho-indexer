@@ -542,12 +542,12 @@ mod tests {
 
     #[test]
     fn test_encode_uniswap_v4_grouped() {
-        let fee = BigInt::from(500);
-        let tick_spacing = BigInt::from(10);
+        let fee = BigInt::from(3000);
+        let tick_spacing = BigInt::from(60);
         let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
         let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
-        let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
-        let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+        let token_in = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+        let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
         static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
@@ -588,11 +588,11 @@ mod tests {
             String::from(concat!(
                 // pool params:
                 // - intermediary token (20 bytes)
-                "dac17f958d2ee523a2206206994597c13d831ec7",
+                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // - fee (3 bytes)
-                "0001f4",
+                "000bb8",
                 // - tick spacing (3 bytes)
-                "00000a"
+                "00003c"
             ))
         );
     }
