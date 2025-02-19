@@ -152,14 +152,6 @@ impl UniswapV4SwapEncoder {
     fn get_zero_to_one(sell_token_address: Address, buy_token_address: Address) -> bool {
         sell_token_address < buy_token_address
     }
-
-    fn encode_pool_params(
-        intermediary_token: Address,
-        fee: [u8; 3],
-        tick_spacing: [u8; 3],
-    ) -> Vec<u8> {
-        (intermediary_token, fee, tick_spacing).abi_encode_packed()
-    }
 }
 
 impl SwapEncoder for UniswapV4SwapEncoder {
@@ -189,11 +181,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
         // Early check if this is not the first swap
         if encoding_context.group_token_in != Some(swap.token_in.clone()) {
-            return Ok(Self::encode_pool_params(
-                bytes_to_address(&swap.token_out)?,
-                pool_fee_u24,
-                pool_tick_spacing_u24,
-            ));
+            return Ok((bytes_to_address(&swap.token_out)?, pool_fee_u24, pool_tick_spacing_u24)
+                .abi_encode_packed());
         }
 
         // This is the first swap, compute all necessary values
@@ -219,7 +208,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let callback_executor = bytes_to_address(&encoding_context.router_address)?;
 
         let pool_params =
-            Self::encode_pool_params(token_out_address, pool_fee_u24, pool_tick_spacing_u24);
+            (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
 
         let args = (
             group_token_in,
