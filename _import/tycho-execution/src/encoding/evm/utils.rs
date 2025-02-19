@@ -4,7 +4,10 @@ use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, 
 use num_bigint::BigUint;
 use tycho_core::Bytes;
 
-use crate::encoding::{errors::EncodingError, models::Solution};
+use crate::encoding::{
+    errors::EncodingError,
+    models::{Solution, Swap},
+};
 
 /// Safely converts a `Bytes` object to an `Address` object.
 ///
@@ -92,7 +95,7 @@ pub fn get_token_position(tokens: Vec<Bytes>, token: Bytes) -> Result<U8, Encodi
     Ok(position)
 }
 
-/// Pads a byte slice to a fixed size array with leading zeros.
+/// Pads a byte slice to a fixed size array of N bytes.
 pub fn pad_to_fixed_size<const N: usize>(input: &[u8]) -> Result<[u8; N], EncodingError> {
     let mut padded = [0u8; N];
     let start = N - input.len();
@@ -104,4 +107,16 @@ pub fn pad_to_fixed_size<const N: usize>(input: &[u8]) -> Result<[u8; N], Encodi
 pub fn encode_function_selector(selector: &str) -> FixedBytes<4> {
     let hash = keccak256(selector.as_bytes());
     FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
+}
+
+/// Extracts a static attribute from a swap.
+pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>, EncodingError> {
+    Ok(swap
+        .component
+        .static_attributes
+        .get(attribute_name)
+        .ok_or_else(|| {
+            EncodingError::FatalError(format!("Attribute {} not found", attribute_name))
+        })?
+        .to_vec())
 }

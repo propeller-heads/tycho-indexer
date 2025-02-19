@@ -7,7 +7,9 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{bytes_to_address, encode_function_selector, pad_to_fixed_size},
+        utils::{
+            bytes_to_address, encode_function_selector, get_static_attribute, pad_to_fixed_size,
+        },
     },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
@@ -105,16 +107,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let component_id = Address::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid USV3 component id".to_string()))?;
-        let pool_fee_bytes = swap
-            .component
-            .static_attributes
-            .get("fee")
-            .ok_or_else(|| {
-                EncodingError::FatalError(
-                    "Pool fee not found in Uniswap v3 static attributes".to_string(),
-                )
-            })?
-            .to_vec();
+        let pool_fee_bytes = get_static_attribute(&swap, "fee")?;
 
         let pool_fee_u24 = pad_to_fixed_size::<3>(&pool_fee_bytes)
             .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
@@ -183,10 +176,27 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         swap: Swap,
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let mut first_swap = false;
-        if encoding_context.group_token_in == Some(swap.token_in.clone()) {
-            first_swap = true;
+        let fee = get_static_attribute(&swap, "fee")?;
+
+        let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
+            .map_err(|_| EncodingError::FatalError("Failed to pad fee bytes".to_string()))?;
+
+        let tick_spacing = get_static_attribute(&swap, "tickSpacing")?;
+
+        let pool_tick_spacing_u24 = pad_to_fixed_size::<3>(&tick_spacing).map_err(|_| {
+            EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
+        })?;
+
+        // Early check if this is not the first swap
+        if encoding_context.group_token_in != Some(swap.token_in.clone()) {
+            return Ok(Self::encode_pool_params(
+                bytes_to_address(&swap.token_out)?,
+                pool_fee_u24,
+                pool_tick_spacing_u24,
+            ));
         }
+
+        // This is the first swap, compute all necessary values
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
         let group_token_in = if let Some(group_token_in) = encoding_context.group_token_in {
@@ -208,45 +218,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let callback_executor = bytes_to_address(&encoding_context.router_address)?;
 
-        let fee = swap
-            .component
-            .static_attributes
-            .get("fee")
-            .ok_or_else(|| {
-                EncodingError::FatalError(
-                    "Pool fee not found in Uniswap v4 static attributes".to_string(),
-                )
-            })?
-            .to_vec();
-
-        let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
-            .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
-
-        let tick_spacing = swap
-            .component
-            .static_attributes
-            .get("tickSpacing")
-            .ok_or_else(|| {
-                EncodingError::FatalError(
-                    "Pool tick spacing not found in Uniswap v4 static attributes".to_string(),
-                )
-            })?
-            .to_vec();
-
-        let pool_tick_spacing_u24 = pad_to_fixed_size::<3>(&tick_spacing).map_err(|_| {
-            EncodingError::FatalError("Failed to extract tick spacing bytes".to_string())
-        })?;
-
         let pool_params =
             Self::encode_pool_params(token_out_address, pool_fee_u24, pool_tick_spacing_u24);
-
-        if !first_swap {
-            return Ok(Self::encode_pool_params(
-                token_out_address,
-                pool_fee_u24,
-                pool_tick_spacing_u24,
-            ));
-        }
 
         let args = (
             group_token_in,
@@ -527,9 +500,9 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // token in
+                // group token in
                 "4c9edd5852cd905f086c759e8383e09bff1e68b3",
-                // token out
+                // group token out
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // amount out min (0 as u128)
                 "0000000000000000000000000000000000000000000000000000000000000001",
@@ -540,11 +513,11 @@ mod tests {
                 // callback selector for "unlockCallback(bytes)"
                 "91dd7346",
                 // pool params:
-                // - intermediary token (20 bytes)
+                // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
-                // - fee (3 bytes)
+                // - fee
                 "000064",
-                // - tick spacing (3 bytes)
+                // - tick spacing
                 "000001"
             ))
         );
@@ -556,6 +529,7 @@ mod tests {
         let tick_spacing = BigInt::from(60);
         let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
         let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
+        let group_token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
         let token_in = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
         let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
 
@@ -580,9 +554,9 @@ mod tests {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Bytes::zero(20),
-            // Different from token_in and token_out
-            group_token_in: Some(Bytes::zero(20)),
-            group_token_out: Some(Bytes::zero(20)),
+            group_token_in: Some(group_token_in),
+            // Token out is the same as the group token out
+            group_token_out: Some(token_out),
             amount_out_min: Some(BigUint::from(1u128)),
         };
 
