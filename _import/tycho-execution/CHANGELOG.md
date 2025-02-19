@@ -1,3 +1,18 @@
+## [0.43.0](https://github.com/propeller-heads/tycho-execution/compare/0.42.0...0.43.0) (2025-02-19)
+
+
+### Features
+
+* Add methods to builder to set chain and strategy independently ([684de4f](https://github.com/propeller-heads/tycho-execution/commit/684de4fa6006400c2511f58fbd407758cbda7b52))
+* Create a EVMEncoderBuilder ([03506fa](https://github.com/propeller-heads/tycho-execution/commit/03506fabe90c00f1518e42243fd650fb561e2a39))
+* Remove direct_execution from Solution ([8537d27](https://github.com/propeller-heads/tycho-execution/commit/8537d274692aabf45a1ce79ded6c40998ba6fc50))
+
+
+### Bug Fixes
+
+* After rebase fixes ([4f29022](https://github.com/propeller-heads/tycho-execution/commit/4f29022c42af0b598916df6af80ec9c64a09f6c9))
+* After rebase fixes ([30b5ab9](https://github.com/propeller-heads/tycho-execution/commit/30b5ab9025ae3292e4977f1ed10ceac4850d7669))
+
 ## [0.42.0](https://github.com/propeller-heads/tycho-execution/compare/0.41.0...0.42.0) (2025-02-19)
 
 
