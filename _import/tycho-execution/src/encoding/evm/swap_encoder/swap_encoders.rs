@@ -189,6 +189,16 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         }
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
+        let group_token_in = if let Some(group_token_in) = encoding_context.group_token_in {
+            bytes_to_address(&group_token_in)?
+        } else {
+            token_in_address
+        };
+        let group_token_out = if let Some(group_token_out) = encoding_context.group_token_out {
+            bytes_to_address(&group_token_out)?
+        } else {
+            token_out_address
+        };
         let mut amount_out_min = vec![0u8; 32]; // Zero-filled buffer of 32 bytes
         let min_value = encoding_context
             .amount_out_min
@@ -239,8 +249,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         }
 
         let args = (
-            token_in_address,
-            token_out_address,
+            group_token_in,
+            group_token_out,
             amount_out_min,
             zero_to_one,
             callback_executor,
@@ -541,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_uniswap_v4_grouped() {
+    fn test_encode_uniswap_v4_second_swap() {
         let fee = BigInt::from(3000);
         let tick_spacing = BigInt::from(60);
         let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
@@ -592,6 +602,124 @@ mod tests {
                 // - fee (3 bytes)
                 "000bb8",
                 // - tick spacing (3 bytes)
+                "00003c"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_encode_uniswap_v4_combined() {
+        // USDE -> USDT -> WBTC
+        let fee = BigInt::from(100);
+        let tick_spacing = BigInt::from(1);
+        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
+        let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
+        let group_token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
+        let group_token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
+        let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
+        let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
+        static_attributes.insert("tickSpacing".into(), Bytes::from(encoded_tick_spacing.to_vec()));
+
+        let usv4_pool = ProtocolComponent {
+            id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+            static_attributes,
+            ..Default::default()
+        };
+        let swap = Swap {
+            component: usv4_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            receiver: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            exact_out: false,
+            router_address: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            group_token_in: Some(group_token_in.clone()),
+            group_token_out: Some(group_token_out.clone()),
+            amount_out_min: Some(BigUint::from(1u128)),
+        };
+        let encoder =
+            UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoded_simple_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_simple_swap = encode(&encoded_simple_swap);
+
+        let fee = BigInt::from(3000);
+        let tick_spacing = BigInt::from(60);
+        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
+        let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
+        let token_in = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+        let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
+
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
+        static_attributes.insert("tickSpacing".into(), Bytes::from(encoded_tick_spacing.to_vec()));
+
+        let usv4_pool = ProtocolComponent {
+            id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+            static_attributes,
+            ..Default::default()
+        };
+
+        let swap = Swap {
+            component: usv4_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+
+        let encoding_context = EncodingContext {
+            receiver: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            exact_out: false,
+            router_address: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            group_token_in: Some(group_token_in),
+            group_token_out: Some(group_token_out),
+            amount_out_min: Some(BigUint::from(1u128)),
+        };
+
+        let encoded_grouped_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_grouped_swap = encode(&encoded_grouped_swap);
+
+        let combined_hex = format!("{}{}", hex_simple_swap, hex_grouped_swap);
+
+        println!("{}", combined_hex);
+
+        assert_eq!(
+            combined_hex,
+            String::from(concat!(
+                // group_token in
+                "4c9edd5852cd905f086c759e8383e09bff1e68b3",
+                // group_token out
+                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                // amount out min (0 as u128)
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                // zero for one
+                "01",
+                // router address
+                "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",
+                // callback selector for "unlockCallback(bytes)"
+                "91dd7346",
+                // pool params:
+                // - intermediary token USDT
+                "dac17f958d2ee523a2206206994597c13d831ec7",
+                // - fee
+                "000064",
+                // - tick spacing
+                "000001",
+                // Second swap (grouped)
+                // pool params:
+                // - intermediary token WBTC
+                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                // - fee
+                "000bb8",
+                // - tick spacing
                 "00003c"
             ))
         );
