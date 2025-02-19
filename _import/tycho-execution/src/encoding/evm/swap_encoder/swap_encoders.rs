@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
-use alloy_primitives::{keccak256, Address, Bytes as AlloyBytes};
+use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        approvals::protocol_approvals_manager::ProtocolApprovalsManager, utils::bytes_to_address,
+        approvals::protocol_approvals_manager::ProtocolApprovalsManager,
+        utils::{bytes_to_address, encode_function_selector, pad_to_fixed_size},
     },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
@@ -115,13 +116,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             })?
             .to_vec();
 
-        // this is necessary to pad on the left with zeros if the fee is less than 3 bytes
-        let mut padded_fee_bytes = [0u8; 3];
-        let start = 3 - pool_fee_bytes.len();
-        padded_fee_bytes[start..].copy_from_slice(&pool_fee_bytes);
-
-        let pool_fee_u24: [u8; 3] = padded_fee_bytes[(padded_fee_bytes.len() - 3)..]
-            .try_into()
+        let pool_fee_u24 = pad_to_fixed_size::<3>(&pool_fee_bytes)
             .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
 
         let args = (
@@ -152,13 +147,12 @@ impl SwapEncoder for UniswapV3SwapEncoder {
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 /// * `executor_selector` - The selector of the swap function in the executor contract.
-/// * `callback_selector` - The pre-computed selector of the callback function in the executor
-///   contract.
+/// * `callback_selector` - The selector of the callback function in the executor contract.
 #[derive(Clone)]
 pub struct UniswapV4SwapEncoder {
     executor_address: String,
     executor_selector: String,
-    callback_selector: [u8; 4],
+    callback_selector: String,
 }
 
 impl UniswapV4SwapEncoder {
@@ -171,29 +165,16 @@ impl UniswapV4SwapEncoder {
         fee: [u8; 3],
         tick_spacing: [u8; 3],
     ) -> Vec<u8> {
-        let mut encoded = Vec::with_capacity(26);
-        // Encode intermediary token (20 bytes)
-        encoded.extend_from_slice(intermediary_token.as_ref());
-        // Encode fee (3 bytes)
-        encoded.extend_from_slice(fee.as_ref());
-        // Encode tick spacing (3 bytes)
-        encoded.extend_from_slice(tick_spacing.as_ref());
-        encoded
+        (intermediary_token, fee, tick_spacing).abi_encode_packed()
     }
 }
 
 impl SwapEncoder for UniswapV4SwapEncoder {
     fn new(executor_address: String) -> Self {
-        // Pre-compute the callback selector for "unlockCallback(bytes)"
-        // This matches how Solidity computes function selectors
-        let callback_selector = keccak256(b"unlockCallback(bytes)")[..4]
-            .try_into()
-            .unwrap();
-
         Self {
             executor_address,
             executor_selector: "swap(uint256,bytes)".to_string(),
-            callback_selector,
+            callback_selector: "unlockCallback(bytes)".to_string(),
         }
     }
 
@@ -203,19 +184,16 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let mut first_swap = false;
-        if encoding_context.group_token_in == Some(swap.token_in.clone()) &&
-            encoding_context.group_token_out == Some(swap.token_out.clone())
-        {
+        if encoding_context.group_token_in == Some(swap.token_in.clone()) {
             first_swap = true;
         }
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
-        let mut amount_out_min = vec![0u8; 32]; // Create a zero-filled buffer of 32 bytes
+        let mut amount_out_min = vec![0u8; 32]; // Zero-filled buffer of 32 bytes
         let min_value = encoding_context
             .amount_out_min
             .unwrap_or_default()
             .to_bytes_be();
-        // Copy the actual value to the end of the buffer, maintaining leading zeros
         amount_out_min[(32 - min_value.len())..].copy_from_slice(&min_value);
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let callback_executor = bytes_to_address(&encoding_context.router_address)?;
@@ -231,13 +209,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             })?
             .to_vec();
 
-        // Pad on the left with zeros if the fee is less than 3 bytes
-        let mut padded_fee_bytes = [0u8; 3];
-        let start = 3 - fee.len();
-        padded_fee_bytes[start..].copy_from_slice(&fee);
-
-        let pool_fee_u24: [u8; 3] = padded_fee_bytes[(padded_fee_bytes.len() - 3)..]
-            .try_into()
+        let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
             .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
 
         let tick_spacing = swap
@@ -251,24 +223,16 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             })?
             .to_vec();
 
-        // Pad on the left with zeros if the tick spacing is less than 3 bytes
-        let mut padded_tick_spacing_bytes = [0u8; 3];
-        let start = 3 - tick_spacing.len();
-        padded_tick_spacing_bytes[start..].copy_from_slice(&tick_spacing);
-
-        let pool_tick_spacing_u24: [u8; 3] = padded_tick_spacing_bytes
-            [(padded_tick_spacing_bytes.len() - 3)..]
-            .try_into()
-            .map_err(|_| {
-                EncodingError::FatalError("Failed to extract tick spacing bytes".to_string())
-            })?;
+        let pool_tick_spacing_u24 = pad_to_fixed_size::<3>(&tick_spacing).map_err(|_| {
+            EncodingError::FatalError("Failed to extract tick spacing bytes".to_string())
+        })?;
 
         let pool_params =
             Self::encode_pool_params(token_out_address, pool_fee_u24, pool_tick_spacing_u24);
 
         if !first_swap {
             return Ok(Self::encode_pool_params(
-                token_in_address,
+                token_out_address,
                 pool_fee_u24,
                 pool_tick_spacing_u24,
             ));
@@ -280,7 +244,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             amount_out_min,
             zero_to_one,
             callback_executor,
-            self.callback_selector,
+            encode_function_selector(&self.callback_selector),
             pool_params,
         );
 
@@ -624,7 +588,7 @@ mod tests {
             String::from(concat!(
                 // pool params:
                 // - intermediary token (20 bytes)
-                "4c9edd5852cd905f086c759e8383e09bff1e68b3",
+                "dac17f958d2ee523a2206206994597c13d831ec7",
                 // - fee (3 bytes)
                 "0001f4",
                 // - tick spacing (3 bytes)
