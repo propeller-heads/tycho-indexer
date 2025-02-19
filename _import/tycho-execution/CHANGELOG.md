@@ -1,3 +1,10 @@
+## [0.42.0](https://github.com/propeller-heads/tycho-execution/compare/0.41.0...0.42.0) (2025-02-19)
+
+
+### Features
+
+* Support swap grouping for executor strategy ([ac83117](https://github.com/propeller-heads/tycho-execution/commit/ac831176d461221d0bb0ae6e9145d8ccfc27761f))
+
 ## [0.41.0](https://github.com/propeller-heads/tycho-execution/compare/0.40.0...0.41.0) (2025-02-18)
 
 
