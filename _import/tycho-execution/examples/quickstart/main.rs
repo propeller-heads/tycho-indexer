@@ -21,7 +21,9 @@ fn main() {
         .expect("Failed to create user address");
 
     // Initialize the encoder
-    let encoder = EVMEncoderBuilder::tycho_router(TychoCoreChain::Ethereum, swapper_pk, None)
+    let encoder = EVMEncoderBuilder::new()
+        .chain(TychoCoreChain::Ethereum)
+        .tycho_router(swapper_pk, None)
         .expect("Failed to create encoder builder")
         .build()
         .expect("Failed to build encoder");

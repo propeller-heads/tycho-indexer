@@ -11,34 +11,66 @@ use crate::encoding::{
 };
 
 pub struct EVMEncoderBuilder {
-    strategy: Box<dyn StrategyEncoder>,
-    chain: Chain,
+    strategy: Option<Box<dyn StrategyEncoder>>,
+    chain: Option<Chain>,
+}
+
+impl Default for EVMEncoderBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EVMEncoderBuilder {
-    pub fn new(chain: Chain, strategy: Box<dyn StrategyEncoder>) -> Self {
-        EVMEncoderBuilder { chain, strategy }
+    pub fn new() -> Self {
+        EVMEncoderBuilder { chain: None, strategy: None }
+    }
+    pub fn chain(mut self, chain: Chain) -> Self {
+        self.chain = Some(chain);
+        self
+    }
+    pub fn strategy_encoder(mut self, strategy: Box<dyn StrategyEncoder>) -> Self {
+        self.strategy = Some(strategy);
+        self
     }
     pub fn tycho_router(
-        chain: Chain,
+        self,
         swapper_pk: String,
         executors_file_path: Option<String>,
     ) -> Result<Self, EncodingError> {
-        let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain)?;
-        let strategy =
-            Box::new(SplitSwapStrategyEncoder::new(swapper_pk, chain, swap_encoder_registry)?);
-        Ok(EVMEncoderBuilder { chain, strategy })
+        if let Some(chain) = self.chain {
+            let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain)?;
+            let strategy =
+                Box::new(SplitSwapStrategyEncoder::new(swapper_pk, chain, swap_encoder_registry)?);
+            Ok(EVMEncoderBuilder { chain: Some(chain), strategy: Some(strategy) })
+        } else {
+            Err(EncodingError::FatalError(
+                "Please set the chain before setting the strategy".to_string(),
+            ))
+        }
     }
     pub fn direct_execution(
-        chain: Chain,
+        self,
         executors_file_path: Option<String>,
     ) -> Result<Self, EncodingError> {
-        let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain)?;
-        let strategy = Box::new(ExecutorStrategyEncoder::new(swap_encoder_registry));
-        Ok(EVMEncoderBuilder { chain, strategy })
+        if let Some(chain) = self.chain {
+            let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain)?;
+            let strategy = Box::new(ExecutorStrategyEncoder::new(swap_encoder_registry));
+            Ok(EVMEncoderBuilder { chain: Some(chain), strategy: Some(strategy) })
+        } else {
+            Err(EncodingError::FatalError(
+                "Please set the chain before setting the strategy".to_string(),
+            ))
+        }
     }
 
     pub fn build(self) -> Result<EVMTychoEncoder, EncodingError> {
-        EVMTychoEncoder::new(self.chain, self.strategy)
+        if let (Some(chain), Some(strategy)) = (self.chain, self.strategy) {
+            EVMTychoEncoder::new(chain, strategy)
+        } else {
+            Err(EncodingError::FatalError(
+                "Please set the chain and strategy before building the encoder".to_string(),
+            ))
+        }
     }
 }

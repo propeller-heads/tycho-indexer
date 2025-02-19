@@ -103,14 +103,16 @@ fn encode_swaps(
     let solution: Solution = serde_json::from_str(input)?;
     let chain = Chain::Ethereum;
 
-    let encoder = if use_tycho_router {
+    let mut builder = EVMEncoderBuilder::new().chain(chain);
+    builder = if use_tycho_router {
         let private_key = swapper_pk.ok_or(EncodingError::FatalError(
             "Swapper private key is required for tycho_router".to_string(),
         ))?;
-        EVMEncoderBuilder::tycho_router(chain, private_key, config_path)?.build()?
+        builder.tycho_router(private_key, config_path)?
     } else {
-        EVMEncoderBuilder::direct_execution(chain, config_path)?.build()?
+        builder.direct_execution(config_path)?
     };
+    let encoder = builder.build()?;
 
     let transactions = encoder.encode_router_calldata(vec![solution])?;
 
