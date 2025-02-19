@@ -30,6 +30,7 @@ contract Constants is Test {
     address INCH_ADDR = address(0x111111111117dC0aa78b770fA6A738034120C302);
     address USDE_ADDR = address(0x4c9EDD5852cd905f086C759E8383e09bff1E68B3);
     address USDT_ADDR = address(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    address PEPE_ADDR = address(0x6982508145454Ce325dDbE47a25d4ec3d2311933);
 
     // uniswap v2
     address WETH_DAI_POOL = 0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11;

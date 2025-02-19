@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes as AlloyBytes, U256};
 use alloy_sol_types::SolValue;
+use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -173,7 +174,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
             .map_err(|_| EncodingError::FatalError("Failed to pad fee bytes".to_string()))?;
 
-        let tick_spacing = get_static_attribute(&swap, "tickSpacing")?;
+        let tick_spacing = get_static_attribute(&swap, "tick_spacing")?;
 
         let pool_tick_spacing_u24 = pad_to_fixed_size::<3>(&tick_spacing).map_err(|_| {
             EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
@@ -193,7 +194,10 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
         let amount_out_min = U256::from(0);
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
-        let callback_executor = bytes_to_address(&encoding_context.router_address)?;
+        let callback_executor =
+            bytes_to_address(&Bytes::from_str(&self.executor_address).map_err(|_| {
+                EncodingError::FatalError("Invalid UniswapV4 executor address".into())
+            })?)?;
 
         let pool_params =
             (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
@@ -439,14 +443,13 @@ mod tests {
     fn test_encode_uniswap_v4_simple_swap() {
         let fee = BigInt::from(100);
         let tick_spacing = BigInt::from(1);
-        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
-        let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
         let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
         let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
-        static_attributes.insert("tickSpacing".into(), Bytes::from(encoded_tick_spacing.to_vec()));
+        static_attributes.insert("fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+        static_attributes
+            .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
 
         let usv4_pool = ProtocolComponent {
             // Pool manager
@@ -472,7 +475,7 @@ mod tests {
             group_token_out: token_out.clone(),
         };
         let encoder =
-            UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+            UniswapV4SwapEncoder::new(String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -489,8 +492,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000",
                 // zero for one
                 "01",
-                // router address
-                "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",
+                // executor address
+                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                 // callback selector for "unlockCallback(bytes)"
                 "91dd7346",
                 // pool params:
@@ -508,15 +511,14 @@ mod tests {
     fn test_encode_uniswap_v4_second_swap() {
         let fee = BigInt::from(3000);
         let tick_spacing = BigInt::from(60);
-        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
-        let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
         let group_token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
         let token_in = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
         let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
-        static_attributes.insert("tickSpacing".into(), Bytes::from(encoded_tick_spacing.to_vec()));
+        static_attributes.insert("fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+        static_attributes
+            .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
 
         let usv4_pool = ProtocolComponent {
             id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -581,15 +583,14 @@ mod tests {
         // Setup - First sequence: USDE -> USDT
         let usde_usdt_fee = BigInt::from(100);
         let usde_usdt_tick_spacing = BigInt::from(1);
-        let usde_usdt_encoded_pool_fee = Bytes::from(usde_usdt_fee.to_signed_bytes_be());
-        let usde_usdt_encoded_tick_spacing =
-            Bytes::from(usde_usdt_tick_spacing.to_signed_bytes_be());
 
         let mut usde_usdt_static_attributes: HashMap<String, Bytes> = HashMap::new();
         usde_usdt_static_attributes
-            .insert("fee".into(), Bytes::from(usde_usdt_encoded_pool_fee.to_vec()));
-        usde_usdt_static_attributes
-            .insert("tickSpacing".into(), Bytes::from(usde_usdt_encoded_tick_spacing.to_vec()));
+            .insert("fee".into(), Bytes::from(usde_usdt_fee.to_signed_bytes_be()));
+        usde_usdt_static_attributes.insert(
+            "tick_spacing".into(),
+            Bytes::from(usde_usdt_tick_spacing.to_signed_bytes_be()),
+        );
 
         let usde_usdt_component = ProtocolComponent {
             id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -600,15 +601,14 @@ mod tests {
         // Setup - Second sequence: USDT -> WBTC
         let usdt_wbtc_fee = BigInt::from(3000);
         let usdt_wbtc_tick_spacing = BigInt::from(60);
-        let usdt_wbtc_encoded_pool_fee = Bytes::from(usdt_wbtc_fee.to_signed_bytes_be());
-        let usdt_wbtc_encoded_tick_spacing =
-            Bytes::from(usdt_wbtc_tick_spacing.to_signed_bytes_be());
 
         let mut usdt_wbtc_static_attributes: HashMap<String, Bytes> = HashMap::new();
         usdt_wbtc_static_attributes
-            .insert("fee".into(), Bytes::from(usdt_wbtc_encoded_pool_fee.to_vec()));
-        usdt_wbtc_static_attributes
-            .insert("tickSpacing".into(), Bytes::from(usdt_wbtc_encoded_tick_spacing.to_vec()));
+            .insert("fee".into(), Bytes::from(usdt_wbtc_fee.to_signed_bytes_be()));
+        usdt_wbtc_static_attributes.insert(
+            "tick_spacing".into(),
+            Bytes::from(usdt_wbtc_tick_spacing.to_signed_bytes_be()),
+        );
 
         let usdt_wbtc_component = ProtocolComponent {
             id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -631,7 +631,7 @@ mod tests {
         };
 
         let encoder =
-            UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+            UniswapV4SwapEncoder::new(String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"));
         let initial_encoded_swap = encoder
             .encode_swap(initial_swap, context.clone())
             .unwrap();
@@ -653,8 +653,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000",
                 // zero for one
                 "01",
-                // router address
-                "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",
+                // executor address
+                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                 // callback selector for "unlockCallback(bytes)"
                 "91dd7346",
                 // pool params:
