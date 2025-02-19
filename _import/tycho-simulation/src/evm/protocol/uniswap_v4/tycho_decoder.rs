@@ -43,10 +43,10 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
 
         let lp_fee = u32::from(
             snapshot
-                .state
-                .attributes
-                .get("fee")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
+                .component
+                .static_attributes
+                .get("key_lp_fee")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("key_lp_fee".to_string()))?
                 .clone(),
         );
 
