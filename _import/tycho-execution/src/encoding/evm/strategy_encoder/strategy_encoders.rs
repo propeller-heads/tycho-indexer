@@ -2,6 +2,7 @@ use std::{collections::HashSet, str::FromStr};
 
 use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
+use num_bigint::BigUint;
 use tycho_core::{keccak256, Bytes};
 
 use crate::encoding::{
@@ -189,6 +190,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 receiver: solution.router_address.clone(),
                 exact_out: solution.exact_out,
                 router_address: solution.router_address.clone(),
+                group_token_in: Some(tokens.first().unwrap().clone()),
+                group_token_out: Some(tokens.last().unwrap().clone()),
+                amount_out_min: Some(min_amount_out.clone()),
             };
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
@@ -204,7 +208,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
-                self.encode_executor_selector(swap_encoder.executor_selector()),
+                self.encode_executor_selector(swap_encoder.swap_selector()),
                 grouped_protocol_data,
             );
             swaps.push(swap_data);
@@ -292,6 +296,9 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: router_address.clone(),
+                group_token_in: Some(swap.token_in.clone()),
+                group_token_out: Some(swap.token_out.clone()),
+                amount_out_min: Some(BigUint::from(1u128)),
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
@@ -303,11 +310,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
         Ok((
             grouped_protocol_data,
             executor_address,
-            Some(
-                swap_encoder
-                    .executor_selector()
-                    .to_string(),
-            ),
+            Some(swap_encoder.swap_selector().to_string()),
         ))
     }
 
