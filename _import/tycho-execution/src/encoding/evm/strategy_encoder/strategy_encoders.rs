@@ -277,7 +277,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
-                self.encode_executor_selector(swap_encoder.executor_selector()),
+                self.encode_executor_selector(swap_encoder.swap_selector()),
                 grouped_protocol_data.abi_encode_packed(),
             );
             swaps.push(swap_data);
@@ -360,15 +360,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
 
         let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
-        Ok((
-            protocol_data,
-            executor_address,
-            Some(
-                swap_encoder
-                    .executor_selector()
-                    .to_string(),
-            ),
-        ))
+        Ok((protocol_data, executor_address, Some(swap_encoder.swap_selector().to_string())))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {

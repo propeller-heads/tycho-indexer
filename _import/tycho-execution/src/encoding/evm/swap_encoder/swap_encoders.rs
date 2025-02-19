@@ -17,11 +17,11 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `executor_selector` - The selector of the swap function in the executor contract.
+/// * `swap_selector` - The selector of the swap function in the executor contract.
 #[derive(Clone)]
 pub struct UniswapV2SwapEncoder {
     executor_address: String,
-    executor_selector: String,
+    swap_selector: String,
 }
 
 impl UniswapV2SwapEncoder {
@@ -32,7 +32,7 @@ impl UniswapV2SwapEncoder {
 
 impl SwapEncoder for UniswapV2SwapEncoder {
     fn new(executor_address: String) -> Self {
-        Self { executor_address, executor_selector: "swap(uint256,bytes)".to_string() }
+        Self { executor_address, swap_selector: "swap(uint256,bytes)".to_string() }
     }
 
     fn encode_swap(
@@ -63,8 +63,8 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         &self.executor_address
     }
 
-    fn executor_selector(&self) -> &str {
-        &self.executor_selector
+    fn swap_selector(&self) -> &str {
+        &self.swap_selector
     }
 
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
@@ -76,11 +76,11 @@ impl SwapEncoder for UniswapV2SwapEncoder {
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `executor_selector` - The selector of the swap function in the executor contract.
+/// * `swap_selector` - The selector of the swap function in the executor contract.
 #[derive(Clone)]
 pub struct UniswapV3SwapEncoder {
     executor_address: String,
-    executor_selector: String,
+    swap_selector: String,
 }
 
 impl UniswapV3SwapEncoder {
@@ -91,7 +91,7 @@ impl UniswapV3SwapEncoder {
 
 impl SwapEncoder for UniswapV3SwapEncoder {
     fn new(executor_address: String) -> Self {
-        Self { executor_address, executor_selector: "swap(uint256,bytes)".to_string() }
+        Self { executor_address, swap_selector: "swap(uint256,bytes)".to_string() }
     }
 
     fn encode_swap(
@@ -134,8 +134,8 @@ impl SwapEncoder for UniswapV3SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
-    fn executor_selector(&self) -> &str {
-        &self.executor_selector
+    fn swap_selector(&self) -> &str {
+        &self.swap_selector
     }
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
@@ -146,12 +146,12 @@ impl SwapEncoder for UniswapV3SwapEncoder {
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `executor_selector` - The selector of the swap function in the executor contract.
+/// * `swap_selector` - The selector of the swap function in the executor contract.
 /// * `callback_selector` - The selector of the callback function in the executor contract.
 #[derive(Clone)]
 pub struct UniswapV4SwapEncoder {
     executor_address: String,
-    executor_selector: String,
+    swap_selector: String,
     callback_selector: String,
 }
 
@@ -173,7 +173,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
     fn new(executor_address: String) -> Self {
         Self {
             executor_address,
-            executor_selector: "swap(uint256,bytes)".to_string(),
+            swap_selector: "swap(uint256,bytes)".to_string(),
             callback_selector: "unlockCallback(bytes)".to_string(),
         }
     }
@@ -255,8 +255,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         &self.executor_address
     }
 
-    fn executor_selector(&self) -> &str {
-        &self.executor_selector
+    fn swap_selector(&self) -> &str {
+        &self.swap_selector
     }
 
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
@@ -268,11 +268,11 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `executor_selector` - The selector of the swap function in the executor contract.
+/// * `swap_selector` - The selector of the swap function in the executor contract.
 #[derive(Clone)]
 pub struct BalancerV2SwapEncoder {
     executor_address: String,
-    executor_selector: String,
+    swap_selector: String,
     vault_address: String,
 }
 
@@ -280,7 +280,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     fn new(executor_address: String) -> Self {
         Self {
             executor_address,
-            executor_selector: "swap(uint256,bytes)".to_string(),
+            swap_selector: "swap(uint256,bytes)".to_string(),
             vault_address: "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
         }
     }
@@ -315,8 +315,8 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
-    fn executor_selector(&self) -> &str {
-        &self.executor_selector
+    fn swap_selector(&self) -> &str {
+        &self.swap_selector
     }
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
