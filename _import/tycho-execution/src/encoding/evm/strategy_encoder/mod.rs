@@ -1,3 +1,3 @@
 mod group_swaps;
-mod strategy_encoders;
+pub mod strategy_encoders;
 mod strategy_validators;
