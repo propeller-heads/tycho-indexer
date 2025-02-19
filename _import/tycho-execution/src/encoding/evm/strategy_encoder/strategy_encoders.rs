@@ -88,13 +88,14 @@ pub struct SplitSwapStrategyEncoder {
 
 impl SplitSwapStrategyEncoder {
     pub fn new(
-        signer_pk: String,
-        chain: Chain,
+        swapper_pk: String,
+        blockchain: tycho_core::dto::Chain,
         swap_encoder_registry: SwapEncoderRegistry,
     ) -> Result<Self, EncodingError> {
+        let chain = Chain::from(blockchain);
         let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
         Ok(Self {
-            permit2: Permit2::new(signer_pk, chain.clone())?,
+            permit2: Permit2::new(swapper_pk, chain.clone())?,
             selector,
             swap_encoder_registry,
             native_address: chain.native_token()?,
@@ -337,8 +338,8 @@ mod tests {
     use super::*;
     use crate::encoding::models::Swap;
 
-    fn eth_chain() -> Chain {
-        TychoCoreChain::Ethereum.into()
+    fn eth_chain() -> TychoCoreChain {
+        TychoCoreChain::Ethereum
     }
 
     fn eth() -> Bytes {
@@ -384,7 +385,6 @@ mod tests {
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap],
-            direct_execution: true,
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             slippage: None,
             native_action: None,
@@ -442,7 +442,6 @@ mod tests {
             sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap.clone(), swap],
-            direct_execution: true,
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             slippage: None,
             native_action: None,
@@ -493,7 +492,6 @@ mod tests {
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap_a, swap_b],
-            direct_execution: true,
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             slippage: None,
             native_action: None,

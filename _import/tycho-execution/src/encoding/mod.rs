@@ -1,4 +1,4 @@
-mod errors;
+pub mod errors;
 #[cfg(feature = "evm")]
 pub mod evm;
 pub mod models;
