@@ -8,7 +8,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
-        strategy_encoder::{strategy_validators::SplitSwapValidator, utils::group_swaps},
+        strategy_encoder::{group_swaps::group_swaps, strategy_validators::SplitSwapValidator},
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{
             biguint_to_u256, bytes_to_address, encode_input, get_min_amount_for_solution,
@@ -190,11 +190,11 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 exact_out: solution.exact_out,
                 router_address: solution.router_address.clone(),
             };
-            let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
+            let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data =
                     swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
-                grouped_protocol_data.push(protocol_data);
+                grouped_protocol_data.extend(protocol_data);
             }
 
             let swap_data = self.encode_swap_header(
@@ -205,7 +205,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
                 self.encode_executor_selector(swap_encoder.executor_selector()),
-                grouped_protocol_data.abi_encode_packed(),
+                grouped_protocol_data,
             );
             swaps.push(swap_data);
         }
@@ -286,7 +286,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
                 ))
             })?;
 
-        let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
+        let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
             let encoding_context = EncodingContext {
                 receiver: receiver.clone(),
@@ -294,14 +294,14 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
                 router_address: router_address.clone(),
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
-            grouped_protocol_data.push(protocol_data);
+            grouped_protocol_data.extend(protocol_data);
         }
 
         let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
 
         Ok((
-            grouped_protocol_data.abi_encode_packed(),
+            grouped_protocol_data,
             executor_address,
             Some(
                 swap_encoder
