@@ -26,16 +26,9 @@ impl EVMTychoEncoder {
         strategy_encoder: Box<dyn StrategyEncoder>,
     ) -> Result<Self, EncodingError> {
         let chain: Chain = Chain::from(chain);
-        if chain.name != *"ethereum" {
-            return Err(EncodingError::InvalidInput(
-                "Currently only Ethereum is supported".to_string(),
-            ));
-        }
-        Ok(EVMTychoEncoder {
-            strategy_encoder,
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
-        })
+        let native_address = chain.native_token()?;
+        let wrapped_address = chain.wrapped_token()?;
+        Ok(EVMTychoEncoder { strategy_encoder, native_address, wrapped_address })
     }
 }
 
