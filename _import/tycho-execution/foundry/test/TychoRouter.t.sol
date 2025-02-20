@@ -389,19 +389,13 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
     function testSwapCheckedNoPermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
-        // Does permit2 token approval and transfer
         // Checks amount out at the end
         uint256 amountIn = 1 ether;
 
-        // Assume Alica has already transferred tokens to the TychoRouter
+        // Assume Alice has already transferred tokens to the TychoRouter
         deal(WETH_ADDR, tychoRouterAddr, amountIn);
 
         vm.startPrank(ALICE);
-
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false

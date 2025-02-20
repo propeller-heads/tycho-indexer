@@ -75,16 +75,15 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @dev
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
-     * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
      * - Swaps are executed sequentially using the `_swap` function.
      * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is bigger than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH when `wrapEth` is true.
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH when `unwrapEth` is true.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. If it's 0, no check is performed.
-     * @param wrapEth If true, treats the input token as native ETH and wraps it into WETH.
+     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
@@ -151,13 +150,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
      * - Swaps are executed sequentially using the `_swap` function.
      * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is bigger than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH when `wrapEth` is true.
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH when `unwrapEth` is true.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. If it's 0, no check is performed.
-     * @param wrapEth If true, treats the input token as native ETH and wraps it into WETH.
+     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
