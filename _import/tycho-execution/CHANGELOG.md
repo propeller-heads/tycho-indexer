@@ -1,3 +1,5 @@
+## [0.46.1](https://github.com/propeller-heads/tycho-execution/compare/0.46.0...0.46.1) (2025-02-20)
+
 ## [0.46.0](https://github.com/propeller-heads/tycho-execution/compare/0.45.0...0.46.0) (2025-02-20)
 
 
