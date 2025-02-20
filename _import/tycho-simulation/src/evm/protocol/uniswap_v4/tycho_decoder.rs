@@ -142,10 +142,10 @@ mod tests {
             .unwrap()
             .naive_utc();
 
-        // Add a static attribute "tick_spacing"
-        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes
-            .insert("tick_spacing".to_string(), Bytes::from(60_i32.to_be_bytes().to_vec()));
+        let static_attributes: HashMap<String, Bytes> = HashMap::from([
+            ("key_lp_fee".to_string(), Bytes::from(500_i32.to_be_bytes().to_vec())),
+            ("tick_spacing".to_string(), Bytes::from(60_i32.to_be_bytes().to_vec())),
+        ]);
 
         ProtocolComponent {
             id: "State1".to_string(),
@@ -162,8 +162,7 @@ mod tests {
     }
 
     fn usv4_attributes() -> HashMap<String, Bytes> {
-        vec![
-            ("fee".to_string(), Bytes::from(500_i32.to_be_bytes().to_vec())),
+        HashMap::from([
             ("liquidity".to_string(), Bytes::from(100_u64.to_be_bytes().to_vec())),
             ("tick".to_string(), Bytes::from(300_i32.to_be_bytes().to_vec())),
             (
@@ -177,9 +176,7 @@ mod tests {
             ("protocol_fees/zero2one".to_string(), Bytes::from(0_u32.to_be_bytes().to_vec())),
             ("protocol_fees/one2zero".to_string(), Bytes::from(0_u32.to_be_bytes().to_vec())),
             ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_be_bytes().to_vec())),
-        ]
-        .into_iter()
-        .collect::<HashMap<String, Bytes>>()
+        ])
     }
     fn header() -> Header {
         Header {
@@ -223,11 +220,12 @@ mod tests {
     #[case::missing_sqrt_price("sqrt_price")]
     #[case::missing_tick("tick")]
     #[case::missing_tick_liquidity("tick_liquidities")]
-    #[case::missing_fee("fee")]
+    #[case::missing_fee("key_lp_fee")]
     #[case::missing_fee("protocol_fees/one2zero")]
     #[case::missing_fee("protocol_fees/zero2one")]
     async fn test_usv4_try_from_invalid(#[case] missing_attribute: String) {
         // remove missing attribute
+        let mut component = usv4_component();
         let mut attributes = usv4_attributes();
         attributes.remove(&missing_attribute);
 
@@ -239,8 +237,10 @@ mod tests {
             attributes.remove("sqrt_price_x96");
         }
 
-        if missing_attribute == "fee" {
-            attributes.remove("fee");
+        if missing_attribute == "key_lp_fee" {
+            component
+                .static_attributes
+                .remove("key_lp_fee");
         }
 
         let snapshot = ComponentWithState {
@@ -249,7 +249,7 @@ mod tests {
                 attributes,
                 balances: HashMap::new(),
             },
-            component: usv4_component(),
+            component,
         };
 
         let result = UniswapV4State::try_from_with_block(snapshot, header(), &HashMap::new()).await;

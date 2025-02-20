@@ -377,16 +377,12 @@ impl ProtocolSim for UniswapV4State {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::{HashMap, HashSet},
-        str::FromStr,
-    };
+    use std::{collections::HashSet, fs, path::Path, str::FromStr};
 
     use num_bigint::ToBigUint;
     use num_traits::FromPrimitive;
     use serde_json::Value;
     use tycho_client::feed::synchronizer::ComponentWithState;
-    use tycho_core::hex_bytes::Bytes;
 
     use super::*;
     use crate::protocol::models::TryFromWithBlock;
@@ -450,8 +446,11 @@ mod tests {
     /// Compares a quote that we got from the UniswapV4 Quoter contract on Sepolia with a simulation
     /// using Tycho-simulation and a state extracted with Tycho-indexer
     async fn test_swap_sim() {
-        let data_str = include_str!("assets/sepolia_state_block_7239119.json");
-        let data: Value = serde_json::from_str(data_str).expect("Failed to parse JSON");
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path = Path::new(project_root)
+            .join("tests/assets/decoder/uniswap_v4_snapshot_sepolia_block_7239119.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
 
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
