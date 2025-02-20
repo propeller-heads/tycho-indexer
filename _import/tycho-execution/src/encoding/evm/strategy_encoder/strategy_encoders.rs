@@ -2,7 +2,6 @@ use std::{collections::HashSet, str::FromStr};
 
 use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
 use alloy_sol_types::SolValue;
-use num_bigint::BigUint;
 use tycho_core::{keccak256, Bytes};
 
 use crate::encoding::{
@@ -187,16 +186,15 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let encoding_context = EncodingContext {
-                receiver: solution.router_address.clone(),
-                exact_out: solution.exact_out,
-                router_address: solution.router_address.clone(),
-                group_token_in: tokens.first().unwrap().clone(),
-                group_token_out: tokens.last().unwrap().clone(),
-                amount_out_min: min_amount_out.clone(),
-            };
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
+                let encoding_context = EncodingContext {
+                    receiver: solution.router_address.clone(),
+                    exact_out: solution.exact_out,
+                    router_address: solution.router_address.clone(),
+                    group_token_in: grouped_swap.input_token.clone(),
+                    group_token_out: grouped_swap.output_token.clone(),
+                };
                 let protocol_data =
                     swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
                 grouped_protocol_data.extend(protocol_data);
@@ -297,9 +295,8 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: router_address.clone(),
-                group_token_in: swap.token_in.clone(),
-                group_token_out: swap.token_out.clone(),
-                amount_out_min: BigUint::from(1u128),
+                group_token_in: grouped_swap.input_token.clone(),
+                group_token_out: grouped_swap.output_token.clone(),
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
@@ -327,11 +324,11 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::HashMap, str::FromStr};
 
     use alloy::hex::encode;
     use alloy_primitives::hex;
-    use num_bigint::BigUint;
+    use num_bigint::{BigInt, BigUint};
     use rstest::rstest;
     use tycho_core::{
         models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
@@ -459,45 +456,64 @@ mod tests {
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder = ExecutorStrategyEncoder::new(swap_encoder_registry);
 
-        let weth = weth();
-        let dai = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-        let usdc = Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+        let eth = eth();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let pepe = Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap();
 
-        let swap_a = Swap {
+        // Fee and tick spacing information for this test is obtained by querying the
+        // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
+        // Using the poolKeys function with the first 25 bytes of the pool id
+        let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+        let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+        let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_usdc_eth.insert("fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+
+        let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
+        let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
+        let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_eth_pepe.insert("fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
+
+        let swap_usdc_eth = Swap {
             component: ProtocolComponent {
-                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
+                    .to_string(),
                 protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_usdc_eth,
                 ..Default::default()
             },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
+            token_in: usdc.clone(),
+            token_out: eth.clone(),
             split: 0f64,
         };
-        let swap_b = Swap {
+
+        let swap_eth_pepe = Swap {
             component: ProtocolComponent {
-                id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
+                id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9"
+                    .to_string(),
                 protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_eth_pepe,
                 ..Default::default()
             },
-            token_in: dai.clone(),
-            token_out: usdc.clone(),
+            token_in: eth.clone(),
+            token_out: pepe.clone(),
             split: 0f64,
         };
 
         let solution = Solution {
             exact_out: false,
-            given_token: weth,
-            given_amount: BigUint::from(1000000000000000000u64),
-            expected_amount: Some(BigUint::from(1000000000000000000u64)),
-            checked_token: usdc,
+            given_token: usdc,
+            given_amount: BigUint::from_str("1000_000000").unwrap(),
+            checked_token: pepe,
+            expected_amount: Some(BigUint::from_str("105_152_000000000000000000").unwrap()),
             checked_amount: None,
-            sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-            // The receiver was generated with `makeAddr("bob") using forge`
-            receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
-            swaps: vec![swap_a, swap_b],
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             slippage: None,
-            native_action: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap_usdc_eth, swap_eth_pepe],
+            ..Default::default()
         };
 
         let (protocol_data, executor_address, selector) = encoder
@@ -506,27 +522,33 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0x5c2f5a71f67c01775180adc06909288b4c329308").unwrap()
+            Bytes::from_str("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
             String::from(concat!(
-                // in token
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                // component id
-                "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                // group in token
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // group out token
+                "6982508145454ce325ddbe47a25d4ec3d2311933",
                 // zero for one
                 "00",
-                // in token
-                "6b175474e89094c44da98b954eedeac495271d0f",
-                // component id
-                "ae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // zero for one
-                "01",
+                // executor address
+                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
+                // callback selector
+                "91dd7346",
+                // first pool intermediary token (ETH)
+                "0000000000000000000000000000000000000000",
+                // fee
+                "000bb8",
+                // tick spacing
+                "00003c",
+                // second pool intermediary token (PEPE)
+                "6982508145454ce325ddbe47a25d4ec3d2311933",
+                // fee
+                "0061a8",
+                // tick spacing
+                "0001f4"
             ))
         );
         assert_eq!(selector, Some("swap(uint256,bytes)".to_string()));
@@ -847,39 +869,57 @@ mod tests {
 
     #[test]
     fn test_split_encoding_strategy_usv4() {
-        // Performs a split swap from WETH to USDC though WBTC using two consecutive USV4 pools
+        // Performs a sequential swap from USDC to PEPE though ETH using two consecutive USV4 pools
         //
-        //   WETH ──(USV4)──> WBTC ───(USV4)──> USDC
+        //   USDC ──(USV4)──> ETH ───(USV4)──> PEPE
         //
 
-        // Set up a mock private key for signing
+        // Set up a mock private key for signing (Alice's pk in our router tests)
         let private_key =
             "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
-        let weth = weth();
-        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let eth = eth();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let pepe = Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap();
 
-        let swap_weth_wbtc = Swap {
+        // Fee and tick spacing information for this test is obtained by querying the
+        // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
+        // Using the poolKeys function with the first 25 bytes of the pool id
+        let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+        let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+        let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_usdc_eth.insert("fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+
+        let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
+        let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
+        let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_eth_pepe.insert("fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
+
+        let swap_usdc_eth = Swap {
             component: ProtocolComponent {
-                id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+                id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
+                    .to_string(),
                 protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_usdc_eth,
                 ..Default::default()
             },
-            token_in: weth.clone(),
-            token_out: wbtc.clone(),
-            // This represents the remaining 50%, but to avoid any rounding errors we set this to
-            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+            token_in: usdc.clone(),
+            token_out: eth.clone(),
             split: 0f64,
         };
-        let swap_wbtc_usdc = Swap {
+
+        let swap_eth_pepe = Swap {
             component: ProtocolComponent {
-                id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
+                id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9"
+                    .to_string(),
                 protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_eth_pepe,
                 ..Default::default()
             },
-            token_in: wbtc.clone(),
-            token_out: usdc.clone(),
+            token_in: eth.clone(),
+            token_out: pepe.clone(),
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
@@ -887,16 +927,16 @@ mod tests {
             SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
         let solution = Solution {
             exact_out: false,
-            given_token: weth,
-            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-            checked_token: usdc,
-            expected_amount: Some(BigUint::from_str("3_000_000000").unwrap()),
+            given_token: usdc,
+            given_amount: BigUint::from_str("1000_000000").unwrap(),
+            checked_token: pepe,
+            expected_amount: Some(BigUint::from_str("105_152_000000000000000000").unwrap()),
             checked_amount: None,
             slippage: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
-            swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+            swaps: vec![swap_usdc_eth, swap_eth_pepe],
             ..Default::default()
         };
 
@@ -906,9 +946,9 @@ mod tests {
 
         let expected_input = [
             "d499aa88",                                                              // Function selector
-            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
-            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
-            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token out
+            "000000000000000000000000000000000000000000000000000000003b9aca00",      // amount in
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token in
+            "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933",      // token out
             "0000000000000000000000000000000000000000000000000000000000000000",      // min amount out
             "0000000000000000000000000000000000000000000000000000000000000000",      // wrap
             "0000000000000000000000000000000000000000000000000000000000000000",      // unwrap
@@ -939,29 +979,34 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "0000000000000000000000000000000000000000000000000000000000000099",
+            "0000000000000000000000000000000000000000000000000000000000000094",
             // ple encoded swaps
-            "0097",   // Swap length
+            "0092",   // Swap length
             "00",     // token in index
             "01",     // token out index
             "000000", // split
             // Swap data header
-            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
+            "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
             "bd0625ab",                                 // selector
-            // First swap protocol data
-            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-            "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            // Protocol data
+            "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
+            "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
-            // Second swap protocol data
-            "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // token in
-            "ae461ca67b15dc8dc81ce7615e0320da1a9ab8d5", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
-            "01",                                       // zero2one
-            "00000000000000",                           // padding
+            "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
+            "91dd7346",                                 // callback selector
+            // First pool params
+            "0000000000000000000000000000000000000000", // intermediary token (ETH)
+            "000bb8",                                   // fee
+            "00003c",                                   // tick spacing
+            // Second pool params
+            "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
+            "0061a8",                                   // fee
+            "0001f4",                                   // tick spacing
+            "000000000000000000000000"                  // padding
         ));
         let hex_calldata = encode(&calldata);
 
+        println!("{}", hex_calldata);
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
     }

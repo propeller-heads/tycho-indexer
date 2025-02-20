@@ -2,14 +2,14 @@ use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
+use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{
-            biguint_to_u256, bytes_to_address, encode_function_selector, get_static_attribute,
-            pad_to_fixed_size,
+            bytes_to_address, encode_function_selector, get_static_attribute, pad_to_fixed_size,
         },
     },
     models::{EncodingContext, Swap},
@@ -174,7 +174,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
             .map_err(|_| EncodingError::FatalError("Failed to pad fee bytes".to_string()))?;
 
-        let tick_spacing = get_static_attribute(&swap, "tickSpacing")?;
+        let tick_spacing = get_static_attribute(&swap, "tick_spacing")?;
 
         let pool_tick_spacing_u24 = pad_to_fixed_size::<3>(&tick_spacing).map_err(|_| {
             EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
@@ -192,9 +192,11 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let group_token_in_address = bytes_to_address(&encoding_context.group_token_in)?;
         let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
-        let amount_out_min = biguint_to_u256(&encoding_context.amount_out_min);
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
-        let callback_executor = bytes_to_address(&encoding_context.router_address)?;
+        let callback_executor =
+            bytes_to_address(&Bytes::from_str(&self.executor_address).map_err(|_| {
+                EncodingError::FatalError("Invalid UniswapV4 executor address".into())
+            })?)?;
 
         let pool_params =
             (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
@@ -202,7 +204,6 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let args = (
             group_token_in_address,
             group_token_out_address,
-            amount_out_min,
             zero_to_one,
             callback_executor,
             encode_function_selector(&self.callback_selector),
@@ -289,7 +290,7 @@ mod tests {
     use std::collections::HashMap;
 
     use alloy::hex::encode;
-    use num_bigint::{BigInt, BigUint};
+    use num_bigint::BigInt;
     use tycho_core::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
@@ -315,7 +316,6 @@ mod tests {
             router_address: Bytes::zero(20),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             UniswapV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -363,7 +363,6 @@ mod tests {
             router_address: Bytes::zero(20),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             UniswapV3SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -412,7 +411,6 @@ mod tests {
             router_address: Bytes::zero(20),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(0u128),
         };
         let encoder =
             BalancerV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
@@ -443,14 +441,13 @@ mod tests {
     fn test_encode_uniswap_v4_simple_swap() {
         let fee = BigInt::from(100);
         let tick_spacing = BigInt::from(1);
-        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
-        let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
         let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
         let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
-        static_attributes.insert("tickSpacing".into(), Bytes::from(encoded_tick_spacing.to_vec()));
+        static_attributes.insert("fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+        static_attributes
+            .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
 
         let usv4_pool = ProtocolComponent {
             // Pool manager
@@ -474,10 +471,9 @@ mod tests {
 
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(1u128),
         };
         let encoder =
-            UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+            UniswapV4SwapEncoder::new(String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"));
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -490,12 +486,10 @@ mod tests {
                 "4c9edd5852cd905f086c759e8383e09bff1e68b3",
                 // group token out
                 "dac17f958d2ee523a2206206994597c13d831ec7",
-                // amount out min (0 as u128)
-                "0000000000000000000000000000000000000000000000000000000000000001",
                 // zero for one
                 "01",
-                // router address
-                "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",
+                // executor address
+                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                 // callback selector for "unlockCallback(bytes)"
                 "91dd7346",
                 // pool params:
@@ -513,15 +507,14 @@ mod tests {
     fn test_encode_uniswap_v4_second_swap() {
         let fee = BigInt::from(3000);
         let tick_spacing = BigInt::from(60);
-        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
-        let encoded_tick_spacing = Bytes::from(tick_spacing.to_signed_bytes_be());
         let group_token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
         let token_in = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
         let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
-        static_attributes.insert("tickSpacing".into(), Bytes::from(encoded_tick_spacing.to_vec()));
+        static_attributes.insert("fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+        static_attributes
+            .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
 
         let usv4_pool = ProtocolComponent {
             id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -543,7 +536,6 @@ mod tests {
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
-            amount_out_min: BigUint::from(1u128),
         };
 
         let encoder =
@@ -582,21 +574,19 @@ mod tests {
             router_address: router_address.clone(),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
-            amount_out_min: BigUint::from(1u128),
         };
 
         // Setup - First sequence: USDE -> USDT
         let usde_usdt_fee = BigInt::from(100);
         let usde_usdt_tick_spacing = BigInt::from(1);
-        let usde_usdt_encoded_pool_fee = Bytes::from(usde_usdt_fee.to_signed_bytes_be());
-        let usde_usdt_encoded_tick_spacing =
-            Bytes::from(usde_usdt_tick_spacing.to_signed_bytes_be());
 
         let mut usde_usdt_static_attributes: HashMap<String, Bytes> = HashMap::new();
         usde_usdt_static_attributes
-            .insert("fee".into(), Bytes::from(usde_usdt_encoded_pool_fee.to_vec()));
-        usde_usdt_static_attributes
-            .insert("tickSpacing".into(), Bytes::from(usde_usdt_encoded_tick_spacing.to_vec()));
+            .insert("fee".into(), Bytes::from(usde_usdt_fee.to_signed_bytes_be()));
+        usde_usdt_static_attributes.insert(
+            "tick_spacing".into(),
+            Bytes::from(usde_usdt_tick_spacing.to_signed_bytes_be()),
+        );
 
         let usde_usdt_component = ProtocolComponent {
             id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -607,15 +597,14 @@ mod tests {
         // Setup - Second sequence: USDT -> WBTC
         let usdt_wbtc_fee = BigInt::from(3000);
         let usdt_wbtc_tick_spacing = BigInt::from(60);
-        let usdt_wbtc_encoded_pool_fee = Bytes::from(usdt_wbtc_fee.to_signed_bytes_be());
-        let usdt_wbtc_encoded_tick_spacing =
-            Bytes::from(usdt_wbtc_tick_spacing.to_signed_bytes_be());
 
         let mut usdt_wbtc_static_attributes: HashMap<String, Bytes> = HashMap::new();
         usdt_wbtc_static_attributes
-            .insert("fee".into(), Bytes::from(usdt_wbtc_encoded_pool_fee.to_vec()));
-        usdt_wbtc_static_attributes
-            .insert("tickSpacing".into(), Bytes::from(usdt_wbtc_encoded_tick_spacing.to_vec()));
+            .insert("fee".into(), Bytes::from(usdt_wbtc_fee.to_signed_bytes_be()));
+        usdt_wbtc_static_attributes.insert(
+            "tick_spacing".into(),
+            Bytes::from(usdt_wbtc_tick_spacing.to_signed_bytes_be()),
+        );
 
         let usdt_wbtc_component = ProtocolComponent {
             id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -638,7 +627,7 @@ mod tests {
         };
 
         let encoder =
-            UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+            UniswapV4SwapEncoder::new(String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"));
         let initial_encoded_swap = encoder
             .encode_swap(initial_swap, context.clone())
             .unwrap();
@@ -656,12 +645,10 @@ mod tests {
                 "4c9edd5852cd905f086c759e8383e09bff1e68b3",
                 // group_token out
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                // amount out min (1 as u128)
-                "0000000000000000000000000000000000000000000000000000000000000001",
                 // zero for one
                 "01",
-                // router address
-                "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",
+                // executor address
+                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                 // callback selector for "unlockCallback(bytes)"
                 "91dd7346",
                 // pool params:

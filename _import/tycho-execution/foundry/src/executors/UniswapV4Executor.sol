@@ -39,7 +39,6 @@ contract UniswapV4Executor is IExecutor, V4Router {
         (
             address tokenIn,
             address tokenOut,
-            uint256 amountOutMin,
             bool zeroForOne,
             address callbackExecutor,
             bytes4 callbackSelector,
@@ -68,12 +67,12 @@ contract UniswapV4Executor is IExecutor, V4Router {
                     poolKey: key,
                     zeroForOne: zeroForOne,
                     amountIn: uint128(amountIn),
-                    amountOutMinimum: uint128(amountOutMin),
+                    amountOutMinimum: uint128(0),
                     hookData: bytes("")
                 })
             );
             params[1] = abi.encode(key.currency0, amountIn);
-            params[2] = abi.encode(key.currency1, amountOutMin);
+            params[2] = abi.encode(key.currency1, uint256(0));
             swapData = abi.encode(actions, params);
         } else {
             PathKey[] memory path = new PathKey[](pools.length);
@@ -101,11 +100,11 @@ contract UniswapV4Executor is IExecutor, V4Router {
                     currencyIn: currencyIn,
                     path: path,
                     amountIn: uint128(amountIn),
-                    amountOutMinimum: uint128(amountOutMin)
+                    amountOutMinimum: uint128(0)
                 })
             );
             params[1] = abi.encode(currencyIn, amountIn);
-            params[2] = abi.encode(Currency.wrap(tokenOut), amountOutMin);
+            params[2] = abi.encode(Currency.wrap(tokenOut), uint256(0));
             swapData = abi.encode(actions, params);
         }
         bytes memory fullData =
@@ -141,27 +140,25 @@ contract UniswapV4Executor is IExecutor, V4Router {
         returns (
             address tokenIn,
             address tokenOut,
-            uint256 amountOutMin,
             bool zeroForOne,
             address callbackExecutor,
             bytes4 callbackSelector,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 123) {
+        if (data.length < 91) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
-        amountOutMin = uint256(bytes32(data[40:72]));
-        zeroForOne = (data[72] != 0);
-        callbackExecutor = address(bytes20(data[73:93]));
-        callbackSelector = bytes4(data[93:97]);
+        zeroForOne = (data[40] != 0);
+        callbackExecutor = address(bytes20(data[41:61]));
+        callbackSelector = bytes4(data[61:65]);
 
-        uint256 poolsLength = (data.length - 97) / 26; // 26 bytes per pool object
+        uint256 poolsLength = (data.length - 65) / 26; // 26 bytes per pool object
         pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[97:];
+        bytes memory poolsData = data[65:];
         uint256 offset = 0;
         for (uint256 i = 0; i < poolsLength; i++) {
             address intermediaryToken;
