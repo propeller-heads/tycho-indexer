@@ -1,4 +1,4 @@
-use tycho_core::dto::Chain;
+use tycho_core::models::Chain;
 
 use crate::encoding::{
     errors::EncodingError,

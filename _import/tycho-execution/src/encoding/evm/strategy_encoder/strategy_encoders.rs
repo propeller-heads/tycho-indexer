@@ -90,7 +90,7 @@ pub struct SplitSwapStrategyEncoder {
 impl SplitSwapStrategyEncoder {
     pub fn new(
         swapper_pk: String,
-        blockchain: tycho_core::dto::Chain,
+        blockchain: tycho_core::models::Chain,
         swap_encoder_registry: SwapEncoderRegistry,
     ) -> Result<Self, EncodingError> {
         let chain = Chain::from(blockchain);
@@ -334,7 +334,7 @@ mod tests {
     use num_bigint::BigUint;
     use rstest::rstest;
     use tycho_core::{
-        dto::{Chain as TychoCoreChain, ProtocolComponent},
+        models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
         Bytes,
     };
 
