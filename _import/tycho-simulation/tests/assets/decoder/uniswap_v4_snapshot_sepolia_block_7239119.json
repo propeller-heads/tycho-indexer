@@ -6,7 +6,6 @@
       "balance_owner": "0x8c4bcbe6b9ef47855f97e675296fa3f6fafa5f1a",
       "sqrt_price_x96": "0x01000000000000000000000000",
       "protocol_fees/one2zero": "0x00",
-      "fee": "0x0bb8",
       "liquidity": "0x09184f0b3680",
       "ticks/887220/net-liquidity": "0xf6e7b0f4c980",
       "ticks/-887220/net-liquidity": "0x09184f0b3680",
@@ -30,7 +29,8 @@
     "static_attributes": {
       "hooks": "0x0000000000000000000000000000000000000000",
       "pool_id": "0x12e4510bc312b3e459340cbee3e281d81671083f56161c0c6673dee018cab4d0",
-      "tick_spacing": "0x3c"
+      "tick_spacing": "0x3c",
+      "key_lp_fee": "0x0bb8"
     },
     "change": "Creation",
     "creation_tx": "0x3d458bfd841ee29b03958b19f737255286c9ce9b4026220c47f8a015b8ed6d1a",
