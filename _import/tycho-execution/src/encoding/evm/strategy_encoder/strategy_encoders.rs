@@ -485,8 +485,6 @@ mod tests {
             },
             token_in: usdc.clone(),
             token_out: eth.clone(),
-            // This represents the remaining 50%, but to avoid any rounding errors we set this to
-            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
         };
 
@@ -911,8 +909,6 @@ mod tests {
             },
             token_in: usdc.clone(),
             token_out: eth.clone(),
-            // This represents the remaining 50%, but to avoid any rounding errors we set this to
-            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
         };
 

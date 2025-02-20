@@ -744,12 +744,11 @@ contract TychoRouterTest is TychoRouterTestSetup {
         //
         deal(USDC_ADDR, ALICE, 1 ether);
         uint256 balancerBefore = IERC20(PEPE_ADDR).balanceOf(ALICE);
-        console.logAddress(address(usv4Executor));
 
         // Approve permit2
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(address(permit2Address), type(uint256).max);
-        // Encoded solution generated using `test_split_swap_strategy_encoder_simple`
+        // Encoded solution generated using `test_split_encoding_strategy_usv4`
         // but manually replacing the executor address
         // `5c2f5a71f67c01775180adc06909288b4c329308` with the one in this test
         // `f62849f9a0b5bf2913b396098f7c7019b51a820a`
@@ -762,7 +761,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         uint256 balancerAfter = IERC20(PEPE_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertGt(balancerAfter - balancerBefore, 26173932);
+        assertEq(balancerAfter - balancerBefore, 97191013220606467325121599);
     }
 
     function testSingleSwapWithWrapIntegration() public {
