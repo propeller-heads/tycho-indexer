@@ -2,7 +2,7 @@ use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_core::{
-    dto::{Chain as TychoCoreChain, ProtocolComponent},
+    models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
     Bytes,
 };
 
@@ -189,7 +189,7 @@ mod tests {
                 tokens: vec![],
                 protocol_type_name: "".to_string(),
                 chain: Default::default(),
-                contract_ids: vec![],
+                contract_addresses: vec![],
                 static_attributes: Default::default(),
                 change: Default::default(),
                 creation_tx: Default::default(),

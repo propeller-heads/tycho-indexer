@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use num_bigint::BigUint;
 use tycho_core::{
-    dto::{Chain as TychoCoreChain, ProtocolComponent},
+    models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
     Bytes,
 };
 use tycho_execution::encoding::{

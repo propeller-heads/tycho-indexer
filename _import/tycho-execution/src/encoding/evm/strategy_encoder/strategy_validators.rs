@@ -178,7 +178,7 @@ impl SplitSwapValidator {
 mod tests {
     use std::str::FromStr;
 
-    use tycho_core::{dto::ProtocolComponent, Bytes};
+    use tycho_core::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
     use crate::encoding::models::Swap;

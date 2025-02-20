@@ -2,7 +2,7 @@ use std::io::{self, Read};
 
 use clap::{Parser, Subcommand};
 use serde_json::Value;
-use tycho_core::dto::Chain;
+use tycho_core::models::Chain;
 use tycho_execution::encoding::{
     errors::EncodingError, evm::encoder_builder::EVMEncoderBuilder, models::Solution,
     tycho_encoder::TychoEncoder,
