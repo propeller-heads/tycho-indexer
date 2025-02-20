@@ -1,3 +1,10 @@
+## [0.45.0](https://github.com/propeller-heads/tycho-execution/compare/0.44.0...0.45.0) (2025-02-20)
+
+
+### Features
+
+* TychoRouter swap method not requiring Permit2 ([c3482a5](https://github.com/propeller-heads/tycho-execution/commit/c3482a509a52be7b7e0c9c9f4bc0a08a16f98728))
+
 ## [0.44.0](https://github.com/propeller-heads/tycho-execution/compare/0.43.0...0.44.0) (2025-02-19)
 
 
