@@ -1,3 +1,16 @@
+## [0.47.0](https://github.com/propeller-heads/tycho-execution/compare/0.46.1...0.47.0) (2025-02-20)
+
+
+### Features
+
+* Don't encode min amount for USV4 ([d65d575](https://github.com/propeller-heads/tycho-execution/commit/d65d575003f67347110c70e2dabe6a9cc83fd712))
+* UniswapV4 integration test and fixes ([45fdfc7](https://github.com/propeller-heads/tycho-execution/commit/45fdfc708d87ca81f9d92c649b4a7e58c254bc4e))
+
+
+### Bug Fixes
+
+* Pass proper group tokens in EncodingContext... ([81c8a04](https://github.com/propeller-heads/tycho-execution/commit/81c8a04cbb4f6f4c758ca782349d6ac2f6b79355))
+
 ## [0.46.1](https://github.com/propeller-heads/tycho-execution/compare/0.46.0...0.46.1) (2025-02-20)
 
 ## [0.46.0](https://github.com/propeller-heads/tycho-execution/compare/0.45.0...0.46.0) (2025-02-20)
