@@ -291,7 +291,7 @@ mod tests {
 
     use alloy::hex::encode;
     use num_bigint::BigInt;
-    use tycho_core::{dto::ProtocolComponent, Bytes};
+    use tycho_core::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
 
@@ -479,7 +479,6 @@ mod tests {
             .unwrap();
         let hex_swap = encode(&encoded_swap);
 
-        println!("{}", hex_swap);
         assert_eq!(
             hex_swap,
             String::from(concat!(

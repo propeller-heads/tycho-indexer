@@ -183,7 +183,7 @@ mod tests {
 
     use alloy_primitives::Uint;
     use num_bigint::BigUint;
-    use tycho_core::dto::Chain as TychoCoreChain;
+    use tycho_core::models::Chain as TychoCoreChain;
 
     use super::*;
 

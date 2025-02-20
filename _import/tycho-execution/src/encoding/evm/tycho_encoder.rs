@@ -22,7 +22,7 @@ pub struct EVMTychoEncoder {
 
 impl EVMTychoEncoder {
     pub fn new(
-        chain: tycho_core::dto::Chain,
+        chain: tycho_core::models::Chain,
         strategy_encoder: Box<dyn StrategyEncoder>,
     ) -> Result<Self, EncodingError> {
         let chain: Chain = Chain::from(chain);
@@ -119,7 +119,7 @@ impl TychoEncoder for EVMTychoEncoder {
 mod tests {
     use std::str::FromStr;
 
-    use tycho_core::dto::{Chain as TychoCoreChain, ProtocolComponent};
+    use tycho_core::models::{protocol::ProtocolComponent, Chain as TychoCoreChain};
 
     use super::*;
     use crate::encoding::{
