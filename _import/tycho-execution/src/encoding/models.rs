@@ -1,4 +1,3 @@
-use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_core::{
@@ -6,6 +5,7 @@ use tycho_core::{
     Bytes,
 };
 
+use super::evm::utils::decode_hex;
 use crate::encoding::{
     errors::EncodingError,
     serde_primitives::{biguint_string, biguint_string_option},
@@ -120,52 +120,31 @@ pub struct EncodingContext {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ChainId(pub u64);
-
-#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Chain {
-    pub id: ChainId,
+    pub id: u64,
     pub name: String,
-}
-
-impl ChainId {
-    pub fn id(&self) -> u64 {
-        self.0
-    }
-}
-
-impl From<TychoCoreChain> for ChainId {
-    fn from(chain: TychoCoreChain) -> Self {
-        match chain {
-            TychoCoreChain::Ethereum => ChainId(1),
-            TychoCoreChain::ZkSync => ChainId(324),
-            TychoCoreChain::Arbitrum => ChainId(42161),
-            TychoCoreChain::Starknet => ChainId(0),
-            TychoCoreChain::Base => ChainId(8453),
-        }
-    }
 }
 
 impl From<TychoCoreChain> for Chain {
     fn from(chain: TychoCoreChain) -> Self {
-        Chain { id: chain.into(), name: chain.to_string() }
+        match chain {
+            TychoCoreChain::Ethereum => Chain { id: 1, name: chain.to_string() },
+            TychoCoreChain::ZkSync => Chain { id: 324, name: chain.to_string() },
+            TychoCoreChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
+            TychoCoreChain::Starknet => Chain { id: 0, name: chain.to_string() },
+            TychoCoreChain::Base => Chain { id: 8453, name: chain.to_string() },
+        }
     }
 }
 
 impl Chain {
-    fn decode_hex(&self, hex_str: &str, err_msg: &str) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(
-            hex::decode(hex_str).map_err(|_| EncodingError::FatalError(err_msg.to_string()))?,
-        ))
-    }
-
     pub fn native_token(&self) -> Result<Bytes, EncodingError> {
         let decode_err_msg = "Failed to decode native token";
-        match self.id.id() {
+        match self.id {
             1 | 8453 | 42161 => {
-                self.decode_hex("0000000000000000000000000000000000000000", decode_err_msg)
+                decode_hex("0000000000000000000000000000000000000000", decode_err_msg)
             }
-            324 => self.decode_hex("000000000000000000000000000000000000800A", decode_err_msg),
+            324 => decode_hex("000000000000000000000000000000000000800A", decode_err_msg),
             _ => Err(EncodingError::InvalidInput(format!(
                 "Native token not set for chain {:?}. Double check the chain is supported.",
                 self.name
@@ -175,11 +154,11 @@ impl Chain {
 
     pub fn wrapped_token(&self) -> Result<Bytes, EncodingError> {
         let decode_err_msg = "Failed to decode wrapped token";
-        match self.id.id() {
-            1 => self.decode_hex("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decode_err_msg),
-            8453 => self.decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
-            324 => self.decode_hex("5AEa5775959fBC2557Cc8789bC1bf90A239D9a91", decode_err_msg),
-            42161 => self.decode_hex("82aF49447D8a07e3bd95BD0d56f35241523fBab1", decode_err_msg),
+        match self.id {
+            1 => decode_hex("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decode_err_msg),
+            8453 => decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
+            324 => decode_hex("5AEa5775959fBC2557Cc8789bC1bf90A239D9a91", decode_err_msg),
+            42161 => decode_hex("82aF49447D8a07e3bd95BD0d56f35241523fBab1", decode_err_msg),
             _ => Err(EncodingError::InvalidInput(format!(
                 "Wrapped token not set for chain {:?}. Double check the chain is supported.",
                 self.name
