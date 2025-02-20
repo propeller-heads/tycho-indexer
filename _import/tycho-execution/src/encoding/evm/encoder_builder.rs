@@ -42,17 +42,35 @@ impl EVMEncoderBuilder {
         self
     }
 
-    /// Shortcut method to initialize a `SplitSwapStrategyEncoder` with a given `swapper_pk`.
-    /// **Note**: Should not be used at the same time as `strategy_encoder`.
-    pub fn tycho_router(
-        self,
-        swapper_pk: String,
-        executors_file_path: Option<String>,
-    ) -> Result<Self, EncodingError> {
+    /// Shortcut method to initialize a `SplitSwapStrategyEncoder` without any approval nor token in
+    /// transfer. **Note**: Should not be used at the same time as `strategy_encoder`.
+    pub fn tycho_router(self, executors_file_path: Option<String>) -> Result<Self, EncodingError> {
         if let Some(chain) = self.chain {
             let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain)?;
             let strategy =
-                Box::new(SplitSwapStrategyEncoder::new(swapper_pk, chain, swap_encoder_registry)?);
+                Box::new(SplitSwapStrategyEncoder::new(chain, swap_encoder_registry, None)?);
+            Ok(EVMEncoderBuilder { chain: Some(chain), strategy: Some(strategy) })
+        } else {
+            Err(EncodingError::FatalError(
+                "Please set the chain before setting the tycho router".to_string(),
+            ))
+        }
+    }
+
+    /// Shortcut method to initialize a `SplitSwapStrategyEncoder` with Permit2 approval and token
+    /// in transfer. **Note**: Should not be used at the same time as `strategy_encoder`.
+    pub fn tycho_router_with_permit2(
+        self,
+        executors_file_path: Option<String>,
+        swapper_pk: String,
+    ) -> Result<Self, EncodingError> {
+        if let Some(chain) = self.chain {
+            let swap_encoder_registry = SwapEncoderRegistry::new(executors_file_path, chain)?;
+            let strategy = Box::new(SplitSwapStrategyEncoder::new(
+                chain,
+                swap_encoder_registry,
+                Some(swapper_pk),
+            )?);
             Ok(EVMEncoderBuilder { chain: Some(chain), strategy: Some(strategy) })
         } else {
             Err(EncodingError::FatalError(
