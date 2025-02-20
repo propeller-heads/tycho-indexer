@@ -23,7 +23,7 @@ use crate::encoding::{
         approvals::protocol_approvals_manager::get_client,
         utils::{biguint_to_u256, bytes_to_address, encode_input},
     },
-    models::{Chain, ChainId},
+    models::Chain,
 };
 
 /// Struct for managing Permit2 operations, including encoding approvals and fetching allowance
@@ -33,7 +33,7 @@ pub struct Permit2 {
     address: Address,
     client: Arc<RootProvider<BoxTransport>>,
     signer: PrivateKeySigner,
-    chain_id: ChainId,
+    chain_id: u64,
     runtime_handle: Handle,
     // Store the runtime to prevent it from being dropped before use.
     // This is required since tycho-execution does not have a pre-existing runtime.
@@ -160,7 +160,7 @@ impl Permit2 {
 
         let domain = eip712_domain! {
             name: "Permit2",
-            chain_id: self.chain_id.id(),
+            chain_id: self.chain_id,
             verifying_contract: self.address,
         };
         let hash = permit_single.eip712_signing_hash(&domain);
