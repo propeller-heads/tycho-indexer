@@ -10,12 +10,8 @@ use num_bigint::BigUint;
 use tracing_subscriber::EnvFilter;
 use tycho_core::Bytes;
 use tycho_execution::encoding::{
-    evm::{
-        strategy_encoder::strategy_encoder_registry::EVMStrategyEncoderRegistry,
-        tycho_encoder::EVMTychoEncoder,
-    },
+    evm::{encoder_builder::EVMEncoderBuilder, tycho_encoder::EVMTychoEncoder},
     models::{Solution, Swap},
-    strategy_encoder::StrategyEncoderRegistry,
     tycho_encoder::TychoEncoder,
 };
 use tycho_simulation::{
@@ -118,18 +114,18 @@ async fn main() {
         .expect("Failed building protocol stream");
 
     // execution setup
-    let router_address = "0x1234567890abcdef1234567890abcdef12345678".to_string();
-    let signer_pk =
-        Some("0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string());
+    let swapper_pk =
+        "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
         .expect("Failed to create user address");
 
     // Initialize the encoder
-    let strategy_encoder_registry =
-        EVMStrategyEncoderRegistry::new(Chain::Ethereum, None, signer_pk.clone())
-            .expect("Failed to create strategy encoder registry");
-    let encoder = EVMTychoEncoder::new(strategy_encoder_registry, router_address, Chain::Ethereum)
-        .expect("Failed to create encoder");
+    let encoder = EVMEncoderBuilder::new()
+        .chain(Chain::Ethereum)
+        .tycho_router_with_permit2(None, swapper_pk)
+        .expect("Failed to create encoder builder")
+        .build()
+        .expect("Failed to build encoder");
 
     while let Some(message) = protocol_stream.next().await {
         let message = message.expect("Could not receive message");
@@ -143,10 +139,14 @@ async fn main() {
         );
 
         if let Some(best_pool) = best_pool {
+            let component = pairs
+                .get(&best_pool)
+                .expect("Best pool not found")
+                .clone();
+
             encode(
                 encoder.clone(),
-                &pairs,
-                best_pool,
+                component,
                 sell_token.clone(),
                 buy_token.clone(),
                 amount_in.clone(),
@@ -176,7 +176,7 @@ fn get_best_swap(
     }
     for (id, state) in message.states.iter() {
         if let Some(component) = pairs.get(id) {
-            let tokens = component.tokens.clone();
+            let tokens = &component.tokens;
             if HashSet::from([&sell_token, &buy_token]) == HashSet::from([&tokens[0], &tokens[1]]) {
                 let amount_out = state
                     .get_amount_out(amount_in.clone(), &sell_token, &buy_token)
@@ -212,19 +212,13 @@ fn get_best_swap(
 }
 
 fn encode(
-    encoder: EVMTychoEncoder<EVMStrategyEncoderRegistry>,
-    pairs: &HashMap<String, ProtocolComponent>,
-    best_pool: String,
+    encoder: EVMTychoEncoder,
+    component: ProtocolComponent,
     sell_token: Token,
     buy_token: Token,
     sell_amount: BigUint,
     user_address: Bytes,
 ) {
-    let component = pairs
-        .get(&best_pool)
-        .expect("Best pool not found")
-        .clone();
-
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
         component,
@@ -242,9 +236,11 @@ fn encode(
         given_token: sell_token.address,
         given_amount: sell_amount,
         checked_token: buy_token.address,
-        exact_out: false,   // it's an exact in solution
-        check_amount: None, // the amount out will not be checked in execution
+        exact_out: false,     // it's an exact in solution
+        checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
+        router_address: Bytes::from_str("0x1234567890abcdef1234567890abcdef12345678")
+            .expect("Failed to create router address"),
         ..Default::default()
     };
 
