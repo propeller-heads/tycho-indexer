@@ -1,3 +1,10 @@
+## [0.77.0](https://github.com/propeller-heads/tycho-simulation/compare/0.76.0...0.77.0) (2025-02-20)
+
+
+### Features
+
+* update uniswap v4 decoding of lp fees ([9a6a91f](https://github.com/propeller-heads/tycho-simulation/commit/9a6a91fb35ec445c8a90860e02f78ca1968eb4ca))
+
 ## [0.76.0](https://github.com/propeller-heads/tycho-simulation/compare/0.75.0...0.76.0) (2025-02-18)
 
 
