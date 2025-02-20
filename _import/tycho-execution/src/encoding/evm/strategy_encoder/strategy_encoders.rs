@@ -531,8 +531,6 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
                 // group out token
                 "6982508145454ce325ddbe47a25d4ec3d2311933",
-                // group min amount out
-                "0000000000000000000000000000000000000000000000000000000000000000",
                 // zero for one
                 "00",
                 // executor address
