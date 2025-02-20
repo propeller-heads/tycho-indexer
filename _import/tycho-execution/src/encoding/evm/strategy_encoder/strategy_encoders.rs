@@ -981,9 +981,9 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "00000000000000000000000000000000000000000000000000000000000000b4",
+            "0000000000000000000000000000000000000000000000000000000000000094",
             // ple encoded swaps
-            "00b2",   // Swap length
+            "0092",   // Swap length
             "00",     // token in index
             "01",     // token out index
             "000000", // split
@@ -993,7 +993,6 @@ mod tests {
             // Protocol data
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
-            "0000000000000000000000000000000000000000000000000000000000000000", // amount out min
             "00",                                       // zero2one
             "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
             "91dd7346",                                 // callback selector

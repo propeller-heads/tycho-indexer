@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use alloy_primitives::{Address, Bytes as AlloyBytes, U256};
+use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
 use tycho_core::Bytes;
 
@@ -192,7 +192,6 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let group_token_in_address = bytes_to_address(&encoding_context.group_token_in)?;
         let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
-        let amount_out_min = U256::from(0);
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let callback_executor =
             bytes_to_address(&Bytes::from_str(&self.executor_address).map_err(|_| {
@@ -205,7 +204,6 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let args = (
             group_token_in_address,
             group_token_out_address,
-            amount_out_min,
             zero_to_one,
             callback_executor,
             encode_function_selector(&self.callback_selector),
@@ -481,6 +479,7 @@ mod tests {
             .unwrap();
         let hex_swap = encode(&encoded_swap);
 
+        println!("{}", hex_swap);
         assert_eq!(
             hex_swap,
             String::from(concat!(
@@ -488,8 +487,6 @@ mod tests {
                 "4c9edd5852cd905f086c759e8383e09bff1e68b3",
                 // group token out
                 "dac17f958d2ee523a2206206994597c13d831ec7",
-                // amount out min
-                "0000000000000000000000000000000000000000000000000000000000000000",
                 // zero for one
                 "01",
                 // executor address
@@ -649,8 +646,6 @@ mod tests {
                 "4c9edd5852cd905f086c759e8383e09bff1e68b3",
                 // group_token out
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                // amount out min
-                "0000000000000000000000000000000000000000000000000000000000000000",
                 // zero for one
                 "01",
                 // executor address

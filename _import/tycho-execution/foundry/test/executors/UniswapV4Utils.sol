@@ -7,7 +7,6 @@ library UniswapV4Utils {
     function encodeExactInput(
         address tokenIn,
         address tokenOut,
-        uint256 amountOutMin,
         bool zeroForOne,
         address callbackExecutor,
         bytes4 callbackSelector,
@@ -27,7 +26,6 @@ library UniswapV4Utils {
         return abi.encodePacked(
             tokenIn,
             tokenOut,
-            amountOutMin,
             zeroForOne,
             callbackExecutor,
             bytes4(callbackSelector),
