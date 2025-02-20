@@ -93,7 +93,7 @@ impl SplitSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
     ) -> Result<Self, EncodingError> {
         let chain = Chain::from(blockchain);
-        let selector = "swap(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
+        let selector = "swapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
         Ok(Self {
             permit2: Permit2::new(swapper_pk, chain.clone())?,
             selector,
@@ -631,7 +631,7 @@ mod tests {
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
         let expected_input = [
-            "4860f9ed",                                                             // Function selector
+            "d499aa88",                                                             // Function selector
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
             "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
             "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",      // token out
@@ -951,7 +951,7 @@ mod tests {
             .unwrap();
 
         let expected_input = [
-            "4860f9ed",                                                              // Function selector
+            "d499aa88",                                                              // Function selector
             "000000000000000000000000000000000000000000000000000000003b9aca00",      // amount in
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token in
             "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933",      // token out
