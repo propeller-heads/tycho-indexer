@@ -1,3 +1,15 @@
+## [0.46.0](https://github.com/propeller-heads/tycho-execution/compare/0.45.0...0.46.0) (2025-02-20)
+
+
+### Features
+
+* add native and weth addresses for supported networks ([83f1955](https://github.com/propeller-heads/tycho-execution/commit/83f1955094693420cd6bf94ff47f145d25ff6624))
+
+
+### Bug Fixes
+
+* add decode_hex to models ([7dd59db](https://github.com/propeller-heads/tycho-execution/commit/7dd59dbe3450ad15b4dc7eb4478b0422c18a6575))
+
 ## [0.45.0](https://github.com/propeller-heads/tycho-execution/compare/0.44.0...0.45.0) (2025-02-20)
 
 
