@@ -120,10 +120,3 @@ pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>
         })?
         .to_vec())
 }
-
-/// Decodes a hex string to a `Bytes` object.
-pub fn decode_hex(hex_str: &str, err_msg: &str) -> Result<Bytes, EncodingError> {
-    Ok(Bytes::from(
-        hex::decode(hex_str).map_err(|_| EncodingError::FatalError(err_msg.to_string()))?,
-    ))
-}
