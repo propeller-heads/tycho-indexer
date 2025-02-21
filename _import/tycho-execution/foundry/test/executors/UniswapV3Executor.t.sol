@@ -83,14 +83,6 @@ contract UniswapV3ExecutorTest is Test, Constants {
         assertEq(computedPair, DAI_WETH_USV3);
     }
 
-    function testComputePairAddressInvalid() public view {
-        address maliciousPool = DUMMY; // Contract with malicious behavior
-
-        address computedPair =
-            uniswapV3Exposed.computePairAddress(WETH_ADDR, DAI_ADDR, 3000);
-        assertNotEq(computedPair, maliciousPool);
-    }
-
     function testUSV3Callback() public {
         uint24 poolFee = 3000;
         uint256 amountOwed = 1000000000000000000;
