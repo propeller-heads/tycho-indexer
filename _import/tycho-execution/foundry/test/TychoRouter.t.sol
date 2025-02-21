@@ -790,7 +790,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
     function testUSV4IntegrationOutputETH() public {
         // Test created with calldata from our router encoder.
 
-        // Performs a single swap from ETH to PEPE without wrapping or unwrapping
+        // Performs a single swap from USDC to ETH without wrapping or unwrapping
         //
         //   USDC ───(USV4)──> ETH
         //
@@ -801,7 +801,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(address(permit2Address), type(uint256).max);
 
-        // Encoded solution generated using `test_split_encoding_strategy_usv4_eth_in`
+        // Encoded solution generated using `test_split_encoding_strategy_usv4_eth_out`
         // and ensuring that the encoded executor address is the one in this test
         // `f62849f9a0b5bf2913b396098f7c7019b51a820a`
         (bool success,) = tychoRouterAddr.call(
