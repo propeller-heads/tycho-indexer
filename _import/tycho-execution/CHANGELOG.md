@@ -1,3 +1,12 @@
+## [0.48.0](https://github.com/propeller-heads/tycho-execution/compare/0.47.0...0.48.0) (2025-02-21)
+
+
+### Features
+
+* Adapt SplitSwapStrategyEncoder to have optional permit2 logic ([20e6419](https://github.com/propeller-heads/tycho-execution/commit/20e6419a208965e4d80e3d36455bd39078fe613b))
+* Implement Clone for EVMTychoEncoder ([8b2af4f](https://github.com/propeller-heads/tycho-execution/commit/8b2af4f5775a14fd508c6660e43c541e9faeeb0d))
+* Update tycho-core ([c6c734d](https://github.com/propeller-heads/tycho-execution/commit/c6c734d4940303f862b7b0275d57a87e4ef81d56))
+
 ## [0.47.0](https://github.com/propeller-heads/tycho-execution/compare/0.46.1...0.47.0) (2025-02-20)
 
 

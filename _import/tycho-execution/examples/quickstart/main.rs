@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use num_bigint::BigUint;
 use tycho_core::{
-    models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
+    models::{protocol::ProtocolComponent, Chain},
     Bytes,
 };
 use tycho_execution::encoding::{
@@ -22,8 +22,8 @@ fn main() {
 
     // Initialize the encoder
     let encoder = EVMEncoderBuilder::new()
-        .chain(TychoCoreChain::Ethereum)
-        .tycho_router(swapper_pk, None)
+        .chain(Chain::Ethereum)
+        .tycho_router_with_permit2(None, swapper_pk)
         .expect("Failed to create encoder builder")
         .build()
         .expect("Failed to build encoder");
