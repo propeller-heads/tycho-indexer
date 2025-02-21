@@ -1,0 +1,12 @@
+{
+  "name": "hardhat-project",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "dotenv": "^16.4.7",
+    "hardhat": "^2.22.18"
+  },
+  "dependencies": {
+    "@nomicfoundation/hardhat-foundry": "^1.1.3",
+    "@tenderly/hardhat-tenderly": "^2.3.0"
+  }
+}
