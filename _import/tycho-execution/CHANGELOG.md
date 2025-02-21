@@ -1,3 +1,10 @@
+## [0.48.1](https://github.com/propeller-heads/tycho-execution/compare/0.48.0...0.48.1) (2025-02-21)
+
+
+### Bug Fixes
+
+* Native ETH input/output integration tests/fixes ([a7aa4d7](https://github.com/propeller-heads/tycho-execution/commit/a7aa4d7ebb956ec290b5853245f0e1f0077d708a))
+
 ## [0.48.0](https://github.com/propeller-heads/tycho-execution/compare/0.47.0...0.48.0) (2025-02-21)
 
 
