@@ -20,6 +20,16 @@ pub struct EVMTychoEncoder {
     wrapped_address: Bytes,
 }
 
+impl Clone for EVMTychoEncoder {
+    fn clone(&self) -> Self {
+        Self {
+            strategy_encoder: self.strategy_encoder.clone_box(),
+            native_address: self.native_address.clone(),
+            wrapped_address: self.wrapped_address.clone(),
+        }
+    }
+}
+
 impl EVMTychoEncoder {
     pub fn new(
         chain: tycho_core::models::Chain,

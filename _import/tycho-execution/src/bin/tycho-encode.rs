@@ -1,11 +1,9 @@
 use std::io::{self, Read};
 
 use clap::{Parser, Subcommand};
-use serde_json::Value;
 use tycho_core::models::Chain;
 use tycho_execution::encoding::{
-    errors::EncodingError, evm::encoder_builder::EVMEncoderBuilder, models::Solution,
-    tycho_encoder::TychoEncoder,
+    evm::encoder_builder::EVMEncoderBuilder, models::Solution, tycho_encoder::TychoEncoder,
 };
 
 #[derive(Parser)]
@@ -52,6 +50,11 @@ pub enum Commands {
     TychoRouter {
         #[arg(short, long)]
         config_path: Option<String>,
+    },
+    /// Use the Tycho router encoding strategy with Permit2 approval and token in transfer
+    TychoRouterPermit2 {
+        #[arg(short, long)]
+        config_path: Option<String>,
         #[arg(short, long)]
         swapper_pk: String,
     },
@@ -64,6 +67,7 @@ pub enum Commands {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    let chain = Chain::Ethereum;
 
     // Read from stdin until EOF
     let mut buffer = String::new();
@@ -74,16 +78,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if buffer.trim().is_empty() {
         return Err("No input provided. Expected JSON input on stdin.".into());
     }
+    let solution: Solution = serde_json::from_str(&buffer)?;
 
-    // Encode the solution
-    let encoded = match cli.command {
-        Commands::TychoRouter { config_path, swapper_pk } => {
-            encode_swaps(&buffer, config_path, Some(swapper_pk), true)?
+    let mut builder = EVMEncoderBuilder::new().chain(chain);
+
+    builder = match cli.command {
+        Commands::TychoRouter { config_path } => builder.tycho_router(config_path)?,
+        Commands::TychoRouterPermit2 { config_path, swapper_pk } => {
+            builder.tycho_router_with_permit2(config_path, swapper_pk)?
         }
-        Commands::DirectExecution { config_path } => {
-            encode_swaps(&buffer, config_path, None, false)?
-        }
+        Commands::DirectExecution { config_path } => builder.direct_execution(config_path)?,
     };
+    let encoder = builder.build()?;
+    let transactions = encoder.encode_router_calldata(vec![solution])?;
+    let encoded = serde_json::json!({
+        "to": format!("0x{}", hex::encode(&transactions[0].to)),
+        "value": format!("0x{}", hex::encode(transactions[0].value.to_bytes_be())),
+        "data": format!("0x{}", hex::encode(&transactions[0].data)),
+    });
     // Output the encoded result as JSON to stdout
     println!(
         "{}",
@@ -92,33 +104,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     Ok(())
-}
-
-fn encode_swaps(
-    input: &str,
-    config_path: Option<String>,
-    swapper_pk: Option<String>,
-    use_tycho_router: bool,
-) -> Result<Value, EncodingError> {
-    let solution: Solution = serde_json::from_str(input)?;
-    let chain = Chain::Ethereum;
-
-    let mut builder = EVMEncoderBuilder::new().chain(chain);
-    builder = if use_tycho_router {
-        let private_key = swapper_pk.ok_or(EncodingError::FatalError(
-            "Swapper private key is required for tycho_router".to_string(),
-        ))?;
-        builder.tycho_router(private_key, config_path)?
-    } else {
-        builder.direct_execution(config_path)?
-    };
-    let encoder = builder.build()?;
-
-    let transactions = encoder.encode_router_calldata(vec![solution])?;
-
-    Ok(serde_json::json!({
-        "to": format!("0x{}", hex::encode(&transactions[0].to)),
-        "value": format!("0x{}", hex::encode(transactions[0].value.to_bytes_be())),
-        "data": format!("0x{}", hex::encode(&transactions[0].data)),
-    }))
 }
