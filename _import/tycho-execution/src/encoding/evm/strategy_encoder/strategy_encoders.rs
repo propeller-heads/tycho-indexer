@@ -79,7 +79,7 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    permit2: Permit2,
+    permit2: Option<Permit2>,
     selector: String,
     native_address: Bytes,
     wrapped_address: Bytes,
@@ -88,14 +88,21 @@ pub struct SplitSwapStrategyEncoder {
 
 impl SplitSwapStrategyEncoder {
     pub fn new(
-        swapper_pk: String,
         blockchain: tycho_core::models::Chain,
         swap_encoder_registry: SwapEncoderRegistry,
+        swapper_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
         let chain = Chain::from(blockchain);
-        let selector = "swapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string();
+        let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
+            (Some(Permit2::new(swapper_pk, chain.clone())?), "swapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+        } else {
+            (
+                None,
+                "swap(uint256,address,address,uint256,bool,bool,uint256,address,bytes)".to_string(),
+            )
+        };
         Ok(Self {
-            permit2: Permit2::new(swapper_pk, chain.clone())?,
+            permit2,
             selector,
             swap_encoder_registry,
             native_address: chain.native_token()?,
@@ -122,12 +129,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 &self.native_address,
                 &self.wrapped_address,
             )?;
-        let (permit, signature) = self.permit2.get_permit(
-            &solution.router_address,
-            &solution.sender,
-            &solution.given_token,
-            &solution.given_amount,
-        )?;
+
         let min_amount_out = get_min_amount_for_solution(solution.clone());
 
         // The tokens array is composed of the given token, the checked token and all the
@@ -214,20 +216,41 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         }
 
         let encoded_swaps = self.ple_encode(swaps);
-        let method_calldata = (
-            biguint_to_u256(&solution.given_amount),
-            bytes_to_address(&solution.given_token)?,
-            bytes_to_address(&solution.checked_token)?,
-            biguint_to_u256(&min_amount_out),
-            wrap,
-            unwrap,
-            U256::from(tokens.len()),
-            bytes_to_address(&solution.receiver)?,
-            permit,
-            signature.as_bytes().to_vec(),
-            encoded_swaps,
-        )
-            .abi_encode();
+        let method_calldata = if let Some(permit2) = self.permit2.clone() {
+            let (permit, signature) = permit2.get_permit(
+                &solution.router_address,
+                &solution.sender,
+                &solution.given_token,
+                &solution.given_amount,
+            )?;
+            (
+                biguint_to_u256(&solution.given_amount),
+                bytes_to_address(&solution.given_token)?,
+                bytes_to_address(&solution.checked_token)?,
+                biguint_to_u256(&min_amount_out),
+                wrap,
+                unwrap,
+                U256::from(tokens.len()),
+                bytes_to_address(&solution.receiver)?,
+                permit,
+                signature.as_bytes().to_vec(),
+                encoded_swaps,
+            )
+                .abi_encode()
+        } else {
+            (
+                biguint_to_u256(&solution.given_amount),
+                bytes_to_address(&solution.given_token)?,
+                bytes_to_address(&solution.checked_token)?,
+                biguint_to_u256(&min_amount_out),
+                wrap,
+                unwrap,
+                U256::from(tokens.len()),
+                bytes_to_address(&solution.receiver)?,
+                encoded_swaps,
+            )
+                .abi_encode()
+        };
 
         let contract_interaction = encode_input(&self.selector, method_calldata);
         Ok((contract_interaction, solution.router_address, None))
@@ -606,7 +629,8 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -707,7 +731,8 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: eth(),
@@ -755,7 +780,8 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: dai,
@@ -844,7 +870,8 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -924,7 +951,8 @@ mod tests {
         };
         let swap_encoder_registry = get_swap_encoder_registry();
         let encoder =
-            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: usdc,
@@ -1006,8 +1034,212 @@ mod tests {
         ));
         let hex_calldata = encode(&calldata);
 
-        println!("{}", hex_calldata);
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+    }
+
+    #[test]
+    fn test_split_swap_strategy_encoder_simple_route_no_permit2() {
+        // Performs a single swap from WETH to DAI on a USV2 pool, without permit2 and no grouping
+        // optimizations.
+
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let expected_amount = Some(BigUint::from_str("2_650_000000000000000000").unwrap());
+        let slippage = Some(0.01f64);
+        let checked_amount = Some(BigUint::from_str("2_640_000000000000000000").unwrap());
+        let expected_min_amount = U256::from_str("2_640_000000000000000000").unwrap();
+
+        let swap = Swap {
+            component: ProtocolComponent {
+                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: dai.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, None).unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: weth,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: dai,
+            expected_amount,
+            slippage,
+            checked_amount,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap],
+            ..Default::default()
+        };
+
+        let (calldata, _, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+        let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
+        let expected_input = [
+            "0a83cb08",                                                           // Function selector
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount out
+            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
+            "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
+            &expected_min_amount_encoded,                                         // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000",   // wrap
+            "0000000000000000000000000000000000000000000000000000000000000000",   // unwrap
+            "0000000000000000000000000000000000000000000000000000000000000002",   // tokens length
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
+            "0000000000000000000000000000000000000000000000000000000000000120",   // offset of ple encoded swaps
+            "000000000000000000000000000000000000000000000000000000000000005c",   // length of ple encoded swaps without padding
+            "005a", // ple encoded swaps
+            // Swap header
+            "00", // token in index
+            "01", // token out index
+            "000000", // split
+            // Swap data
+            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
+            "bd0625ab",                                 // selector
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+            "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "00",                                       // zero2one
+            "00",                                       // exact out
+            "000000",                                   // padding
+        ]
+            .join("");
+
+        let hex_calldata = encode(&calldata);
+
+        assert_eq!(hex_calldata, expected_input);
+        println!("{}", hex_calldata);
+    }
+
+    #[test]
+    fn test_split_encoding_strategy_usv4_eth_in() {
+        // Performs a single swap from ETH to PEPE using a USV4 pool
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+        //
+        //   ETH ───(USV4)──> PEPE
+        //
+        // Set up a mock private key for signing (Alice's pk in our router tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let eth = eth();
+        let pepe = Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap();
+
+        let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
+        let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
+        let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_eth_pepe.insert("fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
+
+        let swap_eth_pepe = Swap {
+            component: ProtocolComponent {
+                id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_eth_pepe,
+                ..Default::default()
+            },
+            token_in: eth.clone(),
+            token_out: pepe.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: eth,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: pepe,
+            expected_amount: Some(BigUint::from_str("300_000_000000000000000000").unwrap()),
+            checked_amount: None,
+            slippage: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap_eth_pepe],
+            ..Default::default()
+        };
+
+        let (calldata, _, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+        let hex_calldata = encode(&calldata);
+
+        println!("{}", hex_calldata);
+    }
+    #[test]
+    fn test_split_encoding_strategy_usv4_eth_out() {
+        // Performs a single swap from USDC to ETH using a USV4 pool
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+        //
+        //   USDC ───(USV4)──> ETH
+        //
+        // Set up a mock private key for signing (Alice's pk in our router tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let eth = eth();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        // Fee and tick spacing information for this test is obtained by querying the
+        // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
+        // Using the poolKeys function with the first 25 bytes of the pool id
+        let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+        let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+        let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_usdc_eth.insert("fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+
+        let swap_usdc_eth = Swap {
+            component: ProtocolComponent {
+                id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_usdc_eth,
+                ..Default::default()
+            },
+            token_in: usdc.clone(),
+            token_out: eth.clone(),
+            split: 0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: usdc,
+            given_amount: BigUint::from_str("3000_000000").unwrap(),
+            checked_token: eth,
+            expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
+            checked_amount: None,
+            slippage: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap_usdc_eth],
+            ..Default::default()
+        };
+
+        let (calldata, _, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
     }
 }
