@@ -3,9 +3,17 @@ use crate::encoding::{
     models::{Solution, Transaction},
 };
 
-/// An encoder must implement this trait in order to encode a solution into a Transaction for
-/// execution using a Tycho router or related contracts.
+/// A high-level encoder that converts solutions into executable transactions. Allows for modularity
+/// in the encoding process.
 pub trait TychoEncoder {
+    /// Encodes solutions into transactions that can be executed by the Tycho router.
+    ///
+    /// # Arguments
+    /// * `solutions` - Vector of solutions to encode, each potentially using different setups (swap
+    ///   paths, protocols, etc.)
+    ///
+    /// # Returns
+    /// * `Result<Vec<Transaction>, EncodingError>` - Vector of executable transactions
     fn encode_router_calldata(
         &self,
         solutions: Vec<Solution>,
