@@ -15,7 +15,6 @@ import "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
-error TychoRouter__WithdrawalFailed();
 error TychoRouter__AddressZero();
 error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
@@ -408,9 +407,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 amount = address(this).balance;
         if (amount > 0) {
             emit Withdrawal(address(0), amount, receiver);
-            // slither-disable-next-line arbitrary-send-eth
-            bool success = payable(receiver).send(amount);
-            if (!success) revert TychoRouter__WithdrawalFailed();
+            Address.sendValue(payable(receiver), amount);
         }
     }
 
