@@ -124,7 +124,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }
 
-        uint256 leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
+        uint256 leftoverAmountIn;
+        if (tokenIn == address(0)) {
+            leftoverAmountIn = address(this).balance;
+        } else {
+            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
+        }
+
         if (leftoverAmountIn > 0) {
             revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
         }
@@ -209,7 +215,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }
 
-        uint256 leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
+        uint256 leftoverAmountIn;
+        if (tokenIn == address(0)) {
+            leftoverAmountIn = address(this).balance;
+        } else {
+            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
+        }
+
         if (leftoverAmountIn > 0) {
             revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
         }

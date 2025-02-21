@@ -1006,8 +1006,129 @@ mod tests {
         ));
         let hex_calldata = encode(&calldata);
 
-        println!("{}", hex_calldata);
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+    }
+
+    #[test]
+    fn test_split_encoding_strategy_usv4_eth_in() {
+        // Performs a single swap from ETH to PEPE using a USV4 pool
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+        //
+        //   ETH ───(USV4)──> PEPE
+        //
+        // Set up a mock private key for signing (Alice's pk in our router tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let eth = eth();
+        let pepe = Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap();
+
+        let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
+        let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
+        let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_eth_pepe.insert("fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
+
+        let swap_eth_pepe = Swap {
+            component: ProtocolComponent {
+                id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_eth_pepe,
+                ..Default::default()
+            },
+            token_in: eth.clone(),
+            token_out: pepe.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: eth,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: pepe,
+            expected_amount: Some(BigUint::from_str("300_000_000000000000000000").unwrap()),
+            checked_amount: None,
+            slippage: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap_eth_pepe],
+            ..Default::default()
+        };
+
+        let (calldata, _, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+        let hex_calldata = encode(&calldata);
+
+        println!("{}", hex_calldata);
+    }
+    #[test]
+    fn test_split_encoding_strategy_usv4_eth_out() {
+        // Performs a single swap from USDC to ETH using a USV4 pool
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+        //
+        //   USDC ───(USV4)──> ETH
+        //
+        // Set up a mock private key for signing (Alice's pk in our router tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let eth = eth();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        // Fee and tick spacing information for this test is obtained by querying the
+        // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
+        // Using the poolKeys function with the first 25 bytes of the pool id
+        let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+        let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+        let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_usdc_eth.insert("fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+
+        let swap_usdc_eth = Swap {
+            component: ProtocolComponent {
+                id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_usdc_eth,
+                ..Default::default()
+            },
+            token_in: usdc.clone(),
+            token_out: eth.clone(),
+            split: 0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(private_key, eth_chain(), swap_encoder_registry).unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: usdc,
+            given_amount: BigUint::from_str("3000_000000").unwrap(),
+            checked_token: eth,
+            expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
+            checked_amount: None,
+            slippage: None,
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap_usdc_eth],
+            ..Default::default()
+        };
+
+        let (calldata, _, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
     }
 }

@@ -71,8 +71,8 @@ contract UniswapV4Executor is IExecutor, V4Router {
                     hookData: bytes("")
                 })
             );
-            params[1] = abi.encode(key.currency0, amountIn);
-            params[2] = abi.encode(key.currency1, uint256(0));
+            params[1] = abi.encode(tokenIn, amountIn); // currency to settle
+            params[2] = abi.encode(tokenOut, uint256(0)); // currency to take
             swapData = abi.encode(actions, params);
         } else {
             PathKey[] memory path = new PathKey[](pools.length);
