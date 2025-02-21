@@ -30,10 +30,11 @@ contract UniswapV3Executor is IExecutor, ICallback {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(
-        uint256 amountIn,
-        bytes calldata data
-    ) external payable returns (uint256 amountOut) {
+    function swap(uint256 amountIn, bytes calldata data)
+        external
+        payable
+        returns (uint256 amountOut)
+    {
         (
             address tokenIn,
             address tokenOut,
@@ -71,9 +72,10 @@ contract UniswapV3Executor is IExecutor, ICallback {
         }
     }
 
-    function handleCallback(
-        bytes calldata msgData
-    ) public returns (bytes memory result) {
+    function handleCallback(bytes calldata msgData)
+        public
+        returns (bytes memory result)
+    {
         // The data has the following layout:
         // - amount0Delta (32 bytes)
         // - amount1Delta (32 bytes)
@@ -81,18 +83,15 @@ contract UniswapV3Executor is IExecutor, ICallback {
         // - dataLength (32 bytes)
         // - protocolData (variable length)
 
-        (int256 amount0Delta, int256 amount1Delta) = abi.decode(
-            msgData[:64],
-            (int256, int256)
-        );
+        (int256 amount0Delta, int256 amount1Delta) =
+            abi.decode(msgData[:64], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[128:148]));
 
         verifyCallback(msgData[128:]);
 
-        uint256 amountOwed = amount0Delta > 0
-            ? uint256(amount0Delta)
-            : uint256(amount1Delta);
+        uint256 amountOwed =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
         IERC20(tokenIn).safeTransfer(msg.sender, amountOwed);
         return abi.encode(amountOwed, tokenIn);
@@ -104,32 +103,24 @@ contract UniswapV3Executor is IExecutor, ICallback {
         uint24 poolFee = uint24(bytes3(data[40:43]));
 
         // slither-disable-next-line unused-return
-        CallbackValidationV2.verifyCallback(
-            factory,
-            tokenIn,
-            tokenOut,
-            poolFee
-        );
+        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
     }
 
     function uniswapV3SwapCallback(
-        int256 /* amount0Delta */,
-        int256 /* amount1Delta */,
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
         bytes calldata /* data */
     ) external {
         uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
-        uint256 dataLength = uint256(
-            bytes32(msg.data[dataOffset:dataOffset + 32])
-        );
+        uint256 dataLength =
+            uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
 
         bytes calldata fullData = msg.data[4:dataOffset + 32 + dataLength];
 
         handleCallback(fullData);
     }
 
-    function _decodeData(
-        bytes calldata data
-    )
+    function _decodeData(bytes calldata data)
         internal
         pure
         returns (
@@ -152,29 +143,23 @@ contract UniswapV3Executor is IExecutor, ICallback {
         zeroForOne = uint8(data[83]) > 0;
     }
 
-    function _makeV3CallbackData(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee
-    ) internal view returns (bytes memory) {
-        return
-            abi.encodePacked(
-                tokenIn,
-                tokenOut,
-                fee,
-                self,
-                ICallback.handleCallback.selector
-            );
+    function _makeV3CallbackData(address tokenIn, address tokenOut, uint24 fee)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return abi.encodePacked(
+            tokenIn, tokenOut, fee, self, ICallback.handleCallback.selector
+        );
     }
 
-    function _computePairAddress(
-        address tokenA,
-        address tokenB,
-        uint24 fee
-    ) internal view returns (address pool) {
-        (address token0, address token1) = tokenA < tokenB
-            ? (tokenA, tokenB)
-            : (tokenB, tokenA);
+    function _computePairAddress(address tokenA, address tokenB, uint24 fee)
+        internal
+        view
+        returns (address pool)
+    {
+        (address token0, address token1) =
+            tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         pool = address(
             uint160(
                 uint256(

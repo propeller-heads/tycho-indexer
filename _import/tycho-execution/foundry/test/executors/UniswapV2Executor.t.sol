@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV2Executor.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
+import {MockUniswapV2Pool} from "../mock/MockUniswapV2Pool.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
     function decodeParams(bytes calldata data)
@@ -25,6 +26,14 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
         returns (uint256 amount)
     {
         return _getAmountOut(target, amountIn, zeroForOne);
+    }
+
+    function computePairAddress(address target)
+        external
+        view
+        returns (address pair)
+    {
+        return _computePairAddress(target);
     }
 }
 
@@ -62,6 +71,21 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         uniswapV2Exposed.decodeParams(invalidParams);
     }
 
+    function testComputePairAddress() public view {
+        address computedPair =
+            uniswapV2Exposed.computePairAddress(WETH_DAI_POOL);
+        assertEq(computedPair, WETH_DAI_POOL);
+    }
+
+    function testComputePairAddressInvalid() public {
+        address tokenA = WETH_ADDR;
+        address tokenB = DAI_ADDR;
+        address maliciousPool = address(new MockUniswapV2Pool(tokenA, tokenB));
+        address computedPair =
+            uniswapV2Exposed.computePairAddress(maliciousPool);
+        assertNotEq(computedPair, maliciousPool);
+    }
+
     function testAmountOut() public view {
         uint256 amountOut =
             uniswapV2Exposed.getAmountOut(WETH_DAI_POOL, 10 ** 18, false);
@@ -80,7 +104,7 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         assertGe(amountOut, 0);
     }
 
-    function testSwapUniswapV2() public {
+    function testSwap() public {
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
@@ -119,5 +143,18 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
 
         uint256 finalBalance = DAI.balanceOf(BOB);
         assertGe(finalBalance, amountOut);
+    }
+
+    function test_RevertIf_InvalidTarget() public {
+        uint256 amountIn = 10 ** 18;
+        bool zeroForOne = false;
+        address maliciousPool =
+            address(new MockUniswapV2Pool(WETH_ADDR, DAI_ADDR));
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, maliciousPool, BOB, zeroForOne);
+
+        deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
+        vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
+        uniswapV2Exposed.swap(amountIn, protocolData);
     }
 }

@@ -22,6 +22,14 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     {
         return _decodeData(data);
     }
+
+    function computePairAddress(address tokenA, address tokenB, uint24 fee)
+        external
+        view
+        returns (address)
+    {
+        return _computePairAddress(tokenA, tokenB, fee);
+    }
 }
 
 contract UniswapV3ExecutorTest is Test, Constants {
@@ -69,6 +77,20 @@ contract UniswapV3ExecutorTest is Test, Constants {
         uniswapV3Exposed.decodeData(invalidParams);
     }
 
+    function testComputePairAddress() public view {
+        address computedPair =
+            uniswapV3Exposed.computePairAddress(WETH_ADDR, DAI_ADDR, 3000);
+        assertEq(computedPair, DAI_WETH_USV3);
+    }
+
+    function testComputePairAddressInvalid() public view {
+        address maliciousPool = DUMMY; // Contract with malicious behavior
+
+        address computedPair =
+            uniswapV3Exposed.computePairAddress(WETH_ADDR, DAI_ADDR, 3000);
+        assertNotEq(computedPair, maliciousPool);
+    }
+
     function testUSV3Callback() public {
         uint24 poolFee = 3000;
         uint256 amountOwed = 1000000000000000000;
@@ -111,6 +133,25 @@ contract UniswapV3ExecutorTest is Test, Constants {
         assertGe(amountOut, expAmountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
         assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
+    }
+
+    function test_RevertIf_InvalidTargetV3() public {
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
+        bool zeroForOne = false;
+        address maliciousPool = DUMMY;
+
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            DAI_ADDR,
+            uint24(3000),
+            address(this),
+            maliciousPool,
+            zeroForOne
+        );
+
+        vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);
+        uniswapV3Exposed.swap(amountIn, protocolData);
     }
 
     function encodeUniswapV3Swap(
