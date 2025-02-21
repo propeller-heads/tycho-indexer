@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV2Executor.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
-import {MockUniswapV2Pool} from "../mock/MockUniswapV2Pool.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
     function decodeParams(bytes calldata data)
@@ -28,12 +27,18 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
         return _getAmountOut(target, amountIn, zeroForOne);
     }
 
-    function computePairAddress(address target)
-        external
-        view
-        returns (address pair)
-    {
-        return _computePairAddress(target);
+    function verifyPairAddress(address target) external view {
+        _verifyPairAddress(target);
+    }
+}
+
+contract FakeUniswapV2Pool {
+    address public token0;
+    address public token1;
+
+    constructor(address _tokenA, address _tokenB) {
+        token0 = _tokenA < _tokenB ? _tokenA : _tokenB;
+        token1 = _tokenA < _tokenB ? _tokenB : _tokenA;
     }
 }
 
@@ -71,19 +76,14 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         uniswapV2Exposed.decodeParams(invalidParams);
     }
 
-    function testComputePairAddress() public view {
-        address computedPair =
-            uniswapV2Exposed.computePairAddress(WETH_DAI_POOL);
-        assertEq(computedPair, WETH_DAI_POOL);
+    function testVerifyPairAddress() public view {
+        uniswapV2Exposed.verifyPairAddress(WETH_DAI_POOL);
     }
 
-    function testComputePairAddressInvalid() public {
-        address tokenA = WETH_ADDR;
-        address tokenB = DAI_ADDR;
-        address maliciousPool = address(new MockUniswapV2Pool(tokenA, tokenB));
-        address computedPair =
-            uniswapV2Exposed.computePairAddress(maliciousPool);
-        assertNotEq(computedPair, maliciousPool);
+    function test_RevertIf_InvalidTarget() public {
+        address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
+        vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
+        uniswapV2Exposed.verifyPairAddress(fakePool);
     }
 
     function testAmountOut() public view {
@@ -145,13 +145,12 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         assertGe(finalBalance, amountOut);
     }
 
-    function test_RevertIf_InvalidTarget() public {
+    function test_RevertIf_Swap_InvalidTarget() public {
         uint256 amountIn = 10 ** 18;
         bool zeroForOne = false;
-        address maliciousPool =
-            address(new MockUniswapV2Pool(WETH_ADDR, DAI_ADDR));
+        address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
         bytes memory protocolData =
-            abi.encodePacked(WETH_ADDR, maliciousPool, BOB, zeroForOne);
+            abi.encodePacked(WETH_ADDR, fakePool, BOB, zeroForOne);
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);

@@ -23,12 +23,13 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
         return _decodeData(data);
     }
 
-    function computePairAddress(address tokenA, address tokenB, uint24 fee)
-        external
-        view
-        returns (address)
-    {
-        return _computePairAddress(tokenA, tokenB, fee);
+    function verifyPairAddress(
+        address tokenA,
+        address tokenB,
+        uint24 fee,
+        address target
+    ) external view {
+        _verifyPairAddress(tokenA, tokenB, fee, target);
     }
 }
 
@@ -77,10 +78,10 @@ contract UniswapV3ExecutorTest is Test, Constants {
         uniswapV3Exposed.decodeData(invalidParams);
     }
 
-    function testComputePairAddress() public view {
-        address computedPair =
-            uniswapV3Exposed.computePairAddress(WETH_ADDR, DAI_ADDR, 3000);
-        assertEq(computedPair, DAI_WETH_USV3);
+    function testVerifyPairAddress() public view {
+        uniswapV3Exposed.verifyPairAddress(
+            WETH_ADDR, DAI_ADDR, 3000, DAI_WETH_USV3
+        );
     }
 
     function testUSV3Callback() public {
@@ -127,18 +128,18 @@ contract UniswapV3ExecutorTest is Test, Constants {
         assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
     }
 
-    function test_RevertIf_InvalidTargetV3() public {
+    function test_RevertIf_InvalidTarget() public {
         uint256 amountIn = 10 ** 18;
         deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
         bool zeroForOne = false;
-        address maliciousPool = DUMMY;
+        address fakePool = DUMMY; // Contract with minimal code
 
         bytes memory protocolData = abi.encodePacked(
             WETH_ADDR,
             DAI_ADDR,
             uint24(3000),
             address(this),
-            maliciousPool,
+            fakePool,
             zeroForOne
         );
 

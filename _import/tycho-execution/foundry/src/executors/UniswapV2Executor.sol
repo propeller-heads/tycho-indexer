@@ -11,6 +11,9 @@ error UniswapV2Executor__InvalidTarget();
 contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
+    bytes32 internal constant POOL_INIT_CODE_HASH =
+        0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
+
     address private constant FACTORY =
         0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
 
@@ -27,9 +30,8 @@ contract UniswapV2Executor is IExecutor {
 
         (tokenIn, target, receiver, zeroForOne) = _decodeData(data);
 
-        if (target != _computePairAddress(target)) {
-            revert UniswapV2Executor__InvalidTarget();
-        }
+        _verifyPairAddress(target);
+
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
         tokenIn.safeTransfer(target, givenAmount);
 
@@ -83,27 +85,23 @@ contract UniswapV2Executor is IExecutor {
         amount = numerator / denominator;
     }
 
-    function _computePairAddress(address target)
-        internal
-        view
-        returns (address pair)
-    {
+    function _verifyPairAddress(address target) internal view {
         address token0 = IUniswapV2Pair(target).token0();
         address token1 = IUniswapV2Pair(target).token1();
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
-        pair = address(
+        address pair = address(
             uint160(
                 uint256(
                     keccak256(
                         abi.encodePacked(
-                            hex"ff",
-                            FACTORY,
-                            salt,
-                            hex"96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f"
+                            hex"ff", FACTORY, salt, POOL_INIT_CODE_HASH
                         )
                     )
                 )
             )
         );
+        if (pair != target) {
+            revert UniswapV2Executor__InvalidTarget();
+        }
     }
 }
