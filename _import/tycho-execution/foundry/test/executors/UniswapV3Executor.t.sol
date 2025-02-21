@@ -128,7 +128,7 @@ contract UniswapV3ExecutorTest is Test, Constants {
         assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
     }
 
-    function test_RevertIf_InvalidTarget() public {
+    function testSwapFailureInvalidTarget() public {
         uint256 amountIn = 10 ** 18;
         deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
         bool zeroForOne = false;

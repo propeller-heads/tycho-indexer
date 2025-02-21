@@ -80,7 +80,7 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         uniswapV2Exposed.verifyPairAddress(WETH_DAI_POOL);
     }
 
-    function test_RevertIf_InvalidTarget() public {
+    function testInvalidTarget() public {
         address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
         vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
         uniswapV2Exposed.verifyPairAddress(fakePool);
@@ -145,7 +145,7 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         assertGe(finalBalance, amountOut);
     }
 
-    function test_RevertIf_Swap_InvalidTarget() public {
+    function testSwapFailureInvalidTarget() public {
         uint256 amountIn = 10 ** 18;
         bool zeroForOne = false;
         address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
