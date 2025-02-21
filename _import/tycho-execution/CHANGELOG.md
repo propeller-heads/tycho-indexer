@@ -1,3 +1,10 @@
+## [0.49.0](https://github.com/propeller-heads/tycho-execution/compare/0.48.1...0.49.0) (2025-02-21)
+
+
+### Features
+
+* Use openzepplin's sendValue instead of send for ETH transfers ([0ba5d02](https://github.com/propeller-heads/tycho-execution/commit/0ba5d02268e42e10ab9a7d4390eb87dfd7099f07))
+
 ## [0.48.1](https://github.com/propeller-heads/tycho-execution/compare/0.48.0...0.48.1) (2025-02-21)
 
 
