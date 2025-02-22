@@ -1,3 +1,10 @@
+## [0.50.0](https://github.com/propeller-heads/tycho-execution/compare/0.49.0...0.50.0) (2025-02-22)
+
+
+### Features
+
+* add target verification for usv2 and usv3  using _computePairAddress ([7936ba1](https://github.com/propeller-heads/tycho-execution/commit/7936ba1c943a616a143dc6f8ecb1da61073b05a8))
+
 ## [0.49.0](https://github.com/propeller-heads/tycho-execution/compare/0.48.1...0.49.0) (2025-02-21)
 
 
