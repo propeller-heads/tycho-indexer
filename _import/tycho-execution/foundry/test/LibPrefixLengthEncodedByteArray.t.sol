@@ -51,14 +51,14 @@ contract LibPrefixLengthEncodedByteArrayTest is Test {
         assertEq(this.size(multiple), 3);
     }
 
-    function test_RevertIf_InvalidLength() public {
+    function testInvalidLength() public {
         // Length prefix larger than remaining data
         vm.expectRevert();
         bytes memory invalid = hex"0004414243";
         this.next(invalid);
     }
 
-    function test_RevertIf_IncompletePrefix() public {
+    function testIncompletePrefix() public {
         // Only 1 byte instead of 2 bytes prefix
         vm.expectRevert();
         bytes memory invalid = hex"01";

@@ -6,9 +6,16 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 
 error UniswapV2Executor__InvalidDataLength();
+error UniswapV2Executor__InvalidTarget();
 
 contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
+
+    bytes32 internal constant POOL_INIT_CODE_HASH =
+        0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
+
+    address private constant FACTORY =
+        0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
 
     // slither-disable-next-line locked-ether
     function swap(uint256 givenAmount, bytes calldata data)
@@ -22,6 +29,9 @@ contract UniswapV2Executor is IExecutor {
         IERC20 tokenIn;
 
         (tokenIn, target, receiver, zeroForOne) = _decodeData(data);
+
+        _verifyPairAddress(target);
+
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
         tokenIn.safeTransfer(target, givenAmount);
 
@@ -73,5 +83,25 @@ contract UniswapV2Executor is IExecutor {
         uint256 numerator = amountInWithFee * uint256(reserveOut);
         uint256 denominator = (uint256(reserveIn) * 1000) + amountInWithFee;
         amount = numerator / denominator;
+    }
+
+    function _verifyPairAddress(address target) internal view {
+        address token0 = IUniswapV2Pair(target).token0();
+        address token1 = IUniswapV2Pair(target).token1();
+        bytes32 salt = keccak256(abi.encodePacked(token0, token1));
+        address pair = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            hex"ff", FACTORY, salt, POOL_INIT_CODE_HASH
+                        )
+                    )
+                )
+            )
+        );
+        if (pair != target) {
+            revert UniswapV2Executor__InvalidTarget();
+        }
     }
 }

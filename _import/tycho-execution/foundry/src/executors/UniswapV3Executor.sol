@@ -9,10 +9,13 @@ import "@interfaces/ICallback.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
+error UniswapV3Executor__InvalidTarget();
 
 contract UniswapV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
+    bytes32 internal constant POOL_INIT_CODE_HASH =
+        0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54;
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
@@ -42,6 +45,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
             address target,
             bool zeroForOne
         ) = _decodeData(data);
+
+        _verifyPairAddress(tokenIn, tokenOut, fee, target);
+
         int256 amount0;
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
@@ -145,5 +151,32 @@ contract UniswapV3Executor is IExecutor, ICallback {
         return abi.encodePacked(
             tokenIn, tokenOut, fee, self, ICallback.handleCallback.selector
         );
+    }
+
+    function _verifyPairAddress(
+        address tokenA,
+        address tokenB,
+        uint24 fee,
+        address target
+    ) internal view {
+        (address token0, address token1) =
+            tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        address pool = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            hex"ff",
+                            factory,
+                            keccak256(abi.encode(token0, token1, fee)),
+                            POOL_INIT_CODE_HASH
+                        )
+                    )
+                )
+            )
+        );
+        if (pool != target) {
+            revert UniswapV3Executor__InvalidTarget();
+        }
     }
 }

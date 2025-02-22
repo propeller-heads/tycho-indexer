@@ -26,6 +26,20 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
     {
         return _getAmountOut(target, amountIn, zeroForOne);
     }
+
+    function verifyPairAddress(address target) external view {
+        _verifyPairAddress(target);
+    }
+}
+
+contract FakeUniswapV2Pool {
+    address public token0;
+    address public token1;
+
+    constructor(address _tokenA, address _tokenB) {
+        token0 = _tokenA < _tokenB ? _tokenA : _tokenB;
+        token1 = _tokenA < _tokenB ? _tokenB : _tokenA;
+    }
 }
 
 contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
@@ -62,6 +76,16 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         uniswapV2Exposed.decodeParams(invalidParams);
     }
 
+    function testVerifyPairAddress() public view {
+        uniswapV2Exposed.verifyPairAddress(WETH_DAI_POOL);
+    }
+
+    function testInvalidTarget() public {
+        address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
+        vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
+        uniswapV2Exposed.verifyPairAddress(fakePool);
+    }
+
     function testAmountOut() public view {
         uint256 amountOut =
             uniswapV2Exposed.getAmountOut(WETH_DAI_POOL, 10 ** 18, false);
@@ -80,7 +104,7 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         assertGe(amountOut, 0);
     }
 
-    function testSwapUniswapV2() public {
+    function testSwap() public {
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
@@ -119,5 +143,17 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
 
         uint256 finalBalance = DAI.balanceOf(BOB);
         assertGe(finalBalance, amountOut);
+    }
+
+    function testSwapFailureInvalidTarget() public {
+        uint256 amountIn = 10 ** 18;
+        bool zeroForOne = false;
+        address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, fakePool, BOB, zeroForOne);
+
+        deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
+        vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
+        uniswapV2Exposed.swap(amountIn, protocolData);
     }
 }

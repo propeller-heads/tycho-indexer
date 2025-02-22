@@ -22,6 +22,15 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     {
         return _decodeData(data);
     }
+
+    function verifyPairAddress(
+        address tokenA,
+        address tokenB,
+        uint24 fee,
+        address target
+    ) external view {
+        _verifyPairAddress(tokenA, tokenB, fee, target);
+    }
 }
 
 contract UniswapV3ExecutorTest is Test, Constants {
@@ -69,6 +78,12 @@ contract UniswapV3ExecutorTest is Test, Constants {
         uniswapV3Exposed.decodeData(invalidParams);
     }
 
+    function testVerifyPairAddress() public view {
+        uniswapV3Exposed.verifyPairAddress(
+            WETH_ADDR, DAI_ADDR, 3000, DAI_WETH_USV3
+        );
+    }
+
     function testUSV3Callback() public {
         uint24 poolFee = 3000;
         uint256 amountOwed = 1000000000000000000;
@@ -111,6 +126,25 @@ contract UniswapV3ExecutorTest is Test, Constants {
         assertGe(amountOut, expAmountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
         assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
+    }
+
+    function testSwapFailureInvalidTarget() public {
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
+        bool zeroForOne = false;
+        address fakePool = DUMMY; // Contract with minimal code
+
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            DAI_ADDR,
+            uint24(3000),
+            address(this),
+            fakePool,
+            zeroForOne
+        );
+
+        vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);
+        uniswapV3Exposed.swap(amountIn, protocolData);
     }
 
     function encodeUniswapV3Swap(
