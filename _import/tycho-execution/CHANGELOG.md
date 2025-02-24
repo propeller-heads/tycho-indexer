@@ -1,3 +1,16 @@
+## [0.51.0](https://github.com/propeller-heads/tycho-execution/compare/0.50.0...0.51.0) (2025-02-24)
+
+
+### Features
+
+* hardcode callback and swap selection in dispatcher ([58116e0](https://github.com/propeller-heads/tycho-execution/commit/58116e074acbe5830771eb6491becff58cc9f5a7))
+* rm selector from usv3, usv4, update tests, and rename dispatcher file ([69745b1](https://github.com/propeller-heads/tycho-execution/commit/69745b18fdbb4cab8a8fce1d4cf872720358db92))
+
+
+### Bug Fixes
+
+* usv4 integration tests and remove selector from swap/strategy encoder ([18efe03](https://github.com/propeller-heads/tycho-execution/commit/18efe0305b763b1ea5037536cd54734b58778fd2))
+
 ## [0.50.0](https://github.com/propeller-heads/tycho-execution/compare/0.49.0...0.50.0) (2025-02-22)
 
 
