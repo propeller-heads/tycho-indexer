@@ -239,7 +239,7 @@ fn encode(
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address: Bytes::from_str("0x1234567890abcdef1234567890abcdef12345678")
+        router_address: Bytes::from_str("0xFfA5ec2e444e4285108e4a17b82dA495c178427B")
             .expect("Failed to create router address"),
         ..Default::default()
     };
