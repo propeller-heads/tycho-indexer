@@ -96,7 +96,6 @@ pub struct Transaction {
     pub to: Bytes,
     pub value: BigUint,
     pub data: Vec<u8>,
-    pub selector: Option<String>,
 }
 
 /// Represents necessary attributes for encoding an order.

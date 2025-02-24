@@ -118,7 +118,6 @@ impl TychoEncoder for EVMTychoEncoder {
                 value,
                 data: contract_interaction,
                 to: target_address,
-                selector: None,
             });
         }
         Ok(transactions)
