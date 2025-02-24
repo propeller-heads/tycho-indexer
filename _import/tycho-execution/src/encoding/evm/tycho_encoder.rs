@@ -105,7 +105,7 @@ impl TychoEncoder for EVMTychoEncoder {
         for solution in solutions.iter() {
             self.validate_solution(solution)?;
 
-            let (contract_interaction, target_address, selector) = self
+            let (contract_interaction, target_address) = self
                 .strategy_encoder
                 .encode_strategy(solution.clone())?;
 
@@ -118,7 +118,6 @@ impl TychoEncoder for EVMTychoEncoder {
                 value,
                 data: contract_interaction,
                 to: target_address,
-                selector,
             });
         }
         Ok(transactions)
@@ -152,16 +151,12 @@ mod tests {
     struct MockStrategy;
 
     impl StrategyEncoder for MockStrategy {
-        fn encode_strategy(
-            &self,
-            _solution: Solution,
-        ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
+        fn encode_strategy(&self, _solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
             Ok((
                 Bytes::from_str("0x1234")
                     .unwrap()
                     .to_vec(),
                 Bytes::from_str("0xabcd").unwrap(),
-                None,
             ))
         }
 

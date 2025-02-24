@@ -186,11 +186,10 @@ contract TychoRouterTestSetup is Test, Constants {
         uint8 tokenOutIndex,
         uint24 split,
         address executor,
-        bytes4 selector,
         bytes memory protocolData
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
-            tokenInIndex, tokenOutIndex, split, executor, selector, protocolData
+            tokenInIndex, tokenOutIndex, split, executor, protocolData
         );
     }
 

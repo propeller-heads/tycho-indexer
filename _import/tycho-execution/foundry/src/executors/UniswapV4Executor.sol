@@ -16,10 +16,11 @@ import {V4Router} from "@uniswap/v4-periphery/src/V4Router.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
+import {ICallback} from "@interfaces/ICallback.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 
-contract UniswapV4Executor is IExecutor, V4Router {
+contract UniswapV4Executor is IExecutor, V4Router, ICallback {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
 
@@ -41,7 +42,6 @@ contract UniswapV4Executor is IExecutor, V4Router {
             address tokenOut,
             bool zeroForOne,
             address callbackExecutor,
-            bytes4 callbackSelector,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
 
@@ -107,8 +107,7 @@ contract UniswapV4Executor is IExecutor, V4Router {
             params[2] = abi.encode(Currency.wrap(tokenOut), uint256(0));
             swapData = abi.encode(actions, params);
         }
-        bytes memory fullData =
-            abi.encodePacked(swapData, callbackExecutor, callbackSelector);
+        bytes memory fullData = abi.encodePacked(swapData, callbackExecutor);
         uint256 tokenOutBalanceBefore;
 
         tokenOutBalanceBefore = tokenOut == address(0)
@@ -142,11 +141,10 @@ contract UniswapV4Executor is IExecutor, V4Router {
             address tokenOut,
             bool zeroForOne,
             address callbackExecutor,
-            bytes4 callbackSelector,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 91) {
+        if (data.length < 87) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
@@ -154,11 +152,10 @@ contract UniswapV4Executor is IExecutor, V4Router {
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = (data[40] != 0);
         callbackExecutor = address(bytes20(data[41:61]));
-        callbackSelector = bytes4(data[61:65]);
 
-        uint256 poolsLength = (data.length - 65) / 26; // 26 bytes per pool object
+        uint256 poolsLength = (data.length - 61) / 26; // 26 bytes per pool object
         pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[65:];
+        bytes memory poolsData = data[61:];
         uint256 offset = 0;
         for (uint256 i = 0; i < poolsLength; i++) {
             address intermediaryToken;
@@ -175,6 +172,16 @@ contract UniswapV4Executor is IExecutor, V4Router {
             offset += 26;
         }
     }
+
+    function handleCallback(bytes calldata data)
+        external
+        returns (bytes memory)
+    {
+        verifyCallback(data);
+        return _unlockCallback(data);
+    }
+
+    function verifyCallback(bytes calldata) public view onlyPoolManager {}
 
     function _pay(Currency token, address, uint256 amount) internal override {
         IERC20(Currency.unwrap(token)).safeTransfer(

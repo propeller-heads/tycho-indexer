@@ -1,8 +1,8 @@
 use std::{collections::HashSet, str::FromStr};
 
-use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
+use alloy_primitives::{aliases::U24, U256, U8};
 use alloy_sol_types::SolValue;
-use tycho_core::{keccak256, Bytes};
+use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -30,7 +30,6 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
         token_out: U8,
         split: U24,
         executor_address: Bytes,
-        executor_selector: FixedBytes<4>,
         protocol_data: Vec<u8>,
     ) -> Vec<u8> {
         let mut encoded = Vec::new();
@@ -38,15 +37,8 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
         encoded.push(token_out.to_be_bytes_vec()[0]);
         encoded.extend_from_slice(&split.to_be_bytes_vec());
         encoded.extend(executor_address.to_vec());
-        encoded.extend(executor_selector);
         encoded.extend(protocol_data);
         encoded
-    }
-
-    /// Encodes a selector string into its 4-byte representation.
-    fn encode_executor_selector(&self, selector: &str) -> FixedBytes<4> {
-        let hash = keccak256(selector.as_bytes());
-        FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
     }
 
     /// Uses prefix-length encoding to efficient encode action data.
@@ -114,10 +106,7 @@ impl SplitSwapStrategyEncoder {
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
@@ -209,7 +198,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
-                self.encode_executor_selector(swap_encoder.swap_selector()),
                 grouped_protocol_data,
             );
             swaps.push(swap_data);
@@ -253,7 +241,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         };
 
         let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, solution.router_address, None))
+        Ok((contract_interaction, solution.router_address))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -283,10 +271,7 @@ impl ExecutorStrategyEncoder {
 }
 impl EVMStrategyEncoder for ExecutorStrategyEncoder {}
 impl StrategyEncoder for ExecutorStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         let grouped_swaps = group_swaps(solution.clone().swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups > 1 {
@@ -328,11 +313,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
         let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
 
-        Ok((
-            grouped_protocol_data,
-            executor_address,
-            Some(swap_encoder.swap_selector().to_string()),
-        ))
+        Ok((grouped_protocol_data, executor_address))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -413,7 +394,7 @@ mod tests {
             native_action: None,
         };
 
-        let (protocol_data, executor_address, selector) = encoder
+        let (protocol_data, executor_address) = encoder
             .encode_strategy(solution)
             .unwrap();
         let hex_protocol_data = encode(&protocol_data);
@@ -434,7 +415,6 @@ mod tests {
                 "00",
             ))
         );
-        assert_eq!(selector, Some("swap(uint256,bytes)".to_string()));
     }
 
     #[test]
@@ -539,7 +519,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (protocol_data, executor_address, selector) = encoder
+        let (protocol_data, executor_address) = encoder
             .encode_strategy(solution)
             .unwrap();
         let hex_protocol_data = encode(&protocol_data);
@@ -558,8 +538,6 @@ mod tests {
                 "00",
                 // executor address
                 "f62849f9a0b5bf2913b396098f7c7019b51a820a",
-                // callback selector
-                "91dd7346",
                 // first pool intermediary token (ETH)
                 "0000000000000000000000000000000000000000",
                 // fee
@@ -574,7 +552,6 @@ mod tests {
                 "0001f4"
             ))
         );
-        assert_eq!(selector, Some("swap(uint256,bytes)".to_string()));
     }
 
     #[rstest]
@@ -646,7 +623,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
@@ -684,22 +661,21 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "000000000000000000000000000000000000000000000000000000000000005c",
+            "0000000000000000000000000000000000000000000000000000000000000058",
             // ple encoded swaps
-            "005a",
+            "0056",
             // Swap header
             "00",     // token in index
             "01",     // token out index
             "000000", // split
             // Swap data
             "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
-            "bd0625ab",                                 // selector
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
-            "000000",                                   // padding
+            "00000000000000",                           // padding
         ));
         let hex_calldata = encode(&calldata);
 
@@ -748,7 +724,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -797,7 +773,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -886,7 +862,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -968,7 +944,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -1007,21 +983,19 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "0000000000000000000000000000000000000000000000000000000000000094",
+            "000000000000000000000000000000000000000000000000000000000000008c",
             // ple encoded swaps
-            "0092",   // Swap length
+            "008a",   // Swap length
             "00",     // token in index
             "01",     // token out index
             "000000", // split
             // Swap data header
             "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
-            "bd0625ab",                                 // selector
             // Protocol data
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
             "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
-            "91dd7346",                                 // callback selector
             // First pool params
             "0000000000000000000000000000000000000000", // intermediary token (ETH)
             "000bb8",                                   // fee
@@ -1030,8 +1004,9 @@ mod tests {
             "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
             "0061a8",                                   // fee
             "0001f4",                                   // tick spacing
-            "000000000000000000000000"                  // padding
+            "0000000000000000000000000000000000000000"  // padding
         ));
+
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata[..520], expected_input);
@@ -1079,7 +1054,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
@@ -1094,21 +1069,20 @@ mod tests {
             "0000000000000000000000000000000000000000000000000000000000000002",   // tokens length
             "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
             "0000000000000000000000000000000000000000000000000000000000000120",   // offset of ple encoded swaps
-            "000000000000000000000000000000000000000000000000000000000000005c",   // length of ple encoded swaps without padding
-            "005a", // ple encoded swaps
+            "0000000000000000000000000000000000000000000000000000000000000058",   // length of ple encoded swaps without padding
+            "0056", // ple encoded swaps
             // Swap header
             "00", // token in index
             "01", // token out index
             "000000", // split
             // Swap data
             "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
-            "bd0625ab",                                 // selector
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
-            "000000",                                   // padding
+            "00000000000000",                                   // padding
         ]
             .join("");
 
@@ -1171,7 +1145,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
         let hex_calldata = encode(&calldata);
@@ -1235,7 +1209,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 

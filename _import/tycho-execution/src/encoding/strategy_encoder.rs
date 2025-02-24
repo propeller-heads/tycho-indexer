@@ -17,10 +17,7 @@ pub trait StrategyEncoder {
     ///   - The encoded data as bytes
     ///   - The address of the contract to call (router or executor)
     ///   - Optionally, the function selector to use when calling the contract
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError>;
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError>;
 
     /// Retrieves the swap encoder for a specific protocol system.
     ///

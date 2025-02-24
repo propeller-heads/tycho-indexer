@@ -28,17 +28,10 @@ library LibSwap {
         res = address(uint160(bytes20(swap[5:25])));
     }
 
-    /// The selector to be used of the executor contract
-    function executorSelector(
-        bytes calldata swap
-    ) internal pure returns (bytes4 res) {
-        res = bytes4(swap[25:29]);
-    }
-
     /// Remaining bytes are interpreted as protocol data
     function protocolData(
         bytes calldata swap
     ) internal pure returns (bytes calldata res) {
-        res = swap[29:];
+        res = swap[25:];
     }
 }
