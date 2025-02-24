@@ -103,9 +103,9 @@ impl ProtocolComponent {
     }
 }
 
-impl From<ProtocolComponent> for tycho_core::dto::ProtocolComponent {
+impl From<ProtocolComponent> for tycho_core::models::protocol::ProtocolComponent {
     fn from(component: ProtocolComponent) -> Self {
-        tycho_core::dto::ProtocolComponent {
+        tycho_core::models::protocol::ProtocolComponent {
             id: hex::encode(component.id),
             protocol_system: component.protocol_system,
             protocol_type_name: component.protocol_type_name,
@@ -115,11 +115,11 @@ impl From<ProtocolComponent> for tycho_core::dto::ProtocolComponent {
                 .into_iter()
                 .map(|t| t.address)
                 .collect(),
-            contract_ids: component.contract_ids,
             static_attributes: component.static_attributes,
             change: Default::default(),
             creation_tx: component.creation_tx,
             created_at: component.created_at,
+            contract_addresses: component.contract_ids,
         }
     }
 }
