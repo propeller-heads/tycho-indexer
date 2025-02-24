@@ -13,5 +13,8 @@ export DEPLOY_WALLET=<wallet-address>
 export PRIVATE_KEY=<private-key>
 ```
 
-3. Fund wallet: `npx hardhat run scripts/fund-tenderly-fork.js --network tenderly`
+3. Fund wallet: `npx hardhat run scripts/fund-wallet-tenderly-fork.js --network tenderly`
 4. Deploy router: `npx hardhat run scripts/deploy-router.js --network tenderly`
+5. Define the accounts to grant roles to in `scripts/roles.json`
+6. Export the router address to the environment variable `export ROUTER=<router-address>`
+7. Grant roles: `npx hardhat run scripts/set-roles.js --network tenderly`
