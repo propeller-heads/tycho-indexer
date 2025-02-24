@@ -608,7 +608,6 @@ mod tests {
 
         let combined_hex =
             format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
-        println!("{}", combined_hex);
 
         assert_eq!(
             combined_hex,

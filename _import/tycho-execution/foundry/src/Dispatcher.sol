@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@interfaces/ICallback.sol";
-import "forge-std/console.sol";
 
 error Dispatcher__UnapprovedExecutor();
 error Dispatcher__NonContractExecutor();
