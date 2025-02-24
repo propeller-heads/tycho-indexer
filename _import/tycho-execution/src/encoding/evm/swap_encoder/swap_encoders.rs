@@ -8,9 +8,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{
-            bytes_to_address, encode_function_selector, get_static_attribute, pad_to_fixed_size,
-        },
+        utils::{bytes_to_address, get_static_attribute, pad_to_fixed_size},
     },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,

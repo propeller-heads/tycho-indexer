@@ -1,8 +1,8 @@
 use std::{collections::HashSet, str::FromStr};
 
-use alloy_primitives::{aliases::U24, FixedBytes, U256, U8};
+use alloy_primitives::{aliases::U24, U256, U8};
 use alloy_sol_types::SolValue;
-use tycho_core::{keccak256, Bytes};
+use tycho_core::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -538,8 +538,6 @@ mod tests {
                 "00",
                 // executor address
                 "f62849f9a0b5bf2913b396098f7c7019b51a820a",
-                // callback selector
-                "91dd7346",
                 // first pool intermediary token (ETH)
                 "0000000000000000000000000000000000000000",
                 // fee
@@ -663,22 +661,21 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "000000000000000000000000000000000000000000000000000000000000005c",
+            "0000000000000000000000000000000000000000000000000000000000000058",
             // ple encoded swaps
-            "005a",
+            "0056",
             // Swap header
             "00",     // token in index
             "01",     // token out index
             "000000", // split
             // Swap data
             "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
-            "bd0625ab",                                 // selector
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
-            "000000",                                   // padding
+            "00000000000000",                           // padding
         ));
         let hex_calldata = encode(&calldata);
 
@@ -986,21 +983,19 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "0000000000000000000000000000000000000000000000000000000000000094",
+            "000000000000000000000000000000000000000000000000000000000000008c",
             // ple encoded swaps
-            "0092",   // Swap length
+            "008a",   // Swap length
             "00",     // token in index
             "01",     // token out index
             "000000", // split
             // Swap data header
             "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
-            "bd0625ab",                                 // selector
             // Protocol data
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
             "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
-            "91dd7346",                                 // callback selector
             // First pool params
             "0000000000000000000000000000000000000000", // intermediary token (ETH)
             "000bb8",                                   // fee
@@ -1009,8 +1004,9 @@ mod tests {
             "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
             "0061a8",                                   // fee
             "0001f4",                                   // tick spacing
-            "000000000000000000000000"                  // padding
+            "0000000000000000000000000000000000000000"  // padding
         ));
+
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata[..520], expected_input);
@@ -1073,21 +1069,20 @@ mod tests {
             "0000000000000000000000000000000000000000000000000000000000000002",   // tokens length
             "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
             "0000000000000000000000000000000000000000000000000000000000000120",   // offset of ple encoded swaps
-            "000000000000000000000000000000000000000000000000000000000000005c",   // length of ple encoded swaps without padding
-            "005a", // ple encoded swaps
+            "0000000000000000000000000000000000000000000000000000000000000058",   // length of ple encoded swaps without padding
+            "0056", // ple encoded swaps
             // Swap header
             "00", // token in index
             "01", // token out index
             "000000", // split
             // Swap data
             "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
-            "bd0625ab",                                 // selector
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
-            "000000",                                   // padding
+            "00000000000000",                                   // padding
         ]
             .join("");
 
