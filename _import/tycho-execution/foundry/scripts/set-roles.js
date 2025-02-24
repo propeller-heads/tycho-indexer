@@ -31,13 +31,13 @@ async function main() {
         const addresses = rolesDict[roleName];
         if (addresses && addresses.length > 0) {
             console.log(`Granting ${roleName} to the following addresses:`, addresses);
-            await router.batchGrantRole(roleHash, addresses);
+            const tx = await router.batchGrantRole(roleHash, addresses);
+            await tx.wait(); // Wait for the transaction to be mined
+            console.log(`Role ${roleName} granted at transaction: ${tx.hash}`);
         } else {
             console.log(`No addresses found for role ${roleName}`);
         }
     }
-
-    console.log("All roles have been set successfully.");
 }
 
 main()

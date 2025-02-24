@@ -33,7 +33,6 @@ async function main() {
     }
 }
 
-// Execute deployment
 main()
     .then(() => process.exit(0))
     .catch((error) => {
