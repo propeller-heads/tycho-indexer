@@ -679,6 +679,8 @@ mod tests {
         ));
         let hex_calldata = encode(&calldata);
 
+        println!("{}", hex_calldata);
+
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
     }
