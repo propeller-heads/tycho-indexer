@@ -19,7 +19,6 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             address tokenOut,
             bool zeroForOne,
             address callbackExecutor,
-            bytes4 callbackSelector,
             UniswapV4Pool[] memory pools
         )
     {
@@ -42,7 +41,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             new UniswapV4ExecutorExposed(IPoolManager(poolManager));
     }
 
-    function testDecodeParams() public view {
+    function testDecodeParamsV4() public view {
         bool zeroForOne = true;
         uint24 pool1Fee = 500;
         int24 tickSpacing1 = 60;
@@ -63,12 +62,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            USDT_ADDR,
-            zeroForOne,
-            address(uniswapV4Exposed),
-            SafeCallback.unlockCallback.selector,
-            pools
+            USDE_ADDR, USDT_ADDR, zeroForOne, address(uniswapV4Exposed), pools
         );
 
         (
@@ -76,7 +70,6 @@ contract UniswapV4ExecutorTest is Test, Constants {
             address tokenOut,
             bool zeroForOneDecoded,
             address callbackExecutor,
-            bytes4 callbackSelector,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
@@ -84,7 +77,6 @@ contract UniswapV4ExecutorTest is Test, Constants {
         assertEq(tokenOut, USDT_ADDR);
         assertEq(zeroForOneDecoded, zeroForOne);
         assertEq(callbackExecutor, address(uniswapV4Exposed));
-        assertEq(callbackSelector, SafeCallback.unlockCallback.selector);
         assertEq(decodedPools.length, 2);
         assertEq(decodedPools[0].intermediaryToken, USDT_ADDR);
         assertEq(decodedPools[0].fee, pool1Fee);
@@ -94,7 +86,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         assertEq(decodedPools[1].tickSpacing, tickSpacing2);
     }
 
-    function testSingleSwap() public {
+    function testSingleSwapV4() public {
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
@@ -110,12 +102,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            USDT_ADDR,
-            true,
-            address(uniswapV4Exposed),
-            SafeCallback.unlockCallback.selector,
-            pools
+            USDE_ADDR, USDT_ADDR, true, address(uniswapV4Exposed), pools
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
@@ -148,7 +135,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         assertTrue(USDT.balanceOf(address(uniswapV4Exposed)) == amountOut);
     }
 
-    function testMultipleSwap() public {
+    function testMultipleSwapV4() public {
         // USDE -> USDT -> WBTC
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
@@ -170,12 +157,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            WBTC_ADDR,
-            true,
-            address(uniswapV4Exposed),
-            SafeCallback.unlockCallback.selector,
-            pools
+            USDE_ADDR, WBTC_ADDR, true, address(uniswapV4Exposed), pools
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);

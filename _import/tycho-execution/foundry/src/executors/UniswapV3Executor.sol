@@ -148,9 +148,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         view
         returns (bytes memory)
     {
-        return abi.encodePacked(
-            tokenIn, tokenOut, fee, self, ICallback.handleCallback.selector
-        );
+        return abi.encodePacked(tokenIn, tokenOut, fee, self);
     }
 
     function _verifyPairAddress(

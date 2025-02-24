@@ -219,12 +219,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv2Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
@@ -250,7 +245,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(1),
             uint24(0),
             address(usv2Executor),
-            bytes4(0),
             encodeUniswapV2Swap(
                 WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
             )
@@ -262,7 +256,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(2),
             uint24(0),
             address(usv2Executor),
-            bytes4(0),
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
 
@@ -289,7 +282,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(1),
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
-            bytes4(0),
             encodeUniswapV2Swap(
                 WETH_ADDR, WETH_WBTC_POOL, tychoRouterAddr, false
             )
@@ -300,7 +292,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(2),
             uint24(0),
             address(usv2Executor),
-            bytes4(0),
             encodeUniswapV2Swap(
                 WBTC_ADDR, USDC_WBTC_POOL, tychoRouterAddr, true
             )
@@ -311,7 +302,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(3),
             uint24(0),
             address(usv2Executor),
-            bytes4(0),
             encodeUniswapV2Swap(
                 WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
             )
@@ -323,7 +313,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(2),
             uint24(0),
             address(usv2Executor),
-            bytes4(0),
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
 
@@ -353,12 +342,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv2Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
@@ -402,12 +386,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv2Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
@@ -453,12 +432,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv2Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
@@ -512,12 +486,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv2Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
@@ -569,12 +538,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv2Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
@@ -618,12 +582,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_ADDR, WETH_DAI_POOL, tychoRouterAddr, true);
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv2Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
@@ -662,12 +621,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             WETH_ADDR, DAI_ADDR, tychoRouterAddr, DAI_WETH_USV3, zeroForOne
         );
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv3Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv3Executor), protocolData
         );
 
         bytes[] memory swaps = new bytes[](1);
@@ -933,7 +887,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             uint8(1),
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
-            bytes4(0),
             protocolData
         );
 
@@ -976,21 +929,11 @@ contract TychoRouterTest is TychoRouterTestSetup {
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            USDT_ADDR,
-            true,
-            address(usv4Executor),
-            SafeCallback.unlockCallback.selector,
-            pools
+            USDE_ADDR, USDT_ADDR, true, address(usv4Executor), pools
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv4Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv4Executor), protocolData
         );
 
         bytes[] memory swaps = new bytes[](1);
@@ -1021,21 +964,11 @@ contract TychoRouterTest is TychoRouterTestSetup {
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            WBTC_ADDR,
-            true,
-            address(usv4Executor),
-            SafeCallback.unlockCallback.selector,
-            pools
+            USDE_ADDR, WBTC_ADDR, true, address(usv4Executor), pools
         );
 
         bytes memory swap = encodeSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv4Executor),
-            bytes4(0),
-            protocolData
+            uint8(0), uint8(1), uint24(0), address(usv4Executor), protocolData
         );
 
         bytes[] memory swaps = new bytes[](1);

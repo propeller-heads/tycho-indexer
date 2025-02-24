@@ -42,7 +42,6 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
             address tokenOut,
             bool zeroForOne,
             address callbackExecutor,
-            bytes4 callbackSelector,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
 
@@ -108,8 +107,7 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
             params[2] = abi.encode(Currency.wrap(tokenOut), uint256(0));
             swapData = abi.encode(actions, params);
         }
-        bytes memory fullData =
-            abi.encodePacked(swapData, callbackExecutor, callbackSelector);
+        bytes memory fullData = abi.encodePacked(swapData, callbackExecutor);
         uint256 tokenOutBalanceBefore;
 
         tokenOutBalanceBefore = tokenOut == address(0)
@@ -143,11 +141,10 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
             address tokenOut,
             bool zeroForOne,
             address callbackExecutor,
-            bytes4 callbackSelector,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 91) {
+        if (data.length < 87) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
@@ -155,11 +152,10 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = (data[40] != 0);
         callbackExecutor = address(bytes20(data[41:61]));
-        callbackSelector = bytes4(data[61:65]);
 
-        uint256 poolsLength = (data.length - 65) / 26; // 26 bytes per pool object
+        uint256 poolsLength = (data.length - 61) / 26; // 26 bytes per pool object
         pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[65:];
+        bytes memory poolsData = data[61:];
         uint256 offset = 0;
         for (uint256 i = 0; i < poolsLength; i++) {
             address intermediaryToken;

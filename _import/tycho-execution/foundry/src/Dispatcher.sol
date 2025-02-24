@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@interfaces/ICallback.sol";
+import "forge-std/console.sol";
 
 error Dispatcher__UnapprovedExecutor();
 error Dispatcher__NonContractExecutor();
@@ -81,7 +82,7 @@ contract Dispatcher {
     }
 
     function _handleCallback(bytes calldata data) internal {
-        address executor = address(uint160(bytes20(data[data.length - 24:])));
+        address executor = address(uint160(bytes20(data[data.length - 20:])));
 
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor();
