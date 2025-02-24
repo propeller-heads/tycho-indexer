@@ -286,10 +286,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
                 : remainingAmounts[tokenInIndex];
 
             currentAmountOut = _callExecutor(
-                swapData.executor(),
-                swapData.executorSelector(),
-                currentAmountIn,
-                swapData.protocolData()
+                swapData.executor(), currentAmountIn, swapData.protocolData()
             );
             amounts[tokenOutIndex] += currentAmountOut;
             remainingAmounts[tokenOutIndex] += currentAmountOut;

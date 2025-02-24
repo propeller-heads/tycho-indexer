@@ -55,7 +55,6 @@ contract Dispatcher {
     // slither-disable-next-line delegatecall-loop
     function _callExecutor(
         address executor,
-        bytes4 selector,
         uint256 amount,
         bytes calldata data
     ) internal returns (uint256 calculatedAmount) {
@@ -63,10 +62,9 @@ contract Dispatcher {
             revert Dispatcher__UnapprovedExecutor();
         }
 
-        selector = selector == bytes4(0) ? IExecutor.swap.selector : selector;
         // slither-disable-next-line controlled-delegatecall,low-level-calls
         (bool success, bytes memory result) = executor.delegatecall(
-            abi.encodeWithSelector(selector, amount, data)
+            abi.encodeWithSelector(IExecutor.swap.selector, amount, data)
         );
 
         if (!success) {
@@ -83,18 +81,16 @@ contract Dispatcher {
     }
 
     function _handleCallback(bytes calldata data) internal {
-        bytes4 selector = bytes4(data[data.length - 4:]);
         address executor = address(uint160(bytes20(data[data.length - 24:])));
 
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor();
         }
 
-        selector =
-            selector == bytes4(0) ? ICallback.handleCallback.selector : selector;
         // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success, bytes memory result) =
-            executor.delegatecall(abi.encodeWithSelector(selector, data));
+        (bool success, bytes memory result) = executor.delegatecall(
+            abi.encodeWithSelector(ICallback.handleCallback.selector, data)
+        );
 
         if (!success) {
             revert(

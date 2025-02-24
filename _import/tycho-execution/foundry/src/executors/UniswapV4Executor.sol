@@ -16,10 +16,11 @@ import {V4Router} from "@uniswap/v4-periphery/src/V4Router.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
+import {ICallback} from "@interfaces/ICallback.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 
-contract UniswapV4Executor is IExecutor, V4Router {
+contract UniswapV4Executor is IExecutor, V4Router, ICallback {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
 
@@ -175,6 +176,16 @@ contract UniswapV4Executor is IExecutor, V4Router {
             offset += 26;
         }
     }
+
+    function handleCallback(bytes calldata data)
+        external
+        returns (bytes memory)
+    {
+        verifyCallback(data);
+        return _unlockCallback(data);
+    }
+
+    function verifyCallback(bytes calldata) public view onlyPoolManager {}
 
     function _pay(Currency token, address, uint256 amount) internal override {
         IERC20(Currency.unwrap(token)).safeTransfer(
