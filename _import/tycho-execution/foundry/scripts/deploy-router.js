@@ -21,22 +21,16 @@ async function main() {
     await router.deployed();
     console.log(`TychoRouter deployed to: ${router.address}`);
 
-    // Verify contract on Etherscan/tenderly
-    console.log("Waiting a bit before verifying...");
-    // Wait for a few more confirmations before verifying
-    await new Promise(resolve => setTimeout(resolve, 10000));
-
-    // TODO: this doesn't work aarrggghh when I install and add hardhat-tenderly everything dies. I think it's a version mismatch with ethers
-    // try {
-    //     console.log("Verifying contract on Tenderly...");
-    //     await hre.tenderly.verify({
-    //         name: "TychoRouter",
-    //         address: router.address,
-    //     });
-    //     console.log("Contract verified successfully on Tenderly");
-    // } catch (error) {
-    //     console.error("Error during contract verification:", error);
-    // }
+    try {
+        console.log("Verifying contract on Tenderly...");
+        await hre.tenderly.verify({
+            name: "TychoRouter",
+            address: router.address,
+        });
+        console.log("Contract verified successfully on Tenderly");
+    } catch (error) {
+        console.error("Error during contract verification:", error);
+    }
 }
 
 // Execute deployment

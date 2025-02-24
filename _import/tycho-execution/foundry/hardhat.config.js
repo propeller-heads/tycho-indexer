@@ -1,7 +1,7 @@
 /** @type import('hardhat/config').HardhatUserConfig */
+require("@tenderly/hardhat-tenderly");
 require("@nomiclabs/hardhat-ethers");
 require("@nomicfoundation/hardhat-foundry");
-// require("@tenderly/hardhat-tenderly");
 
 module.exports = {
     solidity: {
