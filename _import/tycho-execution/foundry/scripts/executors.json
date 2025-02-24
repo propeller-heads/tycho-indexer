@@ -1,18 +1,6 @@
 [
   {
     "name": "UniswapV2Executor",
-    "executor": "0xFF804342b632bd2C210643c005Ef139c0AaeBa0c"
-  },
-  {
-    "name": "UniswapV3Executor",
-    "executor": "0xb45f428357174C8d9DfB56E7ccf87EDdB8fDa5C6"
-  },
-  {
-    "name": "UniswapV4Executor",
-    "executor": "0x0E759000F3C1FFEe31ecc56D125EB796151F556E"
-  },
-  {
-    "name": "BalancerV2Executor",
-    "executor": "0x14702382b81e6d8677321ed904edd6ec3ea7e3dc"
+    "executor": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E"
   }
 ]

@@ -14,7 +14,11 @@ module.exports = {
 
     networks: {
         tenderly: {
-            url: process.env.TENDERLY_RPC_URL,
+            url: process.env.RPC_URL,
+            accounts: [process.env.PRIVATE_KEY]
+        },
+        mainnet: {
+            url: process.env.RPC_URL,
             accounts: [process.env.PRIVATE_KEY]
         }
     },
