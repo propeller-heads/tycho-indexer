@@ -30,7 +30,6 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
         token_out: U8,
         split: U24,
         executor_address: Bytes,
-        executor_selector: FixedBytes<4>,
         protocol_data: Vec<u8>,
     ) -> Vec<u8> {
         let mut encoded = Vec::new();
@@ -38,15 +37,8 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
         encoded.push(token_out.to_be_bytes_vec()[0]);
         encoded.extend_from_slice(&split.to_be_bytes_vec());
         encoded.extend(executor_address.to_vec());
-        encoded.extend(executor_selector);
         encoded.extend(protocol_data);
         encoded
-    }
-
-    /// Encodes a selector string into its 4-byte representation.
-    fn encode_executor_selector(&self, selector: &str) -> FixedBytes<4> {
-        let hash = keccak256(selector.as_bytes());
-        FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
     }
 
     /// Uses prefix-length encoding to efficient encode action data.
@@ -114,10 +106,7 @@ impl SplitSwapStrategyEncoder {
 impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
@@ -209,7 +198,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
-                self.encode_executor_selector(swap_encoder.swap_selector()),
                 grouped_protocol_data,
             );
             swaps.push(swap_data);
@@ -253,7 +241,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         };
 
         let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, solution.router_address, None))
+        Ok((contract_interaction, solution.router_address))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -283,10 +271,7 @@ impl ExecutorStrategyEncoder {
 }
 impl EVMStrategyEncoder for ExecutorStrategyEncoder {}
 impl StrategyEncoder for ExecutorStrategyEncoder {
-    fn encode_strategy(
-        &self,
-        solution: Solution,
-    ) -> Result<(Vec<u8>, Bytes, Option<String>), EncodingError> {
+    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         let grouped_swaps = group_swaps(solution.clone().swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups > 1 {
@@ -328,11 +313,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
         let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
 
-        Ok((
-            grouped_protocol_data,
-            executor_address,
-            Some(swap_encoder.swap_selector().to_string()),
-        ))
+        Ok((grouped_protocol_data, executor_address))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -413,7 +394,7 @@ mod tests {
             native_action: None,
         };
 
-        let (protocol_data, executor_address, selector) = encoder
+        let (protocol_data, executor_address) = encoder
             .encode_strategy(solution)
             .unwrap();
         let hex_protocol_data = encode(&protocol_data);
@@ -434,7 +415,6 @@ mod tests {
                 "00",
             ))
         );
-        assert_eq!(selector, Some("swap(uint256,bytes)".to_string()));
     }
 
     #[test]
@@ -539,7 +519,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (protocol_data, executor_address, selector) = encoder
+        let (protocol_data, executor_address) = encoder
             .encode_strategy(solution)
             .unwrap();
         let hex_protocol_data = encode(&protocol_data);
@@ -574,7 +554,6 @@ mod tests {
                 "0001f4"
             ))
         );
-        assert_eq!(selector, Some("swap(uint256,bytes)".to_string()));
     }
 
     #[rstest]
@@ -646,7 +625,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
@@ -748,7 +727,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -797,7 +776,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -886,7 +865,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -968,7 +947,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 
@@ -1079,7 +1058,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
@@ -1171,7 +1150,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
         let hex_calldata = encode(&calldata);
@@ -1235,7 +1214,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (calldata, _, _) = encoder
+        let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
 

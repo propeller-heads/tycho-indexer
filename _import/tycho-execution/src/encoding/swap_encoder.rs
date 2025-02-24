@@ -32,9 +32,6 @@ pub trait SwapEncoder: Sync + Send {
     /// Returns the address of the protocol-specific executor contract.
     fn executor_address(&self) -> &str;
 
-    /// Returns the function selector used to execute the swap on the protocol.
-    fn swap_selector(&self) -> &str;
-
     /// Creates a cloned instance of the swap encoder.
     ///
     /// This allows the encoder to be cloned when it is being used as a `Box<dyn SwapEncoder>`.
