@@ -28,7 +28,7 @@ async function main() {
 
     // Iterate through roles and grant them to the corresponding addresses
     for (const [roleName, roleHash] of Object.entries(roles)) {
-        const addresses = rolesDict[roleName];
+        const addresses = rolesDict[network][roleName];
         if (addresses && addresses.length > 0) {
             console.log(`Granting ${roleName} to the following addresses:`, addresses);
             const tx = await router.batchGrantRole(roleHash, addresses);

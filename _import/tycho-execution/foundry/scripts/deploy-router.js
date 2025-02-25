@@ -4,8 +4,18 @@ const hre = require("hardhat");
 
 async function main() {
     const network = hre.network.name;
-    const permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-    const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+    let permit2;
+    let weth;
+    if (network === "mainnet" || network === "tenderly_mainnet") {
+        permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+        weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+    } else if (network === "base" || network === "tenderly_base") {
+        // permit2 address is the same as on mainnet
+        permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+        weth = "0x4200000000000000000000000000000000000006";
+    } else {
+        throw new Error(`Unsupported network: ${network}`);
+    }
 
     console.log(`Deploying TychoRouter to ${network} with:`);
     console.log(`- permit2: ${permit2}`);
