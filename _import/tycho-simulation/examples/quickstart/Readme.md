@@ -8,14 +8,14 @@ This quickstart guide enables you to:
 ## How to run
 
 ```bash
-export RPC_URL=<your-eth-rpc-url>
+export ETH_RPC_URL=<your-eth-rpc-url>
 cargo run --release --example quickstart
 ```
 
 By default, the example will trade 1 WETH -> USDC. If you want a different trade you can do:
 
 ```bash
-cargo run --release --example quickstart -- --sell-token "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" --buy-token "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599" --sell-amount 10000
+cargo run --release --example quickstart -- --sell-token "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" --buy-token "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" --sell-amount 10
 ```
 
 for 10000 USDC -> WBTC.

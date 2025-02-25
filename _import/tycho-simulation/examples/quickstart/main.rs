@@ -1,17 +1,37 @@
 use std::{
     collections::{HashMap, HashSet},
-    env,
+    default::Default,
+    env, io,
+    io::Write,
     str::FromStr,
 };
 
+use alloy::{
+    eips::BlockNumberOrTag,
+    network::{Ethereum, EthereumWallet},
+    providers::{
+        fillers::{FillProvider, JoinFill, WalletFiller},
+        Identity, Provider, ProviderBuilder, ReqwestProvider,
+    },
+    rpc::types::{
+        simulate::{SimBlock, SimulatePayload},
+        TransactionInput, TransactionReceipt, TransactionRequest,
+    },
+    signers::local::PrivateKeySigner,
+    transports::http::{Client, Http},
+};
+use alloy_primitives::{Address, Bytes as AlloyBytes, B256, U256};
+use alloy_sol_types::SolValue;
 use clap::Parser;
 use futures::StreamExt;
 use num_bigint::BigUint;
 use tracing_subscriber::EnvFilter;
 use tycho_core::Bytes;
 use tycho_execution::encoding::{
-    evm::{encoder_builder::EVMEncoderBuilder, tycho_encoder::EVMTychoEncoder},
-    models::{Solution, Swap},
+    evm::{
+        encoder_builder::EVMEncoderBuilder, tycho_encoder::EVMTychoEncoder, utils::encode_input,
+    },
+    models::{Solution, Swap, Transaction},
     tycho_encoder::TychoEncoder,
 };
 use tycho_simulation::{
@@ -19,6 +39,7 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             filters::{balancer_pool_filter, uniswap_v4_pool_with_hook_filter},
+            u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
@@ -39,8 +60,8 @@ struct Cli {
     sell_token: String,
     #[arg(short, long, default_value = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")]
     buy_token: String,
-    #[arg(short, long, default_value_t = 1)]
-    sell_amount: u32,
+    #[arg(short, long, default_value_t = 1.0)]
+    sell_amount: f64,
     /// The tvl threshold to filter the graph by
     #[arg(short, long, default_value_t = 100.0)]
     tvl_threshold: f64,
@@ -83,7 +104,7 @@ async fn main() {
         .expect("Buy token not found")
         .clone();
     let amount_in =
-        BigUint::from(cli.sell_amount) * BigUint::from(10u32).pow(sell_token.decimals as u32);
+        BigUint::from((cli.sell_amount * 10f64.powi(sell_token.decimals as i32)) as u128);
 
     println!(
         "Looking for the best swap for {} {} -> {}",
@@ -122,10 +143,26 @@ async fn main() {
     // Initialize the encoder
     let encoder = EVMEncoderBuilder::new()
         .chain(Chain::Ethereum)
-        .tycho_router_with_permit2(None, swapper_pk)
+        .tycho_router_with_permit2(None, swapper_pk.clone())
         .expect("Failed to create encoder builder")
         .build()
         .expect("Failed to build encoder");
+
+    let tx_signer = EthereumWallet::from(
+        PrivateKeySigner::from_bytes(
+            &B256::from_str(&swapper_pk).expect("Failed to convert swapper pk to B256"),
+        )
+        .expect("Failed to private key signer"),
+    );
+
+    let provider = ProviderBuilder::new()
+        .wallet(tx_signer.clone())
+        .on_http(
+            env::var("ETH_RPC_URL")
+                .expect("ETH_RPC_URL env var not set")
+                .parse()
+                .expect("Failed to parse ETH_RPC_URL"),
+        );
 
     while let Some(message) = protocol_stream.next().await {
         let message = message.expect("Could not receive message");
@@ -144,7 +181,7 @@ async fn main() {
                 .expect("Best pool not found")
                 .clone();
 
-            encode(
+            let tx = encode(
                 encoder.clone(),
                 component,
                 sell_token.clone(),
@@ -152,6 +189,109 @@ async fn main() {
                 amount_in.clone(),
                 user_address.clone(),
             );
+
+            print!("Do you want to simulate, execute or skip this swap? (simulate/execute/skip): ");
+            io::stdout().flush().unwrap();
+            let mut input = String::new();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let input = input.trim().to_lowercase();
+
+            match input.as_str() {
+                "simulate" => {
+                    println!("Simulating by performing an approval (for permit2) and a swap transaction...");
+                    let (approval_request, swap_request) = get_tx_requests(
+                        provider.clone(),
+                        biguint_to_u256(&amount_in),
+                        Address::from_slice(&user_address),
+                        Address::from_slice(&sell_token_address),
+                        tx,
+                    )
+                    .await;
+
+                    let payload = SimulatePayload {
+                        block_state_calls: vec![SimBlock {
+                            block_overrides: None,
+                            state_overrides: None,
+                            calls: vec![approval_request, swap_request],
+                        }],
+                        trace_transfers: true,
+                        validation: true,
+                        return_full_transactions: true,
+                    };
+
+                    let output = provider
+                        .simulate(&payload)
+                        .await
+                        .expect("Failed to simulate transaction");
+
+                    for block in output.iter() {
+                        println!("Simulated Block {}:", block.inner.header.number);
+                        for (j, transaction) in block.calls.iter().enumerate() {
+                            println!(
+                                "  Transaction {}: Status: {:?}, Gas Used: {}",
+                                j + 1,
+                                transaction.status,
+                                transaction.gas_used
+                            );
+                        }
+                    }
+                    return;
+                }
+                "execute" => {
+                    println!("Executing by performing an approval (for permit2) and a swap transaction...");
+                    let (approval_request, swap_request) = get_tx_requests(
+                        provider.clone(),
+                        biguint_to_u256(&amount_in),
+                        Address::from_slice(&user_address),
+                        Address::from_slice(&sell_token_address),
+                        tx,
+                    )
+                    .await;
+
+                    let approval_receipt = provider
+                        .send_transaction(approval_request)
+                        .await
+                        .expect("Failed to send transaction");
+
+                    let approval_result = approval_receipt
+                        .get_receipt()
+                        .await
+                        .expect("Failed to get approval receipt");
+                    println!(
+                        "Approval transaction sent with hash {:?} and status {:?}",
+                        approval_result.transaction_hash,
+                        approval_result.status()
+                    );
+
+                    let swap_receipt = provider
+                        .send_transaction(swap_request)
+                        .await
+                        .expect("Failed to send transaction");
+
+                    let swap_result = swap_receipt
+                        .get_receipt()
+                        .await
+                        .expect("Failed to get swap receipt");
+                    println!(
+                        "Swap transaction sent with hash {:?} and status {:?}",
+                        swap_result.transaction_hash,
+                        swap_result.status()
+                    );
+
+                    return;
+                }
+                "skip" => {
+                    println!("Skipping this swap...");
+                    continue;
+                }
+                _ => {
+                    println!("Invalid input. Please choose 'simulate', 'execute' or 'skip'.");
+                    continue;
+                }
+            }
         }
     }
 }
@@ -199,9 +339,10 @@ fn get_best_swap(
         .max_by_key(|(_, value)| value.to_owned())
     {
         println!(
-            "Pool with the highest amount out: {} with {} (out of {} possible pools)",
+            "Pool with the highest amount out is {} with {} {} (out of {} possible pools)",
             key,
             amount_out,
+            buy_token.symbol,
             amounts_out.len()
         );
         Some(key.to_string())
@@ -218,7 +359,7 @@ fn encode(
     buy_token: Token,
     sell_amount: BigUint,
     user_address: Bytes,
-) {
+) -> Transaction {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
         component,
@@ -249,8 +390,65 @@ fn encode(
         .encode_router_calldata(vec![solution.clone()])
         .expect("Failed to encode router calldata")[0]
         .clone();
-    println!("The encoded transaction is:");
-    println!("to: {:?}", tx.to);
-    println!("value: {:?}", tx.value);
-    println!("data: {:?}", hex::encode(tx.data));
+
+    return tx;
+}
+
+async fn get_tx_requests(
+    provider: FillProvider<
+        JoinFill<Identity, WalletFiller<EthereumWallet>>,
+        ReqwestProvider,
+        Http<Client>,
+        Ethereum,
+    >,
+    amount_in: U256,
+    user_address: Address,
+    sell_token_address: Address,
+    tx: Transaction,
+) -> (TransactionRequest, TransactionRequest) {
+    let block = provider
+        .get_block_by_number(BlockNumberOrTag::Latest, false)
+        .await
+        .expect("Failed to fetch latest block")
+        .expect("Block not found");
+
+    let base_fee = block
+        .header
+        .base_fee_per_gas
+        .expect("Base fee not available");
+    let max_priority_fee_per_gas = 1_000_000_000u64;
+    let max_fee_per_gas = base_fee + max_priority_fee_per_gas;
+
+    let approve_function_signature = "approve(address,uint256)";
+    let args = (
+        Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+            .expect("Couldn't convert to address"),
+        amount_in,
+    );
+    let data = encode_input(approve_function_signature, args.abi_encode());
+    let nonce = provider
+        .get_transaction_count(user_address.clone())
+        .await
+        .expect("Failed to get nonce");
+
+    let approval_request = TransactionRequest::default()
+        .from(user_address.clone())
+        .to(sell_token_address)
+        .input(TransactionInput { input: Some(AlloyBytes::from(data)), data: None })
+        .gas_limit(50_000u64.into())
+        .max_fee_per_gas(max_fee_per_gas.into())
+        .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
+        .nonce(nonce);
+
+    let swap_request = TransactionRequest::default()
+        .to(Address::from_slice(&tx.to))
+        .from(user_address)
+        .value(biguint_to_u256(&tx.value))
+        .input(TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None })
+        .max_fee_per_gas(max_fee_per_gas.into())
+        .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
+        .gas_limit(300_000u64.into())
+        .nonce(nonce + 1);
+
+    (approval_request, swap_request)
 }
