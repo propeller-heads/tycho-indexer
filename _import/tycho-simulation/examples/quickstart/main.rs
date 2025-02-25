@@ -17,7 +17,7 @@ use tycho_simulation::{
     models::Token,
     protocol::models::BlockUpdate,
     tycho_client::feed::component_tracker::ComponentFilter,
-    tycho_core::dto::Chain,
+    tycho_core::models::Chain,
     utils::load_all_tokens,
 };
 

@@ -6,7 +6,7 @@ use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
     stream::{StreamError, TychoStreamBuilder},
 };
-use tycho_core::{dto::Chain, Bytes};
+use tycho_core::{models::Chain, Bytes};
 
 use crate::{
     evm::decoder::{StreamDecodeError, TychoStreamDecoder},
@@ -56,7 +56,7 @@ impl ProtocolStreamBuilder {
     pub fn new(tycho_url: &str, chain: Chain) -> Self {
         Self {
             decoder: TychoStreamDecoder::new(),
-            stream_builder: TychoStreamBuilder::new(tycho_url, chain),
+            stream_builder: TychoStreamBuilder::new(tycho_url, chain.into()),
         }
     }
 
