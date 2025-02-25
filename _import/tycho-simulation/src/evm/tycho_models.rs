@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 use alloy_primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-pub use tycho_core::dto::{Chain, ChangeType};
+pub use tycho_core::{dto::ChangeType, models::Chain};
 use uuid::Uuid;
 
 use super::engine_db::simulation_db::BlockHeader;
@@ -138,7 +138,7 @@ impl AccountUpdate {
 impl From<tycho_core::dto::AccountUpdate> for AccountUpdate {
     fn from(value: tycho_core::dto::AccountUpdate) -> Self {
         Self {
-            chain: value.chain,
+            chain: value.chain.into(),
             address: Address::from_slice(&value.address[..20]), // Convert address field to Address
             slots: u256_num::map_slots_to_u256(value.slots),
             balance: value
@@ -260,7 +260,7 @@ impl std::fmt::Debug for ResponseAccount {
 impl From<tycho_core::dto::ResponseAccount> for ResponseAccount {
     fn from(value: tycho_core::dto::ResponseAccount) -> Self {
         Self {
-            chain: value.chain,
+            chain: value.chain.into(),
             address: Address::from_slice(&value.address[..20]), // Convert address field to Address
             title: value.title.clone(),
             slots: u256_num::map_slots_to_u256(value.slots),

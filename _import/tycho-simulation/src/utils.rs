@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tracing::info;
 use tycho_client::{rpc::RPCClient, HttpRPCClient};
-use tycho_core::{dto::Chain, Bytes};
+use tycho_core::{models::Chain, Bytes};
 
 use crate::{models::Token, protocol::errors::SimulationError};
 
@@ -66,7 +66,7 @@ pub async fn load_all_tokens(
     #[allow(clippy::mutable_key_type)]
     rpc_client
         .get_all_tokens(
-            chain,
+            chain.into(),
             min_quality.or(Some(100)),
             max_days_since_last_trade.or(default_min_days
                 .get(&chain)

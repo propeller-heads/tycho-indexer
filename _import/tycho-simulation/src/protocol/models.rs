@@ -29,7 +29,7 @@ use std::{collections::HashMap, default::Default, future::Future};
 use chrono::NaiveDateTime;
 use num_bigint::BigUint;
 use tycho_client::feed::Header;
-use tycho_core::{dto::Chain, Bytes};
+use tycho_core::{models::Chain, Bytes};
 
 use super::state::ProtocolSim;
 use crate::models::Token;
@@ -93,7 +93,7 @@ impl ProtocolComponent {
             id.clone(),
             core_model.protocol_system,
             core_model.protocol_type_name,
-            core_model.chain,
+            core_model.chain.into(),
             tokens,
             core_model.contract_ids,
             core_model.static_attributes,
@@ -109,7 +109,7 @@ impl From<ProtocolComponent> for tycho_core::dto::ProtocolComponent {
             id: hex::encode(component.id),
             protocol_system: component.protocol_system,
             protocol_type_name: component.protocol_type_name,
-            chain: component.chain,
+            chain: component.chain.into(),
             tokens: component
                 .tokens
                 .into_iter()
