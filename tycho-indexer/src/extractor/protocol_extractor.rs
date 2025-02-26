@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     str::FromStr,
     sync::Arc,
 };
@@ -9,7 +9,7 @@ use chrono::NaiveDateTime;
 use metrics::gauge;
 use mockall::automock;
 use prost::Message;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use tycho_core::{
@@ -56,7 +56,7 @@ pub struct Inner {
 }
 
 pub struct ProtocolExtractor<G, T> {
-    gateway: G,
+    gateway: Arc<G>,
     name: String,
     chain: Chain,
     chain_state: ChainState,
@@ -68,11 +68,12 @@ pub struct ProtocolExtractor<G, T> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
+    db_futures: Mutex<VecDeque<JoinHandle<Result<(), StorageError>>>>,
 }
 
 impl<G, T> ProtocolExtractor<G, T>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + Send + Sync + 'static,
     T: TokenPreProcessor,
 {
     #[allow(clippy::too_many_arguments)]
@@ -92,7 +93,7 @@ where
             Err(StorageError::NotFound(_, _)) => {
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
                 ProtocolExtractor {
-                    gateway,
+                    gateway: Arc::new(gateway),
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -109,6 +110,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    db_futures: Mutex::new(VecDeque::new()),
                 }
             }
             Ok(cursor) => {
@@ -120,7 +122,7 @@ where
                     "Found existing cursor! Resuming extractor.."
                 );
                 ProtocolExtractor {
-                    gateway,
+                    gateway: Arc::new(gateway),
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -137,6 +139,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    db_futures: Mutex::new(VecDeque::new()),
                 }
             }
             Err(err) => return Err(ExtractionError::Setup(err.to_string())),
@@ -565,7 +568,7 @@ where
 #[async_trait]
 impl<G, T> Extractor for ProtocolExtractor<G, T>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + Send + Sync + 'static,
     T: TokenPreProcessor,
 {
     fn get_id(&self) -> ExtractorIdentity {
@@ -706,9 +709,35 @@ where
                 // committing.
                 let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
 
-                self.gateway
-                    .advance(msg.block_update(), msg.cursor(), force_db_commit)
-                    .await?;
+                let gateway = Arc::clone(&self.gateway);
+
+                let mut db_futures = self.db_futures.lock().await;
+
+                // If we have a future in the queue, wait for it to complete
+                if let Some(completed_fut) = db_futures.pop_front() {
+                    match completed_fut.await {
+                        Ok(_) => {
+                            // Previous operation succeeded, schedule the next one
+                            let new_fut = tokio::spawn(async move {
+                                gateway
+                                    .advance(msg.block_update(), msg.cursor(), force_db_commit)
+                                    .await
+                            });
+                            db_futures.push_back(new_fut);
+                        }
+                        Err(e) => {
+                            error!("Error in db future: {}", e);
+                        }
+                    }
+                } else {
+                    // Queue is empty, start a new operation
+                    let new_fut = tokio::spawn(async move {
+                        gateway
+                            .advance(msg.block_update(), msg.cursor(), force_db_commit)
+                            .await
+                    });
+                    db_futures.push_back(new_fut);
+                }
             }
         }
 
