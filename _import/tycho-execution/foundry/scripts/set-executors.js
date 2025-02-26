@@ -18,7 +18,7 @@ async function main() {
     const router = TychoRouter.attach(routerAddress);
 
     const executorsFilePath = path.join(__dirname, "../../config/executor_addresses.json");
-    const executors = Object.entries(JSON.parse(fs.readFileSync(executorsFilePath, "utf8"))["ethereum"]);
+    const executors = Object.entries(JSON.parse(fs.readFileSync(executorsFilePath, "utf8"))[network]);
 
 
     // Filter out executors that are already set

@@ -17,11 +17,19 @@ module.exports = {
     },
 
     networks: {
-        tenderly: {
+        tenderly_ethereum: {
             url: process.env.RPC_URL,
             accounts: [process.env.PRIVATE_KEY]
         },
-        mainnet: {
+        tenderly_base: {
+            url: process.env.RPC_URL,
+            accounts: [process.env.PRIVATE_KEY]
+        },
+        ethereum: {
+            url: process.env.RPC_URL,
+            accounts: [process.env.PRIVATE_KEY]
+        },
+        base: {
             url: process.env.RPC_URL,
             accounts: [process.env.PRIVATE_KEY]
         }
