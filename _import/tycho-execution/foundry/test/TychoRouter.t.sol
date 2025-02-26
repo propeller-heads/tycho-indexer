@@ -978,4 +978,26 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         assertEq(IERC20(WBTC_ADDR).balanceOf(tychoRouterAddr), 102718);
     }
+
+    // Base Network Tests
+    // Make sure to set the fork block to 26857267 for base network
+    function testSwapSingleBase() public {
+        vm.skip(true);
+        uint256 amountIn = 100 * 1e6;
+        deal(BASE_USDC, tychoRouterAddr, amountIn);
+
+        bytes memory protocolData = encodeUniswapV2Swap(
+            BASE_USDC, USDC_MAG7_POOL, tychoRouterAddr, true
+        );
+
+        bytes memory swap = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
+        );
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+        assertEq(IERC20(BASE_USDC).balanceOf(tychoRouterAddr), 0);
+        assertGt(IERC20(BASE_MAG7).balanceOf(tychoRouterAddr), 0);
+    }
 }

@@ -156,4 +156,21 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
         vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
         uniswapV2Exposed.swap(amountIn, protocolData);
     }
+
+    // Base Network Tests
+    // Make sure to set the fork block to 26857267 for base network
+    function testSwapBaseNetwork() public {
+        vm.skip(true);
+        uint256 amountIn = 10 * 10 ** 6;
+        bool zeroForOne = true;
+        bytes memory protocolData =
+            abi.encodePacked(BASE_USDC, USDC_MAG7_POOL, BOB, zeroForOne);
+
+        deal(BASE_USDC, address(uniswapV2Exposed), amountIn);
+
+        uniswapV2Exposed.swap(amountIn, protocolData);
+
+        assertEq(IERC20(BASE_USDC).balanceOf(BOB), 0);
+        assertGe(IERC20(BASE_MAG7).balanceOf(BOB), 0);
+    }
 }
