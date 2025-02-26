@@ -140,18 +140,32 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 nTokens,
         address receiver,
         bytes calldata swaps
-    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         if (receiver == address(0)) {
             revert TychoRouter__AddressZero();
         }
-
-        // Assume funds already in our router.
+        // Assume funds are already in the router.
         if (wrapEth) {
             _wrapETH(amountIn);
             tokenIn = address(_weth);
         }
 
+        uint256 initialBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
         amountOut = _swap(amountIn, nTokens, swaps);
+
+        uint256 currentBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
+        uint256 amountConsumed = initialBalance - currentBalance;
+
+        if (amountConsumed < amountIn) {
+            uint256 leftoverAmount = amountIn - amountConsumed;
+            revert TychoRouter__AmountInNotFullySpent(leftoverAmount);
+        }
 
         if (fee > 0) {
             uint256 feeAmount = (amountOut * fee) / 10000;
@@ -161,17 +175,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         if (minAmountOut > 0 && amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        uint256 leftoverAmountIn;
-        if (tokenIn == address(0)) {
-            leftoverAmountIn = address(this).balance;
-        } else {
-            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
-        }
-
-        if (leftoverAmountIn > 0) {
-            revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
         }
 
         if (unwrapEth) {
@@ -223,16 +226,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
-    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
-
+    ) external payable whenNotPaused returns (uint256 amountOut) {
         // For native ETH, assume funds already in our router. Else, transfer and handle approval.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        } else if (tokenIn != address(0)) {
+        if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
             permit2.transferFrom(
                 msg.sender,
@@ -242,37 +238,17 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             );
         }
 
-        amountOut = _swap(amountIn, nTokens, swaps);
-
-        if (fee > 0) {
-            uint256 feeAmount = (amountOut * fee) / 10000;
-            amountOut -= feeAmount;
-            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-        }
-
-        if (minAmountOut > 0 && amountOut < minAmountOut) {
-            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        uint256 leftoverAmountIn;
-        if (tokenIn == address(0)) {
-            leftoverAmountIn = address(this).balance;
-        } else {
-            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
-        }
-
-        if (leftoverAmountIn > 0) {
-            revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
-        }
-
-        if (unwrapEth) {
-            _unwrapETH(amountOut);
-        }
-        if (tokenOut == address(0)) {
-            Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
-        }
+        return swap(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            wrapEth,
+            unwrapEth,
+            nTokens,
+            receiver,
+            swaps
+        );
     }
 
     /**
