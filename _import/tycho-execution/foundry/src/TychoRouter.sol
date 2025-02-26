@@ -251,7 +251,22 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
+        uint256 initialBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
         amountOut = _swap(amountIn, nTokens, swaps);
+
+        uint256 currentBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
+        uint256 amountConsumed = initialBalance - currentBalance;
+
+        if (amountConsumed < amountIn) {
+            uint256 leftoverAmount = amountIn - amountConsumed;
+            revert TychoRouter__AmountInNotFullySpent(leftoverAmount);
+        }
 
         if (fee > 0) {
             uint256 feeAmount = (amountOut * fee) / 10000;
@@ -261,17 +276,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         if (minAmountOut > 0 && amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        uint256 leftoverAmountIn;
-        if (tokenIn == address(0)) {
-            leftoverAmountIn = address(this).balance;
-        } else {
-            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
-        }
-
-        if (leftoverAmountIn > 0) {
-            revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
         }
 
         if (unwrapEth) {
