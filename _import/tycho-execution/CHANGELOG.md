@@ -1,3 +1,10 @@
+## [0.51.2](https://github.com/propeller-heads/tycho-execution/compare/0.51.1...0.51.2) (2025-02-26)
+
+
+### Bug Fixes
+
+* Restrict receive callers to have code ([801976f](https://github.com/propeller-heads/tycho-execution/commit/801976fafab6d28395f738ba7971e927a3743e9d))
+
 ## [0.51.1](https://github.com/propeller-heads/tycho-execution/compare/0.51.0...0.51.1) (2025-02-25)
 
 ## [0.51.0](https://github.com/propeller-heads/tycho-execution/compare/0.50.0...0.51.0) (2025-02-24)
