@@ -17,15 +17,16 @@ async function main() {
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
     const router = TychoRouter.attach(routerAddress);
 
-    const executorsFilePath = path.join(__dirname, "executors.json");
-    const executors = JSON.parse(fs.readFileSync(executorsFilePath, "utf8"));
+    const executorsFilePath = path.join(__dirname, "../../config/executor_addresses.json");
+    const executors = Object.entries(JSON.parse(fs.readFileSync(executorsFilePath, "utf8"))["ethereum"]);
+
 
     // Filter out executors that are already set
     const executorsToSet = [];
-    for (const executor of executors) {
-        const isExecutorSet = await router.executors(executor.executor);
+    for (const [name, executor] of executors) {
+        const isExecutorSet = await router.executors(executor);
         if (!isExecutorSet) {
-            executorsToSet.push(executor);
+            executorsToSet.push({name: name, executor: executor});
         }
     }
 
@@ -49,7 +50,9 @@ async function main() {
 
     // Set executors
     const executorAddresses = executorsToSet.map(executor => executor.executor);
-    const tx = await router.setExecutors(executorAddresses);
+    const tx = await router.setExecutors(executorAddresses, {
+        gasLimit: 100000
+    });
     await tx.wait(); // Wait for the transaction to be mined
     console.log(`Executors set at transaction: ${tx.hash}`);
 }

@@ -9,6 +9,10 @@ module.exports = {
         settings: {
             evmVersion: "cancun",
             viaIR: true,
+            optimizer: {
+                enabled: true,
+                runs: 1000,
+            },
         },
     },
 

@@ -43,4 +43,5 @@ from being stored in the shell history.
 
 1. In `scripts/deploy-executors.js` define the executors to be deployed
 2. Deploy executors: `npx hardhat run scripts/deploy-executors.js --network tenderly/mainnet`
-3. Fill in the executor addresses in `scripts/executors.json`
+3. Fill in the executor addresses in `config/executor_addresses.json`. Note that the naming there needs to match the one
+   from tycho-indexer.
