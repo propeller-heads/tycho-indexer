@@ -448,7 +448,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @dev Allows this contract to receive native token from contracts
+     * @dev Allows this contract to receive native token with empty msg.data from contracts
      */
     receive() external payable {
         require(msg.sender.code.length != 0);
