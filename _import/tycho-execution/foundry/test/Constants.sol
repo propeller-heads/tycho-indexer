@@ -3,7 +3,15 @@ pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 
-contract Constants is Test {
+contract BaseConstants {
+    address BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address BASE_MAG7 = 0x9E6A46f294bB67c20F1D1E7AfB0bBEf614403B55;
+
+    // uniswap v2
+    address USDC_MAG7_POOL = 0x739c2431670A12E2cF8e11E3603eB96e6728a789;
+}
+
+contract Constants is Test, BaseConstants {
     address ADMIN = makeAddr("admin"); //admin=us
     address BOB = makeAddr("bob"); //bob=someone!=us
     address FUND_RESCUER = makeAddr("fundRescuer");
