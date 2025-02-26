@@ -141,21 +141,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
-
-        // Assume funds already in our router.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        }
-
         return _executeSwap(
             amountIn,
             tokenIn,
             tokenOut,
             minAmountOut,
+            wrapEth,
             unwrapEth,
             nTokens,
             receiver,
@@ -203,15 +194,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
-
-        // For native ETH, assume funds already in our router. Else, transfer and handle approval.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        } else if (tokenIn != address(0)) {
+        // For non native ETH, transfer and handle approval.
+        if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
             permit2.transferFrom(
                 msg.sender,
@@ -226,6 +210,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             tokenIn,
             tokenOut,
             minAmountOut,
+            wrapEth,
             unwrapEth,
             nTokens,
             receiver,
@@ -246,11 +231,21 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
+        bool wrapEth,
         bool unwrapEth,
         uint256 nTokens,
         address receiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
+        // For native ETH, assume funds are already in the router.
+        if (wrapEth) {
+            _wrapETH(amountIn);
+            tokenIn = address(_weth);
+        }
+
         amountOut = _swap(amountIn, nTokens, swaps);
 
         if (fee > 0) {
