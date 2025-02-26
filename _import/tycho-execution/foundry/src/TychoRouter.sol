@@ -140,18 +140,47 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 nTokens,
         address receiver,
         bytes calldata swaps
-    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        return _executeSwap(
-            amountIn,
-            tokenIn,
-            tokenOut,
-            minAmountOut,
-            wrapEth,
-            unwrapEth,
-            nTokens,
-            receiver,
-            swaps
-        );
+    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
+        // Assume funds are already in the router.
+        if (wrapEth) {
+            _wrapETH(amountIn);
+            tokenIn = address(_weth);
+        }
+
+        amountOut = _swap(amountIn, nTokens, swaps);
+
+        if (fee > 0) {
+            uint256 feeAmount = (amountOut * fee) / 10000;
+            amountOut -= feeAmount;
+            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
+        }
+
+        if (minAmountOut > 0 && amountOut < minAmountOut) {
+            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
+
+        uint256 leftoverAmountIn;
+        if (tokenIn == address(0)) {
+            leftoverAmountIn = address(this).balance;
+        } else {
+            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
+        }
+
+        if (leftoverAmountIn > 0) {
+            revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
+        }
+
+        if (unwrapEth) {
+            _unwrapETH(amountOut);
+        }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        }
     }
 
     /**
@@ -193,8 +222,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
-    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        // For non native ETH, transfer and handle approval.
+    ) external payable whenNotPaused returns (uint256 amountOut) {
+        // For native ETH, assume funds already in our router. Else, transfer and handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
             permit2.transferFrom(
@@ -205,7 +234,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             );
         }
 
-        return _executeSwap(
+        return swap(
             amountIn,
             tokenIn,
             tokenOut,
@@ -216,67 +245,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             receiver,
             swaps
         );
-    }
-
-    /**
-     * @notice Internal implementation of the core swap logic shared between swap() and swapPermit2().
-     *
-     * @notice This function centralizes the swap execution logic.
-     * @notice For detailed documentation on parameters and behavior, see the documentation for
-     * swap() and swapPermit2() functions.
-     *
-     */
-    function _executeSwap(
-        uint256 amountIn,
-        address tokenIn,
-        address tokenOut,
-        uint256 minAmountOut,
-        bool wrapEth,
-        bool unwrapEth,
-        uint256 nTokens,
-        address receiver,
-        bytes calldata swaps
-    ) internal returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
-        // For native ETH, assume funds are already in the router.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        }
-
-        amountOut = _swap(amountIn, nTokens, swaps);
-
-        if (fee > 0) {
-            uint256 feeAmount = (amountOut * fee) / 10000;
-            amountOut -= feeAmount;
-            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-        }
-
-        if (minAmountOut > 0 && amountOut < minAmountOut) {
-            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        uint256 leftoverAmountIn;
-        if (tokenIn == address(0)) {
-            leftoverAmountIn = address(this).balance;
-        } else {
-            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
-        }
-
-        if (leftoverAmountIn > 0) {
-            revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
-        }
-
-        if (unwrapEth) {
-            _unwrapETH(amountOut);
-        }
-        if (tokenOut == address(0)) {
-            Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
-        }
     }
 
     /**
