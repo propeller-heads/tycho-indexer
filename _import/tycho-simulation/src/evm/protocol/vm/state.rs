@@ -1055,6 +1055,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_set_spot_prices_without_capability() {
+        // Tests set Spot Prices functions when the pool doesn't have PriceFunction capability
+        let mut pool_state = setup_pool_state().await;
+
+        pool_state
+            .capabilities
+            .remove(&Capability::PriceFunction);
+
+        pool_state
+            .set_spot_prices(
+                &vec![bal(), dai()]
+                    .into_iter()
+                    .map(|t| (t.address.clone(), t))
+                    .collect(),
+            )
+            .unwrap();
+
+        let dai_bal_spot_price = pool_state
+            .spot_prices
+            .get(&(
+                bytes_to_address(&pool_state.tokens[0]).unwrap(),
+                bytes_to_address(&pool_state.tokens[1]).unwrap(),
+            ))
+            .unwrap();
+        let bal_dai_spot_price = pool_state
+            .spot_prices
+            .get(&(
+                bytes_to_address(&pool_state.tokens[1]).unwrap(),
+                bytes_to_address(&pool_state.tokens[0]).unwrap(),
+            ))
+            .unwrap();
+        assert_eq!(dai_bal_spot_price, &0.13736685496467538);
+        assert_eq!(bal_dai_spot_price, &7.050354297665408);
+    }
+
+    #[tokio::test]
     async fn test_get_balance_overwrites_with_component_balances() {
         let pool_state: EVMPoolState<PreCachedDB> = setup_pool_state().await;
 
