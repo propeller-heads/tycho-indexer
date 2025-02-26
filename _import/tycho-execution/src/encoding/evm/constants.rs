@@ -1,7 +1,6 @@
 use std::{collections::HashSet, sync::LazyLock};
 
-pub const DEFAULT_EXECUTORS_JSON: &str =
-    include_str!("../../../src/encoding/config/executor_addresses.json");
+pub const DEFAULT_EXECUTORS_JSON: &str = include_str!("../../../config/executor_addresses.json");
 
 /// These protocols support the optimization of grouping swaps.
 ///

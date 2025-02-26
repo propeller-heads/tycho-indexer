@@ -400,7 +400,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0x5c2f5a71f67c01775180adc06909288b4c329308").unwrap()
+            Bytes::from_str("0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -669,7 +669,7 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data
-            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
+            "00c1b81e3c8f6347e69e2ddb90454798a6be975e", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
@@ -1076,7 +1076,7 @@ mod tests {
             "01", // token out index
             "000000", // split
             // Swap data
-            "5c2f5a71f67c01775180adc06909288b4c329308", // executor address
+            "00c1b81e3c8f6347e69e2ddb90454798a6be975e", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
