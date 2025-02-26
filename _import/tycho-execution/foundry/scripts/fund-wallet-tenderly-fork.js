@@ -1,12 +1,12 @@
 require("dotenv").config();
 const {ethers} = require("hardhat");
 
-const TENDERLY_RPC_URL = process.env.TENDERLY_RPC_URL;
+const RPC_URL = process.env.RPC_URL;
 const DEPLOY_WALLET = process.env.DEPLOY_WALLET;
 
 async function main() {
-    if (!TENDERLY_RPC_URL || !DEPLOY_WALLET) {
-        console.error("Missing TENDERLY_RPC_URL or DEPLOY_WALLET in environment variables.");
+    if (!RPC_URL || !DEPLOY_WALLET) {
+        console.error("Missing RPC_URL or DEPLOY_WALLET in environment variables.");
         process.exit(1);
     }
 
