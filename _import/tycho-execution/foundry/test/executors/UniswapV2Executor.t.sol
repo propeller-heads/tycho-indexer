@@ -170,7 +170,6 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
 
         uniswapV2Exposed.swap(amountIn, protocolData);
 
-        assertEq(IERC20(BASE_USDC).balanceOf(BOB), 0);
-        assertGe(IERC20(BASE_MAG7).balanceOf(BOB), 0);
+        assertEq(IERC20(BASE_MAG7).balanceOf(BOB), 1379830606);
     }
 }
