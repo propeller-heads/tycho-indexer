@@ -15,7 +15,7 @@ use alloy::{
     },
     rpc::types::{
         simulate::{SimBlock, SimulatePayload},
-        TransactionInput, TransactionReceipt, TransactionRequest,
+        TransactionInput, TransactionRequest,
     },
     signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
@@ -190,7 +190,9 @@ async fn main() {
                 user_address.clone(),
             );
 
-            print!("Do you want to simulate, execute or skip this swap? (simulate/execute/skip): ");
+            println!("Do you want to simulate, execute or skip this swap?");
+            println!("Please be aware that the market might move while you make your decision.");
+            println!("(simulate/execute/skip): ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
             io::stdin()
@@ -386,12 +388,10 @@ fn encode(
     };
 
     // Encode the solution
-    let tx = encoder
+    encoder
         .encode_router_calldata(vec![solution.clone()])
         .expect("Failed to encode router calldata")[0]
-        .clone();
-
-    return tx;
+        .clone()
 }
 
 async fn get_tx_requests(
@@ -427,15 +427,15 @@ async fn get_tx_requests(
     );
     let data = encode_input(approve_function_signature, args.abi_encode());
     let nonce = provider
-        .get_transaction_count(user_address.clone())
+        .get_transaction_count(user_address)
         .await
         .expect("Failed to get nonce");
 
     let approval_request = TransactionRequest::default()
-        .from(user_address.clone())
+        .from(user_address)
         .to(sell_token_address)
         .input(TransactionInput { input: Some(AlloyBytes::from(data)), data: None })
-        .gas_limit(50_000u64.into())
+        .gas_limit(50_000u64)
         .max_fee_per_gas(max_fee_per_gas.into())
         .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
         .nonce(nonce);
@@ -447,7 +447,7 @@ async fn get_tx_requests(
         .input(TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None })
         .max_fee_per_gas(max_fee_per_gas.into())
         .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
-        .gas_limit(300_000u64.into())
+        .gas_limit(300_000u64)
         .nonce(nonce + 1);
 
     (approval_request, swap_request)

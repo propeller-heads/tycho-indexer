@@ -109,7 +109,7 @@ impl From<ProtocolComponent> for tycho_core::models::protocol::ProtocolComponent
             id: hex::encode(component.id),
             protocol_system: component.protocol_system,
             protocol_type_name: component.protocol_type_name,
-            chain: component.chain.into(),
+            chain: component.chain,
             tokens: component
                 .tokens
                 .into_iter()
