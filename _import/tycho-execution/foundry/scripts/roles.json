@@ -1,5 +1,5 @@
 {
-  "mainnet": {
+  "ethereum": {
     "EXECUTOR_SETTER_ROLE": [
       "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
     ],
@@ -14,7 +14,7 @@
       "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
     ]
   },
-  "tenderly_mainnet": {
+  "tenderly_ethereum": {
     "EXECUTOR_SETTER_ROLE": [
       "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
     ],
