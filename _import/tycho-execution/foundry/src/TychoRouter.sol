@@ -151,37 +151,16 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             tokenIn = address(_weth);
         }
 
-        amountOut = _swap(amountIn, nTokens, swaps);
-
-        if (fee > 0) {
-            uint256 feeAmount = (amountOut * fee) / 10000;
-            amountOut -= feeAmount;
-            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-        }
-
-        if (minAmountOut > 0 && amountOut < minAmountOut) {
-            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        uint256 leftoverAmountIn;
-        if (tokenIn == address(0)) {
-            leftoverAmountIn = address(this).balance;
-        } else {
-            leftoverAmountIn = IERC20(tokenIn).balanceOf(address(this));
-        }
-
-        if (leftoverAmountIn > 0) {
-            revert TychoRouter__AmountInNotFullySpent(leftoverAmountIn);
-        }
-
-        if (unwrapEth) {
-            _unwrapETH(amountOut);
-        }
-        if (tokenOut == address(0)) {
-            Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
-        }
+        return _executeSwap(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            unwrapEth,
+            nTokens,
+            receiver,
+            swaps
+        );
     }
 
     /**
@@ -242,6 +221,36 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             );
         }
 
+        return _executeSwap(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            unwrapEth,
+            nTokens,
+            receiver,
+            swaps
+        );
+    }
+
+    /**
+     * @notice Internal implementation of the core swap logic shared between swap() and swapPermit2().
+     *
+     * @notice This function centralizes the swap execution logic.
+     * @notice For detailed documentation on parameters and behavior, see the documentation for
+     * swap() and swapPermit2() functions.
+     *
+     */
+    function _executeSwap(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        bool unwrapEth,
+        uint256 nTokens,
+        address receiver,
+        bytes calldata swaps
+    ) internal returns (uint256 amountOut) {
         amountOut = _swap(amountIn, nTokens, swaps);
 
         if (fee > 0) {
