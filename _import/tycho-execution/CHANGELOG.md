@@ -1,3 +1,18 @@
+## [0.53.0](https://github.com/propeller-heads/tycho-execution/compare/0.52.2...0.53.0) (2025-02-26)
+
+
+### Features
+
+* support base deployment ([7ca9120](https://github.com/propeller-heads/tycho-execution/commit/7ca9120b7b1feb4704b625077a6be34ea1c1a8f1))
+
+
+### Bug Fixes
+
+* (deployment) add tenderly keys to json files ([1bdcbb8](https://github.com/propeller-heads/tycho-execution/commit/1bdcbb83e089c012dde3a33f159653a004c43c1d))
+* proper executor address json after merge ([adfcb3d](https://github.com/propeller-heads/tycho-execution/commit/adfcb3da82564282e5eb311a1504be9f64ce1237))
+* rename mainnet -> ethereum ([ac35256](https://github.com/propeller-heads/tycho-execution/commit/ac35256c6961b8f8783b8461302594aaeb0eaa95))
+* TENDERLY_RPC_URL -> RPC_URL ([e5759b9](https://github.com/propeller-heads/tycho-execution/commit/e5759b94984772078d9324dcce2eaced0d6cc377))
+
 ## [0.52.2](https://github.com/propeller-heads/tycho-execution/compare/0.52.1...0.52.2) (2025-02-26)
 
 ## [0.52.1](https://github.com/propeller-heads/tycho-execution/compare/0.52.0...0.52.1) (2025-02-26)
