@@ -1,3 +1,19 @@
+## [0.52.0](https://github.com/propeller-heads/tycho-execution/compare/0.51.2...0.52.0) (2025-02-26)
+
+
+### Features
+
+* Add deployment and fund wallet scripts ([cbea0bd](https://github.com/propeller-heads/tycho-execution/commit/cbea0bdab380ef92b7cf170f7734b0039f21725c))
+* Deploy executors and set them in router ([02a9da1](https://github.com/propeller-heads/tycho-execution/commit/02a9da183e74fe0d5e20e4cf9493398931c2735e))
+* Deploy on mainnet ([34563c3](https://github.com/propeller-heads/tycho-execution/commit/34563c3eb7f353391344bf36de5e8ee6bc766a3c))
+* Set roles script ([90cf194](https://github.com/propeller-heads/tycho-execution/commit/90cf19486967752bed0775d524034f499a03baf6))
+* Verify router contract on tenderly ([77ba949](https://github.com/propeller-heads/tycho-execution/commit/77ba9498a75b9724ed5f4bdfb22626d8e62e04e4))
+
+
+### Bug Fixes
+
+* Unify both executor addresses in one file ([57789a4](https://github.com/propeller-heads/tycho-execution/commit/57789a40e43f3a4092a4754704a8798e4d06c060))
+
 ## [0.51.2](https://github.com/propeller-heads/tycho-execution/compare/0.51.1...0.51.2) (2025-02-26)
 
 
