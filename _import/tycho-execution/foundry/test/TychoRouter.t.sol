@@ -980,9 +980,10 @@ contract TychoRouterTest is TychoRouterTestSetup {
     }
 
     // Base Network Tests
-    // Make sure to set the fork block to 26857267 for base network
+    // Make sure to set the RPC_URL to base network
     function testSwapSingleBase() public {
         vm.skip(true);
+        vm.rollFork(26857267);
         uint256 amountIn = 10 * 10 ** 6;
         deal(BASE_USDC, tychoRouterAddr, amountIn);
 

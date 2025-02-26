@@ -158,9 +158,10 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
     }
 
     // Base Network Tests
-    // Make sure to set the fork block to 26857267 for base network
+    // Make sure to set the RPC_URL to base network
     function testSwapBaseNetwork() public {
         vm.skip(true);
+        vm.rollFork(26857267);
         uint256 amountIn = 10 * 10 ** 6;
         bool zeroForOne = true;
         bytes memory protocolData =
