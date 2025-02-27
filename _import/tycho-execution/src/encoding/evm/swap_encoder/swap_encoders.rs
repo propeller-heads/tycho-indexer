@@ -152,7 +152,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         swap: Swap,
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let fee = get_static_attribute(&swap, "fee")?;
+        let fee = get_static_attribute(&swap, "key_lp_fee")?;
 
         let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
             .map_err(|_| EncodingError::FatalError("Failed to pad fee bytes".to_string()))?;
@@ -417,7 +417,7 @@ mod tests {
         let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+        static_attributes.insert("key_lp_fee".into(), Bytes::from(fee.to_signed_bytes_be()));
         static_attributes
             .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
 
@@ -483,7 +483,7 @@ mod tests {
         let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
 
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+        static_attributes.insert("key_lp_fee".into(), Bytes::from(fee.to_signed_bytes_be()));
         static_attributes
             .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
 
@@ -553,7 +553,7 @@ mod tests {
 
         let mut usde_usdt_static_attributes: HashMap<String, Bytes> = HashMap::new();
         usde_usdt_static_attributes
-            .insert("fee".into(), Bytes::from(usde_usdt_fee.to_signed_bytes_be()));
+            .insert("key_lp_fee".into(), Bytes::from(usde_usdt_fee.to_signed_bytes_be()));
         usde_usdt_static_attributes.insert(
             "tick_spacing".into(),
             Bytes::from(usde_usdt_tick_spacing.to_signed_bytes_be()),
@@ -571,7 +571,7 @@ mod tests {
 
         let mut usdt_wbtc_static_attributes: HashMap<String, Bytes> = HashMap::new();
         usdt_wbtc_static_attributes
-            .insert("fee".into(), Bytes::from(usdt_wbtc_fee.to_signed_bytes_be()));
+            .insert("key_lp_fee".into(), Bytes::from(usdt_wbtc_fee.to_signed_bytes_be()));
         usdt_wbtc_static_attributes.insert(
             "tick_spacing".into(),
             Bytes::from(usdt_wbtc_tick_spacing.to_signed_bytes_be()),
