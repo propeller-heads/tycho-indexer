@@ -650,7 +650,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         // Approve permit2
         vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(address(permit2Address), type(uint256).max);
+        IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
         // Encoded solution generated using `test_split_swap_strategy_encoder_simple`
         // but manually replacing the executor address
         // `5c2f5a71f67c01775180adc06909288b4c329308` with the one in this test
@@ -688,7 +688,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(balancerAfter - balancerBefore, 2659881924818443699787);
     }
 
-    function testUSV4Integration4() public {
+    function testUSV4Integration() public {
         // Test created with calldata from our router encoder.
 
         // Performs a sequential swap from USDC to PEPE though ETH using two
@@ -701,7 +701,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         // Approve permit2
         vm.startPrank(ALICE);
-        IERC20(USDC_ADDR).approve(address(permit2Address), type(uint256).max);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
         // Encoded solution generated using `test_split_encoding_strategy_usv4`
         // and ensuring that the encoded executor address is the one in this test
         // `f62849f9a0b5bf2913b396098f7c7019b51a820a`
@@ -754,7 +754,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         // Approve permit2
         vm.startPrank(ALICE);
-        IERC20(USDC_ADDR).approve(address(permit2Address), type(uint256).max);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
 
         // Encoded solution generated using `test_split_encoding_strategy_usv4_eth_out`
         // and ensuring that the encoded executor address is the one in this test
@@ -783,7 +783,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         // Approve permit2
         vm.startPrank(ALICE);
-        //        IERC20(WETH_ADDR).approve(address(permit2Address), type(uint256).max);
+        //        IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
         // Encoded solution generated using
         // `test_split_swap_strategy_encoder_simple_route_wrap`
         // but manually replacing the executor address
@@ -812,7 +812,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         // Approve permit2
         vm.startPrank(ALICE);
-        IERC20(DAI_ADDR).approve(address(permit2Address), type(uint256).max);
+        IERC20(DAI_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
         // Encoded solution generated using
         // `test_split_swap_strategy_encoder_simple_route_unwrap`
         // but manually replacing the executor address
@@ -844,7 +844,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         // Approve permit2
         vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(address(permit2Address), type(uint256).max);
+        IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
         // Encoded solution generated using `test_split_swap_strategy_encoder_complex`
         // but manually replacing the executor address
         // `5c2f5a71f67c01775180adc06909288b4c329308` with the one in this test

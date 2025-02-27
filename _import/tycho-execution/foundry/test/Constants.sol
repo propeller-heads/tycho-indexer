@@ -50,6 +50,12 @@ contract Constants is Test, BaseConstants {
     address USV3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
 
+    // universal router
+    address UNIVERSAL_ROUTER = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af;
+
+    // permit2
+    address PERMIT2_ADDRESS = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+
     /**
      * @dev Deploys a dummy contract with non-empty bytecode
      */
