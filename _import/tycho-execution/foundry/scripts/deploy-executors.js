@@ -25,14 +25,28 @@ async function main() {
         await deployedExecutor.deployed();
         console.log(`${exchange} deployed to: ${deployedExecutor.address}`);
 
+        // Verify on Tenderly
         try {
             await hre.tenderly.verify({
                 name: exchange,
-                address: deployedExecutor.address,
+                address: address,
             });
             console.log("Contract verified successfully on Tenderly");
         } catch (error) {
             console.error("Error during contract verification:", error);
+        }
+
+        console.log("Waiting for 1 minute before verifying the contract...");
+        await new Promise(resolve => setTimeout(resolve, 60000));
+        // Verify on Etherscan
+        try {
+            await hre.run("verify:verify", {
+                address: address,
+                constructorArguments: args,
+            });
+            console.log(`${exchange} verified successfully on Etherscan!`);
+        } catch (error) {
+            console.error(`Error during Etherscan verification:`, error);
         }
     }
 }

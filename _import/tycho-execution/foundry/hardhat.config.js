@@ -1,5 +1,6 @@
 /** @type import('hardhat/config').HardhatUserConfig */
 require("@tenderly/hardhat-tenderly");
+require("@nomicfoundation/hardhat-verify");
 require("@nomiclabs/hardhat-ethers");
 require("@nomicfoundation/hardhat-foundry");
 
@@ -40,6 +41,10 @@ module.exports = {
     tenderly: {
         project: "project",
         username: "tvinagre",
-        privateVerification: true,
+        privateVerification: false,
     },
+
+    etherscan: {
+        apiKey: process.env.ETHERSCAN_API_KEY,
+    }
 };

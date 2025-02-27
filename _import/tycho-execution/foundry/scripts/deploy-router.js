@@ -20,17 +20,19 @@ async function main() {
     console.log(`Deploying TychoRouter to ${network} with:`);
     console.log(`- permit2: ${permit2}`);
     console.log(`- weth: ${weth}`);
+    const args = [permit2, weth];
 
     const [deployer] = await ethers.getSigners();
     console.log(`Deploying with account: ${deployer.address}`);
     console.log(`Account balance: ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
 
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
-    const router = await TychoRouter.deploy(permit2, weth);
+    const router = await TychoRouter.deploy(args);
 
     await router.deployed();
     console.log(`TychoRouter deployed to: ${router.address}`);
 
+    // Verify on Tenderly
     try {
         console.log("Verifying contract on Tenderly...");
         await hre.tenderly.verify({
@@ -41,6 +43,21 @@ async function main() {
     } catch (error) {
         console.error("Error during contract verification:", error);
     }
+
+    console.log("Waiting for 1 minute before verifying the contract...");
+    await new Promise(resolve => setTimeout(resolve, 60000));
+
+    // Verify on Etherscan
+    try {
+        await hre.run("verify:verify", {
+            address: router.address,
+            constructorArguments: args,
+        });
+        console.log(`TychoRouter verified successfully on Etherscan!`);
+    } catch (error) {
+        console.error(`Error during Etherscan verification:`, error);
+    }
+
 }
 
 main()
