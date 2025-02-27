@@ -20,5 +20,11 @@ cargo run --release --example quickstart -- --sell-token "0xA0b86991c6218b36c1d1
 
 for 10000 USDC -> WBTC.
 
+To be able to execute or simulate the best swap, you need to pass your private key:
+
+```bash
+cargo run --release --example quickstart -- --swapper-pk <your-private-key>
+```
+
 See [here](https://docs.propellerheads.xyz/tycho/for-solvers/tycho-quickstart) a complete guide on how to run the
 Quickstart example.
