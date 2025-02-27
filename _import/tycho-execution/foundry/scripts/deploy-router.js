@@ -6,11 +6,11 @@ async function main() {
     const network = hre.network.name;
     let permit2;
     let weth;
-    if (network === "mainnet" || network === "tenderly_mainnet") {
+    if (network === "ethereum" || network === "tenderly_ethereum") {
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     } else if (network === "base" || network === "tenderly_base") {
-        // permit2 address is the same as on mainnet
+        // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         weth = "0x4200000000000000000000000000000000000006";
     } else {
@@ -20,14 +20,13 @@ async function main() {
     console.log(`Deploying TychoRouter to ${network} with:`);
     console.log(`- permit2: ${permit2}`);
     console.log(`- weth: ${weth}`);
-    const args = [permit2, weth];
 
     const [deployer] = await ethers.getSigners();
     console.log(`Deploying with account: ${deployer.address}`);
     console.log(`Account balance: ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
 
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
-    const router = await TychoRouter.deploy(args);
+    const router = await TychoRouter.deploy(permit2, weth);
 
     await router.deployed();
     console.log(`TychoRouter deployed to: ${router.address}`);
@@ -51,7 +50,7 @@ async function main() {
     try {
         await hre.run("verify:verify", {
             address: router.address,
-            constructorArguments: args,
+            constructorArguments: [permit2, weth],
         });
         console.log(`TychoRouter verified successfully on Etherscan!`);
     } catch (error) {

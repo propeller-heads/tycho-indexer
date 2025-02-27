@@ -29,7 +29,7 @@ async function main() {
         try {
             await hre.tenderly.verify({
                 name: exchange,
-                address: address,
+                address: deployedExecutor.address,
             });
             console.log("Contract verified successfully on Tenderly");
         } catch (error) {
@@ -41,7 +41,7 @@ async function main() {
         // Verify on Etherscan
         try {
             await hre.run("verify:verify", {
-                address: address,
+                address: deployedExecutor.address,
                 constructorArguments: args,
             });
             console.log(`${exchange} verified successfully on Etherscan!`);

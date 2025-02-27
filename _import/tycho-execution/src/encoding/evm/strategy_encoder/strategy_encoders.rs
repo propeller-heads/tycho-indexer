@@ -400,7 +400,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E").unwrap()
+            Bytes::from_str("0xE6424D3d95A5D86e2b6cB3E1d77B9391816265DD").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -525,7 +525,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0x90BE4620436354c9DfA58614B3Bdd5a80FBfAF31").unwrap()
+            Bytes::from_str("0xE183caC244f44D1922BDcE041e960Db3979860BB").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -537,7 +537,7 @@ mod tests {
                 // zero for one
                 "00",
                 // executor address
-                "90be4620436354c9dfa58614b3bdd5a80fbfaf31",
+                "e183cac244f44d1922bdce041e960db3979860bb",
                 // first pool intermediary token (ETH)
                 "0000000000000000000000000000000000000000",
                 // fee
@@ -669,7 +669,7 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data
-            "00c1b81e3c8f6347e69e2ddb90454798a6be975e", // executor address
+            "e6424d3d95a5d86e2b6cb3e1d77b9391816265dd", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
@@ -990,12 +990,12 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data header
-            "90be4620436354c9dfa58614b3bdd5a80fbfaf31", // executor address
+            "e183cac244f44d1922bdce041e960db3979860bb", // executor address
             // Protocol data
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
-            "90be4620436354c9dfa58614b3bdd5a80fbfaf31", // executor address
+            "e183cac244f44d1922bdce041e960db3979860bb", // executor address
             // First pool params
             "0000000000000000000000000000000000000000", // intermediary token (ETH)
             "000bb8",                                   // fee
@@ -1076,7 +1076,7 @@ mod tests {
             "01", // token out index
             "000000", // split
             // Swap data
-            "00c1b81e3c8f6347e69e2ddb90454798a6be975e", // executor address
+            "e6424d3d95a5d86e2b6cb3e1d77b9391816265dd", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver

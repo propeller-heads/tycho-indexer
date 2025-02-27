@@ -1,9 +1,9 @@
 {
   "ethereum": {
-    "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
-    "uniswap_v3": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
-    "uniswap_v4": "0x90BE4620436354c9DfA58614B3Bdd5a80FBfAF31",
-    "vm:balancer_v2": "0xffe5B139b396c9A3d5d9ab89AAE78bF3070CbD64"
+    "uniswap_v2": "0xE6424D3d95A5D86e2b6cB3E1d77B9391816265DD",
+    "uniswap_v3": "0xdba8d9142e98ebd30608e65d685f01826b2ae6a4",
+    "uniswap_v4": "0xE183caC244f44D1922BDcE041e960Db3979860BB",
+    "vm:balancer_v2": "0xF99eE7695db4f5fc181A3EE3bC7333E8a0312335"
   },
   "tenderly_ethereum": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
