@@ -54,6 +54,8 @@ use tycho_simulation::{
     utils::load_all_tokens,
 };
 
+const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
+
 #[derive(Parser)]
 struct Cli {
     #[arg(short, long, default_value = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")]
@@ -65,7 +67,7 @@ struct Cli {
     /// The tvl threshold to filter the graph by
     #[arg(short, long, default_value_t = 10.0)]
     tvl_threshold: f64,
-    #[arg(short, long)]
+    #[arg(short, long, default_value = FAKE_PK)]
     swapper_pk: String,
 }
 
@@ -185,6 +187,10 @@ async fn main() {
                 Bytes::from(wallet.address().to_vec()),
             );
 
+            if cli.swapper_pk == FAKE_PK {
+                println!("Signer private key was not provided. Skipping simulation/execution...");
+                continue
+            }
             println!("Do you want to simulate, execute or skip this swap?");
             println!("Please be aware that the market might move while you make your decision. Which might lead to a revert if you've set a min amount out or slippage.");
             print!("(simulate/execute/skip): ");
