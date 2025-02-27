@@ -5,9 +5,9 @@ const hre = require("hardhat");
 // Comment out the executors you don't want to deploy
 const executors_to_deploy = [
     {exchange: "UniswapV2Executor", args: []},
-    // {exchange: "UniswapV3Executor", args: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"]},
-    // {exchange: "UniswapV4Executor", args: ["0x000000000004444c5dc75cB358380D2e3dE08A90"]},
-    // {exchange: "BalancerV2Executor", args: []},
+    {exchange: "UniswapV3Executor", args: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"]},
+    {exchange: "UniswapV4Executor", args: ["0x000000000004444c5dc75cB358380D2e3dE08A90"]},
+    {exchange: "BalancerV2Executor", args: []},
 ]
 
 async function main() {
@@ -25,6 +25,7 @@ async function main() {
         await deployedExecutor.deployed();
         console.log(`${exchange} deployed to: ${deployedExecutor.address}`);
 
+        // Verify on Tenderly
         try {
             await hre.tenderly.verify({
                 name: exchange,
@@ -33,6 +34,19 @@ async function main() {
             console.log("Contract verified successfully on Tenderly");
         } catch (error) {
             console.error("Error during contract verification:", error);
+        }
+
+        console.log("Waiting for 1 minute before verifying the contract...");
+        await new Promise(resolve => setTimeout(resolve, 60000));
+        // Verify on Etherscan
+        try {
+            await hre.run("verify:verify", {
+                address: deployedExecutor.address,
+                constructorArguments: args,
+            });
+            console.log(`${exchange} verified successfully on Etherscan!`);
+        } catch (error) {
+            console.error(`Error during Etherscan verification:`, error);
         }
     }
 }

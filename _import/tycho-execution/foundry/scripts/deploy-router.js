@@ -6,11 +6,11 @@ async function main() {
     const network = hre.network.name;
     let permit2;
     let weth;
-    if (network === "mainnet" || network === "tenderly_mainnet") {
+    if (network === "ethereum" || network === "tenderly_ethereum") {
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     } else if (network === "base" || network === "tenderly_base") {
-        // permit2 address is the same as on mainnet
+        // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         weth = "0x4200000000000000000000000000000000000006";
     } else {
@@ -31,6 +31,7 @@ async function main() {
     await router.deployed();
     console.log(`TychoRouter deployed to: ${router.address}`);
 
+    // Verify on Tenderly
     try {
         console.log("Verifying contract on Tenderly...");
         await hre.tenderly.verify({
@@ -41,6 +42,21 @@ async function main() {
     } catch (error) {
         console.error("Error during contract verification:", error);
     }
+
+    console.log("Waiting for 1 minute before verifying the contract...");
+    await new Promise(resolve => setTimeout(resolve, 60000));
+
+    // Verify on Etherscan
+    try {
+        await hre.run("verify:verify", {
+            address: router.address,
+            constructorArguments: [permit2, weth],
+        });
+        console.log(`TychoRouter verified successfully on Etherscan!`);
+    } catch (error) {
+        console.error(`Error during Etherscan verification:`, error);
+    }
+
 }
 
 main()
