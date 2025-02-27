@@ -1,3 +1,10 @@
+## [0.53.1](https://github.com/propeller-heads/tycho-execution/compare/0.53.0...0.53.1) (2025-02-27)
+
+
+### Bug Fixes
+
+* remove 0 amount check in _unwrapEth ([0273f58](https://github.com/propeller-heads/tycho-execution/commit/0273f5827462f6f6cadb5b7e78ae7c1d0bfd2e29))
+
 ## [0.53.0](https://github.com/propeller-heads/tycho-execution/compare/0.52.2...0.53.0) (2025-02-26)
 
 

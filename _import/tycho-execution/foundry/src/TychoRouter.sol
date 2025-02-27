@@ -56,6 +56,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 //           ✷✷✷✷✷✷               ✷✷✷✷✷              ✷✷✷✷✷✷✷✷        ✷✷✷✷✷✷      ✷✷✷✷✷✷         ✷✷✷✷✷✷✷✷
 
 error TychoRouter__AddressZero();
+error TychoRouter__AmountZero();
 error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
@@ -440,13 +441,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param amount of WETH to unwrap.
      */
     function _unwrapETH(uint256 amount) internal {
-        uint256 unwrapAmount =
-            amount == 0 ? _weth.balanceOf(address(this)) : amount;
-        _weth.withdraw(unwrapAmount);
+        _weth.withdraw(amount);
     }
 
     /**
-     * @dev Allows this contract to receive native token
+     * @dev Allows this contract to receive native token with empty msg.data from contracts
      */
     receive() external payable {
         require(msg.sender.code.length != 0);
