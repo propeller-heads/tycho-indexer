@@ -63,8 +63,10 @@ struct Cli {
     #[arg(short, long, default_value_t = 1.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
-    #[arg(short, long, default_value_t = 100.0)]
+    #[arg(short, long, default_value_t = 10.0)]
     tvl_threshold: f64,
+    #[arg(short, long)]
+    swapper_pk: String,
 }
 
 #[tokio::main]
@@ -134,26 +136,19 @@ async fn main() {
         .await
         .expect("Failed building protocol stream");
 
-    // execution setup
-    let swapper_pk =
-        "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-    let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
-        .expect("Failed to create user address");
-
     // Initialize the encoder
     let encoder = EVMEncoderBuilder::new()
         .chain(Chain::Ethereum)
-        .tycho_router_with_permit2(None, swapper_pk.clone())
+        .tycho_router_with_permit2(None, cli.swapper_pk.clone())
         .expect("Failed to create encoder builder")
         .build()
         .expect("Failed to build encoder");
 
-    let tx_signer = EthereumWallet::from(
-        PrivateKeySigner::from_bytes(
-            &B256::from_str(&swapper_pk).expect("Failed to convert swapper pk to B256"),
-        )
-        .expect("Failed to private key signer"),
-    );
+    let wallet = PrivateKeySigner::from_bytes(
+        &B256::from_str(&cli.swapper_pk).expect("Failed to convert swapper pk to B256"),
+    )
+    .expect("Failed to private key signer");
+    let tx_signer = EthereumWallet::from(wallet.clone());
 
     let provider = ProviderBuilder::new()
         .wallet(tx_signer.clone())
@@ -187,12 +182,12 @@ async fn main() {
                 sell_token.clone(),
                 buy_token.clone(),
                 amount_in.clone(),
-                user_address.clone(),
+                Bytes::from(wallet.address().to_vec()),
             );
 
             println!("Do you want to simulate, execute or skip this swap?");
-            println!("Please be aware that the market might move while you make your decision.");
-            println!("(simulate/execute/skip): ");
+            println!("Please be aware that the market might move while you make your decision. Which might lead to a revert if you've set a min amount out or slippage.");
+            print!("(simulate/execute/skip): ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
             io::stdin()
@@ -207,7 +202,7 @@ async fn main() {
                     let (approval_request, swap_request) = get_tx_requests(
                         provider.clone(),
                         biguint_to_u256(&amount_in),
-                        Address::from_slice(&user_address),
+                        wallet.address(),
                         Address::from_slice(&sell_token_address),
                         tx,
                     )
@@ -240,6 +235,7 @@ async fn main() {
                             );
                         }
                     }
+                    // println!("Full simulation logs: {:?}", output);
                     return;
                 }
                 "execute" => {
@@ -247,7 +243,7 @@ async fn main() {
                     let (approval_request, swap_request) = get_tx_requests(
                         provider.clone(),
                         biguint_to_u256(&amount_in),
-                        Address::from_slice(&user_address),
+                        wallet.address(),
                         Address::from_slice(&sell_token_address),
                         tx,
                     )
@@ -263,7 +259,7 @@ async fn main() {
                         .await
                         .expect("Failed to get approval receipt");
                     println!(
-                        "Approval transaction sent with hash {:?} and status {:?}",
+                        "Approval transaction sent with hash: {:?} and status: {:?}",
                         approval_result.transaction_hash,
                         approval_result.status()
                     );
@@ -278,7 +274,7 @@ async fn main() {
                         .await
                         .expect("Failed to get swap receipt");
                     println!(
-                        "Swap transaction sent with hash {:?} and status {:?}",
+                        "Swap transaction sent with hash: {:?} and status: {:?}",
                         swap_result.transaction_hash,
                         swap_result.status()
                     );
@@ -340,12 +336,18 @@ fn get_best_swap(
         .iter()
         .max_by_key(|(_, value)| value.to_owned())
     {
+        println!("The best swap (out of {} possible pools) is:", amounts_out.len());
         println!(
-            "Pool with the highest amount out is {} with {} {} (out of {} possible pools)",
-            key,
-            amount_out,
-            buy_token.symbol,
-            amounts_out.len()
+            "protocol: {:?}",
+            pairs
+                .get(key)
+                .expect("Failed to get best pool")
+                .protocol_system
+        );
+        println!("id: {:?}", key);
+        println!(
+            "swap: {:?} {:} -> {:?} {:}",
+            amount_in, sell_token.symbol, amount_out, buy_token.symbol
         );
         Some(key.to_string())
     } else {
