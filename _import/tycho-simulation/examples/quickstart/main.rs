@@ -20,9 +20,10 @@ use alloy::{
     signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
 };
-use alloy_primitives::{Address, Bytes as AlloyBytes, B256, U256};
+use alloy_primitives::{Address, Bytes as AlloyBytes, B256, U256, TxKind};
 use alloy_sol_types::SolValue;
 use clap::Parser;
+use foundry_config::NamedChain;
 use futures::StreamExt;
 use num_bigint::BigUint;
 use tracing_subscriber::EnvFilter;
@@ -31,7 +32,7 @@ use tycho_execution::encoding::{
     evm::{
         encoder_builder::EVMEncoderBuilder, tycho_encoder::EVMTychoEncoder, utils::encode_input,
     },
-    models::{Solution, Swap, Transaction},
+    models::{Solution, Swap, Transaction, Chain as TychoExecutionChain},
     tycho_encoder::TychoEncoder,
 };
 use tycho_simulation::{
@@ -69,6 +70,8 @@ struct Cli {
     tvl_threshold: f64,
     #[arg(short, long, default_value = FAKE_PK)]
     swapper_pk: String,
+    #[arg(short, long, default_value = "ethereum")]
+    chain: String,
 }
 
 #[tokio::main]
@@ -86,11 +89,13 @@ async fn main() {
     let cli = Cli::parse();
     let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
 
+    let chain = Chain::from_str(&cli.chain).expect("Invalid chain");
+    println!("Loading tokens from Tycho... {}", tycho_url.as_str());
     let all_tokens = load_all_tokens(
         tycho_url.as_str(),
         false,
         Some(tycho_api_key.as_str()),
-        Chain::Ethereum,
+        chain,
         None,
         None,
     )
@@ -117,19 +122,19 @@ async fn main() {
     let mut pairs: HashMap<String, ProtocolComponent> = HashMap::new();
     let mut amounts_out: HashMap<String, BigUint> = HashMap::new();
 
-    let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, Chain::Ethereum)
+    let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, chain)
         .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-        .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-        .exchange::<EVMPoolState<PreCachedDB>>(
-            "vm:balancer_v2",
-            tvl_filter.clone(),
-            Some(balancer_pool_filter),
-        )
-        .exchange::<UniswapV4State>(
-            "uniswap_v4",
-            tvl_filter.clone(),
-            Some(uniswap_v4_pool_with_hook_filter),
-        )
+        // .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+        // .exchange::<EVMPoolState<PreCachedDB>>(
+        //     "vm:balancer_v2",
+        //     tvl_filter.clone(),
+        //     Some(balancer_pool_filter),
+        // )
+        // .exchange::<UniswapV4State>(
+        //     "uniswap_v4",
+        //     tvl_filter.clone(),
+        //     Some(uniswap_v4_pool_with_hook_filter),
+        // )
         .auth_key(Some(tycho_api_key.clone()))
         .skip_state_decode_failures(true)
         .set_tokens(all_tokens.clone())
@@ -140,7 +145,7 @@ async fn main() {
 
     // Initialize the encoder
     let encoder = EVMEncoderBuilder::new()
-        .chain(Chain::Ethereum)
+        .chain(chain)
         .tycho_router_with_permit2(None, cli.swapper_pk.clone())
         .expect("Failed to create encoder builder")
         .build()
@@ -153,6 +158,7 @@ async fn main() {
     let tx_signer = EthereumWallet::from(wallet.clone());
 
     let provider = ProviderBuilder::new()
+        .with_chain(NamedChain::Base)
         .wallet(tx_signer.clone())
         .on_http(
             env::var("ETH_RPC_URL")
@@ -185,6 +191,7 @@ async fn main() {
                 buy_token.clone(),
                 amount_in.clone(),
                 Bytes::from(wallet.address().to_vec()),
+                chain,
             );
 
             if cli.swapper_pk == FAKE_PK {
@@ -241,7 +248,6 @@ async fn main() {
                             );
                         }
                     }
-                    // println!("Full simulation logs: {:?}", output);
                     return;
                 }
                 "execute" => {
@@ -369,6 +375,7 @@ fn encode(
     buy_token: Token,
     sell_amount: BigUint,
     user_address: Bytes,
+    chain: Chain,
 ) -> Transaction {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
@@ -380,6 +387,15 @@ fn encode(
         0f64,
     );
 
+    let router_addresses: HashMap<Chain, Bytes> = HashMap::from([
+        (Chain::Ethereum, Bytes::from_str("0xFfA5ec2e444e4285108e4a17b82dA495c178427B").expect("Failed to create router address")),
+        (Chain::Base, Bytes::from_str("0x94ebf984511b06bab48545495b754760bfaa566e").expect("Failed to create router address")),
+    ]);
+    let router_address = router_addresses
+        .get(&chain)
+        .expect("Router address not found")
+        .clone();
+
     // Then we create a solution object with the previous swap
     let solution = Solution {
         sender: user_address.clone(),
@@ -390,8 +406,7 @@ fn encode(
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address: Bytes::from_str("0xFfA5ec2e444e4285108e4a17b82dA495c178427B")
-            .expect("Failed to create router address"),
+        router_address: router_address,
         ..Default::default()
     };
 
@@ -439,24 +454,30 @@ async fn get_tx_requests(
         .await
         .expect("Failed to get nonce");
 
-    let approval_request = TransactionRequest::default()
-        .from(user_address)
-        .to(sell_token_address)
-        .input(TransactionInput { input: Some(AlloyBytes::from(data)), data: None })
-        .gas_limit(50_000u64)
-        .max_fee_per_gas(max_fee_per_gas.into())
-        .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
-        .nonce(nonce);
+    let approval_request = TransactionRequest{
+        to: Some(TxKind::Call(sell_token_address)),
+        from: Some(user_address),
+        value: None,
+        input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
+        gas: Some(100_000u64),
+        chain_id: Some(8453),
+        max_fee_per_gas: Some(max_fee_per_gas.into()),
+        max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+        nonce: Some(nonce),
+        ..Default::default()
+    };
 
-    let swap_request = TransactionRequest::default()
-        .to(Address::from_slice(&tx.to))
-        .from(user_address)
-        .value(biguint_to_u256(&tx.value))
-        .input(TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None })
-        .max_fee_per_gas(max_fee_per_gas.into())
-        .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
-        .gas_limit(300_000u64)
-        .nonce(nonce + 1);
-
+    let swap_request = TransactionRequest{
+        to: Some(TxKind::Call(Address::from_slice(&tx.to))),
+        from: Some(user_address),
+        value: Some(biguint_to_u256(&tx.value)),
+        input: TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None },
+        gas: Some(300_000u64),
+        chain_id: Some(8453),
+        max_fee_per_gas: Some(max_fee_per_gas.into()),
+        max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+        nonce: Some(nonce + 1),
+        ..Default::default()
+    };
     (approval_request, swap_request)
 }

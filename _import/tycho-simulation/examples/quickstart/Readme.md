@@ -8,14 +8,17 @@ This quickstart guide enables you to:
 ## How to run
 
 ```bash
-export ETH_RPC_URL=<your-eth-rpc-url>
+export RPC_URL=<your-rpc-url>
 cargo run --release --example quickstart
 ```
 
-By default, the example will trade 1 WETH -> USDC. If you want a different trade you can do:
+By default, the example will trade 1 WETH -> USDC on Ethereum Mainnet. If you want a different trade or chain,
+you can do:
 
 ```bash
-cargo run --release --example quickstart -- --sell-token "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" --buy-token "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" --sell-amount 10
+export TYCHO_URL=<tycho-api-url-for-chain>
+export TYCHO_API_KEY=<tycho-api-key-for-chain>
+cargo run --release --example quickstart -- --sell-token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" --buy-token "0x4200000000000000000000000000000000000006" --sell-amount 10 --chain "base"
 ```
 
 for 10000 USDC -> WBTC.
