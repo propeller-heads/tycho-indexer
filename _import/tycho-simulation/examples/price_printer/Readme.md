@@ -6,6 +6,6 @@ quotes from each pool.
 ## How to run
 
 ```bash
-export RPC_URL=<your-node-rpc-url>
+export ETH_RPC_URL=<your-node-rpc-url>
 cargo run --release --example price_printer -- --tvl-threshold 1000 --chain <ethereum | base>
 ```
