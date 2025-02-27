@@ -1,3 +1,23 @@
+## [0.78.0](https://github.com/propeller-heads/tycho-simulation/compare/0.77.2...0.78.0) (2025-02-27)
+
+
+### Features
+
+* Add execution to quickstart ([10e3835](https://github.com/propeller-heads/tycho-simulation/commit/10e3835a41a9bf9686721a48b9101460be5e635d))
+* Change tycho-execution version ([0bd8c90](https://github.com/propeller-heads/tycho-simulation/commit/0bd8c90011726d9d929a22f025ef92c3a250d330))
+* **quickstart:** Simulate or execute in the quickstart ([1100c72](https://github.com/propeller-heads/tycho-simulation/commit/1100c728c192b7ade53845648625d1720eef847b))
+* **quickstart:** Update rev for execution to use mainet contracts ([fdf599f](https://github.com/propeller-heads/tycho-simulation/commit/fdf599f2e3efa1647cb379601f8e968d701cdc8d))
+* **quickstart:** Update version tag for tycho-execution ([f9cb85a](https://github.com/propeller-heads/tycho-simulation/commit/f9cb85a6f157a15f7483824d77ba299b4ca52c95))
+* **quickstart:** Update with new EncoderBuilder from tycho-execution ([85caade](https://github.com/propeller-heads/tycho-simulation/commit/85caade3f952d288347b6f8e8eb5ad57ffdae45c))
+* Refactor quickstart ([781f017](https://github.com/propeller-heads/tycho-simulation/commit/781f0171c6ead2cef69e520e57163aa95885110c))
+
+
+### Bug Fixes
+
+* **quickstart:** Make signer pk optional ([9ba2e38](https://github.com/propeller-heads/tycho-simulation/commit/9ba2e38cbb9cc67345d563b86a59b4c8306df484))
+* **quickstart:** Make signer-pk a cli argument ([2f3748c](https://github.com/propeller-heads/tycho-simulation/commit/2f3748cc09eb08c29151a99a0c60c96f8e1c1566))
+* Update tycho-execution tag ([81fe59a](https://github.com/propeller-heads/tycho-simulation/commit/81fe59a13b0c62a9db43d6d64f6ec52ef2197158))
+
 ## [0.77.2](https://github.com/propeller-heads/tycho-simulation/compare/0.77.1...0.77.2) (2025-02-27)
 
 ## [0.77.1](https://github.com/propeller-heads/tycho-simulation/compare/0.77.0...0.77.1) (2025-02-25)
