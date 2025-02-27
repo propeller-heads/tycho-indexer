@@ -231,6 +231,50 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
+    function testSwapSimplePermit2() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V2 using Permit2
+        // 1 WETH   ->   DAI
+        //       (USV2)
+        vm.startPrank(ALICE);
+
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+
+        bytes memory protocolData = encodeUniswapV2Swap(
+            WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
+        );
+
+        bytes memory swap = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
+        );
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.swapPermit2(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            0,
+            false,
+            false,
+            2,
+            ALICE,
+            permitSingle,
+            signature,
+            pleEncode(swaps)
+        );
+
+        uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
+        assertEq(daiBalance, 2659881924818443699787);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+
+        vm.stopPrank();
+    }
+
     function testSwapMultipleHops() public {
         // Trade 1 WETH for USDC through DAI with 2 swaps on Uniswap V2
         // 1 WETH   ->   DAI   ->   USDC
@@ -633,6 +677,50 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertGe(finalBalance, expAmountOut);
     }
 
+    function testSwapSingleUSV3Permit2() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V3 using Permit2
+        // 1 WETH   ->   DAI
+        //       (USV3)
+        vm.startPrank(ALICE);
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, ALICE, amountIn);
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+
+        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = false;
+        bytes memory protocolData = encodeUniswapV3Swap(
+            WETH_ADDR, DAI_ADDR, tychoRouterAddr, DAI_WETH_USV3, zeroForOne
+        );
+        bytes memory swap = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv3Executor), protocolData
+        );
+
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.swapPermit2(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            0,
+            false,
+            false,
+            2,
+            ALICE,
+            permitSingle,
+            signature,
+            pleEncode(swaps)
+        );
+
+        uint256 finalBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
+        assertGe(finalBalance, expAmountOut);
+
+        vm.stopPrank();
+    }
+
     function testEmptySwapsRevert() public {
         uint256 amountIn = 10 ** 18;
         bytes memory swaps = "";
@@ -942,6 +1030,52 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
 
         assertEq(IERC20(USDT_ADDR).balanceOf(tychoRouterAddr), 99943852);
+    }
+
+    function testSwapSingleUSV4CallbackPermit2() public {
+        vm.startPrank(ALICE);
+        uint256 amountIn = 100 ether;
+        deal(USDE_ADDR, ALICE, amountIn);
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(USDE_ADDR, amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1)
+        });
+
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR, USDT_ADDR, true, address(usv4Executor), pools
+        );
+
+        bytes memory swap = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv4Executor), protocolData
+        );
+
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.swapPermit2(
+            amountIn,
+            USDE_ADDR,
+            USDT_ADDR,
+            0,
+            false,
+            false,
+            2,
+            ALICE,
+            permitSingle,
+            signature,
+            pleEncode(swaps)
+        );
+
+        assertEq(IERC20(USDT_ADDR).balanceOf(ALICE), 99943852);
+        vm.stopPrank();
     }
 
     function testSwapMultipleUSV4Callback() public {
