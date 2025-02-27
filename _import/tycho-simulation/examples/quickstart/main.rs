@@ -389,7 +389,7 @@ fn encode(
         given_token: sell_token.address,
         given_amount: sell_amount,
         checked_token: buy_token.address,
-        slippage: Some(0.01), // 1% slippage
+        slippage: Some(0.0025), // 0.25% slippage
         expected_amount: Some(expected_amount),
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
