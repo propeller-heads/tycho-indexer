@@ -445,7 +445,7 @@ impl TychoStreamDecoder {
                                         })?;
                                     updated_states.insert(id, state);
                                 }
-                                None => warn!(
+                                None => debug!(
                                     pool = id,
                                     reason = "MissingState",
                                     "DeltaTransitionError"
