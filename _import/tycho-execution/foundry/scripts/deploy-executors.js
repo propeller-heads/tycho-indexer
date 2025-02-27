@@ -5,9 +5,9 @@ const hre = require("hardhat");
 // Comment out the executors you don't want to deploy
 const executors_to_deploy = [
     {exchange: "UniswapV2Executor", args: []},
-    // {exchange: "UniswapV3Executor", args: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"]},
-    // {exchange: "UniswapV4Executor", args: ["0x000000000004444c5dc75cB358380D2e3dE08A90"]},
-    // {exchange: "BalancerV2Executor", args: []},
+    {exchange: "UniswapV3Executor", args: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"]},
+    {exchange: "UniswapV4Executor", args: ["0x000000000004444c5dc75cB358380D2e3dE08A90"]},
+    {exchange: "BalancerV2Executor", args: []},
 ]
 
 async function main() {
