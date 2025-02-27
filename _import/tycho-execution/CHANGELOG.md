@@ -1,3 +1,13 @@
+## [0.55.0](https://github.com/propeller-heads/tycho-execution/compare/0.54.0...0.55.0) (2025-02-27)
+
+
+### Features
+
+* Change license to SPDX-License-Identifier: UNLICENSED everywhere ([59eb219](https://github.com/propeller-heads/tycho-execution/commit/59eb2195b60280bfba9f07b55bf0d7bc973ad23f))
+* Deploy to mainnet (again) ([fedc504](https://github.com/propeller-heads/tycho-execution/commit/fedc5043db71cbe77fc5222124072eaecf8e5119))
+* Deploy to mainnet. Update all addresses ([3d65ac8](https://github.com/propeller-heads/tycho-execution/commit/3d65ac8cd95cd8b63427d10ae660925c18adb7fa))
+* Verify contracts on etherscan ([79045e2](https://github.com/propeller-heads/tycho-execution/commit/79045e26897f067cf5e573a61643f4271f9a664b))
+
 ## [0.54.0](https://github.com/propeller-heads/tycho-execution/compare/0.53.1...0.54.0) (2025-02-27)
 
 
