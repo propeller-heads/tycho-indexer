@@ -70,9 +70,6 @@ struct Cli {
     tvl_threshold: f64,
     #[arg(short, long, default_value = FAKE_PK)]
     swapper_pk: String,
-    /// Whether to use Flashbots Protect for transaction submission
-    #[arg(long, default_value_t = false)]
-    flashbots: bool,
 }
 
 #[tokio::main]
@@ -156,22 +153,14 @@ async fn main() {
     .expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
 
-    let provider = {
-        let builder = ProviderBuilder::new().wallet(tx_signer.clone());
-
-        if cli.flashbots {
-            println!("Using Flashbots Protect for transaction submission");
-            builder.on_http("https://rpc.flashbots.net/fast".parse().expect("Failed to parse Flashbots URL"))
-        } else {
-            println!("Using standard RPC for transaction submission");
-            builder.on_http(
-                env::var("ETH_RPC_URL")
-                    .expect("ETH_RPC_URL env var not set")
-                    .parse()
-                    .expect("Failed to parse ETH_RPC_URL"),
-            )
-        }
-    };
+    let provider = ProviderBuilder::new()
+        .wallet(tx_signer.clone())
+        .on_http(
+            env::var("ETH_RPC_URL")
+                .expect("ETH_RPC_URL env var not set")
+                .parse()
+                .expect("Failed to parse ETH_RPC_URL"),
+        );
 
     while let Some(message_result) = protocol_stream.next().await {
         let message = match message_result {
@@ -231,38 +220,6 @@ async fn main() {
             match choice {
                 "simulate" => {
                     println!("Simulating by performing an approval (for permit2) and a swap transaction...");
-
-                    if cli.flashbots {
-                        println!("Note: Transaction simulation is limited when using Flashbots Protect.");
-                        println!("Flashbots only attempts to include transactions that won't revert.");
-                        println!("Do you want to proceed with execution instead?");
-                        let yes_no_options = vec!["Yes", "No"];
-                        let yes_no_selection = Select::with_theme(&ColorfulTheme::default())
-                            .with_prompt("Do you want to proceed with execution instead?")
-                            .default(1) // Default to No
-                            .items(&yes_no_options)
-                            .interact()
-                            .unwrap_or(1); // Default to No if error
-
-                        if yes_no_selection == 0 {
-                            match execute_swap_transaction(
-                                provider.clone(),
-                                &amount_in,
-                                wallet.address(),
-                                &sell_token_address,
-                                tx.clone(),
-                            ).await {
-                                Ok(_) => return,
-                                Err(e) => {
-                                    eprintln!("Failed to execute transaction: {:?}", e);
-                                    continue;
-                                }
-                            }
-                        } else {
-                            println!("Skipping this swap...");
-                            continue;
-                        }
-                    }
 
                     let (approval_request, swap_request) = get_tx_requests(
                         provider.clone(),
