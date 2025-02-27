@@ -180,7 +180,7 @@ async fn main() {
             &mut amounts_out,
         );
 
-        if let Some(best_pool) = best_pool {
+        if let Some((best_pool, expected_amount)) = best_swap {
             let component = pairs
                 .get(&best_pool)
                 .expect("Best pool not found")
@@ -193,12 +193,24 @@ async fn main() {
                 buy_token.clone(),
                 amount_in.clone(),
                 Bytes::from(wallet.address().to_vec()),
+                expected_amount,
             );
 
             if cli.swapper_pk == FAKE_PK {
                 println!("Signer private key was not provided. Skipping simulation/execution...");
                 continue
             }
+            println!("Do you want to simulate, execute or skip this swap?");
+            println!("Please be aware that the market might move while you make your decision, which might lead to a revert if you've set a min amount out or slippage.");
+            println!("Warning: slippage is set to 0.25% during execution by default.");
+            print!("(simulate/execute/skip): ");
+            io::stdout().flush().unwrap();
+            let mut input = String::new();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let input = input.trim().to_lowercase();
             println!("What would you like to do?");
             let options = vec!["Simulate the swap", "Execute the swap", "Skip this swap"];
             let selection = Select::with_theme(&ColorfulTheme::default())
@@ -321,7 +333,7 @@ fn get_best_swap(
     sell_token: Token,
     buy_token: Token,
     amounts_out: &mut HashMap<String, BigUint>,
-) -> Option<String> {
+) -> Option<(String, BigUint)> {
     println!("==================== Received block {:?} ====================", message.block_number);
     for (id, comp) in message.new_pairs.iter() {
         pairs
@@ -376,7 +388,7 @@ fn get_best_swap(
             forward_price, buy_token.symbol, sell_token.symbol,
             reverse_price, sell_token.symbol, buy_token.symbol
         );
-        Some(key.to_string())
+        Some((key.to_string(), amount_out.clone()))
     } else {
         println!("There aren't pools with the tokens we are looking for");
         None
@@ -390,6 +402,7 @@ fn encode(
     buy_token: Token,
     sell_amount: BigUint,
     user_address: Bytes,
+    expected_amount: BigUint,
 ) -> Transaction {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
@@ -408,10 +421,12 @@ fn encode(
         given_token: sell_token.address,
         given_amount: sell_amount,
         checked_token: buy_token.address,
+        slippage: Some(0.0025), // 0.25% slippage
+        expected_amount: Some(expected_amount),
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address: Bytes::from_str("0xFfA5ec2e444e4285108e4a17b82dA495c178427B")
+        router_address: Bytes::from_str("0x023eea66B260FA2E109B0764774837629cC41FeF")
             .expect("Failed to create router address"),
         ..Default::default()
     };
@@ -464,7 +479,7 @@ async fn get_tx_requests(
         .from(user_address)
         .to(sell_token_address)
         .input(TransactionInput { input: Some(AlloyBytes::from(data)), data: None })
-        .gas_limit(50_000u64)
+        .gas_limit(100_000u64)
         .max_fee_per_gas(max_fee_per_gas.into())
         .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
         .nonce(nonce);
