@@ -441,9 +441,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param amount of WETH to unwrap.
      */
     function _unwrapETH(uint256 amount) internal {
-        if (amount == 0) {
-            revert TychoRouter__AmountZero();
-        }
         _weth.withdraw(amount);
     }
 
