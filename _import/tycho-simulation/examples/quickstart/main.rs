@@ -163,7 +163,7 @@ async fn main() {
 
     while let Some(message) = protocol_stream.next().await {
         let message = message.expect("Could not receive message");
-        let best_pool = get_best_swap(
+        let best_swap = get_best_swap(
             message,
             &mut pairs,
             amount_in.clone(),
@@ -172,7 +172,7 @@ async fn main() {
             &mut amounts_out,
         );
 
-        if let Some(best_pool) = best_pool {
+        if let Some((best_pool, expected_amount)) = best_swap {
             let component = pairs
                 .get(&best_pool)
                 .expect("Best pool not found")
@@ -185,6 +185,7 @@ async fn main() {
                 buy_token.clone(),
                 amount_in.clone(),
                 Bytes::from(wallet.address().to_vec()),
+                expected_amount,
             );
 
             if cli.swapper_pk == FAKE_PK {
@@ -307,7 +308,7 @@ fn get_best_swap(
     sell_token: Token,
     buy_token: Token,
     amounts_out: &mut HashMap<String, BigUint>,
-) -> Option<String> {
+) -> Option<(String, BigUint)> {
     println!("==================== Received block {:?} ====================", message.block_number);
     for (id, comp) in message.new_pairs.iter() {
         pairs
@@ -355,7 +356,7 @@ fn get_best_swap(
             "swap: {:?} {:} -> {:?} {:}",
             amount_in, sell_token.symbol, amount_out, buy_token.symbol
         );
-        Some(key.to_string())
+        Some((key.to_string(), amount_out.clone()))
     } else {
         println!("There aren't pools with the tokens we are looking for");
         None
@@ -369,6 +370,7 @@ fn encode(
     buy_token: Token,
     sell_amount: BigUint,
     user_address: Bytes,
+    expected_amount: BigUint,
 ) -> Transaction {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
@@ -387,6 +389,8 @@ fn encode(
         given_token: sell_token.address,
         given_amount: sell_amount,
         checked_token: buy_token.address,
+        slippage: Some(0.01), // 1% slippage
+        expected_amount: Some(expected_amount),
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
