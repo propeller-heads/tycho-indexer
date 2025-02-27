@@ -1,3 +1,17 @@
+## [0.54.0](https://github.com/propeller-heads/tycho-execution/compare/0.53.1...0.54.0) (2025-02-27)
+
+
+### Features
+
+* Deploy all executors ([f95c74f](https://github.com/propeller-heads/tycho-execution/commit/f95c74fbc67b32e65617691fc07f015878be324b))
+
+
+### Bug Fixes
+
+* Add a value to the Transaction if token in is ETH ([05a1843](https://github.com/propeller-heads/tycho-execution/commit/05a1843f9c3f916d4af8fbf67cccf3b3b94aeab8))
+* Get correct runtime everywhere ([6a6f2d3](https://github.com/propeller-heads/tycho-execution/commit/6a6f2d322102c71a13f3fab5b9b1ef406af1fbbc))
+* the key for univ4 fee is key_lp_fee ([9eb4299](https://github.com/propeller-heads/tycho-execution/commit/9eb4299ffe4561f7f9d24e8a09a78b376b62889b))
+
 ## [0.53.1](https://github.com/propeller-heads/tycho-execution/compare/0.53.0...0.53.1) (2025-02-27)
 
 
