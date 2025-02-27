@@ -1,3 +1,10 @@
+## [0.79.1](https://github.com/propeller-heads/tycho-simulation/compare/0.79.0...0.79.1) (2025-02-27)
+
+
+### Bug Fixes
+
+* 0.25% slippage check in quickstart ([3aedb2f](https://github.com/propeller-heads/tycho-simulation/commit/3aedb2f874aafd93b54ecddc71585e487b2925f9))
+
 ## [0.79.0](https://github.com/propeller-heads/tycho-simulation/compare/0.78.1...0.79.0) (2025-02-27)
 
 
