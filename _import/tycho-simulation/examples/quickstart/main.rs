@@ -65,7 +65,7 @@ struct Cli {
     #[arg(short, long, default_value_t = 1.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
-    #[arg(short, long, default_value_t = 10.0)]
+    #[arg(short, long, default_value_t = 100.0)]
     tvl_threshold: f64,
     #[arg(short, long, default_value = FAKE_PK)]
     swapper_pk: String,
@@ -192,7 +192,7 @@ async fn main() {
                 continue
             }
             println!("Do you want to simulate, execute or skip this swap?");
-            println!("Please be aware that the market might move while you make your decision. Which might lead to a revert if you've set a min amount out or slippage.");
+            println!("Please be aware that the market might move while you make your decision, which might lead to a revert if you've set a min amount out or slippage.");
             print!("(simulate/execute/skip): ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
