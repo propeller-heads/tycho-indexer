@@ -469,13 +469,13 @@ mod tests {
         let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
         let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
         let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
-        static_attributes_usdc_eth.insert("fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
         static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
 
         let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
         let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
         let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
-        static_attributes_eth_pepe.insert("fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("key_lp_fee".into(), pool_fee_eth_pepe);
         static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
 
         let swap_usdc_eth = Swap {
@@ -525,7 +525,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a").unwrap()
+            Bytes::from_str("0x90BE4620436354c9DfA58614B3Bdd5a80FBfAF31").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -537,7 +537,7 @@ mod tests {
                 // zero for one
                 "00",
                 // executor address
-                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
+                "90be4620436354c9dfa58614b3bdd5a80fbfaf31",
                 // first pool intermediary token (ETH)
                 "0000000000000000000000000000000000000000",
                 // fee
@@ -891,13 +891,13 @@ mod tests {
         let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
         let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
         let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
-        static_attributes_usdc_eth.insert("fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
         static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
 
         let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
         let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
         let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
-        static_attributes_eth_pepe.insert("fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("key_lp_fee".into(), pool_fee_eth_pepe);
         static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
 
         let swap_usdc_eth = Swap {
@@ -990,12 +990,12 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data header
-            "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
+            "90be4620436354c9dfa58614b3bdd5a80fbfaf31", // executor address
             // Protocol data
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
-            "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
+            "90be4620436354c9dfa58614b3bdd5a80fbfaf31", // executor address
             // First pool params
             "0000000000000000000000000000000000000000", // intermediary token (ETH)
             "000bb8",                                   // fee
@@ -1110,7 +1110,7 @@ mod tests {
         let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
         let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
         let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
-        static_attributes_eth_pepe.insert("fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("key_lp_fee".into(), pool_fee_eth_pepe);
         static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
 
         let swap_eth_pepe = Swap {
@@ -1173,7 +1173,7 @@ mod tests {
         let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
         let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
         let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
-        static_attributes_usdc_eth.insert("fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
         static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
 
         let swap_usdc_eth = Swap {

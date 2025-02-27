@@ -1,7 +1,8 @@
-use std::cmp::max;
+use std::{cmp::max, sync::Arc};
 
 use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, U256, U8};
 use num_bigint::BigUint;
+use tokio::runtime::{Handle, Runtime};
 use tycho_core::Bytes;
 
 use crate::encoding::{
@@ -119,4 +120,16 @@ pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>
             EncodingError::FatalError(format!("Attribute {} not found", attribute_name))
         })?
         .to_vec())
+}
+
+pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
+    match Handle::try_current() {
+        Ok(h) => Ok((h, None)),
+        Err(_) => {
+            let rt = Arc::new(Runtime::new().map_err(|_| {
+                EncodingError::FatalError("Failed to create a new tokio runtime".to_string())
+            })?);
+            Ok((rt.handle().clone(), Some(rt)))
+        }
+    }
 }

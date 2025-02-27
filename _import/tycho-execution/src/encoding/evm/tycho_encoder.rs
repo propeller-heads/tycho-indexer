@@ -109,9 +109,10 @@ impl TychoEncoder for EVMTychoEncoder {
                 .strategy_encoder
                 .encode_strategy(solution.clone())?;
 
-            let value = match solution.native_action.as_ref() {
-                Some(NativeAction::Wrap) => solution.given_amount.clone(),
-                _ => BigUint::ZERO,
+            let value = if solution.given_token == self.native_address {
+                solution.given_amount.clone()
+            } else {
+                BigUint::ZERO
             };
 
             transactions.push(Transaction {

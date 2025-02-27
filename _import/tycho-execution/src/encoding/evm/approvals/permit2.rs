@@ -21,7 +21,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::get_client,
-        utils::{biguint_to_u256, bytes_to_address, encode_input},
+        utils::{biguint_to_u256, bytes_to_address, encode_input, get_runtime},
     },
     models::Chain,
 };
@@ -70,15 +70,7 @@ sol! {
 
 impl Permit2 {
     pub fn new(swapper_pk: String, chain: Chain) -> Result<Self, EncodingError> {
-        let (handle, runtime) = match Handle::try_current() {
-            Ok(h) => (h, None),
-            Err(_) => {
-                let rt = Arc::new(Runtime::new().map_err(|_| {
-                    EncodingError::FatalError("Failed to create a new tokio runtime".to_string())
-                })?);
-                (rt.handle().clone(), Some(rt))
-            }
-        };
+        let (handle, runtime) = get_runtime()?;
         let client = block_in_place(|| handle.block_on(get_client()))?;
         let pk = B256::from_str(&swapper_pk).map_err(|_| {
             EncodingError::FatalError("Failed to convert swapper private key to B256".to_string())
