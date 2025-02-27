@@ -8,21 +8,32 @@ use alloy::{
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use alloy_sol_types::SolValue;
 use dotenv::dotenv;
-use tokio::runtime::Runtime;
+use tokio::{
+    runtime::{Handle, Runtime},
+    task::block_in_place,
+};
 
-use crate::encoding::{errors::EncodingError, evm::utils::encode_input};
+use crate::encoding::{
+    errors::EncodingError,
+    evm::utils::{encode_input, get_runtime},
+};
 
 /// A manager for checking if an approval is needed for interacting with a certain spender.
 pub struct ProtocolApprovalsManager {
     client: Arc<RootProvider<BoxTransport>>,
-    runtime: Runtime,
+    runtime_handle: Handle,
+    // Store the runtime to prevent it from being dropped before use.
+    // This is required since tycho-execution does not have a pre-existing runtime.
+    // However, if the library is used in a context where a runtime already exists, it is not
+    // necessary to store it.
+    #[allow(dead_code)]
+    runtime: Option<Arc<Runtime>>,
 }
 impl ProtocolApprovalsManager {
     pub fn new() -> Result<Self, EncodingError> {
-        let runtime = Runtime::new()
-            .map_err(|_| EncodingError::FatalError("Failed to create runtime".to_string()))?;
-        let client = runtime.block_on(get_client())?;
-        Ok(Self { client, runtime })
+        let (handle, runtime) = get_runtime()?;
+        let client = block_in_place(|| handle.block_on(get_client()))?;
+        Ok(Self { client, runtime_handle: handle, runtime })
     }
 
     /// Checks the current allowance for the given token, owner, and spender, and returns true
@@ -41,9 +52,10 @@ impl ProtocolApprovalsManager {
             ..Default::default()
         };
 
-        let output = self
-            .runtime
-            .block_on(async { self.client.call(&tx).await });
+        let output = block_in_place(|| {
+            self.runtime_handle
+                .block_on(async { self.client.call(&tx).await })
+        });
         match output {
             Ok(response) => {
                 let allowance: U256 = U256::abi_decode(&response, true).map_err(|_| {
