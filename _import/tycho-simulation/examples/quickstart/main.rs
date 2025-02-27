@@ -390,7 +390,7 @@ fn encode(
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address: Bytes::from_str("0xFfA5ec2e444e4285108e4a17b82dA495c178427B")
+        router_address: Bytes::from_str("0x023eea66B260FA2E109B0764774837629cC41FeF")
             .expect("Failed to create router address"),
         ..Default::default()
     };
@@ -443,7 +443,7 @@ async fn get_tx_requests(
         .from(user_address)
         .to(sell_token_address)
         .input(TransactionInput { input: Some(AlloyBytes::from(data)), data: None })
-        .gas_limit(50_000u64)
+        .gas_limit(100_000u64)
         .max_fee_per_gas(max_fee_per_gas.into())
         .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
         .nonce(nonce);
