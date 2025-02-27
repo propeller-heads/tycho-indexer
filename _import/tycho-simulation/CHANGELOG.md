@@ -1,3 +1,10 @@
+## [0.78.1](https://github.com/propeller-heads/tycho-simulation/compare/0.78.0...0.78.1) (2025-02-27)
+
+
+### Bug Fixes
+
+* Update tycho-execution tag ([bde0944](https://github.com/propeller-heads/tycho-simulation/commit/bde0944d8803579665fadfc5121853f5214b1056))
+
 ## [0.78.0](https://github.com/propeller-heads/tycho-simulation/compare/0.77.2...0.78.0) (2025-02-27)
 
 
