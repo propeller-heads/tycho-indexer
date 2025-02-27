@@ -2524,6 +2524,18 @@ dependencies = [
 
 [[package]]
 name = "dialoguer"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59c6f2989294b9a498d3ad5491a79c6deb604617378e1cdc4bfc1c1361fe2f87"
+dependencies = [
+ "console",
+ "shell-words",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "dialoguer"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "658bce805d770f407bc62102fca7c2c64ceef2fbcb2b8bd19d2765ce093980de"
@@ -3077,7 +3089,7 @@ dependencies = [
  "alloy-sol-types",
  "base64 0.22.1",
  "chrono",
- "dialoguer",
+ "dialoguer 0.11.0",
  "ecdsa",
  "eyre",
  "forge-script-sequence",
@@ -7907,6 +7919,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossterm",
+ "dialoguer 0.10.4",
  "dotenv",
  "foundry-config",
  "foundry-evm",
