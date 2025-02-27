@@ -194,6 +194,7 @@ async fn main() {
             }
             println!("Do you want to simulate, execute or skip this swap?");
             println!("Please be aware that the market might move while you make your decision, which might lead to a revert if you've set a min amount out or slippage.");
+            println!("Warning: slippage is set to 0.25% during execution by default.");
             print!("(simulate/execute/skip): ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
@@ -389,7 +390,7 @@ fn encode(
         given_token: sell_token.address,
         given_amount: sell_amount,
         checked_token: buy_token.address,
-        slippage: Some(0.01), // 1% slippage
+        slippage: Some(0.0025), // 0.25% slippage
         expected_amount: Some(expected_amount),
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
