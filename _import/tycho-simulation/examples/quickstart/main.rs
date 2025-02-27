@@ -194,6 +194,7 @@ async fn main() {
             }
             println!("Do you want to simulate, execute or skip this swap?");
             println!("Please be aware that the market might move while you make your decision, which might lead to a revert if you've set a min amount out or slippage.");
+            println!("Warning: slippage is set to 0.25% during execution by default.");
             print!("(simulate/execute/skip): ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
