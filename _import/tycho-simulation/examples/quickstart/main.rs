@@ -44,7 +44,7 @@ use tycho_simulation::{
             pancakeswap_v2::state::PancakeswapV2State,
             u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
-            uniswap_v3::state::UniswapV3State,
+            uniswap_v3::state::UniswapV3State, balancer_v2_pool_filter
             uniswap_v4::state::UniswapV4State,
             vm::state::EVMPoolState,
         },
@@ -177,7 +177,7 @@ async fn main() {
                 .exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:balancer_v2",
                     tvl_filter.clone(),
-                    Some(balancer_pool_filter),
+                    Some(balancer_v2_pool_filter),
                 )
                 .exchange::<UniswapV4State>(
                     "uniswap_v4",
@@ -235,7 +235,7 @@ async fn main() {
     let wallet = PrivateKeySigner::from_bytes(
         &B256::from_str(&cli.swapper_pk).expect("Failed to convert swapper pk to B256"),
     )
-    .expect("Failed to private key signer");
+        .expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
     let named_chain =
         NamedChain::from_str(&cli.chain.replace("ethereum", "mainnet")).expect("Invalid chain");
@@ -384,7 +384,7 @@ async fn main() {
                         tx.clone(),
                         named_chain as u64,
                     )
-                    .await;
+                        .await;
 
                     let payload = SimulatePayload {
                         block_state_calls: vec![SimBlock {
@@ -437,7 +437,7 @@ async fn main() {
                                     tx.clone(),
                                     named_chain as u64,
                                 )
-                                .await
+                                    .await
                                 {
                                     Ok(_) => {
                                         println!("\n✅ Swap executed successfully! Exiting the session...\n");
@@ -451,7 +451,7 @@ async fn main() {
                                         );
 
                                         println!(
-                                            "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at 
+                                            "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
                                             a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
                                             formatted_in = format_token_amount(&amount_in, &sell_token),
                                             sell_symbol = sell_token.symbol,
@@ -481,7 +481,7 @@ async fn main() {
                         tx,
                         named_chain as u64,
                     )
-                    .await
+                        .await
                     {
                         Ok(_) => {
                             println!("\n✅ Swap executed successfully! Exiting the session...\n");
@@ -495,7 +495,7 @@ async fn main() {
                             );
 
                             println!(
-                                "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at 
+                                "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
                                 a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
                                 formatted_in = format_token_amount(&amount_in, &sell_token),
                                 sell_symbol = sell_token.symbol,
@@ -587,7 +587,7 @@ fn get_best_swap(
 
         println!(
             "Swap: {formatted_in} {sell_symbol} -> {formatted_out} {buy_symbol} \n
-            Price: {forward_price:.6} {buy_symbol} per {sell_symbol}, 
+            Price: {forward_price:.6} {buy_symbol} per {sell_symbol},
             {reverse_price:.6} {sell_symbol} per {buy_symbol}",
             sell_symbol = sell_token.symbol,
             buy_symbol = buy_token.symbol,
@@ -890,7 +890,7 @@ async fn execute_swap_transaction(
         tx.clone(),
         chain_id,
     )
-    .await;
+        .await;
 
     let approval_receipt = provider
         .send_transaction(approval_request)
