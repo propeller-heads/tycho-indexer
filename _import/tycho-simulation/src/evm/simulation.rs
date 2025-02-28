@@ -620,7 +620,7 @@ mod tests {
     }
     fn new_state() -> SimulationDB<RootProvider<BoxTransport>> {
         dotenv().ok();
-        let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
+        let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
         let runtime = tokio::runtime::Handle::try_current()
             .is_err()
             .then(|| tokio::runtime::Runtime::new().unwrap())

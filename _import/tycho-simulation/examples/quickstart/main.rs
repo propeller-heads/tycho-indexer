@@ -79,7 +79,7 @@ async fn main() {
         .init();
 
     let tycho_url =
-        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-beta.propellerheads.xyz".to_string());
+        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-base-beta.propellerheads.xyz".to_string());
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
@@ -148,10 +148,10 @@ async fn main() {
         .with_chain(named_chain)
         .wallet(tx_signer.clone())
         .on_http(
-            env::var("ETH_RPC_URL")
-                .expect("ETH_RPC_URL env var not set")
+            env::var("RPC_URL")
+                .expect("RPC_URL env var not set")
                 .parse()
-                .expect("Failed to parse ETH_RPC_URL"),
+                .expect("Failed to parse RPC_URL"),
         );
 
     while let Some(message_result) = protocol_stream.next().await {
