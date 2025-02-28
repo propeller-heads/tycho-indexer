@@ -19,7 +19,7 @@ use alloy::{
     signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
 };
-use alloy_primitives::{Address, Bytes as AlloyBytes, B256, U256, TxKind};
+use alloy_primitives::{Address, Bytes as AlloyBytes, TxKind, B256, U256};
 use alloy_sol_types::SolValue;
 use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -39,10 +39,8 @@ use tycho_execution::encoding::{
 use tycho_simulation::{
     evm::{
         protocol::{
-            filters::uniswap_v4_pool_with_hook_filter,
-            u256_num::biguint_to_u256,
-            uniswap_v2::state::UniswapV2State,
-            uniswap_v3::state::UniswapV3State,
+            filters::uniswap_v4_pool_with_hook_filter, u256_num::biguint_to_u256,
+            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
         },
         stream::ProtocolStreamBuilder,
@@ -81,7 +79,7 @@ async fn main() {
         .init();
 
     let tycho_url =
-        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-base-beta.propellerheads.xyz".to_string());
+        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-beta.propellerheads.xyz".to_string());
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
@@ -90,15 +88,9 @@ async fn main() {
 
     let chain = Chain::from_str(&cli.chain).expect("Invalid chain");
     println!("Loading tokens from Tycho... {}", tycho_url.as_str());
-    let all_tokens = load_all_tokens(
-        tycho_url.as_str(),
-        false,
-        Some(tycho_api_key.as_str()),
-        chain,
-        None,
-        None,
-    )
-    .await;
+    let all_tokens =
+        load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str()), chain, None, None)
+            .await;
     println!("Tokens loaded: {}", all_tokens.len());
 
     let sell_token_address =
@@ -276,7 +268,7 @@ async fn main() {
                                     wallet.address(),
                                     &sell_token_address,
                                     tx.clone(),
-                                    named_chain as u64
+                                    named_chain as u64,
                                 )
                                 .await
                                 {
@@ -302,7 +294,7 @@ async fn main() {
                         wallet.address(),
                         &sell_token_address,
                         tx,
-                        named_chain as u64
+                        named_chain as u64,
                     )
                     .await
                     {
@@ -402,6 +394,7 @@ fn get_best_swap(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn encode(
     encoder: EVMTychoEncoder,
     component: ProtocolComponent,
@@ -423,8 +416,16 @@ fn encode(
     );
 
     let router_addresses: HashMap<Chain, Bytes> = HashMap::from([
-        (Chain::Ethereum, Bytes::from_str("0x023eea66B260FA2E109B0764774837629cC41FeF").expect("Failed to create router address")),
-        (Chain::Base, Bytes::from_str("0x94ebf984511b06bab48545495b754760bfaa566e").expect("Failed to create router address")),
+        (
+            Chain::Ethereum,
+            Bytes::from_str("0x023eea66B260FA2E109B0764774837629cC41FeF")
+                .expect("Failed to create router address"),
+        ),
+        (
+            Chain::Base,
+            Bytes::from_str("0x94ebf984511b06bab48545495b754760bfaa566e")
+                .expect("Failed to create router address"),
+        ),
     ]);
     let router_address = router_addresses
         .get(&chain)
@@ -443,7 +444,7 @@ fn encode(
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address: router_address,
+        router_address,
         ..Default::default()
     };
 
@@ -492,7 +493,7 @@ async fn get_tx_requests(
         .await
         .expect("Failed to get nonce");
 
-    let approval_request = TransactionRequest{
+    let approval_request = TransactionRequest {
         to: Some(TxKind::Call(sell_token_address)),
         from: Some(user_address),
         value: None,
@@ -505,7 +506,7 @@ async fn get_tx_requests(
         ..Default::default()
     };
 
-    let swap_request = TransactionRequest{
+    let swap_request = TransactionRequest {
         to: Some(TxKind::Call(Address::from_slice(&tx.to))),
         from: Some(user_address),
         value: Some(biguint_to_u256(&tx.value)),
