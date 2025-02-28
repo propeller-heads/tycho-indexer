@@ -57,6 +57,9 @@ revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
 num-bigint = "0.4.6"
 tokio-stream = "0.1.16"
 
+# Dialoguer
+dialoguer = "0.10.4"
+
 [dev-dependencies]
 tokio-test = "0.4.4"
 approx = "0.5.1"
