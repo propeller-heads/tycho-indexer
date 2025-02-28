@@ -1,6 +1,6 @@
-# QuickStart
+# Encoding example
 
-This quickstart guide enables you to:
+This guide enables you to:
 
 1. Create a Solution object
 2. Encode the solution to interact with the Ethereum blockchain
@@ -8,5 +8,5 @@ This quickstart guide enables you to:
 ## How to run
 
 ```bash
-cargo run --release --example quickstart
+cargo run --release --example encoding-example
 ```
