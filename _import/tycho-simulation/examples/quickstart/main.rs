@@ -3,6 +3,7 @@ use std::{
     default::Default,
     env,
     str::FromStr,
+    sync::LazyLock,
 };
 
 use alloy::{
@@ -53,6 +54,23 @@ use tycho_simulation::{
 };
 
 const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
+
+static ROUTER_ADDRESSES: LazyLock<HashMap<Chain, Bytes>> = LazyLock::new(|| {
+    HashMap::from([
+        (
+            Chain::Ethereum,
+            "0x023eea66B260FA2E109B0764774837629cC41FeF"
+                .parse::<Bytes>()
+                .expect("Failed to create router address"),
+        ),
+        (
+            Chain::Base,
+            "0x94ebf984511b06bab48545495b754760bfaa566e"
+                .parse::<Bytes>()
+                .expect("Failed to create router address"),
+        ),
+    ])
+});
 
 #[derive(Parser)]
 struct Cli {
@@ -414,20 +432,7 @@ fn encode(
         // the amount or the total remaining balance.
         0f64,
     );
-
-    let router_addresses: HashMap<Chain, Bytes> = HashMap::from([
-        (
-            Chain::Ethereum,
-            Bytes::from_str("0x023eea66B260FA2E109B0764774837629cC41FeF")
-                .expect("Failed to create router address"),
-        ),
-        (
-            Chain::Base,
-            Bytes::from_str("0x94ebf984511b06bab48545495b754760bfaa566e")
-                .expect("Failed to create router address"),
-        ),
-    ]);
-    let router_address = router_addresses
+    let router_address = ROUTER_ADDRESSES
         .get(&chain)
         .expect("Router address not found")
         .clone();
