@@ -54,7 +54,6 @@ use tycho_simulation::{
     tycho_core::models::Chain,
     utils::load_all_tokens,
 };
-use dialoguer::{theme::ColorfulTheme, Select};
 
 const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
 
