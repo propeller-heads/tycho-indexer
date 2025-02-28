@@ -269,7 +269,7 @@ mod tests {
 
     /// This test actually calls the permit method on the Permit2 contract to verify the encoded
     /// data works. It requires an Anvil fork, so please run with the following command: anvil
-    /// --fork-url <RPC-URL> And set up the following env var as ETH_RPC_URL=127.0.0.1:8545
+    /// --fork-url <RPC-URL> And set up the following env var as RPC_URL=127.0.0.1:8545
     /// Use an account from anvil to fill the anvil_account and anvil_private_key variables
     #[test]
     #[cfg_attr(not(feature = "fork-tests"), ignore)]
