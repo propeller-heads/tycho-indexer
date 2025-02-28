@@ -6,6 +6,8 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
+    constructor(address _factory) UniswapV2Executor(_factory) {}
+
     function decodeParams(bytes calldata data)
         external
         pure
@@ -42,7 +44,7 @@ contract FakeUniswapV2Pool {
     }
 }
 
-contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
+contract UniswapV2ExecutorTest is Test, Constants {
     using SafeERC20 for IERC20;
 
     UniswapV2ExecutorExposed uniswapV2Exposed;
@@ -52,7 +54,7 @@ contract UniswapV2ExecutorTest is UniswapV2ExecutorExposed, Test, Constants {
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV2Exposed = new UniswapV2ExecutorExposed();
+        uniswapV2Exposed = new UniswapV2ExecutorExposed(USV2_FACTORY_ETHEREUM);
     }
 
     function testDecodeParams() public view {
