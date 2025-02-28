@@ -19,8 +19,7 @@ contract Commands {
 }
 
 // A gas test to compare the gas usage of the UniversalRouter with the TychoRouter
-// The gas usage quoted from the TychoRouter is without any asserts after the swap
-// The path executed on TychoRouter is the same as the path executed on UniversalRouter
+
 contract GasTest is Commands, Test, Constants {
     IUniversalRouter universalRouter = IUniversalRouter(UNIVERSAL_ROUTER);
     IPermit2 permit2 = IPermit2(PERMIT2_ADDRESS);
@@ -30,8 +29,6 @@ contract GasTest is Commands, Test, Constants {
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
     }
 
-    // Gas usage: 72783
-    // TychoRouter:testSwapSimple costs 113647
     function testUniversalRouterUniswapV2() public {
         bool isPermit2 = false;
         uint256 amountIn = 10 ** 18;
@@ -50,8 +47,6 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 74822
-    // TychoRouter:testSwapSimplePermit2 costs 184993
     function testUniversalRouterUniswapV2Permit2() public {
         bool isPermit2 = true;
         uint256 amountIn = 10 ** 18;
@@ -77,8 +72,6 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 75917
-    // TychoRouter:testSwapSingleUSV3 costs 126181
     function testUniversalRouterUniswapV3() public {
         bool isPermit2 = false;
         uint256 amountIn = 10 ** 18;
@@ -96,8 +89,6 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 77962
-    // TychoRouter:testSwapSingleUSV3Permit2 costs 192780
     function testUniversalRouterUniswapV3Permit2() public {
         bool isPermit2 = true;
         uint256 amountIn = 10 ** 18;
@@ -122,8 +113,6 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 76112
-    // TychoRouter:testSwapSingleUSV4CallbackPermit2 costs 217751
     function testUniversalRouterUniswapV4Permit2() public {
         uint128 amountIn = uint128(100 ether);
         uint128 amountOutMinimum = uint128(0);
