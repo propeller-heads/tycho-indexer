@@ -100,6 +100,7 @@ async fn main() {
         None,
     )
     .await;
+    println!("Tokens loaded: {}", all_tokens.len());
 
     let sell_token_address =
         Bytes::from_str(&cli.sell_token).expect("Invalid address for sell token");
@@ -124,17 +125,12 @@ async fn main() {
 
     let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, chain)
         .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-        // .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-        // .exchange::<EVMPoolState<PreCachedDB>>(
-        //     "vm:balancer_v2",
-        //     tvl_filter.clone(),
-        //     Some(balancer_pool_filter),
-        // )
-        // .exchange::<UniswapV4State>(
-        //     "uniswap_v4",
-        //     tvl_filter.clone(),
-        //     Some(uniswap_v4_pool_with_hook_filter),
-        // )
+        .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+        .exchange::<UniswapV4State>(
+            "uniswap_v4",
+            tvl_filter.clone(),
+            Some(uniswap_v4_pool_with_hook_filter),
+        )
         .auth_key(Some(tycho_api_key.clone()))
         .skip_state_decode_failures(true)
         .set_tokens(all_tokens.clone())
@@ -156,9 +152,9 @@ async fn main() {
     )
     .expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
-
+    let named_chain = NamedChain::from_str(&cli.chain).expect("Invalid chain");
     let provider = ProviderBuilder::new()
-        .with_chain(NamedChain::Base)
+        .with_chain(named_chain)
         .wallet(tx_signer.clone())
         .on_http(
             env::var("ETH_RPC_URL")
@@ -218,6 +214,7 @@ async fn main() {
                         wallet.address(),
                         Address::from_slice(&sell_token_address),
                         tx,
+                        named_chain as u64,
                     )
                     .await;
 
@@ -258,6 +255,7 @@ async fn main() {
                         wallet.address(),
                         Address::from_slice(&sell_token_address),
                         tx,
+                        named_chain as u64
                     )
                     .await;
 
@@ -428,6 +426,7 @@ async fn get_tx_requests(
     user_address: Address,
     sell_token_address: Address,
     tx: Transaction,
+    chain_id: u64,
 ) -> (TransactionRequest, TransactionRequest) {
     let block = provider
         .get_block_by_number(BlockNumberOrTag::Latest, false)
@@ -460,7 +459,7 @@ async fn get_tx_requests(
         value: None,
         input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
         gas: Some(100_000u64),
-        chain_id: Some(8453),
+        chain_id: Some(chain_id),
         max_fee_per_gas: Some(max_fee_per_gas.into()),
         max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
         nonce: Some(nonce),
@@ -473,7 +472,7 @@ async fn get_tx_requests(
         value: Some(biguint_to_u256(&tx.value)),
         input: TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None },
         gas: Some(300_000u64),
-        chain_id: Some(8453),
+        chain_id: Some(chain_id),
         max_fee_per_gas: Some(max_fee_per_gas.into()),
         max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
         nonce: Some(nonce + 1),
