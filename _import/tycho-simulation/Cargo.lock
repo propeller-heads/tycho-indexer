@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.78.0"
+version = "0.79.2"
 dependencies = [
  "alloy 0.5.4",
  "num-bigint",
@@ -2524,6 +2524,18 @@ dependencies = [
 
 [[package]]
 name = "dialoguer"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59c6f2989294b9a498d3ad5491a79c6deb604617378e1cdc4bfc1c1361fe2f87"
+dependencies = [
+ "console",
+ "shell-words",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "dialoguer"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "658bce805d770f407bc62102fca7c2c64ceef2fbcb2b8bd19d2765ce093980de"
@@ -3077,7 +3089,7 @@ dependencies = [
  "alloy-sol-types",
  "base64 0.22.1",
  "chrono",
- "dialoguer",
+ "dialoguer 0.11.0",
  "ecdsa",
  "eyre",
  "forge-script-sequence",
@@ -7874,8 +7886,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.55.0"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=bc47c12a1a8cae0b9464b4899b52369e5036c9f7#bc47c12a1a8cae0b9464b4899b52369e5036c9f7"
+version = "0.56.0"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?tag=0.56.0#b569a0ad8544b12e61f3f6624b1fbd756964d35a"
 dependencies = [
  "alloy 0.9.2",
  "alloy-primitives",
@@ -7897,7 +7909,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.78.0"
+version = "0.79.2"
 dependencies = [
  "alloy 0.5.4",
  "alloy-primitives",
@@ -7907,6 +7919,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossterm",
+ "dialoguer 0.10.4",
  "dotenv",
  "foundry-config",
  "foundry-evm",

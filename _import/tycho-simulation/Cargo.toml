@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.78.0"
+version = "0.79.2"
 edition = "2021"
 
 [workspace]
@@ -40,7 +40,7 @@ lazy_static = "1.4.0"
 # Tycho dependencies
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.56.5" }
 tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.56.5" }
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "bc47c12a1a8cae0b9464b4899b52369e5036c9f7" }
+tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], tag = "0.56.0" }
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }
@@ -56,6 +56,9 @@ revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
 revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
 num-bigint = "0.4.6"
 tokio-stream = "0.1.16"
+
+# Dialoguer
+dialoguer = "0.10.4"
 
 [dev-dependencies]
 tokio-test = "0.4.4"
