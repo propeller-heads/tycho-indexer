@@ -7,6 +7,7 @@ import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 
 error UniswapV2Executor__InvalidDataLength();
 error UniswapV2Executor__InvalidTarget();
+error UniswapV2Executor__InvalidFactory();
 
 contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
@@ -14,8 +15,16 @@ contract UniswapV2Executor is IExecutor {
     bytes32 internal constant POOL_INIT_CODE_HASH =
         0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
 
-    address private constant FACTORY =
-        0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
+    address public immutable factory;
+    address private immutable self;
+
+    constructor(address _factory) {
+        if (_factory == address(0)) {
+            revert UniswapV2Executor__InvalidFactory();
+        }
+        factory = _factory;
+        self = address(this);
+    }
 
     // slither-disable-next-line locked-ether
     function swap(uint256 givenAmount, bytes calldata data)
@@ -94,7 +103,7 @@ contract UniswapV2Executor is IExecutor {
                 uint256(
                     keccak256(
                         abi.encodePacked(
-                            hex"ff", FACTORY, salt, POOL_INIT_CODE_HASH
+                            hex"ff", factory, salt, POOL_INIT_CODE_HASH
                         )
                     )
                 )

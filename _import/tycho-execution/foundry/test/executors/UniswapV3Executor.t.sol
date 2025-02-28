@@ -44,7 +44,7 @@ contract UniswapV3ExecutorTest is Test, Constants {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
-        uniswapV3Exposed = new UniswapV3ExecutorExposed(USV3_FACTORY);
+        uniswapV3Exposed = new UniswapV3ExecutorExposed(USV3_FACTORY_ETHEREUM);
     }
 
     function testDecodeParams() public view {
