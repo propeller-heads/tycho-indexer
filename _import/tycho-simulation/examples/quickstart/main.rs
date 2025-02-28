@@ -22,6 +22,7 @@ use alloy::{
 use alloy_primitives::{Address, Bytes as AlloyBytes, B256, U256};
 use alloy_sol_types::SolValue;
 use clap::Parser;
+use dialoguer::{theme::ColorfulTheme, Select};
 use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
@@ -170,8 +171,8 @@ async fn main() {
                 continue;
             }
         };
-        
-        let best_pool = get_best_swap(
+
+        let best_swap = get_best_swap(
             message,
             &mut pairs,
             amount_in.clone(),
@@ -200,18 +201,9 @@ async fn main() {
                 println!("Signer private key was not provided. Skipping simulation/execution...");
                 continue
             }
-            println!("Do you want to simulate, execute or skip this swap?");
+            println!("Would you like to simulate or execute this swap?");
             println!("Please be aware that the market might move while you make your decision, which might lead to a revert if you've set a min amount out or slippage.");
             println!("Warning: slippage is set to 0.25% during execution by default.");
-            print!("(simulate/execute/skip): ");
-            io::stdout().flush().unwrap();
-            let mut input = String::new();
-            io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read input");
-
-            let input = input.trim().to_lowercase();
-            println!("What would you like to do?");
             let options = vec!["Simulate the swap", "Execute the swap", "Skip this swap"];
             let selection = Select::with_theme(&ColorfulTheme::default())
                 .with_prompt("What would you like to do?")
@@ -229,7 +221,7 @@ async fn main() {
             match choice {
                 "simulate" => {
                     println!("Simulating by performing an approval (for permit2) and a swap transaction...");
-                    
+
                     let (approval_request, swap_request) = get_tx_requests(
                         provider.clone(),
                         biguint_to_u256(&amount_in),
@@ -263,7 +255,7 @@ async fn main() {
                                     );
                                 }
                             }
-                        },
+                        }
                         Err(e) => {
                             eprintln!("Simulation failed: {:?}", e);
                             println!("Your RPC provider does not support transaction simulation.");
@@ -279,11 +271,13 @@ async fn main() {
                             if yes_no_selection == 0 {
                                 match execute_swap_transaction(
                                     provider.clone(),
-                                    &amount_in, 
+                                    &amount_in,
                                     wallet.address(),
                                     &sell_token_address,
                                     tx.clone(),
-                                ).await {
+                                )
+                                .await
+                                {
                                     Ok(_) => return,
                                     Err(e) => {
                                         eprintln!("Failed to execute transaction: {:?}", e);
@@ -305,7 +299,9 @@ async fn main() {
                         wallet.address(),
                         &sell_token_address,
                         tx,
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(_) => return,
                         Err(e) => {
                             eprintln!("Failed to execute transaction: {:?}", e);
@@ -379,14 +375,21 @@ fn get_best_swap(
         println!("Pool address: {:?}", key);
         let formatted_in = format_token_amount(&amount_in, &sell_token);
         let formatted_out = format_token_amount(amount_out, &buy_token);
-        let (forward_price, reverse_price) = format_price_ratios(&amount_in, amount_out, &sell_token, &buy_token);
+        let (forward_price, reverse_price) =
+            format_price_ratios(&amount_in, amount_out, &sell_token, &buy_token);
 
         println!(
             "Swap: {} {} -> {} {} \nPrice: {:.6} {} per {}, {:.6} {} per {}",
-            formatted_in, sell_token.symbol, 
-            formatted_out, buy_token.symbol,
-            forward_price, buy_token.symbol, sell_token.symbol,
-            reverse_price, sell_token.symbol, buy_token.symbol
+            formatted_in,
+            sell_token.symbol,
+            formatted_out,
+            buy_token.symbol,
+            forward_price,
+            buy_token.symbol,
+            sell_token.symbol,
+            reverse_price,
+            sell_token.symbol,
+            buy_token.symbol
         );
         Some((key.to_string(), amount_out.clone()))
     } else {
@@ -497,7 +500,7 @@ async fn get_tx_requests(
     (approval_request, swap_request)
 }
 
-// Helper function to format token amounts to human-readable values
+// Format token amounts to human-readable values
 fn format_token_amount(amount: &BigUint, token: &Token) -> String {
     let decimal_amount = amount.to_f64().unwrap_or(0.0) / 10f64.powi(token.decimals as i32);
     format!("{:.6}", decimal_amount)
@@ -505,19 +508,16 @@ fn format_token_amount(amount: &BigUint, token: &Token) -> String {
 
 // Calculate price ratios in both directions
 fn format_price_ratios(
-    amount_in: &BigUint, 
-    amount_out: &BigUint, 
-    token_in: &Token, 
-    token_out: &Token
+    amount_in: &BigUint,
+    amount_out: &BigUint,
+    token_in: &Token,
+    token_out: &Token,
 ) -> (f64, f64) {
-    // Convert to f64 for calculation
     let decimal_in = amount_in.to_f64().unwrap_or(0.0) / 10f64.powi(token_in.decimals as i32);
     let decimal_out = amount_out.to_f64().unwrap_or(0.0) / 10f64.powi(token_out.decimals as i32);
-    
+
     if decimal_in > 0.0 && decimal_out > 0.0 {
-        // Forward price: out per in
         let forward = decimal_out / decimal_in;
-        // Reverse price: in per out
         let reverse = decimal_in / decimal_out;
         (forward, reverse)
     } else {
@@ -551,9 +551,7 @@ async fn execute_swap_transaction(
         .send_transaction(approval_request)
         .await?;
 
-    let approval_result = approval_receipt
-        .get_receipt()
-        .await?;
+    let approval_result = approval_receipt.get_receipt().await?;
     println!(
         "Approval transaction sent with hash: {:?} and status: {:?}",
         approval_result.transaction_hash,
@@ -564,14 +562,12 @@ async fn execute_swap_transaction(
         .send_transaction(swap_request)
         .await?;
 
-    let swap_result = swap_receipt
-        .get_receipt()
-        .await?;
+    let swap_result = swap_receipt.get_receipt().await?;
     println!(
         "Swap transaction sent with hash: {:?} and status: {:?}",
         swap_result.transaction_hash,
         swap_result.status()
     );
-    
+
     Ok(())
 }
