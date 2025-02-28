@@ -1,3 +1,10 @@
+## [0.79.2](https://github.com/propeller-heads/tycho-simulation/compare/0.79.1...0.79.2) (2025-02-28)
+
+
+### Bug Fixes
+
+* Polish quickstart after Markus' changes ([c0993eb](https://github.com/propeller-heads/tycho-simulation/commit/c0993ebcbeed580831ad0b00f3b3125dc337af2e))
+
 ## [0.79.1](https://github.com/propeller-heads/tycho-simulation/compare/0.79.0...0.79.1) (2025-02-27)
 
 
