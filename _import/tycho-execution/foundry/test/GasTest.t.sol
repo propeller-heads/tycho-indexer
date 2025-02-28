@@ -30,7 +30,7 @@ contract GasTest is Commands, Test, Constants {
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
     }
 
-    // Gas usage: 248511
+    // Gas usage: 72783
     // TychoRouter:testSwapSimple costs 113647
     function testUniversalRouterUniswapV2() public {
         bool isPermit2 = false;
@@ -50,7 +50,7 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 296248
+    // Gas usage: 74822
     // TychoRouter:testSwapSimplePermit2 costs 184993
     function testUniversalRouterUniswapV2Permit2() public {
         bool isPermit2 = true;
@@ -77,7 +77,7 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 252003
+    // Gas usage: 75917
     // TychoRouter:testSwapSingleUSV3 costs 126181
     function testUniversalRouterUniswapV3() public {
         bool isPermit2 = false;
@@ -96,7 +96,7 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 299036
+    // Gas usage: 77962
     // TychoRouter:testSwapSingleUSV3Permit2 costs 192780
     function testUniversalRouterUniswapV3Permit2() public {
         bool isPermit2 = true;
@@ -122,7 +122,7 @@ contract GasTest is Commands, Test, Constants {
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
     }
 
-    // Gas usage: 299523
+    // Gas usage: 76112
     // TychoRouter:testSwapSingleUSV4CallbackPermit2 costs 217751
     function testUniversalRouterUniswapV4Permit2() public {
         uint128 amountIn = uint128(100 ether);
