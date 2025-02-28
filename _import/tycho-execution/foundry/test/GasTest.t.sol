@@ -33,6 +33,7 @@ contract GasTest is Commands, Test, Constants {
     // Gas usage: 248511
     // TychoRouter:testSwapSimple costs 113647
     function testUniversalRouterUniswapV2() public {
+        bool isPermit2 = false;
         uint256 amountIn = 10 ** 18;
 
         bytes memory commands =
@@ -43,7 +44,7 @@ contract GasTest is Commands, Test, Constants {
         path[1] = DAI_ADDR;
 
         bytes[] memory inputs = new bytes[](1);
-        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, false);
+        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, isPermit2);
 
         deal(WETH_ADDR, address(universalRouter), amountIn);
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
@@ -52,6 +53,7 @@ contract GasTest is Commands, Test, Constants {
     // Gas usage: 296248
     // TychoRouter:testSwapSimplePermit2 costs 184993
     function testUniversalRouterUniswapV2Permit2() public {
+        bool isPermit2 = true;
         uint256 amountIn = 10 ** 18;
 
         bytes memory commands =
@@ -62,7 +64,7 @@ contract GasTest is Commands, Test, Constants {
         path[1] = DAI_ADDR;
 
         bytes[] memory inputs = new bytes[](1);
-        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, true);
+        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, isPermit2);
 
         deal(WETH_ADDR, address(this), amountIn);
         IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, amountIn);
@@ -78,6 +80,7 @@ contract GasTest is Commands, Test, Constants {
     // Gas usage: 252003
     // TychoRouter:testSwapSingleUSV3 costs 126181
     function testUniversalRouterUniswapV3() public {
+        bool isPermit2 = false;
         uint256 amountIn = 10 ** 18;
 
         bytes memory commands =
@@ -87,7 +90,7 @@ contract GasTest is Commands, Test, Constants {
         bytes memory path = abi.encodePacked(WETH_ADDR, poolFee, DAI_ADDR);
 
         bytes[] memory inputs = new bytes[](1);
-        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, false);
+        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, isPermit2);
 
         deal(WETH_ADDR, address(universalRouter), amountIn);
         universalRouter.execute(commands, inputs, block.timestamp + 1000);
@@ -96,6 +99,7 @@ contract GasTest is Commands, Test, Constants {
     // Gas usage: 299036
     // TychoRouter:testSwapSingleUSV3Permit2 costs 192780
     function testUniversalRouterUniswapV3Permit2() public {
+        bool isPermit2 = true;
         uint256 amountIn = 10 ** 18;
 
         bytes memory commands =
@@ -105,7 +109,7 @@ contract GasTest is Commands, Test, Constants {
         bytes memory path = abi.encodePacked(WETH_ADDR, poolFee, DAI_ADDR);
 
         bytes[] memory inputs = new bytes[](1);
-        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, true);
+        inputs[0] = abi.encode(BOB, amountIn, uint256(0), path, isPermit2);
 
         deal(WETH_ADDR, address(this), amountIn);
         IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, amountIn);
