@@ -1,3 +1,15 @@
+## [0.56.0](https://github.com/propeller-heads/tycho-execution/compare/0.55.0...0.56.0) (2025-02-28)
+
+
+### Features
+
+* update base executor addresses ([bc47c12](https://github.com/propeller-heads/tycho-execution/commit/bc47c12a1a8cae0b9464b4899b52369e5036c9f7))
+
+
+### Bug Fixes
+
+* make USV2 factory configurable in Executor ([33973a6](https://github.com/propeller-heads/tycho-execution/commit/33973a65b8486c2c78e68c6a35374bd35775a7e5))
+
 ## [0.55.0](https://github.com/propeller-heads/tycho-execution/compare/0.54.0...0.55.0) (2025-02-27)
 
 
