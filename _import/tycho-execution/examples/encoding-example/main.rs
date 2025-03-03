@@ -23,7 +23,7 @@ fn main() {
     // Initialize the encoder
     let encoder = EVMEncoderBuilder::new()
         .chain(Chain::Ethereum)
-        .tycho_router_with_permit2(None, swapper_pk)
+        .initialize_tycho_router_with_permit2(swapper_pk)
         .expect("Failed to create encoder builder")
         .build()
         .expect("Failed to build encoder");

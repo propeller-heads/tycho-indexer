@@ -42,27 +42,21 @@ use tycho_execution::encoding::{
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+    #[arg(short, long)]
+    executors_file_path: Option<String>,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
     /// Use the Tycho router encoding strategy
-    TychoRouter {
-        #[arg(short, long)]
-        config_path: Option<String>,
-    },
+    TychoRouter,
     /// Use the Tycho router encoding strategy with Permit2 approval and token in transfer
     TychoRouterPermit2 {
-        #[arg(short, long)]
-        config_path: Option<String>,
         #[arg(short, long)]
         swapper_pk: String,
     },
     /// Use the direct execution encoding strategy
-    DirectExecution {
-        #[arg(short, long)]
-        config_path: Option<String>,
-    },
+    DirectExecution,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -82,12 +76,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut builder = EVMEncoderBuilder::new().chain(chain);
 
+    if let Some(config_path) = cli.executors_file_path {
+        builder = builder.executors_file_path(config_path);
+    }
+
     builder = match cli.command {
-        Commands::TychoRouter { config_path } => builder.tycho_router(config_path)?,
-        Commands::TychoRouterPermit2 { config_path, swapper_pk } => {
-            builder.tycho_router_with_permit2(config_path, swapper_pk)?
+        Commands::TychoRouter => builder.initialize_tycho_router()?,
+        Commands::TychoRouterPermit2 { swapper_pk } => {
+            builder.initialize_tycho_router_with_permit2(swapper_pk)?
         }
-        Commands::DirectExecution { config_path } => builder.direct_execution(config_path)?,
+        Commands::DirectExecution => builder.initialize_direct_execution()?,
     };
     let encoder = builder.build()?;
     let transactions = encoder.encode_router_calldata(vec![solution])?;
