@@ -40,7 +40,7 @@ lazy_static = "1.4.0"
 # Tycho dependencies
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.56.5" }
 tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.56.5" }
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "9bb0d9bc8495f4fff9006d9ed7e353042c023c9c" }
+tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], tag = "0.58.0" }
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }

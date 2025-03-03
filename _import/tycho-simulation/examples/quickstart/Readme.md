@@ -21,7 +21,7 @@ export TYCHO_API_KEY=<tycho-api-key-for-chain>
 cargo run --release --example quickstart -- --sell-token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" --buy-token "0x4200000000000000000000000000000000000006" --sell-amount 10 --chain "base"
 ```
 
-for 10000 USDC -> WBTC.
+for 10 USDC -> WETH on Base.
 
 To be able to execute or simulate the best swap, you need to pass your private key:
 
