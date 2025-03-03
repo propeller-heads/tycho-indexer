@@ -1,3 +1,12 @@
+## [0.80.0](https://github.com/propeller-heads/tycho-simulation/compare/0.79.2...0.80.0) (2025-03-03)
+
+
+### Features
+
+* Configurable chain in quickstart ([9b1e03e](https://github.com/propeller-heads/tycho-simulation/commit/9b1e03e4f8e0b7d06731e395bb15738f2ca1b08a))
+* Enable all Uniswap exchanges again ([518bb67](https://github.com/propeller-heads/tycho-simulation/commit/518bb67bfe0a95228ef9c39d6173aaca214a7e27))
+* Rename ETH_RPC_URL -> RPC_URL ([95cbc91](https://github.com/propeller-heads/tycho-simulation/commit/95cbc91d5c38133cb9a17e4b0e1f8bd7ade870fe))
+
 ## [0.79.2](https://github.com/propeller-heads/tycho-simulation/compare/0.79.1...0.79.2) (2025-02-28)
 
 
