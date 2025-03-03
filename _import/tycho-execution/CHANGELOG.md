@@ -1,3 +1,10 @@
+## [0.57.0](https://github.com/propeller-heads/tycho-execution/compare/0.56.0...0.57.0) (2025-03-03)
+
+
+### Features
+
+* Rename shortcut methods of encoder builder ([6f572ee](https://github.com/propeller-heads/tycho-execution/commit/6f572eed01552f4a43181187cfef0c49d0fd9d80))
+
 ## [0.56.0](https://github.com/propeller-heads/tycho-execution/compare/0.55.0...0.56.0) (2025-02-28)
 
 
