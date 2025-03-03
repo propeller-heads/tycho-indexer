@@ -151,7 +151,7 @@ async fn main() {
     // Initialize the encoder
     let encoder = EVMEncoderBuilder::new()
         .chain(chain)
-        .tycho_router_with_permit2(None, cli.swapper_pk.clone())
+        .initialize_tycho_router_with_permit2(cli.swapper_pk.clone())
         .expect("Failed to create encoder builder")
         .build()
         .expect("Failed to build encoder");
