@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::collections::{hash_map::Entry, HashMap};
+
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::{
@@ -459,12 +460,12 @@ impl From<&AccountChangesWithTx> for Vec<Account> {
 
 #[cfg(test)]
 mod test {
-    use chrono::NaiveDateTime;
-    use rstest::rstest;
     use std::str::FromStr;
 
-    use super::*;
+    use chrono::NaiveDateTime;
+    use rstest::rstest;
 
+    use super::*;
     use crate::models::blockchain::fixtures as block_fixtures;
 
     const HASH_256_0: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";

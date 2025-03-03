@@ -1,10 +1,11 @@
+use chrono::NaiveDateTime;
+use tokio::{sync::mpsc, task::JoinHandle};
+use tycho_core::{models::Chain, storage::StorageError};
+
 use crate::{
     postgres,
     postgres::{cache::CachedGateway, PostgresGateway},
 };
-use chrono::NaiveDateTime;
-use tokio::{sync::mpsc, task::JoinHandle};
-use tycho_core::{models::Chain, storage::StorageError};
 
 #[derive(Default)]
 pub struct GatewayBuilder {

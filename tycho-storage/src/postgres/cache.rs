@@ -12,7 +12,6 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, info, info_span, instrument, trace, Instrument};
-
 use tycho_core::{
     models::{
         self,
@@ -1077,9 +1076,8 @@ mod test_serial_db {
 
     use tycho_core::models::ChangeType;
 
-    use crate::postgres::{db_fixtures, db_fixtures::yesterday_one_am, testing::run_against_db};
-
     use super::*;
+    use crate::postgres::{db_fixtures, db_fixtures::yesterday_one_am, testing::run_against_db};
 
     #[tokio::test]
     async fn test_write_and_flush() {

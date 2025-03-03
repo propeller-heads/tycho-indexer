@@ -1,8 +1,8 @@
-use futures03::{future::try_join_all, FutureExt};
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Instant};
+
+use futures03::{future::try_join_all, FutureExt};
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
-
 use tycho_core::{
     models::{
         blockchain::BlockTag,
@@ -181,15 +181,13 @@ async fn analyze_batch(
 #[cfg(test)]
 mod test {
     use chrono::NaiveDateTime;
-
-    use super::*;
-
-    use crate::testing;
-
     use tycho_core::{
         models::{protocol::ProtocolComponent, ChangeType},
         storage::WithTotal,
     };
+
+    use super::*;
+    use crate::testing;
 
     // requires a running ethereum node
     #[ignore]

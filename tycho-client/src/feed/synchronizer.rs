@@ -1,10 +1,11 @@
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::Duration,
 };
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use tokio::{
     select,
     sync::{
@@ -15,7 +16,6 @@ use tokio::{
     time::timeout,
 };
 use tracing::{debug, error, info, instrument, trace, warn};
-
 use tycho_core::{
     dto::{
         BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent, ResponseAccount,
@@ -527,18 +527,16 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use test_log::test;
-    use uuid::Uuid;
-
     use tycho_core::dto::{
         Block, Chain, PaginationResponse, ProtocolComponentRequestResponse,
         ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
         ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, StateRequestBody,
         StateRequestResponse, TokensRequestBody, TokensRequestResponse,
     };
+    use uuid::Uuid;
 
+    use super::*;
     use crate::{deltas::MockDeltasClient, rpc::MockRPCClient, DeltasError, RPCError};
 
     // Required for mock client to implement clone

@@ -44,8 +44,9 @@ pub mod hex_bytes {
 
 /// serde functions for handling Option of bytes
 pub mod hex_bytes_option {
-    use super::decode_hex_with_prefix;
     use serde::{Deserialize, Deserializer, Serializer};
+
+    use super::decode_hex_with_prefix;
 
     /// Serialize a byte vec as a Some hex string with 0x prefix
     pub fn serialize<S, T>(x: &Option<T>, s: S) -> Result<S::Ok, S::Error>
@@ -81,12 +82,12 @@ pub mod hex_bytes_option {
 
 /// serde functions for handling HashMap with a bytes key
 pub mod hex_hashmap_key {
-    use crate::Bytes;
-
-    use super::decode_hex_with_prefix;
     use std::collections::HashMap;
 
     use serde::{de, ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::decode_hex_with_prefix;
+    use crate::Bytes;
 
     pub fn serialize<S, V>(x: &HashMap<Bytes, V>, s: S) -> Result<S::Ok, S::Error>
     where
@@ -119,12 +120,12 @@ pub mod hex_hashmap_key {
 
 /// serde functions for handling HashMap with bytes value
 pub mod hex_hashmap_value {
-    use crate::Bytes;
-
-    use super::decode_hex_with_prefix;
     use std::collections::HashMap;
 
     use serde::{de, ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::decode_hex_with_prefix;
+    use crate::Bytes;
 
     pub fn serialize<S, K>(x: &HashMap<K, Bytes>, s: S) -> Result<S::Ok, S::Error>
     where
@@ -161,9 +162,8 @@ pub mod hex_hashmap_key_value {
 
     use serde::{de, ser::SerializeMap, Deserialize, Deserializer, Serializer};
 
-    use crate::Bytes;
-
     use super::decode_hex_with_prefix;
+    use crate::Bytes;
 
     pub fn serialize<S>(x: &HashMap<Bytes, Bytes>, s: S) -> Result<S::Ok, S::Error>
     where
@@ -194,8 +194,9 @@ pub mod hex_hashmap_key_value {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde::{Deserialize, Serialize};
+
+    use super::*;
 
     #[derive(Debug, Serialize, Deserialize)]
     struct TestStruct {

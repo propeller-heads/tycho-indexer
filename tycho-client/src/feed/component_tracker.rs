@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use tracing::{debug, instrument, warn};
 
+use tracing::{debug, instrument, warn};
 use tycho_core::{
     dto::{BlockChanges, Chain, ProtocolComponent, ProtocolComponentsRequestBody},
     Bytes,
@@ -231,11 +231,10 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
-    use crate::rpc::MockRPCClient;
-
     use tycho_core::dto::{PaginationResponse, ProtocolComponentRequestResponse};
+
+    use super::*;
+    use crate::rpc::MockRPCClient;
 
     fn with_mocked_rpc() -> ComponentTracker<MockRPCClient> {
         let rpc = MockRPCClient::new();

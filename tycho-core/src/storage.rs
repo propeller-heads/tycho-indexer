@@ -1,7 +1,8 @@
 //! Storage traits used by Tycho
+use std::{collections::HashMap, fmt::Display};
+
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use std::{collections::HashMap, fmt::Display};
 use thiserror::Error;
 
 use crate::{

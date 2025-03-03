@@ -3,17 +3,16 @@
 //! The objective of this module is to provide swift and simplified access to the Remote Procedure
 //! Call (RPC) endpoints of Tycho. These endpoints are chiefly responsible for facilitating data
 //! queries, especially querying snapshots of data.
-#[cfg(test)]
-use mockall::automock;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures03::future::try_join_all;
+#[cfg(test)]
+use mockall::automock;
 use reqwest::{header, Client, ClientBuilder, Url};
 use thiserror::Error;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, instrument, trace, warn};
-
 use tycho_core::{
     dto::{
         Chain, PaginationParams, PaginationResponse, ProtocolComponentRequestResponse,
@@ -647,16 +646,15 @@ impl RPCClient for HttpRPCClient {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use mockito::Server;
-
-    use rstest::rstest;
     use std::{collections::HashMap, str::FromStr};
 
+    use mockito::Server;
+    use rstest::rstest;
     // TODO: remove once deprecated ProtocolId struct is removed
     #[allow(deprecated)]
     use tycho_core::dto::ProtocolId;
+
+    use super::*;
 
     // Dummy implementation of `get_protocol_states_paginated` for backwards compatibility testing
     // purposes

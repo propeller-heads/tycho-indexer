@@ -14,7 +14,6 @@ use tokio::{
     time::timeout,
 };
 use tracing::{debug, error, info, trace, warn};
-
 use tycho_core::{
     dto::{Block, ExtractorIdentity},
     Bytes,
@@ -523,13 +522,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::feed::synchronizer::SyncResult;
-    use async_trait::async_trait;
     use std::sync::Arc;
+
+    use async_trait::async_trait;
     use test_log::test;
     use tokio::sync::{oneshot, Mutex};
     use tycho_core::dto::Chain;
+
+    use super::*;
+    use crate::feed::synchronizer::SyncResult;
 
     #[derive(Clone)]
     struct MockStateSync {

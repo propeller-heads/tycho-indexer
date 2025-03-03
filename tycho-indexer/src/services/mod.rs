@@ -1,16 +1,14 @@
 //! This module contains Tycho web services implementation
 // TODO: remove once deprecated ProtocolId struct is removed
 #![allow(deprecated)]
+use std::{collections::HashMap, sync::Arc};
+
 use actix_web::{dev::ServerHandle, web, App, HttpServer};
 use actix_web_opentelemetry::RequestTracing;
 use deltas_buffer::PendingDeltasBuffer;
 use futures03::future::try_join_all;
-use std::{collections::HashMap, sync::Arc};
 use tokio::task::JoinHandle;
 use tracing::info;
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
-
 use tycho_core::{
     dto::{
         AccountUpdate, BlockParam, Chain, ChangeType, ContractId, Health, PaginationParams,
@@ -22,6 +20,8 @@ use tycho_core::{
     },
     storage::Gateway,
 };
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     extractor::{runner::ExtractorHandle, ExtractionError},

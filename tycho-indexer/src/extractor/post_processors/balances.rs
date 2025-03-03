@@ -1,6 +1,5 @@
 use num_bigint::BigUint;
 use num_traits::Num;
-
 use tycho_core::Bytes;
 
 use crate::extractor::{models::BlockChanges, u256_num::bytes_to_f64};
@@ -109,9 +108,8 @@ mod tests {
         Chain,
     };
 
-    use crate::testing::block;
-
     use super::*;
+    use crate::testing::block;
 
     #[test]
     fn test_trancode_ascii_balance_to_be() {

@@ -10,9 +10,8 @@ use ethers::{
     types::{H160, H256, U256},
 };
 use thiserror::Error;
-use web3::types::BlockNumber;
-
 use tycho_core::{models::blockchain::BlockTag, Bytes};
+use web3::types::BlockNumber;
 
 #[derive(Error, Debug)]
 pub enum RPCError {

@@ -91,8 +91,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use futures03::future::try_join_all;
     use std::sync::Arc;
+
+    use futures03::future::try_join_all;
     use tokio::sync::Mutex;
 
     use crate::services::{cache::RpcCache, rpc::RpcError};

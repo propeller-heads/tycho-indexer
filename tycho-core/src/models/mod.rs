@@ -3,13 +3,14 @@ pub mod contract;
 pub mod protocol;
 pub mod token;
 
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display, str::FromStr, sync::Arc};
+
+use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
+use token::CurrencyToken;
 
 use crate::{dto, Bytes};
-use token::CurrencyToken;
 
 /// Address hash literal type to uniquely identify contracts/accounts on a
 /// blockchain.

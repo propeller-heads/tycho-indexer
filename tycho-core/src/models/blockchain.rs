@@ -1,10 +1,11 @@
-use chrono::NaiveDateTime;
-use serde::{Deserialize, Serialize};
 use std::{
     any::Any,
     collections::{hash_map::Entry, HashMap},
     sync::Arc,
 };
+
+use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::{
@@ -343,11 +344,10 @@ pub enum BlockTag {
 
 #[cfg(test)]
 pub mod fixtures {
-    use crate::models::ChangeType;
+    use std::str::FromStr;
 
     use super::*;
-
-    use std::str::FromStr;
+    use crate::models::ChangeType;
 
     pub fn transaction01() -> Transaction {
         Transaction::new(

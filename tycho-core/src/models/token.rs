@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{models::Chain, traits::TokenOwnerFinding, Bytes};
 use serde::{Deserialize, Serialize};
 
 use super::{Address, Balance};
+use crate::{models::Chain, traits::TokenOwnerFinding, Bytes};
 
 /// Cost related to a token transfer, for example amount of gas in evm chains.
 pub type TransferCost = u64;

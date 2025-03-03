@@ -11,7 +11,6 @@ pub mod traits;
 extern crate pretty_assertions;
 
 pub use hex_bytes::Bytes;
-
 use tiny_keccak::{Hasher, Keccak};
 
 /// Compute the Keccak-256 hash of input bytes.

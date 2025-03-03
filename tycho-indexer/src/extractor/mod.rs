@@ -1,9 +1,9 @@
+use std::{collections::HashMap, sync::Arc};
+
 use async_trait::async_trait;
 use mockall::automock;
 use prost::DecodeError;
-use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
-
 use tycho_core::{
     models::{
         blockchain::{Block, BlockScoped},

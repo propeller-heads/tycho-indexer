@@ -5,13 +5,14 @@
 //!
 //! Structs in here implement utoipa traits so they can be used to derive an OpenAPI schema.
 #![allow(deprecated)]
-use chrono::{NaiveDateTime, Utc};
-use serde::{de, Deserialize, Deserializer, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
 };
+
+use chrono::{NaiveDateTime, Utc};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use strum_macros::{Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;

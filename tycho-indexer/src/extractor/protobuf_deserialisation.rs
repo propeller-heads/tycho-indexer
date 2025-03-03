@@ -1,8 +1,8 @@
 #![allow(deprecated)]
-use chrono::NaiveDateTime;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
-use tracing::warn;
 
+use chrono::NaiveDateTime;
+use tracing::warn;
 use tycho_core::{
     models::{
         blockchain::{Block, Transaction, TxWithChanges},
@@ -614,7 +614,6 @@ mod test {
     use rstest::rstest;
 
     use super::*;
-
     use crate::{
         extractor::models::fixtures::{
             block_entity_changes, block_state_changes, create_transaction,

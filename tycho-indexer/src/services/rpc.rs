@@ -1,15 +1,15 @@
 //! This module contains Tycho RPC implementation
 #![allow(deprecated)]
+use std::{collections::HashSet, sync::Arc};
+
 use actix_web::{web, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
 use metrics::counter;
 use reqwest::StatusCode;
-use std::{collections::HashSet, sync::Arc};
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
-
 use tycho_core::{
     dto::{self, PaginationResponse},
     models::{
@@ -969,12 +969,11 @@ pub async fn health() -> HttpResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{collections::HashMap, str::FromStr};
+
     use actix_web::test;
     use chrono::NaiveDateTime;
     use mockall::mock;
-    use std::{collections::HashMap, str::FromStr};
-
     use tycho_core::{
         models::{
             contract::Account,
@@ -985,6 +984,7 @@ mod tests {
         storage::WithTotal,
     };
 
+    use super::*;
     use crate::testing::{evm_contract_slots, MockGateway};
 
     const WETH: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";

@@ -1,5 +1,3 @@
-use crate::serde_primitives::hex_bytes;
-use serde::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
     clone::Clone,
@@ -7,7 +5,6 @@ use std::{
     ops::Deref,
     str::FromStr,
 };
-use thiserror::Error;
 
 #[cfg(feature = "diesel")]
 use diesel::{
@@ -18,6 +15,10 @@ use diesel::{
     sql_types::Binary,
 };
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::serde_primitives::hex_bytes;
 
 /// Wrapper type around Bytes to deserialize/serialize from/to hex
 #[derive(Clone, Default, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]

@@ -1,14 +1,16 @@
-use super::{orm, schema, storage_error_from_diesel, PostgresError, PostgresGateway, MAX_TS};
+use std::collections::HashMap;
+
 use diesel::prelude::*;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
-use std::collections::HashMap;
 use tracing::{instrument, warn};
 use tycho_core::{
     models::{blockchain::*, BlockHash, TxHash},
     storage::{BlockIdentifier, StorageError},
     Bytes,
 };
+
+use super::{orm, schema, storage_error_from_diesel, PostgresError, PostgresGateway, MAX_TS};
 
 impl PostgresGateway {
     #[instrument(skip_all)]
@@ -262,15 +264,16 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
+    use std::{str::FromStr, time::Duration};
+
+    use diesel_async::AsyncConnection;
+    use tycho_core::models::Chain;
+
+    use super::*;
     use crate::postgres::{
         db_fixtures,
         db_fixtures::{yesterday_midnight, yesterday_one_am},
     };
-    use diesel_async::AsyncConnection;
-    use std::{str::FromStr, time::Duration};
-    use tycho_core::models::Chain;
-
-    use super::*;
 
     type EVMGateway = PostgresGateway;
 

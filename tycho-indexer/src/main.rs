@@ -17,7 +17,6 @@ use serde::Deserialize;
 use tokio::{runtime::Handle, select, task::JoinHandle};
 use tracing::{debug, error, info, instrument, warn};
 use tracing_subscriber::EnvFilter;
-
 use tycho_core::{
     models::{
         blockchain::{Block, Transaction},
@@ -559,8 +558,9 @@ async fn run_tycho_ethereum(
 
 #[cfg(test)]
 mod test_serial_db {
-    use super::*;
     use tycho_storage::postgres::testing::run_against_db;
+
+    use super::*;
 
     #[tokio::test]
     #[ignore = "require archive node (RPC)"]

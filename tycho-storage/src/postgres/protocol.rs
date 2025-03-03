@@ -1,3 +1,5 @@
+use std::collections::{BTreeSet, HashMap, HashSet};
+
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
@@ -5,9 +7,7 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
-use std::collections::{BTreeSet, HashMap, HashSet};
 use tracing::{error, instrument, trace, warn, Level};
-
 use tycho_core::{
     models::{
         protocol::{
@@ -1745,14 +1745,14 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::str::FromStr;
+
     use diesel_async::AsyncConnection;
     use rstest::rstest;
     use serde_json::json;
-    use std::str::FromStr;
-
     use tycho_core::storage::BlockIdentifier;
 
+    use super::*;
     use crate::postgres::{db_fixtures, db_fixtures::yesterday_half_past_midnight};
 
     type EVMGateway = PostgresGateway;

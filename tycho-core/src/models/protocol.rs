@@ -1,6 +1,7 @@
+use std::collections::{hash_map::Entry, HashMap, HashSet};
+
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use std::collections::{hash_map::Entry, HashMap, HashSet};
 use tracing::warn;
 
 use crate::{
@@ -313,10 +314,9 @@ impl ProtocolChangesWithTx {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use rstest::rstest;
 
+    use super::*;
     use crate::models::blockchain::fixtures as block_fixtures;
 
     const HASH_256_0: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";

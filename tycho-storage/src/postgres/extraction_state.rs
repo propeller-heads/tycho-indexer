@@ -1,6 +1,5 @@
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
-
 use tycho_core::models::{Chain, ExtractionState};
 
 use super::{orm, schema, storage_error_from_diesel, PostgresGateway, StorageError};
@@ -93,14 +92,14 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
-    use diesel::prelude::*;
-    use diesel_async::{AsyncConnection, RunQueryDsl};
     use std::str::FromStr;
 
-    use crate::postgres::db_fixtures;
+    use diesel::prelude::*;
+    use diesel_async::{AsyncConnection, RunQueryDsl};
     use tycho_core::Bytes;
 
     use super::*;
+    use crate::postgres::db_fixtures;
 
     async fn setup_db() -> AsyncPgConnection {
         // Creates a DB connecton

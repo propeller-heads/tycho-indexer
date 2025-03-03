@@ -19,6 +19,12 @@
 //!
 //! Therefore, sharing one client among multiple tasks ensures optimal performance, reduces resource
 //! consumption, and enhances overall software scalability.
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+    time::Duration,
+};
+
 use async_trait::async_trait;
 use futures03::{stream::SplitSink, SinkExt, StreamExt};
 use hyper::{
@@ -30,11 +36,6 @@ use hyper::{
 };
 #[cfg(test)]
 use mockall::automock;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
-    time::Duration,
-};
 use thiserror::Error;
 use tokio::{
     net::TcpStream,
@@ -54,9 +55,8 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 use tracing::{debug, error, info, instrument, trace, warn};
-use uuid::Uuid;
-
 use tycho_core::dto::{BlockChanges, Command, ExtractorIdentity, Response, WebSocketMessage};
+use uuid::Uuid;
 
 use crate::TYCHO_SERVER_VERSION;
 
@@ -739,12 +739,12 @@ impl DeltasClient for WsDeltasClient {
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
+
+    use tokio::{net::TcpListener, time::timeout};
     use tycho_core::dto::Chain;
 
     use super::*;
-
-    use std::net::SocketAddr;
-    use tokio::{net::TcpListener, time::timeout};
 
     #[derive(Clone)]
     enum ExpectedComm {

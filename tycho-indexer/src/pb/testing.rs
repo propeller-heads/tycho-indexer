@@ -1,13 +1,12 @@
 #[cfg(test)]
 pub mod fixtures {
+    use std::{collections::HashSet, str::FromStr};
+
     use prost::Message;
-    use std::str::FromStr;
-
-    use std::collections::HashSet;
-
-    use crate::extractor::models::fixtures::HASH_256_0;
     use tycho_core::{models::protocol::ProtocolComponentStateDelta, Bytes};
     use tycho_storage::postgres::db_fixtures::yesterday_midnight;
+
+    use crate::extractor::models::fixtures::HASH_256_0;
 
     pub fn pb_state_changes() -> crate::pb::tycho::evm::v1::EntityChanges {
         use crate::pb::tycho::evm::v1::*;

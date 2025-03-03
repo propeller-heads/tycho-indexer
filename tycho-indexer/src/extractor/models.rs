@@ -368,16 +368,17 @@ impl From<BlockEntityChanges> for BlockChanges {
 
 #[cfg(test)]
 pub mod fixtures {
-    use super::*;
-    use chrono::NaiveDateTime;
-    use prost::Message;
     use std::str::FromStr;
 
+    use chrono::NaiveDateTime;
+    use prost::Message;
     use tycho_core::models::{
         blockchain::Transaction, contract::AccountDelta, protocol::ProtocolComponentStateDelta,
         ChangeType,
     };
     use tycho_storage::postgres::db_fixtures::yesterday_midnight;
+
+    use super::*;
 
     pub const HASH_256_0: &str =
         "0x0000000000000000000000000000000000000000000000000000000000000000";
@@ -749,9 +750,11 @@ pub mod fixtures {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use prost::Message;
     use std::str::FromStr;
+
+    use prost::Message;
+
+    use super::*;
 
     #[test]
     fn test_block_contract_changes_state_filter() {

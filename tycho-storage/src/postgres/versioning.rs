@@ -35,7 +35,12 @@
 //! There are basically two versions to resolve this, modify the ORM structs to use smart pointers
 //! thus making the clones cheap. Or modify the traits and the function defined here to work around
 //! the lifetime issues.
-use crate::postgres::PostgresError;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
+};
+
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use diesel::{
@@ -45,12 +50,9 @@ use diesel::{
     sql_types::{BigInt, Timestamp},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    hash::Hash,
-};
 use tycho_core::storage::StorageError;
+
+use crate::postgres::PostgresError;
 
 /// Trait indicating that a struct can be inserted into a versioned table.
 ///
@@ -402,11 +404,12 @@ pub async fn apply_partitioned_versioning<T: PartitionedVersionedRow>(
 
 #[cfg(test)]
 mod test {
-    use super::apply_partitioned_versioning;
-    use crate::postgres::{orm::NewProtocolState, versioning::VersioningEntry};
     use chrono::NaiveDateTime;
     use diesel_async::{AsyncConnection, AsyncPgConnection};
     use tycho_core::Bytes;
+
+    use super::apply_partitioned_versioning;
+    use crate::postgres::{orm::NewProtocolState, versioning::VersioningEntry};
 
     async fn setup_db() -> AsyncPgConnection {
         let db_url = std::env::var("DATABASE_URL").unwrap();

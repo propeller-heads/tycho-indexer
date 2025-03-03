@@ -1,9 +1,9 @@
+use std::{collections::HashMap, sync::Arc};
+
 use async_trait::async_trait;
 use chrono::{Local, NaiveDateTime};
-use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
-
 use tycho_core::{
     models::{
         protocol::{ProtocolComponent, QualityRange},
@@ -278,12 +278,10 @@ impl ProtocolDataCache for ProtocolMemoryCache {
 mod tests {
     use chrono::Duration;
     use mockall::predicate::*;
+    use tycho_core::{models::ChangeType, storage::WithTotal};
 
     use super::*;
-
     use crate::testing::MockGateway;
-
-    use tycho_core::{models::ChangeType, storage::WithTotal};
 
     #[tokio::test]
     async fn test_get_token_prices() {

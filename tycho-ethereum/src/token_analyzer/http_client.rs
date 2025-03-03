@@ -1,6 +1,7 @@
+use std::{fmt, time::Duration};
+
 use anyhow::{anyhow, Result};
 use reqwest::{Client, ClientBuilder, Response};
-use std::{fmt, time::Duration};
 
 const USER_AGENT: &str = "propeller-tycho-ethereum";
 

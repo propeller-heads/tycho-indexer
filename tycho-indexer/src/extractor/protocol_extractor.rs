@@ -11,7 +11,6 @@ use mockall::automock;
 use prost::Message;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, instrument, trace, warn};
-
 use tycho_core::{
     models::{
         blockchain::{Block, BlockAggregatedChanges, BlockTag},
@@ -1452,16 +1451,15 @@ impl ExtractorGateway for ExtractorPgGateway {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use float_eq::assert_float_eq;
     use mockall::mock;
-
-    use crate::{pb::testing::fixtures as pb_fixtures, testing::MockGateway};
-
     use tycho_core::{
         models::blockchain::{Transaction, TxWithChanges},
         traits::TokenOwnerFinding,
     };
+
+    use super::*;
+    use crate::{pb::testing::fixtures as pb_fixtures, testing::MockGateway};
 
     mock! {
         pub TokenPreProcessor {}
@@ -2147,13 +2145,6 @@ mod test_serial_db {
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
     use futures03::{stream, StreamExt};
     use mockall::mock;
-
-    use super::*;
-
-    use crate::{
-        extractor::models::fixtures,
-        pb::{sf::substreams::v1::BlockRef, testing::fixtures as pb_fixtures},
-    };
     use tycho_core::{
         models::{
             blockchain::TxWithChanges, protocol::QualityRange, ContractId, FinancialType,
@@ -2165,6 +2156,12 @@ mod test_serial_db {
     use tycho_storage::postgres::{
         builder::GatewayBuilder, db_fixtures, db_fixtures::yesterday_midnight,
         testing::run_against_db,
+    };
+
+    use super::*;
+    use crate::{
+        extractor::models::fixtures,
+        pb::{sf::substreams::v1::BlockRef, testing::fixtures as pb_fixtures},
     };
 
     mock! {

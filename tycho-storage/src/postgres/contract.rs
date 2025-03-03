@@ -1,3 +1,5 @@
+use std::collections::{hash_map::Entry, HashMap, HashSet};
+
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
@@ -5,9 +7,7 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
 use tracing::{debug, error, instrument, Level};
-
 use tycho_core::{
     keccak256,
     models::{
@@ -1647,18 +1647,19 @@ impl PostgresGateway {
 /// The tests below test the functionality using the concrete EVM types.
 #[cfg(test)]
 mod test {
-    use super::*;
-    use diesel_async::AsyncConnection;
-    use rstest::rstest;
     use std::{str::FromStr, time::Duration};
 
-    use crate::postgres::{
-        db_fixtures,
-        db_fixtures::{yesterday_midnight, yesterday_one_am},
-    };
+    use diesel_async::AsyncConnection;
+    use rstest::rstest;
     use tycho_core::{
         models::{FinancialType, ImplementationType},
         storage::{BlockIdentifier, VersionKind},
+    };
+
+    use super::*;
+    use crate::postgres::{
+        db_fixtures,
+        db_fixtures::{yesterday_midnight, yesterday_one_am},
     };
 
     type EVMGateway = PostgresGateway;

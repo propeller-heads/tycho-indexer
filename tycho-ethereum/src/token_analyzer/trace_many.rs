@@ -51,8 +51,9 @@ pub fn all_calls_succeeded(traces: &[BlockTrace]) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn ok_true() {

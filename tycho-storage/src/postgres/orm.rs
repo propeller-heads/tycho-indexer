@@ -1,14 +1,5 @@
-use super::{
-    schema::{
-        account, account_balance, block, chain, component_balance, component_balance_default,
-        component_tvl, contract_code, contract_storage, contract_storage_default, extraction_state,
-        protocol_component, protocol_component_holds_contract, protocol_component_holds_token,
-        protocol_state, protocol_state_default, protocol_system, protocol_type, token, transaction,
-    },
-    versioning::{StoredVersionedRow, VersionedRow},
-    PostgresError, MAX_TS, MAX_VERSION_TS,
-};
-use crate::postgres::versioning::PartitionedVersionedRow;
+use std::collections::{HashMap, HashSet};
+
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use diesel::{
@@ -21,7 +12,6 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_derive_enum::DbEnum;
-use std::collections::{HashMap, HashSet};
 use tycho_core::{
     models,
     models::{
@@ -31,6 +21,18 @@ use tycho_core::{
     storage::{BlockIdentifier, StorageError, WithTotal},
     Bytes,
 };
+
+use super::{
+    schema::{
+        account, account_balance, block, chain, component_balance, component_balance_default,
+        component_tvl, contract_code, contract_storage, contract_storage_default, extraction_state,
+        protocol_component, protocol_component_holds_contract, protocol_component_holds_token,
+        protocol_state, protocol_state_default, protocol_system, protocol_type, token, transaction,
+    },
+    versioning::{StoredVersionedRow, VersionedRow},
+    PostgresError, MAX_TS, MAX_VERSION_TS,
+};
+use crate::postgres::versioning::PartitionedVersionedRow;
 
 #[derive(Identifiable, Queryable, Selectable)]
 #[diesel(table_name = chain)]

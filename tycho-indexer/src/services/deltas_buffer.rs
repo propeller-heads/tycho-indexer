@@ -1,12 +1,9 @@
-use crate::extractor::{
-    reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus, ReorgBuffer},
-    runner::MessageSender,
-};
-use futures03::{stream, StreamExt};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
+
+use futures03::{stream, StreamExt};
 use thiserror::Error;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, instrument, trace, Level};
@@ -19,6 +16,11 @@ use tycho_core::{
     },
     storage::StorageError,
     Bytes,
+};
+
+use crate::extractor::{
+    reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus, ReorgBuffer},
+    runner::MessageSender,
 };
 
 /// The `PendingDeltas` struct manages access to the reorg buffers maintained by each extractor.
@@ -483,15 +485,14 @@ impl PendingDeltasBuffer for PendingDeltas {
 mod test {
     use std::str::FromStr;
 
-    use super::*;
-
-    use crate::{extractor::models::fixtures, testing::block};
-
     use tycho_core::models::{
         contract::{AccountBalance, AccountDelta},
         protocol::{ComponentBalance, ProtocolComponentStateDelta},
         Chain, ChangeType,
     };
+
+    use super::*;
+    use crate::{extractor::models::fixtures, testing::block};
 
     fn vm_state() -> Account {
         Account::new(

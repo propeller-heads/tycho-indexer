@@ -5,13 +5,13 @@
 //! that would require an expensive re-sync or similar. The post processors allow us to
 //! avoid this by applying the necessary changes to the data after it has been extracted.
 
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
 
 use attributes::{
     add_default_attributes_uniswapv2, add_default_attributes_uniswapv3, trim_curve_component_token,
 };
 use balances::{ignore_self_balances, transcode_ambient_balances, transcode_usv2_balances};
+use once_cell::sync::Lazy;
 
 use crate::extractor::models::BlockChanges;
 

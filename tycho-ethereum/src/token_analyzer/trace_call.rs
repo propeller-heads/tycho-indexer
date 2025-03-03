@@ -1,16 +1,11 @@
+use std::{cmp, str::FromStr, sync::Arc};
+
 use anyhow::{bail, ensure, Context, Result};
 use contracts::ERC20;
 use ethcontract::{dyns::DynTransport, transaction::TransactionBuilder, PrivateKey};
 use ethers::types::{H160, U256};
 use ethrpc::{http::HttpTransport, Web3, Web3Transport};
 use reqwest::Client;
-use std::{cmp, str::FromStr, sync::Arc};
-use url::Url;
-use web3::{
-    signing::keccak256,
-    types::{BlockNumber, BlockTrace, CallRequest, Res},
-};
-
 use tycho_core::{
     models::{
         blockchain::BlockTag,
@@ -18,6 +13,11 @@ use tycho_core::{
     },
     traits::{TokenAnalyzer, TokenOwnerFinding},
     Bytes,
+};
+use url::Url;
+use web3::{
+    signing::keccak256,
+    types::{BlockNumber, BlockTrace, CallRequest, Res},
 };
 
 use crate::{token_analyzer::trace_many, BlockTagWrapper, BytesCodec};

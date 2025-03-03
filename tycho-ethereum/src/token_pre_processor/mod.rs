@@ -1,13 +1,11 @@
+use std::{str::FromStr, sync::Arc};
+
 use async_trait::async_trait;
 use ethers::{abi::Abi, contract::Contract, prelude::Provider, providers::Http, types::H160};
 use ethrpc::{http::HttpTransport, Web3, Web3Transport};
 use reqwest::Client;
 use serde_json::from_str;
-use std::{str::FromStr, sync::Arc};
 use tracing::{instrument, warn};
-use unicode_segmentation::UnicodeSegmentation;
-use url::Url;
-
 use tycho_core::{
     models::{
         blockchain::BlockTag,
@@ -17,6 +15,8 @@ use tycho_core::{
     traits::{TokenAnalyzer, TokenOwnerFinding, TokenPreProcessor},
     Bytes,
 };
+use unicode_segmentation::UnicodeSegmentation;
+use url::Url;
 
 use crate::{token_analyzer::trace_call::TraceCallDetector, BytesCodec};
 
@@ -148,9 +148,11 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{collections::HashMap, env};
+
     use tycho_core::models::token::TokenOwnerStore;
+
+    use super::*;
 
     #[tokio::test]
     #[ignore]

@@ -138,7 +138,6 @@ use diesel_async::{
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tracing::{debug, info};
-
 use tycho_core::{
     models::{Chain, TxHash},
     storage::{BlockIdentifier, BlockOrTimestamp, StorageError, Version, VersionKind},
@@ -850,16 +849,14 @@ pub mod db_fixtures {
     use diesel::{prelude::*, sql_query};
     use diesel_async::{AsyncPgConnection, RunQueryDsl};
     use serde_json::Value;
-
     use tycho_core::{
         keccak256,
         models::{Balance, Code, FinancialType, ImplementationType},
         Bytes,
     };
 
-    use crate::postgres::orm;
-
     use super::{schema, MAX_TS};
+    use crate::postgres::orm;
 
     // Insert a new chain
     pub async fn insert_chain(conn: &mut AsyncPgConnection, name: &str) -> i64 {
