@@ -52,9 +52,9 @@ async function main() {
             address: router.address,
             constructorArguments: [permit2, weth],
         });
-        console.log(`TychoRouter verified successfully on Etherscan!`);
+        console.log(`TychoRouter verified successfully on blockchain explorer!`);
     } catch (error) {
-        console.error(`Error during Etherscan verification:`, error);
+        console.error(`Error during blockchain explorer verification:`, error);
     }
 
 }

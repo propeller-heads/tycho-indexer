@@ -25,7 +25,7 @@ export PRIVATE_KEY=<private-key>
 export RPC_URL=<chain-rpc-url>
 export DEPLOY_WALLET=<wallet-address>
 export PRIVATE_KEY=<private-key>
-export ETHERSCAN_API_KEY=<etherscan-api-key>
+export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
 ```
 
 Make sure to run `unset HISTFILE` in your terminal before setting the private key. This will prevent the private key
