@@ -1,3 +1,10 @@
+## [0.58.0](https://github.com/propeller-heads/tycho-execution/compare/0.57.0...0.58.0) (2025-03-03)
+
+
+### Features
+
+* Rename ETH_RPC_URL -> RPC_URL ([9bb0d9b](https://github.com/propeller-heads/tycho-execution/commit/9bb0d9bc8495f4fff9006d9ed7e353042c023c9c))
+
 ## [0.57.0](https://github.com/propeller-heads/tycho-execution/compare/0.56.0...0.57.0) (2025-03-03)
 
 
