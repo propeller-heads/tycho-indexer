@@ -3,6 +3,7 @@ use std::{
     default::Default,
     env,
     str::FromStr,
+    sync::LazyLock,
 };
 
 use alloy::{
@@ -19,10 +20,11 @@ use alloy::{
     signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
 };
-use alloy_primitives::{Address, Bytes as AlloyBytes, B256, U256};
+use alloy_primitives::{Address, Bytes as AlloyBytes, TxKind, B256, U256};
 use alloy_sol_types::SolValue;
 use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, Select};
+use foundry_config::NamedChain;
 use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
@@ -37,14 +39,10 @@ use tycho_execution::encoding::{
 };
 use tycho_simulation::{
     evm::{
-        engine_db::tycho_db::PreCachedDB,
         protocol::{
-            filters::{balancer_pool_filter, uniswap_v4_pool_with_hook_filter},
-            u256_num::biguint_to_u256,
-            uniswap_v2::state::UniswapV2State,
-            uniswap_v3::state::UniswapV3State,
+            filters::uniswap_v4_pool_with_hook_filter, u256_num::biguint_to_u256,
+            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
-            vm::state::EVMPoolState,
         },
         stream::ProtocolStreamBuilder,
     },
@@ -56,6 +54,23 @@ use tycho_simulation::{
 };
 
 const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
+
+static ROUTER_ADDRESSES: LazyLock<HashMap<Chain, Bytes>> = LazyLock::new(|| {
+    HashMap::from([
+        (
+            Chain::Ethereum,
+            "0x023eea66B260FA2E109B0764774837629cC41FeF"
+                .parse::<Bytes>()
+                .expect("Failed to create router address"),
+        ),
+        (
+            Chain::Base,
+            "0x94ebf984511b06bab48545495b754760bfaa566e"
+                .parse::<Bytes>()
+                .expect("Failed to create router address"),
+        ),
+    ])
+});
 
 #[derive(Parser)]
 struct Cli {
@@ -70,6 +85,8 @@ struct Cli {
     tvl_threshold: f64,
     #[arg(short, long, default_value = FAKE_PK)]
     swapper_pk: String,
+    #[arg(short, long, default_value = "ethereum")]
+    chain: String,
 }
 
 #[tokio::main]
@@ -87,15 +104,12 @@ async fn main() {
     let cli = Cli::parse();
     let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
 
-    let all_tokens = load_all_tokens(
-        tycho_url.as_str(),
-        false,
-        Some(tycho_api_key.as_str()),
-        Chain::Ethereum,
-        None,
-        None,
-    )
-    .await;
+    let chain = Chain::from_str(&cli.chain).expect("Invalid chain");
+    println!("Loading tokens from Tycho... {}", tycho_url.as_str());
+    let all_tokens =
+        load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str()), chain, None, None)
+            .await;
+    println!("Tokens loaded: {}", all_tokens.len());
 
     let sell_token_address =
         Bytes::from_str(&cli.sell_token).expect("Invalid address for sell token");
@@ -118,14 +132,9 @@ async fn main() {
     let mut pairs: HashMap<String, ProtocolComponent> = HashMap::new();
     let mut amounts_out: HashMap<String, BigUint> = HashMap::new();
 
-    let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, Chain::Ethereum)
+    let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, chain)
         .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
         .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-        .exchange::<EVMPoolState<PreCachedDB>>(
-            "vm:balancer_v2",
-            tvl_filter.clone(),
-            Some(balancer_pool_filter),
-        )
         .exchange::<UniswapV4State>(
             "uniswap_v4",
             tvl_filter.clone(),
@@ -141,7 +150,7 @@ async fn main() {
 
     // Initialize the encoder
     let encoder = EVMEncoderBuilder::new()
-        .chain(Chain::Ethereum)
+        .chain(chain)
         .initialize_tycho_router_with_permit2(cli.swapper_pk.clone())
         .expect("Failed to create encoder builder")
         .build()
@@ -152,14 +161,15 @@ async fn main() {
     )
     .expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
-
+    let named_chain = NamedChain::from_str(&cli.chain).expect("Invalid chain");
     let provider = ProviderBuilder::new()
+        .with_chain(named_chain)
         .wallet(tx_signer.clone())
         .on_http(
-            env::var("ETH_RPC_URL")
-                .expect("ETH_RPC_URL env var not set")
+            env::var("RPC_URL")
+                .expect("RPC_URL env var not set")
                 .parse()
-                .expect("Failed to parse ETH_RPC_URL"),
+                .expect("Failed to parse RPC_URL"),
         );
 
     while let Some(message_result) = protocol_stream.next().await {
@@ -194,6 +204,7 @@ async fn main() {
                 amount_in.clone(),
                 Bytes::from(wallet.address().to_vec()),
                 expected_amount,
+                chain,
             );
 
             if cli.swapper_pk == FAKE_PK {
@@ -227,6 +238,7 @@ async fn main() {
                         wallet.address(),
                         Address::from_slice(&sell_token_address),
                         tx.clone(),
+                        named_chain as u64,
                     )
                     .await;
 
@@ -274,6 +286,7 @@ async fn main() {
                                     wallet.address(),
                                     &sell_token_address,
                                     tx.clone(),
+                                    named_chain as u64,
                                 )
                                 .await
                                 {
@@ -289,6 +302,7 @@ async fn main() {
                             }
                         }
                     }
+                    // println!("Full simulation logs: {:?}", output);
                     return;
                 }
                 "execute" => {
@@ -298,6 +312,7 @@ async fn main() {
                         wallet.address(),
                         &sell_token_address,
                         tx,
+                        named_chain as u64,
                     )
                     .await
                     {
@@ -397,6 +412,7 @@ fn get_best_swap(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn encode(
     encoder: EVMTychoEncoder,
     component: ProtocolComponent,
@@ -405,6 +421,7 @@ fn encode(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
+    chain: Chain,
 ) -> Transaction {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
@@ -415,6 +432,10 @@ fn encode(
         // the amount or the total remaining balance.
         0f64,
     );
+    let router_address = ROUTER_ADDRESSES
+        .get(&chain)
+        .expect("Router address not found")
+        .clone();
 
     // Then we create a solution object with the previous swap
     let solution = Solution {
@@ -428,8 +449,7 @@ fn encode(
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address: Bytes::from_str("0x023eea66B260FA2E109B0764774837629cC41FeF")
-            .expect("Failed to create router address"),
+        router_address,
         ..Default::default()
     };
 
@@ -451,6 +471,7 @@ async fn get_tx_requests(
     user_address: Address,
     sell_token_address: Address,
     tx: Transaction,
+    chain_id: u64,
 ) -> (TransactionRequest, TransactionRequest) {
     let block = provider
         .get_block_by_number(BlockNumberOrTag::Latest, false)
@@ -477,25 +498,31 @@ async fn get_tx_requests(
         .await
         .expect("Failed to get nonce");
 
-    let approval_request = TransactionRequest::default()
-        .from(user_address)
-        .to(sell_token_address)
-        .input(TransactionInput { input: Some(AlloyBytes::from(data)), data: None })
-        .gas_limit(100_000u64)
-        .max_fee_per_gas(max_fee_per_gas.into())
-        .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
-        .nonce(nonce);
+    let approval_request = TransactionRequest {
+        to: Some(TxKind::Call(sell_token_address)),
+        from: Some(user_address),
+        value: None,
+        input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
+        gas: Some(100_000u64),
+        chain_id: Some(chain_id),
+        max_fee_per_gas: Some(max_fee_per_gas.into()),
+        max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+        nonce: Some(nonce),
+        ..Default::default()
+    };
 
-    let swap_request = TransactionRequest::default()
-        .to(Address::from_slice(&tx.to))
-        .from(user_address)
-        .value(biguint_to_u256(&tx.value))
-        .input(TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None })
-        .max_fee_per_gas(max_fee_per_gas.into())
-        .max_priority_fee_per_gas(max_priority_fee_per_gas.into())
-        .gas_limit(300_000u64)
-        .nonce(nonce + 1);
-
+    let swap_request = TransactionRequest {
+        to: Some(TxKind::Call(Address::from_slice(&tx.to))),
+        from: Some(user_address),
+        value: Some(biguint_to_u256(&tx.value)),
+        input: TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None },
+        gas: Some(300_000u64),
+        chain_id: Some(chain_id),
+        max_fee_per_gas: Some(max_fee_per_gas.into()),
+        max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+        nonce: Some(nonce + 1),
+        ..Default::default()
+    };
     (approval_request, swap_request)
 }
 
@@ -535,6 +562,7 @@ async fn execute_swap_transaction(
     wallet_address: Address,
     sell_token_address: &Bytes,
     tx: Transaction,
+    chain_id: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Executing by performing an approval (for permit2) and a swap transaction...");
     let (approval_request, swap_request) = get_tx_requests(
@@ -543,6 +571,7 @@ async fn execute_swap_transaction(
         wallet_address,
         Address::from_slice(sell_token_address),
         tx.clone(),
+        chain_id,
     )
     .await;
 

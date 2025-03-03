@@ -444,9 +444,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[cfg_attr(not(feature = "network_tests"), ignore)]
     async fn test_get_code_for_address() {
-        let rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
+        let rpc_url = env::var("RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
-            env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
+            env::var("RPC_URL").expect("Missing RPC_URL in .env file")
         });
 
         let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";

@@ -465,9 +465,9 @@ mod tests {
 
     fn get_client() -> Arc<RootProvider<BoxTransport>> {
         let runtime = get_runtime().unwrap();
-        let eth_rpc_url = env::var("ETH_RPC_URL").unwrap_or_else(|_| {
+        let eth_rpc_url = env::var("RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
-            env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in .env file")
+            env::var("RPC_URL").expect("Missing RPC_URL in .env file")
         });
         let client = runtime.block_on(async {
             ProviderBuilder::new()
