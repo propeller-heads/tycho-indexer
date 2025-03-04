@@ -69,8 +69,8 @@ struct Data {
 }
 
 impl Data {
-    const fn ref_array(&self) -> [&String; 3] {
-        [&self.name, &self.tokens, &self.price]
+    const fn ref_array(&self) -> [&String; 4] {
+        [&self.name, &self.component.protocol_system, &self.tokens, &self.price]
     }
 }
 
@@ -284,7 +284,7 @@ impl App {
             .add_modifier(Modifier::REVERSED)
             .fg(self.colors.selected_cell_style_fg);
 
-        let header = ["Pool", "Tokens", "Price"]
+        let header = ["Pool", "Protocol", "Tokens", "Price"]
             .into_iter()
             .map(Cell::from)
             .collect::<Row>()
@@ -316,6 +316,7 @@ impl App {
             [
                 // + 1 is for padding.
                 Constraint::Length(43),
+                Constraint::Min(1),
                 Constraint::Min(1),
                 Constraint::Min(1),
             ],
