@@ -896,6 +896,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.expectRevert(
             abi.encodeWithSelector(
                 TychoRouter__AmountInDiffersFromConsumed.selector,
+                1000000000000000000,
                 600000000000000000
             )
         );
