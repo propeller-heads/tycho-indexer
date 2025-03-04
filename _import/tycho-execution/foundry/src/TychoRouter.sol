@@ -59,7 +59,7 @@ error TychoRouter__AddressZero();
 error TychoRouter__AmountZero();
 error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
-error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
+error TychoRouter__AmountInDiffersFromConsumed(uint256 amountConsumed);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 error TychoRouter__InvalidDataLength();
 
@@ -163,9 +163,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         uint256 amountConsumed = initialBalance - currentBalance;
 
-        if (amountConsumed < amountIn) {
-            uint256 leftoverAmount = amountIn - amountConsumed;
-            revert TychoRouter__AmountInNotFullySpent(leftoverAmount);
+        if (amountConsumed != amountIn) {
+            revert TychoRouter__AmountInDiffersFromConsumed(amountConsumed);
         }
 
         if (fee > 0) {
