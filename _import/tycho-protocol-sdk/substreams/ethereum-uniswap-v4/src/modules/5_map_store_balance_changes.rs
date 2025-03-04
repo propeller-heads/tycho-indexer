@@ -58,33 +58,24 @@ fn event_to_balance_deltas(
                 get_amount_delta(current_sqrt_price, e.tick_lower, e.tick_upper, e.liquidity_delta);
             Some(vec![
                 BalanceDelta {
-                    token: hex::decode(
-                        event
-                            .currency0
-                            .clone()
-                            .trim_start_matches("0x"),
-                    )
-                    .unwrap(),
+                    token: hex::decode(event.currency0.trim_start_matches("0x")).unwrap(),
                     delta: delta0.to_signed_bytes_be(),
                     component_id: address.clone(),
                     ord: event.log_ordinal,
                     tx: event
                         .transaction
-                        .clone()
+                        .as_ref()
                         .map(Into::into),
                 },
                 BalanceDelta {
-                    token: hex::decode(
-                        event
-                            .currency1
-                            .clone()
-                            .trim_start_matches("0x"),
-                    )
-                    .unwrap(),
+                    token: hex::decode(event.currency1.trim_start_matches("0x")).unwrap(),
                     delta: delta1.to_signed_bytes_be(),
                     component_id: address,
                     ord: event.log_ordinal,
-                    tx: event.transaction.map(Into::into),
+                    tx: event
+                        .transaction
+                        .as_ref()
+                        .map(Into::into),
                 },
             ])
         }
@@ -123,33 +114,24 @@ fn event_to_balance_deltas(
 
             Some(vec![
                 BalanceDelta {
-                    token: hex::decode(
-                        event
-                            .currency0
-                            .clone()
-                            .trim_start_matches("0x"),
-                    )
-                    .unwrap(),
+                    token: hex::decode(event.currency0.trim_start_matches("0x")).unwrap(),
                     delta: delta0.to_signed_bytes_be(),
                     component_id: address.clone(),
                     ord: event.log_ordinal,
                     tx: event
                         .transaction
-                        .clone()
+                        .as_ref()
                         .map(Into::into),
                 },
                 BalanceDelta {
-                    token: hex::decode(
-                        event
-                            .currency1
-                            .clone()
-                            .trim_start_matches("0x"),
-                    )
-                    .unwrap(),
+                    token: hex::decode(event.currency1.trim_start_matches("0x")).unwrap(),
                     delta: delta1.to_signed_bytes_be(),
-                    component_id: address.clone(),
+                    component_id: address,
                     ord: event.log_ordinal,
-                    tx: event.transaction.map(Into::into),
+                    tx: event
+                        .transaction
+                        .as_ref()
+                        .map(Into::into),
                 },
             ])
         }

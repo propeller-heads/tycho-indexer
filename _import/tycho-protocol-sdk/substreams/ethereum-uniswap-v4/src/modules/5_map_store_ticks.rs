@@ -28,7 +28,7 @@ pub fn map_ticks_changes(events: Events) -> Result<TickDeltas, anyhow::Error> {
 
 #[substreams::handlers::store]
 pub fn store_ticks_liquidity(ticks_deltas: TickDeltas, store: StoreAddBigInt) {
-    let mut deltas = ticks_deltas.deltas.clone();
+    let mut deltas = ticks_deltas.deltas;
 
     deltas.sort_unstable_by_key(|delta| delta.ordinal);
 

@@ -23,11 +23,15 @@ pub fn map_events(
         .into_iter()
         .filter(|tx| tx.status == 1)
         .flat_map(|tx| {
-            tx.clone()
+            let receipt = tx
                 .receipt
-                .into_iter()
-                .flat_map(|receipt| receipt.logs)
-                .filter_map(|log| log_to_event(&log, tx.clone(), &pools_store))
+                .as_ref()
+                .expect("all transaction traces have a receipt");
+
+            receipt
+                .logs
+                .iter()
+                .filter_map(|log| log_to_event(log, &tx, &pools_store))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -39,7 +43,7 @@ pub fn map_events(
 
 fn log_to_event(
     event: &Log,
-    tx: TransactionTrace,
+    tx: &TransactionTrace,
     pools_store: &StoreGetProto<Pool>,
 ) -> Option<PoolEvent> {
     if let Some(init) = Initialize::match_and_decode(event) {

@@ -1,5 +1,6 @@
 use num_bigint::BigInt;
 use std::ops::Shr;
+
 /// Calculates the amounts of token0 and token1 for a given position
 ///
 /// Source: https://github.com/Uniswap/v4-core/blob/main/src/libraries/Pool.sol
