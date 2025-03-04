@@ -1,3 +1,15 @@
+## [0.81.0](https://github.com/propeller-heads/tycho-simulation/compare/0.80.0...0.81.0) (2025-03-04)
+
+
+### Features
+
+* **price_printer:** display the protocol name for each row in the table ([b8ad2d5](https://github.com/propeller-heads/tycho-simulation/commit/b8ad2d5dc400dfb72a9bda57c4e24027b4788d9c))
+
+
+### Bug Fixes
+
+* **quickstart:** map `ethereum` to `mainnet` when creating alloy `NamedChain`. ([2d559b3](https://github.com/propeller-heads/tycho-simulation/commit/2d559b357dbab382540a63d70704a9808eb7cc2a))
+
 ## [0.80.0](https://github.com/propeller-heads/tycho-simulation/compare/0.79.2...0.80.0) (2025-03-03)
 
 
