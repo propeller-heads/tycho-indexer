@@ -161,7 +161,8 @@ async fn main() {
     )
     .expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
-    let named_chain = NamedChain::from_str(&cli.chain).expect("Invalid chain");
+    let named_chain =
+        NamedChain::from_str(&cli.chain.replace("ethereum", "mainnet")).expect("Invalid chain");
     let provider = ProviderBuilder::new()
         .with_chain(named_chain)
         .wallet(tx_signer.clone())
