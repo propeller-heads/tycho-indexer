@@ -420,10 +420,10 @@ contract TychoRouterTest is TychoRouterTestSetup {
         // Checks amount out at the end
         uint256 amountIn = 1 ether;
 
-        // Assume Alice has already transferred tokens to the TychoRouter
-        deal(WETH_ADDR, tychoRouterAddr, amountIn);
-
+        // Approve the tokenIn to be transferred to the router
+        deal(WETH_ADDR, ALICE, amountIn);
         vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
@@ -453,6 +453,43 @@ contract TychoRouterTest is TychoRouterTestSetup {
         uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
         assertEq(daiBalance, expectedAmount);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+
+        vm.stopPrank();
+    }
+
+    function testSwapCheckedLessApprovalFailure() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V2
+        // Checks amount out at the end
+        uint256 amountIn = 1 ether;
+
+        // Approve less than the amountIn
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn - 1);
+
+        bytes memory protocolData = encodeUniswapV2Swap(
+            WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
+        );
+
+        bytes memory swap = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
+        );
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        uint256 minAmountOut = 2600 * 1e18;
+        vm.expectRevert();
+        uint256 amountOut = tychoRouter.swap(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            false,
+            false,
+            2,
+            ALICE,
+            pleEncode(swaps)
+        );
 
         vm.stopPrank();
     }
@@ -760,7 +797,9 @@ contract TychoRouterTest is TychoRouterTestSetup {
         // address with the USV2 executor address.
 
         // Tests swapping WETH -> DAI on a USV2 pool without permit2
-        deal(WETH_ADDR, tychoRouterAddr, 1 ether);
+        deal(WETH_ADDR, ALICE, 1 ether);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), 1 ether);
         uint256 balancerBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
         // Encoded solution generated using `test_split_swap_strategy_encoder_simple_route_no_permit2`
         // but manually replacing the executor address
