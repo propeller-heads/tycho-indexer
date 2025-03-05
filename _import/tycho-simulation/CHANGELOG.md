@@ -1,3 +1,11 @@
+## [0.82.0](https://github.com/propeller-heads/tycho-simulation/compare/0.81.0...0.82.0) (2025-03-05)
+
+
+### Features
+
+* update tycho-execution version ([1235fe8](https://github.com/propeller-heads/tycho-simulation/commit/1235fe89f5d530a88bb255f1dbc6decd6061582d))
+* update tycho-execution version ([23da794](https://github.com/propeller-heads/tycho-simulation/commit/23da79479562711f2232891ecddeb39b43e1f128))
+
 ## [0.81.0](https://github.com/propeller-heads/tycho-simulation/compare/0.80.0...0.81.0) (2025-03-04)
 
 
