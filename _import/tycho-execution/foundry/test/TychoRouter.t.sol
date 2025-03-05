@@ -420,9 +420,9 @@ contract TychoRouterTest is TychoRouterTestSetup {
         // Checks amount out at the end
         uint256 amountIn = 1 ether;
 
-        // Approve the tokenIn to be transferred to the router
         deal(WETH_ADDR, ALICE, amountIn);
         vm.startPrank(ALICE);
+        // Approve the tokenIn to be transferred to the router
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
@@ -459,12 +459,12 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
     function testSwapCheckedLessApprovalFailure() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
-        // Checks amount out at the end
+        // Fails while transferring the tokenIn to the router due to insufficient approval
         uint256 amountIn = 1 ether;
 
-        // Approve less than the amountIn
         deal(WETH_ADDR, ALICE, amountIn);
         vm.startPrank(ALICE);
+        // Approve less than the amountIn
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn - 1);
 
         bytes memory protocolData = encodeUniswapV2Swap(
@@ -494,7 +494,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSwapCheckedFailure() public {
+    function testSwapCheckedNegativeSlippageFailure() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // Does permit2 token approval and transfer
         // Checks amount out at the end and fails
