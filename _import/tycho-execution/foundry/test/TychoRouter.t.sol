@@ -164,7 +164,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(tychoRouter.paused(), false);
         tychoRouter.pause();
         assertEq(tychoRouter.paused(), true);
-        // TODO: test swap calls when implemeted
         vm.stopPrank();
 
         vm.startPrank(UNPAUSER);
@@ -415,6 +414,46 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
+    function testSwapCheckedUndefinedMinAmount() public {
+        // Min amount should always be non-zero. If zero, swap attempt should revert.
+
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+
+        bytes memory protocolData = encodeUniswapV2Swap(
+            WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
+        );
+
+        bytes memory swap = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
+        );
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+        uint256 minAmountOut = 0;
+
+        vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
+        tychoRouter.swapPermit2(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            false,
+            false,
+            2,
+            ALICE,
+            permitSingle,
+            signature,
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+    }
+
     function testSwapCheckedNoPermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // Checks amount out at the end
@@ -479,7 +518,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         uint256 minAmountOut = 2600 * 1e18;
         vm.expectRevert();
-        uint256 amountOut = tychoRouter.swap(
+        tychoRouter.swap(
             amountIn,
             WETH_ADDR,
             DAI_ADDR,
