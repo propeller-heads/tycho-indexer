@@ -53,9 +53,9 @@ async function main() {
                 address: deployedExecutor.address,
                 constructorArguments: args,
             });
-            console.log(`${exchange} verified successfully on Etherscan!`);
+            console.log(`${exchange} verified successfully on blockchain explorer!`);
         } catch (error) {
-            console.error(`Error during Etherscan verification:`, error);
+            console.error(`Error during blockchain explorer verification:`, error);
         }
     }
 }
