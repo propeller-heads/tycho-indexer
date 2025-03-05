@@ -1,3 +1,25 @@
+## [0.58.1](https://github.com/propeller-heads/tycho-execution/compare/0.58.0...0.58.1) (2025-03-04)
+
+
+### Bug Fixes
+
+* add amountIn in error TychoRouter__AmountInDiffersFromConsumed ([a3bffd4](https://github.com/propeller-heads/tycho-execution/commit/a3bffd4f75e8644997970a45c6a8f2b896a30394))
+* inequality check for amountConsumed and amountIn ([6f421eb](https://github.com/propeller-heads/tycho-execution/commit/6f421eb374b798e9521a2a345558fae53f77dae3))
+
+## [0.58.0](https://github.com/propeller-heads/tycho-execution/compare/0.57.0...0.58.0) (2025-03-03)
+
+
+### Features
+
+* Rename ETH_RPC_URL -> RPC_URL ([9bb0d9b](https://github.com/propeller-heads/tycho-execution/commit/9bb0d9bc8495f4fff9006d9ed7e353042c023c9c))
+
+## [0.57.0](https://github.com/propeller-heads/tycho-execution/compare/0.56.0...0.57.0) (2025-03-03)
+
+
+### Features
+
+* Rename shortcut methods of encoder builder ([6f572ee](https://github.com/propeller-heads/tycho-execution/commit/6f572eed01552f4a43181187cfef0c49d0fd9d80))
+
 ## [0.56.0](https://github.com/propeller-heads/tycho-execution/compare/0.55.0...0.56.0) (2025-02-28)
 
 
