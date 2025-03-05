@@ -1,3 +1,10 @@
+## [0.61.0](https://github.com/propeller-heads/tycho-execution/compare/0.60.0...0.61.0) (2025-03-05)
+
+
+### Features
+
+* Rename Etherscan in deployment verification ([bc54eac](https://github.com/propeller-heads/tycho-execution/commit/bc54eac110c6777d48dede7d0f91d7f580412ebf))
+
 ## [0.60.0](https://github.com/propeller-heads/tycho-execution/compare/0.59.0...0.60.0) (2025-03-05)
 
 
