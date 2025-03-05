@@ -63,6 +63,7 @@ error TychoRouter__AmountInDiffersFromConsumed(
 );
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 error TychoRouter__InvalidDataLength();
+error TychoRouter__UndefinedMinAmountOut();
 
 contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     IAllowanceTransfer public immutable permit2;
@@ -243,6 +244,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         if (receiver == address(0)) {
             revert TychoRouter__AddressZero();
         }
+        if (minAmountOut == 0) {
+            revert TychoRouter__UndefinedMinAmountOut();
+        }
+
         // Assume funds are already in the router.
         if (wrapEth) {
             _wrapETH(amountIn);
