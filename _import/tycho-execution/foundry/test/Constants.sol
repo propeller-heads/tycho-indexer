@@ -7,7 +7,7 @@ contract BaseConstants {
     address BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address BASE_MAG7 = 0x9E6A46f294bB67c20F1D1E7AfB0bBEf614403B55;
 
-    // uniswap v2
+    // Uniswap v2
     address USDC_MAG7_POOL = 0x739c2431670A12E2cF8e11E3603eB96e6728a789;
 }
 
@@ -40,16 +40,22 @@ contract Constants is Test, BaseConstants {
     address USDT_ADDR = address(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     address PEPE_ADDR = address(0x6982508145454Ce325dDbE47a25d4ec3d2311933);
 
-    // uniswap v2
+    // Uniswap v2
     address WETH_DAI_POOL = 0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11;
     address DAI_USDC_POOL = 0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5;
     address WETH_WBTC_POOL = 0xBb2b8038a1640196FbE3e38816F3e67Cba72D940;
     address USDC_WBTC_POOL = 0x004375Dff511095CC5A197A54140a24eFEF3A416;
 
-    // uniswap v3
+    // Uniswap v3
     address USV3_FACTORY_ETHEREUM = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     address USV2_FACTORY_ETHEREUM = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
     address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
+
+    // Uniswap universal router
+    address UNIVERSAL_ROUTER = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af;
+
+    // Permit2
+    address PERMIT2_ADDRESS = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode

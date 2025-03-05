@@ -56,12 +56,14 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 //           ✷✷✷✷✷✷               ✷✷✷✷✷              ✷✷✷✷✷✷✷✷        ✷✷✷✷✷✷      ✷✷✷✷✷✷         ✷✷✷✷✷✷✷✷
 
 error TychoRouter__AddressZero();
-error TychoRouter__AmountZero();
 error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
-error TychoRouter__AmountInNotFullySpent(uint256 leftoverAmount);
+error TychoRouter__AmountInDiffersFromConsumed(
+    uint256 amountIn, uint256 amountConsumed
+);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 error TychoRouter__InvalidDataLength();
+error TychoRouter__UndefinedMinAmountOut();
 
 contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     IAllowanceTransfer public immutable permit2;
@@ -142,50 +144,18 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
-        // Assume funds are already in the router.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        }
-
-        uint256 initialBalance = tokenIn == address(0)
-            ? address(this).balance
-            : IERC20(tokenIn).balanceOf(address(this));
-
-        amountOut = _swap(amountIn, nTokens, swaps);
-
-        uint256 currentBalance = tokenIn == address(0)
-            ? address(this).balance
-            : IERC20(tokenIn).balanceOf(address(this));
-
-        uint256 amountConsumed = initialBalance - currentBalance;
-
-        if (amountConsumed < amountIn) {
-            uint256 leftoverAmount = amountIn - amountConsumed;
-            revert TychoRouter__AmountInNotFullySpent(leftoverAmount);
-        }
-
-        if (fee > 0) {
-            uint256 feeAmount = (amountOut * fee) / 10000;
-            amountOut -= feeAmount;
-            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-        }
-
-        if (minAmountOut > 0 && amountOut < minAmountOut) {
-            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        if (unwrapEth) {
-            _unwrapETH(amountOut);
-        }
-        if (tokenOut == address(0)) {
-            Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
-        }
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        return _swapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            wrapEth,
+            unwrapEth,
+            nTokens,
+            receiver,
+            swaps
+        );
     }
 
     /**
@@ -227,7 +197,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
-    ) external payable whenNotPaused returns (uint256 amountOut) {
+    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         // For native ETH, assume funds already in our router. Else, transfer and handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
@@ -239,7 +209,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             );
         }
 
-        return swap(
+        return _swapChecked(
             amountIn,
             tokenIn,
             tokenOut,
@@ -250,6 +220,76 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             receiver,
             swaps
         );
+    }
+
+    /**
+     * @notice Internal implementation of the core swap logic shared between swap() and swapPermit2().
+     *
+     * @notice This function centralizes the swap execution logic.
+     * @notice For detailed documentation on parameters and behavior, see the documentation for
+     * swap() and swapPermit2() functions.
+     *
+     */
+    function _swapChecked(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        bool wrapEth,
+        bool unwrapEth,
+        uint256 nTokens,
+        address receiver,
+        bytes calldata swaps
+    ) internal returns (uint256 amountOut) {
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
+        if (minAmountOut == 0) {
+            revert TychoRouter__UndefinedMinAmountOut();
+        }
+
+        // Assume funds are already in the router.
+        if (wrapEth) {
+            _wrapETH(amountIn);
+            tokenIn = address(_weth);
+        }
+
+        uint256 initialBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
+        amountOut = _swap(amountIn, nTokens, swaps);
+
+        uint256 currentBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
+        uint256 amountConsumed = initialBalance - currentBalance;
+
+        if (amountConsumed != amountIn) {
+            revert TychoRouter__AmountInDiffersFromConsumed(
+                amountIn, amountConsumed
+            );
+        }
+
+        if (fee > 0) {
+            uint256 feeAmount = (amountOut * fee) / 10000;
+            amountOut -= feeAmount;
+            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
+        }
+
+        if (minAmountOut > 0 && amountOut < minAmountOut) {
+            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
+
+        if (unwrapEth) {
+            _unwrapETH(amountOut);
+        }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        }
     }
 
     /**

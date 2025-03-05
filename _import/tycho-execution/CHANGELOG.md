@@ -1,3 +1,37 @@
+## [0.60.0](https://github.com/propeller-heads/tycho-execution/compare/0.59.0...0.60.0) (2025-03-05)
+
+
+### Features
+
+* Check min amount out is not zero ([5c28d77](https://github.com/propeller-heads/tycho-execution/commit/5c28d77f1d92bb7fba5fa7495e77fcbb5e077eb8))
+
+## [0.59.0](https://github.com/propeller-heads/tycho-execution/compare/0.58.2...0.59.0) (2025-03-05)
+
+
+### Features
+
+* add transferFrom in swap and move core swap logic inside _swapChecked ([f853739](https://github.com/propeller-heads/tycho-execution/commit/f853739a3dafb57dc12c77d97a30703a6d65445a))
+
+
+### Bug Fixes
+
+* TychoRouter swap check test naming and docs ([7833086](https://github.com/propeller-heads/tycho-execution/commit/783308642524cf917b9870188707318959407a10))
+
+## [0.58.2](https://github.com/propeller-heads/tycho-execution/compare/0.58.1...0.58.2) (2025-03-05)
+
+
+### Bug Fixes
+
+* Make permit2 permit an action in the universal router ([db9c8cd](https://github.com/propeller-heads/tycho-execution/commit/db9c8cde5aaa6cb32dbe74df228fb65d358687a3))
+
+## [0.58.1](https://github.com/propeller-heads/tycho-execution/compare/0.58.0...0.58.1) (2025-03-04)
+
+
+### Bug Fixes
+
+* add amountIn in error TychoRouter__AmountInDiffersFromConsumed ([a3bffd4](https://github.com/propeller-heads/tycho-execution/commit/a3bffd4f75e8644997970a45c6a8f2b896a30394))
+* inequality check for amountConsumed and amountIn ([6f421eb](https://github.com/propeller-heads/tycho-execution/commit/6f421eb374b798e9521a2a345558fae53f77dae3))
+
 ## [0.58.0](https://github.com/propeller-heads/tycho-execution/compare/0.57.0...0.58.0) (2025-03-03)
 
 

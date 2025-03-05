@@ -34,7 +34,6 @@ contract TychoRouterExposed is TychoRouter {
 contract TychoRouterTestSetup is Test, Constants {
     TychoRouterExposed tychoRouter;
     address tychoRouterAddr;
-    address permit2Address = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     UniswapV2Executor public usv2Executor;
     UniswapV3Executor public usv3Executor;
     UniswapV4Executor public usv4Executor;
@@ -49,7 +48,7 @@ contract TychoRouterTestSetup is Test, Constants {
         address factoryV2 = USV2_FACTORY_ETHEREUM;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        tychoRouter = new TychoRouterExposed(permit2Address, WETH_ADDR);
+        tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS, WETH_ADDR);
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("FEE_SETTER_ROLE"), FEE_SETTER);
@@ -108,7 +107,7 @@ contract TychoRouterTestSetup is Test, Constants {
         internal
         returns (IAllowanceTransfer.PermitSingle memory, bytes memory)
     {
-        IERC20(tokenIn).approve(permit2Address, amount_in);
+        IERC20(tokenIn).approve(PERMIT2_ADDRESS, amount_in);
         IAllowanceTransfer.PermitSingle memory permitSingle = IAllowanceTransfer
             .PermitSingle({
             details: IAllowanceTransfer.PermitDetails({
@@ -148,7 +147,7 @@ contract TychoRouterTestSetup is Test, Constants {
                 ),
                 keccak256("Permit2"),
                 block.chainid,
-                permit2Address
+                PERMIT2_ADDRESS
             )
         );
         bytes32 detailsHash =
