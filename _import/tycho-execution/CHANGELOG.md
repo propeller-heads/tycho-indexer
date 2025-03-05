@@ -1,3 +1,10 @@
+## [0.58.2](https://github.com/propeller-heads/tycho-execution/compare/0.58.1...0.58.2) (2025-03-05)
+
+
+### Bug Fixes
+
+* Make permit2 permit an action in the universal router ([db9c8cd](https://github.com/propeller-heads/tycho-execution/commit/db9c8cde5aaa6cb32dbe74df228fb65d358687a3))
+
 ## [0.58.1](https://github.com/propeller-heads/tycho-execution/compare/0.58.0...0.58.1) (2025-03-04)
 
 
