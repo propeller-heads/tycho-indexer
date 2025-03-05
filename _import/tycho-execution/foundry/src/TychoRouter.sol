@@ -143,7 +143,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        // Transfer the tokenIn token to the router
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
         return _swapChecked(
             amountIn,
