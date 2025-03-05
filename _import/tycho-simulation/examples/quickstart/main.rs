@@ -59,13 +59,13 @@ static ROUTER_ADDRESSES: LazyLock<HashMap<Chain, Bytes>> = LazyLock::new(|| {
     HashMap::from([
         (
             Chain::Ethereum,
-            "0x023eea66B260FA2E109B0764774837629cC41FeF"
+            "0x6512E8f80Ab24e6dD6eB042897898516c3175375"
                 .parse::<Bytes>()
                 .expect("Failed to create router address"),
         ),
         (
             Chain::Base,
-            "0x94ebf984511b06bab48545495b754760bfaa566e"
+            "0xC2C23b0199525DE070D126860133dc3badaD2EEb"
                 .parse::<Bytes>()
                 .expect("Failed to create router address"),
         ),
