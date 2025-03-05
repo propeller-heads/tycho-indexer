@@ -1,3 +1,15 @@
+## [0.59.0](https://github.com/propeller-heads/tycho-execution/compare/0.58.2...0.59.0) (2025-03-05)
+
+
+### Features
+
+* add transferFrom in swap and move core swap logic inside _swapChecked ([f853739](https://github.com/propeller-heads/tycho-execution/commit/f853739a3dafb57dc12c77d97a30703a6d65445a))
+
+
+### Bug Fixes
+
+* TychoRouter swap check test naming and docs ([7833086](https://github.com/propeller-heads/tycho-execution/commit/783308642524cf917b9870188707318959407a10))
+
 ## [0.58.2](https://github.com/propeller-heads/tycho-execution/compare/0.58.1...0.58.2) (2025-03-05)
 
 
