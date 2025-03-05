@@ -147,7 +147,7 @@ where
                 components.add_security_scheme(
                     "apiKey",
                     SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
-                        "X-API-KEY",
+                        "authorization",
                         "Use 'sampletoken' as value for testing",
                     ))),
                 );

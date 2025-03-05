@@ -736,6 +736,9 @@ where
         (status = 200, description = "OK", body = StateRequestResponse),
     ),
     request_body = StateRequestBody,
+    security(
+         ("apiKey" = [])
+    ),
 )]
 pub async fn contract_state<G: Gateway>(
     body: web::Json<dto::StateRequestBody>,
@@ -785,6 +788,9 @@ pub async fn contract_state<G: Gateway>(
         (status = 200, description = "OK", body = TokensRequestResponse),
     ),
     request_body = TokensRequestBody,
+    security(
+         ("apiKey" = [])
+    ),
 )]
 pub async fn tokens<G: Gateway>(
     body: web::Json<dto::TokensRequestBody>,
@@ -829,6 +835,9 @@ pub async fn tokens<G: Gateway>(
         (status = 200, description = "OK", body = ProtocolComponentRequestResponse),
     ),
     request_body = ProtocolComponentsRequestBody,
+    security(
+         ("apiKey" = [])
+    ),
 )]
 pub async fn protocol_components<G: Gateway>(
     body: web::Json<dto::ProtocolComponentsRequestBody>,
@@ -873,6 +882,9 @@ pub async fn protocol_components<G: Gateway>(
         (status = 200, description = "OK", body = ProtocolStateRequestResponse),
     ),
     request_body = ProtocolStateRequestBody,
+    security(
+         ("apiKey" = [])
+    ),
 )]
 pub async fn protocol_state<G: Gateway>(
     body: web::Json<dto::ProtocolStateRequestBody>,
@@ -918,6 +930,9 @@ pub async fn protocol_state<G: Gateway>(
         (status = 200, description = "OK", body = ProtocolSystemsRequestResponse),
     ),
     request_body = ProtocolSystemsRequestBody,
+    security(
+         ("apiKey" = [])
+    ),
 )]
 pub async fn protocol_systems<G: Gateway>(
     body: web::Json<dto::ProtocolSystemsRequestBody>,
@@ -961,6 +976,9 @@ pub async fn protocol_systems<G: Gateway>(
     responses(
         (status = 200, description = "OK", body=Health),
     ),
+    security(
+         ("apiKey" = [])
+    )
 )]
 pub async fn health() -> HttpResponse {
     counter!("rpc_requests", "endpoint" => "health").increment(1);
