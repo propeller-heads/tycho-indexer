@@ -1,3 +1,10 @@
+## [0.60.0](https://github.com/propeller-heads/tycho-execution/compare/0.59.0...0.60.0) (2025-03-05)
+
+
+### Features
+
+* Check min amount out is not zero ([5c28d77](https://github.com/propeller-heads/tycho-execution/commit/5c28d77f1d92bb7fba5fa7495e77fcbb5e077eb8))
+
 ## [0.59.0](https://github.com/propeller-heads/tycho-execution/compare/0.58.2...0.59.0) (2025-03-05)
 
 
