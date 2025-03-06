@@ -329,6 +329,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         uint256[] memory remainingAmounts = new uint256[](nTokens);
         uint256[] memory amounts = new uint256[](nTokens);
+        uint256 cyclicSwapAmountOut = 0;
         amounts[0] = amountIn;
         remainingAmounts[0] = amountIn;
 
@@ -345,13 +346,15 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             currentAmountOut = _callExecutor(
                 swapData.executor(), currentAmountIn, swapData.protocolData()
             );
-            amounts[tokenOutIndex] = tokenOutIndex == 0
-                ? currentAmountOut
-                : amounts[tokenOutIndex] + currentAmountOut;
+            if (tokenOutIndex == 0) {
+                cyclicSwapAmountOut += currentAmountOut;
+            } else {
+                amounts[tokenOutIndex] += currentAmountOut;
+            }
             remainingAmounts[tokenOutIndex] += currentAmountOut;
             remainingAmounts[tokenInIndex] -= currentAmountIn;
         }
-        return amounts[tokenOutIndex];
+        return tokenOutIndex == 0 ? cyclicSwapAmountOut : amounts[tokenOutIndex];
     }
 
     /**
