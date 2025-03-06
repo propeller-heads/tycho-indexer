@@ -1,3 +1,10 @@
+## [0.62.0](https://github.com/propeller-heads/tycho-execution/compare/0.61.0...0.62.0) (2025-03-06)
+
+
+### Features
+
+* enforce checked amount when encoding to router ([a4476e0](https://github.com/propeller-heads/tycho-execution/commit/a4476e0a17179205e795236368c2ffe3959f56e2))
+
 ## [0.61.0](https://github.com/propeller-heads/tycho-execution/compare/0.60.0...0.61.0) (2025-03-05)
 
 
