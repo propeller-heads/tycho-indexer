@@ -45,6 +45,7 @@ actix = "0.13.1"
 actix-web = "4.4.0"
 actix-web-actors = "4.2.0"
 actix-web-opentelemetry = "0.16.0"
+actix-cors = "0.6.5"
 aws-config = { version = "1.1.8", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.77"
 serde_yaml = "0.9.32"

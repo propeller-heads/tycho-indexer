@@ -3,7 +3,8 @@
 #![allow(deprecated)]
 use std::{collections::HashMap, sync::Arc};
 
-use actix_web::{dev::ServerHandle, web, App, HttpServer};
+use actix_cors::Cors;
+use actix_web::{dev::ServerHandle, http, web, App, HttpServer};
 use actix_web_opentelemetry::RequestTracing;
 use deltas_buffer::PendingDeltasBuffer;
 use futures03::future::try_join_all;
@@ -188,7 +189,19 @@ where
         let rpc_data = web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas));
 
         let server = HttpServer::new(move || {
+            let cors = Cors::default()
+                .allowed_origin("https://open.gitbook.com")
+                .allowed_origin("https://docs.propellerheads.xyz")
+                .allow_any_method()
+                .allowed_headers(vec![
+                    http::header::AUTHORIZATION,
+                    http::header::ACCEPT,
+                    http::header::CONTENT_TYPE,
+                ])
+                .max_age(3600); // Cache preflight requests for 1 hour
+
             let mut app = App::new()
+                .wrap(cors)
                 .app_data(rpc_data.clone())
                 .service(
                     web::resource(format!("/{}/contract_state", self.prefix))
