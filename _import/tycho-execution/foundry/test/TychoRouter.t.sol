@@ -1192,6 +1192,45 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(IERC20(WBTC_ADDR).balanceOf(tychoRouterAddr), 102718);
     }
 
+    function testCyclicSwapWithTwoPools() public {
+        // This test has start and end tokens that are the same
+        // The flow is:
+        // USDC -> WETH -> USDC -> WETH -> USDC using two pools, and four swaps
+        uint256 amountIn = 100 * 10 ** 6;
+        deal(USDC_ADDR, tychoRouterAddr, amountIn);
+
+        // First pool:  USDC -> WETH, in uniswap v3
+        bytes memory usdcWethData = encodeUniswapV3Swap(
+            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
+        );
+
+        // Second pool: WETH -> USDC, in uniswap v3
+        bytes memory wethUsdcData = encodeUniswapV3Swap(
+            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
+        );
+
+        bytes[] memory swaps = new bytes[](4);
+        // USDC -> WETH
+        swaps[0] = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv3Executor), usdcWethData
+        );
+        // WETH -> USDC
+        swaps[1] = encodeSwap(
+            uint8(1), uint8(0), uint24(0), address(usv3Executor), wethUsdcData
+        );
+        // USDC -> WETH
+        swaps[2] = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv3Executor), usdcWethData
+        );
+        // WETH -> USDC
+        swaps[3] = encodeSwap(
+            uint8(1), uint8(0), uint24(0), address(usv3Executor), wethUsdcData
+        );
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99778590);
+    }
+
     // Base Network Tests
     // Make sure to set the RPC_URL to base network
     function testSwapSingleBase() public {
