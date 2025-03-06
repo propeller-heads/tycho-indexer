@@ -37,7 +37,7 @@ struct DecoderState {
     tokens: HashMap<Bytes, Token>,
     states: HashMap<String, Box<dyn ProtocolSim>>,
     // maps contract address to the pools they affect
-    contracts_map: HashMap<Bytes, Vec<String>>,
+    contracts_map: HashMap<Bytes, HashSet<String>>,
 }
 
 type DecodeFut =
@@ -279,27 +279,26 @@ impl TychoStreamDecoder {
                         }
                     }
                 }
-                new_pairs.insert(
-                    id.clone(),
-                    ProtocolComponent::from_with_tokens(
-                        snapshot.component.clone(),
-                        component_tokens,
-                    ),
+                let component = ProtocolComponent::from_with_tokens(
+                    snapshot.component.clone(),
+                    component_tokens,
                 );
+
                 // collect contracts:ids mapping for states that should update on contract changes
-                for component in new_pairs.values() {
-                    if component
-                        .static_attributes
-                        .contains_key("manual_updates")
-                    {
-                        for contract in &component.contract_ids {
-                            contracts_map
-                                .entry(contract.clone())
-                                .or_insert_with(Vec::new)
-                                .push(id.clone());
-                        }
+
+                if component
+                    .static_attributes
+                    .contains_key("manual_updates")
+                {
+                    for contract in &component.contract_ids {
+                        contracts_map
+                            .entry(contract.clone())
+                            .or_insert_with(HashSet::new)
+                            .insert(id.clone());
                     }
                 }
+
+                new_pairs.insert(id.clone(), component);
 
                 // Construct state from snapshot
                 if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
@@ -465,7 +464,7 @@ impl TychoStreamDecoder {
             state_guard
                 .contracts_map
                 .entry(key)
-                .or_insert_with(Vec::new)
+                .or_insert_with(HashSet::new)
                 .extend(values);
         }
 
@@ -653,7 +652,7 @@ mod tests {
             .contracts_map
             .insert(
                 Bytes::from("0xba12222222228d8ba445958a75a0704d566bf2c8").lpad(20, 0),
-                vec![pool_id.clone()],
+                HashSet::from([pool_id.clone()]),
             );
 
         // Load a test message containing a contract update
