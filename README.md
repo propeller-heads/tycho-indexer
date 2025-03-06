@@ -10,6 +10,8 @@ state as quickly as possible.
 
 With Tycho, clients stay updated with the latest state of **all** protocols they are interested in. If they can handle all, they can get all.
 
+For comprehensive documentation about tycho-indexer, visit our [GitBook](https://docs.propellerheads.xyz/tycho/for-solvers/indexer).
+
 ## Supported implementations
 
 Tycho supports two primary protocol implementation strategies:
@@ -52,10 +54,3 @@ Tycho consists of several crates, each responsible for different aspects of the 
 - `tycho-client`: a rust client to simplify the start-up and managing of data from a Tycho connection. More detailed docs [here](./tycho-client/README.md).
 - `tycho-client-py`: a python interface for the rust client and RPC service. More detailed docs [here](./tycho-client-py/README.md).
 - `tycho-ethereum`: a module that integrates Ethereum-specific blockchain functionalities into Tycho. More detailed docs [here](./tycho-ethereum/README.md).
-
-## Other Chains
-
-Before moving to other chains the following things should be taken care of:
-
-- Correctly implement ChainState struct to return the latest block by querying the chains rpc.
-- Potentially fix assumption about fixed block times in the `tycho_client::feed`.
