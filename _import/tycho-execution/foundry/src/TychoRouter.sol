@@ -299,12 +299,15 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * - The indices of the input and output tokens (via `tokenInIndex()` and `tokenOutIndex()`).
      * - The portion of the available amount to be used for the swap, indicated by the `split` value.
      *
-     * Two important notes:
+     * Three important notes:
      * - The contract assumes that token indexes follow a specific order: the sell token is at index 0, followed by any
      *  intermediary tokens, and finally the buy token.
      * - A `split` value of 0 is interpreted as 100% of the available amount (i.e., the entire remaining balance).
      *  This means that in scenarios without explicit splits the value should be 0, and when splits are present,
      *  the last swap should also have a split value of 0.
+     * - In case of cyclic swaps, the output token is the same as the input token.
+     *  `cyclicSwapAmountOut` is used to track the amount of the output token, and is updated when
+     *  the `tokenOutIndex` is 0.
      *
      * @param amountIn The initial amount of the sell token to be swapped.
      * @param nTokens The total number of tokens involved in the swap path, used to initialize arrays for internal tracking.
@@ -346,6 +349,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             currentAmountOut = _callExecutor(
                 swapData.executor(), currentAmountIn, swapData.protocolData()
             );
+            // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
                 cyclicSwapAmountOut += currentAmountOut;
             } else {

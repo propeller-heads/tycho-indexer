@@ -1232,11 +1232,11 @@ contract TychoRouterTest is TychoRouterTestSetup {
     function testSplitInputCyclicSwap() public {
         // This test has start and end tokens that are the same
         // The flow is:
-        //                   ┌─── WETH (Pool 1) ───┐
-        //                   │                     │
-        // USDC (60% split) ─┤                     ├─> USDC
-        //                   │                     │
-        //                   └─── WETH (Pool 2) ───┘
+        //                   ┌─── WETH (USV3 Pool 1) ───┐
+        //                   │                          │
+        // USDC (60% split) ─┤                          ├─> USDC
+        //                   │                          │
+        //                   └─── WETH (USV3 Pool 2) ───┘
         //
         // 60% of USDC is swapped to WETH using Pool 1, then swapped back to USDC using Pool 2
         // 40% of USDC is swapped to WETH using Pool 2, then swapped back to USDC using Pool 1
@@ -1300,12 +1300,12 @@ contract TychoRouterTest is TychoRouterTestSetup {
     function testSplitOutputCyclicSwap() public {
         // This test has start and end tokens that are the same
         // The flow is:
-        //           ┌─── WETH (Pool 2, 60% split) ───┐
-        //           │                                │
-        // USDC ----─┤                                ├─> USDC
-        //           │                                │
-        //           └─── WETH (Pool 2, the rest)  ───┘
-        //
+        //                 ┌─── (USV3 Pool 1, 60% split) ───┐
+        //                 │                                │
+        // USDC ──(USV2)── ┤WETH                            ├─> USDC
+        //                 │                                │
+        //                 └─── (USV3 Pool 2, 40% split) ───┘
+
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, tychoRouterAddr, amountIn);
 
