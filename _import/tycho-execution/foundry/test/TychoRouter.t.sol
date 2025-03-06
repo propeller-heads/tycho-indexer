@@ -1192,43 +1192,125 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(IERC20(WBTC_ADDR).balanceOf(tychoRouterAddr), 102718);
     }
 
-    function testCyclicSwapWithTwoPools() public {
+    function testCyclicSequentialSwap() public {
         // This test has start and end tokens that are the same
         // The flow is:
         // USDC -> WETH -> USDC -> WETH -> USDC using two pools, and four swaps
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, tychoRouterAddr, amountIn);
 
-        // First pool:  USDC -> WETH, in uniswap v3
-        bytes memory usdcWethData = encodeUniswapV3Swap(
+        bytes memory usdcWethPoolOneZeroForOneData = encodeUniswapV3Swap(
             USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
         );
 
-        // Second pool: WETH -> USDC, in uniswap v3
-        bytes memory wethUsdcData = encodeUniswapV3Swap(
+        bytes memory usdcWethPoolTwoOneForZeroData = encodeUniswapV3Swap(
             WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
         );
 
         bytes[] memory swaps = new bytes[](4);
         // USDC -> WETH
         swaps[0] = encodeSwap(
-            uint8(0), uint8(1), uint24(0), address(usv3Executor), usdcWethData
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethPoolOneZeroForOneData
         );
         // WETH -> USDC
         swaps[1] = encodeSwap(
-            uint8(1), uint8(0), uint24(0), address(usv3Executor), wethUsdcData
+            uint8(1),
+            uint8(0),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethPoolTwoOneForZeroData
         );
         // USDC -> WETH
         swaps[2] = encodeSwap(
-            uint8(0), uint8(1), uint24(0), address(usv3Executor), usdcWethData
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethPoolOneZeroForOneData
         );
         // WETH -> USDC
         swaps[3] = encodeSwap(
-            uint8(1), uint8(0), uint24(0), address(usv3Executor), wethUsdcData
+            uint8(1),
+            uint8(0),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethPoolTwoOneForZeroData
         );
 
         tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99778590);
+    }
+
+    function testCyclicSplitSwap() public {
+        // This test has start and end tokens that are the same
+        // The flow is:
+        //                   ┌─── WETH (Pool 1) ───┐
+        //                   │                     │
+        // USDC (60% split) ─┤                     ├─> USDC
+        //                   │                     │
+        //                   └─── WETH (Pool 2) ───┘
+        //
+        // 60% of USDC is swapped to WETH using Pool 1, then swapped back to USDC using Pool 2
+        // 40% of USDC is swapped to WETH using Pool 2, then swapped back to USDC using Pool 1
+        uint256 amountIn = 100 * 10 ** 6;
+        deal(USDC_ADDR, tychoRouterAddr, amountIn);
+
+        bytes memory usdcWethPoolOneZeroForOneData = encodeUniswapV3Swap(
+            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
+        );
+        bytes memory usdcWethPoolOneOneForZeroData = encodeUniswapV3Swap(
+            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3, false
+        );
+
+        bytes memory usdcWethPoolTwoZeroForOneData = encodeUniswapV3Swap(
+            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, true
+        );
+
+        bytes memory usdcWethPoolTwoOneForZeroData = encodeUniswapV3Swap(
+            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
+        );
+
+        bytes[] memory swaps = new bytes[](4);
+        // USDC -> WETH
+        swaps[0] = encodeSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv3Executor),
+            usdcWethPoolOneZeroForOneData
+        );
+        // WETH -> USDC
+        swaps[1] = encodeSwap(
+            uint8(1),
+            uint8(0),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethPoolTwoOneForZeroData
+        );
+
+        // USDC -> WETH
+        swaps[2] = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethPoolTwoZeroForOneData
+        );
+
+        // WETH -> USDC
+        swaps[3] = encodeSwap(
+            uint8(1),
+            uint8(0),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethPoolOneOneForZeroData
+        );
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99345512);
     }
 
     // Base Network Tests
