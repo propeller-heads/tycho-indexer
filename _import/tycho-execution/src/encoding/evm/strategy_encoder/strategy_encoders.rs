@@ -108,6 +108,8 @@ impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
 impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         self.split_swap_validator
+            .validate_solution_min_amounts(&solution)?;
+        self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
             .validate_swap_path(
@@ -555,12 +557,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_check_no_slippage(
-        None,
-        None,
-        None,
-        U256::from_str("0").unwrap(),
-    )]
     #[case::with_check_no_slippage(
         None,
         None,
@@ -764,7 +760,7 @@ mod tests {
             given_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
             checked_token: eth(),
             expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
-            checked_amount: None,
+            checked_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
