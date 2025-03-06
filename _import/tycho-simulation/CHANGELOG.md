@@ -1,3 +1,11 @@
+## [0.82.1](https://github.com/propeller-heads/tycho-simulation/compare/0.82.0...0.82.1) (2025-03-06)
+
+
+### Bug Fixes
+
+* **evm-decoder:** correctly construct the `contracts_map`. ([b8b9a61](https://github.com/propeller-heads/tycho-simulation/commit/b8b9a617be6dc8d78ec7dfb374b0c59ff30a9e82))
+* **price-printer:** make amount stay >0. ([6d8cf77](https://github.com/propeller-heads/tycho-simulation/commit/6d8cf7772f9e3cb9bbf535a4a52aec1e6e18289a))
+
 ## [0.82.0](https://github.com/propeller-heads/tycho-simulation/compare/0.81.0...0.82.0) (2025-03-05)
 
 
