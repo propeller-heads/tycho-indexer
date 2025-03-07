@@ -20,7 +20,10 @@ use tycho_core::{
     },
     storage::Gateway,
 };
-use utoipa::OpenApi;
+use utoipa::{
+    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
+    Modify, OpenApi,
+};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
@@ -92,13 +95,18 @@ where
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
         #[derive(OpenApi)]
         #[openapi(
+            info(title = "Tycho-Indexer RPC",),
+            servers(
+                (url = "https://tycho-beta.propellerheads.xyz/", description = "PropellerHeads hosted service"),
+                (url = "/", description = "Local"),
+            ),
             paths(
-                rpc::contract_state,
+                rpc::health,
+                rpc::protocol_systems,
                 rpc::tokens,
                 rpc::protocol_components,
                 rpc::protocol_state,
-                rpc::health,
-                rpc::protocol_systems
+                rpc::contract_state,
             ),
             components(
                 schemas(VersionParam),
@@ -126,9 +134,25 @@ where
                 schemas(Health),
                 schemas(ProtocolSystemsRequestBody),
                 schemas(ProtocolSystemsRequestResponse),
-            )
+            ),
+            modifiers(&SecurityAddon),
         )]
         struct ApiDoc;
+
+        struct SecurityAddon;
+
+        impl Modify for SecurityAddon {
+            fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+                let components = openapi.components.as_mut().unwrap();
+                components.add_security_scheme(
+                    "apiKey",
+                    SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
+                        "authorization",
+                        "Use 'sampletoken' as value for testing",
+                    ))),
+                );
+            }
+        }
 
         let open_api = ApiDoc::openapi();
 

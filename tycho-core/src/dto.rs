@@ -25,6 +25,7 @@ use crate::{
     Bytes,
 };
 
+/// Currently supported Blockchains
 #[derive(
     Debug,
     Clone,
@@ -424,22 +425,33 @@ impl From<models::contract::AccountDelta> for AccountUpdate {
 /// Represents the static parts of a protocol component.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize, ToSchema)]
 pub struct ProtocolComponent {
+    /// Unique identifier for this component
     pub id: String,
+    /// Protocol system this component is part of
     pub protocol_system: String,
+    /// Type of the protocol system
     pub protocol_type_name: String,
     pub chain: Chain,
+    /// Token addresses the component operates on
     #[schema(value_type=Vec<String>)]
     pub tokens: Vec<Bytes>,
+    /// Contract addresses involved in the components operations (may be empty for
+    /// native implementations)
     #[serde(alias = "contract_addresses")]
     #[schema(value_type=Vec<String>)]
     pub contract_ids: Vec<Bytes>,
+    /// Constant attributes of the component
     #[serde(with = "hex_hashmap_value")]
     #[schema(value_type=HashMap<String, String>)]
     pub static_attributes: HashMap<String, Bytes>,
+    /// Internal use only
+    #[serde(skip_serializing)]
     pub change: ChangeType,
+    /// Transaction hash which created this component
     #[serde(with = "hex_bytes")]
     #[schema(value_type=String)]
     pub creation_tx: Bytes,
+    /// Date time of creation in UTC time
     pub created_at: NaiveDateTime,
 }
 
@@ -535,19 +547,21 @@ impl ProtocolStateDelta {
     }
 }
 
+/// Maximum page size for this endpoint is 100
 #[derive(Clone, Serialize, Debug, Default, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct StateRequestBody {
+    /// Filters response by contract addresses
     #[serde(alias = "contractIds")]
     #[schema(value_type=Option<Vec<String>>)]
     pub contract_ids: Option<Vec<Bytes>>,
+    /// Required to correctly apply unconfirmed state from ReorgBuffers
     #[serde(alias = "protocolSystem", default)]
     pub protocol_system: String,
     #[serde(default = "VersionParam::default")]
     pub version: VersionParam,
     #[serde(default)]
     pub chain: Chain,
-    /// Max page size supported is 100
     #[serde(default)]
     pub pagination: PaginationParams,
 }
@@ -604,32 +618,43 @@ impl StateRequestResponse {
 /// Code is serialized as a hex string instead of a list of bytes.
 pub struct ResponseAccount {
     pub chain: Chain,
+    /// The address of the account as hex encoded string
     #[schema(value_type=String, example="0xc9f2e6ea1637E499406986ac50ddC92401ce1f58")]
     #[serde(with = "hex_bytes")]
     pub address: Bytes,
+    /// The title of the account usualy specifying it's function within the protocol
     #[schema(value_type=String, example="Protocol Vault")]
     pub title: String,
+    /// Contract storage map of hex encoded string values
     #[schema(value_type=HashMap<String, String>, example=json!({"0x....": "0x...."}))]
     #[serde(with = "hex_hashmap_key_value")]
     pub slots: HashMap<Bytes, Bytes>,
+    /// The balance of the account in the native token
     #[schema(value_type=String, example="0x00")]
     #[serde(with = "hex_bytes")]
     pub native_balance: Bytes,
+    /// Balances of this account in other tokens (only tokens balance that are
+    /// relevant to the protocol are returned here)
     #[schema(value_type=HashMap<String, String>, example=json!({"0x....": "0x...."}))]
     #[serde(with = "hex_hashmap_key_value")]
     pub token_balances: HashMap<Bytes, Bytes>,
+    /// The accounts code as hex encoded string
     #[schema(value_type=String, example="0xBADBABE")]
     #[serde(with = "hex_bytes")]
     pub code: Bytes,
+    /// The hash of above code
     #[schema(value_type=String, example="0x123456789")]
     #[serde(with = "hex_bytes")]
     pub code_hash: Bytes,
+    /// Transaction hash which last modified native balance
     #[schema(value_type=String, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes")]
     pub balance_modify_tx: Bytes,
+    /// Transaction hash which last modified code
     #[schema(value_type=String, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes")]
     pub code_modify_tx: Bytes,
+    /// Transaction hash which created the account
     #[schema(value_type=Option<String>, example="0x8f1133bfb054a23aedfe5d25b1d81b96195396d8b88bd5d4bcf865fc1ae2c3f4")]
     #[serde(with = "hex_bytes_option")]
     pub creation_tx: Option<Bytes>,
@@ -796,23 +821,26 @@ impl StateRequestParameters {
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct TokensRequestBody {
+    /// Filters tokens by addresses
     #[serde(alias = "tokenAddresses")]
     #[schema(value_type=Option<Vec<String>>)]
     pub token_addresses: Option<Vec<Bytes>>,
     /// Quality is between 0-100, where:
-    ///  - 100: Normal token
-    ///  - 75: Rebase token
-    ///  - 50: Fee token
-    ///  - 10: Token analysis failed at creation
-    ///  - 5: Token analysis failed on cronjob (after creation).
-    ///  - 0: Failed to extract decimals onchain
+    ///  - 100: Normal ERC-20 Token behavior
+    ///  - 75: Rebasing token
+    ///  - 50: Fee-on-transfer token
+    ///  - 10: Token analysis failed at first detection
+    ///  - 5: Token analysis failed multiple times (after creation)
+    ///  - 0: Failed to extract attributes, like Decimal or Symbol
     #[serde(default)]
     pub min_quality: Option<i32>,
+    /// Filters tokens by recent trade activity
     #[serde(default)]
     pub traded_n_days_ago: Option<u64>,
     /// Max page size supported is 3000
     #[serde(default)]
     pub pagination: PaginationParams,
+    /// Filter tokens by blockchain, default 'ethereum'
     #[serde(default)]
     pub chain: Chain,
 }
@@ -830,11 +858,14 @@ impl TokensRequestResponse {
     }
 }
 
+/// Pagination parameter
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct PaginationParams {
+    /// What page to retrieve
     #[serde(default)]
     pub page: i64,
+    /// How many results to return per page
     #[serde(default)]
     pub page_size: i64,
 }
@@ -860,6 +891,7 @@ pub struct PaginationResponse {
     pub total: i64,
 }
 
+/// Current pagination information
 impl PaginationResponse {
     pub fn new(page: i64, page_size: i64, total: i64) -> Self {
         Self { page, page_size, total }
@@ -876,14 +908,26 @@ impl PaginationResponse {
 /// Token struct for the response from Tycho server for a tokens request.
 pub struct ResponseToken {
     pub chain: Chain,
+    /// The address of this token as hex encoded string
     #[schema(value_type=String, example="0xc9f2e6ea1637E499406986ac50ddC92401ce1f58")]
     #[serde(with = "hex_bytes")]
     pub address: Bytes,
+    /// A shorthand symbol for this token (not unique)
     #[schema(value_type=String, example="WETH")]
     pub symbol: String,
+    /// The number of decimals used to represent token values
     pub decimals: u32,
+    /// The tax this token charges on transfers in basis points
     pub tax: u64,
+    /// Gas usage of the token, currently is always a single averaged value
     pub gas: Vec<Option<u64>>,
+    /// Quality is between 0-100, where:
+    ///  - 100: Normal ERC-20 Token behavior
+    ///  - 75: Rebasing token
+    ///  - 50: Fee-on-transfer token
+    ///  - 10: Token analysis failed at first detection
+    ///  - 5: Token analysis failed multiple times (after creation)
+    ///  - 0: Failed to extract attributes, like Decimal or Symbol
     pub quality: u32,
 }
 
@@ -904,10 +948,13 @@ impl From<models::token::CurrencyToken> for ResponseToken {
 #[derive(Serialize, Deserialize, Debug, Default, ToSchema, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolComponentsRequestBody {
+    /// Required to correctly apply unconfirmed state from ReorgBuffers
     pub protocol_system: String,
+    /// Filter by component ids
     #[serde(alias = "componentAddresses")]
     pub component_ids: Option<Vec<String>>,
-    /// The minimum TVL of the protocol components to return, denoted in the chain's native token.
+    /// The minimum TVL of the protocol components to return, denoted in the chain's
+    /// native token.
     #[serde(default)]
     pub tvl_gt: Option<f64>,
     #[serde(default)]
@@ -1052,12 +1099,14 @@ impl AsRef<str> for ProtocolId {
 /// Protocol State struct for the response from Tycho server for a protocol state request.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize, ToSchema)]
 pub struct ResponseProtocolState {
+    /// Component id this state belongs to
     pub component_id: String,
     /// Attributes of the component. If an attribute's value is a `bigint`,
     /// it will be encoded as a big endian signed hex string.
     #[schema(value_type=HashMap<String, String>)]
     #[serde(with = "hex_hashmap_value")]
     pub attributes: HashMap<String, Bytes>,
+    /// Sum aggregated balances of the component
     #[schema(value_type=HashMap<String, String>)]
     #[serde(with = "hex_hashmap_key_value")]
     pub balances: HashMap<Bytes, Bytes>,
@@ -1077,11 +1126,14 @@ fn default_include_balances_flag() -> bool {
     true
 }
 
+/// Max page size supported is 100
 #[derive(Clone, Debug, Serialize, PartialEq, ToSchema, Default, Eq, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolStateRequestBody {
+    /// Filters response by protocol components ids
     #[serde(alias = "protocolIds")]
     pub protocol_ids: Option<Vec<String>>,
+    /// Required to correctly apply unconfirmed state from ReorgBuffers
     #[serde(alias = "protocolSystem")]
     pub protocol_system: String,
     #[serde(default)]
@@ -1091,7 +1143,6 @@ pub struct ProtocolStateRequestBody {
     pub include_balances: bool,
     #[serde(default = "VersionParam::default")]
     pub version: VersionParam,
-    /// Max page size supported is 100
     #[serde(default)]
     pub pagination: PaginationParams,
 }
@@ -1249,13 +1300,13 @@ pub enum Health {
 pub struct ProtocolSystemsRequestBody {
     #[serde(default)]
     pub chain: Chain,
-    /// Max page size supported is 100
     #[serde(default)]
     pub pagination: PaginationParams,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 pub struct ProtocolSystemsRequestResponse {
+    /// List of currently supported protocol systems
     pub protocol_systems: Vec<String>,
     pub pagination: PaginationResponse,
 }
