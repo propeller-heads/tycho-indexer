@@ -1412,4 +1412,111 @@ mod tests {
 
         println!("{}", hex::encode(&calldata));
     }
+
+    #[test]
+    fn test_split_output_cyclic_swap() {
+        // This test has start and end tokens that are the same
+        // The flow is:
+        //                        ┌─── (USV3, 60% split) ───┐
+        //                        │                         │
+        // USDC ──(USV2) ── WETH──|                         ├─> USDC
+        //                        │                         │
+        //                        └─── WETH (USV3 Pool 2)───┘
+
+        // Set up a mock private key for signing (Alice's pk in our router tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let swap_usdc_weth_v2 = Swap {
+            component: ProtocolComponent {
+                id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), // USDC-WETH USV2
+                protocol_system: "uniswap_v2".to_string(),
+                static_attributes: {
+                    let mut attrs = HashMap::new();
+                    attrs.insert(
+                        "fee".to_string(),
+                        Bytes::from(BigInt::from(500).to_signed_bytes_be()),
+                    );
+                    attrs
+                },
+                ..Default::default()
+            },
+            token_in: usdc.clone(),
+            token_out: weth.clone(),
+            split: 0.0f64,
+        };
+
+        let swap_weth_usdc_v3_pool1 = Swap {
+            component: ProtocolComponent {
+                id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
+                                                                               * Pool 1 */
+                protocol_system: "uniswap_v3".to_string(),
+                static_attributes: {
+                    let mut attrs = HashMap::new();
+                    attrs.insert(
+                        "fee".to_string(),
+                        Bytes::from(BigInt::from(500).to_signed_bytes_be()),
+                    );
+                    attrs
+                },
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: usdc.clone(),
+            split: 0.6f64,
+        };
+
+        let swap_weth_usdc_v3_pool2 = Swap {
+            component: ProtocolComponent {
+                id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
+                                                                               * Pool 2 */
+                protocol_system: "uniswap_v3".to_string(),
+                static_attributes: {
+                    let mut attrs = HashMap::new();
+                    attrs.insert(
+                        "fee".to_string(),
+                        Bytes::from(BigInt::from(3000).to_signed_bytes_be()),
+                    );
+                    attrs
+                },
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: usdc.clone(),
+            split: 0.0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key.clone()),
+        )
+        .unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: usdc.clone(),
+            given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
+            checked_token: usdc.clone(),
+            expected_amount: None,
+            checked_amount: Some(BigUint::from_str("99525908").unwrap()), /* Expected output from
+                                                                           * test */
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            slippage: None,
+            swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
+            ..Default::default()
+        };
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        println!("{}", hex::encode(&calldata));
+    }
 }
