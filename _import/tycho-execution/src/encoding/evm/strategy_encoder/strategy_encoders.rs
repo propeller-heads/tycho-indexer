@@ -1396,13 +1396,13 @@ mod tests {
             given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
             checked_token: usdc.clone(),
             expected_amount: None,
-            checked_amount: Some(BigUint::from_str("99345512").unwrap()), /* Expected output from
+            checked_amount: Some(BigUint::from_str("99693951").unwrap()), /* Expected output from
                                                                            * test */
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             slippage: None,
-            swaps: vec![swap_usdc_weth_pool1, swap_weth_usdc_pool2, swap_usdc_weth_pool2],
+            swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
             ..Default::default()
         };
 
