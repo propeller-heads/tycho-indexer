@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use figment::providers::Format;
 use hex::FromHex;
 use serde::{Deserialize, Serialize};
 
@@ -18,9 +17,9 @@ impl From<String> for HexBytes {
     }
 }
 
-impl Into<String> for HexBytes {
-    fn into(self) -> String {
-        format!("0x{}", hex::encode(self.0))
+impl From<HexBytes> for String {
+    fn from(val: HexBytes) -> Self {
+        format!("0x{}", hex::encode(val.0))
     }
 }
 
