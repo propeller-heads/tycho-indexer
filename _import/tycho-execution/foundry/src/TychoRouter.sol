@@ -14,6 +14,7 @@ import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import "forge-std/console.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
 //                                   ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -259,7 +260,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             : IERC20(tokenIn).balanceOf(address(this));
 
         amountOut = _swap(amountIn, nTokens, swaps);
-
         uint256 currentBalance = tokenIn == address(0)
             ? address(this).balance
             : IERC20(tokenIn).balanceOf(address(this));
@@ -322,6 +322,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         if (swaps_.length == 0) {
             revert TychoRouter__EmptySwaps();
         }
+
+        console.log("amountIn", amountIn);
+        console.log("nTokens", nTokens);
+        console.logBytes(swaps_);
 
         uint256 currentAmountIn;
         uint256 currentAmountOut;

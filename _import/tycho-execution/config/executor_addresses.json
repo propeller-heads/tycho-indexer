@@ -1,7 +1,7 @@
 {
   "ethereum": {
     "uniswap_v2": "0xf6c5be66FFf9DC69962d73da0A617a827c382329",
-    "uniswap_v3": "0xdD8559c917393FC8DD2b4dD289c52Ff445fDE1B0",
+    "uniswap_v3": "0x2e234DAe75C793f67A35089C9d99245E1C58470b",
     "uniswap_v4": "0x042C0ebBEAb9d9987c2f64Ee05f2B3aeB86eAf70",
     "vm:balancer_v2": "0x00BE8EfAE40219Ff76287b0F9b9e497942f5BC91"
   },
