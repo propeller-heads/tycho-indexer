@@ -1,3 +1,16 @@
+## [0.63.0](https://github.com/propeller-heads/tycho-execution/compare/0.62.0...0.63.0) (2025-03-10)
+
+
+### Features
+
+* add cyclicSwapAmountOut tracker in _swap, add split cylic tests ([4d67df4](https://github.com/propeller-heads/tycho-execution/commit/4d67df40965414caff94f8660c70f4acad51482f))
+
+
+### Bug Fixes
+
+* amountConsumed check in _swapChecked for cyclic swap ([91f36fe](https://github.com/propeller-heads/tycho-execution/commit/91f36fe3285ae4e3e010b9138e8226e257f8499c))
+* remove amountIn addition to amountOut in _swap for cyclic swaps, add testCyclicSwapWithTwoPools test to verify ([57acbd5](https://github.com/propeller-heads/tycho-execution/commit/57acbd58c5146c88098e9bc274ec702ef25add32))
+
 ## [0.62.0](https://github.com/propeller-heads/tycho-execution/compare/0.61.0...0.62.0) (2025-03-06)
 
 
