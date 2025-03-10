@@ -1,0 +1,21 @@
+[package]
+name = "protocol-testing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Logging & Tracing
+tracing = "0.1.37"
+# Tycho dependencies
+tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.56.5" }
+tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.56.5" }
+# EVM dependencies
+alloy = { version = "0.5.4", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http"] }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1.0.140"
+clap = "4.5.31"
+figment = { version = "0.10.19", features = ["yaml"] }
+serde = { version = "1.0.218", features = ["derive"] }
+hex = "0.4.3"
+tracing-subscriber = "0.3.19"
+postgres = "0.19.10"
