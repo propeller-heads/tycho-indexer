@@ -1,9 +1,9 @@
-use std::{cmp::max, str::FromStr, time::Instant};
+use std::{str::FromStr, time::Instant};
 
 use futures::StreamExt;
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_traits::One;
+use num_traits::{CheckedSub, One};
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Flex, Layout, Margin, Rect},
@@ -252,10 +252,10 @@ impl App {
             if increase {
                 self.quote_amount += BigUint::from(10u64).pow(decimals as u32);
             } else {
-                self.quote_amount = max(
-                    &self.quote_amount - BigUint::from(10u64).pow(decimals as u32),
-                    BigUint::one(),
-                );
+                self.quote_amount = self
+                    .quote_amount
+                    .checked_sub(&BigUint::from(10u64).pow(decimals as u32))
+                    .unwrap_or(BigUint::one());
             }
         }
     }
