@@ -1364,9 +1364,9 @@ mod tests {
         // WETH -> USDC (Pool 2)
         let swap_weth_usdc_pool2 = Swap {
             component: ProtocolComponent {
-                id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
+                id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), /* USDC-WETH USV2
                                                                                * Pool 2 */
-                protocol_system: "uniswap_v3".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
                 static_attributes: {
                     let mut attrs = HashMap::new();
                     attrs.insert(
@@ -1396,7 +1396,7 @@ mod tests {
             given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
             checked_token: usdc.clone(),
             expected_amount: None,
-            checked_amount: Some(BigUint::from_str("99693951").unwrap()), /* Expected output from
+            checked_amount: Some(BigUint::from_str("99574171").unwrap()), /* Expected output from
                                                                            * test */
             router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
