@@ -206,7 +206,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         }
 
         let encoded_swaps = self.ple_encode(swaps);
-        let tokens_len = if &solution.given_token == &solution.checked_token {
+        let tokens_len = if solution.given_token == solution.checked_token {
             tokens.len() - 1
         } else {
             tokens.len()
@@ -1306,11 +1306,11 @@ mod tests {
     fn test_split_input_cyclic_swap() {
         // This test has start and end tokens that are the same
         // The flow is:
-        //                   ┌─── WETH (USV3 Pool 1) ───┐
-        //                   │                          │
-        // USDC (60% split) ─┤                          ├─> USDC
-        //                   │                          │
-        //                   └─── WETH (USV3 Pool 2) ───┘
+        //            ┌─ (USV3, 60% split) ──> WETH ─┐
+        //            │                              │
+        // USDC ──────┤                              ├──(USV2)──> USDC
+        //            │                              │
+        //            └─ (USV3, 40% split) ──> WETH ─┘
 
         // Set up a mock private key for signing (Alice's pk in our router tests)
         let private_key =

@@ -143,16 +143,12 @@ impl SplitSwapValidator {
 
         // Build directed graph of token flows
         let mut graph: HashMap<&Bytes, HashSet<&Bytes>> = HashMap::new();
+        let mut all_tokens = HashSet::new();
         for swap in swaps {
             graph
                 .entry(&swap.token_in)
                 .or_default()
                 .insert(&swap.token_out);
-        }
-
-        // Collect all unique tokens from the swaps
-        let mut all_tokens = HashSet::new();
-        for swap in swaps {
             all_tokens.insert(&swap.token_in);
             all_tokens.insert(&swap.token_out);
         }
@@ -321,7 +317,7 @@ mod tests {
                 },
                 token_in: usdc.clone(),
                 token_out: weth.clone(),
-                split: 0.5,
+                split: 0f64,
             },
             Swap {
                 component: ProtocolComponent {
@@ -331,7 +327,7 @@ mod tests {
                 },
                 token_in: weth.clone(),
                 token_out: usdc.clone(),
-                split: 0.5,
+                split: 0f64,
             },
         ];
 
