@@ -1351,13 +1351,13 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testCyclicSplitInputSwapIntegration() public {
+    function testSplitInputCyclicSwapIntegration() public {
         deal(USDC_ADDR, ALICE, 100 * 10 ** 6);
 
         // Approve permit2
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
-        // Encoded solution generated using `test_cyclic_split_swap`
+        // Encoded solution generated using `test_split_input_cyclic_swap`
         // but manually replacing the executor addresses with the ones in this test
         // `dD8559c917393FC8DD2b4dD289c52Ff445fDE1B0` to `2e234DAe75C793f67A35089C9d99245E1C58470b`
         // `f6c5be66FFf9DC69962d73da0A617a827c382329` to `5615deb798bb3e4dfa0139dfa1b3d433cc23b72f`
@@ -1370,13 +1370,13 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testCyclicSplitOutputSwapIntegration() public {
+    function testSplitOutputCyclicSwapIntegration() public {
         deal(USDC_ADDR, ALICE, 100 * 10 ** 6);
 
         // Approve permit2
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
-        // Encoded solution generated using `test_cyclic_split_swap`
+        // Encoded solution generated using `test_split_output_cyclic_swap`
         // but manually replacing the executor addresses with the ones in this test
         // `dD8559c917393FC8DD2b4dD289c52Ff445fDE1B0` to `2e234DAe75C793f67A35089C9d99245E1C58470b`
         // `f6c5be66FFf9DC69962d73da0A617a827c382329` to `5615deb798bb3e4dfa0139dfa1b3d433cc23b72f`
