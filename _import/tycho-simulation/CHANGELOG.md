@@ -1,3 +1,10 @@
+## [0.82.2](https://github.com/propeller-heads/tycho-simulation/compare/0.82.1...0.82.2) (2025-03-10)
+
+
+### Bug Fixes
+
+* **price-printer:** do not panic during amount calculation math. ([eb3f7f9](https://github.com/propeller-heads/tycho-simulation/commit/eb3f7f92902d709b3a6babffd421885afda167b5))
+
 ## [0.82.1](https://github.com/propeller-heads/tycho-simulation/compare/0.82.0...0.82.1) (2025-03-06)
 
 

@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.82.1"
+version = "0.82.2"
 dependencies = [
  "alloy 0.5.4",
  "num-bigint",
@@ -7909,7 +7909,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.82.1"
+version = "0.82.2"
 dependencies = [
  "alloy 0.5.4",
  "alloy-primitives",
