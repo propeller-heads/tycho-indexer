@@ -8,7 +8,7 @@ use std::{
 
 use alloy_primitives::Address;
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
@@ -18,7 +18,7 @@ use crate::{
         engine_db::{update_engine, SHARED_TYCHO_DB},
         tycho_models::{AccountUpdate, ResponseAccount},
     },
-    models::Token,
+    models::{Balances, Token},
     protocol::{
         errors::InvalidSnapshotError,
         models::{BlockUpdate, ProtocolComponent, TryFromWithBlock},
@@ -42,8 +42,10 @@ struct DecoderState {
 
 type DecodeFut =
     Pin<Box<dyn Future<Output = Result<Box<dyn ProtocolSim>, InvalidSnapshotError>> + Send + Sync>>;
-type RegistryFn =
-    dyn Fn(ComponentWithState, Header, Arc<RwLock<DecoderState>>) -> DecodeFut + Send + Sync;
+type AccountBalances = HashMap<Bytes, HashMap<Bytes, Bytes>>;
+type RegistryFn = dyn Fn(ComponentWithState, Header, AccountBalances, Arc<RwLock<DecoderState>>) -> DecodeFut
+    + Send
+    + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
 
 /// A decoder to process raw messages.
@@ -111,10 +113,11 @@ impl TychoStreamDecoder {
         let decoder = Box::new(
             move |component: ComponentWithState,
                   header: Header,
+                  account_balances: AccountBalances,
                   state: Arc<RwLock<DecoderState>>| {
                 Box::pin(async move {
                     let guard = state.read().await;
-                    T::try_from_with_block(component, header, &guard.tokens)
+                    T::try_from_with_block(component, header, &account_balances, &guard.tokens)
                         .await
                         .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
                 }) as DecodeFut
@@ -240,6 +243,16 @@ impl TychoStreamDecoder {
                 .iter()
                 .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
                 .collect();
+            let account_balances = protocol_msg
+                .clone()
+                .snapshots
+                .get_vm_storage()
+                .iter()
+                .map(|(addr, acc)| {
+                    let balances = acc.token_balances.clone();
+                    (addr.clone(), balances)
+                })
+                .collect::<AccountBalances>();
             info!("Updating engine with {} snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
@@ -302,7 +315,14 @@ impl TychoStreamDecoder {
 
                 // Construct state from snapshot
                 if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
-                    match state_decode_f(snapshot, block.clone(), self.state.clone()).await {
+                    match state_decode_f(
+                        snapshot,
+                        block.clone(),
+                        account_balances.clone(),
+                        self.state.clone(),
+                    )
+                    .await
+                    {
                         Ok(state) => {
                             new_components.insert(id.clone(), state);
                         }
@@ -334,13 +354,14 @@ impl TychoStreamDecoder {
 
             // PROCESS DELTAS
             if let Some(deltas) = protocol_msg.deltas.clone() {
+                // Update engine with account changes
                 let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
                     .account_updates
                     .clone()
                     .iter()
                     .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
                     .collect();
-                info!("Updating engine with {} deltas", deltas.state_updates.len());
+                info!("Updating engine with {} contract deltas", deltas.state_updates.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
                     block.clone().into(),
@@ -350,9 +371,8 @@ impl TychoStreamDecoder {
                 .await;
                 info!("Engine updated");
 
-                // update states related to contracts with account deltas
+                // Collect all pools related to the updated accounts
                 let mut pools_to_update = HashSet::new();
-                // get pools related to the updated accounts
                 for (account, _update) in deltas.account_updates {
                     // get new pools related to the account updated
                     pools_to_update.extend(
@@ -370,91 +390,65 @@ impl TychoStreamDecoder {
                             .unwrap_or_default(),
                     );
                 }
-                // update the pools
-                for pool in pools_to_update {
-                    match updated_states.entry(pool.clone()) {
-                        Entry::Occupied(mut entry) => {
-                            // if state exists in updated_states, update it
-                            let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
-                            state
-                                .delta_transition(
-                                    ProtocolStateDelta::default(),
-                                    &state_guard.tokens,
-                                )
-                                .map_err(|e| {
-                                    error!(pool = pool, error = ?e, "DeltaTransitionError");
-                                    StreamDecodeError::Fatal(format!("TransitionFailure: {e:?}"))
-                                })?;
-                        }
-                        Entry::Vacant(_) => {
-                            match state_guard.states.get(&pool) {
-                                // if state does not exist in updated_states, update the stored
-                                // state
-                                Some(stored_state) => {
-                                    let mut state = stored_state.clone();
-                                    state
-                                        .delta_transition(
-                                            ProtocolStateDelta::default(),
-                                            &state_guard.tokens,
-                                        )
-                                        .map_err(|e| {
-                                            error!(pool = pool, error = ?e, "DeltaTransitionError");
-                                            StreamDecodeError::Fatal(format!(
-                                                "TransitionFailure: {e:?}"
-                                            ))
-                                        })?;
-                                    updated_states.insert(pool.clone(), state);
-                                }
-                                None => debug!(
-                                    pool = pool,
-                                    reason = "MissingState",
-                                    "DeltaTransitionError"
-                                ),
+
+                // Collect all balance changes this block
+                let all_balances = Balances {
+                    component_balances: deltas
+                        .component_balances
+                        .iter()
+                        .map(|(pool_id, bals)| {
+                            let mut balances = HashMap::new();
+                            for (t, b) in &bals.0 {
+                                balances.insert(t.clone(), b.balance.clone());
                             }
-                        }
-                    }
-                }
+                            pools_to_update.insert(pool_id.clone());
+                            (pool_id.clone(), balances)
+                        })
+                        .collect(),
+                    account_balances: deltas
+                        .account_balances
+                        .iter()
+                        .map(|(account, bals)| {
+                            let mut balances = HashMap::new();
+                            for (t, b) in bals {
+                                balances.insert(t.clone(), b.balance.clone());
+                            }
+                            pools_to_update.extend(
+                                contracts_map
+                                    .get(account)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                            );
+                            (account.clone(), balances)
+                        })
+                        .collect(),
+                };
 
                 // update states with protocol state deltas (attribute changes etc.)
                 for (id, update) in deltas.state_updates {
-                    match updated_states.entry(id.clone()) {
-                        Entry::Occupied(mut entry) => {
-                            // if state exists in updated_states, apply the delta to it
-                            let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
-                            state
-                                .delta_transition(update, &state_guard.tokens)
-                                .map_err(|e| {
-                                    error!(pool = id, error = ?e, "DeltaTransitionError");
-                                    StreamDecodeError::Fatal(format!("TransitionFailure: {e:?}"))
-                                })?;
-                        }
-                        Entry::Vacant(_) => {
-                            match state_guard.states.get(&id) {
-                                // if state does not exist in updated_states, apply the delta to the
-                                // stored state
-                                Some(stored_state) => {
-                                    let mut state = stored_state.clone();
-                                    state
-                                        .delta_transition(update, &state_guard.tokens)
-                                        .map_err(|e| {
-                                            error!(pool = id, error = ?e, "DeltaTransitionError");
-                                            StreamDecodeError::Fatal(format!(
-                                                "TransitionFailure: {e:?}"
-                                            ))
-                                        })?;
-                                    updated_states.insert(id, state);
-                                }
-                                None => debug!(
-                                    pool = id,
-                                    reason = "MissingState",
-                                    "DeltaTransitionError"
-                                ),
-                            }
-                        }
-                    }
+                    Self::apply_update(
+                        &id,
+                        update,
+                        &mut updated_states,
+                        &state_guard,
+                        &all_balances,
+                    )?;
+                    pools_to_update.remove(&id);
+                }
+
+                // update remaining pools linked to updated contracts/updated balances
+                for pool in pools_to_update {
+                    Self::apply_update(
+                        &pool,
+                        ProtocolStateDelta::default(),
+                        &mut updated_states,
+                        &state_guard,
+                        &all_balances,
+                    )?;
                 }
             };
         }
+
         // Persist the newly added/updated states
         let mut state_guard = self.state.write().await;
         state_guard
@@ -471,6 +465,45 @@ impl TychoStreamDecoder {
         // Send the tick with all updated states
         Ok(BlockUpdate::new(block.number, updated_states, new_pairs)
             .set_removed_pairs(removed_pairs))
+    }
+
+    fn apply_update(
+        id: &String,
+        update: ProtocolStateDelta,
+        updated_states: &mut HashMap<String, Box<dyn ProtocolSim>>,
+        state_guard: &RwLockReadGuard<'_, DecoderState>,
+        all_balances: &Balances,
+    ) -> Result<(), StreamDecodeError> {
+        match updated_states.entry(id.clone()) {
+            Entry::Occupied(mut entry) => {
+                // If state exists in updated_states, apply the delta to it
+                let state: &mut Box<dyn ProtocolSim> = entry.get_mut();
+                state
+                    .delta_transition(update, &state_guard.tokens, all_balances)
+                    .map_err(|e| {
+                        error!(pool = id, error = ?e, "DeltaTransitionError");
+                        StreamDecodeError::Fatal(format!("TransitionFailure: {e:?}"))
+                    })?;
+            }
+            Entry::Vacant(_) => {
+                match state_guard.states.get(id) {
+                    // If state does not exist in updated_states, apply the delta to the stored
+                    // state
+                    Some(stored_state) => {
+                        let mut state = stored_state.clone();
+                        state
+                            .delta_transition(update, &state_guard.tokens, all_balances)
+                            .map_err(|e| {
+                                error!(pool = id, error = ?e, "DeltaTransitionError");
+                                StreamDecodeError::Fatal(format!("TransitionFailure: {e:?}"))
+                            })?;
+                        updated_states.insert(id.clone(), state);
+                    }
+                    None => debug!(pool = id, reason = "MissingState", "DeltaTransitionError"),
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -628,7 +661,7 @@ mod tests {
                 cloned_mock_state
                     .expect_delta_transition()
                     .times(1)
-                    .returning(|_, _| Ok(()));
+                    .returning(|_, _, _| Ok(()));
                 cloned_mock_state
                     .expect_clone_box()
                     .times(1)

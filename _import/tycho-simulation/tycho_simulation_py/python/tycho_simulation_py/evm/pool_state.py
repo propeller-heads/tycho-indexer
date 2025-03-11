@@ -9,15 +9,13 @@ from logging import getLogger
 from typing import Optional, cast, TypeVar
 
 import eth_abi
-from eth_utils import keccak
 from eth_typing import HexStr
+from eth_utils import keccak
 
-from . import token
 from . import SimulationEngine, AccountInfo, SimulationParameters
+from . import token
 from .adapter_contract import AdapterContract
 from .constants import MAX_BALANCE, EXTERNAL_ACCOUNT
-from ..exceptions import RecoverableSimulationException
-from ..models import EVMBlock, Capability, Address, EthereumToken
 from .utils import (
     ContractCompiler,
     ERC20Slots,
@@ -27,6 +25,8 @@ from .utils import (
     ERC20OverwriteFactory,
     get_code_for_address,
 )
+from ..exceptions import RecoverableSimulationException
+from ..models import EVMBlock, Capability, Address, EthereumToken
 
 ADAPTER_ADDRESS = "0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270"
 
@@ -40,6 +40,7 @@ class ThirdPartyPool:
         id_: str,
         tokens: tuple[EthereumToken, ...],
         balances: dict[Address, Decimal],
+        contract_balances: dict[Address, dict[Address, Decimal]],
         block: EVMBlock,
         adapter_contract_path: str,
         marginal_prices: dict[tuple[EthereumToken, EthereumToken], Decimal] = None,
@@ -59,7 +60,10 @@ class ThirdPartyPool:
         """The pools tokens."""
 
         self.balances = balances
-        """The pools token balances."""
+        """The pools component balances."""
+
+        self.contract_balances = contract_balances
+        """The pools contract balances. If supplied, component balances are ignored."""
 
         self.block = block
         """The current block, will be used to set vm context."""
@@ -346,25 +350,45 @@ class ThirdPartyPool:
 
     def _get_balance_overwrites(self) -> dict[Address, dict[int, int]]:
         balance_overwrites = {}
-        address = self.balance_owner or self.id_
-        for t in self.tokens:
-            slots = ERC20Slots(0, 1)
-            compiler = ContractCompiler.Solidity
-            if t.address in self.involved_contracts:
-                slots, compiler = self.token_storage_slots.get(t.address)
-            overwrites = ERC20OverwriteFactory(t, token_slots=slots, compiler=compiler)
-            # This is a hack made for BalancerV3. We need to find a way to properly handle this.
-            # Context: we need this to be true when we try to simulate _reservesOf[token] <= token.balanceOf(vault).
-            # But with how we currently overwrite balances (pool balance only) it's false.
-            # Proposed solution would be to index a per account token balance and use it for overwrite instead of TVL balances.
-            if address.lower() == "0xba1333333333a1ba1108e8412f11850a5c319ba9":
-                amount = 2**150 - 1 # Big amount but not too close to 2**256 to avoid overflows
-            else:
+        slots = ERC20Slots(0, 1)
+        compiler = ContractCompiler.Solidity
+        if self.contract_balances:
+            # use contract balances for overrides
+            balances_by_token = dict()
+            for contract, balances in self.contract_balances.items():
+                for token_address, amount in balances.items():
+                    token: Optional[EthereumToken] = None
+                    for t in self.tokens:
+                        if t.address.lower() == token_address.lower():
+                            token = t
+                            break
+                    if token is None:
+                        log.warning("Found balance for token not in pool. Overwrite skipped")
+                        continue
+                    amount = token.to_onchain_amount(amount)
+                    if token in balances_by_token:
+                        balances_by_token[token].append((contract, amount))
+                    else:
+                        balances_by_token[token] = [(contract, amount)]
+            for token, bals in balances_by_token.items():
+                overwrites = ERC20OverwriteFactory(token, slots, compiler)
+                for contract, amount in bals:
+                    overwrites.set_balance(
+                        amount, contract
+                    )
+                balance_overwrites.update(overwrites.get_tycho_overwrites())
+        else:
+            # use component balances for overrides
+            address = self.balance_owner or self.id_
+            for t in self.tokens:
+                if t.address in self.involved_contracts:
+                    slots, compiler = self.token_storage_slots.get(t.address)
+                overwrites = ERC20OverwriteFactory(t, slots, compiler)
                 amount = t.to_onchain_amount(self.balances[t.address])
-            overwrites.set_balance(
-                amount, address
-            )
-            balance_overwrites.update(overwrites.get_tycho_overwrites())
+                overwrites.set_balance(
+                    amount, address
+                )
+                balance_overwrites.update(overwrites.get_tycho_overwrites())
         return balance_overwrites
 
     def _duplicate(self: "ThirdPartyPool") -> "ThirdPartyPool":
@@ -380,6 +404,7 @@ class ThirdPartyPool:
             id_=self.id_,
             tokens=self.tokens,
             balances=self.balances,
+            contract_balances=self.contract_balances,
             block=self.block,
             marginal_prices=self.marginal_prices.copy(),
             adapter_contract_path=self.adapter_contract_path,

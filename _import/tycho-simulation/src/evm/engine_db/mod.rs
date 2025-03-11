@@ -90,7 +90,7 @@ pub async fn update_engine(
                 address: vm_storage_values.address,
                 chain: vm_storage_values.chain,
                 slots: vm_storage_values.slots.clone(),
-                balance: Some(vm_storage_values.balance),
+                balance: Some(vm_storage_values.native_balance),
                 code: Some(vm_storage_values.code.clone()),
                 change: ChangeType::Creation,
             });

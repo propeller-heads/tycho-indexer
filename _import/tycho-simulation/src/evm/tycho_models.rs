@@ -201,7 +201,8 @@ pub struct ResponseAccount {
     pub address: Address,
     pub title: String,
     pub slots: HashMap<U256, U256>,
-    pub balance: U256,
+    pub native_balance: U256,
+    pub token_balances: HashMap<Address, U256>,
     #[serde(with = "hex_bytes")]
     pub code: Vec<u8>,
     pub code_hash: B256,
@@ -217,7 +218,8 @@ impl ResponseAccount {
         address: Address,
         title: String,
         slots: HashMap<U256, U256>,
-        balance: U256,
+        native_balance: U256,
+        token_balances: HashMap<Address, U256>,
         code: Vec<u8>,
         code_hash: B256,
         balance_modify_tx: B256,
@@ -229,7 +231,8 @@ impl ResponseAccount {
             address,
             title,
             slots,
-            balance,
+            native_balance,
+            token_balances,
             code,
             code_hash,
             balance_modify_tx,
@@ -247,7 +250,8 @@ impl std::fmt::Debug for ResponseAccount {
             .field("address", &self.address)
             .field("title", &self.title)
             .field("slots", &self.slots)
-            .field("balance", &self.balance)
+            .field("native_balance", &self.native_balance)
+            .field("token_balances", &self.token_balances)
             .field("code", &format!("[{} bytes]", self.code.len()))
             .field("code_hash", &self.code_hash)
             .field("balance_modify_tx", &self.balance_modify_tx)
@@ -264,7 +268,14 @@ impl From<tycho_core::dto::ResponseAccount> for ResponseAccount {
             address: Address::from_slice(&value.address[..20]), // Convert address field to Address
             title: value.title.clone(),
             slots: u256_num::map_slots_to_u256(value.slots),
-            balance: u256_num::bytes_to_u256(value.native_balance.into()),
+            native_balance: u256_num::bytes_to_u256(value.native_balance.into()),
+            token_balances: value
+                .token_balances
+                .into_iter()
+                .map(|(address, balance)| {
+                    (Address::from_slice(&address[..20]), u256_num::bytes_to_u256(balance.into()))
+                })
+                .collect(),
             code: value.code.to_vec(),
             code_hash: B256::from_slice(&value.code_hash[..]),
             balance_modify_tx: B256::from_slice(&value.balance_modify_tx[..]),
