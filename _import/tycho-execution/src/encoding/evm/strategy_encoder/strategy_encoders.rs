@@ -1421,7 +1421,7 @@ mod tests {
         //                        │                         │
         // USDC ──(USV2) ── WETH──|                         ├─> USDC
         //                        │                         │
-        //                        └─── WETH (USV3 Pool 2)───┘
+        //                        └─── (USV3, 40% split) ───┘
 
         // Set up a mock private key for signing (Alice's pk in our router tests)
         let private_key =
@@ -1510,6 +1510,94 @@ mod tests {
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             slippage: None,
             swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
+            ..Default::default()
+        };
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        println!("{}", hex::encode(&calldata));
+    }
+
+    #[test]
+    fn test_cylic_swap_unwrap_output() {
+        // This test has start and end tokens that are the same
+        // The flow is:
+        // ETH -> WBTC -> WETH(unwrap operation) -> ETH
+
+        // Set up a mock private key for signing (Alice's pk in our router tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+
+        // ETH -> WBTC (Uniswap V4)
+        let swap_eth_wbtc = Swap {
+            component: ProtocolComponent {
+                id: "0x54c72c46df32f2cc455e84e41e191b26ed73a29452cdd3d82f511097af9f427e"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                static_attributes: {
+                    let mut attrs = HashMap::new();
+                    attrs.insert(
+                        "key_lp_fee".to_string(),
+                        Bytes::from(BigInt::from(3000).to_signed_bytes_be()),
+                    );
+                    attrs.insert(
+                        "tick_spacing".to_string(),
+                        Bytes::from(BigInt::from(60).to_signed_bytes_be()),
+                    );
+                    attrs
+                },
+                ..Default::default()
+            },
+            token_in: eth(),
+            token_out: wbtc.clone(),
+            split: 0f64,
+        };
+
+        // WBTC -> WETH (Uniswap V3)
+        let swap_wbtc_weth = Swap {
+            component: ProtocolComponent {
+                id: "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD".to_string(),
+                protocol_system: "uniswap_v3".to_string(),
+                static_attributes: {
+                    let mut attrs = HashMap::new();
+                    attrs.insert(
+                        "fee".to_string(),
+                        Bytes::from(BigInt::from(3000).to_signed_bytes_be()),
+                    );
+                    attrs
+                },
+                ..Default::default()
+            },
+            token_in: wbtc.clone(),
+            token_out: weth.clone(),
+            split: 0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
+                .unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: eth(),
+            given_amount: BigUint::from_str("1000000000000000000").unwrap(), // 1 WETH
+            checked_token: eth(),
+            expected_amount: None,
+            checked_amount: Some(BigUint::from_str("993164318934741987").unwrap()), /* Expected output
+                                                                                     * from
+                                                                                     * test */
+            slippage: None,
+            swaps: vec![swap_eth_wbtc, swap_wbtc_weth],
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            native_action: Some(NativeAction::Unwrap),
             ..Default::default()
         };
 
