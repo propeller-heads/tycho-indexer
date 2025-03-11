@@ -9,11 +9,19 @@ adapter_build_args: "0x0000000000000000000000000000000000000000"
 # Whether or not the testing script should skip checking balances of the protocol components.
 # If set to `true` please always add a reason why it's skipped.
 skip_balance_check: false
-# A list of accounts that need to be indexed to run the tests properly.
-# Usually used when there is a global component required by all pools and created before the tested range of blocks. For example a factory or a vault.
-# Please note that this component needs to be indexed by your substreams module, this feature is only for testing purpose.
-# Also please always add a reason why this account is needed for your tests.
-# This will be applied to each test.
+# Accounts that will be automatically initialized at test start
+# IMPORTANT: These are TEST FIXTURES ONLY. Your actual code must still properly
+# initialize these accounts. This configuration only eliminates the need to include
+# historical blocks containing the initialization events in your test data.
+#
+# Example use case:
+# - Your substream would normally initialize account XYZ at block 10000
+# - Your test only includes blocks 20000-21000 for efficiency
+# - You list XYZ here so the test environment will automatically initialize the account XYZ with the state it had at block 20000
+# - Your actual substream code MUST STILL contain the initialization and state tracking logic for this contract
+#
+# Without this, you would need to include block 10000 in your test data or your
+# test would fail because the account appears uninitialized to your code.
 initialized_accounts:
   - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84" # Needed for ....
 # A list of protocol types names created by your Substreams module.
