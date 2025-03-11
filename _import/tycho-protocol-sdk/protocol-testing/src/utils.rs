@@ -1,4 +1,9 @@
-use std::{error::Error, fs, path::Path, process::Command};
+use std::{
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use figment::{
     providers::{Format, Yaml},
@@ -7,19 +12,16 @@ use figment::{
 };
 
 /// Build a Substreams package with modifications to the YAML file.
-pub fn build_spkg<F>(yaml_file_path: &str, modify_func: F) -> Result<String, Box<dyn Error>>
-where
-    F: FnOnce(&mut Value) -> Result<(), Box<dyn Error>>,
-{
+pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> Result<String, Box<dyn Error>> {
     // Create a backup file of the unmodified Substreams protocol YAML config file.
-    let backup_file_path = format!("{}.backup", yaml_file_path);
+    let backup_file_path = yaml_file_path.with_extension("backup");
     fs::copy(yaml_file_path, &backup_file_path)?;
 
     let figment = Figment::new().merge(Yaml::file(yaml_file_path));
     let mut data: Value = figment.extract()?;
 
     // Apply the modification function to update the YAML files
-    modify_func(&mut data).expect("Failed to modify the YAML config file.");
+    modify_initial_block(&mut data, initial_block);
 
     let parent_dir = Path::new(yaml_file_path)
         .parent()
@@ -79,7 +81,7 @@ where
 }
 
 /// Update the initial block for all modules in the configuration data.
-pub fn modify_initial_block(data: &mut Value, start_block: usize) {
+pub fn modify_initial_block(data: &mut Value, start_block: u64) {
     if let Value::Dict(_, ref mut dict) = data {
         if let Some(Value::Array(_, modules)) = dict.get_mut("modules") {
             for module in modules.iter_mut() {
