@@ -1298,13 +1298,48 @@ mod tests {
         let (calldata, _) = encoder
             .encode_strategy(solution)
             .unwrap();
+        let hex_calldata = hex::encode(&calldata);
+        let expected_input = [
+            "d499aa88",                                                         // selector
+            "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
+            "0000000000000000000000000000000000000000000000000000000005f4308e", // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000", // wrap action
+            "0000000000000000000000000000000000000000000000000000000000000000", // unwrap action
+            "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        ]
+        .join("");
 
-        let hex_calldata = encode(&calldata);
-        let encoded_swap_header = "d499aa880000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f4308e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2".to_string();
-        let encoded_swaps = "00000000000000000000000000000000000000000000000000000000000000de006d0001000000dd8559c917393fc8dd2b4dd289c52ff445fde1b0a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f564001006d0100000000dd8559c917393fc8dd2b4dd289c52ff445fde1b0c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000bb83ede3eca2a72b3aecc820e955b36f38437d013958ad599c3a0ff1de082011efddc58f1908eb6e6d8000000".to_string();
-        assert_eq!(hex_calldata[..520], encoded_swap_header);
-        assert_eq!(hex_calldata[1288..], encoded_swaps);
-        println!("{}", hex_calldata);
+        let expected_swaps = [
+            "00000000000000000000000000000000000000000000000000000000000000de",  // length of ple encoded swaps without padding
+            "006d",  // ple encoded swaps
+            "00",     // token in index
+            "01",     // token out index
+            "000000", // split
+            "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+            "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
+            "0001f4",                                   // pool fee
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+            "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
+            "01",                                       // zero2one
+            "006d",                                     // ple encoded swaps
+            "01",                                       // token in index
+            "00000000",                                 // split
+            "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+            "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
+            "000bb8",                                   // pool fee
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+            "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
+            "000000",                                   // zero2one
+        ]
+        .join("");
+
+        assert_eq!(hex_calldata[..520], expected_input);
+        assert_eq!(hex_calldata[1288..], expected_swaps);
     }
 
     #[test]
@@ -1416,11 +1451,56 @@ mod tests {
             .unwrap();
 
         let hex_calldata = hex::encode(&calldata);
-        let encoded_swap_header = "d499aa880000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005ef619b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2".to_string();
-        let encoded_swaps = "0000000000000000000000000000000000000000000000000000000000000136006d0001999999dd8559c917393fc8dd2b4dd289c52ff445fde1b0a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f564001006d0001000000dd8559c917393fc8dd2b4dd289c52ff445fde1b0a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000bb83ede3eca2a72b3aecc820e955b36f38437d013958ad599c3a0ff1de082011efddc58f1908eb6e6d80100560100000000f6c5be66fff9dc69962d73da0a617a827c382329c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2b4e16d0168e52d35cacd2c6185b44281ec28c9dc3ede3eca2a72b3aecc820e955b36f38437d013950000000000000000000000".to_string();
-        assert_eq!(hex_calldata[..520], encoded_swap_header);
-        assert_eq!(hex_calldata[1288..], encoded_swaps);
-        println!("{}", hex_calldata);
+        let expected_input = [
+            "d499aa88",                                                         // selector
+            "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
+            "0000000000000000000000000000000000000000000000000000000005ef619b", // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000", // wrap action
+            "0000000000000000000000000000000000000000000000000000000000000000", // unwrap action
+            "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        ]
+        .join("");
+        let expected_swaps = [
+        "0000000000000000000000000000000000000000000000000000000000000136", // length of ple encoded swaps without padding
+        "006d", // ple encoded swaps
+        "00", // token in index
+        "01", // token out index
+        "999999", // split
+        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
+        "0001f4", // pool fee
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
+        "01", // zero2one
+        "006d", // ple encoded swaps
+        "00", // token in index
+        "01", // token out index
+        "000000", // split
+        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
+        "000bb8", // pool fee
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
+        "01", // zero2one
+        "0056", // ple encoded swaps
+        "01", // token in index
+        "00", // token out index
+        "000000", // split
+        "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address,
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+        "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "00", // zero2one
+        "00000000000000000000" // padding
+        ]
+        .join("");
+        assert_eq!(hex_calldata[..520], expected_input);
+        assert_eq!(hex_calldata[1288..], expected_swaps);
     }
 
     #[test]
@@ -1528,11 +1608,58 @@ mod tests {
             .unwrap();
 
         let hex_calldata = hex::encode(&calldata);
-        let encoded_swap_header = "d499aa880000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005eea514000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2".to_string();
-        let encoded_swaps = "000000000000000000000000000000000000000000000000000000000000013600560001000000f6c5be66fff9dc69962d73da0a617a827c382329a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48b4e16d0168e52d35cacd2c6185b44281ec28c9dc3ede3eca2a72b3aecc820e955b36f38437d0139501006d0100999999dd8559c917393fc8dd2b4dd289c52ff445fde1b0c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f564000006d0100000000dd8559c917393fc8dd2b4dd289c52ff445fde1b0c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000bb83ede3eca2a72b3aecc820e955b36f38437d013958ad599c3a0ff1de082011efddc58f1908eb6e6d80000000000000000000000".to_string();
-        assert_eq!(hex_calldata[..520], encoded_swap_header);
-        assert_eq!(hex_calldata[1288..], encoded_swaps);
-        println!("{}", hex_calldata);
+        let expected_input = [
+            "d499aa88",                                                         // selector
+            "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
+            "0000000000000000000000000000000000000000000000000000000005eea514", // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000", // wrap action
+            "0000000000000000000000000000000000000000000000000000000000000000", // unwrap action
+            "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        ]
+        .join("");
+
+        let expected_swaps = [
+        "0000000000000000000000000000000000000000000000000000000000000136", // length of ple encoded swaps without padding
+        "0056", // ple encoded swaps
+        "00", // token in index
+        "01", // token out index
+        "000000", // split
+        "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
+        "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "01", // zero2one
+        "006d", // ple encoded swaps
+        "01", // token in index
+        "00", // token out index
+        "999999", // split
+        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
+        "0001f4", // pool fee
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
+        "00", // zero2one
+        "006d", // ple encoded swaps
+        "01", // token in index
+        "00", // token out index
+        "000000", // split
+        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
+        "000bb8", // pool fee
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
+        "00", // zero2one
+        "00000000000000000000" // padding
+    ]
+    .join("");
+
+        assert_eq!(hex_calldata[..520], expected_input);
+        assert_eq!(hex_calldata[1288..], expected_swaps);
     }
 
     #[test]
@@ -1621,10 +1748,52 @@ mod tests {
 
         let hex_calldata = hex::encode(&calldata);
 
-        let expected_input_swap_header = "d499aa880000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000dc86dafa1b2b3e3000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000003000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2".to_string();
-        let expected_input_swaps = "00000000000000000000000000000000000000000000000000000000000000e100700001000000042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf7000000000000000000000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c59901042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf702260fac5e5542a773aa44fbcfedf7c193bc2c599000bb800003c006d0102000000dd8559c917393fc8dd2b4dd289c52ff445fde1b02260fac5e5542a773aa44fbcfedf7c193bc2c599c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000bb83ede3eca2a72b3aecc820e955b36f38437d01395cbcdf9626bc03e24f779434178a73a0b4bad62ed0100000000000000000000000000000000000000000000000000000000000000".to_string();
-        assert_eq!(hex_calldata[..520], expected_input_swap_header);
-        assert_eq!(hex_calldata[1288..], expected_input_swaps);
+        let expected_input = [
+            "d499aa88",                                                         // selector
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // given amount
+            "0000000000000000000000000000000000000000000000000000000000000000", // given token
+            "0000000000000000000000000000000000000000000000000000000000000000", // checked token
+            "0000000000000000000000000000000000000000000000000dc86dafa1b2b3e3", // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000", // wrap action
+            "0000000000000000000000000000000000000000000000000000000000000001", // unwrap action
+            "0000000000000000000000000000000000000000000000000000000000000003", // tokens length
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        ]
+        .join("");
+
+        let expected_swaps = [
+            "00000000000000000000000000000000000000000000000000000000000000e1", // length of ple encoded swaps without padding
+            "0070", // ple encoded swaps
+            "00", // token in index
+            "01", // token out index
+            "000000", // split
+            "042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf70", // executor address
+            "0000000000000000000000000000000000000000", // token in
+            "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // intermediary token
+            "01", // zero2one
+            "042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf70", // executor address
+            // Pool params
+            "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // intermediary token
+            "000bb8", // pool fee
+            "00003c", // tick spacing
+            // Next swap
+            "006d", // ple encoded swaps
+            "01", // token in index
+            "02", // token out index
+            "000000", // split
+            "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+            "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // token in
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
+            "000bb8", // pool fee
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+            "cbcdf9626bc03e24f779434178a73a0b4bad62ed", // component id
+            "01", // zero2one
+            "00000000000000000000000000000000000000000000000000000000000000" // padding
+        ]
+        .join("");
+
+        assert_eq!(hex_calldata[..520], expected_input);
+        assert_eq!(hex_calldata[1288..], expected_swaps);
         println!("{}", hex_calldata);
     }
 }
