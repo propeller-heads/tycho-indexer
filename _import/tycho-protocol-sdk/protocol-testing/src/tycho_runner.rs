@@ -97,7 +97,7 @@ impl TychoRunner {
         Ok(())
     }
 
-    fn run_with_rpc_server<F, R>(&self, func: F) -> R
+    pub fn run_with_rpc_server<F, R>(&self, func: F) -> R
     where
         F: FnOnce() -> R,
     {
