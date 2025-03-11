@@ -1,7 +1,8 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::U256;
+use alloy_primitives::{Address, U256};
 use num_bigint::{BigUint, ToBigUint};
+use num_traits::Zero;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
 use super::reserve_price::spot_price_from_reserves;
@@ -98,6 +99,21 @@ impl ProtocolSim for UniswapV2State {
                 .expect("Expected an unsigned integer as gas value"),
             Box::new(new_state),
         ))
+    }
+
+    fn get_limits(
+        &self,
+        token_in: Address,
+        token_out: Address,
+    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+        if self.reserve0 == U256::from(0u64) || self.reserve1 == U256::from(0u64) {
+            return Ok((Some(BigUint::zero()), Some(BigUint::zero())));
+        }
+
+        let zero_for_one = token_in < token_out;
+        let reserve_out = if zero_for_one { self.reserve1 } else { self.reserve0 };
+
+        Ok((None, Some(u256_to_biguint(reserve_out))))
     }
 
     fn delta_transition(

@@ -193,7 +193,7 @@ where
                 vec![sell_token_address, buy_token_address],
                 *MAX_BALANCE / U256::from(100),
             )?);
-            let sell_amount_limit = self.get_sell_amount_limit(
+            let (sell_amount_limit, _) = self.get_sell_amount_limit(
                 vec![sell_token_address, buy_token_address],
                 overwrites.clone(),
             )?;
@@ -265,16 +265,16 @@ where
         &self,
         tokens: Vec<Address>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
-    ) -> Result<U256, SimulationError> {
+    ) -> Result<(U256, U256), SimulationError> {
         let limits = self.adapter_contract.get_limits(
             &self.id,
             tokens[0],
             tokens[1],
             self.block.number,
             overwrites,
-        );
+        )?;
 
-        Ok(limits?.0)
+        Ok(limits)
     }
 
     /// Updates the pool state.
@@ -535,7 +535,7 @@ where
             vec![sell_token_address, buy_token_address],
             U256::from_be_slice(&(*MAX_BALANCE / U256::from(100)).to_be_bytes::<32>()),
         )?;
-        let sell_amount_limit = self.get_sell_amount_limit(
+        let (sell_amount_limit, _) = self.get_sell_amount_limit(
             vec![sell_token_address, buy_token_address],
             Some(overwrites.clone()),
         )?;
@@ -612,6 +612,23 @@ where
             u256_to_biguint(trade.gas_used),
             Box::new(new_state.clone()),
         ))
+    }
+
+    fn get_limits(
+        &self,
+        token_in: Address,
+        token_out: Address,
+    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+        let overwrites =
+            self.get_overwrites(vec![token_in, token_out], *MAX_BALANCE / U256::from(100))?;
+        let limits = self.adapter_contract.get_limits(
+            &self.id,
+            token_in,
+            token_out,
+            self.block.number,
+            Some(overwrites),
+        )?;
+        Ok((Some(u256_to_biguint(limits.0)), Some(u256_to_biguint(limits.1))))
     }
 
     fn delta_transition(
@@ -947,12 +964,12 @@ mod tests {
                 *MAX_BALANCE / U256::from(100),
             )
             .unwrap();
-        let dai_limit = pool_state
+        let (dai_limit, _) = pool_state
             .get_sell_amount_limit(vec![dai_addr(), bal_addr()], Some(overwrites.clone()))
             .unwrap();
         assert_eq!(dai_limit, U256::from_str("100279494253364362835").unwrap());
 
-        let bal_limit = pool_state
+        let (bal_limit, _) = pool_state
             .get_sell_amount_limit(
                 vec![
                     bytes_to_address(&pool_state.tokens[1]).unwrap(),

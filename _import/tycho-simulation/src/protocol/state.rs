@@ -46,6 +46,7 @@
 //! ```
 use std::{any::Any, collections::HashMap};
 
+use alloy_primitives::Address;
 #[cfg(test)]
 use mockall::mock;
 use num_bigint::BigUint;
@@ -104,6 +105,30 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError>;
 
+    /// Computes the maximum amount that can be traded between two tokens.
+    ///
+    /// This function calculates the maximum possible trade amount between two tokens,
+    /// taking into account the protocol's specific constraints and mechanics.
+    /// The implementation details vary by protocol - for example:
+    /// - For constant product AMMs (like Uniswap V2), this is based on available reserves
+    /// - For concentrated liquidity AMMs (like Uniswap V3), this considers liquidity across tick
+    ///   ranges
+    ///
+    /// # Arguments
+    /// * `sell_token` - The address of the token being sold
+    /// * `buy_token` - The address of the token being bought
+    ///
+    /// # Returns
+    /// * `Ok((Option<BigUint>, Option<BigUint>))` - A tuple containing:
+    ///   - First element: The maximum input amount (None if there is no limit)
+    ///   - Second element: The maximum output amount (None if there is no limit)
+    /// * `Err(SimulationError)` - If any unexpected error occurs
+    fn get_limits(
+        &self,
+        sell_token: Address,
+        buy_token: Address,
+    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError>;
+
     /// Decodes and applies a protocol state delta to the state
     ///
     /// Will error if the provided delta is missing any required attributes or if any of the
@@ -158,6 +183,11 @@ mock! {
             token_in: &Token,
             token_out: &Token,
         ) -> Result<GetAmountOutResult, SimulationError>;
+        pub fn get_limits(
+            &self,
+            sell_token: Address,
+            buy_token: Address,
+        ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError>;
         pub fn delta_transition(
             &mut self,
             delta: ProtocolStateDelta,
@@ -186,6 +216,14 @@ impl ProtocolSim for MockProtocolSim {
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         self.get_amount_out(amount_in, token_in, token_out)
+    }
+
+    fn get_limits(
+        &self,
+        sell_token: Address,
+        buy_token: Address,
+    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+        self.get_limits(sell_token, buy_token)
     }
 
     fn delta_transition(

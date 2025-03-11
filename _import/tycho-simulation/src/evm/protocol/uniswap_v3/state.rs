@@ -1,7 +1,8 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::{Sign, I256, U256};
+use alloy_primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
+use num_traits::Zero;
 use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
@@ -12,7 +13,7 @@ use crate::{
         u256_num::u256_to_biguint,
         utils::uniswap::{
             i24_be_bytes_to_i32, liquidity_math,
-            sqrt_price_math::sqrt_price_q96_to_f64,
+            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
             swap_math,
             tick_list::{TickInfo, TickList, TickListErrorKind},
             tick_math::{
@@ -260,6 +261,84 @@ impl ProtocolSim for UniswapV3State {
             u256_to_biguint(result.gas_used),
             Box::new(new_state),
         ))
+    }
+
+    fn get_limits(
+        &self,
+        token_in: Address,
+        token_out: Address,
+    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+        if self.liquidity == 0 {
+            return Ok((Some(BigUint::zero()), Some(BigUint::zero())));
+        }
+
+        let zero_for_one = token_in < token_out;
+        let mut current_tick = self.tick;
+        let mut current_sqrt_price = self.sqrt_price;
+        let mut current_liquidity = self.liquidity;
+        let mut total_amount_in = U256::from(0u64);
+        let mut total_amount_out = U256::from(0u64);
+
+        loop {
+            let (next_tick, initialized) = match self
+                .ticks
+                .next_initialized_tick_within_one_word(current_tick, zero_for_one)
+            {
+                Ok((tick, init)) => (tick.clamp(MIN_TICK, MAX_TICK), init),
+                Err(_) => break,
+            };
+
+            let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
+
+            let (amount_in, amount_out) = if zero_for_one {
+                let amount0 = get_amount0_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    true,
+                )?;
+                let amount1 = get_amount1_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    false,
+                )?;
+                (amount0, amount1)
+            } else {
+                let amount0 = get_amount0_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    false,
+                )?;
+                let amount1 = get_amount1_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    true,
+                )?;
+                (amount1, amount0)
+            };
+
+            total_amount_in = safe_add_u256(total_amount_in, amount_in)?;
+            total_amount_out = safe_add_u256(total_amount_out, amount_out)?;
+
+            if initialized {
+                let liquidity_raw = self
+                    .ticks
+                    .get_tick(next_tick)
+                    .unwrap()
+                    .net_liquidity;
+                let liquidity_delta = if zero_for_one { -liquidity_raw } else { liquidity_raw };
+                current_liquidity =
+                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta);
+            }
+
+            current_tick = next_tick;
+            current_sqrt_price = sqrt_price_next;
+        }
+
+        Ok((Some(u256_to_biguint(total_amount_in)), Some(u256_to_biguint(total_amount_out))))
     }
 
     fn delta_transition(
