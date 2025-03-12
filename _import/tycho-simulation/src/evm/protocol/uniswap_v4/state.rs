@@ -285,9 +285,9 @@ impl ProtocolSim for UniswapV4State {
         &self,
         token_in: Address,
         token_out: Address,
-    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+    ) -> Result<(BigUint, BigUint), SimulationError> {
         if self.liquidity == 0 {
-            return Ok((Some(BigUint::zero()), Some(BigUint::zero())));
+            return Ok((BigUint::zero(), BigUint::zero()));
         }
 
         let zero_for_one = token_in < token_out;
@@ -356,7 +356,7 @@ impl ProtocolSim for UniswapV4State {
             current_sqrt_price = sqrt_price_next;
         }
 
-        Ok((Some(u256_to_biguint(total_amount_in)), Some(u256_to_biguint(total_amount_out))))
+        Ok((u256_to_biguint(total_amount_in), u256_to_biguint(total_amount_out)))
     }
 
     fn delta_transition(

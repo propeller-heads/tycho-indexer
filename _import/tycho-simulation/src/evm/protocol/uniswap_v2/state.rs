@@ -105,15 +105,24 @@ impl ProtocolSim for UniswapV2State {
         &self,
         token_in: Address,
         token_out: Address,
-    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+    ) -> Result<(BigUint, BigUint), SimulationError> {
         if self.reserve0 == U256::from(0u64) || self.reserve1 == U256::from(0u64) {
-            return Ok((Some(BigUint::zero()), Some(BigUint::zero())));
+            return Ok((BigUint::zero(), BigUint::zero()));
         }
 
         let zero_for_one = token_in < token_out;
-        let reserve_out = if zero_for_one { self.reserve1 } else { self.reserve0 };
+        let (reserve_in, reserve_out) = if zero_for_one {
+            (self.reserve0, self.reserve1)
+        } else {
+            (self.reserve1, self.reserve0)
+        };
 
-        Ok((None, Some(u256_to_biguint(reserve_out))))
+        // Soft limit for amount in is the amount to get a 90% price impact.
+        // It is given by this: (√10 - 1) × reserve0 = 2.16 × reserve0
+        let amount_in =
+            safe_div_u256(safe_mul_u256(reserve_in, U256::from(216))?, U256::from(100))?;
+
+        Ok((u256_to_biguint(amount_in), u256_to_biguint(reserve_out)))
     }
 
     fn delta_transition(
@@ -348,5 +357,46 @@ mod tests {
             }
             _ => panic!("Test failed: was expecting an Err value"),
         };
+    }
+
+    #[test]
+    fn test_get_limits_price_impact() {
+        let state =
+            UniswapV2State::new(U256::from_str("1000").unwrap(), U256::from_str("100000").unwrap());
+
+        let (amount_in, _) = state
+            .get_limits(
+                Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            )
+            .unwrap();
+
+        let token_0 = Token::new(
+            "0x0000000000000000000000000000000000000000",
+            18,
+            "T0",
+            10_000.to_biguint().unwrap(),
+        );
+        let token_1 = Token::new(
+            "0x0000000000000000000000000000000000000001",
+            18,
+            "T1",
+            10_000.to_biguint().unwrap(),
+        );
+
+        let result = state
+            .get_amount_out(amount_in.clone(), &token_0, &token_1)
+            .unwrap();
+        let new_state = result
+            .new_state
+            .as_any()
+            .downcast_ref::<UniswapV2State>()
+            .unwrap();
+
+        let initial_price = safe_div_u256(state.reserve1, state.reserve0).unwrap();
+        let new_price = safe_div_u256(new_state.reserve1, new_state.reserve0).unwrap();
+
+        let expected_price = initial_price / U256::from(10);
+        assert!(expected_price == new_price, "Price impact not 90%.");
     }
 }

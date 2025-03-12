@@ -114,20 +114,24 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// - For concentrated liquidity AMMs (like Uniswap V3), this considers liquidity across tick
     ///   ranges
     ///
+    /// Note: if there are no limits, the returned amount will be a "soft" limit,
+    ///       meaning that the actual amount traded could be higher but it's advised to not
+    ///       exceed it.
+    ///
     /// # Arguments
     /// * `sell_token` - The address of the token being sold
     /// * `buy_token` - The address of the token being bought
     ///
     /// # Returns
     /// * `Ok((Option<BigUint>, Option<BigUint>))` - A tuple containing:
-    ///   - First element: The maximum input amount (None if there is no limit)
-    ///   - Second element: The maximum output amount (None if there is no limit)
+    ///   - First element: The maximum input amount
+    ///   - Second element: The maximum output amount
     /// * `Err(SimulationError)` - If any unexpected error occurs
     fn get_limits(
         &self,
         sell_token: Address,
         buy_token: Address,
-    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError>;
+    ) -> Result<(BigUint, BigUint), SimulationError>;
 
     /// Decodes and applies a protocol state delta to the state
     ///
@@ -187,7 +191,7 @@ mock! {
             &self,
             sell_token: Address,
             buy_token: Address,
-        ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError>;
+        ) -> Result<(BigUint, BigUint), SimulationError>;
         pub fn delta_transition(
             &mut self,
             delta: ProtocolStateDelta,
@@ -222,7 +226,7 @@ impl ProtocolSim for MockProtocolSim {
         &self,
         sell_token: Address,
         buy_token: Address,
-    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+    ) -> Result<(BigUint, BigUint), SimulationError> {
         self.get_limits(sell_token, buy_token)
     }
 

@@ -618,7 +618,7 @@ where
         &self,
         token_in: Address,
         token_out: Address,
-    ) -> Result<(Option<BigUint>, Option<BigUint>), SimulationError> {
+    ) -> Result<(BigUint, BigUint), SimulationError> {
         let overwrites =
             self.get_overwrites(vec![token_in, token_out], *MAX_BALANCE / U256::from(100))?;
         let limits = self.adapter_contract.get_limits(
@@ -628,7 +628,7 @@ where
             self.block.number,
             Some(overwrites),
         )?;
-        Ok((Some(u256_to_biguint(limits.0)), Some(u256_to_biguint(limits.1))))
+        Ok((u256_to_biguint(limits.0), u256_to_biguint(limits.1)))
     }
 
     fn delta_transition(
