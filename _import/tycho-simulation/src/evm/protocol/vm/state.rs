@@ -193,7 +193,7 @@ where
                 vec![sell_token_address, buy_token_address],
                 *MAX_BALANCE / U256::from(100),
             )?);
-            let (sell_amount_limit, _) = self.get_sell_amount_limit(
+            let (sell_amount_limit, _) = self.get_amount_limits(
                 vec![sell_token_address, buy_token_address],
                 overwrites.clone(),
             )?;
@@ -245,10 +245,10 @@ where
             })
     }
 
-    /// Retrieves the sell amount limit for a given pair of tokens and the given overwrites.
+    /// Retrieves the sell and buy amount limit for a given pair of tokens and the given overwrites.
     ///
-    /// Attempting to swap an amount of the sell token that exceeds the sell amount limit will
-    /// result in a revert.
+    /// Attempting to swap an amount of the sell token that exceeds the sell amount limit is not
+    /// advised and in most cases will result in a revert.
     ///
     /// # Arguments
     ///
@@ -259,9 +259,9 @@ where
     ///
     /// # Returns
     ///
-    /// * `Result<U256, SimulationError>` - Returns the sell amount limit as a `U256` if successful,
-    ///   or a `SimulationError` on failure.
-    fn get_sell_amount_limit(
+    /// * `Result<(U256,U256), SimulationError>` - Returns the sell and buy amount limit as a `U256`
+    ///   if successful, or a `SimulationError` on failure.
+    fn get_amount_limits(
         &self,
         tokens: Vec<Address>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
@@ -533,9 +533,9 @@ where
         let sell_amount = U256::from_be_slice(&amount_in.to_bytes_be());
         let overwrites = self.get_overwrites(
             vec![sell_token_address, buy_token_address],
-            U256::from_be_slice(&(*MAX_BALANCE / U256::from(100)).to_be_bytes::<32>()),
+            *MAX_BALANCE / U256::from(100),
         )?;
-        let (sell_amount_limit, _) = self.get_sell_amount_limit(
+        let (sell_amount_limit, _) = self.get_amount_limits(
             vec![sell_token_address, buy_token_address],
             Some(overwrites.clone()),
         )?;
@@ -616,18 +616,12 @@ where
 
     fn get_limits(
         &self,
-        token_in: Address,
-        token_out: Address,
+        sell_token: Address,
+        buy_token: Address,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         let overwrites =
-            self.get_overwrites(vec![token_in, token_out], *MAX_BALANCE / U256::from(100))?;
-        let limits = self.adapter_contract.get_limits(
-            &self.id,
-            token_in,
-            token_out,
-            self.block.number,
-            Some(overwrites),
-        )?;
+            self.get_overwrites(vec![sell_token, buy_token], *MAX_BALANCE / U256::from(100))?;
+        let limits = self.get_amount_limits(vec![sell_token, buy_token], Some(overwrites))?;
         Ok((u256_to_biguint(limits.0), u256_to_biguint(limits.1)))
     }
 
@@ -952,7 +946,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_sell_amount_limit() {
+    async fn test_get_amount_limits() {
         let pool_state = setup_pool_state().await;
 
         let overwrites = pool_state
@@ -965,12 +959,12 @@ mod tests {
             )
             .unwrap();
         let (dai_limit, _) = pool_state
-            .get_sell_amount_limit(vec![dai_addr(), bal_addr()], Some(overwrites.clone()))
+            .get_amount_limits(vec![dai_addr(), bal_addr()], Some(overwrites.clone()))
             .unwrap();
         assert_eq!(dai_limit, U256::from_str("100279494253364362835").unwrap());
 
         let (bal_limit, _) = pool_state
-            .get_sell_amount_limit(
+            .get_amount_limits(
                 vec![
                     bytes_to_address(&pool_state.tokens[1]).unwrap(),
                     bytes_to_address(&pool_state.tokens[0]).unwrap(),

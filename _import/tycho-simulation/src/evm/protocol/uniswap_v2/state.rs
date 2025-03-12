@@ -118,7 +118,11 @@ impl ProtocolSim for UniswapV2State {
         };
 
         // Soft limit for amount in is the amount to get a 90% price impact.
-        // It is given by this: (√10 - 1) × reserve0 = 2.16 × reserve0
+        // The two equations to resolves are:
+        // 90% price impact: (reserve1 - y)/(reserve0 + x) = 0.1 × (reserve1/reserve0)
+        // Maintain constant product: (reserve0 + x) × (reserve1 - y) = reserve0 * reserve1
+        //
+        // This resolves into x = (√10 - 1) × reserve0 = 2.16 × reserve0
         let amount_in =
             safe_div_u256(safe_mul_u256(reserve_in, U256::from(216))?, U256::from(100))?;
 
