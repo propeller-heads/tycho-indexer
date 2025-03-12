@@ -1,0 +1,82 @@
+{
+  "state": {
+    "component_id": "0x20c3a15e34e5d88aeba004b0753af69e4f6bea80eae2263f7a92e919cd33cc56",
+    "attributes": {
+      "ticks/64800/net-liquidity": "0x008c522bd7",
+      "balance_owner": "0x000000000004444c5dc75cb358380d2e3de08a90",
+      "ticks/66960/net-liquidity": "0x08e013f3",
+      "ticks/70920/net-liquidity": "0xe8ee8421f4",
+      "liquidity": "0x415b6cbe13",
+      "ticks/67620/net-liquidity": "0x02b0e55f",
+      "ticks/887220/net-liquidity": "0xff17b7e268",
+      "ticks/70020/net-liquidity": "0xdcdd8b66",
+      "ticks/69060/net-liquidity": "0xff44d9767c",
+      "ticks/71340/net-liquidity": "0xfec4d6f173",
+      "ticks/68040/net-liquidity": "0x19cdd7",
+      "ticks/67260/net-liquidity": "0xc2f5278b71",
+      "ticks/69480/net-liquidity": "0x00b7606f7a6f",
+      "sqrt_price_x96": "0x1cb6880ce9a458d93f94037404",
+      "ticks/68520/net-liquidity": "0xff0e33ce9a",
+      "ticks/69660/net-liquidity": "0xff485f0099c2",
+      "ticks/63120/net-liquidity": "0x2308a6c3",
+      "ticks/70200/net-liquidity": "0xff51db5e",
+      "ticks/68460/net-liquidity": "0x1f4ef003",
+      "ticks/71400/net-liquidity": "0xf2c16071",
+      "ticks/73440/net-liquidity": "0xcba21bd0",
+      "ticks/73500/net-liquidity": "0xff36513a01",
+      "ticks/66360/net-liquidity": "0x01839178d2",
+      "ticks/67680/net-liquidity": "0x177c6036c9",
+      "ticks/64020/net-liquidity": "0x3d0b869931",
+      "protocol_fees/one2zero": "0x00",
+      "ticks/68160/net-liquidity": "0x096c7c1f",
+      "ticks/68340/net-liquidity": "0x41abbf4e",
+      "ticks/68580/net-liquidity": "0x31f29f06",
+      "ticks/68940/net-liquidity": "0xf8576143",
+      "ticks/-887220/net-liquidity": "0x00e8481d98",
+      "ticks/69240/net-liquidity": "0xe287f070",
+      "ticks/67440/net-liquidity": "0x03206d5680a2",
+      "ticks/68280/net-liquidity": "0xfb497785",
+      "ticks/67140/net-liquidity": "0x0751c1f9",
+      "ticks/66300/net-liquidity": "0x008e994a00",
+      "ticks/70320/net-liquidity": "0xc240111e",
+      "ticks/65880/net-liquidity": "0x03bed995",
+      "ticks/66900/net-liquidity": "0x0a3f417d",
+      "ticks/68760/net-liquidity": "0xd93c5b28",
+      "ticks/67020/net-liquidity": "0x71c23349",
+      "ticks/67320/net-liquidity": "0x0ad276c5",
+      "ticks/69300/net-liquidity": "0xf71fec0d",
+      "ticks/68640/net-liquidity": "0xfcd627f8",
+      "ticks/67200/net-liquidity": "0x00c9aec5ff",
+      "protocol_fees/zero2one": "0x00",
+      "ticks/67560/net-liquidity": "0x013b290e8d",
+      "tick": "0x01064e",
+      "ticks/69600/net-liquidity": "0xfcde05ab8a6d",
+      "ticks/66600/net-liquidity": "0x16264d97",
+      "ticks/69780/net-liquidity": "0xfd2af608"
+    },
+    "balances": {
+      "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": "0x030dc380ff",
+      "0xdac17f958d2ee523a2206206994597c13d831ec7": "0x011d0121558a"
+    }
+  },
+  "component": {
+    "id": "0x20c3a15e34e5d88aeba004b0753af69e4f6bea80eae2263f7a92e919cd33cc56",
+    "protocol_system": "uniswap_v4",
+    "protocol_type_name": "uniswap_v4_pool",
+    "chain": "ethereum",
+    "tokens": [
+      "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "0xdac17f958d2ee523a2206206994597c13d831ec7"
+    ],
+    "contract_ids": [],
+    "static_attributes": {
+      "tick_spacing": "0x3c",
+      "key_lp_fee": "0x0bb8",
+      "pool_id": "0x20c3a15e34e5d88aeba004b0753af69e4f6bea80eae2263f7a92e919cd33cc56",
+      "hooks": "0x0000000000000000000000000000000000000000"
+    },
+    "change": "Creation",
+    "creation_tx": "0x7c894a5ed1199c8b046fbee6d2b7e9537dd75b6a5156790ef9ec3ea2e9eda2e9",
+    "created_at": "2025-02-01T16:49:47"
+  }
+}

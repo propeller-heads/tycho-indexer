@@ -334,7 +334,15 @@ impl ProtocolSim for UniswapV3State {
                     liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta);
             }
 
-            current_tick = next_tick;
+            if zero_for_one && current_tick < next_tick {
+                break;
+            }
+
+            if !zero_for_one && current_tick == next_tick {
+                break;
+            }
+
+            current_tick = if zero_for_one { next_tick - 1 } else { next_tick };
             current_sqrt_price = sqrt_price_next;
         }
 
@@ -458,13 +466,19 @@ impl ProtocolSim for UniswapV3State {
 mod tests {
     use std::{
         collections::{HashMap, HashSet},
+        fs,
+        path::Path,
         str::FromStr,
     };
 
     use num_bigint::ToBigUint;
+    use num_traits::FromPrimitive;
+    use serde_json::Value;
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_core::hex_bytes::Bytes;
 
     use super::*;
+    use crate::{evm::protocol::utils::bytes_to_address, protocol::models::TryFromWithBlock};
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {
@@ -719,5 +733,45 @@ mod tests {
                 .net_liquidity,
             9800
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_limits() {
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/uniswap_v3_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+
+        let state: ComponentWithState = serde_json::from_value(data)
+            .expect("Expected json to match ComponentWithState structure");
+
+        let usv3_state =
+            UniswapV3State::try_from_with_block(state, Default::default(), &Default::default())
+                .await
+                .unwrap();
+
+        let t0 = Token::new(
+            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            8,
+            "WBTC",
+            10_000.to_biguint().unwrap(),
+        );
+        let t1 = Token::new(
+            "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+            8,
+            "cbBTC",
+            10_000.to_biguint().unwrap(),
+        );
+
+        let res = usv3_state
+            .get_limits(
+                bytes_to_address(&t0.address).unwrap(),
+                bytes_to_address(&t1.address).unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(&res.0, &BigUint::from_u128(20358481906554983980330156).unwrap()); // Crazy amount because of this tick: "ticks/-887272/net-liquidity": "0x10d73d"
+        assert_eq!(&res.1, &BigUint::from_u128(23870900560).unwrap());
     }
 }

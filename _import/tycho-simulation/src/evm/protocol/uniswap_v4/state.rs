@@ -352,7 +352,15 @@ impl ProtocolSim for UniswapV4State {
                     liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta);
             }
 
-            current_tick = next_tick;
+            if zero_for_one && current_tick < next_tick {
+                break;
+            }
+
+            if !zero_for_one && current_tick == next_tick {
+                break;
+            }
+
+            current_tick = if zero_for_one { next_tick - 1 } else { next_tick };
             current_sqrt_price = sqrt_price_next;
         }
 
@@ -465,7 +473,7 @@ mod tests {
     use tycho_client::feed::synchronizer::ComponentWithState;
 
     use super::*;
-    use crate::protocol::models::TryFromWithBlock;
+    use crate::{evm::protocol::utils::bytes_to_address, protocol::models::TryFromWithBlock};
 
     #[test]
     fn test_delta_transition() {
@@ -586,5 +594,45 @@ mod tests {
         // ```
         let expected_amount = BigUint::from(9999909699895_u64);
         assert_eq!(res.amount, expected_amount);
+    }
+
+    #[tokio::test]
+    async fn test_get_limits() {
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/uniswap_v4_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+
+        let state: ComponentWithState = serde_json::from_value(data)
+            .expect("Expected json to match ComponentWithState structure");
+
+        let usv4_state =
+            UniswapV4State::try_from_with_block(state, Default::default(), &Default::default())
+                .await
+                .unwrap();
+
+        let t0 = Token::new(
+            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            8,
+            "WBTC",
+            10_000.to_biguint().unwrap(),
+        );
+        let t1 = Token::new(
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            6,
+            "USDT",
+            10_000.to_biguint().unwrap(),
+        );
+
+        let res = usv4_state
+            .get_limits(
+                bytes_to_address(&t0.address).unwrap(),
+                bytes_to_address(&t1.address).unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466708).unwrap()); // Crazy amount because of this tick: "ticks/-887220/net-liquidity": "0x00e8481d98"
+        assert_eq!(&res.1, &BigUint::from_u128(1224084635221).unwrap());
     }
 }
