@@ -76,6 +76,10 @@ contract Constants is Test, BaseConstants {
     address PANCAKESWAPV3_DEPLOYER_ETHEREUM =
         0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9;
 
+    // Curve
+    address TRICRYPTO_USDC_WBTC_WETH =
+        0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B;
+
     // Uniswap universal router
     address UNIVERSAL_ROUTER = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af;
 
@@ -93,6 +97,9 @@ contract Constants is Test, BaseConstants {
         0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d;
     bytes32 PANCAKEV3_POOL_CODE_INIT_HASH =
         0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2;
+
+    // Curve router
+    address CURVE_ROUTER = 0x16C6521Dff6baB339122a0FE25a9116693265353;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode
