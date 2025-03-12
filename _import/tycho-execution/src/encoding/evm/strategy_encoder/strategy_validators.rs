@@ -143,11 +143,14 @@ impl SplitSwapValidator {
 
         // Build directed graph of token flows
         let mut graph: HashMap<&Bytes, HashSet<&Bytes>> = HashMap::new();
+        let mut all_tokens = HashSet::new();
         for swap in swaps {
             graph
                 .entry(&swap.token_in)
                 .or_default()
                 .insert(&swap.token_out);
+            all_tokens.insert(&swap.token_in);
+            all_tokens.insert(&swap.token_out);
         }
 
         // BFS from validation_given
@@ -160,8 +163,8 @@ impl SplitSwapValidator {
                 continue;
             }
 
-            // Early success check
-            if token == checked_token && visited.len() == graph.len() + 1 {
+            // Early success check - if we've reached the checked token and visited all tokens
+            if token == checked_token && visited.len() == all_tokens.len() {
                 return Ok(());
             }
 
@@ -172,6 +175,13 @@ impl SplitSwapValidator {
                     }
                 }
             }
+        }
+
+        // After BFS completes, check if both conditions are met:
+        // 1. The checked token is in the visited set
+        // 2. All unique tokens from the swaps are visited
+        if visited.contains(checked_token) && visited.len() == all_tokens.len() {
+            return Ok(());
         }
 
         // If we get here, either checked_token wasn't reached or not all tokens were visited
@@ -289,6 +299,41 @@ mod tests {
             result,
             Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
         ));
+    }
+
+    #[test]
+    fn test_validate_path_cyclic_swap() {
+        let validator = SplitSwapValidator;
+        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let cyclic_swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool1".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: usdc.clone(),
+                token_out: weth.clone(),
+                split: 0f64,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "pool2".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: usdc.clone(),
+                split: 0f64,
+            },
+        ];
+
+        // Test with USDC as both given token and checked token
+        let result = validator.validate_swap_path(&cyclic_swaps, &usdc, &usdc, &None, &eth, &weth);
+        assert_eq!(result, Ok(()));
     }
 
     #[test]
