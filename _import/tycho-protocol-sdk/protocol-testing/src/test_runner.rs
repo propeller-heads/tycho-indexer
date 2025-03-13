@@ -1,20 +1,19 @@
-use std::{
-    path::{Path, PathBuf},
-    thread::sleep,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use figment::{
     providers::{Format, Yaml},
     Figment,
 };
 use postgres::{Client, Error, NoTls};
-use tracing::{debug, field::debug, info};
+use tokio::runtime::Runtime;
+use tracing::{debug, info};
+use tycho_core::dto::{Chain, ProtocolComponent};
 
 use crate::{
     config::{IntegrationTest, IntegrationTestsConfig},
+    tycho_rpc::TychoClient,
     tycho_runner::TychoRunner,
-    utils::{build_spkg, modify_initial_block},
+    utils::build_spkg,
 };
 
 pub struct TestRunner {
@@ -92,7 +91,7 @@ impl TestRunner {
             )
             .expect("Failed to run Tycho");
 
-        tycho_runner.run_with_rpc_server(validate_state)
+        tycho_runner.run_with_rpc_server(validate_state);
     }
 
     fn empty_database(&self) -> Result<(), Error> {
@@ -113,7 +112,33 @@ impl TestRunner {
     }
 }
 
-pub fn validate_state() {
-    // TODO: Implement
+fn validate_state() {
+    let rt = Runtime::new().unwrap();
+
+    // Create Tycho client for the RPC server
+    let tycho_client =
+        TychoClient::new("http://localhost:4242").expect("Failed to create Tycho client");
+
+    let chain = Chain::Ethereum;
+    let protocol_system = "test_protocol";
+
+    let protocol_components = rt
+        .block_on(tycho_client.get_protocol_components(protocol_system, chain))
+        .expect("Failed to get protocol components");
+
+    let protocol_states = rt
+        .block_on(tycho_client.get_protocol_state(protocol_system, chain))
+        .expect("Failed to get protocol state");
+
+    // Create a map of component IDs to components for easy lookup
+    let components_by_id: HashMap<String, ProtocolComponent> = protocol_components
+        .into_iter()
+        .map(|c| (c.id.clone(), c))
+        .collect();
+
+    info!("Found {} protocol components", components_by_id.len());
+    info!("Found {} protocol states", protocol_states.len());
+
+    // TODO: Implement complete validation logic similar to Python code
     info!("Validating state...");
 }

@@ -7,8 +7,8 @@ edition = "2021"
 # Logging & Tracing
 tracing = "0.1.37"
 # Tycho dependencies
-tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.56.5" }
-tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.56.5" }
+tycho-core = { path = "../../tycho-indexer/tycho-core", package = "tycho-core" }
+tycho-client = { path = "../../tycho-indexer/tycho-client", package = "tycho-client" }
 # EVM dependencies
 alloy = { version = "0.5.4", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http"] }
 tokio = { version = "1", features = ["full"] }
@@ -21,3 +21,4 @@ tracing-subscriber = "0.3.19"
 postgres = "0.19.10"
 serde_yaml = "0.9.34"
 dotenv = "0.15.0"
+async-trait = "0.1.87"

@@ -1,12 +1,7 @@
 use std::{
-    env,
     io::{BufRead, BufReader},
-    path::Path,
     process::{Child, Command, Stdio},
-    sync::{
-        mpsc::{self, Receiver, Sender},
-        Arc, Mutex,
-    },
+    sync::mpsc::{self, Receiver, Sender},
     thread,
     time::Duration,
 };
@@ -110,7 +105,7 @@ impl TychoRunner {
             let binary_path = "tycho-indexer";
 
             let mut cmd = Command::new(binary_path)
-                .args(&["--database-url", db_url.as_str(), "rpc"])
+                .args(["--database-url", db_url.as_str(), "rpc"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .env("RUST_LOG", "info")
