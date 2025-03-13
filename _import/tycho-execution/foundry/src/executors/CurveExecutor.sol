@@ -5,6 +5,8 @@ import "@interfaces/IExecutor.sol";
 import "@interfaces/ICurveRouter.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+error CurveExecutor__InvalidAddresses();
+
 contract CurveExecutor is IExecutor {
     using SafeERC20 for IERC20;
 
@@ -12,6 +14,9 @@ contract CurveExecutor is IExecutor {
     address public immutable ethAddress;
 
     constructor(address _curveRouter, address _ethAddress) {
+        if (_curveRouter == address(0) || _ethAddress == address(0)) {
+            revert CurveExecutor__InvalidAddresses();
+        }
         curveRouter = ICurveRouter(_curveRouter);
         ethAddress = _ethAddress;
     }
@@ -24,15 +29,16 @@ contract CurveExecutor is IExecutor {
     {
         CurveRouterParams memory params = _decodeData(data);
         if (params.route[0] != ethAddress) {
+            // slither-disable-next-line unused-return
             IERC20(params.route[0]).approve(address(curveRouter), amountIn);
 
             return curveRouter.exchange(
-            params.route,
-            params.swapParams,
-            amountIn,
-            params.minAmountOut,
-            params.pools,
-            params.receiver
+                params.route,
+                params.swapParams,
+                amountIn,
+                params.minAmountOut,
+                params.pools,
+                params.receiver
             );
         } else {
             return curveRouter.exchange{value: amountIn}(

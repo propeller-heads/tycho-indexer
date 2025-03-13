@@ -46,6 +46,12 @@ contract Constants is Test, BaseConstants {
     address CRV_ADDR = address(0xD533a949740bb3306d119CC777fa900bA034cd52);
     address ADAI_ADDR = address(0x028171bCA77440897B824Ca71D1c56caC55b68A3);
     address AUSDC_ADDR = address(0xBcca60bB61934080951369a648Fb03DF4F96263C);
+    address SUSD_ADDR = address(0x57Ab1ec28D129707052df4dF418D58a2D46d5f51);
+    address FRAX_ADDR = address(0x853d955aCEf822Db058eb8505911ED77F175b99e);
+    address DOLA_ADDR = address(0x865377367054516e17014CcdED1e7d814EDC9ce4);
+    address XYO_ADDR = address(0x55296f69f40Ea6d20E478533C15A6B08B654E758);
+    address UWU_ADDR = address(0x55C08ca52497e2f1534B59E2917BF524D4765257);
+    address CRVUSD_ADDR = address(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
 
     // Uniswap v2
     address WETH_DAI_POOL = 0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11;
@@ -102,6 +108,20 @@ contract Constants is Test, BaseConstants {
     // AAVE - Pool type 0
     address AAVE_POOL = 0xDeBF20617708857ebe4F679508E7b7863a8A8EeE;
 
+    // BASE META POOL
+    address FRAXPYUSD_ADDR = address(0xA5588F7cdf560811710A2D82D3C9c99769DB1Dcb);
+
+    // Curve pools taken from the substreams
+    address TRICRYPTO_USDT_WETH_WBTC =
+        0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
+    address SUSD_POOL = 0xA5407eAE9Ba41422680e2e00537571bcC53efBfD;
+    address FRAX_USDC_POOL = 0xDcEF968d416a41Cdac0ED8702fAC8128A64241A2;
+    address USDE_USDC_POOL = 0x02950460E2b9529D0E00284A5fA2d7bDF3fA4d72;
+    address DOLA_FRAXPYUSD_POOL = 0xef484de8C07B6e2d732A92B5F78e81B38f99f95E;
+    address WETH_XYO_POOL = 0x99e09ee2d6Bb16c0F5ADDfEA649dbB2C1d524624;
+    address UWU_WETH_POOL = 0x77146B0a1d08B6844376dF6d9da99bA7F1b19e71;
+    address CRVUSD_USDT_POOL = 0x390f3595bCa2Df7d23783dFd126427CCeb997BF4;
+
     // Uniswap universal router
     address UNIVERSAL_ROUTER = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af;
 
@@ -122,6 +142,9 @@ contract Constants is Test, BaseConstants {
 
     // Curve router
     address CURVE_ROUTER = 0x16C6521Dff6baB339122a0FE25a9116693265353;
+
+    // Curve meta registry
+    address CURVE_META_REGISTRY = 0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode

@@ -11,6 +11,7 @@ interface ICurveRouter {
         address receiver
     ) external payable returns (uint256);
 
+    // slither-disable-next-line naming-convention
     function get_dy(
         address[] memory route,
         uint256[] memory swapParams,
