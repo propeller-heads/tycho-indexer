@@ -352,14 +352,6 @@ impl ProtocolSim for UniswapV4State {
                     liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta);
             }
 
-            if zero_for_one && current_tick < next_tick {
-                break;
-            }
-
-            if !zero_for_one && current_tick == next_tick {
-                break;
-            }
-
             current_tick = if zero_for_one { next_tick - 1 } else { next_tick };
             current_sqrt_price = sqrt_price_next;
         }
@@ -607,10 +599,14 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let usv4_state =
-            UniswapV4State::try_from_with_block(state, Default::default(), &Default::default())
-                .await
-                .unwrap();
+        let usv4_state = UniswapV4State::try_from_with_block(
+            state,
+            Default::default(),
+            &Default::default(),
+            &Default::default(),
+        )
+        .await
+        .unwrap();
 
         let t0 = Token::new(
             "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
@@ -632,7 +628,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466708).unwrap()); // Crazy amount because of this tick: "ticks/-887220/net-liquidity": "0x00e8481d98"
+        assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466707).unwrap()); // Crazy amount because of this tick: "ticks/-887220/net-liquidity": "0x00e8481d98"
         assert_eq!(&res.1, &BigUint::from_u128(1224084635221).unwrap());
     }
 }
