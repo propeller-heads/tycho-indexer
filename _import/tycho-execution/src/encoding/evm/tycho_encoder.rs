@@ -105,10 +105,8 @@ impl EVMTychoEncoder {
                     split_tokens_already_considered.insert(swap.token_in.clone());
                 }
             } else {
-                // it's the last swap of the split
-                if split_tokens_already_considered.contains(&swap.token_in) {
-                    split_tokens_already_considered.remove(&swap.token_in);
-                } else {
+                // it might be the last swap of the split or a regular swap
+                if !split_tokens_already_considered.contains(&swap.token_in) {
                     solution_tokens.push(swap.token_in.clone());
                 }
             }
@@ -129,6 +127,14 @@ impl EVMTychoEncoder {
                     return Err(EncodingError::FatalError(
                     "Cyclical swaps are only allowed if they are the first and last token of a solution".to_string(),
                 ));
+                } else {
+                    // it is a valid cyclical swap
+                    // we don't support any wrapping or unwrapping in this case
+                    if let Some(_native_action) = solution.clone().native_action {
+                        return Err(EncodingError::FatalError(
+                            "Wrapping/Unwrapping is not available in cyclical swaps".to_string(),
+                        ));
+                    }
                 }
             }
         }
@@ -488,9 +494,10 @@ mod tests {
     #[test]
     fn test_validate_cyclical_swap() {
         // This validation passes because the cyclical swap is the first and last token
-        //     50% ->  WETH
-        // DAI              -> DAI
-        //     50% -> WETH
+        //      50% ->  WETH
+        // DAI -              -> DAI
+        //      50% -> WETH
+        // (some of the pool addresses in this test are fake)
         let encoder = get_mocked_tycho_encoder();
         let swaps = vec![
             Swap {
@@ -602,6 +609,68 @@ mod tests {
             result.err().unwrap(),
             EncodingError::FatalError(
                 "Cyclical swaps are only allowed if they are the first and last token of a solution".to_string()
+            )
+        );
+    }
+    #[test]
+    fn test_validate_cyclical_swap_split_native_action_fail() {
+        // This validation fails because there is a native action with a valid cyclical swap
+        //                    -> WETH
+        // ETH -> WETH -> DAI
+        //                    -> WETH
+        // (some of the pool addresses in this test are fake)
+        let encoder = get_mocked_tycho_encoder();
+        let swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth(),
+                token_out: dai(),
+                split: 0f64,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "0x0000000000000000000000000000000000000000".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: dai(),
+                token_out: weth(),
+                split: 0.5f64,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "0x0000000000000000000000000000000000000000".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: dai(),
+                token_out: weth(),
+                split: 0f64,
+            },
+        ];
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: eth(),
+            checked_token: weth(),
+            swaps,
+            native_action: Some(NativeAction::Wrap),
+            ..Default::default()
+        };
+
+        let result = encoder.validate_solution(&solution);
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap(),
+            EncodingError::FatalError(
+                "Wrapping/Unwrapping is not available in cyclical swaps"
+                    .to_string()
+                    .to_string()
             )
         );
     }
