@@ -1,3 +1,10 @@
+## [0.65.1](https://github.com/propeller-heads/tycho-execution/compare/0.65.0...0.65.1) (2025-03-13)
+
+
+### Reverts
+
+* Revert "feat: Add validation for cyclical trades" ([3d7dcef](https://github.com/propeller-heads/tycho-execution/commit/3d7dcef1bd01db283d787f0bc86b4e9cfc28bbaa))
+
 ## [0.65.0](https://github.com/propeller-heads/tycho-execution/compare/0.64.0...0.65.0) (2025-03-13)
 
 
