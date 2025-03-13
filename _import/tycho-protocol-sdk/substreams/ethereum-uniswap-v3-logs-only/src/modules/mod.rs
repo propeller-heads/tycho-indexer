@@ -32,6 +32,28 @@ impl From<TransactionTrace> for Transaction {
     }
 }
 
+impl From<&TransactionTrace> for Transaction {
+    fn from(value: &TransactionTrace) -> Self {
+        Self {
+            hash: value.hash.clone(),
+            from: value.from.clone(),
+            to: value.to.clone(),
+            index: value.index.into(),
+        }
+    }
+}
+
+impl From<&Transaction> for tycho_substreams::prelude::Transaction {
+    fn from(value: &Transaction) -> Self {
+        Self {
+            hash: value.hash.clone(),
+            from: value.from.clone(),
+            to: value.to.clone(),
+            index: value.index,
+        }
+    }
+}
+
 impl From<Transaction> for tycho_substreams::prelude::Transaction {
     fn from(value: Transaction) -> Self {
         Self { hash: value.hash, from: value.from, to: value.to, index: value.index }

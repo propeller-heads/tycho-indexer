@@ -35,7 +35,7 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
     match event.r#type.unwrap() {
         pool_event::Type::Mint(e) => vec![
             BalanceDelta {
-                token: hex::decode(event.token0.clone()).unwrap(),
+                token: hex::decode(event.token0).unwrap(),
                 delta: BigInt::from_str(&e.amount_0)
                     .unwrap()
                     .to_signed_bytes_be(),
@@ -43,11 +43,11 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
                 ord: event.log_ordinal,
                 tx: event
                     .transaction
-                    .clone()
+                    .as_ref()
                     .map(Into::into),
             },
             BalanceDelta {
-                token: hex::decode(event.token1.clone()).unwrap(),
+                token: hex::decode(event.token1).unwrap(),
                 delta: BigInt::from_str(&e.amount_1)
                     .unwrap()
                     .to_signed_bytes_be(),
@@ -58,7 +58,7 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
         ],
         pool_event::Type::Collect(e) => vec![
             BalanceDelta {
-                token: hex::decode(event.token0.clone()).unwrap(),
+                token: hex::decode(event.token0).unwrap(),
                 delta: BigInt::from_str(&e.amount_0)
                     .unwrap()
                     .neg()
@@ -67,11 +67,11 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
                 ord: event.log_ordinal,
                 tx: event
                     .transaction
-                    .clone()
+                    .as_ref()
                     .map(Into::into),
             },
             BalanceDelta {
-                token: hex::decode(event.token1.clone()).unwrap(),
+                token: hex::decode(event.token1).unwrap(),
                 delta: BigInt::from_str(&e.amount_1)
                     .unwrap()
                     .neg()
@@ -86,7 +86,7 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
         pool_event::Type::Swap(e) => {
             vec![
                 BalanceDelta {
-                    token: hex::decode(event.token0.clone()).unwrap(),
+                    token: hex::decode(event.token0).unwrap(),
                     delta: BigInt::from_str(&e.amount_0)
                         .unwrap()
                         .to_signed_bytes_be(),
@@ -94,15 +94,15 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
                     ord: event.log_ordinal,
                     tx: event
                         .transaction
-                        .clone()
+                        .as_ref()
                         .map(Into::into),
                 },
                 BalanceDelta {
-                    token: hex::decode(event.token1.clone()).unwrap(),
+                    token: hex::decode(event.token1).unwrap(),
                     delta: BigInt::from_str(&e.amount_1)
                         .unwrap()
                         .to_signed_bytes_be(),
-                    component_id: address.clone(),
+                    component_id: address,
                     ord: event.log_ordinal,
                     tx: event.transaction.map(Into::into),
                 },
@@ -113,20 +113,18 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
                 token: hex::decode(event.token0).unwrap(),
                 delta: BigInt::from_str(&e.paid_0)
                     .unwrap()
-                    .clone()
                     .to_signed_bytes_be(),
                 component_id: address.clone(),
                 ord: event.log_ordinal,
                 tx: event
                     .transaction
-                    .clone()
+                    .as_ref()
                     .map(Into::into),
             },
             BalanceDelta {
                 token: hex::decode(event.token1).unwrap(),
                 delta: BigInt::from_str(&e.paid_1)
                     .unwrap()
-                    .clone()
                     .to_signed_bytes_be(),
                 component_id: address,
                 ord: event.log_ordinal,
@@ -140,31 +138,21 @@ fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
                     delta: BigInt::from_str(&e.amount_0)
                         .unwrap()
                         .neg()
-                        .clone()
                         .to_signed_bytes_be(),
-                    component_id: event
-                        .pool_address
-                        .clone()
-                        .as_bytes()
-                        .to_vec(),
+                    component_id: address.clone(),
                     ord: event.log_ordinal,
                     tx: event
                         .transaction
-                        .clone()
+                        .as_ref()
                         .map(Into::into),
                 },
                 BalanceDelta {
                     token: hex::decode(event.token1).unwrap(),
                     delta: BigInt::from_str(&e.amount_1)
                         .unwrap()
-                        .clone()
                         .neg()
                         .to_signed_bytes_be(),
-                    component_id: event
-                        .pool_address
-                        .clone()
-                        .as_bytes()
-                        .to_vec(),
+                    component_id: address,
                     ord: event.log_ordinal,
                     tx: event.transaction.map(Into::into),
                 },

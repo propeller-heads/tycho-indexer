@@ -32,15 +32,19 @@ pub fn map_events(
         .into_iter()
         .filter(|tx| tx.status == 1)
         .flat_map(|tx| {
-            tx.clone()
+            let receipt = tx
                 .receipt
-                .into_iter()
-                .flat_map(|receipt| receipt.logs)
+                .as_ref()
+                .expect("all transaction traces have a receipt");
+
+            receipt
+                .logs
+                .iter()
                 .filter_map(|log| {
                     let key = format!("{}:{}", "Pool", log.address.to_hex());
                     // Skip if the log is not from a known uniswapV3 pool.
                     if let Some(pool) = pools_store.get_last(key) {
-                        log_to_event(&log, pool, tx.clone())
+                        log_to_event(log, pool, &tx)
                     } else {
                         None
                     }
@@ -54,7 +58,7 @@ pub fn map_events(
     Ok(Events { pool_events })
 }
 
-fn log_to_event(event: &Log, pool: Pool, tx: TransactionTrace) -> Option<PoolEvent> {
+fn log_to_event(event: &Log, pool: Pool, tx: &TransactionTrace) -> Option<PoolEvent> {
     if let Some(init) = Initialize::match_and_decode(event) {
         Some(PoolEvent {
             log_ordinal: event.ordinal,
