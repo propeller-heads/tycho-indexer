@@ -511,7 +511,7 @@ mod tests {
                 },
                 token_in: dai(),
                 token_out: weth(),
-                split: 0.5f64,
+                split: 0f64,
             },
             Swap {
                 component: ProtocolComponent {
