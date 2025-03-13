@@ -123,7 +123,8 @@ contract UniswapV3ExecutorTest is Test, Constants {
             dataOffset,
             dataLength,
             protocolData,
-            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER)
+            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER),
+            address(uniswapV3Exposed) // transferFrom sender (irrelevant in this case)
         );
         uniswapV3Exposed.handleCallback(callbackData);
         vm.stopPrank();

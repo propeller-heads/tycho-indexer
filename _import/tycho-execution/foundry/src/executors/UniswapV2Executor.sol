@@ -49,7 +49,7 @@ contract UniswapV2Executor is IExecutor, ExecutorTransferMethods {
         _verifyPairAddress(target);
 
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
-        _transfer(tokenIn, target, givenAmount, method);
+        _transfer(tokenIn, msg.sender, target, givenAmount, method);
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
         if (zeroForOne) {

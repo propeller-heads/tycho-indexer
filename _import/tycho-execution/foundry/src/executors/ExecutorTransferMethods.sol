@@ -29,6 +29,7 @@ contract ExecutorTransferMethods {
 
     function _transfer(
         IERC20 tokenIn,
+        address sender,
         address receiver,
         uint256 amount,
         TransferMethod method
@@ -40,7 +41,7 @@ contract ExecutorTransferMethods {
         } else if (method == TransferMethod.TRANSFERPERMIT2) {
             // Permit2.permit is called from the TychoRouter
             permit2.transferFrom(
-                msg.sender,
+                sender,
                 receiver, // Does this work if receiver is not address(this)?
                 uint160(amount),
                 address(tokenIn)
