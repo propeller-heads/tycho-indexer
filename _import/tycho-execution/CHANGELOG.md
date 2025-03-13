@@ -1,3 +1,10 @@
+## [0.64.0](https://github.com/propeller-heads/tycho-execution/compare/0.63.0...0.64.0) (2025-03-13)
+
+
+### Features
+
+* update tycho-core to 0.61.1 ([53b8c6a](https://github.com/propeller-heads/tycho-execution/commit/53b8c6afee6efdb2a878e2535a8daadfb29d91be))
+
 ## [0.63.0](https://github.com/propeller-heads/tycho-execution/compare/0.62.0...0.63.0) (2025-03-10)
 
 
