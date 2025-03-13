@@ -5,13 +5,14 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@interfaces/ICallback.sol";
+import {ExecutorTransferMethods} from "./ExecutorTransferMethods.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
 error UniswapV3Executor__InvalidTarget();
 error UniswapV3Executor__InvalidInitCode();
 
-contract UniswapV3Executor is IExecutor, ICallback {
+contract UniswapV3Executor is IExecutor, ICallback, ExecutorTransferMethods {
     using SafeERC20 for IERC20;
 
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
@@ -22,7 +23,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
     bytes32 public immutable initCode;
     address private immutable self;
 
-    constructor(address _factory, bytes32 _initCode) {
+    constructor(address _factory, bytes32 _initCode, address _permit2)
+        ExecutorTransferMethods(_permit2)
+    {
         if (_factory == address(0)) {
             revert UniswapV3Executor__InvalidFactory();
         }
@@ -46,7 +49,8 @@ contract UniswapV3Executor is IExecutor, ICallback {
             uint24 fee,
             address receiver,
             address target,
-            bool zeroForOne
+            bool zeroForOne,
+            TransferMethod method
         ) = _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
@@ -55,7 +59,8 @@ contract UniswapV3Executor is IExecutor, ICallback {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = _makeV3CallbackData(tokenIn, tokenOut, fee);
+        bytes memory callbackData =
+            _makeV3CallbackData(tokenIn, tokenOut, fee, method);
 
         {
             (amount0, amount1) = pool.swap(
@@ -92,12 +97,20 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
         address tokenIn = address(bytes20(msgData[132:152]));
 
+        require(
+            uint8(msgData[171]) <= uint8(TransferMethod.NONE),
+            "InvalidTransferMethod"
+        );
+        TransferMethod method = TransferMethod(uint8(msgData[171]));
+
         verifyCallback(msgData[132:]);
 
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
-        IERC20(tokenIn).safeTransfer(msg.sender, amountOwed);
+        // TODO This must never be a safeTransfer. Figure out how to ensure this.
+        _transfer(IERC20(tokenIn), msg.sender, amountOwed, method);
+
         return abi.encode(amountOwed, tokenIn);
     }
 
@@ -132,7 +145,8 @@ contract UniswapV3Executor is IExecutor, ICallback {
             uint24 fee,
             address receiver,
             address target,
-            bool zeroForOne
+            bool zeroForOne,
+            TransferMethod method
         )
     {
         if (data.length != 84) {
@@ -144,14 +158,16 @@ contract UniswapV3Executor is IExecutor, ICallback {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
+        method = TransferMethod.TRANSFER;
     }
 
-    function _makeV3CallbackData(address tokenIn, address tokenOut, uint24 fee)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodePacked(tokenIn, tokenOut, fee);
+    function _makeV3CallbackData(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        TransferMethod method
+    ) internal pure returns (bytes memory) {
+        return abi.encodePacked(tokenIn, tokenOut, fee, uint8(method), self);
     }
 
     function _verifyPairAddress(

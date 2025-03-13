@@ -87,7 +87,10 @@ contract UniswapV2ExecutorTest is Test, Constants {
         assertEq(target, address(2));
         assertEq(receiver, address(3));
         assertEq(zeroForOne, false);
-        assertEq(0, uint8(method));
+        assertEq(
+            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER),
+            uint8(method)
+        );
     }
 
     function testDecodeParamsInvalidDataLength() public {
