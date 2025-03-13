@@ -1,3 +1,28 @@
+## [0.83.0](https://github.com/propeller-heads/tycho-simulation/compare/0.82.2...0.83.0) (2025-03-13)
+
+
+### Features
+
+* add contract balances to EVMPoolState ([21e78ec](https://github.com/propeller-heads/tycho-simulation/commit/21e78ecfc3d24b1d06472d5f242bac7a1a5a11b2))
+* add token balances to Account message conversion ([5a57b56](https://github.com/propeller-heads/tycho-simulation/commit/5a57b56f59a5ba573b9391a11764e9cab7fe47d5))
+* allow custom account balances overwrites on Python Simulation ([c9d0650](https://github.com/propeller-heads/tycho-simulation/commit/c9d06502ea7548c7529311bc3253dc41131fadbd))
+* apply account balances to decoded pool states ([61438ab](https://github.com/propeller-heads/tycho-simulation/commit/61438abf6273d76c9279ecfc5c364351f2fa169a))
+* handle account balances on python decoder and poolstate ([4d5a446](https://github.com/propeller-heads/tycho-simulation/commit/4d5a4469dd4e6f541a756982ec09c056a2d86dd7))
+* remove unnecessary tokens arg from get_balance_overwrites ([cf2f529](https://github.com/propeller-heads/tycho-simulation/commit/cf2f529202ea9b19d406dc1ac859be877ad4a328))
+* update pool state balances on deltas ([be6d68a](https://github.com/propeller-heads/tycho-simulation/commit/be6d68acdcb349c2a443f899fa4a3f577be0f527))
+* update pool states on balance updates ([5431692](https://github.com/propeller-heads/tycho-simulation/commit/54316929269715e1b1482bc0ae7699a1b41fabc0))
+
+
+### Bug Fixes
+
+* Checkout CI target branch. ([c19beea](https://github.com/propeller-heads/tycho-simulation/commit/c19beea9c7fc20e70e000563eddbc38090dc5d3c))
+* do not error for pool_id not an address is account balances exist ([5bf3df1](https://github.com/propeller-heads/tycho-simulation/commit/5bf3df1dccd6678f7eb2ceb2e9dfd50deac1636e))
+* error instead of panic on generating adapter contract address ([8f9b89b](https://github.com/propeller-heads/tycho-simulation/commit/8f9b89be1762f83edcee3c8302eaea7cd751d9df))
+* fix broken dependencies after AccountBalances update ([b5e0705](https://github.com/propeller-heads/tycho-simulation/commit/b5e070586a0894472bc928b0c31634bac9638367))
+* fix contract_balances initialization ([cc2f368](https://github.com/propeller-heads/tycho-simulation/commit/cc2f36843ed7f535f6a80725d82dc6319257bdff))
+* only attempt component balance overwrites for present balances ([40ad970](https://github.com/propeller-heads/tycho-simulation/commit/40ad970f400f53e160e22453cb84c5e6ae72cc6e))
+* use EthereumToken on overrides instead of address, convert amount to int ([7068ed5](https://github.com/propeller-heads/tycho-simulation/commit/7068ed5cd45eb5f535a7e83bc393564a4af850d1))
+
 ## [0.82.2](https://github.com/propeller-heads/tycho-simulation/compare/0.82.1...0.82.2) (2025-03-10)
 
 
