@@ -1,3 +1,10 @@
+## [0.65.0](https://github.com/propeller-heads/tycho-execution/compare/0.64.0...0.65.0) (2025-03-13)
+
+
+### Features
+
+* Add validation for cyclical trades ([55ffa4e](https://github.com/propeller-heads/tycho-execution/commit/55ffa4eb457ea8dd1ed57cdaac01f45880d34b0f))
+
 ## [0.64.0](https://github.com/propeller-heads/tycho-execution/compare/0.63.0...0.64.0) (2025-03-13)
 
 
