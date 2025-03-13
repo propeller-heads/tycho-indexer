@@ -56,8 +56,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         );
         pancakeV3Exposed = new UniswapV3ExecutorExposed(
             PANCAKESWAPV3_DEPLOYER_ETHEREUM,
-            PANCAKEV3_POOL_CODE_INIT_HASH,
-            PERMIT2_ADDRESS
+            PANCAKEV3_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
         );
         permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
@@ -134,8 +133,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             int256(0), // amount1Delta
             dataOffset,
             dataLength,
-            protocolData,
-            address(uniswapV3Exposed) // transferFrom sender (irrelevant in this case)
+            protocolData
         );
         uniswapV3Exposed.handleCallback(callbackData);
         vm.stopPrank();
