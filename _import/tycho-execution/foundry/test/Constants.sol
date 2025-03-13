@@ -30,6 +30,7 @@ contract Constants is Test, BaseConstants {
     address UNPAUSER = makeAddr("unpauser");
 
     // Assets
+    address ETH_ADDR = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
     address WETH_ADDR = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address DAI_ADDR = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     address BAL_ADDR = address(0xba100000625a3754423978a60c9317c58a424e3D);
@@ -39,6 +40,12 @@ contract Constants is Test, BaseConstants {
     address USDE_ADDR = address(0x4c9EDD5852cd905f086C759E8383e09bff1E68B3);
     address USDT_ADDR = address(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     address PEPE_ADDR = address(0x6982508145454Ce325dDbE47a25d4ec3d2311933);
+    address STETH_ADDR = address(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+    address LUSD_ADDR = address(0x5f98805A4E8be255a32880FDeC7F6728C6568bA0);
+    address LDO_ADDR = address(0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32);
+    address CRV_ADDR = address(0xD533a949740bb3306d119CC777fa900bA034cd52);
+    address ADAI_ADDR = address(0x028171bCA77440897B824Ca71D1c56caC55b68A3);
+    address AUSDC_ADDR = address(0xBcca60bB61934080951369a648Fb03DF4F96263C);
 
     // Uniswap v2
     address WETH_DAI_POOL = 0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11;
@@ -77,8 +84,23 @@ contract Constants is Test, BaseConstants {
         0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9;
 
     // Curve
+    // 3pool - Pool type 1
+    address TRIPOOL_USDT_USDC_DAI = 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7;
+    // Tricrypto - Pool type 3
     address TRICRYPTO_USDC_WBTC_WETH =
         0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B;
+    // stEth - Pool type 4
+    address STETH_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
+    // LUSD - Pool type 5
+    address LUSD_POOL = 0xEd279fDD11cA84bEef15AF5D39BB4d4bEE23F0cA;
+    // Compound - Pool type 6
+    address CPOOL = 0xA2B47E3D5c44877cca798226B7B8118F9BFb7A56;
+    // LDO - Pool type 7
+    address LDO_POOL = 0x9409280DC1e6D33AB7A8C6EC03e5763FB61772B5;
+    // CRV - Pool type 8
+    address CRV_POOL = 0x8301AE4fc9c624d1D396cbDAa1ed877821D7C511;
+    // AAVE - Pool type 0
+    address AAVE_POOL = 0xDeBF20617708857ebe4F679508E7b7863a8A8EeE;
 
     // Uniswap universal router
     address UNIVERSAL_ROUTER = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af;
