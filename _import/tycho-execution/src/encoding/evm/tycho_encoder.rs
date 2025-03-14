@@ -613,11 +613,11 @@ mod tests {
         );
     }
     #[test]
-    fn test_validate_cyclical_swap_split_native_action_fail() {
-        // This validation fails because there is a native action with a valid cyclical swap
-        //                    -> WETH
-        // ETH -> WETH -> DAI
-        //                    -> WETH
+    fn test_validate_cyclical_swap_split_output() {
+        // This validation passes because it is a valid cyclical swap
+        //             -> WETH
+        // WETH -> DAI
+        //             -> WETH
         // (some of the pool addresses in this test are fake)
         let encoder = get_mocked_tycho_encoder();
         let swaps = vec![
@@ -640,6 +640,48 @@ mod tests {
                 token_in: dai(),
                 token_out: weth(),
                 split: 0.5f64,
+            },
+            Swap {
+                component: ProtocolComponent {
+                    id: "0x0000000000000000000000000000000000000000".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: dai(),
+                token_out: weth(),
+                split: 0f64,
+            },
+        ];
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: weth(),
+            checked_token: weth(),
+            swaps,
+            ..Default::default()
+        };
+
+        let result = encoder.validate_solution(&solution);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_cyclical_swap_native_action_fail() {
+        // This validation fails because there is a native action with a valid cyclical swap
+        // ETH -> WETH -> DAI -> WETH
+        // (some of the pool addresses in this test are fake)
+        let encoder = get_mocked_tycho_encoder();
+        let swaps = vec![
+            Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth(),
+                token_out: dai(),
+                split: 0f64,
             },
             Swap {
                 component: ProtocolComponent {
