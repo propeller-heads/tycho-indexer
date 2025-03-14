@@ -86,11 +86,12 @@ impl SplitSwapStrategyEncoder {
     ) -> Result<Self, EncodingError> {
         let chain = Chain::from(blockchain);
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
-            (Some(Permit2::new(swapper_pk, chain.clone())?), "swapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+            (Some(Permit2::new(swapper_pk, chain.clone())?), "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
         } else {
             (
                 None,
-                "swap(uint256,address,address,uint256,bool,bool,uint256,address,bytes)".to_string(),
+                "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bytes)"
+                    .to_string(),
             )
         };
         Ok(Self {
@@ -629,7 +630,7 @@ mod tests {
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
         let expected_input = [
-            "d499aa88",                                                             // Function selector
+            "7c553846",                                                             // Function selector
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
             "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
             "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",      // token out
@@ -950,7 +951,7 @@ mod tests {
             .unwrap();
 
         let expected_input = [
-            "d499aa88",                                                              // Function selector
+            "7c553846",                                                              // Function selector
             "000000000000000000000000000000000000000000000000000000003b9aca00",      // amount in
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token in
             "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933",      // token out
@@ -1060,7 +1061,7 @@ mod tests {
             .unwrap();
         let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
         let expected_input = [
-            "0a83cb08",                                                           // Function selector
+            "79b9b93b",                                                           // Function selector
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount out
             "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
             "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
@@ -1300,7 +1301,7 @@ mod tests {
             .unwrap();
         let hex_calldata = hex::encode(&calldata);
         let expected_input = [
-            "d499aa88",                                                         // selector
+            "7c553846",                                                         // selector
             "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
@@ -1452,7 +1453,7 @@ mod tests {
 
         let hex_calldata = hex::encode(&calldata);
         let expected_input = [
-            "d499aa88",                                                         // selector
+            "7c553846",                                                         // selector
             "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
@@ -1609,7 +1610,7 @@ mod tests {
 
         let hex_calldata = hex::encode(&calldata);
         let expected_input = [
-            "d499aa88",                                                         // selector
+            "7c553846",                                                         // selector
             "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
             "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
