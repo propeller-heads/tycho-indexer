@@ -27,7 +27,7 @@ contract CurveExecutor is IExecutor {
         payable
         returns (uint256)
     {
-        CurveRouterParams memory params = _decodeData(data);
+        ICurveRouter.CurveRouterParams memory params = _decodeData(data);
         if (params.route[0] != ethAddress) {
             // slither-disable-next-line unused-return
             IERC20(params.route[0]).approve(address(curveRouter), amountIn);
@@ -55,10 +55,8 @@ contract CurveExecutor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (CurveRouterParams memory params)
+        returns (ICurveRouter.CurveRouterParams memory params)
     {
-        return abi.decode(data, (CurveRouterParams));
+        return abi.decode(data, (ICurveRouter.CurveRouterParams));
     }
-
-    receive() external payable {}
 }
