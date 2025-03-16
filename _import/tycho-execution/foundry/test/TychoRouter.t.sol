@@ -366,7 +366,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
-    function testSplitSwapChecked() public {
+    function testSingleSwapChecked() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // Does permit2 token approval and transfer
         // Checks amount out at the end
@@ -387,11 +387,9 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes memory swap = encodeSplitSwap(
             uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
-        bytes[] memory swaps = new bytes[](1);
-        swaps[0] = swap;
 
         uint256 minAmountOut = 2600 * 1e18;
-        uint256 amountOut = tychoRouter.splitSwapPermit2(
+        uint256 amountOut = tychoRouter.singleSwapPermit2(
             amountIn,
             WETH_ADDR,
             DAI_ADDR,
@@ -402,7 +400,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             ALICE,
             permitSingle,
             signature,
-            pleEncode(swaps)
+            swap
         );
 
         uint256 expectedAmount = 2659881924818443699787;
@@ -454,7 +452,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSplitSwapCheckedNoPermit2() public {
+    function testSingleSwapCheckedNoPermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // Checks amount out at the end
         uint256 amountIn = 1 ether;
@@ -471,11 +469,9 @@ contract TychoRouterTest is TychoRouterTestSetup {
         bytes memory swap = encodeSplitSwap(
             uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
         );
-        bytes[] memory swaps = new bytes[](1);
-        swaps[0] = swap;
 
         uint256 minAmountOut = 2600 * 1e18;
-        uint256 amountOut = tychoRouter.splitSwap(
+        uint256 amountOut = tychoRouter.singleSwap(
             amountIn,
             WETH_ADDR,
             DAI_ADDR,
@@ -484,7 +480,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             false,
             2,
             ALICE,
-            pleEncode(swaps)
+            swap
         );
 
         uint256 expectedAmount = 2659881924818443699787;
