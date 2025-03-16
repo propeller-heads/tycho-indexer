@@ -223,11 +223,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @notice Internal implementation of the core swap logic shared between swap() and swapPermit2().
+     * @notice Internal implementation of the core swap logic shared between splitSwap() and splitSwapPermit2().
      *
      * @notice This function centralizes the swap execution logic.
      * @notice For detailed documentation on parameters and behavior, see the documentation for
-     * swap() and swapPermit2() functions.
+     * splitSwap() and splitSwapPermit2() functions.
      *
      */
     function _splitSwapChecked(
