@@ -79,7 +79,13 @@ contract CurveExecutorTest is Test, Constants {
         address[5] memory pools;
 
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this), true
+            route,
+            swapParams,
+            amountIn,
+            minAmountOut,
+            pools,
+            address(this),
+            true
         );
 
         CurveExecutor.SwapParams memory params =
@@ -112,7 +118,13 @@ contract CurveExecutorTest is Test, Constants {
 
         deal(DAI_ADDR, address(curveExecutorExposed), amountIn);
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this), true
+            route,
+            swapParams,
+            amountIn,
+            minAmountOut,
+            pools,
+            address(this),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -132,12 +144,18 @@ contract CurveExecutorTest is Test, Constants {
 
         deal(address(curveExecutorExposed), amountIn);
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this), false
+            route,
+            swapParams,
+            amountIn,
+            minAmountOut,
+            pools,
+            address(this),
+            false
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
-        assertTrue(amountOut == 1001072414418410898); 
+        assertTrue(amountOut == 1001072414418410898);
         assertEq(IERC20(STETH_ADDR).balanceOf(address(this)), amountOut - 1); //// Gets 1 wei less than amountOut
     }
 
@@ -337,7 +355,13 @@ contract CurveExecutorTest is Test, Constants {
 
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this), true
+            route,
+            swapParams,
+            amountIn,
+            minAmountOut,
+            pools,
+            address(this),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);

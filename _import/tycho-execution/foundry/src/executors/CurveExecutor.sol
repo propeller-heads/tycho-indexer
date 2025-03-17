@@ -46,7 +46,9 @@ contract CurveExecutor is IExecutor {
             );
         }
         // Only add the value parameter when the first token is the native token
-        return curveRouter.exchange{value: params.route[0] == nativeToken ? amountIn : 0}(
+        return curveRouter.exchange{
+            value: params.route[0] == nativeToken ? amountIn : 0
+        }(
             params.route,
             params.swapParams,
             amountIn,
