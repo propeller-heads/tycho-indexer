@@ -11,7 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Build the contracts
+        run: forge build --build-info
+        with:
+          target: 'foundry/'
       - uses: crytic/slither-action@v0.4.0
         with:
           target: 'foundry/'
+          ignore-compile: true
           slither-args: '--filter-paths foundry/lib/'
