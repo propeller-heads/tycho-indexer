@@ -111,8 +111,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     /**
      * @notice Executes a swap operation based on a predefined swap graph, supporting internal token amount splits.
      *         This function enables multi-step swaps, optional ETH wrapping/unwrapping, and validates the output amount
-     *         against a user-specified minimum. This function expects the input tokens to already be in the router at
-     *         the time of calling.
+     *         against a user-specified minimum. This function performs a transferFrom to retrieve tokens from the caller.
      *
      * @dev
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
