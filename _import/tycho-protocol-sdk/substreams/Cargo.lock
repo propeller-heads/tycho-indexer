@@ -261,6 +261,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum-pancakeswap-v3"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ethabi 18.0.0",
+ "getrandom",
+ "hex",
+ "hex-literal 0.4.1",
+ "itertools 0.13.0",
+ "num-bigint",
+ "prost 0.11.9",
+ "substreams",
+ "substreams-entity-change",
+ "substreams-ethereum",
+ "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+ "tiny-keccak",
+ "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+]
+
+[[package]]
 name = "ethereum-sfrax"
 version = "0.1.0"
 dependencies = [
