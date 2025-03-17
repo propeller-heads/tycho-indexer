@@ -446,7 +446,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         uint256 amountConsumed = initialBalance - currentBalance;
 
-        if (tokenIn != tokenOut && amountConsumed != amountIn) {
+        if (amountConsumed != amountIn) {
             revert TychoRouter__AmountInDiffersFromConsumed(
                 amountIn, amountConsumed
             );
