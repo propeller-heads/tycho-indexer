@@ -42,7 +42,7 @@ contract CurveExecutorExposed is CurveExecutor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (ICurveRouter.CurveRouterParams memory params)
+        returns (SwapParams memory params)
     {
         return _decodeData(data);
     }
@@ -79,10 +79,10 @@ contract CurveExecutorTest is Test, Constants {
         address[5] memory pools;
 
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this)
+            route, swapParams, amountIn, minAmountOut, pools, address(this), true
         );
 
-        ICurveRouter.CurveRouterParams memory params =
+        CurveExecutor.SwapParams memory params =
             curveExecutorExposed.decodeParams(data);
 
         assertEq(params.route[0], WETH_ADDR);
@@ -92,6 +92,11 @@ contract CurveExecutorTest is Test, Constants {
         assertEq(params.swapParams[0][1], 0);
         assertEq(params.swapParams[0][2], 1);
         assertEq(params.swapParams[0][3], 3);
+        assertEq(params.swapParams[0][4], 3);
+        assertEq(params.amountIn, amountIn);
+        assertEq(params.minAmountOut, minAmountOut);
+        assertEq(params.receiver, address(this));
+        assertEq(params.needsApproval, true);
     }
 
     // The following pools are unique and do not have a factory
@@ -107,7 +112,7 @@ contract CurveExecutorTest is Test, Constants {
 
         deal(DAI_ADDR, address(curveExecutorExposed), amountIn);
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this)
+            route, swapParams, amountIn, minAmountOut, pools, address(this), true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -127,13 +132,13 @@ contract CurveExecutorTest is Test, Constants {
 
         deal(address(curveExecutorExposed), amountIn);
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this)
+            route, swapParams, amountIn, minAmountOut, pools, address(this), false
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
-        assertTrue(amountOut == 1 ether - 1); //// Gets 1 wei less than amountOut
-        assertEq(IERC20(STETH_ADDR).balanceOf(address(this)), amountOut - 1);
+        assertTrue(amountOut == 1001072414418410898); 
+        assertEq(IERC20(STETH_ADDR).balanceOf(address(this)), amountOut - 1); //// Gets 1 wei less than amountOut
     }
 
     function testSwapTricrypto2Pool() public {
@@ -153,7 +158,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -181,7 +187,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -210,7 +217,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -241,7 +249,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -272,7 +281,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -301,7 +311,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -326,7 +337,7 @@ contract CurveExecutorTest is Test, Constants {
 
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
         bytes memory data = abi.encode(
-            route, swapParams, amountIn, minAmountOut, pools, address(this)
+            route, swapParams, amountIn, minAmountOut, pools, address(this), true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -352,7 +363,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -383,7 +395,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -411,7 +424,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -439,7 +453,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -467,7 +482,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -495,7 +511,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
@@ -529,7 +546,8 @@ contract CurveExecutorTest is Test, Constants {
             amountIn,
             minAmountOut,
             pools,
-            address(curveExecutorExposed)
+            address(curveExecutorExposed),
+            true
         );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);

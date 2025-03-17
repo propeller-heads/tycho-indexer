@@ -11,14 +11,24 @@ contract CurveExecutor is IExecutor {
     using SafeERC20 for IERC20;
 
     ICurveRouter public immutable curveRouter;
-    address public immutable nativeTokens;
+    address public immutable nativeToken;
 
-    constructor(address _curveRouter, address _nativeTokens) {
-        if (_curveRouter == address(0) || _nativeTokens == address(0)) {
+    struct SwapParams {
+        address[11] route;
+        uint256[5][5] swapParams;
+        uint256 amountIn;
+        uint256 minAmountOut;
+        address[5] pools;
+        address receiver;
+        bool needsApproval;
+    }
+
+    constructor(address _curveRouter, address _nativeToken) {
+        if (_curveRouter == address(0) || _nativeToken == address(0)) {
             revert CurveExecutor__InvalidAddresses();
         }
         curveRouter = ICurveRouter(_curveRouter);
-        nativeTokens = _nativeTokens;
+        nativeToken = _nativeToken;
     }
 
     // slither-disable-next-line locked-ether
@@ -27,36 +37,30 @@ contract CurveExecutor is IExecutor {
         payable
         returns (uint256)
     {
-        ICurveRouter.CurveRouterParams memory params = _decodeData(data);
-        if (params.route[0] != nativeTokens) {
-            // slither-disable-next-line unused-return
-            IERC20(params.route[0]).approve(address(curveRouter), amountIn);
+        SwapParams memory params = _decodeData(data);
 
-            return curveRouter.exchange(
-                params.route,
-                params.swapParams,
-                amountIn,
-                params.minAmountOut,
-                params.pools,
-                params.receiver
-            );
-        } else {
-            return curveRouter.exchange{value: amountIn}(
-                params.route,
-                params.swapParams,
-                amountIn,
-                params.minAmountOut,
-                params.pools,
-                params.receiver
+        if (params.needsApproval) {
+            // slither-disable-next-line unused-return
+            IERC20(params.route[0]).approve(
+                address(curveRouter), type(uint256).max
             );
         }
+        // Only add the value parameter when the first token is the native token
+        return curveRouter.exchange{value: params.route[0] == nativeToken ? amountIn : 0}(
+            params.route,
+            params.swapParams,
+            amountIn,
+            params.minAmountOut,
+            params.pools,
+            params.receiver
+        );
     }
 
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (ICurveRouter.CurveRouterParams memory params)
+        returns (SwapParams memory params)
     {
-        return abi.decode(data, (ICurveRouter.CurveRouterParams));
+        return abi.decode(data, (SwapParams));
     }
 }
