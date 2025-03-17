@@ -13,16 +13,14 @@ interface ICurvePool {
 // This is the registry that contains the information about the pool
 // The naming convention is different because it is in vyper
 interface MetaRegistry {
-    // Get the number of coins in the pool
     function get_n_coins(address pool) external view returns (uint256);
-    // Get the indices of the coins in the pool
+
     function get_coin_indices(address pool, address from, address to)
         external
         view
         returns (int128, int128, bool);
 }
 
-// Aave lending pool
 interface IAaveLendingPool {
     function deposit(
         address asset,
@@ -37,8 +35,8 @@ interface IAaveLendingPool {
 }
 
 contract CurveExecutorExposed is CurveExecutor {
-    constructor(address _curveRouter, address _ethAddress)
-        CurveExecutor(_curveRouter, _ethAddress)
+    constructor(address _curveRouter, address _nativeToken)
+        CurveExecutor(_curveRouter, _nativeToken)
     {}
 
     function decodeParams(bytes calldata data)
@@ -134,8 +132,8 @@ contract CurveExecutorTest is Test, Constants {
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
-        assertTrue(amountOut >= 1 ether);
-        assertEq(IERC20(STETH_ADDR).balanceOf(address(this)), amountOut - 1); // Gets 1 wei less than amountOut
+        assertTrue(amountOut == 1 ether - 1); //// Gets 1 wei less than amountOut
+        assertEq(IERC20(STETH_ADDR).balanceOf(address(this)), amountOut - 1);
     }
 
     function testSwapTricrypto2Pool() public {
@@ -224,10 +222,9 @@ contract CurveExecutorTest is Test, Constants {
         );
     }
 
-    // The following pool is from CryptoSwapNG, deployed by factory 0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf
-    // - It is a plain pool
-
     function testSwapUsdeUsdcPool() public {
+        // The following pool is from CryptoSwapNG, deployed by factory 0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf
+        // - It is a plain pool
         address[11] memory route =
             _getRoute(USDC_ADDR, USDE_ADDR, USDE_USDC_POOL);
         uint256[5][5] memory swapParams =
@@ -256,10 +253,9 @@ contract CurveExecutorTest is Test, Constants {
         );
     }
 
-    // The following pool is from CryptoSwapNG, deployed by factory 0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf
-    // - It is a meta pool
-
     function testSwapDolaFraxPyusdPool() public {
+        // The following pool is from CryptoSwapNG, deployed by factory 0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf
+        // - It is a meta pool
         address[11] memory route =
             _getRoute(DOLA_ADDR, FRAXPYUSD_POOL, DOLA_FRAXPYUSD_POOL);
         uint256[5][5] memory swapParams =
@@ -288,9 +284,8 @@ contract CurveExecutorTest is Test, Constants {
         );
     }
 
-    // The following pool is from CryptoPool, deployed by factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99
-
     function testSwapWethXyoPool() public {
+        // The following pool is from CryptoPool, deployed by factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99
         address[11] memory route = _getRoute(XYO_ADDR, WETH_ADDR, WETH_XYO_POOL);
         uint256[5][5] memory swapParams =
             _getSwapParams(WETH_XYO_POOL, XYO_ADDR, WETH_ADDR, 1, 2);
@@ -318,9 +313,8 @@ contract CurveExecutorTest is Test, Constants {
         );
     }
 
-    // The following pool is from Tricrypto, deployed by factory 0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963
-
     function testSwapTricryptoPool() public {
+        // The following pool is from Tricrypto, deployed by factory 0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963
         address[11] memory route =
             _getRoute(WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL);
         uint256[5][5] memory swapParams =
@@ -341,9 +335,8 @@ contract CurveExecutorTest is Test, Constants {
         assertEq(IERC20(USDC_ADDR).balanceOf(address(this)), amountOut);
     }
 
-    // The following pool is from Twocrypto, deployed by factory 0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f
-
     function testSwapUwuWethPool() public {
+        // The following pool is from Twocrypto, deployed by factory 0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f
         address[11] memory route = _getRoute(UWU_ADDR, WETH_ADDR, UWU_WETH_POOL);
         uint256[5][5] memory swapParams =
             _getSwapParams(UWU_WETH_POOL, UWU_ADDR, WETH_ADDR, 1, 2);
@@ -371,10 +364,9 @@ contract CurveExecutorTest is Test, Constants {
         );
     }
 
-    // The following pool is from StableSwap, deployed by factory 0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d
-    // - It is a plain pool
-
     function testSwapCrvusdUsdtPool() public {
+        // The following pool is from StableSwap, deployed by factory 0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d
+        // - It is a plain pool
         address[11] memory route =
             _getRoute(CRVUSD_ADDR, USDT_ADDR, CRVUSD_USDT_POOL);
         uint256[5][5] memory swapParams =
@@ -402,8 +394,6 @@ contract CurveExecutorTest is Test, Constants {
             amountOut
         );
     }
-
-    // The following pools were taken from the old curve executor tests
 
     function testSwapAavePool() public {
         address[11] memory route = _getRoute(ADAI_ADDR, AUSDC_ADDR, AAVE_POOL);

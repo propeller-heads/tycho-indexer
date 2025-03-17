@@ -11,14 +11,14 @@ contract CurveExecutor is IExecutor {
     using SafeERC20 for IERC20;
 
     ICurveRouter public immutable curveRouter;
-    address public immutable ethAddress;
+    address public immutable nativeTokens;
 
-    constructor(address _curveRouter, address _ethAddress) {
-        if (_curveRouter == address(0) || _ethAddress == address(0)) {
+    constructor(address _curveRouter, address _nativeTokens) {
+        if (_curveRouter == address(0) || _nativeTokens == address(0)) {
             revert CurveExecutor__InvalidAddresses();
         }
         curveRouter = ICurveRouter(_curveRouter);
-        ethAddress = _ethAddress;
+        nativeTokens = _nativeTokens;
     }
 
     // slither-disable-next-line locked-ether
@@ -28,7 +28,7 @@ contract CurveExecutor is IExecutor {
         returns (uint256)
     {
         ICurveRouter.CurveRouterParams memory params = _decodeData(data);
-        if (params.route[0] != ethAddress) {
+        if (params.route[0] != nativeTokens) {
             // slither-disable-next-line unused-return
             IERC20(params.route[0]).approve(address(curveRouter), amountIn);
 
