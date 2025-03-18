@@ -230,7 +230,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
-    function testSplitSwapSimplePermit2() public {
+    function testSingleSwapSimplePermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2 using Permit2
         // 1 WETH   ->   DAI
         //       (USV2)
@@ -274,7 +274,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSplitSwapMultipleHops() public {
+    function testSequentialSwapMultipleHops() public {
         // Trade 1 WETH for USDC through DAI with 2 swaps on Uniswap V2
         // 1 WETH   ->   DAI   ->   USDC
         //       (univ2)     (univ2)
@@ -302,7 +302,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
 
-        tychoRouter.exposedSplitSwap(amountIn, 3, pleEncode(swaps));
+        tychoRouter.exposedSequentialSwap(amountIn, pleEncode(swaps));
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(tychoRouterAddr);
         assertEq(usdcBalance, 2644659787);
@@ -965,7 +965,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
     function testCyclicSequentialSwap() public {
         // This test has start and end tokens that are the same
         // The flow is:
-        // USDC -> WETH -> USDC  using two pools
+        // USDC --(USV3)--> WETH --(USV3)--> USDC
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, tychoRouterAddr, amountIn);
 
@@ -995,9 +995,10 @@ contract TychoRouterTest is TychoRouterTestSetup {
             usdcWethV3Pool2OneZeroData
         );
 
-        tychoRouter.exposedSplitSwap(amountIn, 2, pleEncode(swaps));
+        tychoRouter.exposedSequentialSwap(amountIn, pleEncode(swaps));
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99889294);
     }
+
 
     function testSplitInputCyclicSwap() public {
         // This test has start and end tokens that are the same
