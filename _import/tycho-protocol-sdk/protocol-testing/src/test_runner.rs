@@ -1,20 +1,30 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, env, ops::Deref, path::PathBuf};
 
+use alloy::{
+    primitives::{bytes, U256},
+    providers::Provider,
+};
 use figment::{
     providers::{Format, Yaml},
     Figment,
 };
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
-use tracing::{debug, info};
-use tycho_core::dto::{Chain, ProtocolComponent};
+use tracing::{debug, field::debug, info};
+use tycho_core::{
+    dto::{Chain, ProtocolComponent, ResponseProtocolState},
+    Bytes,
+};
+use tycho_core::models::Address;
+use tycho_simulation::evm::protocol::u256_num::{bytes_to_u256, u256_to_f64};
 
 use crate::{
-    config::{IntegrationTest, IntegrationTestsConfig},
+    config::{IntegrationTest, IntegrationTestsConfig, ProtocolComponentWithTestConfig},
     tycho_rpc::TychoClient,
     tycho_runner::TychoRunner,
     utils::build_spkg,
 };
+use crate::rpc::RPCProvider;
 
 pub struct TestRunner {
     package: String,
@@ -56,7 +66,7 @@ impl TestRunner {
         }
     }
 
-    fn run_test(&self, test: &IntegrationTest, config: &IntegrationTestsConfig) {
+    fn run_test(&self, test: &IntegrationTest, config: &IntegrationTestsConfig, skip_balance_check: bool) {
         info!("Running test: {}", test.name);
         self.empty_database()
             .expect("Failed to empty the database");
@@ -91,7 +101,7 @@ impl TestRunner {
             )
             .expect("Failed to run Tycho");
 
-        tycho_runner.run_with_rpc_server(validate_state);
+        tycho_runner.run_with_rpc_server(validate_state, &test.expected_components, test.start_block, skip_balance_check);
     }
 
     fn empty_database(&self) -> Result<(), Error> {
@@ -112,7 +122,7 @@ impl TestRunner {
     }
 }
 
-fn validate_state() {
+fn validate_state(expected_components: &Vec<ProtocolComponentWithTestConfig>, start_block: u64, skip_balance_check: bool) {
     let rt = Runtime::new().unwrap();
 
     // Create Tycho client for the RPC server
@@ -133,12 +143,75 @@ fn validate_state() {
     // Create a map of component IDs to components for easy lookup
     let components_by_id: HashMap<String, ProtocolComponent> = protocol_components
         .into_iter()
-        .map(|c| (c.id.clone(), c))
+        .map(|c| (c.id.to_lowercase(), c))
+        .collect();
+
+    let protocol_states_by_id: HashMap<String, ResponseProtocolState> = protocol_states
+        .into_iter()
+        .map(|s| (s.component_id.to_lowercase(), s))
         .collect();
 
     info!("Found {} protocol components", components_by_id.len());
-    info!("Found {} protocol states", protocol_states.len());
+    info!("Found {} protocol states", protocol_states_by_id.len());
 
-    // TODO: Implement complete validation logic similar to Python code
     info!("Validating state...");
+
+    // Step 1: Validate that all expected components are present on Tycho after indexing
+    debug!("Validating {:?} expected components", expected_components.len());
+    for expected_component in expected_components {
+        let component_id = expected_component
+            .base
+            .id
+            .to_lowercase();
+
+        assert!(
+            components_by_id.contains_key(&component_id),
+            "Component {:?} was not found on Tycho",
+            component_id
+        );
+
+        let component = components_by_id
+            .get(&component_id)
+            .unwrap();
+
+        let diff = expected_component
+            .base
+            .compare(&component, true);
+        match diff {
+            Some(diff) => {
+                panic!("Component {} does not match the expected state:\n{}", component_id, diff);
+            }
+            None => {
+                info!("Component {} matches the expected state", component_id);
+            }
+        }
+    }
+    info!("All expected components were successfully found on Tycho and match the expected state");
+
+    // Step 2: Validate Token Balances
+    // In this step, we validate that the token balances of the components match the values
+    // on-chain, extracted by querying the token balances using a node.
+    let rpc_url = env::var("RPC_URL").expect("Missing ETH_RPC_URL in environment");
+    let rpc_provider = RPCProvider::new(rpc_url.to_string());
+
+    for (id_lower, component) in components_by_id.iter() {
+        let component_state = protocol_states_by_id.get(id_lower);
+
+        for token in &component.tokens {
+            let mut balance: U256 = U256::from(0);
+
+            if let Some(state) = component_state {
+                let bal = state.balances.get(token);
+                if let Some(bal) = bal {
+                    let bal = bal.clone().into();
+                    balance = bytes_to_u256(bal);
+                }
+            }
+
+            if (!skip_balance_check) {
+                let token_address: Address
+                let node_balance = rpc_provider.get_token_balance(token, component.id, start_block)
+            }
+        }
+    }
 }

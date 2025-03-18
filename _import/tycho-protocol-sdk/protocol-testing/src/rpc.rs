@@ -6,25 +6,26 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     transports::http::reqwest::Url,
 };
+use tycho_core::models::Address;
 
 const NATIVE_ALIASES: &[Address] = &[
-    address!("0x0000000000000000000000000000000000000000"),
-    address!("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+    address!("0x0000000000000000000000000000000000000000").into(),
+    address!("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee").into(),
 ];
 
 const ERC_20_ABI: &str = r#"[{"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"stateMutability":"view","type":"function"}]"#;
 
-struct RPCProvider {
+pub struct RPCProvider {
     url: Url,
 }
 
 impl RPCProvider {
-    fn new(url: String) -> RPCProvider {
+    pub(crate) fn new(url: String) -> RPCProvider {
         let url = url.as_str().parse().unwrap();
         RPCProvider { url }
     }
 
-    async fn get_token_balance(
+    pub async fn get_token_balance(
         self,
         token_address: Address,
         wallet_address: Address,

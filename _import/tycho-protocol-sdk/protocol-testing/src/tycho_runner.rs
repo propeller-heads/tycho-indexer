@@ -9,6 +9,8 @@ use std::{
 use dotenv::dotenv;
 use tracing::debug;
 
+use crate::config::ProtocolComponentWithTestConfig;
+
 pub struct TychoRunner {
     db_url: String,
     initialized_accounts: Vec<String>,
@@ -92,9 +94,15 @@ impl TychoRunner {
         Ok(())
     }
 
-    pub fn run_with_rpc_server<F, R>(&self, func: F) -> R
+    pub fn run_with_rpc_server<F, R>(
+        &self,
+        func: F,
+        expected_components: &Vec<ProtocolComponentWithTestConfig>,
+        start_block: u64,
+        skip_balance_check: bool,
+    ) -> R
     where
-        F: FnOnce() -> R,
+        F: FnOnce(&Vec<ProtocolComponentWithTestConfig>, u64, bool) -> R,
     {
         let (tx, rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
         let db_url = self.db_url.clone();
@@ -133,7 +141,7 @@ impl TychoRunner {
         thread::sleep(Duration::from_secs(3));
 
         // Run the provided function
-        let result = func();
+        let result = func(expected_components, start_block, skip_balance_check);
 
         tx.send(true)
             .expect("Failed to send termination message");
