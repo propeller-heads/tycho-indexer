@@ -16,9 +16,7 @@ contract CurveExecutor is IExecutor {
     struct SwapParams {
         address[11] route;
         uint256[5][5] swapParams;
-        uint256 amountIn;
         uint256 minAmountOut;
-        address[5] pools;
         address receiver;
         bool needsApproval;
     }
@@ -45,7 +43,8 @@ contract CurveExecutor is IExecutor {
                 address(curveRouter), type(uint256).max
             );
         }
-        // Only add the value parameter when the first token is the native token
+        // slither-disable-next-line uninitialized-local
+        address[5] memory pools;
         return curveRouter.exchange{
             value: params.route[0] == nativeToken ? amountIn : 0
         }(
@@ -53,7 +52,7 @@ contract CurveExecutor is IExecutor {
             params.swapParams,
             amountIn,
             params.minAmountOut,
-            params.pools,
+            pools,
             params.receiver
         );
     }
