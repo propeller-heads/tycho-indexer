@@ -230,7 +230,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
-    function testSingleSwapSimplePermit2() public {
+    function testSingleSwapPermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2 using Permit2
         // 1 WETH   ->   DAI
         //       (USV2)
@@ -247,24 +247,20 @@ contract TychoRouterTest is TychoRouterTestSetup {
             WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
         );
 
-        bytes memory swap = encodeSplitSwap(
-            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
-        );
-        bytes[] memory swaps = new bytes[](1);
-        swaps[0] = swap;
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
 
-        tychoRouter.splitSwapPermit2(
+        tychoRouter.singleSwapPermit2(
             amountIn,
             WETH_ADDR,
             DAI_ADDR,
             2659881924818443699786,
             false,
             false,
-            2,
             ALICE,
             permitSingle,
             signature,
-            pleEncode(swaps)
+            swap
         );
 
         uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
@@ -274,7 +270,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSequentialSwapMultipleHops() public {
+    function testSequentialSwap() public {
         // Trade 1 WETH for USDC through DAI with 2 swaps on Uniswap V2
         // 1 WETH   ->   DAI   ->   USDC
         //       (univ2)     (univ2)
@@ -283,10 +279,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         bytes[] memory swaps = new bytes[](2);
         // WETH -> DAI
-        swaps[0] = encodeSplitSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
+        swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
                 WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
@@ -294,10 +287,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         );
 
         // DAI -> USDC
-        swaps[1] = encodeSplitSwap(
-            uint8(1),
-            uint8(2),
-            uint24(0),
+        swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
         );
@@ -384,9 +374,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
         );
 
-        bytes memory swap = encodeSplitSwap(
-            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
-        );
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
 
         uint256 minAmountOut = 2600 * 1e18;
         uint256 amountOut = tychoRouter.singleSwapPermit2(
@@ -396,7 +385,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             minAmountOut,
             false,
             false,
-            2,
             ALICE,
             permitSingle,
             signature,
@@ -466,9 +454,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
             WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
         );
 
-        bytes memory swap = encodeSplitSwap(
-            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
-        );
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
 
         uint256 minAmountOut = 2600 * 1e18;
         uint256 amountOut = tychoRouter.singleSwap(
@@ -478,7 +465,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
             minAmountOut,
             false,
             false,
-            2,
             ALICE,
             swap
         );
@@ -979,26 +965,17 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         bytes[] memory swaps = new bytes[](2);
         // USDC -> WETH
-        swaps[0] = encodeSplitSwap(
-            uint8(0),
-            uint8(1),
-            uint24(0),
-            address(usv3Executor),
-            usdcWethV3Pool1ZeroOneData
+        swaps[0] = encodeSequentialSwap(
+            address(usv3Executor), usdcWethV3Pool1ZeroOneData
         );
         // WETH -> USDC
-        swaps[1] = encodeSplitSwap(
-            uint8(1),
-            uint8(0),
-            uint24(0),
-            address(usv3Executor),
-            usdcWethV3Pool2OneZeroData
+        swaps[1] = encodeSequentialSwap(
+            address(usv3Executor), usdcWethV3Pool2OneZeroData
         );
 
         tychoRouter.exposedSequentialSwap(amountIn, pleEncode(swaps));
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99889294);
     }
-
 
     function testSplitInputCyclicSwap() public {
         // This test has start and end tokens that are the same
