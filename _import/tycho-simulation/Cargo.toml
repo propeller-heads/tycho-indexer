@@ -28,6 +28,7 @@ tracing = "0.1.37"
 num-traits = "0.2.17"
 dotenv = "0.15.0"
 itertools = "0.10.5"
+enum_delegate = "0.2.0"
 
 # Enum utilities
 strum = "0.25.0"
@@ -60,6 +61,9 @@ tokio-stream = "0.1.16"
 # Dialoguer
 dialoguer = "0.10.4"
 
+# Ekubo
+evm_ekubo_sdk = { path = "../evm-rust-sdk" } # TODO Refer to git repo
+
 [dev-dependencies]
 tokio-test = "0.4.4"
 approx = "0.5.1"
@@ -80,7 +84,6 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
-
 
 [features]
 default = ["evm"]
