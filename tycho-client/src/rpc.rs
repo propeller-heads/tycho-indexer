@@ -468,6 +468,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let accounts = serde_json::from_str::<StateRequestResponse>(&body).map_err(|err| {
+            error!("Error: {}", err);
             error!("Failed to parse contract state response: {:?}", &body);
             RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
         })?;
@@ -507,6 +508,7 @@ impl RPCClient for HttpRPCClient {
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let components =
             serde_json::from_str::<ProtocolComponentRequestResponse>(&body).map_err(|err| {
+                error!("Error: {}", err);
                 error!("Failed to parse protocol component response: {:?}", &body);
                 RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
             })?;
@@ -568,6 +570,7 @@ impl RPCClient for HttpRPCClient {
 
         let states =
             serde_json::from_str::<ProtocolStateRequestResponse>(&body).map_err(|err| {
+                error!("Error: {}", err);
                 error!("Failed to parse protocol state response: {:?}", &body);
                 RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
             })?;
@@ -602,6 +605,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let tokens = serde_json::from_str::<TokensRequestResponse>(&body).map_err(|err| {
+            error!("Error: {}", err);
             error!("Failed to parse tokens response: {:?}", &body);
             RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
         })?;
@@ -636,6 +640,7 @@ impl RPCClient for HttpRPCClient {
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let protocol_systems = serde_json::from_str::<ProtocolSystemsRequestResponse>(&body)
             .map_err(|err| {
+                error!("Error: {}", err);
                 error!("Failed to parse protocol systems response: {:?}", &body);
                 RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
             })?;
