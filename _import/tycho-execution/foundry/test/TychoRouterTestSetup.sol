@@ -46,6 +46,7 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.startPrank(ADMIN);
         address factoryV3 = USV3_FACTORY_ETHEREUM;
         address factoryV2 = USV2_FACTORY_ETHEREUM;
+        bytes32 initCodeV2 = USV2_POOL_CODE_INIT_HASH;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
         tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS, WETH_ADDR);
@@ -60,7 +61,7 @@ contract TychoRouterTestSetup is Test, Constants {
         deployDummyContract();
         vm.stopPrank();
 
-        usv2Executor = new UniswapV2Executor(factoryV2);
+        usv2Executor = new UniswapV2Executor(factoryV2, initCodeV2);
         usv3Executor = new UniswapV3Executor(factoryV3);
         usv4Executor = new UniswapV4Executor(poolManager);
         vm.startPrank(EXECUTOR_SETTER);

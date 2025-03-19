@@ -47,9 +47,23 @@ contract Constants is Test, BaseConstants {
     address USDC_WBTC_POOL = 0x004375Dff511095CC5A197A54140a24eFEF3A416;
     address USDC_WETH_USV2 = 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
 
-    // Uniswap v3
+    // Sushiswap v2
+    address SUSHISWAP_WBTC_WETH_POOL =
+        0xCEfF51756c56CeFFCA006cD410B03FFC46dd3a58;
+
+    // Pancakeswap v2
+    address PANCAKESWAP_WBTC_WETH_POOL =
+        0x4AB6702B3Ed3877e9b1f203f90cbEF13d663B0e8;
+
+    // Factories
     address USV3_FACTORY_ETHEREUM = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     address USV2_FACTORY_ETHEREUM = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
+    address SUSHISWAPV2_FACTORY_ETHEREUM =
+        0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac;
+    address PANCAKESWAPV2_FACTORY_ETHEREUM =
+        0x1097053Fd2ea711dad45caCcc45EfF7548fCB362;
+
+    // Uniswap v3
     address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
     address USDC_WETH_USV3 = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640; // 0.05% fee
     address USDC_WETH_USV3_2 = 0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8; // 0.3% fee
@@ -59,6 +73,14 @@ contract Constants is Test, BaseConstants {
 
     // Permit2
     address PERMIT2_ADDRESS = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+
+    // Pool Code Init Hashes
+    bytes32 USV2_POOL_CODE_INIT_HASH =
+        0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
+    bytes32 SUSHIV2_POOL_CODE_INIT_HASH =
+        0xe18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303;
+    bytes32 PANCAKEV2_POOL_CODE_INIT_HASH =
+        0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode

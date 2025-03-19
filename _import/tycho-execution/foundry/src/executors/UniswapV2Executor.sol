@@ -8,21 +8,24 @@ import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 error UniswapV2Executor__InvalidDataLength();
 error UniswapV2Executor__InvalidTarget();
 error UniswapV2Executor__InvalidFactory();
+error UniswapV2Executor__InvalidInitCode();
 
 contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    bytes32 internal constant POOL_INIT_CODE_HASH =
-        0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
-
     address public immutable factory;
+    bytes32 public immutable init_code;
     address private immutable self;
 
-    constructor(address _factory) {
+    constructor(address _factory, bytes32 _init_code) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
+        if (_init_code == bytes32(0)) {
+            revert UniswapV2Executor__InvalidInitCode();
+        }
         factory = _factory;
+        init_code = _init_code;
         self = address(this);
     }
 
@@ -102,9 +105,7 @@ contract UniswapV2Executor is IExecutor {
             uint160(
                 uint256(
                     keccak256(
-                        abi.encodePacked(
-                            hex"ff", factory, salt, POOL_INIT_CODE_HASH
-                        )
+                        abi.encodePacked(hex"ff", factory, salt, init_code)
                     )
                 )
             )

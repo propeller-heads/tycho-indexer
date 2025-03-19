@@ -6,7 +6,9 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
-    constructor(address _factory) UniswapV2Executor(_factory) {}
+    constructor(address _factory, bytes32 _init_code)
+        UniswapV2Executor(_factory, _init_code)
+    {}
 
     function decodeParams(bytes calldata data)
         external
@@ -48,13 +50,23 @@ contract UniswapV2ExecutorTest is Test, Constants {
     using SafeERC20 for IERC20;
 
     UniswapV2ExecutorExposed uniswapV2Exposed;
+    UniswapV2ExecutorExposed sushiswapV2Exposed;
+    UniswapV2ExecutorExposed pancakeswapV2Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
 
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV2Exposed = new UniswapV2ExecutorExposed(USV2_FACTORY_ETHEREUM);
+        uniswapV2Exposed = new UniswapV2ExecutorExposed(
+            USV2_FACTORY_ETHEREUM, USV2_POOL_CODE_INIT_HASH
+        );
+        sushiswapV2Exposed = new UniswapV2ExecutorExposed(
+            SUSHISWAPV2_FACTORY_ETHEREUM, SUSHIV2_POOL_CODE_INIT_HASH
+        );
+        pancakeswapV2Exposed = new UniswapV2ExecutorExposed(
+            PANCAKESWAPV2_FACTORY_ETHEREUM, PANCAKEV2_POOL_CODE_INIT_HASH
+        );
     }
 
     function testDecodeParams() public view {
@@ -80,6 +92,14 @@ contract UniswapV2ExecutorTest is Test, Constants {
 
     function testVerifyPairAddress() public view {
         uniswapV2Exposed.verifyPairAddress(WETH_DAI_POOL);
+    }
+
+    function testVerifyPairAddressSushi() public view {
+        sushiswapV2Exposed.verifyPairAddress(SUSHISWAP_WBTC_WETH_POOL);
+    }
+
+    function testVerifyPairAddressPancake() public view {
+        pancakeswapV2Exposed.verifyPairAddress(PANCAKESWAP_WBTC_WETH_POOL);
     }
 
     function testInvalidTarget() public {
