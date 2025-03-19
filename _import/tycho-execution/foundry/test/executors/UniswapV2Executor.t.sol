@@ -6,8 +6,8 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
-    constructor(address _factory, bytes32 _init_code)
-        UniswapV2Executor(_factory, _init_code)
+    constructor(address _factory, bytes32 _initCode)
+        UniswapV2Executor(_factory, _initCode)
     {}
 
     function decodeParams(bytes calldata data)

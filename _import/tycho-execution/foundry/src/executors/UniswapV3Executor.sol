@@ -10,24 +10,28 @@ import "@interfaces/ICallback.sol";
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
 error UniswapV3Executor__InvalidTarget();
+error UniswapV3Executor__InvalidInitCode();
 
 contract UniswapV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
-    bytes32 internal constant POOL_INIT_CODE_HASH =
-        0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54;
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
     address public immutable factory;
+    bytes32 public immutable initCode;
     address private immutable self;
 
-    constructor(address _factory) {
+    constructor(address _factory, bytes32 _initCode) {
         if (_factory == address(0)) {
             revert UniswapV3Executor__InvalidFactory();
         }
+        if (_initCode == bytes32(0)) {
+            revert UniswapV3Executor__InvalidInitCode();
+        }
         factory = _factory;
+        initCode = _initCode;
         self = address(this);
     }
 
@@ -167,7 +171,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
                             hex"ff",
                             factory,
                             keccak256(abi.encode(token0, token1, fee)),
-                            POOL_INIT_CODE_HASH
+                            initCode
                         )
                     )
                 )

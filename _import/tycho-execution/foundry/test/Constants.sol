@@ -55,6 +55,15 @@ contract Constants is Test, BaseConstants {
     address PANCAKESWAP_WBTC_WETH_POOL =
         0x4AB6702B3Ed3877e9b1f203f90cbEF13d663B0e8;
 
+    // Uniswap v3
+    address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
+    address USDC_WETH_USV3 = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640; // 0.05% fee
+    address USDC_WETH_USV3_2 = 0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8; // 0.3% fee
+
+    // Pancakeswap v3
+    address PANCAKESWAPV3_WETH_USDT_POOL =
+        0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C;
+
     // Factories
     address USV3_FACTORY_ETHEREUM = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     address USV2_FACTORY_ETHEREUM = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
@@ -63,10 +72,9 @@ contract Constants is Test, BaseConstants {
     address PANCAKESWAPV2_FACTORY_ETHEREUM =
         0x1097053Fd2ea711dad45caCcc45EfF7548fCB362;
 
-    // Uniswap v3
-    address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
-    address USDC_WETH_USV3 = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640; // 0.05% fee
-    address USDC_WETH_USV3_2 = 0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8; // 0.3% fee
+    // Pancakeswap uses their deployer instead of their factory for target verification
+    address PANCAKESWAPV3_DEPLOYER_ETHEREUM =
+        0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9;
 
     // Uniswap universal router
     address UNIVERSAL_ROUTER = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af;
@@ -77,10 +85,14 @@ contract Constants is Test, BaseConstants {
     // Pool Code Init Hashes
     bytes32 USV2_POOL_CODE_INIT_HASH =
         0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
+    bytes32 USV3_POOL_CODE_INIT_HASH =
+        0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54;
     bytes32 SUSHIV2_POOL_CODE_INIT_HASH =
         0xe18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303;
     bytes32 PANCAKEV2_POOL_CODE_INIT_HASH =
         0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d;
+    bytes32 PANCAKEV3_POOL_CODE_INIT_HASH =
+        0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode

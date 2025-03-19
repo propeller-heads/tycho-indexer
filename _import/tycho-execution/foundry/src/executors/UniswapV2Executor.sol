@@ -14,18 +14,18 @@ contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
-    bytes32 public immutable init_code;
+    bytes32 public immutable initCode;
     address private immutable self;
 
-    constructor(address _factory, bytes32 _init_code) {
+    constructor(address _factory, bytes32 _initCode) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
-        if (_init_code == bytes32(0)) {
+        if (_initCode == bytes32(0)) {
             revert UniswapV2Executor__InvalidInitCode();
         }
         factory = _factory;
-        init_code = _init_code;
+        initCode = _initCode;
         self = address(this);
     }
 
@@ -105,7 +105,7 @@ contract UniswapV2Executor is IExecutor {
             uint160(
                 uint256(
                     keccak256(
-                        abi.encodePacked(hex"ff", factory, salt, init_code)
+                        abi.encodePacked(hex"ff", factory, salt, initCode)
                     )
                 )
             )
