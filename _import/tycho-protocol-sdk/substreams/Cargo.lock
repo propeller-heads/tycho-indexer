@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-pancakeswap-v3"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
