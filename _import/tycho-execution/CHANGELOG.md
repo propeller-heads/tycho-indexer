@@ -1,3 +1,10 @@
+## [0.66.1](https://github.com/propeller-heads/tycho-execution/compare/0.66.0...0.66.1) (2025-03-19)
+
+
+### Bug Fixes
+
+* Slippage precision calculation ([d644b63](https://github.com/propeller-heads/tycho-execution/commit/d644b63851a63babadfb909af97c5bf80dd03376))
+
 ## [0.66.0](https://github.com/propeller-heads/tycho-execution/compare/0.65.1...0.66.0) (2025-03-14)
 
 

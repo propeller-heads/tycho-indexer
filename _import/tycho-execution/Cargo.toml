@@ -1,6 +1,6 @@
 [package]
 name = "tycho-execution"
-version = "0.66.0"
+version = "0.66.1"
 edition = "2021"
 
 [[bin]]
