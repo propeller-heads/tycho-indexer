@@ -252,7 +252,7 @@ contract CurveExecutorTest is Test, Constants {
     }
 
     function testSwapWethXyoPool() public {
-        // The following pool is from CryptoPool, deployed by factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99
+        // The following pool is from CryptoPool, deployed by factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99 - with ETH
         address[11] memory route = _getRoute(XYO_ADDR, WETH_ADDR, WETH_XYO_POOL);
         uint256[5][5] memory swapParams =
             _getSwapParams(WETH_XYO_POOL, XYO_ADDR, WETH_ADDR, 1, 2);
@@ -336,6 +336,55 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 999910);
+        assertEq(
+            IERC20(USDT_ADDR).balanceOf(address(curveExecutorExposed)),
+            amountOut
+        );
+    }
+
+    function testSwapWsttaoWtaoPool() public {
+        // The following pool is deployed by factory 0xB9fC157394Af804a3578134A6585C0dc9cc990d4
+        // - It is a plain pool
+        address[11] memory route =
+            _getRoute(WTAO_ADDR, WSTTAO_ADDR, WSTTAO_WTAO_POOL);
+        uint256[5][5] memory swapParams =
+            _getSwapParams(WSTTAO_WTAO_POOL, WTAO_ADDR, WSTTAO_ADDR, 1, 1);
+
+        uint256 amountIn = 100 * 10 ** 9; // 9 decimals
+        uint256 minAmountOut = 0;
+
+        deal(WTAO_ADDR, address(curveExecutorExposed), amountIn);
+        bytes memory data = abi.encode(
+            route, swapParams, minAmountOut, address(curveExecutorExposed), true
+        );
+
+        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+
+        assertEq(amountOut, 32797923609);
+        assertEq(
+            IERC20(WSTTAO_ADDR).balanceOf(address(curveExecutorExposed)),
+            amountOut
+        );
+    }
+
+    function testSwapBsggUsdtPool() public {
+        // The following pool is from CryptoPool, deployed by factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99
+        address[11] memory route =
+            _getRoute(BSGG_ADDR, USDT_ADDR, BSGG_USDT_POOL);
+        uint256[5][5] memory swapParams =
+            _getSwapParams(BSGG_USDT_POOL, BSGG_ADDR, USDT_ADDR, 1, 2);
+
+        uint256 amountIn = 1000 ether;
+        uint256 minAmountOut = 0;
+
+        deal(BSGG_ADDR, address(curveExecutorExposed), amountIn);
+        bytes memory data = abi.encode(
+            route, swapParams, minAmountOut, address(curveExecutorExposed), true
+        );
+
+        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+
+        assertEq(amountOut, 23429);
         assertEq(
             IERC20(USDT_ADDR).balanceOf(address(curveExecutorExposed)),
             amountOut
