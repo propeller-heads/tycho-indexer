@@ -1,6 +1,12 @@
 use std::collections::HashMap;
 
-use evm_ekubo_sdk::{math::uint::U256, quoting::{base_pool::BasePoolState, types::{Config, NodeKey, Tick}}};
+use evm_ekubo_sdk::{
+    math::uint::U256,
+    quoting::{
+        base_pool::BasePoolState,
+        types::{Config, NodeKey, Tick},
+    },
+};
 use tycho_core::{dto::ProtocolComponent, Bytes};
 
 use super::{pool::base::BasePool, state::EkuboState};
@@ -8,22 +14,13 @@ use super::{pool::base::BasePool, state::EkuboState};
 pub const POOL_KEY: NodeKey = NodeKey {
     token0: U256([1, 0, 0, 0]),
     token1: U256([2, 0, 0, 0]),
-    config: Config {
-        fee: 0,
-        tick_spacing: 1,
-        extension: U256::zero(),
-    },
+    config: Config { fee: 0, tick_spacing: 1, extension: U256::zero() },
 };
 
-pub const LOWER_TICK: Tick = Tick {
-    index: -10,
-    liquidity_delta: 1_000,
-};
+pub const LOWER_TICK: Tick = Tick { index: -10, liquidity_delta: 1_000 };
 
-pub const UPPER_TICK: Tick = Tick {
-    index: -LOWER_TICK.index,
-    liquidity_delta: -LOWER_TICK.liquidity_delta,
-};
+pub const UPPER_TICK: Tick =
+    Tick { index: -LOWER_TICK.index, liquidity_delta: -LOWER_TICK.liquidity_delta };
 
 pub const TICK_INDEX_BETWEEN: i32 = 0;
 pub const SQRT_RATIO_BETWEEN: U256 = U256([0, 0, 1, 0]);
@@ -37,7 +34,14 @@ pub fn component() -> ProtocolComponent {
             ("token1".to_string(), POOL_KEY.token1.to_big_endian().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
             ("tick_spacing".to_string(), POOL_KEY.config.tick_spacing.into()),
-            ("extension".to_string(), POOL_KEY.config.extension.to_big_endian().into()),
+            (
+                "extension".to_string(),
+                POOL_KEY
+                    .config
+                    .extension
+                    .to_big_endian()
+                    .into(),
+            ),
         ]),
         ..Default::default()
     }
@@ -46,10 +50,27 @@ pub fn component() -> ProtocolComponent {
 pub fn attributes() -> HashMap<String, Bytes> {
     HashMap::from([
         ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
-        ("sqrt_ratio".to_string(), SQRT_RATIO_BETWEEN.to_big_endian().into()),
+        (
+            "sqrt_ratio".to_string(),
+            SQRT_RATIO_BETWEEN
+                .to_big_endian()
+                .into(),
+        ),
         ("tick".to_string(), TICK_INDEX_BETWEEN.to_be_bytes().into()),
-        (format!("ticks/{}", LOWER_TICK.index), LOWER_TICK.liquidity_delta.to_be_bytes().into()),
-        (format!("ticks/{}", UPPER_TICK.index), UPPER_TICK.liquidity_delta.to_be_bytes().into()),
+        (
+            format!("ticks/{}", LOWER_TICK.index),
+            LOWER_TICK
+                .liquidity_delta
+                .to_be_bytes()
+                .into(),
+        ),
+        (
+            format!("ticks/{}", UPPER_TICK.index),
+            UPPER_TICK
+                .liquidity_delta
+                .to_be_bytes()
+                .into(),
+        ),
     ])
 }
 

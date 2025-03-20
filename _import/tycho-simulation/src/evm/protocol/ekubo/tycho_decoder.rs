@@ -3,14 +3,21 @@ use std::collections::HashMap;
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::{
-        base_pool::BasePoolState, oracle_pool::OraclePoolState, types::{Config, NodeKey}, util::find_nearest_initialized_tick_index
+        base_pool::BasePoolState,
+        oracle_pool::OraclePoolState,
+        types::{Config, NodeKey},
+        util::find_nearest_initialized_tick_index,
     },
 };
 use thiserror::Error;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
-use super::{pool::{base::BasePool, oracle::OraclePool}, state::EkuboState, tick::{ticks_from_attributes, Ticks}};
+use super::{
+    pool::{base::BasePool, oracle::OraclePool},
+    state::EkuboState,
+    tick::{ticks_from_attributes, Ticks},
+};
 use crate::{
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
@@ -38,7 +45,10 @@ impl TryFrom<Bytes> for EkuboExtension {
             0 => Err(StateDecodingError::UnsupportedExtension),
             1 => Ok(Self::Base),
             2 => Ok(Self::Oracle),
-            discriminant => Err(InvalidSnapshotError::ValueError(format!("unknown discriminant {discriminant}")).into()),
+            discriminant => Err(InvalidSnapshotError::ValueError(format!(
+                "unknown discriminant {discriminant}"
+            ))
+            .into()),
         }
     }
 }
@@ -61,7 +71,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
             .try_into()?;
 
         let token0 = U256::from_big_endian(
-            &snapshot
+            snapshot
                 .component
                 .static_attributes
                 .get("token0")
@@ -69,45 +79,50 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
         );
 
         let token1 = U256::from_big_endian(
-            &snapshot
+            snapshot
                 .component
                 .static_attributes
                 .get("token1")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token1".to_string()))?,
         );
 
-        let fee = u64::from_be_bytes(snapshot
-            .component
-            .static_attributes
-            .get("fee")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
-            .as_ref()
-            .try_into()
-            .map_err(|err| InvalidSnapshotError::ValueError(format!("fee length mismatch: {err:?}")))?
+        let fee = u64::from_be_bytes(
+            snapshot
+                .component
+                .static_attributes
+                .get("fee")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
+                .as_ref()
+                .try_into()
+                .map_err(|err| {
+                    InvalidSnapshotError::ValueError(format!("fee length mismatch: {err:?}"))
+                })?,
         );
 
-        let tick_spacing = u32::from_be_bytes(snapshot
-            .component
-            .static_attributes
-            .get("tick_spacing")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick_spacing".to_string()))?
-            .as_ref()
-            .try_into()
-            .map_err(|err| InvalidSnapshotError::ValueError(format!("tick_spacing length mismatch: {err:?}")))?
+        let tick_spacing = u32::from_be_bytes(
+            snapshot
+                .component
+                .static_attributes
+                .get("tick_spacing")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick_spacing".to_string()))?
+                .as_ref()
+                .try_into()
+                .map_err(|err| {
+                    InvalidSnapshotError::ValueError(format!(
+                        "tick_spacing length mismatch: {err:?}"
+                    ))
+                })?,
         );
 
-        let extension = U256::from_big_endian(snapshot
-            .component
-            .static_attributes
-            .get("extension")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("extension".to_string()))?
+        let extension = U256::from_big_endian(
+            snapshot
+                .component
+                .static_attributes
+                .get("extension")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("extension".to_string()))?,
         );
 
-        let config = Config {
-            fee,
-            tick_spacing,
-            extension,
-        };
+        let config = Config { fee, tick_spacing, extension };
 
         let liquidity = snapshot
             .state
@@ -134,7 +149,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
             .into();
 
         let mut ticks = ticks_from_attributes(snapshot.state.attributes)
-            .map_err(|err| InvalidSnapshotError::ValueError(err))?;
+            .map_err(InvalidSnapshotError::ValueError)?;
 
         ticks.sort_by_key(|tick| tick.index);
 
@@ -152,7 +167,8 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                 &key,
                 OraclePoolState {
                     base_pool_state: state,
-                    last_snapshot_time: 0, // TODO Fill with real value when timestamps are supported
+                    last_snapshot_time: 0, /* TODO Fill with real value when timestamps are
+                                            * supported */
                 },
             )),
         })
@@ -164,17 +180,13 @@ mod tests {
     use rstest::rstest;
     use tycho_core::dto::ResponseProtocolState;
 
-    use crate::evm::protocol::ekubo::test_pool::{attributes, component, state};
-
     use super::*;
+    use crate::evm::protocol::ekubo::test_pool::{attributes, component, state};
 
     #[tokio::test]
     async fn test_try_from_with_block() {
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
-                attributes: attributes(),
-                ..Default::default()
-            },
+            state: ResponseProtocolState { attributes: attributes(), ..Default::default() },
             component: component(),
         };
 
@@ -205,7 +217,9 @@ mod tests {
         let mut component = component();
         let mut attributes = attributes();
 
-        component.static_attributes.remove(&missing_attribute);
+        component
+            .static_attributes
+            .remove(&missing_attribute);
         attributes.remove(&missing_attribute);
 
         let snapshot = ComponentWithState {
@@ -222,7 +236,8 @@ mod tests {
             Header::default(),
             &HashMap::default(),
             &HashMap::default(),
-        ).await;
+        )
+        .await;
 
         let err = result.unwrap_err();
 

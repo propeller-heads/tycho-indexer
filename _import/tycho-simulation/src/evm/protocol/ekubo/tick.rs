@@ -16,10 +16,9 @@ impl Ticks {
     }
 
     pub fn set(&mut self, tick: Tick) {
-        let res = self.0.binary_search_by_key(
-            &tick.index,
-            |t| t.index,
-        );
+        let res = self
+            .0
+            .binary_search_by_key(&tick.index, |t| t.index);
 
         let remove = tick.liquidity_delta.is_zero();
 
@@ -30,7 +29,7 @@ impl Ticks {
                 } else {
                     self.0[idx] = tick;
                 }
-            },
+            }
             Err(idx) => {
                 if !remove {
                     self.0.insert(idx, tick);
@@ -46,24 +45,22 @@ impl From<Vec<Tick>> for Ticks {
     }
 }
 
-pub fn ticks_from_attributes<T: IntoIterator<Item = (String, Bytes)>>(attributes: T) -> Result<Vec<Tick>, String> {
+pub fn ticks_from_attributes<T: IntoIterator<Item = (String, Bytes)>>(
+    attributes: T,
+) -> Result<Vec<Tick>, String> {
     attributes
         .into_iter()
-        .filter_map(|(key, value)| key
-            .starts_with("ticks/")
-            .then(|| key
-                .split('/')
-                .nth(1)
-                .ok_or_else(|| "expected key name to contain tick index".to_string())?
-                .parse::<i32>()
-                .map_or_else(
-                    |err| Err(format!("tick index can't be parsed as i32: {err}")),
-                    |index| Ok(Tick {
-                        index,
-                        liquidity_delta: i128::from(value.clone()),
-                    }),
-                )
-            )
-        )
+        .filter_map(|(key, value)| {
+            key.starts_with("ticks/").then(|| {
+                key.split('/')
+                    .nth(1)
+                    .ok_or_else(|| "expected key name to contain tick index".to_string())?
+                    .parse::<i32>()
+                    .map_or_else(
+                        |err| Err(format!("tick index can't be parsed as i32: {err}")),
+                        |index| Ok(Tick { index, liquidity_delta: i128::from(value.clone()) }),
+                    )
+            })
+        })
         .try_collect()
 }

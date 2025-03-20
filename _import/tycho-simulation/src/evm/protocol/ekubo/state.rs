@@ -1,11 +1,19 @@
-use std::{any::Any, collections::HashMap, fmt::Debug, u64};
+use std::{any::Any, collections::HashMap, fmt::Debug};
 
-use evm_ekubo_sdk::{math::{tick::{MAX_TICK, MIN_TICK}, uint::U256}, quoting::
-    types::{NodeKey, Tick, TokenAmount}
+use evm_ekubo_sdk::{
+    math::{
+        tick::{MAX_TICK, MIN_TICK},
+        uint::U256,
+    },
+    quoting::types::{NodeKey, Tick, TokenAmount},
 };
 use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
+use super::{
+    pool::{base::BasePool, oracle::OraclePool, EkuboPool},
+    tick::ticks_from_attributes,
+};
 use crate::{
     evm::protocol::u256_num::u256_to_f64,
     models::{Balances, Token},
@@ -15,8 +23,6 @@ use crate::{
         state::ProtocolSim,
     },
 };
-
-use super::{pool::{base::BasePool, oracle::OraclePool, EkuboPool}, tick::ticks_from_attributes};
 
 #[enum_delegate::implement(EkuboPool)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,18 +41,20 @@ impl EkuboState {
                 p.set_tick(tick);
 
                 Ok(())
-            },
+            }
             Self::Oracle(p) => {
                 let idx = tick.index;
 
                 if ![MIN_TICK, MAX_TICK].contains(&idx) {
-                    return Err(format!("oracle must be full-range but passed tick has index {idx}"));
+                    return Err(format!(
+                        "oracle must be full-range but passed tick has index {idx}"
+                    ));
                 }
 
                 p.set_liquidity(tick.liquidity_delta.unsigned_abs());
 
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -68,16 +76,9 @@ impl ProtocolSim for EkuboState {
         let (base_decimals, quote_decimals) = (base.decimals, quote.decimals);
 
         Ok(if base < quote {
-            sqrt_price_q128_to_f64(
-                sqrt_ratio,
-                (base_decimals, quote_decimals),
-            )
+            sqrt_price_q128_to_f64(sqrt_ratio, (base_decimals, quote_decimals))
         } else {
-            1.0f64 /
-                sqrt_price_q128_to_f64(
-                    sqrt_ratio,
-                    (quote_decimals, base_decimals),
-                )
+            1.0f64 / sqrt_price_q128_to_f64(sqrt_ratio, (quote_decimals, base_decimals))
         })
     }
 
@@ -90,9 +91,9 @@ impl ProtocolSim for EkuboState {
     ) -> Result<GetAmountOutResult, SimulationError> {
         let token_amount = TokenAmount {
             token: U256::from_big_endian(&token_in.address),
-            amount: amount_in
-                .try_into()
-                .map_err(|_| SimulationError::InvalidInput("amount in must fit into a i128".to_string(), None))?,
+            amount: amount_in.try_into().map_err(|_| {
+                SimulationError::InvalidInput("amount in must fit into a i128".to_string(), None)
+            })?,
         };
 
         let quote = match self {
@@ -101,9 +102,12 @@ impl ProtocolSim for EkuboState {
         }?;
 
         Ok(GetAmountOutResult {
-            amount: BigUint::try_from(quote.calculated_amount)
-                .map_err(|_| SimulationError::FatalError("output amount must be non-negative".to_string()))?,
-            gas: (quote.gas + Self::BASE_GAS_COST).into(), // TODO If we can detect multihop swaps, only add BASE_GAS_COST for the first swap
+            amount: BigUint::try_from(quote.calculated_amount).map_err(|_| {
+                SimulationError::FatalError("output amount must be non-negative".to_string())
+            })?,
+            gas: (quote.gas + Self::BASE_GAS_COST).into(), /* TODO If we can detect multihop
+                                                            * swaps, only add BASE_GAS_COST for
+                                                            * the first swap */
             new_state: Box::new(quote.new_state),
         })
     }
@@ -128,26 +132,30 @@ impl ProtocolSim for EkuboState {
         }
 
         match self {
-            Self::Base(p) => if let Some(tick) = delta.updated_attributes.get("tick") {
-                p.set_active_tick(tick.clone().into());
-            },
-            Self::Oracle(_) => {}, // The exact tick is not required for oracle pools
+            Self::Base(p) => {
+                if let Some(tick) = delta.updated_attributes.get("tick") {
+                    p.set_active_tick(tick.clone().into());
+                }
+            }
+            Self::Oracle(_) => {} // The exact tick is not required for oracle pools
         }
 
         let changed_ticks = ticks_from_attributes(
-            delta.updated_attributes
+            delta
+                .updated_attributes
                 .into_iter()
-                .chain(delta.deleted_attributes
-                    .into_iter()
-                    .map(|key| (key, Bytes::new()))
-                )
+                .chain(
+                    delta
+                        .deleted_attributes
+                        .into_iter()
+                        .map(|key| (key, Bytes::new())),
+                ),
         )
-        .map_err(|err| TransitionError::DecodeError(err))?;
+        .map_err(TransitionError::DecodeError)?;
 
         for changed_tick in changed_ticks {
-            self
-                .set_tick(changed_tick)
-                .map_err(|err| TransitionError::DecodeError(err))?;
+            self.set_tick(changed_tick)
+                .map_err(TransitionError::DecodeError)?;
         }
 
         self.reinstantiate();
@@ -177,32 +185,23 @@ impl ProtocolSim for EkuboState {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use evm_ekubo_sdk::{math::tick::MIN_SQRT_RATIO, quoting::base_pool::BasePoolState};
 
+    use super::*;
     use crate::evm::protocol::ekubo::test_pool::{attributes, state, POOL_KEY};
 
     #[test]
     fn test_delta_transition() {
         let mut pool = EkuboState::Base(BasePool::new(
             POOL_KEY,
-            BasePoolState {
-                sqrt_ratio: MIN_SQRT_RATIO,
-                liquidity: 0,
-                active_tick_index: None,
-            },
+            BasePoolState { sqrt_ratio: MIN_SQRT_RATIO, liquidity: 0, active_tick_index: None },
             vec![].into(),
             MIN_TICK,
         ));
 
-        let delta = ProtocolStateDelta {
-            updated_attributes: attributes(),
-            ..Default::default()
-        };
+        let delta = ProtocolStateDelta { updated_attributes: attributes(), ..Default::default() };
 
-        pool
-            .delta_transition(delta, &HashMap::default(), &Balances::default())
+        pool.delta_transition(delta, &HashMap::default(), &Balances::default())
             .unwrap();
 
         assert_eq!(state(), pool);
@@ -238,14 +237,14 @@ mod tests {
         };
 
         let reference_quote = pool
-            .quote(TokenAmount {
-                token: POOL_KEY.token0,
-                amount: amount.into(),
-            })
+            .quote(TokenAmount { token: POOL_KEY.token0, amount: amount.into() })
             .unwrap();
 
         let tycho_out: u64 = tycho_quote.amount.try_into().unwrap();
-        let reference_out: u64 = reference_quote.calculated_amount.try_into().unwrap();
+        let reference_out: u64 = reference_quote
+            .calculated_amount
+            .try_into()
+            .unwrap();
 
         assert_eq!(tycho_out, reference_out);
     }

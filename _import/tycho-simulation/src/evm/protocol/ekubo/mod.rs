@@ -1,5 +1,5 @@
-pub mod state;
 mod pool;
+pub mod state;
 mod tick;
 mod tycho_decoder;
 

@@ -1,8 +1,14 @@
-use evm_ekubo_sdk::{math::uint::U256, quoting::{self, oracle_pool::OraclePoolState, types::{NodeKey, Pool, QuoteParams, TokenAmount}}};
-
-use crate::protocol::errors::SimulationError;
+use evm_ekubo_sdk::{
+    math::uint::U256,
+    quoting::{
+        self,
+        oracle_pool::OraclePoolState,
+        types::{NodeKey, Pool, QuoteParams, TokenAmount},
+    },
+};
 
 use super::{base::BasePool, EkuboPool, EkuboPoolQuote};
+use crate::protocol::errors::SimulationError;
 
 #[derive(Debug, Eq, Clone)]
 pub struct OraclePool {
@@ -30,10 +36,7 @@ impl OraclePool {
     const GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT: u64 = 15_000;
 
     pub fn new(key: &NodeKey, state: OraclePoolState) -> Self {
-        Self {
-            imp: impl_from_state(key, &state),
-            state,
-        }
+        Self { imp: impl_from_state(key, &state), state }
     }
 
     pub fn set_last_snapshot_time(&mut self, last_snapshot_time: u64) {
@@ -41,38 +44,40 @@ impl OraclePool {
     }
 
     // TODO Add parameter when timestamps are supported
-    pub fn quote(&self, token_amount: TokenAmount, /*block_timestamp: u64*/) -> Result<EkuboPoolQuote, SimulationError> {
-        let quote = self.imp.quote(QuoteParams {
-            token_amount,
-            sqrt_ratio_limit: None,
-            override_state: None,
-            meta: 0, // TODO Set to timestamp
-        }).map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
+    pub fn quote(
+        &self,
+        token_amount: TokenAmount, /* block_timestamp: u64 */
+    ) -> Result<EkuboPoolQuote, SimulationError> {
+        let quote = self
+            .imp
+            .quote(QuoteParams {
+                token_amount,
+                sqrt_ratio_limit: None,
+                override_state: None,
+                meta: 0, // TODO Set to timestamp
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
 
         let state_after = quote.state_after;
 
-        let new_state = Self {
-            imp: impl_from_state(
-                self.key(),
-                &state_after,
-            ),
-            state: state_after,
-        }.into();
+        let new_state =
+            Self { imp: impl_from_state(self.key(), &state_after), state: state_after }.into();
 
         let resources = quote.execution_resources;
 
         Ok(EkuboPoolQuote {
             calculated_amount: quote.calculated_amount,
-            gas: BasePool::gas_costs(&resources.base_pool_resources)
-                + Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT, // TODO Depend on snapshots_written when timestamps are supported
+            gas: BasePool::gas_costs(&resources.base_pool_resources) +
+                Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT, /* TODO Depend on snapshots_written
+                                                             * when timestamps are supported */
             new_state,
         })
     }
 }
 
 impl EkuboPool for OraclePool {
-    fn key(&self) ->  &NodeKey {
-        &self.imp.key()
+    fn key(&self) -> &NodeKey {
+        self.imp.key()
     }
 
     fn sqrt_ratio(&self) -> U256 {
