@@ -40,6 +40,12 @@ impl Ticks {
     }
 }
 
+impl From<Vec<Tick>> for Ticks {
+    fn from(value: Vec<Tick>) -> Self {
+        Self(value)
+    }
+}
+
 pub fn ticks_from_attributes<T: IntoIterator<Item = (String, Bytes)>>(attributes: T) -> Result<Vec<Tick>, String> {
     attributes
         .into_iter()

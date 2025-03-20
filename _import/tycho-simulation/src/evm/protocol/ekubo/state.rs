@@ -174,3 +174,79 @@ impl ProtocolSim for EkuboState {
             .is_some_and(|other_state| self == other_state)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use evm_ekubo_sdk::{math::tick::MIN_SQRT_RATIO, quoting::base_pool::BasePoolState};
+
+    use crate::evm::protocol::ekubo::test_pool::{attributes, state, POOL_KEY};
+
+    #[test]
+    fn test_delta_transition() {
+        let mut pool = EkuboState::Base(BasePool::new(
+            POOL_KEY,
+            BasePoolState {
+                sqrt_ratio: MIN_SQRT_RATIO,
+                liquidity: 0,
+                active_tick_index: None,
+            },
+            vec![].into(),
+            MIN_TICK,
+        ));
+
+        let delta = ProtocolStateDelta {
+            updated_attributes: attributes(),
+            ..Default::default()
+        };
+
+        pool
+            .delta_transition(delta, &HashMap::default(), &Balances::default())
+            .unwrap();
+
+        assert_eq!(state(), pool);
+    }
+
+    #[tokio::test]
+    // Compare against the reference implementation
+    async fn test_get_amount_out() {
+        let token0 = Token {
+            address: POOL_KEY.token0.to_big_endian().into(),
+            decimals: 0,
+            symbol: "TOKEN0".to_string(),
+            gas: BigUint::default(),
+        };
+
+        let token1 = Token {
+            address: POOL_KEY.token1.to_big_endian().into(),
+            decimals: 0,
+            symbol: "TOKEN1".to_string(),
+            gas: BigUint::default(),
+        };
+
+        let state = state();
+
+        let amount = 100_u8;
+
+        let tycho_quote = state
+            .get_amount_out(BigUint::from(amount), &token0, &token1)
+            .unwrap();
+
+        let EkuboState::Base(pool) = state else {
+            panic!();
+        };
+
+        let reference_quote = pool
+            .quote(TokenAmount {
+                token: POOL_KEY.token0,
+                amount: amount.into(),
+            })
+            .unwrap();
+
+        let tycho_out: u64 = tycho_quote.amount.try_into().unwrap();
+        let reference_out: u64 = reference_quote.calculated_amount.try_into().unwrap();
+
+        assert_eq!(tycho_out, reference_out);
+    }
+}

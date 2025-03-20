@@ -136,7 +136,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
         let mut ticks = ticks_from_attributes(snapshot.state.attributes)
             .map_err(|err| InvalidSnapshotError::ValueError(err))?;
 
-        ticks.sort();
+        ticks.sort_by_key(|tick| tick.index);
 
         let key = NodeKey { token0, token1, config };
 
@@ -156,5 +156,79 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                 },
             )),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use tycho_core::dto::ResponseProtocolState;
+
+    use crate::evm::protocol::ekubo::test_pool::{attributes, component, state};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_try_from_with_block() {
+        let snapshot = ComponentWithState {
+            state: ResponseProtocolState {
+                attributes: attributes(),
+                ..Default::default()
+            },
+            component: component(),
+        };
+
+        let result = EkuboState::try_from_with_block(
+            snapshot,
+            Header::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(state(), result);
+    }
+
+    #[tokio::test]
+    #[rstest]
+    #[case::missing_extension_id("extension_id")]
+    #[case::missing_token0("token0")]
+    #[case::missing_token1("token1")]
+    #[case::missing_fee("fee")]
+    #[case::missing_tick_spacing("tick_spacing")]
+    #[case::missing_extension("extension")]
+    #[case::missing_liquidity("liquidity")]
+    #[case::missing_sqrt_ratio("sqrt_ratio")]
+    #[case::missing_tick("tick")]
+    async fn test_try_from_invalid(#[case] missing_attribute: String) {
+        let mut component = component();
+        let mut attributes = attributes();
+
+        component.static_attributes.remove(&missing_attribute);
+        attributes.remove(&missing_attribute);
+
+        let snapshot = ComponentWithState {
+            state: ResponseProtocolState {
+                component_id: "State1".to_owned(),
+                attributes,
+                balances: HashMap::new(),
+            },
+            component,
+        };
+
+        let result = EkuboState::try_from_with_block(
+            snapshot,
+            Header::default(),
+            &HashMap::default(),
+            &HashMap::default(),
+        ).await;
+
+        let err = result.unwrap_err();
+
+        assert!(matches!(
+            err,
+            StateDecodingError::InvalidSnapshot(InvalidSnapshotError::MissingAttribute(attr)) if attr == missing_attribute
+        ));
     }
 }
