@@ -1192,6 +1192,203 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(IERC20(WBTC_ADDR).balanceOf(tychoRouterAddr), 102718);
     }
 
+    function testCyclicSequentialSwap() public {
+        // This test has start and end tokens that are the same
+        // The flow is:
+        // USDC -> WETH -> USDC  using two pools
+        uint256 amountIn = 100 * 10 ** 6;
+        deal(USDC_ADDR, tychoRouterAddr, amountIn);
+
+        bytes memory usdcWethV3Pool1ZeroOneData = encodeUniswapV3Swap(
+            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
+        );
+
+        bytes memory usdcWethV3Pool2OneZeroData = encodeUniswapV3Swap(
+            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
+        );
+
+        bytes[] memory swaps = new bytes[](2);
+        // USDC -> WETH
+        swaps[0] = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethV3Pool1ZeroOneData
+        );
+        // WETH -> USDC
+        swaps[1] = encodeSwap(
+            uint8(1),
+            uint8(0),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethV3Pool2OneZeroData
+        );
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99889294);
+    }
+
+    function testSplitInputCyclicSwap() public {
+        // This test has start and end tokens that are the same
+        // The flow is:
+        //            ┌─ (USV3, 60% split) ──> WETH ─┐
+        //            │                              │
+        // USDC ──────┤                              ├──(USV2)──> USDC
+        //            │                              │
+        //            └─ (USV3, 40% split) ──> WETH ─┘
+        uint256 amountIn = 100 * 10 ** 6;
+        deal(USDC_ADDR, tychoRouterAddr, amountIn);
+
+        bytes memory usdcWethV3Pool1ZeroOneData = encodeUniswapV3Swap(
+            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
+        );
+
+        bytes memory usdcWethV3Pool2ZeroOneData = encodeUniswapV3Swap(
+            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, true
+        );
+
+        bytes memory wethUsdcV2OneZeroData = encodeUniswapV2Swap(
+            WETH_ADDR, USDC_WETH_USV2, tychoRouterAddr, false
+        );
+
+        bytes[] memory swaps = new bytes[](3);
+        // USDC -> WETH (60% split)
+        swaps[0] = encodeSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv3Executor),
+            usdcWethV3Pool1ZeroOneData
+        );
+        // USDC -> WETH (40% remainder)
+        swaps[1] = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethV3Pool2ZeroOneData
+        );
+        // WETH -> USDC
+        swaps[2] = encodeSwap(
+            uint8(1),
+            uint8(0),
+            uint24(0),
+            address(usv2Executor),
+            wethUsdcV2OneZeroData
+        );
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99574171);
+    }
+
+    function testSplitOutputCyclicSwap() public {
+        // This test has start and end tokens that are the same
+        // The flow is:
+        //                        ┌─── (USV3, 60% split) ───┐
+        //                        │                         │
+        // USDC ──(USV2) ── WETH──|                         ├─> USDC
+        //                        │                         │
+        //                        └─── (USV3, 40% split) ───┘
+
+        uint256 amountIn = 100 * 10 ** 6;
+        deal(USDC_ADDR, tychoRouterAddr, amountIn);
+
+        bytes memory usdcWethV2Data = encodeUniswapV2Swap(
+            USDC_ADDR, USDC_WETH_USV2, tychoRouterAddr, true
+        );
+
+        bytes memory usdcWethV3Pool1OneZeroData = encodeUniswapV3Swap(
+            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3, false
+        );
+
+        bytes memory usdcWethV3Pool2OneZeroData = encodeUniswapV3Swap(
+            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
+        );
+
+        bytes[] memory swaps = new bytes[](3);
+        // USDC -> WETH
+        swaps[0] = encodeSwap(
+            uint8(0), uint8(1), uint24(0), address(usv2Executor), usdcWethV2Data
+        );
+        // WETH -> USDC
+        swaps[1] = encodeSwap(
+            uint8(1),
+            uint8(0),
+            (0xffffff * 60) / 100,
+            address(usv3Executor),
+            usdcWethV3Pool1OneZeroData
+        );
+
+        // WETH -> USDC
+        swaps[2] = encodeSwap(
+            uint8(1),
+            uint8(0),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethV3Pool2OneZeroData
+        );
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99525908);
+    }
+
+    function testCyclicSequentialSwapIntegration() public {
+        deal(USDC_ADDR, ALICE, 100 * 10 ** 6);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+        // Encoded solution generated using `test_cyclic_sequential_swap`
+        // but manually replacing the executor address
+        // `dd8559c917393fc8dd2b4dd289c52ff445fde1b0` with the one in this test
+        // `2e234dae75c793f67a35089c9d99245e1c58470b`
+        (bool success,) = tychoRouterAddr.call(
+            hex"d499aa880000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f4308e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f5e1000000000000000000000000000000000000000000000000000000000067f67a8b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d013950000000000000000000000000000000000000000000000000000000067cef493000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002800000000000000000000000000000000000000000000000000000000000000041c07077fc73bb0f5129006061288fa0583c101631307377281d6b8f3feb50aa2d564f9948c92e0e4abc3771d592bd2f22ebb18ccf21b270459b05f272251ce1c71b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000de006d00010000002e234dae75c793f67a35089c9d99245e1c58470ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f564001006d01000000002e234dae75c793f67a35089c9d99245e1c58470bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000bb83ede3eca2a72b3aecc820e955b36f38437d013958ad599c3a0ff1de082011efddc58f1908eb6e6d8000000"
+        );
+
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99889294);
+
+        vm.stopPrank();
+    }
+
+    function testSplitInputCyclicSwapIntegration() public {
+        deal(USDC_ADDR, ALICE, 100 * 10 ** 6);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+        // Encoded solution generated using `test_split_input_cyclic_swap`
+        // but manually replacing the executor addresses with the ones in this test
+        // `dd8559c917393fc8dd2b4dd289c52ff445fde1b0` to `2e234dae75c793f67a35089c9d99245e1c58470b`
+        // `f6c5be66fff9dc69962d73da0a617a827c382329` to `5615deb798bb3e4dfa0139dfa1b3d433cc23b72f`
+        (bool success,) = tychoRouterAddr.call(
+            hex"d499aa880000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005ef619b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f5e1000000000000000000000000000000000000000000000000000000000067f6c08700000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d013950000000000000000000000000000000000000000000000000000000067cf3a8f000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002800000000000000000000000000000000000000000000000000000000000000041f248bfa39e6801b4173cd4d61e5e5d0c31942eb3c194785f964a82b2c3e05b4b302bccc0924fa4c4ef90854e42865db11f458d3b6a62afddee833f3eb069cd521b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000136006d00019999992e234dae75c793f67a35089c9d99245e1c58470ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f564001006d00010000002e234dae75c793f67a35089c9d99245e1c58470ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000bb83ede3eca2a72b3aecc820e955b36f38437d013958ad599c3a0ff1de082011efddc58f1908eb6e6d801005601000000005615deb798bb3e4dfa0139dfa1b3d433cc23b72fc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2b4e16d0168e52d35cacd2c6185b44281ec28c9dc3ede3eca2a72b3aecc820e955b36f38437d013950000000000000000000000"
+        );
+
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99574171);
+
+        vm.stopPrank();
+    }
+
+    function testSplitOutputCyclicSwapIntegration() public {
+        deal(USDC_ADDR, ALICE, 100 * 10 ** 6);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+        // Encoded solution generated using `test_split_output_cyclic_swap`
+        // but manually replacing the executor addresses with the ones in this test
+        // `dd8559c917393fc8dd2b4dd289c52ff445fde1b0` to `2e234dae75c793f67a35089c9d99245e1c58470b`
+        // `f6c5be66fff9dc69962d73da0a617a827c382329` to `5615deb798bb3e4dfa0139dfa1b3d433cc23b72f`
+        (bool success,) = tychoRouterAddr.call(
+            hex"d499aa880000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005eea514000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f5e1000000000000000000000000000000000000000000000000000000000067f6be9400000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d013950000000000000000000000000000000000000000000000000000000067cf389c000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002800000000000000000000000000000000000000000000000000000000000000041c02ad8eceede50085f35ce8e8313ebbac9b379396c6e72a35bb4df0970cbdaaa1a91e6f787641af55b13b926199c844df42fdd2ae7bb287db7e5cc2a8bc1d7f51b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000136005600010000005615deb798bb3e4dfa0139dfa1b3d433cc23b72fa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48b4e16d0168e52d35cacd2c6185b44281ec28c9dc3ede3eca2a72b3aecc820e955b36f38437d0139501006d01009999992e234dae75c793f67a35089c9d99245e1c58470bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f564000006d01000000002e234dae75c793f67a35089c9d99245e1c58470bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000bb83ede3eca2a72b3aecc820e955b36f38437d013958ad599c3a0ff1de082011efddc58f1908eb6e6d80000000000000000000000"
+        );
+
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99525908);
+
+        vm.stopPrank();
+    }
+
     // Base Network Tests
     // Make sure to set the RPC_URL to base network
     function testSwapSingleBase() public {

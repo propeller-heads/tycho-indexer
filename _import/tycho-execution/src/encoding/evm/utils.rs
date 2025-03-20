@@ -74,10 +74,10 @@ pub fn get_min_amount_for_solution(solution: Solution) -> BigUint {
     if let (Some(expected_amount), Some(slippage)) =
         (solution.expected_amount.as_ref(), solution.slippage)
     {
-        let one_hundred = BigUint::from(100u32);
-        let slippage_percent = BigUint::from((slippage * 100.0) as u32);
-        let multiplier = &one_hundred - slippage_percent;
-        let expected_amount_with_slippage = (expected_amount * &multiplier) / &one_hundred;
+        let bps = BigUint::from(10_000u32);
+        let slippage_percent = BigUint::from((slippage * 10000.0) as u32);
+        let multiplier = &bps - slippage_percent;
+        let expected_amount_with_slippage = (expected_amount * &multiplier) / &bps;
         min_amount_out = max(min_amount_out, expected_amount_with_slippage);
     }
     min_amount_out
@@ -131,5 +131,29 @@ pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
             })?);
             Ok((rt.handle().clone(), Some(rt)))
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use num_bigint::BigUint;
+
+    use super::*;
+    use crate::encoding::models::Solution;
+
+    #[test]
+    fn test_min_amount_out_small_slippage() {
+        // Tests that the calculation's precision is high enough to support a slippage of 0.1%.
+
+        let solution = Solution {
+            exact_out: false,
+            given_amount: BigUint::from(1000000000000000000u64),
+            checked_amount: None,
+            slippage: Some(0.001f64),
+            expected_amount: Some(BigUint::from(1000000000000000000u64)),
+            ..Default::default()
+        };
+
+        let min_amount_out = get_min_amount_for_solution(solution);
+        assert_eq!(min_amount_out, BigUint::from(999000000000000000u64));
     }
 }

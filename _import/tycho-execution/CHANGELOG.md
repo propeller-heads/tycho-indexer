@@ -1,3 +1,58 @@
+## [0.66.1](https://github.com/propeller-heads/tycho-execution/compare/0.66.0...0.66.1) (2025-03-19)
+
+
+### Bug Fixes
+
+* Slippage precision calculation ([d644b63](https://github.com/propeller-heads/tycho-execution/commit/d644b63851a63babadfb909af97c5bf80dd03376))
+
+## [0.66.0](https://github.com/propeller-heads/tycho-execution/compare/0.65.1...0.66.0) (2025-03-14)
+
+
+### Features
+
+* Add check to don't support cyclical swaps with native actions ([27c9c53](https://github.com/propeller-heads/tycho-execution/commit/27c9c53889687b890bb4e4e01329f6a67ae7957c))
+* Add validation for cyclical trades ([f62a9d2](https://github.com/propeller-heads/tycho-execution/commit/f62a9d28c0683490d841439d6a0543370d238387))
+
+
+### Bug Fixes
+
+* Add individual tests for each case ([e96bcdf](https://github.com/propeller-heads/tycho-execution/commit/e96bcdfd0f7f1951ef711efe8a3e45c5bb18fc8b))
+* In test asset, use 0 for the last split, and not 0.5 ([0aba7ed](https://github.com/propeller-heads/tycho-execution/commit/0aba7edf830da0f0efaa465c8069484b62fb7a4d))
+
+## [0.65.1](https://github.com/propeller-heads/tycho-execution/compare/0.65.0...0.65.1) (2025-03-13)
+
+
+### Reverts
+
+* Revert "feat: Add validation for cyclical trades" ([3d7dcef](https://github.com/propeller-heads/tycho-execution/commit/3d7dcef1bd01db283d787f0bc86b4e9cfc28bbaa))
+
+## [0.65.0](https://github.com/propeller-heads/tycho-execution/compare/0.64.0...0.65.0) (2025-03-13)
+
+
+### Features
+
+* Add validation for cyclical trades ([55ffa4e](https://github.com/propeller-heads/tycho-execution/commit/55ffa4eb457ea8dd1ed57cdaac01f45880d34b0f))
+
+## [0.64.0](https://github.com/propeller-heads/tycho-execution/compare/0.63.0...0.64.0) (2025-03-13)
+
+
+### Features
+
+* update tycho-core to 0.61.1 ([53b8c6a](https://github.com/propeller-heads/tycho-execution/commit/53b8c6afee6efdb2a878e2535a8daadfb29d91be))
+
+## [0.63.0](https://github.com/propeller-heads/tycho-execution/compare/0.62.0...0.63.0) (2025-03-10)
+
+
+### Features
+
+* add cyclicSwapAmountOut tracker in _swap, add split cylic tests ([4d67df4](https://github.com/propeller-heads/tycho-execution/commit/4d67df40965414caff94f8660c70f4acad51482f))
+
+
+### Bug Fixes
+
+* amountConsumed check in _swapChecked for cyclic swap ([91f36fe](https://github.com/propeller-heads/tycho-execution/commit/91f36fe3285ae4e3e010b9138e8226e257f8499c))
+* remove amountIn addition to amountOut in _swap for cyclic swaps, add testCyclicSwapWithTwoPools test to verify ([57acbd5](https://github.com/propeller-heads/tycho-execution/commit/57acbd58c5146c88098e9bc274ec702ef25add32))
+
 ## [0.62.0](https://github.com/propeller-heads/tycho-execution/compare/0.61.0...0.62.0) (2025-03-06)
 
 
