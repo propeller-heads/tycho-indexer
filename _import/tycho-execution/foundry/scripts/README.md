@@ -38,7 +38,7 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 
 1. Deploy router: `npx hardhat run scripts/deploy-router.js --network NETWORK`
 2. Define the accounts to grant roles to in `scripts/roles.json`
-3. Export the router address to the environment variable `export ROUTER=<router-address>`
+3. Export the router address to the environment variable `export ROUTER_ADDRESS=<router-address>`
 4. Grant roles: `npx hardhat run scripts/set-roles.js --network NETWORK`
 5. Set executors: `npx hardhat run scripts/set-executors.js --network NETWORK`. Make sure you change the
    DEPLOY_WALLET to the executor deployer wallet. If you need to deploy executors, follow the instructions below.
