@@ -1,4 +1,4 @@
-use std::{ops::Add, str::FromStr};
+use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
@@ -288,7 +288,7 @@ impl SwapEncoder for EkuboEncoder {
             .map_err(|_| EncodingError::FatalError("tick_spacing should be an u32".to_string()))?
         );
 
-        let extension: Address = get_static_attribute(&swap, "fee")?
+        let extension: Address = get_static_attribute(&swap, "extension")?
             .as_slice()
             .try_into()
             .map_err(|_| EncodingError::FatalError("extension should be an address".to_string()))?;
