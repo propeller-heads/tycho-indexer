@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{ops::Add, str::FromStr};
 
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
@@ -253,6 +253,64 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
+/// Encodes a swap on an Ekubo pool through the given executor address.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EkuboEncoder {
+    executor_address: String,
+}
+
+impl SwapEncoder for EkuboEncoder {
+    fn new(executor_address: String) -> Self {
+        Self { executor_address }
+    }
+
+    // TODO Exact out
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let fee = u64::from_be_bytes(get_static_attribute(&swap, "fee")?
+            .try_into()
+            .map_err(|_| EncodingError::FatalError("fee should be an u64".to_string()))?
+        );
+
+        let tick_spacing = u32::from_be_bytes(get_static_attribute(&swap, "tick_spacing")?
+            .try_into()
+            .map_err(|_| EncodingError::FatalError("tick_spacing should be an u32".to_string()))?
+        );
+
+        let extension: Address = get_static_attribute(&swap, "fee")?
+            .as_slice()
+            .try_into()
+            .map_err(|_| EncodingError::FatalError("extension should be an address".to_string()))?;
+
+        let mut encoded = vec![];
+
+        // TODO What if the token_in appears at the start of a route and later on again?
+        if encoding_context.group_token_in == swap.token_in {
+            encoded.extend(bytes_to_address(&encoding_context.receiver)?);
+            encoded.extend(bytes_to_address(&swap.token_in)?);
+        }
+
+        encoded.extend(bytes_to_address(&swap.token_out)?);
+        encoded.extend((extension, fee, tick_spacing).abi_encode_packed());
+
+        Ok(encoded)
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
     }
