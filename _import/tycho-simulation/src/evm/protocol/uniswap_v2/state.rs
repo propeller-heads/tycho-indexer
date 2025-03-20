@@ -118,15 +118,27 @@ impl ProtocolSim for UniswapV2State {
         };
 
         // Soft limit for amount in is the amount to get a 90% price impact.
-        // The two equations to resolves are:
-        // 90% price impact: (reserve1 - y)/(reserve0 + x) = 0.1 × (reserve1/reserve0)
-        // Maintain constant product: (reserve0 + x) × (reserve1 - y) = reserve0 * reserve1
+        // The two equations to resolve are:
+        // - 90% price impact: (reserve1 - y)/(reserve0 + x) = 0.1 × (reserve1/reserve0)
+        // - Maintain constant product: (reserve0 + x) × (reserve1 - y) = reserve0 * reserve1
         //
         // This resolves into x = (√10 - 1) × reserve0 = 2.16 × reserve0
         let amount_in =
             safe_div_u256(safe_mul_u256(reserve_in, U256::from(216))?, U256::from(100))?;
 
-        Ok((u256_to_biguint(amount_in), u256_to_biguint(reserve_out)))
+        // Calculate amount_out using the constant product formula
+        // The constant product formula requires:
+        // (reserve_in + amount_in) × (reserve_out - amount_out) = reserve_in * reserve_out
+        // Solving for amount_out:
+        // amount_out = reserve_out - (reserve_in * reserve_out) (reserve_in + amount_in)
+        // which simplifies to:
+        // amount_out = (reserve_out * amount_in) / (reserve_in + amount_in)
+        let amount_out = safe_div_u256(
+            safe_mul_u256(reserve_out, amount_in)?,
+            safe_add_u256(reserve_in, amount_in)?,
+        )?;
+
+        Ok((u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
     }
 
     fn delta_transition(
@@ -397,10 +409,15 @@ mod tests {
             .downcast_ref::<UniswapV2State>()
             .unwrap();
 
-        let initial_price = safe_div_u256(state.reserve1, state.reserve0).unwrap();
-        let new_price = safe_div_u256(new_state.reserve1, new_state.reserve0).unwrap();
+        let initial_price = state
+            .spot_price(&token_0, &token_1)
+            .unwrap();
+        let new_price = new_state
+            .spot_price(&token_0, &token_1)
+            .unwrap()
+            .floor();
 
-        let expected_price = initial_price / U256::from(10);
+        let expected_price = initial_price / 10.0;
         assert!(expected_price == new_price, "Price impact not 90%.");
     }
 }
