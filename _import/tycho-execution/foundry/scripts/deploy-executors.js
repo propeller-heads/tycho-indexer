@@ -25,11 +25,6 @@ const executors_to_deploy = {
       "0x1F98431c8aD98523631AE4a59f267346ea31F984",
       "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54"
     ]},
-    // PANCAKESWAP V3 - Args: Deployer, Pool Init Code Hash
-    {exchange: "UniswapV3Executor", args: [
-      "0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9",
-      "0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2"
-      ]},
     // Args: Pool manager
     {exchange: "UniswapV4Executor", args: ["0x000000000004444c5dc75cB358380D2e3dE08A90"]},
     {exchange: "BalancerV2Executor", args: []},
@@ -55,11 +50,6 @@ const executors_to_deploy = {
       "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
       "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54"
     ]},
-    // PANCAKESWAP V3 - Args: Deployer, Pool Init Code Hash
-    {exchange: "UniswapV3Executor", args: [
-      "0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9",
-      "0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2"
-      ]},
     // Args: Pool manager
     {exchange: "UniswapV4Executor", args: ["0x498581ff718922c3f8e6a244956af099b2652b2b"]},
     {exchange: "BalancerV2Executor", args: []},

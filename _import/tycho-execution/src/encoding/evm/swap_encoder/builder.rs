@@ -27,7 +27,6 @@ impl SwapEncoderBuilder {
             "pancakeswap_v2" => Ok(Box::new(UniswapV2SwapEncoder::new(self.executor_address))),
             "vm:balancer_v2" => Ok(Box::new(BalancerV2SwapEncoder::new(self.executor_address))),
             "uniswap_v3" => Ok(Box::new(UniswapV3SwapEncoder::new(self.executor_address))),
-            "pancakeswap_v3" => Ok(Box::new(UniswapV2SwapEncoder::new(self.executor_address))),
             "uniswap_v4" => Ok(Box::new(UniswapV4SwapEncoder::new(self.executor_address))),
             _ => Err(EncodingError::FatalError(format!(
                 "Unknown protocol system: {}",
