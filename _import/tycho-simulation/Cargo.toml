@@ -62,7 +62,7 @@ tokio-stream = "0.1.16"
 dialoguer = "0.10.4"
 
 # Ekubo
-evm_ekubo_sdk = { path = "../evm-rust-sdk" } # TODO Refer to git repo
+evm_ekubo_sdk = { git = "https://github.com/EkuboProtocol/evm-rust-sdk", rev = "431beec" }
 
 [dev-dependencies]
 tokio-test = "0.4.4"
