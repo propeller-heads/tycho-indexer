@@ -126,6 +126,11 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// * `Ok((Option<BigUint>, Option<BigUint>))` - A tuple containing:
     ///   - First element: The maximum input amount
     ///   - Second element: The maximum output amount
+    ///
+    /// This means that for `let res = get_limits(...)` the amount input domain for `get_amount_out`
+    /// would be `[0, res.0]` and the amount input domain for `get_amount_in` would be `[0,
+    /// res.1]`
+    ///
     /// * `Err(SimulationError)` - If any unexpected error occurs
     fn get_limits(
         &self,
