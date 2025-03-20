@@ -643,6 +643,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466707).unwrap()); // Crazy amount because of this tick: "ticks/-887220/net-liquidity": "0x00e8481d98"
-        assert_eq!(&res.1, &BigUint::from_u128(1224084635221).unwrap());
+
+        let out = usv4_state
+            .get_amount_out(res.0, &t0, &t1)
+            .expect("swap for limit in didn't work");
+
+        assert_eq!(&res.1, &out.amount);
     }
 }
