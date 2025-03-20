@@ -286,14 +286,18 @@ impl SwapEncoder for EkuboSwapEncoder {
             return Err(EncodingError::InvalidInput("exact out swaps not implemented".to_string()));
         }
 
-        let fee = u64::from_be_bytes(get_static_attribute(&swap, "fee")?
-            .try_into()
-            .map_err(|_| EncodingError::FatalError("fee should be an u64".to_string()))?
+        let fee = u64::from_be_bytes(
+            get_static_attribute(&swap, "fee")?
+                .try_into()
+                .map_err(|_| EncodingError::FatalError("fee should be an u64".to_string()))?,
         );
 
-        let tick_spacing = u32::from_be_bytes(get_static_attribute(&swap, "tick_spacing")?
-            .try_into()
-            .map_err(|_| EncodingError::FatalError("tick_spacing should be an u32".to_string()))?
+        let tick_spacing = u32::from_be_bytes(
+            get_static_attribute(&swap, "tick_spacing")?
+                .try_into()
+                .map_err(|_| {
+                    EncodingError::FatalError("tick_spacing should be an u32".to_string())
+                })?,
         );
 
         let extension: Address = get_static_attribute(&swap, "extension")?
@@ -713,13 +717,13 @@ mod tests {
             let static_attributes = HashMap::from([
                 ("fee".to_string(), Bytes::from(0_u64)),
                 ("tick_spacing".to_string(), Bytes::from(0_u32)),
-                ("extension".to_string(), Bytes::from("0x51d02a5948496a67827242eabc5725531342527c")), // Oracle
+                (
+                    "extension".to_string(),
+                    Bytes::from("0x51d02a5948496a67827242eabc5725531342527c"),
+                ), // Oracle
             ]);
 
-            let component = ProtocolComponent {
-                static_attributes,
-                ..Default::default()
-            };
+            let component = ProtocolComponent { static_attributes, ..Default::default() };
 
             let swap = Swap {
                 component,
@@ -780,7 +784,10 @@ mod tests {
                     static_attributes: HashMap::from([
                         ("fee".to_string(), Bytes::from(0_u64)),
                         ("tick_spacing".to_string(), Bytes::from(0_u32)),
-                        ("extension".to_string(), Bytes::from("0x51d02a5948496a67827242eabc5725531342527c")), // Oracle
+                        (
+                            "extension".to_string(),
+                            Bytes::from("0x51d02a5948496a67827242eabc5725531342527c"),
+                        ), // Oracle
                     ]),
                     ..Default::default()
                 },
@@ -812,7 +819,8 @@ mod tests {
                 .encode_swap(second_swap, encoding_context)
                 .unwrap();
 
-            let combined_hex = format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
+            let combined_hex =
+                format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
 
             assert_eq!(
                 combined_hex,
@@ -833,5 +841,4 @@ mod tests {
             );
         }
     }
-
 }
