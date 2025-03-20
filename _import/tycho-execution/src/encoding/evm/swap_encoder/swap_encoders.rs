@@ -560,6 +560,45 @@ impl SwapEncoder for CurveSwapEncoder {
     }
 }
 
+/// Encodes a swap on a Maverick V2 pool through the given executor address.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+#[derive(Clone)]
+pub struct MaverickV2SwapEncoder {
+    executor_address: String,
+}
+
+impl SwapEncoder for MaverickV2SwapEncoder {
+    fn new(executor_address: String) -> Self {
+        Self {
+            executor_address,
+        }
+    }
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let component_id = AlloyBytes::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
+
+        let args = (
+            bytes_to_address(&swap.token_in)?,
+            component_id,
+            bytes_to_address(&encoding_context.receiver)?,
+        );
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -1393,5 +1432,48 @@ mod tests {
                 ))
             );
         }
+    }
+
+    #[test]
+    fn test_encode_maverick_v2() {
+        let maverick_pool = ProtocolComponent {
+            id: String::from("0x14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67"),
+            protocol_system: String::from("vm:maverick_v2"),
+            ..Default::default()
+        };
+        let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
+        let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+        let swap = Swap {
+            component: maverick_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            // The receiver was generated with `makeAddr("bob") using forge`
+            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+            exact_out: false,
+            router_address: Bytes::zero(20),
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+        };
+        let encoder =
+            MaverickV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // token in
+                "40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+                // pool
+                "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
+                // receiver
+                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+            )).to_lowercase()
+        );
     }
 }

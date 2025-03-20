@@ -64,7 +64,8 @@ contract MaverickV2Executor is IExecutor {
     }
 
     function _verifyPairAddress(address target) internal view {
-        if (!IMaverickV2Factory(factory).isFactoryPool(IMaverickV2Pool(target))) {
+        if (!IMaverickV2Factory(factory).isFactoryPool(IMaverickV2Pool(target)))
+        {
             revert MaverickV2Executor__InvalidTarget();
         }
     }
