@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
+use num_traits::Zero;
 use tycho_core::Bytes;
 
 use crate::encoding::{
@@ -272,12 +273,19 @@ impl SwapEncoder for EkuboSwapEncoder {
         Self { executor_address }
     }
 
-    // TODO Exact out
     fn encode_swap(
         &self,
         swap: Swap,
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
+        if !swap.split.is_zero() {
+            return Err(EncodingError::InvalidInput("splits not implemented".to_string()));
+        }
+
+        if encoding_context.exact_out {
+            return Err(EncodingError::InvalidInput("exact out swaps not implemented".to_string()));
+        }
+
         let fee = u64::from_be_bytes(get_static_attribute(&swap, "fee")?
             .try_into()
             .map_err(|_| EncodingError::FatalError("fee should be an u64".to_string()))?
@@ -295,7 +303,6 @@ impl SwapEncoder for EkuboSwapEncoder {
 
         let mut encoded = vec![];
 
-        // TODO What if the token_in appears at the start of a route and later on again?
         if encoding_context.group_token_in == swap.token_in {
             encoded.extend(bytes_to_address(&encoding_context.receiver)?);
             encoded.extend(bytes_to_address(&swap.token_in)?);
