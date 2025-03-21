@@ -259,7 +259,9 @@ impl ProtocolSim for UniswapV4State {
             Sign::Positive,
             U256::from_be_slice(&amount_in.to_bytes_be()),
         )
-        .expect("UniswapV4 I256 overflow");
+        .ok_or_else(|| {
+            SimulationError::InvalidInput("I256 overflow: amount_in".to_string(), None)
+        })?;
 
         let result = self.swap(zero_for_one, amount_specified, None)?;
 

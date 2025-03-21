@@ -65,7 +65,9 @@ impl UniswapV3State {
         match fee {
             FeeAmount::Lowest => 1,
             FeeAmount::Low => 10,
+            FeeAmount::MediumLow => 50,
             FeeAmount::Medium => 60,
+            FeeAmount::MediumHigh => 100,
             FeeAmount::High => 200,
         }
     }
@@ -241,7 +243,9 @@ impl ProtocolSim for UniswapV3State {
             Sign::Positive,
             U256::from_be_slice(&amount_in.to_bytes_be()),
         )
-        .unwrap();
+        .ok_or_else(|| {
+            SimulationError::InvalidInput("I256 overflow: amount_in".to_string(), None)
+        })?;
 
         let result = self.swap(zero_for_one, amount_specified, None)?;
 
@@ -784,5 +788,57 @@ mod tests {
             .expect("swap for limit in didn't work");
 
         assert_eq!(&res.1, &out.amount);
+    }
+}
+
+mod tests_forks {
+    use std::{fs, path::Path, str::FromStr};
+
+    use num_bigint::ToBigUint;
+    use serde_json::Value;
+    use tycho_client::feed::synchronizer::ComponentWithState;
+
+    use super::*;
+    use crate::protocol::models::TryFromWithBlock;
+
+    #[tokio::test]
+    async fn test_pancakeswap_get_amount_out() {
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/pancakeswap_v3_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+
+        let state: ComponentWithState = serde_json::from_value(data)
+            .expect("Expected json to match ComponentWithState structure");
+
+        let pool_state = UniswapV3State::try_from_with_block(
+            state,
+            Default::default(),
+            &Default::default(),
+            &Default::default(),
+        )
+        .await
+        .unwrap();
+
+        let usdc = Token::new(
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            6,
+            "UDC",
+            10_000.to_biguint().unwrap(),
+        );
+        let usdt = Token::new(
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            6,
+            "USDT",
+            10_000.to_biguint().unwrap(),
+        );
+
+        // Swap from https://etherscan.io/tx/0x641b1e98990ae49fd00157a29e1530ff6403706b2864aa52b1c30849ce020b2c#eventlog
+        let res = pool_state
+            .get_amount_out(BigUint::from_str("5976361609").unwrap(), &usdt, &usdc)
+            .unwrap();
+
+        assert_eq!(res.amount, BigUint::from_str("5975901673").unwrap());
     }
 }
