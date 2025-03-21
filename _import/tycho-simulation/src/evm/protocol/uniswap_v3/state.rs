@@ -791,6 +791,7 @@ mod tests {
     }
 }
 
+#[cfg(test)]
 mod tests_forks {
     use std::{fs, path::Path, str::FromStr};
 
