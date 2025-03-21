@@ -18,12 +18,14 @@ library CallbackValidationV2 {
         address factory,
         address tokenA,
         address tokenB,
-        uint24 fee
+        uint24 fee,
+        bytes32 initCode
     ) internal view returns (IUniswapV3Pool pool) {
         return
             verifyCallback(
                 factory,
-                PoolAddressV2.getPoolKey(tokenA, tokenB, fee)
+                PoolAddressV2.getPoolKey(tokenA, tokenB, fee),
+                initCode
             );
     }
 
@@ -33,9 +35,10 @@ library CallbackValidationV2 {
     /// @return pool The V3 pool contract address
     function verifyCallback(
         address factory,
-        PoolAddressV2.PoolKey memory poolKey
+        PoolAddressV2.PoolKey memory poolKey,
+        bytes32 initCode
     ) internal view returns (IUniswapV3Pool pool) {
-        pool = IUniswapV3Pool(PoolAddressV2.computeAddress(factory, poolKey));
+        pool = IUniswapV3Pool(PoolAddressV2.computeAddress(factory, poolKey, initCode));
         require(msg.sender == address(pool), "CV");
     }
 }

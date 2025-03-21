@@ -107,7 +107,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
         uint24 poolFee = uint24(bytes3(data[40:43]));
 
         // slither-disable-next-line unused-return
-        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
+        CallbackValidationV2.verifyCallback(
+            factory, tokenIn, tokenOut, poolFee, initCode
+        );
     }
 
     function uniswapV3SwapCallback(
