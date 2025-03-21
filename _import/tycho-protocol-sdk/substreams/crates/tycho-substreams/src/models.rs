@@ -52,6 +52,9 @@ impl TransactionChangesBuilder {
                 if !change.code.is_empty() {
                     c.set_code(&change.code)
                 }
+                if !change.token_balances.is_empty() {
+                    c.upsert_token_balances(&change.token_balances)
+                }
             })
             .or_insert_with(|| {
                 let mut c = InterimContractChange::new(
@@ -61,6 +64,7 @@ impl TransactionChangesBuilder {
                 c.upsert_slots(&change.slots);
                 c.set_code(&change.code);
                 c.set_balance(&change.balance);
+                c.upsert_token_balances(&change.token_balances);
                 c
             });
     }
