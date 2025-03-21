@@ -298,24 +298,20 @@ impl ProtocolSim for UniswapV4State {
         let mut total_amount_in = U256::from(0u64);
         let mut total_amount_out = U256::from(0u64);
 
-        loop {
-            // Iterate through all ticks in the direction of the swap (breaks when we there is no
-            // more liquidity in the pool)
-            // Find the next initialized tick (or the next tick within a word)
-            let (next_tick, initialized) = match self
-                .ticks
-                .next_initialized_tick_within_one_word(current_tick, zero_for_one)
-            {
-                Ok((tick, init)) => (tick.clamp(MIN_TICK, MAX_TICK), init),
-                Err(_) => break, // No more ticks to process in this direction
-            };
+        // Iterate through all ticks in the direction of the swap
+        // Continues until there is no more liquidity in the pool or no more ticks to process
+        while let Ok((tick, initialized)) = self
+            .ticks
+            .next_initialized_tick_within_one_word(current_tick, zero_for_one)
+        {
+            // Clamp the tick value to ensure it's within valid range
+            let next_tick = tick.clamp(MIN_TICK, MAX_TICK);
 
             // Calculate the sqrt price at the next tick boundary
             let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
 
             // Calculate the amount of tokens swapped when moving from current_sqrt_price to
-            // sqrt_price_next Direction determines which token is being swapped in vs
-            // out
+            // sqrt_price_next. Direction determines which token is being swapped in vs out
             let (amount_in, amount_out) = if zero_for_one {
                 let amount0 = get_amount0_delta(
                     sqrt_price_next,
