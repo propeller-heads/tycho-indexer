@@ -29,6 +29,13 @@ contract TychoRouterExposed is TychoRouter {
     ) external returns (uint256) {
         return _splitSwap(amountIn, nTokens, swaps);
     }
+
+    function exposedSequentialSwap(uint256 amountIn, bytes calldata swaps)
+        external
+        returns (uint256)
+    {
+        return _sequentialSwap(amountIn, swaps);
+    }
 }
 
 contract TychoRouterTestSetup is Constants {
@@ -179,6 +186,22 @@ contract TychoRouterTestSetup is Constants {
                 abi.encodePacked(bytes2(uint16(data[i].length)), data[i])
             );
         }
+    }
+
+    function encodeSingleSwap(address executor, bytes memory protocolData)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodePacked(executor, protocolData);
+    }
+
+    function encodeSequentialSwap(address executor, bytes memory protocolData)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodePacked(executor, protocolData);
     }
 
     function encodeSplitSwap(

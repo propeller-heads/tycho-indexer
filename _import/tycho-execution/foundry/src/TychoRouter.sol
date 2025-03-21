@@ -223,6 +223,112 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     }
 
     /**
+     * @notice Executes a swap operation based on a predefined swap graph with no split routes.
+     *         This function enables multi-step swaps, optional ETH wrapping/unwrapping, and validates the output amount
+     *         against a user-specified minimum. This function performs a transferFrom to retrieve tokens from the caller.
+     *
+     * @dev
+     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
+     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
+     * - Swaps are executed sequentially using the `_swap` function.
+     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     *
+     * @param amountIn The input token amount to be swapped.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
+     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
+     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
+     * @param receiver The address to receive the output tokens.
+     * @param swaps Encoded swap graph data containing details of each swap.
+     *
+     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     */
+    function sequentialSwap(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        bool wrapEth,
+        bool unwrapEth,
+        address receiver,
+        bytes calldata swaps
+    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        return _sequentialSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            wrapEth,
+            unwrapEth,
+            receiver,
+            swaps
+        );
+    }
+
+    /**
+     * @notice Executes a swap operation based on a predefined swap graph with no split routes.
+     *         This function enables multi-step swaps, optional ETH wrapping/unwrapping, and validates the output amount
+     *         against a user-specified minimum.
+     *
+     * @dev
+     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
+     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
+     * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
+     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     *
+     * @param amountIn The input token amount to be swapped.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
+     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
+     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
+     * @param receiver The address to receive the output tokens.
+     * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
+     * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
+     * @param swaps Encoded swap graph data containing details of each swap.
+     *
+     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     */
+    function sequentialSwapPermit2(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        bool wrapEth,
+        bool unwrapEth,
+        address receiver,
+        IAllowanceTransfer.PermitSingle calldata permitSingle,
+        bytes calldata signature,
+        bytes calldata swaps
+    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        // For native ETH, assume funds already in our router. Else, transfer and handle approval.
+        if (tokenIn != address(0)) {
+            permit2.permit(msg.sender, permitSingle, signature);
+            permit2.transferFrom(
+                msg.sender,
+                address(this),
+                uint160(amountIn),
+                permitSingle.details.token
+            );
+        }
+
+        return _sequentialSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            wrapEth,
+            unwrapEth,
+            receiver,
+            swaps
+        );
+    }
+
+    /**
      * @notice Executes a single swap operation.
      *         This function enables optional ETH wrapping/unwrapping, and validates the output amount against a user-specified minimum.
      *         This function performs a transferFrom to retrieve tokens from the caller.
@@ -239,7 +345,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
-     * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
      * @param swapData Encoded swap details.
      *
@@ -252,7 +357,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 minAmountOut,
         bool wrapEth,
         bool unwrapEth,
-        uint256 nTokens,
         address receiver,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
@@ -264,7 +368,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             minAmountOut,
             wrapEth,
             unwrapEth,
-            nTokens,
             receiver,
             swapData
         );
@@ -288,7 +391,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
-     * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
@@ -303,7 +405,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 minAmountOut,
         bool wrapEth,
         bool unwrapEth,
-        uint256 nTokens,
         address receiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
@@ -327,7 +428,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             minAmountOut,
             wrapEth,
             unwrapEth,
-            nTokens,
             receiver,
             swapData
         );
@@ -417,7 +517,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 minAmountOut,
         bool wrapEth,
         bool unwrapEth,
-        uint256 nTokens,
         address receiver,
         bytes calldata swap_
     ) internal returns (uint256 amountOut) {
@@ -438,8 +537,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             ? address(this).balance
             : IERC20(tokenIn).balanceOf(address(this));
 
-        amountOut =
-            _callExecutor(swap_.executor(), amountIn, swap_.protocolData());
+        (address executor, bytes calldata protocolData) =
+            swap_.decodeSingleSwap();
+
+        amountOut = _callExecutor(executor, amountIn, protocolData);
         uint256 currentBalance = tokenIn == address(0)
             ? address(this).balance
             : IERC20(tokenIn).balanceOf(address(this));
@@ -447,6 +548,75 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 amountConsumed = initialBalance - currentBalance;
 
         if (amountConsumed != amountIn) {
+            revert TychoRouter__AmountInDiffersFromConsumed(
+                amountIn, amountConsumed
+            );
+        }
+
+        if (fee > 0) {
+            uint256 feeAmount = (amountOut * fee) / 10000;
+            amountOut -= feeAmount;
+            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
+        }
+
+        if (amountOut < minAmountOut) {
+            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
+
+        if (unwrapEth) {
+            _unwrapETH(amountOut);
+        }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        }
+    }
+
+    /**
+     * @notice Internal implementation of the core swap logic shared between sequentialSwap() and sequentialSwapPermit2().
+     *
+     * @notice This function centralizes the swap execution logic.
+     * @notice For detailed documentation on parameters and behavior, see the documentation for
+     * sequentialSwap() and sequentialSwapPermit2() functions.
+     *
+     */
+    function _sequentialSwapChecked(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        bool wrapEth,
+        bool unwrapEth,
+        address receiver,
+        bytes calldata swaps
+    ) internal returns (uint256 amountOut) {
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
+        if (minAmountOut == 0) {
+            revert TychoRouter__UndefinedMinAmountOut();
+        }
+
+        // Assume funds are already in the router.
+        if (wrapEth) {
+            _wrapETH(amountIn);
+            tokenIn = address(_weth);
+        }
+
+        uint256 initialBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
+        amountOut = _sequentialSwap(amountIn, swaps);
+
+        uint256 currentBalance = tokenIn == address(0)
+            ? address(this).balance
+            : IERC20(tokenIn).balanceOf(address(this));
+
+        uint256 amountConsumed = initialBalance - currentBalance;
+
+        if (tokenIn != tokenOut && amountConsumed != amountIn) {
             revert TychoRouter__AmountInDiffersFromConsumed(
                 amountIn, amountConsumed
             );
@@ -509,6 +679,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint8 tokenInIndex = 0;
         uint8 tokenOutIndex = 0;
         uint24 split;
+        address executor;
+        bytes calldata protocolData;
         bytes calldata swapData;
 
         uint256[] memory remainingAmounts = new uint256[](nTokens);
@@ -519,17 +691,16 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         while (swaps_.length > 0) {
             (swapData, swaps_) = swaps_.next();
-            tokenInIndex = swapData.tokenInIndex();
-            tokenOutIndex = swapData.tokenOutIndex();
-            split = swapData.splitPercentage();
+
+            (tokenInIndex, tokenOutIndex, split, executor, protocolData) =
+                swapData.decodeSplitSwap();
 
             currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
 
-            currentAmountOut = _callExecutor(
-                swapData.executor(), currentAmountIn, swapData.protocolData()
-            );
+            currentAmountOut =
+                _callExecutor(executor, currentAmountIn, protocolData);
             // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
                 cyclicSwapAmountOut += currentAmountOut;
@@ -540,6 +711,31 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             remainingAmounts[tokenInIndex] -= currentAmountIn;
         }
         return tokenOutIndex == 0 ? cyclicSwapAmountOut : amounts[tokenOutIndex];
+    }
+
+    /**
+     * @dev Executes sequential swaps as defined by the provided swap graph.
+     *
+     * @param amountIn The initial amount of the sell token to be swapped.
+     * @param swaps_ Encoded swap graph data containing the details of each swap operation.
+     *
+     * @return calculatedAmount The total amount of the buy token obtained after all swaps have been executed.
+     */
+    function _sequentialSwap(uint256 amountIn, bytes calldata swaps_)
+        internal
+        returns (uint256 calculatedAmount)
+    {
+        bytes calldata swap;
+        calculatedAmount = amountIn;
+        while (swaps_.length > 0) {
+            (swap, swaps_) = swaps_.next();
+
+            (address executor, bytes calldata protocolData) =
+                swap.decodeSingleSwap();
+
+            calculatedAmount =
+                _callExecutor(executor, calculatedAmount, protocolData);
+        }
     }
 
     /**
