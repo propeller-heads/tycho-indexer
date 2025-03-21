@@ -2,7 +2,7 @@ use std::cmp;
 
 use alloy_primitives::U256;
 
-use super::tick_math;
+use super::tick_math::{self, MAX_TICK, MIN_TICK};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
@@ -139,7 +139,7 @@ impl TickList {
     fn is_below_safe_tick(&self, tick: i32) -> bool {
         let smallest = self.ticks[0].index;
         let minimum = smallest - self.tick_spacing as i32;
-        tick < minimum
+        tick < minimum || tick < MIN_TICK
     }
 
     fn is_at_or_above_largest(&self, tick: i32) -> bool {
@@ -149,7 +149,7 @@ impl TickList {
     fn is_at_or_above_safe_tick(&self, tick: i32) -> bool {
         let largest = self.ticks[self.ticks.len() - 1].index;
         let maximum = largest + self.tick_spacing as i32;
-        tick >= maximum
+        tick >= maximum || tick >= MAX_TICK
     }
 
     pub(crate) fn get_tick(&self, index: i32) -> Result<&TickInfo, TickListError> {

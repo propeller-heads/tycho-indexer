@@ -31,7 +31,7 @@ fn div_rounding_up(a: U256, b: U256) -> Result<U256, SimulationError> {
     }
 }
 
-pub(super) fn get_amount0_delta(
+pub(crate) fn get_amount0_delta(
     a: U256,
     b: U256,
     liquidity: u128,
@@ -51,7 +51,7 @@ pub(super) fn get_amount0_delta(
     }
 }
 
-pub(super) fn get_amount1_delta(
+pub(crate) fn get_amount1_delta(
     a: U256,
     b: U256,
     liquidity: u128,

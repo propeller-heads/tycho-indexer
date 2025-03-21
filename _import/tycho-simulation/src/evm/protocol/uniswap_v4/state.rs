@@ -1,7 +1,8 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::{Sign, I256, U256};
+use alloy_primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
+use num_traits::Zero;
 use tracing::trace;
 use tycho_core::{dto::ProtocolStateDelta, Bytes};
 
@@ -11,7 +12,7 @@ use crate::{
         u256_num::u256_to_biguint,
         utils::uniswap::{
             i24_be_bytes_to_i32, liquidity_math,
-            sqrt_price_math::sqrt_price_q96_to_f64,
+            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
             swap_math,
             tick_list::{TickInfo, TickList, TickListErrorKind},
             tick_math::{
@@ -280,6 +281,98 @@ impl ProtocolSim for UniswapV4State {
         ))
     }
 
+    fn get_limits(
+        &self,
+        token_in: Address,
+        token_out: Address,
+    ) -> Result<(BigUint, BigUint), SimulationError> {
+        // If the pool has no liquidity, return zeros for both limits
+        if self.liquidity == 0 {
+            return Ok((BigUint::zero(), BigUint::zero()));
+        }
+
+        let zero_for_one = token_in < token_out;
+        let mut current_tick = self.tick;
+        let mut current_sqrt_price = self.sqrt_price;
+        let mut current_liquidity = self.liquidity;
+        let mut total_amount_in = U256::from(0u64);
+        let mut total_amount_out = U256::from(0u64);
+
+        loop {
+            // Iterate through all ticks in the direction of the swap (breaks when we there is no
+            // more liquidity in the pool)
+            // Find the next initialized tick (or the next tick within a word)
+            let (next_tick, initialized) = match self
+                .ticks
+                .next_initialized_tick_within_one_word(current_tick, zero_for_one)
+            {
+                Ok((tick, init)) => (tick.clamp(MIN_TICK, MAX_TICK), init),
+                Err(_) => break, // No more ticks to process in this direction
+            };
+
+            // Calculate the sqrt price at the next tick boundary
+            let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
+
+            // Calculate the amount of tokens swapped when moving from current_sqrt_price to
+            // sqrt_price_next Direction determines which token is being swapped in vs
+            // out
+            let (amount_in, amount_out) = if zero_for_one {
+                let amount0 = get_amount0_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    true,
+                )?;
+                let amount1 = get_amount1_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    false,
+                )?;
+                (amount0, amount1)
+            } else {
+                let amount0 = get_amount0_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    false,
+                )?;
+                let amount1 = get_amount1_delta(
+                    sqrt_price_next,
+                    current_sqrt_price,
+                    current_liquidity,
+                    true,
+                )?;
+                (amount1, amount0)
+            };
+
+            // Accumulate total amounts for this tick range
+            total_amount_in = safe_add_u256(total_amount_in, amount_in)?;
+            total_amount_out = safe_add_u256(total_amount_out, amount_out)?;
+
+            // If this tick is "initialized" (meaning its someone's position boundary), update the
+            // liquidity when crossing it
+            // For zero_for_one, liquidity is removed when crossing a tick
+            // For one_for_zero, liquidity is added when crossing a tick
+            if initialized {
+                let liquidity_raw = self
+                    .ticks
+                    .get_tick(next_tick)
+                    .unwrap()
+                    .net_liquidity;
+                let liquidity_delta = if zero_for_one { -liquidity_raw } else { liquidity_raw };
+                current_liquidity =
+                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta);
+            }
+
+            // Move to the next tick position
+            current_tick = if zero_for_one { next_tick - 1 } else { next_tick };
+            current_sqrt_price = sqrt_price_next;
+        }
+
+        Ok((u256_to_biguint(total_amount_in), u256_to_biguint(total_amount_out)))
+    }
+
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
@@ -386,7 +479,7 @@ mod tests {
     use tycho_client::feed::synchronizer::ComponentWithState;
 
     use super::*;
-    use crate::protocol::models::TryFromWithBlock;
+    use crate::{evm::protocol::utils::bytes_to_address, protocol::models::TryFromWithBlock};
 
     #[test]
     fn test_delta_transition() {
@@ -507,5 +600,54 @@ mod tests {
         // ```
         let expected_amount = BigUint::from(9999909699895_u64);
         assert_eq!(res.amount, expected_amount);
+    }
+
+    #[tokio::test]
+    async fn test_get_limits() {
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/uniswap_v4_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+
+        let state: ComponentWithState = serde_json::from_value(data)
+            .expect("Expected json to match ComponentWithState structure");
+
+        let usv4_state = UniswapV4State::try_from_with_block(
+            state,
+            Default::default(),
+            &Default::default(),
+            &Default::default(),
+        )
+        .await
+        .unwrap();
+
+        let t0 = Token::new(
+            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            8,
+            "WBTC",
+            10_000.to_biguint().unwrap(),
+        );
+        let t1 = Token::new(
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            6,
+            "USDT",
+            10_000.to_biguint().unwrap(),
+        );
+
+        let res = usv4_state
+            .get_limits(
+                bytes_to_address(&t0.address).unwrap(),
+                bytes_to_address(&t1.address).unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466707).unwrap()); // Crazy amount because of this tick: "ticks/-887220/net-liquidity": "0x00e8481d98"
+
+        let out = usv4_state
+            .get_amount_out(res.0, &t0, &t1)
+            .expect("swap for limit in didn't work");
+
+        assert_eq!(&res.1, &out.amount);
     }
 }
