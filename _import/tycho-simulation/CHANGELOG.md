@@ -1,3 +1,11 @@
+## [0.85.0](https://github.com/propeller-heads/tycho-simulation/compare/0.84.0...0.85.0) (2025-03-21)
+
+
+### Features
+
+* add `get_limits` in `ProtocolSim`. ([4a607cb](https://github.com/propeller-heads/tycho-simulation/commit/4a607cbd6b9a5e1c9b9db48881015a50de671779))
+* extend uniswap v3 fees to support pancakeswap v3 ([4bd07a8](https://github.com/propeller-heads/tycho-simulation/commit/4bd07a81ff575179797acbd3d9b2f465cb432472))
+
 ## [0.84.0](https://github.com/propeller-heads/tycho-simulation/compare/0.83.0...0.84.0) (2025-03-19)
 
 
