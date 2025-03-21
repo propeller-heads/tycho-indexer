@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.83.0"
+version = "0.84.0"
 dependencies = [
  "alloy 0.5.4",
  "num-bigint",
@@ -7886,8 +7886,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.64.0"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?tag=0.64.0#d7244ada8c002ff0a5b9a064eb0b380dd2d567b5"
+version = "0.66.1"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?tag=0.66.1#5a6433caf1e968ed972bd510c0b87698b65bce14"
 dependencies = [
  "alloy 0.9.2",
  "alloy-primitives",
@@ -7909,7 +7909,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.83.0"
+version = "0.84.0"
 dependencies = [
  "alloy 0.5.4",
  "alloy-primitives",
