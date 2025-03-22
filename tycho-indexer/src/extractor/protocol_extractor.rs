@@ -176,6 +176,12 @@ where
     async fn maybe_report_progress(&self, block: &Block) {
         let mut state = self.inner.lock().await;
         let now = chrono::Local::now().naive_utc();
+        if state.last_report_block_number == 0 {
+            // On startup, initialize state and exit
+            state.last_report_ts = now;
+            state.last_report_block_number = block.number;
+            return;
+        }
         let time_passed = now
             .signed_duration_since(state.last_report_ts)
             .num_seconds();
