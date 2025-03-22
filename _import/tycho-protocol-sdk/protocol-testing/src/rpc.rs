@@ -6,11 +6,10 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     transports::http::reqwest::Url,
 };
-use tycho_core::models::Address;
 
 const NATIVE_ALIASES: &[Address] = &[
-    address!("0x0000000000000000000000000000000000000000").into(),
-    address!("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee").into(),
+    address!("0x0000000000000000000000000000000000000000"),
+    address!("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
 ];
 
 const ERC_20_ABI: &str = r#"[{"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"stateMutability":"view","type":"function"}]"#;
@@ -20,18 +19,19 @@ pub struct RPCProvider {
 }
 
 impl RPCProvider {
-    pub(crate) fn new(url: String) -> RPCProvider {
+    pub fn new(url: String) -> Self {
         let url = url.as_str().parse().unwrap();
         RPCProvider { url }
     }
 
+    // TODO: Return a Result instead of panicking
     pub async fn get_token_balance(
-        self,
+        &self,
         token_address: Address,
         wallet_address: Address,
         block_number: u64,
     ) -> U256 {
-        let provider = ProviderBuilder::new().on_http(self.url);
+        let provider = ProviderBuilder::new().on_http(self.url.clone());
         let block_id: BlockId = BlockId::from(block_number);
 
         match NATIVE_ALIASES.contains(&token_address) {
@@ -65,7 +65,7 @@ impl RPCProvider {
         }
     }
 
-    async fn get_block_header(self, block_number: u64) {
+    async fn get_block_header(&self, block_number: u64) {
         // TODO: Implement
         // let provider = ProviderBuilder::new().on_http(self.url);
         // let block_id: BlockId = BlockId::from(block_number);
@@ -84,7 +84,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_token_balance_native_token() {
-        let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
+        let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
 
         let rpc_provider = RPCProvider::new(eth_rpc_url);
         let token_address = address!("0x0000000000000000000000000000000000000000");
@@ -103,7 +103,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_token_balance_erc20_token() {
-        let eth_rpc_url = env::var("ETH_RPC_URL").expect("Missing ETH_RPC_URL in environment");
+        let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
 
         let rpc_provider = RPCProvider::new(eth_rpc_url);
         let token_address = address!("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");

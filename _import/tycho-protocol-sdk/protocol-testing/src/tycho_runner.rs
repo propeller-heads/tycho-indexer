@@ -99,10 +99,11 @@ impl TychoRunner {
         func: F,
         expected_components: &Vec<ProtocolComponentWithTestConfig>,
         start_block: u64,
+        stop_block: u64,
         skip_balance_check: bool,
     ) -> R
     where
-        F: FnOnce(&Vec<ProtocolComponentWithTestConfig>, u64, bool) -> R,
+        F: FnOnce(&Vec<ProtocolComponentWithTestConfig>, u64, u64, bool) -> R,
     {
         let (tx, rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
         let db_url = self.db_url.clone();
@@ -141,7 +142,7 @@ impl TychoRunner {
         thread::sleep(Duration::from_secs(3));
 
         // Run the provided function
-        let result = func(expected_components, start_block, skip_balance_check);
+        let result = func(expected_components, start_block, stop_block, skip_balance_check);
 
         tx.send(true)
             .expect("Failed to send termination message");

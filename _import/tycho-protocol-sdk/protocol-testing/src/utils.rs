@@ -1,4 +1,5 @@
 use std::{
+    env,
     error::Error,
     fs,
     path::{Path, PathBuf},
@@ -10,6 +11,7 @@ use figment::{
     value::Value,
     Figment,
 };
+use tracing::error;
 
 /// Build a Substreams package with modifications to the YAML file.
 pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> Result<String, Box<dyn Error>> {
@@ -55,6 +57,7 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> Result<String
     fs::write(yaml_file_path, yaml_string)?;
 
     // Run the substreams pack command to create the spkg
+    // WARNING: Ensure substreams is in the PATH
     match Command::new("substreams")
         .arg("pack")
         .arg(yaml_file_path)
@@ -62,14 +65,16 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> Result<String
     {
         Ok(output) => {
             if !output.status.success() {
-                println!(
+                error!(
                     "Substreams pack command failed: {}",
                     String::from_utf8_lossy(&output.stderr)
                 );
             }
         }
         Err(e) => {
-            println!("Error running substreams pack command: {}", e);
+            error!("Error running substreams pack command: {}. \
+            Ensure that the wasm target was built and that substreams CLI\
+             is installed and exported on PATH", e);
         }
     }
 
