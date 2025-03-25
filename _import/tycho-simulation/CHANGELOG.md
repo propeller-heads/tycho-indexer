@@ -1,3 +1,10 @@
+## [0.86.0](https://github.com/propeller-heads/tycho-simulation/compare/0.85.1...0.86.0) (2025-03-25)
+
+
+### Features
+
+* move execution dependency to dev ([7655c89](https://github.com/propeller-heads/tycho-simulation/commit/7655c89e1e5657c7aca6aa4c9a2975f3d91af990))
+
 ## [0.85.1](https://github.com/propeller-heads/tycho-simulation/compare/0.85.0...0.85.1) (2025-03-25)
 
 
