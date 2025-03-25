@@ -2,6 +2,7 @@ specVersion: v0.1.0
 package:
   name: "ethereum_uniswap_v4"
   version: v0.2.1
+  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-uniswap-v4"
 
 protobuf:
   files:
@@ -14,7 +15,6 @@ protobuf:
     - ./proto
   excludePaths:
     - sf/ethereum
-    - sf/substreams
     - google
 
 binaries:
@@ -81,7 +81,7 @@ modules:
     valueType: bigint
     inputs:
       - map: map_balance_changes
-  
+
   - name: map_ticks_changes
     kind: map
     initialBlock: 6894393
@@ -97,7 +97,7 @@ modules:
     valueType: bigint
     inputs:
       - map: map_ticks_changes
-  
+
   - name: map_liquidity_changes
     kind: map
     initialBlock: 6894393
@@ -133,6 +133,6 @@ modules:
         mode: deltas
     output:
       type: proto:tycho.evm.v1.BlockChanges
-      
+
 params:
   map_pools_created: "8c4bcbe6b9ef47855f97e675296fa3f6fafa5f1a"
