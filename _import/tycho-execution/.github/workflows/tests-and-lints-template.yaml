@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Generate a token
         id: generate-token
-        uses: getsentry/action-github-app-token@v2
+        uses: getsentry/action-github-app-token@d4b5da6c5e37703f8c3b3e43abb5705b46e159cc
         with:
           app_id: ${{ secrets.app_id }}
           private_key: ${{ secrets.app_private_key }}
@@ -48,7 +48,9 @@ jobs:
         run: sudo apt update && sudo apt install -y git
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup git to use https
         run: |
@@ -57,17 +59,17 @@ jobs:
           git config --global url."https://x-access-token:${{ steps.generate-token.outputs.token }}@github.com".insteadOf ssh://github.com
 
       - name: Setup toolchain
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1
         with:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Setup Rust Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-on-failure: true
 
       - name: Install latest nextest release
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@b239071b2aedda3db20530301c2d88cd538e90d3
 
       - name: Test
         run: cargo nextest run --workspace --lib --all-targets && cargo test --doc
@@ -79,7 +81,7 @@ jobs:
     steps:
       - name: Generate a token
         id: generate-token
-        uses: getsentry/action-github-app-token@v2
+        uses: getsentry/action-github-app-token@d4b5da6c5e37703f8c3b3e43abb5705b46e159cc
         with:
           app_id: ${{ secrets.app_id }}
           private_key: ${{ secrets.app_private_key }}
@@ -88,7 +90,9 @@ jobs:
         run: sudo apt update && sudo apt install -y git
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Setup git to use https
         run: |
@@ -97,13 +101,13 @@ jobs:
           git config --global url."https://x-access-token:${{ steps.generate-token.outputs.token }}@github.com".insteadOf ssh://github.com
 
       - name: Setup clippy toolchain - stable
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1
         with:
           toolchain: stable
           components: clippy
 
       - name: Setup Rust Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-on-failure: true
 
@@ -116,7 +120,7 @@ jobs:
           RUSTFLAGS: -Dwarnings
 
       - name: Setup rustfmt toolchain - nightly
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@a02741459ec5e501b9843ed30b535ca0a0376ae4
         with:
           components: rustfmt
 
