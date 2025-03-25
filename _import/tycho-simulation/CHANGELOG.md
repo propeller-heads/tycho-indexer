@@ -1,3 +1,12 @@
+## [0.85.1](https://github.com/propeller-heads/tycho-simulation/compare/0.85.0...0.85.1) (2025-03-25)
+
+
+### Bug Fixes
+
+* changed versions to hashes for reusible actions ([f26aca7](https://github.com/propeller-heads/tycho-simulation/commit/f26aca79bb57ac8e6bded991d6757a07758a92ae))
+* lint for branch in the PR ([1edc6d1](https://github.com/propeller-heads/tycho-simulation/commit/1edc6d15e0383326c2e591db0701d16f2397ab65))
+* lint for branch in the PR ([0abed2a](https://github.com/propeller-heads/tycho-simulation/commit/0abed2a1b872778c555d85a785e336f1cbe5b7b1))
+
 ## [0.85.0](https://github.com/propeller-heads/tycho-simulation/compare/0.84.0...0.85.0) (2025-03-21)
 
 
