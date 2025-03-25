@@ -1,33 +1,31 @@
-use std::{collections::HashMap, env, ops::Deref, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, env, path::PathBuf, str::FromStr};
 
-use alloy::{
-    primitives::{bytes, U256},
-    providers::Provider,
-};
+use alloy::{primitives::U256, providers::Provider};
 use figment::{
     providers::{Format, Yaml},
     Figment,
 };
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
-use tracing::{debug, field::debug, info};
+use tracing::{debug, info};
 use tycho_core::{
     dto::{Chain, ProtocolComponent, ResponseAccount, ResponseProtocolState},
-    models::Address,
     Bytes,
 };
 use tycho_simulation::{
     evm::{
         decoder::TychoStreamDecoder,
         engine_db::tycho_db::PreCachedDB,
-        protocol::{
-            u256_num::{bytes_to_u256, u256_to_f64},
-            vm::state::EVMPoolState,
-        },
+        protocol::{u256_num::bytes_to_u256, vm::state::EVMPoolState},
     },
-    tycho_client::feed::{synchronizer::StateSyncMessage, FeedMessage, Header},
+    models::Token,
+    tycho_client::feed::{
+        synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
+        FeedMessage, Header,
+    },
+    utils::load_all_tokens,
 };
-use tycho_simulation::tycho_client::feed::synchronizer::{ComponentW, ComponentWithState, Snapshot};
+
 use crate::{
     config::{IntegrationTest, IntegrationTestsConfig, ProtocolComponentWithTestConfig},
     rpc::RPCProvider,
@@ -206,7 +204,7 @@ fn validate_state(
 
         let diff = expected_component
             .base
-            .compare(&component, true);
+            .compare(component, true);
         match diff {
             Some(diff) => {
                 panic!("Component {} does not match the expected state:\n{}", component_id, diff);
@@ -239,7 +237,7 @@ fn validate_state(
             }
 
             // TODO: Test if balance check works
-            if (!skip_balance_check) {
+            if !skip_balance_check {
                 info!(
                     "Validating token balance for component {} and token {}",
                     component.id, token
@@ -271,7 +269,7 @@ fn validate_state(
 
     // Step 3: Run Tycho Simulation
     let mut decoder = TychoStreamDecoder::new();
-    decoder.register_decoder::<EVMPoolState<PreCachedDB>>("test_protocol");
+    decoder.register_decoder::<EVMPoolState<PreCachedDB>>("test_protocol", None);
 
     // Mock a stream message, with only a Snapshot and no deltas
     let mut states: HashMap<String, ComponentWithState> = HashMap::new();
@@ -306,5 +304,52 @@ fn validate_state(
         },
     )]);
 
-    let stream_message: FeedMessage = FeedMessage { state_msgs, sync_states: Default::default() };
+    let all_tokens = rt.block_on(load_all_tokens(
+        "localhost:4242",
+        true,
+        None,
+        Chain::Ethereum.into(),
+        None,
+        None,
+    ));
+
+    let mut pairs: HashMap<String, Vec<Token>> = HashMap::new();
+
+    let message: FeedMessage = FeedMessage { state_msgs, sync_states: Default::default() };
+
+    let block_msg = rt
+        .block_on(decoder.decode(message))
+        .expect("Failed to decode message");
+
+    for (id, comp) in block_msg.new_pairs.iter() {
+        pairs
+            .entry(id.clone())
+            .or_insert_with(|| comp.tokens.clone());
+    }
+
+    // This is where we get blocked. Currently, Tycho Simulation expects the runtime to be
+    // prebuild and accessible from TychoSim - we should allow passing it when parsing the block
+    for (id, state) in block_msg.states.iter() {
+        if let Some(tokens) = pairs.get(id) {
+            let formatted_token_str = format!("{:}/{:}", &tokens[0].symbol, &tokens[1].symbol);
+            println!("Calculations for pool {:?} with tokens {:?}", id, formatted_token_str);
+            state
+                .spot_price(&tokens[0], &tokens[1])
+                .map(|price| println!("Spot price {:?}: {:?}", formatted_token_str, price))
+                .map_err(|e| eprintln!("Error calculating spot price for Pool {:?}: {:?}", id, e))
+                .ok();
+            let amount_in =
+                BigUint::from(1u32) * BigUint::from(10u32).pow(tokens[0].decimals as u32);
+            state
+                .get_amount_out(amount_in, &tokens[0], &tokens[1])
+                .map(|result| {
+                    println!(
+                        "Amount out for trading 1 {:?} -> {:?}: {:?} (takes {:?} gas)",
+                        &tokens[0].symbol, &tokens[1].symbol, result.amount, result.gas
+                    )
+                })
+                .map_err(|e| eprintln!("Error calculating amount out for Pool {:?}: {:?}", id, e))
+                .ok();
+        }
+    }
 }

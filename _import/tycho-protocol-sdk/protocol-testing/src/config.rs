@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use colored::Colorize;
-use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use tycho_core::{dto::ProtocolComponent, Bytes};
