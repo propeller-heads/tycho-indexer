@@ -47,4 +47,4 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 
 1. In `scripts/deploy-executors.js` define the executors to be deployed
 2. Deploy executors: `npx hardhat run scripts/deploy-executors.js --network NETWORK`
-3. Fill in the executor addresses in `config/executors.json`
+3. Fill in the executor addresses in `config/executor_addresses.json`
