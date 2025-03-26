@@ -53,7 +53,7 @@ contract MaverickV2ExecutorTest is Test, Constants {
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
         bytes memory protocolData =
-            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, address(2));
+            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, BOB);
 
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
         uint256 balanceBefore = GHO.balanceOf(BOB);
