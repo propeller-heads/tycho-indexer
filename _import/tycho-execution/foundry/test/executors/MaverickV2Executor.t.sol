@@ -25,7 +25,7 @@ contract MaverickV2ExecutorTest is Test, Constants {
     IERC20 USDC = IERC20(USDC_ADDR);
 
     function setUp() public {
-        uint256 forkBlock = 20127232;
+        uint256 forkBlock = 22096000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         maverickV2Exposed = new MaverickV2ExecutorExposed(MAVERICK_V2_FACTORY);
     }
@@ -51,16 +51,16 @@ contract MaverickV2ExecutorTest is Test, Constants {
     }
 
     function testSwap() public {
-        uint256 amountIn = 10 ** 18;
+        uint256 amountIn = 10e18;
         bytes memory protocolData =
             abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, BOB);
 
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
-        uint256 balanceBefore = GHO.balanceOf(BOB);
+        uint256 balanceBefore = USDC.balanceOf(BOB);
 
         uint256 amountOut = maverickV2Exposed.swap(amountIn, protocolData);
 
-        uint256 balanceAfter = GHO.balanceOf(BOB);
+        uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
@@ -85,7 +85,7 @@ contract MaverickV2ExecutorTest is Test, Constants {
 
         uint256 amountIn = 10 ** 18;
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
-        uint256 balanceBefore = GHO.balanceOf(BOB);
+        uint256 balanceBefore = USDC.balanceOf(BOB);
 
         uint256 amountOut = maverickV2Exposed.swap(amountIn, protocolData);
 
