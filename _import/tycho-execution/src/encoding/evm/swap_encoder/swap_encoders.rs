@@ -278,10 +278,6 @@ impl SwapEncoder for EkuboSwapEncoder {
         swap: Swap,
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        if !swap.split.is_zero() {
-            return Err(EncodingError::InvalidInput("splits not implemented".to_string()));
-        }
-
         if encoding_context.exact_out {
             return Err(EncodingError::InvalidInput("exact out swaps not implemented".to_string()));
         }
