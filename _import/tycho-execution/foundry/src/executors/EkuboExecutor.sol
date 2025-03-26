@@ -93,6 +93,7 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
     function _lock(bytes memory data) internal {
         address target = address(core);
 
+        // slither-disable-next-line assembly
         assembly ("memory-safe") {
             let args := mload(0x40)
 
@@ -113,7 +114,7 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
 
     function _locked(bytes calldata swapData) internal {
         // For partial swaps this is not equivalent to the given input amount
-        uint128 tokenInDebtAmount;
+        uint128 tokenInDebtAmount = 0;
 
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
 
@@ -177,6 +178,7 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
         if (token == NATIVE_TOKEN_ADDRESS) {
             SafeTransferLib.safeTransferETH(target, amount);
         } else {
+            // slither-disable-next-line assembly
             assembly ("memory-safe") {
                 let free := mload(0x40)
                 // selector of pay(address)
