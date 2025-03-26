@@ -249,7 +249,6 @@ mod tests {
             exact_out: false,
             given_amount: eth_amount_in.clone(),
             given_token: eth(),
-            router_address: Bytes::from_str("0x1234567890abcdef1234567890abcdef12345678").unwrap(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()

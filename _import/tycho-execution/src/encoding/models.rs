@@ -41,8 +41,6 @@ pub struct Solution {
     pub checked_amount: Option<BigUint>,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// Address of the router contract to be used for the swaps.
-    pub router_address: Bytes,
     /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
 }
@@ -104,7 +102,8 @@ pub struct Transaction {
 ///
 /// * `receiver`: Address of the receiver of the out token after the swaps are completed.
 /// * `exact_out`: true if the solution is a buy order, false if it is a sell order.
-/// * `router_address`: Address of the router contract to be used for the swaps.
+/// * `router_address`: Address of the router contract to be used for the swaps. Zero address if
+///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
 #[derive(Clone, Debug)]

@@ -57,7 +57,7 @@ impl EVMEncoderBuilder {
             let swap_encoder_registry =
                 SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
             let strategy =
-                Box::new(SplitSwapStrategyEncoder::new(chain, swap_encoder_registry, None)?);
+                Box::new(SplitSwapStrategyEncoder::new(chain, swap_encoder_registry, None, None)?);
             Ok(EVMEncoderBuilder {
                 chain: Some(chain),
                 strategy: Some(strategy),
@@ -83,6 +83,7 @@ impl EVMEncoderBuilder {
                 chain,
                 swap_encoder_registry,
                 Some(swapper_pk),
+                None,
             )?);
             Ok(EVMEncoderBuilder {
                 chain: Some(chain),

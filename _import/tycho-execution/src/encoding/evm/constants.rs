@@ -1,6 +1,7 @@
 use std::{collections::HashSet, sync::LazyLock};
 
 pub const DEFAULT_EXECUTORS_JSON: &str = include_str!("../../../config/executor_addresses.json");
+pub const DEFAULT_ROUTERS_JSON: &str = include_str!("../../../config/router_addresses.json");
 
 /// These protocols support the optimization of grouping swaps.
 ///
