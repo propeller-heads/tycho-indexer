@@ -19,6 +19,9 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
 
     ICore immutable core;
 
+    bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)
+    bytes4 constant PAY_CALLBACK_SELECTOR = 0x599d0714; // payCallback(uint256,address)
+
     uint256 constant POOL_DATA_OFFSET = 56;
     uint256 constant HOP_BYTE_LEN = 52;
 
@@ -34,7 +37,8 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
         if (data.length < 92) revert EkuboExecutor__InvalidDataLength();
 
         uint256 tokenOutOffset = data.length - HOP_BYTE_LEN;
-        address tokenOut = address(bytes20(LibBytes.loadCalldata(data, tokenOutOffset)));
+        address tokenOut =
+            address(bytes20(LibBytes.loadCalldata(data, tokenOutOffset)));
 
         uint256 tokenOutBalanceBefore = _balanceOf(tokenOut);
 
@@ -60,9 +64,9 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
 
         bytes4 selector = bytes4(raw[:4]);
 
-        if (selector == 0xb45a3c0e) { // Selector of locked(uint256)
+        if (selector == LOCKED_SELECTOR) {
             _locked(stripped);
-        } else if (selector == 0x599d0714) { // Selector of payCallback(uint256,address)
+        } else if (selector == PAY_CALLBACK_SELECTOR) {
             _payCallback(stripped);
         } else {
             revert EkuboExecutor__UnknownCallback();
@@ -84,7 +88,11 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
         SafeTransferLib.safeTransfer(token, address(core), amount);
     }
 
-    function _balanceOf(address token) internal view returns (uint256 balance) {
+    function _balanceOf(address token)
+        internal
+        view
+        returns (uint256 balance)
+    {
         balance = token == NATIVE_TOKEN_ADDRESS
             ? address(this).balance
             : IERC20(token).balanceOf(address(this));
@@ -128,22 +136,15 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
         uint256 offset = POOL_DATA_OFFSET;
 
         for (uint256 i = 0; i < hopsLength; i++) {
-            address nextTokenOut = address(bytes20(LibBytes.loadCalldata(swapData, offset)));
-            Config poolConfig = Config.wrap(LibBytes.loadCalldata(swapData, offset + 20));
+            address nextTokenOut =
+                address(bytes20(LibBytes.loadCalldata(swapData, offset)));
+            Config poolConfig =
+                Config.wrap(LibBytes.loadCalldata(swapData, offset + 20));
 
-            (
-                address token0,
-                address token1,
-                bool isToken1
-            ) = nextTokenIn > nextTokenOut ? (
-                nextTokenOut,
-                nextTokenIn,
-                true
-            ) : (
-                nextTokenIn,
-                nextTokenOut,
-                false
-            );
+            (address token0, address token1, bool isToken1) = nextTokenIn
+                > nextTokenOut
+                ? (nextTokenOut, nextTokenIn, true)
+                : (nextTokenIn, nextTokenOut, false);
 
             (int128 delta0, int128 delta1) = core.swap_611415377(
                 PoolKey(token0, token1, poolConfig),
@@ -165,11 +166,7 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
 
         _pay(tokenIn, tokenInDebtAmount);
 
-        core.withdraw(
-            nextTokenIn,
-            receiver,
-            uint128(nextAmountIn)
-        );
+        core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
     }
 
     function _pay(address token, uint128 amount) internal {
