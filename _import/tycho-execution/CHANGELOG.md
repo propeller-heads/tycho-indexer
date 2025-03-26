@@ -1,3 +1,18 @@
+## [0.67.0](https://github.com/propeller-heads/tycho-execution/compare/0.66.1...0.67.0) (2025-03-20)
+
+
+### Features
+
+* Set v2/v3 executor addresses on ethereum ([783712b](https://github.com/propeller-heads/tycho-execution/commit/783712be5d8dae626c735193416ba03701d3a616))
+* Support Pancakeswap v3 on ethereum ([2a4ee88](https://github.com/propeller-heads/tycho-execution/commit/2a4ee88cad46dfeb068809bdd885e63094020bcd))
+* Support sushiswap v2 and pancakeswap v2 on ethereum ([0a8a34b](https://github.com/propeller-heads/tycho-execution/commit/0a8a34be035588d45e6b72a42f4dd691e3c98d2f))
+
+
+### Bug Fixes
+
+* proper exchange name when deploying executors ([39bd9df](https://github.com/propeller-heads/tycho-execution/commit/39bd9df4b6ca8db78bb4d6757c93b30cce29f360))
+* Remove pancakeswap V3 from approved executor addresses ([1ed149a](https://github.com/propeller-heads/tycho-execution/commit/1ed149a9b8ffd41b9cc702c77e146fa234176af0))
+
 ## [0.66.1](https://github.com/propeller-heads/tycho-execution/compare/0.66.0...0.66.1) (2025-03-19)
 
 
