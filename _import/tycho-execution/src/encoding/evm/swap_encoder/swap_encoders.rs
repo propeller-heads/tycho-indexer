@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
-use num_traits::Zero;
 use tycho_core::Bytes;
 
 use crate::encoding::{
@@ -705,6 +704,8 @@ mod tests {
     mod ekubo {
         use super::*;
 
+        const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
+
         #[test]
         fn test_encode_swap_simple() {
             let token_in = Bytes::from(Address::ZERO.as_slice());
@@ -729,7 +730,7 @@ mod tests {
             };
 
             let encoding_context = EncodingContext {
-                receiver: "0xcA4F73Fe97D0B987a0D12B39BBD562c779BAb6f6".into(), // Random address
+                receiver: RECEIVER.into(),
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 exact_out: false,
@@ -746,16 +747,15 @@ mod tests {
 
             assert_eq!(
                 hex_swap,
-                String::from(concat!(
-                    // receiver
-                    "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
-                    // group token in
-                    "0000000000000000000000000000000000000000",
-                    // token out 1st swap
-                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                    // pool config 1st swap
-                    "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
-                ))
+                RECEIVER.to_string() +
+                    concat!(
+                        // group token in
+                        "0000000000000000000000000000000000000000",
+                        // token out 1st swap
+                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                        // pool config 1st swap
+                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                    ),
             );
         }
 
@@ -768,7 +768,7 @@ mod tests {
             let encoder = EkuboSwapEncoder::new(String::default());
 
             let encoding_context = EncodingContext {
-                receiver: "0xcA4F73Fe97D0B987a0D12B39BBD562c779BAb6f6".into(), // Random address
+                receiver: RECEIVER.into(),
                 group_token_in: group_token_in.clone(),
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
@@ -818,22 +818,23 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
 
+            println!("{}", combined_hex);
+
             assert_eq!(
                 combined_hex,
-                String::from(concat!(
-                    // receiver
-                    "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
-                    // group token in
-                    "0000000000000000000000000000000000000000",
-                    // token out 1st swap
-                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                    // pool config 1st swap
-                    "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
-                    // token out 2nd swap
-                    "dac17f958d2ee523a2206206994597c13d831ec7",
-                    // pool config 2nd swap
-                    "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
-                ))
+                RECEIVER.to_string() +
+                    concat!(
+                        // group token in
+                        "0000000000000000000000000000000000000000",
+                        // token out 1st swap
+                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                        // pool config 1st swap
+                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                        // token out 2nd swap
+                        "dac17f958d2ee523a2206206994597c13d831ec7",
+                        // pool config 2nd swap
+                        "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
+                    ),
             );
         }
     }
