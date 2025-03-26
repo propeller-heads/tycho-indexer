@@ -54,6 +54,8 @@ impl EVMTychoEncoder {
     ///   swap's input is the chain's wrapped token.
     /// * If the solution is unwrapping, the checked token is the chain's native token and the last
     ///   swap's output is the chain's wrapped token.
+    /// * The token cannot appear more than once in the solution unless it is the first and last
+    ///   token (i.e. a true cyclical swap).
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
         if solution.exact_out {
             return Err(EncodingError::FatalError(
