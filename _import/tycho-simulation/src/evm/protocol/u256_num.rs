@@ -117,7 +117,7 @@ pub fn bytes_to_u256(bytes: Bytes) -> U256 {
 }
 
 pub fn map_slots_to_u256(
-    slots: HashMap<tycho_core::hex_bytes::Bytes, tycho_core::hex_bytes::Bytes>,
+    slots: HashMap<tycho_common::hex_bytes::Bytes, tycho_common::hex_bytes::Bytes>,
 ) -> HashMap<U256, U256> {
     slots
         .into_iter()

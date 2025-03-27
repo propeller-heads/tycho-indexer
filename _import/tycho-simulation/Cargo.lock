@@ -2848,7 +2848,7 @@ checksum = "2e1f6c3800b304a6be0012039e2a45a322a093539c45ab818d9e6895a39c90fe"
 dependencies = [
  "proc-macro2",
  "quote",
- "rand",
+ "rand 0.8.5",
  "syn 1.0.109",
 ]
 
@@ -4562,7 +4562,7 @@ dependencies = [
  "console",
  "linked-hash-map",
  "once_cell",
- "pin-project 1.1.7",
+ "pin-project 1.1.10",
  "similar",
 ]
 

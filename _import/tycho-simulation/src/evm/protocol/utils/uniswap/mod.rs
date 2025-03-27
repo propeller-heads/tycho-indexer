@@ -1,5 +1,5 @@
 use alloy_primitives::{I256, U256};
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 pub(crate) mod liquidity_math;
 mod solidity_math;
@@ -66,7 +66,7 @@ pub(crate) fn i24_be_bytes_to_i32(val: &Bytes) -> i32 {
 mod test {
     use std::str::FromStr;
 
-    use tycho_core::Bytes;
+    use tycho_common::Bytes;
 
     use crate::evm::protocol::utils::uniswap::i24_be_bytes_to_i32;
 

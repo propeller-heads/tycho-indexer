@@ -10,7 +10,7 @@ use evm_ekubo_sdk::{
     },
 };
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use super::{
     pool::{base::BasePool, oracle::OraclePool},
@@ -168,7 +168,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use tycho_core::dto::ResponseProtocolState;
+    use tycho_common::dto::ResponseProtocolState;
 
     use super::*;
     use crate::evm::protocol::ekubo::test_pool::{attributes, component, state};

@@ -1,5 +1,5 @@
 use tracing_subscriber::{fmt, EnvFilter};
-use tycho_core::models::Chain;
+use tycho_common::models::Chain;
 
 pub fn setup_tracing() {
     let writer = tracing_appender::rolling::daily("logs", "price_printer.log");

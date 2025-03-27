@@ -7,7 +7,7 @@ use std::{
 use alloy_primitives::{Address, B256, U256};
 use revm::primitives::Bytecode;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
@@ -182,7 +182,7 @@ mod tests {
     use num_bigint::ToBigUint;
     use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY};
     use serde_json::Value;
-    use tycho_core::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
+    use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
     use crate::evm::{

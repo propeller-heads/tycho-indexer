@@ -8,7 +8,7 @@ use evm_ekubo_sdk::{
     },
 };
 use num_bigint::BigUint;
-use tycho_core::{dto::ProtocolComponent, Bytes};
+use tycho_common::{dto::ProtocolComponent, Bytes};
 
 use super::{pool::base::BasePool, state::EkuboState};
 use crate::models::Token;

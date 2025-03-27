@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use alloy_primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use super::state::UniswapV2State;
 use crate::{
@@ -46,7 +46,7 @@ mod tests {
     use std::str::FromStr;
 
     use chrono::DateTime;
-    use tycho_core::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
+    use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
 

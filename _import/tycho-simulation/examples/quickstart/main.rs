@@ -29,7 +29,7 @@ use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tracing_subscriber::EnvFilter;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 use tycho_execution::encoding::{
     evm::{
         encoder_builder::EVMEncoderBuilder, tycho_encoder::EVMTychoEncoder, utils::encode_input,
@@ -49,7 +49,7 @@ use tycho_simulation::{
     models::Token,
     protocol::models::{BlockUpdate, ProtocolComponent},
     tycho_client::feed::component_tracker::ComponentFilter,
-    tycho_core::models::Chain,
+    tycho_common::models::Chain,
     utils::load_all_tokens,
 };
 

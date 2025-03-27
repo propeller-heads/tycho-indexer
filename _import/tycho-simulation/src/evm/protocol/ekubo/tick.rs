@@ -1,7 +1,7 @@
 use evm_ekubo_sdk::quoting::types::Tick;
 use itertools::Itertools;
 use num_traits::Zero;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ticks(Vec<Tick>);

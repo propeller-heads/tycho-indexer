@@ -50,7 +50,7 @@ use alloy_primitives::Address;
 #[cfg(test)]
 use mockall::mock;
 use num_bigint::BigUint;
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     models::{Balances, Token},

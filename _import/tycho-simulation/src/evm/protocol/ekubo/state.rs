@@ -9,7 +9,7 @@ use evm_ekubo_sdk::{
     quoting::types::{NodeKey, Tick, TokenAmount},
 };
 use num_bigint::BigUint;
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
     pool::{base::BasePool, oracle::OraclePool, EkuboPool},
