@@ -15,4 +15,3 @@ jobs:
         with:
           target: 'foundry/'
           slither-args: '--filter-paths foundry/lib/'
-
