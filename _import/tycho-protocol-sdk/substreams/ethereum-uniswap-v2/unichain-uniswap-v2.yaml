@@ -1,6 +1,6 @@
 specVersion: v0.1.0
 package:
-  name: "ethereum_pancakeswap_v2"
+  name: "unichain_uniswap_v2"
   version: v0.3.2
   url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-uniswap-v2"
 
@@ -21,7 +21,7 @@ binaries:
 modules:
   - name: map_pools_created
     kind: map
-    initialBlock: 15614590
+    initialBlock: 0
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
@@ -30,7 +30,7 @@ modules:
 
   - name: store_pools
     kind: store
-    initialBlock: 15614590
+    initialBlock: 0
     updatePolicy: set_if_not_exists
     valueType: proto:tycho.evm.uniswap.v2.Pool
     inputs:
@@ -38,7 +38,7 @@ modules:
 
   - name: map_pool_events
     kind: map
-    initialBlock: 15614590
+    initialBlock: 0
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: map_pools_created
@@ -47,4 +47,4 @@ modules:
       type: proto:tycho.evm.v1.BlockChanges
 
 params:
-  map_pools_created: factory_address=1097053fd2ea711dad45caccc45eff7548fcb362&protocol_type_name=pancakeswap_v2_pool
+  map_pools_created: factory_address=1F98400000000000000000000000000000000002&protocol_type_name=uniswap_v2_pool
