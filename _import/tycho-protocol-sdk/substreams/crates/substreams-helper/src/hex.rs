@@ -1,20 +1,9 @@
-use ethabi::ethereum_types::Address;
-use substreams::Hex;
-
 pub trait Hexable {
     fn to_hex(&self) -> String;
 }
 
-impl Hexable for Vec<u8> {
+impl<T: AsRef<[u8]>> Hexable for T {
     fn to_hex(&self) -> String {
-        let mut str = Hex::encode(self);
-        str.insert_str(0, "0x");
-        str
-    }
-}
-
-impl Hexable for Address {
-    fn to_hex(&self) -> String {
-        self.as_bytes().to_vec().to_hex()
+        format!("0x{}", hex::encode(self))
     }
 }
