@@ -42,6 +42,7 @@ use crate::{
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[non_exhaustive]
 pub enum Chain {
     #[default]
     Ethereum,

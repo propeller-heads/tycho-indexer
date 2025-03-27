@@ -68,6 +68,7 @@ impl TychoStreamBuilder {
             Chain::Arbitrum => (1, 0), // Typically closer to 0.25s
             Chain::Base => (10, 2),
             Chain::Unichain => (10, 2),
+            _ => (1, 1),
         }
     }
 
