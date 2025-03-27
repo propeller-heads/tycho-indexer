@@ -12,7 +12,10 @@ use crate::encoding::{
     evm::{
         approvals::permit2::Permit2,
         constants::DEFAULT_ROUTERS_JSON,
-        strategy_encoder::{group_swaps::group_swaps, strategy_validators::SplitSwapValidator},
+        strategy_encoder::{
+            group_swaps::group_swaps,
+            strategy_validators::{SequentialSwapValidator, SplitSwapValidator, SwapValidator},
+        },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{
             biguint_to_u256, bytes_to_address, encode_input, get_min_amount_for_solution,
@@ -209,12 +212,17 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped token
 /// * `router_address`: Address of the router to be used to execute swaps
+/// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
+///   sequential swap solutions
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Option<Permit2>,
     selector: String,
     router_address: Bytes,
+    native_address: Bytes,
+    wrapped_address: Bytes,
+    sequential_swap_validator: SequentialSwapValidator,
 }
 
 impl SequentialSwapStrategyEncoder {
@@ -234,7 +242,15 @@ impl SequentialSwapStrategyEncoder {
                     .to_string(),
             )
         };
-        Ok(Self { permit2, selector, swap_encoder_registry, router_address })
+        Ok(Self {
+            permit2,
+            selector,
+            swap_encoder_registry,
+            router_address,
+            native_address: chain.native_token()?,
+            wrapped_address: chain.wrapped_token()?,
+            sequential_swap_validator: SequentialSwapValidator,
+        })
     }
 
     /// Encodes information necessary for performing a single swap against a given executor for
@@ -251,7 +267,17 @@ impl EVMStrategyEncoder for SequentialSwapStrategyEncoder {}
 
 impl StrategyEncoder for SequentialSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
-        // TODO validate sequential swaps: check valid cycles, empty swaps, etc.
+        self.sequential_swap_validator
+            .validate_solution_min_amounts(&solution)?;
+        self.sequential_swap_validator
+            .validate_swap_path(
+                &solution.swaps,
+                &solution.given_token,
+                &solution.checked_token,
+                &solution.native_action,
+                &self.native_address,
+                &self.wrapped_address,
+            )?;
 
         let min_amount_out = get_min_amount_for_solution(solution.clone());
         let grouped_swaps = group_swaps(solution.swaps);
