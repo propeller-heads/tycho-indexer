@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.83.0"
+version = "0.86.0"
 edition = "2021"
 
 [workspace]
@@ -41,7 +41,6 @@ lazy_static = "1.4.0"
 # Tycho dependencies
 tycho-core = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-core", tag = "0.61.1" }
 tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.61.1" }
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], tag = "0.64.0" }
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }
@@ -84,6 +83,7 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
+tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], tag = "0.66.1" }
 
 [features]
 default = ["evm"]

@@ -1,3 +1,34 @@
+## [0.86.0](https://github.com/propeller-heads/tycho-simulation/compare/0.85.1...0.86.0) (2025-03-25)
+
+
+### Features
+
+* move execution dependency to dev ([7655c89](https://github.com/propeller-heads/tycho-simulation/commit/7655c89e1e5657c7aca6aa4c9a2975f3d91af990))
+
+## [0.85.1](https://github.com/propeller-heads/tycho-simulation/compare/0.85.0...0.85.1) (2025-03-25)
+
+
+### Bug Fixes
+
+* changed versions to hashes for reusible actions ([f26aca7](https://github.com/propeller-heads/tycho-simulation/commit/f26aca79bb57ac8e6bded991d6757a07758a92ae))
+* lint for branch in the PR ([1edc6d1](https://github.com/propeller-heads/tycho-simulation/commit/1edc6d15e0383326c2e591db0701d16f2397ab65))
+* lint for branch in the PR ([0abed2a](https://github.com/propeller-heads/tycho-simulation/commit/0abed2a1b872778c555d85a785e336f1cbe5b7b1))
+
+## [0.85.0](https://github.com/propeller-heads/tycho-simulation/compare/0.84.0...0.85.0) (2025-03-21)
+
+
+### Features
+
+* add `get_limits` in `ProtocolSim`. ([4a607cb](https://github.com/propeller-heads/tycho-simulation/commit/4a607cbd6b9a5e1c9b9db48881015a50de671779))
+* extend uniswap v3 fees to support pancakeswap v3 ([4bd07a8](https://github.com/propeller-heads/tycho-simulation/commit/4bd07a81ff575179797acbd3d9b2f465cb432472))
+
+## [0.84.0](https://github.com/propeller-heads/tycho-simulation/compare/0.83.0...0.84.0) (2025-03-19)
+
+
+### Features
+
+* update tycho-execution version ([d6fcb05](https://github.com/propeller-heads/tycho-simulation/commit/d6fcb05ab0253b32ad964dbaab4ea2460f47c3ab))
+
 ## [0.83.0](https://github.com/propeller-heads/tycho-simulation/compare/0.82.2...0.83.0) (2025-03-13)
 
 
