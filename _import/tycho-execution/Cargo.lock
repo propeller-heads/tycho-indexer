@@ -4316,9 +4316,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
-name = "tycho-core"
-version = "0.61.1"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?tag=0.61.1#aae2c11bffe9ae5e436adc019b769438fa038272"
+name = "tycho-common"
+version = "0.63.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c64749b24bdb5de6050c37ea91420a67a5fe606247fdb29f2e812dac30b42e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4358,7 +4359,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "tycho-core",
+ "tycho-common",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 
 use clap::{Parser, Subcommand};
-use tycho_core::models::Chain;
+use tycho_common::models::Chain;
 use tycho_execution::encoding::{
     evm::encoder_builder::EVMEncoderBuilder, models::Solution, tycho_encoder::TychoEncoder,
 };

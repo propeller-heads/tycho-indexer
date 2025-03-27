@@ -15,7 +15,7 @@ use tokio::{
     runtime::{Handle, Runtime},
     task::block_in_place,
 };
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -175,7 +175,7 @@ mod tests {
 
     use alloy_primitives::Uint;
     use num_bigint::BigUint;
-    use tycho_core::models::Chain as TychoCoreChain;
+    use tycho_common::models::Chain as TychoCoreChain;
 
     use super::*;
 

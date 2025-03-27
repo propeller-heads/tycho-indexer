@@ -1,7 +1,7 @@
 use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tycho_core::{
+use tycho_common::{
     models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
     Bytes,
 };
